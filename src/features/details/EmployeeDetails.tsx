@@ -1,0 +1,435 @@
+import { useState } from 'react'
+import { motion } from 'framer-motion'
+import {
+  useBreadcrumb, useDirectReports, useEmployee, useEmployeeMutations, useNode,
+  useReportingChain, useTimeline, useTransfers,
+} from '@/lib/api'
+import { useWorkspace } from '@/features/workspace/context'
+import { Button } from '@/components/ui/Button'
+import { Icon } from '@/components/ui/Icon'
+import { Dialog } from '@/components/ui/Dialog'
+import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
+import {
+  Badge, ChargeBadge, ConnectionBadge, ImportantBadge, QualityBadge, StatusBadge, VacantBadge,
+} from '@/components/ui/Badge'
+import { useToast } from '@/components/ui/Toast'
+import { VisitingCard } from '@/features/employees/VisitingCard'
+import { TimelineEventDialog } from '@/features/employees/TimelineEventDialog'
+import { TransferDialog } from '@/features/employees/TransferDialog'
+import { ChargeDialog } from '@/features/employees/ChargeDialog'
+import { EmployeeFormDialog } from '@/features/employees/EmployeeFormDialog'
+import { AddReporteeMenu } from '@/features/employees/AddReporteeMenu'
+import { employeeAccent } from '@/lib/node-colors'
+import { TIMELINE_META } from '@/lib/timeline-meta'
+import { cn, initials } from '@/lib/utils'
+import type { Charge, Employee, TimelineEvent, Transfer } from '@/lib/types'
+
+const COMM_LABEL: Record<string, string> = {
+  phone: 'Phone', email: 'Email', whatsapp: 'WhatsApp', 'in-person': 'In person', sms: 'SMS',
+}
+
+export function EmployeeDetails({ employeeId }: { employeeId: string }) {
+  const ws = useWorkspace()
+  const toast = useToast()
+  const { remove, removeCharge, setManager } = useEmployeeMutations()
+  const { data: emp } = useEmployee(employeeId)
+  const { data: chain = [] } = useReportingChain(employeeId)
+  const { data: reports = [] } = useDirectReports(employeeId)
+  const { data: orgNode } = useNode(emp?.orgNodeId ?? null)
+  const { data: trail = [] } = useBreadcrumb(emp?.orgNodeId ?? null)
+  const { data: timeline = [] } = useTimeline(employeeId)
+  const { data: transfers = [] } = useTransfers(employeeId)
+  const [cardOpen, setCardOpen] = useState(false)
+  const [active, setActive] = useState<'none' | 'event' | 'transfer' | 'charge'>('none')
+  const [reporteeMode, setReporteeMode] = useState<'junior' | 'manager' | null>(null)
+
+  if (!emp) return null
+  const vacant = emp.vacant
+  const accent = employeeAccent(emp)
+  const department = trail.find((t) => t.typeKey === 'department')
+
+  return (
+    <motion.div
+      key={employeeId}
+      initial={{ opacity: 0, x: 12 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.2 }}
+      className="flex h-full flex-col"
+    >
+      <div className="border-b border-line px-6 py-5">
+        <nav className="mb-3 flex flex-wrap items-center gap-1 text-[12px] text-muted">
+          {trail.map((t, i) => (
+            <span key={t.id} className="flex items-center gap-1">
+              {i > 0 && <Icon name="ChevronRight" size={12} className="text-line" />}
+              <button onClick={() => ws.select('node', t.id)} className="rounded px-1 hover:text-ink">{t.name}</button>
+            </span>
+          ))}
+        </nav>
+
+        <div className="flex items-start gap-4">
+          {vacant ? (
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
+              <Icon name="UserX" size={22} />
+            </span>
+          ) : emp.photoUrl ? (
+            <img src={emp.photoUrl} alt={emp.name} className="h-14 w-14 shrink-0 rounded-2xl object-cover" />
+          ) : (
+            <span className={cn('flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl font-display text-lg font-bold', accent.chip)}>
+              {initials(emp.name)}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <span className="eyebrow">{department ? (department.metadata.shortName || department.name) : (orgNode?.name ?? 'Unassigned')}</span>
+            <h2 className="mt-0.5 truncate font-display text-2xl font-bold text-ink-900">
+              {vacant ? emp.designation || 'Vacant position' : emp.name}
+            </h2>
+            {!vacant && <p className="text-sm text-muted">{emp.designation}</p>}
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {vacant ? (
+                <VacantBadge />
+              ) : (
+                <>
+                  <ConnectionBadge connected={emp.connected} />
+                  {emp.connected && <QualityBadge quality={emp.relationshipQuality} />}
+                  {emp.connected && <StatusBadge status={emp.relationshipStatus} />}
+                  {emp.importantContact && <ImportantBadge />}
+                </>
+              )}
+              {emp.charges.map((c) => <ChargeBadge key={c.id} charge={c} />)}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          {vacant ? (
+            <Button variant="primary" size="sm" onClick={() => ws.editEmployee(emp)}>
+              <Icon name="UserCheck" size={14} /> Assign person
+            </Button>
+          ) : (
+            <AddReporteeMenu onChoose={setReporteeMode} />
+          )}
+          <Button size="sm" onClick={() => ws.editEmployee(emp)}><Icon name="Pencil" size={14} /> Edit</Button>
+          {!vacant && (
+            <>
+              <Button size="sm" onClick={() => setActive('event')}><Icon name="Calendar" size={14} /> Add event</Button>
+              <Button size="sm" onClick={() => setActive('charge')}><Icon name="Briefcase" size={14} /> Add charge</Button>
+            </>
+          )}
+
+          {/* Less-frequent / destructive actions tucked away so they can't be hit by accident. */}
+          <Menu
+            align="end"
+            trigger={({ open, toggle }) => (
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="More actions"
+                aria-haspopup="menu"
+                aria-expanded={open}
+                onClick={toggle}
+                className={cn(open && 'bg-ink-900/[0.05] text-ink')}
+              >
+                <Icon name="MoreHorizontal" size={16} />
+              </Button>
+            )}
+          >
+            {(close) => (
+              <>
+                {!vacant && (
+                  <>
+                    <MenuItem icon={<Icon name="ArrowLeftRight" size={15} />} onClick={() => { close(); setActive('transfer') }}>
+                      Transfer
+                    </MenuItem>
+                    <MenuItem icon={<Icon name="IdCard" size={15} />} onClick={() => { close(); setCardOpen(true) }}>
+                      Visiting card
+                    </MenuItem>
+                    <MenuDivider />
+                  </>
+                )}
+                <MenuItem
+                  icon={<Icon name="Trash2" size={15} />}
+                  danger
+                  onClick={async () => {
+                    close()
+                    await remove.mutateAsync(emp.id)
+                    toast(`Removed ${emp.name || 'vacant position'}`)
+                    ws.clearSelection()
+                  }}
+                >
+                  Remove
+                </MenuItem>
+              </>
+            )}
+          </Menu>
+        </div>
+      </div>
+
+      <Dialog open={cardOpen} onClose={() => setCardOpen(false)} title="Visiting card" description={emp.name}>
+        <VisitingCard employeeId={emp.id} />
+      </Dialog>
+      <TimelineEventDialog open={active === 'event'} employeeId={emp.id} onClose={() => setActive('none')} />
+      <TransferDialog open={active === 'transfer'} employee={emp} onClose={() => setActive('none')} />
+      <ChargeDialog open={active === 'charge'} employeeId={emp.id} onClose={() => setActive('none')} />
+      <EmployeeFormDialog
+        open={reporteeMode !== null}
+        orgNode={orgNode ?? null}
+        employee={null}
+        presetManagerId={reporteeMode === 'junior' ? emp.id : (emp.managerId ?? undefined)}
+        onClose={() => setReporteeMode(null)}
+        onSaved={async (newId) => {
+          if (reporteeMode === 'manager') {
+            await setManager.mutateAsync({ employeeId: emp.id, managerId: newId })
+            toast(`${emp.name} now reports to the new manager`)
+          }
+          setReporteeMode(null)
+          ws.select('employee', newId)
+        }}
+      />
+
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto scrollbar-thin px-6 py-5">
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {!vacant && <ContactCard icon="Mail" label="Email" value={emp.email || '—'} href={emp.email ? `mailto:${emp.email}` : undefined} />}
+          {!vacant && <ContactCard icon="Phone" label="Phone" value={emp.phone || '—'} href={emp.phone ? `tel:${emp.phone}` : undefined} />}
+          <ContactCard icon="Building" label="Posting" value={orgNode?.name ?? '—'} />
+        </section>
+
+        {/* Relationship fields are conditional on Connected — entirely hidden when not
+           *  tracked as a contact, per the Connected badge shown in the header above. */}
+        {!vacant && emp.connected && (
+          <Section title="Relationship" icon="Handshake">
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+              <DetailRow label="Quality">
+                <QualityBadge quality={emp.relationshipQuality} />
+              </DetailRow>
+              <DetailRow label="Status"><StatusBadge status={emp.relationshipStatus} /></DetailRow>
+              <DetailRow label="Type" value={emp.relationshipType || '—'} />
+              <DetailRow label="Introduced by" value={emp.introducedBy || '—'} />
+              <DetailRow label="Preferred contact" value={emp.preferredComm ? COMM_LABEL[emp.preferredComm] : '—'} />
+              <DetailRow label="Important contact" value={emp.importantContact ? 'Yes' : 'No'} />
+              <DetailRow label="Last interaction" value={emp.lastInteractionAt ?? '—'} />
+              <DetailRow label="Next follow-up" value={emp.followUpDate ?? '—'} />
+            </dl>
+            {emp.notes && (
+              <p className="mt-3 whitespace-pre-wrap break-words rounded-lg border border-line bg-white px-3 py-2.5 text-sm text-ink-800">{emp.notes}</p>
+            )}
+          </Section>
+        )}
+
+        {emp.charges.length > 0 && (
+          <Section title={`Charges · ${emp.charges.length}`} icon="Briefcase">
+            <div className="space-y-2">
+              {emp.charges.map((c) => (
+                <ChargeRow key={c.id} charge={c} onRemove={async () => {
+                  await removeCharge.mutateAsync({ employeeId: emp.id, chargeId: c.id }); toast('Charge removed')
+                }} />
+              ))}
+            </div>
+          </Section>
+        )}
+
+        {transfers.length > 0 && (
+          <Section title={`Transfers · ${transfers.length}`} icon="ArrowLeftRight">
+            <div className="space-y-2">
+              {transfers.map((t) => <TransferRow key={t.id} transfer={t} />)}
+            </div>
+          </Section>
+        )}
+
+        {!vacant && (
+          <section>
+            <div className="mb-2.5 flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-[13px] font-semibold text-ink-800">
+                <Icon name="Clock" size={14} className="text-muted" /> Timeline · {timeline.length}
+              </h3>
+              <button onClick={() => setActive('event')} className="text-[12px] font-medium text-teal-600 hover:underline">+ Add event</button>
+            </div>
+            <TimelineList events={timeline} />
+          </section>
+        )}
+
+        <section>
+          <h3 className="mb-3 text-[13px] font-semibold text-ink-800">Reporting line</h3>
+          <div className="rounded-card border border-line bg-white p-4">
+            <div className="relative">
+              {chain.length > 0 && <span className="absolute bottom-5 left-6 top-5 w-px bg-line" aria-hidden="true" />}
+              <div className="space-y-1">
+                {chain.map((m) => (
+                  <ChainRow key={m.id} emp={m} onClick={() => ws.select('employee', m.id)} muted />
+                ))}
+                <ChainRow emp={emp} current />
+              </div>
+            </div>
+
+            <div className="mt-3 border-t border-dashed border-line pt-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[12px] font-medium text-muted">Direct reports · {reports.length}</span>
+                <button onClick={() => orgNode && ws.addEmployee(orgNode, emp.id)} className="text-[12px] font-medium text-teal-600 hover:underline">
+                  + Add
+                </button>
+              </div>
+              {reports.length === 0 ? (
+                <p className="text-sm text-muted">No direct reports.</p>
+              ) : (
+                <div className="relative">
+                  {reports.length > 1 && <span className="absolute bottom-5 left-6 top-5 w-px bg-line" aria-hidden="true" />}
+                  <div className="space-y-1">
+                    {reports.map((r) => (
+                      <ChainRow key={r.id} emp={r} onClick={() => ws.select('employee', r.id)} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
+    </motion.div>
+  )
+}
+
+function Section({ title, icon, children }: { title: string; icon?: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h3 className="mb-2.5 flex items-center gap-2 text-[13px] font-semibold text-ink-800">
+        {icon && <Icon name={icon} size={14} className="text-muted" />}{title}
+      </h3>
+      {children}
+    </section>
+  )
+}
+
+function DetailRow({ label, value, children }: { label: string; value?: string; children?: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-[11px] uppercase tracking-wide text-muted">{label}</dt>
+      <dd className="mt-0.5 break-words text-sm text-ink-900">{children ?? value}</dd>
+    </div>
+  )
+}
+
+function ChargeRow({ charge, onRemove }: { charge: Charge; onRemove: () => void }) {
+  return (
+    <div className={cn(
+      'flex items-start gap-3 rounded-lg border px-3 py-2.5',
+      charge.kind === 'acting' ? 'border-purple-600/40 bg-purple-100/40' : 'border-blue-600/40 bg-blue-100/40',
+    )}>
+      <Icon name={charge.kind === 'acting' ? 'Clock' : 'Briefcase'} size={15} className={cn('mt-0.5 shrink-0', charge.kind === 'acting' ? 'text-purple-600' : 'text-blue-600')} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-ink-900">{charge.title}</span>
+          <Badge tone={charge.kind === 'acting' ? 'purple' : 'blue'}>{charge.kind === 'acting' ? 'Acting' : 'Additional'}</Badge>
+        </div>
+        <div className="mt-0.5 text-[12px] text-muted">
+          {charge.startDate ?? '—'}{charge.kind === 'acting' && ` → ${charge.endDate ?? 'ongoing'}`}
+        </div>
+        {charge.reason && <p className="mt-1 text-[12px] text-ink-700">{charge.reason}</p>}
+      </div>
+      <button onClick={onRemove} aria-label="Remove charge" className="rounded p-1 text-muted hover:bg-crimson-100 hover:text-crimson">
+        <Icon name="X" size={14} />
+      </button>
+    </div>
+  )
+}
+
+function TransferRow({ transfer }: { transfer: Transfer }) {
+  return (
+    <div className="rounded-lg border border-line bg-white px-3 py-2.5">
+      <div className="flex items-center gap-2 text-sm text-ink-900">
+        <span className="truncate">{transfer.fromOfficeName}</span>
+        <Icon name="ArrowLeftRight" size={13} className="shrink-0 text-blue-600" />
+        <span className="truncate font-medium">{transfer.toOfficeName}</span>
+      </div>
+      <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[12px] text-muted">
+        <span>Department: {transfer.fromDepartmentName} → {transfer.toDepartmentName}</span>
+        <span>Effective: {transfer.effectiveDate}</span>
+        {transfer.fromDesignation !== transfer.toDesignation && (
+          <span>Designation: {transfer.fromDesignation} → {transfer.toDesignation}</span>
+        )}
+        {transfer.fromManagerName !== transfer.toManagerName && (
+          <span>Reports to: {transfer.fromManagerName} → {transfer.toManagerName}</span>
+        )}
+        {transfer.reason && <span>Reason: {transfer.reason}</span>}
+      </div>
+      {transfer.remarks && <p className="mt-1 text-[12px] text-ink-700">{transfer.remarks}</p>}
+    </div>
+  )
+}
+
+function TimelineList({ events }: { events: TimelineEvent[] }) {
+  if (events.length === 0) {
+    return <p className="text-sm text-muted">No events yet. Add meetings, calls, or notes to build a history.</p>
+  }
+  return (
+    <div className="relative">
+      <span className="absolute bottom-2 left-[15px] top-2 w-px bg-line" aria-hidden="true" />
+      <div className="space-y-3">
+        {events.map((e) => {
+          const meta = TIMELINE_META[e.type]
+          return (
+            <div key={e.id} className="relative flex gap-3">
+              <span className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-white">
+                <Icon name={meta.icon} size={14} className="text-ink-700" />
+              </span>
+              <div className="min-w-0 flex-1 pt-0.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[13px] font-medium text-ink-900">{e.title}</span>
+                  <Badge tone={meta.tone}>{meta.label}</Badge>
+                  {e.source === 'system' && <span className="text-[10px] uppercase tracking-wide text-muted">auto</span>}
+                </div>
+                <div className="text-[11px] text-muted">{e.date}{e.time && ` · ${e.time}`}</div>
+                {e.note && <p className="mt-0.5 break-words text-[12px] text-ink-700">{e.note}</p>}
+                {e.attendees && e.attendees.length > 0 && (
+                  <p className="mt-0.5 break-words text-[12px] text-muted">Attendees: {e.attendees.join(', ')}</p>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ContactCard({ icon, label, value, href }: { icon: string; label: string; value: string; href?: string }) {
+  const inner = (
+    <>
+      <Icon name={icon} size={15} className="mt-0.5 shrink-0 text-muted" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[11px] uppercase tracking-wide text-muted">{label}</span>
+        <span className="block break-words text-sm text-ink-900">{value}</span>
+      </span>
+    </>
+  )
+  const cls = 'flex min-w-0 items-start gap-2.5 rounded-lg border border-line bg-white px-3 py-2.5'
+  return href ? <a href={href} className={cn(cls, 'transition-colors hover:border-ink-600')}>{inner}</a> : <div className={cls}>{inner}</div>
+}
+
+function ChainRow({ emp, onClick, current, muted }: {
+  emp: Employee; onClick?: () => void; current?: boolean; muted?: boolean
+}) {
+  return (
+    <div className="relative flex items-center">
+      <button
+        onClick={onClick}
+        disabled={current}
+        className={cn(
+          'flex flex-1 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left transition-colors',
+          current ? 'bg-ink-900 text-paper' : 'hover:bg-ink-900/[0.05]',
+        )}
+      >
+        <span className={cn(
+          'relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg font-mono text-[10px] font-semibold',
+          current ? 'bg-indigo text-paper' : muted ? 'bg-panel text-muted' : emp.vacant ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600',
+        )}>
+          {emp.vacant ? <Icon name="UserX" size={13} /> : initials(emp.name)}
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className={cn('block truncate text-[13px] font-medium', current ? 'text-paper' : 'text-ink-900')}>
+            {emp.vacant ? emp.designation || 'Vacant position' : emp.name}
+          </span>
+          <span className={cn('block truncate text-[11px]', current ? 'text-paper/70' : 'text-muted')}>{emp.designation}</span>
+        </span>
+      </button>
+    </div>
+  )
+}

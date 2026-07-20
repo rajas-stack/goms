@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Bash(curl -sL -o /tmp/india1.json \"https://raw.githubusercontent.com/geohacker/india/master/state/india_state.geojson\" -w \"%{http_code} %{size_download}\\\\n\")",
+      "Bash(curl -sL -o /tmp/india2.json \"https://raw.githubusercontent.com/udit-001/india-maps-data/main/geojson/india.geojson\" -w \"%{http_code} %{size_download}\\\\n\")",
+      "Bash(python3 -c \"import shapely; print\\('shapely', shapely.__version__\\)\")",
+      "Bash(python3 -c \"import topojson; print\\('topojson ok'\\)\")",
+      "Bash(python3 -)",
+      "Bash(curl -s http://localhost:5173/ -o /dev/null -w \"%{http_code}\\\\n\")",
+      "Bash(curl -s http://localhost:5175/ -o /dev/null -w \"%{http_code}\\\\n\")"
+    ]
+  }
+}
