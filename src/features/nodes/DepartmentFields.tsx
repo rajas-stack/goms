@@ -1,5 +1,6 @@
 import { Field, Input } from '@/components/ui/Field'
 import { EmployeePicker } from '@/features/employees/EmployeePicker'
+import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
 import { WorksEditor } from './WorksEditor'
 import { SALES_ROLES, parseWorks, serializeWorks } from './department-meta'
 import type { Employee } from '@/lib/types'
@@ -26,11 +27,11 @@ export function DepartmentFields({ meta, setMeta, employees }: {
       </Field>
 
       <div className="rounded-card border border-line bg-panel/40 p-4">
-        <p className="mb-3 text-[13px] font-semibold text-ink-800">Sales ownership</p>
+        <p className="mb-3 text-[13px] font-semibold text-ink-800">AMNEX sales ownership</p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {SALES_ROLES.map((r) => (
             <Field key={r.key} label={r.label}>
-              <EmployeePicker candidates={employees} value={meta[r.key] ?? ''} onChange={(id) => set(r.key, id)} />
+              <SalesTeamPicker value={meta[r.key] ?? ''} onChange={(email) => set(r.key, email)} />
             </Field>
           ))}
         </div>

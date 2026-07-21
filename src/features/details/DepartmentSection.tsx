@@ -1,4 +1,5 @@
 import { SALES_ROLES, parseWorks } from '@/features/nodes/department-meta'
+import { SALES_TEAM } from '@/data/sales-team'
 import type { Employee, HierNode } from '@/lib/types'
 
 /** Read-only display of a department's head, sales ownership, and works.
@@ -7,8 +8,8 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
   const byId = new Map(employees.map((e) => [e.id, e]))
   const head = node.metadata.deptHead ? byId.get(node.metadata.deptHead) : undefined
   const owners = SALES_ROLES
-    .map((r) => ({ ...r, emp: node.metadata[r.key] ? byId.get(node.metadata[r.key]) : undefined }))
-    .filter((o): o is typeof o & { emp: Employee } => !!o.emp)
+    .map((r) => ({ ...r, member: SALES_TEAM.find((m) => m.email === node.metadata[r.key]) }))
+    .filter((o): o is typeof o & { member: (typeof SALES_TEAM)[number] } => !!o.member)
   const works = parseWorks(node.metadata.works)
 
   if (!head && owners.length === 0 && works.length === 0) return null
@@ -31,12 +32,12 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
       )}
 
       {owners.length > 0 && (
-        <Block title="Sales ownership">
+        <Block title="AMNEX sales ownership">
           <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
             {owners.map((o) => (
               <div key={o.key}>
                 <dt className="text-[11px] uppercase tracking-wide text-muted">{o.label}</dt>
-                <dd className="mt-0.5 text-sm text-ink-900">{o.emp.name}</dd>
+                <dd className="mt-0.5 text-sm text-ink-900">{o.member.name}</dd>
               </div>
             ))}
           </dl>

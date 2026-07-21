@@ -22,6 +22,7 @@ import { AddReporteeMenu } from '@/features/employees/AddReporteeMenu'
 import { employeeAccent } from '@/lib/node-colors'
 import { TIMELINE_META } from '@/lib/timeline-meta'
 import { cn, initials } from '@/lib/utils'
+import { SALES_TEAM } from '@/data/sales-team'
 import type { Charge, Employee, TimelineEvent, Transfer } from '@/lib/types'
 
 const COMM_LABEL: Record<string, string> = {
@@ -47,6 +48,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
   const vacant = emp.vacant
   const accent = employeeAccent(emp)
   const department = trail.find((t) => t.typeKey === 'department')
+  const relationshipOwner = SALES_TEAM.find((m) => m.email === emp.metadata.relationshipOwner)
 
   return (
     <motion.div
@@ -199,6 +201,10 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
             </DetailRow>
           )}
           <DetailRow label="Posting" value={orgNode?.name ?? '—'} />
+          <DetailRow
+            label="Relationship Owner / AMNEX Representative"
+            value={relationshipOwner ? `${relationshipOwner.name} · ${relationshipOwner.designation}` : '—'}
+          />
         </dl>
 
         {/* Relationship fields are conditional on Connected — entirely hidden when not

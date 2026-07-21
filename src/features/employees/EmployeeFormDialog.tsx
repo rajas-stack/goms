@@ -9,6 +9,7 @@ import { useEmployeeMutations, useEmployeesByState, useNode } from '@/lib/api'
 import { isoToday } from '@/data/repository'
 import { isValidEmail } from '@/lib/utils'
 import { ManagerPicker } from './ManagerPicker'
+import { SalesTeamPicker } from './SalesTeamPicker'
 import type {
   Employee, HierNode, PreferredComm, RelationshipQuality, RelationshipStatus,
 } from '@/lib/types'
@@ -40,6 +41,7 @@ const EMPTY = {
   relationshipStatus: 'new' as RelationshipStatus, relationshipQuality: 'neutral' as RelationshipQuality,
   relationshipType: '', introducedBy: '', importantContact: false, preferredComm: '' as PreferredComm,
   lastInteractionAt: '', followUpDate: '', notes: '',
+  relationshipOwner: '',
 }
 
 export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, onClose, onSaved }: Props) {
@@ -65,6 +67,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, o
         importantContact: employee.importantContact, preferredComm: employee.preferredComm,
         lastInteractionAt: employee.lastInteractionAt ?? '', followUpDate: employee.followUpDate ?? '',
         notes: employee.notes,
+        relationshipOwner: employee.metadata.relationshipOwner ?? '',
       })
     } else {
       setForm({ ...EMPTY, managerId: presetManagerId ?? '' })
@@ -116,6 +119,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, o
       importantContact: form.importantContact, preferredComm: form.preferredComm,
       lastInteractionAt: form.lastInteractionAt || null, followUpDate: form.followUpDate || null,
       notes: form.notes,
+      metadata: { ...(employee?.metadata ?? {}), relationshipOwner: form.relationshipOwner },
     }
     if (employee) {
       await update.mutateAsync({ id: employee.id, patch })
@@ -225,6 +229,13 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, o
             value={form.managerId}
             onChange={(id) => setForm((f) => ({ ...f, managerId: id }))}
             onCreate={createManager}
+          />
+        </Field>
+
+        <Field label="Relationship Owner / AMNEX Representative" hint="The AMNEX account manager who owns this relationship.">
+          <SalesTeamPicker
+            value={form.relationshipOwner}
+            onChange={(email) => setForm((f) => ({ ...f, relationshipOwner: email }))}
           />
         </Field>
 
