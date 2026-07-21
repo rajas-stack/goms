@@ -26,8 +26,12 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 export const Button = forwardRef<HTMLButtonElement, Props>(
-  ({ variant = 'secondary', size = 'md', className, ...props }, ref) => (
-    <button ref={ref} className={cn(base, variants[variant], sizes[size], className)} {...props} />
+  // Defaults to type="button" rather than the native "submit" — nothing in
+  // this app currently wraps a Button in a <form>, but every Button here
+  // (Cancel, Discard, overflow triggers, icon actions) is meant to run its
+  // own onClick, never to submit/reset a surrounding form by accident.
+  ({ variant = 'secondary', size = 'md', type = 'button', className, ...props }, ref) => (
+    <button ref={ref} type={type} className={cn(base, variants[variant], sizes[size], className)} {...props} />
   ),
 )
 Button.displayName = 'Button'

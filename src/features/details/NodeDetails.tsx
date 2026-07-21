@@ -15,10 +15,6 @@ import { cn } from '@/lib/utils'
 
 const EMPLOYEE_ADDERS = new Set(['office', 'unit'])
 
-const FIELD_ICON: Record<string, string> = {
-  phone: 'Phone', email: 'Mail', url: 'Globe', text: 'FileText', string: 'Type',
-}
-
 export function NodeDetails({ nodeId }: { nodeId: string }) {
   const ws = useWorkspace()
   const toast = useToast()
@@ -33,7 +29,9 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
   if (!node) return null
   const type = NODE_TYPE_MAP[node.typeKey]
   const childType = childTypesOf(node.typeKey)[0]
-  const fields = fieldsForType(node.typeKey, node.domain).filter((f) => node.metadata[f.key])
+  const allFields = fieldsForType(node.typeKey, node.domain).filter((f) => node.metadata[f.key])
+  const descriptionField = allFields.find((f) => f.key === 'description')
+  const fields = allFields.filter((f) => f.key !== 'description')
   const archived = node.status === 'archived'
   const isDepartment = node.typeKey === 'department'
   const vacant = employees.filter((e) => e.vacant).length
@@ -49,7 +47,7 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
     >
       <div className="border-b border-line px-6 py-5">
         <nav className="mb-3 flex flex-wrap items-center gap-1 text-[12px] text-muted">
-          {trail.map((t, i) => (
+          {trail.filter((t) => !(isDepartment && t.id === node.id)).map((t, i) => (
             <span key={t.id} className="flex items-center gap-1">
               {i > 0 && <Icon name="ChevronRight" size={12} className="text-line" />}
               <button
@@ -141,30 +139,34 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
       </div>
 
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto scrollbar-thin px-6 py-5">
+        {descriptionField && (
+          <Section title="Description">
+            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-800">
+              {node.metadata[descriptionField.key]}
+            </p>
+          </Section>
+        )}
+
         {fields.length > 0 && (
-          <Section title="Details">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Section title={isDepartment ? 'Department Contact' : 'Details'}>
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
               {fields.map((f) => (
-                <div key={f.key} className="flex min-w-0 items-start gap-2.5 rounded-lg border border-line bg-white px-3 py-2.5">
-                  <Icon name={FIELD_ICON[f.type] ?? 'FileText'} size={15} className="mt-0.5 shrink-0 text-muted" />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[11px] uppercase tracking-wide text-muted">{f.label}</span>
-                    {f.type === 'url' ? (
-                      <a
-                        href={node.metadata[f.key]}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-0.5 inline-flex items-center gap-1 break-words text-sm text-teal-600 hover:underline"
-                      >
-                        <span className="break-all">{node.metadata[f.key]}</span> <Icon name="ExternalLink" size={12} className="shrink-0" />
-                      </a>
-                    ) : (
-                      <span className="mt-0.5 block break-words text-sm text-ink-900">{node.metadata[f.key]}</span>
-                    )}
-                  </span>
-                </div>
+                <DetailRow key={f.key} label={f.label}>
+                  {f.type === 'url' ? (
+                    <a
+                      href={node.metadata[f.key]}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 break-words text-teal-600 hover:underline"
+                    >
+                      <span className="break-all">{node.metadata[f.key]}</span> <Icon name="ExternalLink" size={12} className="shrink-0" />
+                    </a>
+                  ) : (
+                    node.metadata[f.key]
+                  )}
+                </DetailRow>
               ))}
-            </div>
+            </dl>
           </Section>
         )}
 
@@ -226,5 +228,14 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h3 className="mb-2.5 text-[13px] font-semibold text-ink-800">{title}</h3>
       {children}
     </section>
+  )
+}
+
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-[11px] uppercase tracking-wide text-muted">{label}</dt>
+      <dd className="mt-0.5 break-words text-sm text-ink-900">{children}</dd>
+    </div>
   )
 }

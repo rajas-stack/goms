@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useStateNode } from '@/lib/api'
@@ -31,12 +31,14 @@ export function StateWorkspace() {
   const { data: stateNode, isLoading } = useStateNode(stateCode)
   const [view, setView] = useState<View>('org')
   const [detailsWidth, setDetailsWidth] = useState(readStoredDetailsWidth)
+  const [resizing, setResizing] = useState(false)
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null)
   const resizeRafRef = useRef<number | null>(null)
   const resizeClientXRef = useRef(0)
 
   const onResizerPointerDown = useCallback((e: React.PointerEvent) => {
     dragRef.current = { startX: e.clientX, startWidth: detailsWidth }
+    setResizing(true)
     // Prevents the canvas/details text from being selected mid-drag, which
     // otherwise swaps in a text-selection cursor and can leave the pointer
     // looking "stuck" once the drag crosses back onto the canvas.
@@ -55,11 +57,16 @@ export function StateWorkspace() {
       setDetailsWidth(next)
     })
   }, [])
-  // Shared by pointerup AND lostpointercapture — capture can be revoked by
-  // the browser mid-drag, and without this the resize state and cursor would
-  // be left stuck indefinitely.
+  // Shared by pointerup, pointercancel AND lostpointercapture — capture can
+  // be revoked by the browser mid-drag, and without this the resize state
+  // and cursor would be left stuck indefinitely. Deliberately NOT wired to
+  // pointerleave: capture is taken on pointerdown, so pointerup still fires
+  // here even once the cursor has drifted past this 6px-wide divider —
+  // ending on pointerleave made the resize die on virtually the first
+  // mouse-move of any real drag.
   const onResizerPointerUp = useCallback(() => {
     document.body.classList.remove('select-none')
+    setResizing(false)
     if (!dragRef.current) return
     dragRef.current = null
     if (resizeRafRef.current != null) {
@@ -68,6 +75,19 @@ export function StateWorkspace() {
     }
     setDetailsWidth((w) => { sessionStorage.setItem(DETAILS_WIDTH_KEY, String(w)); return w })
   }, [])
+
+  // Hard fallback for gestures the browser never delivers a pointerup for
+  // (alt-tab away mid-drag) — without this, the col-resize cursor and
+  // <body>'s select-none lock can stay stuck indefinitely.
+  useEffect(() => {
+    if (!resizing) return
+    window.addEventListener('blur', onResizerPointerUp)
+    document.addEventListener('visibilitychange', onResizerPointerUp)
+    return () => {
+      window.removeEventListener('blur', onResizerPointerUp)
+      document.removeEventListener('visibilitychange', onResizerPointerUp)
+    }
+  }, [resizing, onResizerPointerUp])
 
   if (isLoading) return null
   if (!stateNode) {
@@ -95,7 +115,7 @@ export function StateWorkspace() {
           onPointerDown={onResizerPointerDown}
           onPointerMove={onResizerPointerMove}
           onPointerUp={onResizerPointerUp}
-          onPointerLeave={onResizerPointerUp}
+          onPointerCancel={onResizerPointerUp}
           onLostPointerCapture={onResizerPointerUp}
           className="hidden w-1.5 shrink-0 touch-none cursor-col-resize items-center justify-center transition-colors hover:bg-ink-900/[0.06] lg:flex"
           role="separator"

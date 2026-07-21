@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
+import { useClampToAncestor } from './useClampToAncestor'
 
 interface MenuProps {
   /** Render prop for the trigger. Call `toggle` to open/close; `open` reflects state. */
@@ -18,6 +19,8 @@ interface MenuProps {
 export function Menu({ trigger, children, align = 'end', className }: MenuProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+  const clampStyle = useClampToAncestor(open, popupRef)
   const close = () => setOpen(false)
 
   useEffect(() => {
@@ -39,20 +42,25 @@ export function Menu({ trigger, children, align = 'end', className }: MenuProps)
       {trigger({ open, toggle: () => setOpen((v) => !v) })}
       <AnimatePresence>
         {open && (
-          <motion.div
-            role="menu"
-            initial={{ opacity: 0, y: -4, scale: 0.97 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.97 }}
-            transition={{ duration: 0.12 }}
-            className={cn(
-              'absolute z-40 mt-1.5 min-w-[11rem] overflow-hidden rounded-xl border border-line bg-paper p-1 shadow-pop',
-              align === 'end' ? 'right-0' : 'left-0',
-              className,
-            )}
+          <div
+            ref={popupRef}
+            className={cn('absolute z-40 mt-1.5', align === 'end' ? 'right-0' : 'left-0')}
+            style={clampStyle}
           >
-            {typeof children === 'function' ? children(close) : children}
-          </motion.div>
+            <motion.div
+              role="menu"
+              initial={{ opacity: 0, y: -4, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.97 }}
+              transition={{ duration: 0.12 }}
+              className={cn(
+                'min-w-[11rem] overflow-hidden rounded-xl border border-line bg-paper p-1 shadow-pop',
+                className,
+              )}
+            >
+              {typeof children === 'function' ? children(close) : children}
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>

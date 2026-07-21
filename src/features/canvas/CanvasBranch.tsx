@@ -5,7 +5,7 @@ import { NodeCard } from './NodeCard'
 import { EmployeeCard } from './EmployeeCard'
 import { rootReportsOf } from './reporting'
 import {
-  useChildren, useDirectReports, useEmployeeMutations, useEmployeesDirect, useEmployeesUnder,
+  useChildren, useDirectReports, useEmployee, useEmployeeMutations, useEmployeesDirect,
   useNode, useNodeMutations,
 } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
@@ -63,8 +63,8 @@ export function CanvasBranch({ item, depth, parentKey, controlled }: {
   const { data: employeeOrgNode } = useNode(!isNode ? employee!.orgNodeId : null)
 
   const isDepartment = isNode && node!.typeKey === 'department'
-  const { data: deptSubtreeEmployees = [] } = useEmployeesUnder(isDepartment ? node!.id : null)
-  const deptHeadNames = isDepartment ? rootReportsOf(deptSubtreeEmployees).map((e) => e.name) : []
+  const { data: deptHeadEmployee } = useEmployee(isDepartment ? node!.metadata.deptHead || null : null)
+  const deptHeadNames = deptHeadEmployee ? [deptHeadEmployee.name] : []
 
   const childItems: CanvasItem[] = useMemo(() => {
     if (isNode) {

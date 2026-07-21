@@ -252,7 +252,7 @@ class InMemoryRepository implements Repository {
           departments: orgUnder.filter((n) => n.typeKey === 'department').length,
           offices: orgUnder.filter((n) => n.typeKey === 'office').length,
           employees: this.data.employees.filter((e) =>
-            orgUnder.some((n) => n.id === e.orgNodeId),
+            e.status === 'active' && !e.vacant && orgUnder.some((n) => n.id === e.orgNodeId),
           ).length,
         }
       })
@@ -609,9 +609,9 @@ class InMemoryRepository implements Repository {
   }
 
   /** Natural-language-aware search. Recognises intent keywords ("connected",
-   *  "vacant", "transferred", "follow-ups due", cadres like "IAS"), a state
-   *  scope by name, and relational phrases ("under X", "reporting to X"), then
-   *  falls back to fuzzy matching over names/codes/designations/locations. */
+   *  "vacant", "transferred", "follow-ups due"), a state scope by name, and
+   *  relational phrases ("under X", "reporting to X"), then falls back to
+   *  fuzzy matching over names/codes/designations/locations. */
   async search(query: string, stateCode?: number): Promise<SearchResult[]> {
     const raw = query.trim()
     if (!raw) return []
@@ -677,8 +677,6 @@ class InMemoryRepository implements Repository {
 
     // --- intent flags ---------------------------------------------------------
     const has = (re: RegExp) => re.test(q)
-    const cadres = ['ias', 'ips', 'ifs', 'state civil service', 'technical', 'ministerial']
-    const cadreHit = cadres.find((c) => q.includes(c))
     const wantVacant = has(/\bvacan/)
     const wantTransferred = has(/\btransfer/)
     const wantNotConnected = has(/\b(not connected|unconnected|no contact)\b/)
@@ -688,13 +686,13 @@ class InMemoryRepository implements Repository {
     const dueToday = wantFollowUp && has(/\btoday\b/)
 
     const intentActive = wantVacant || wantTransferred || wantConnected || wantNotConnected
-      || wantFollowUp || wantImportant || !!cadreHit
+      || wantFollowUp || wantImportant
 
     if (intentActive) {
       // Free-text remainder after stripping recognised keywords, matched
       // against name/designation/office so "collector" in "connected collector"
       // still narrows the set.
-      const stop = /\b(connected|unconnected|vacant|vacancy|vacancies|transferred|transfers?|follow[-\s]?ups?|due|today|high|priority|important|vip|officers?|people|show|list|all|in|the|not|no|contact|ias|ips|ifs|state civil service|technical|ministerial)\b/g
+      const stop = /\b(connected|unconnected|vacant|vacancy|vacancies|transferred|transfers?|follow[-\s]?ups?|due|today|high|priority|important|vip|officers?|people|show|list|all|in|the|not|no|contact)\b/g
       const text = rest.replace(stop, ' ').replace(/\s+/g, ' ').trim()
       const results = activeEmps.filter((e) => {
         if (!inScope(e.orgNodeId)) return false
@@ -708,10 +706,6 @@ class InMemoryRepository implements Repository {
           if (!e.followUpDate) return false
           if (dueToday ? e.followUpDate !== today : e.followUpDate > today) return false
         }
-        if (cadreHit) {
-          const cadre = (e.metadata.cadre ?? '').toLowerCase()
-          if (cadreHit.length <= 3 ? cadre !== cadreHit : !cadre.includes(cadreHit)) return false
-        }
         if (text) {
           const hay = `${e.name} ${e.designation} ${nodeById.get(e.orgNodeId)?.name ?? ''} ${nodeById.get(e.orgNodeId)?.metadata.location ?? ''}`.toLowerCase()
           if (!hay.includes(text)) return false
@@ -720,7 +714,7 @@ class InMemoryRepository implements Repository {
       })
       const label = wantVacant ? 'Vacant' : wantTransferred ? 'Transferred'
         : wantFollowUp ? (dueToday ? 'Due today' : 'Follow-up due') : wantImportant ? 'High priority'
-        : wantNotConnected ? 'Not connected' : cadreHit ? cadreHit.toUpperCase() : 'Connected'
+        : wantNotConnected ? 'Not connected' : 'Connected'
       return results.slice(0, 24).map((e) => empResult(e, label))
     }
 
@@ -735,7 +729,7 @@ class InMemoryRepository implements Repository {
     }
     for (const e of activeEmps) {
       if (scopeState != null && nodeById.get(e.orgNodeId)?.stateCode !== scopeState) continue
-      const hay = `${e.name} ${e.designation} ${e.code} ${e.metadata.cadre ?? ''}`.toLowerCase()
+      const hay = `${e.name} ${e.designation} ${e.code}`.toLowerCase()
       if (rest.split(/\s+/).every((t) => !t || hay.includes(t))) results.push(empResult(e))
       if (results.length > 60) break
     }

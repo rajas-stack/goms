@@ -1,11 +1,12 @@
-import { Input, Select } from '@/components/ui/Field'
+import { Input } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
+import { AddableSelect } from '@/components/ui/AddableSelect'
 import { Icon } from '@/components/ui/Icon'
 import { uid } from '@/lib/utils'
-import { WORK_COMPONENTS, WORK_VERTICALS, withValue } from './department-meta'
+import { WORK_COMPONENTS, WORK_VERTICALS } from './department-meta'
 import type { DepartmentWork } from '@/lib/types'
 
-const COLS = 'grid grid-cols-[minmax(0,1fr)_9rem_4.5rem_7rem_10rem_2rem] gap-2'
+const COLS = 'grid grid-cols-[minmax(0,1fr)_11rem_4.5rem_7rem_12rem_2rem] gap-2'
 
 /** Editable multi-row table of a department's works. Add / edit inline / remove. */
 export function WorksEditor({ works, onChange }: {
@@ -34,14 +35,20 @@ export function WorksEditor({ works, onChange }: {
             {works.map((w) => (
               <div key={w.id} className={`${COLS} items-center`}>
                 <Input value={w.name} onChange={(e) => update(w.id, { name: e.target.value })} placeholder="e.g. ATCS rollout" />
-                <Select value={w.component} onChange={(e) => update(w.id, { component: e.target.value })}>
-                  {withValue(WORK_COMPONENTS, w.component).map((c) => <option key={c} value={c}>{c}</option>)}
-                </Select>
+                <AddableSelect
+                  value={w.component}
+                  onChange={(v) => update(w.id, { component: v })}
+                  options={WORK_COMPONENTS}
+                  storageKey="work-component"
+                />
                 <Input value={w.quantity} onChange={(e) => update(w.id, { quantity: e.target.value })} inputMode="numeric" placeholder="0" />
                 <Input value={w.value} onChange={(e) => update(w.id, { value: e.target.value })} placeholder="₹ / amount" />
-                <Select value={w.vertical} onChange={(e) => update(w.id, { vertical: e.target.value })}>
-                  {withValue(WORK_VERTICALS, w.vertical).map((v) => <option key={v} value={v}>{v}</option>)}
-                </Select>
+                <AddableSelect
+                  value={w.vertical}
+                  onChange={(v) => update(w.id, { vertical: v })}
+                  options={WORK_VERTICALS}
+                  storageKey="work-vertical"
+                />
                 <button
                   type="button"
                   onClick={() => remove(w.id)}

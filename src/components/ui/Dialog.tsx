@@ -10,7 +10,13 @@ interface Props {
   description?: string
   children: ReactNode
   footer?: ReactNode
-  size?: 'md' | 'lg'
+  size?: 'md' | 'lg' | 'xl'
+}
+
+const SIZE_CLASS: Record<NonNullable<Props['size']>, string> = {
+  md: 'max-w-md',
+  lg: 'max-w-2xl',
+  xl: 'max-w-4xl',
 }
 
 export function Dialog({ open, onClose, title, description, children, footer, size = 'md' }: Props) {
@@ -36,10 +42,7 @@ export function Dialog({ open, onClose, title, description, children, footer, si
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            className={cn(
-              'relative mt-8 w-full rounded-2xl border border-line bg-paper shadow-pop',
-              size === 'lg' ? 'max-w-2xl' : 'max-w-md',
-            )}
+            className={cn('relative mt-8 w-full rounded-2xl border border-line bg-paper shadow-pop', SIZE_CLASS[size])}
             initial={{ opacity: 0, y: 16, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }}

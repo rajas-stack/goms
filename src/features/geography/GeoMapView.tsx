@@ -24,17 +24,53 @@ interface Feat {
   cy: number
 }
 
+/** Signed planar area of a ring (shoelace formula) in lon/lat space. */
+function ringArea(ring: number[][]): number {
+  let sum = 0
+  for (let i = 0; i < ring.length - 1; i++) {
+    const [x1, y1] = ring[i]
+    const [x2, y2] = ring[i + 1]
+    sum += x1 * y2 - x2 * y1
+  }
+  return sum / 2
+}
+
+/** Some bundled boundary sources (taluka/village, shapefile-derived) wind
+ *  rings the opposite way from this app's district data, which makes d3-geo
+ *  treat the polygon as covering the whole globe instead of the small region
+ *  it actually is (`fitExtent` then squashes real content to a speck at the
+ *  frame's center). Enforce this project's working winding sense — exterior
+ *  rings negative-signed area, holes positive — regardless of source. */
+function rewindRings(rings: number[][][]): number[][][] {
+  return rings.map((ring, i) => {
+    const isExterior = i === 0
+    const needsFlip = isExterior ? ringArea(ring) > 0 : ringArea(ring) < 0
+    return needsFlip ? [...ring].reverse() : ring
+  })
+}
+
+function rewind(geometry: Geometry): Geometry {
+  if (geometry.type === 'Polygon') {
+    return { type: 'Polygon', coordinates: rewindRings(geometry.coordinates) }
+  }
+  if (geometry.type === 'MultiPolygon') {
+    return { type: 'MultiPolygon', coordinates: geometry.coordinates.map(rewindRings) }
+  }
+  return geometry
+}
+
 /** Projects a (sub)set of features into the fixed WxH viewBox. Passing every
  *  feature in scope (e.g. all of a state's districts) naturally reconstructs
  *  that parent's silhouette from its parts; passing just one selected feature
  *  re-fits the projection to it alone — which is what gives the "zoom into
  *  the clicked region" effect for free, no manual bounding-box math needed. */
 function buildFeats(features: MapFeature[], padding: number): Feat[] {
-  const fc = { type: 'FeatureCollection', features: features.map((f) => ({ type: 'Feature', properties: {}, geometry: f.geometry })) } as never
+  const geometries = features.map((f) => rewind(f.geometry))
+  const fc = { type: 'FeatureCollection', features: geometries.map((geometry) => ({ type: 'Feature', properties: {}, geometry })) } as never
   const projection = geoMercator().fitExtent([[padding, padding], [W - padding, H - padding]], fc)
   const path = geoPath(projection)
   return features.map((f, i) => {
-    const geoFeature = { type: 'Feature', properties: {}, geometry: f.geometry } as never
+    const geoFeature = { type: 'Feature', properties: {}, geometry: geometries[i] } as never
     const [cx, cy] = path.centroid(geoFeature)
     return { code: f.code, name: f.name, d: path(geoFeature) ?? '', cx, cy }
   })
@@ -96,7 +132,7 @@ export function GeoMapView({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endPan}
-        onPointerLeave={endPan}
+        onPointerCancel={endPan}
         onLostPointerCapture={endPan}
       >
         <svg

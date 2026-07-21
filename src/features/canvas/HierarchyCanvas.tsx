@@ -5,7 +5,8 @@ import { DepartmentCombobox } from './DepartmentCombobox'
 import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog'
 import { rootReportsOf } from './reporting'
 import {
-  useBreadcrumb, useEmployeeMutations, useEmployeesByState, useEmployeesUnder, useNode, useOrgRoots, useStateNode,
+  useBreadcrumb, useEmployee, useEmployeeMutations, useEmployeesByState, useEmployeesUnder, useNode, useOrgRoots,
+  useStateNode,
 } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
 import { Icon } from '@/components/ui/Icon'
@@ -88,14 +89,22 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
 
   const selectedDeptId = impliedDeptId ?? lastPeopleDeptRef.current ?? orgRoots[0]?.id ?? null
   const selectedDeptNode = orgRoots.find((d) => d.id === selectedDeptId) ?? null
+  const deptHeadId = domain === 'people' ? selectedDeptNode?.metadata.deptHead ?? null : null
   const { data: deptEmployees = [] } = useEmployeesUnder(domain === 'people' ? selectedDeptId : null)
-  const peopleRoots = domain === 'people' ? rootReportsOf(deptEmployees) : []
+  // The assigned head isn't always posted inside their own department's
+  // subtree (e.g. a head office role covering several branches) — fetch them
+  // directly so their card still renders even when `deptEmployees` wouldn't
+  // otherwise include them.
+  const headInSubtree = !!deptHeadId && deptEmployees.some((e) => e.id === deptHeadId)
+  const { data: outsideHeadEmployee } = useEmployee(deptHeadId && !headInSubtree ? deptHeadId : null)
+  const peopleRootsBase = domain === 'people' ? rootReportsOf(deptEmployees) : []
+  const peopleRoots = outsideHeadEmployee ? [outsideHeadEmployee, ...peopleRootsBase] : peopleRootsBase
 
   // Flag the department head's card wherever it renders in the People view,
   // so hierarchy (who's the head vs. a peer root report) is unambiguous.
   useLayoutEffect(() => {
-    canvas.setDeptHeadId(domain === 'people' ? selectedDeptNode?.metadata.deptHead ?? null : null)
-  }, [domain, selectedDeptNode, canvas])
+    canvas.setDeptHeadId(deptHeadId)
+  }, [deptHeadId, canvas])
 
   function onSelectDepartment(id: string) {
     if (!id) return
@@ -259,10 +268,17 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
       setTransform((t) => ({ ...t, x: dragRef.current!.originX + dx, y: dragRef.current!.originY + dy }))
     })
   }
-  // Shared by pointerup AND lostpointercapture — capture can be revoked by
-  // the browser mid-drag (e.g. a context menu, or crossing into the details
-  // sidebar's own scrollable/focusable content), and without this the drag
-  // state and cursor would be left stuck in "panning" indefinitely.
+  // Shared by pointerup, pointercancel AND lostpointercapture — capture can
+  // be revoked by the browser mid-drag (e.g. a context menu, or crossing into
+  // the details sidebar's own scrollable/focusable content), and without this
+  // the drag state and cursor would be left stuck in "panning" indefinitely.
+  // Deliberately NOT wired to pointerleave: capture is taken on pointerdown,
+  // so pointerup still fires here even once the cursor has panned outside
+  // the viewport's own bounds — ending on pointerleave would make panning
+  // die the instant the cursor drifts past the edge, before the button is
+  // released, and leave `select-none` stuck on <body> since it's the
+  // pointerup/lostpointercapture path (not pointerleave) that was meant to
+  // clear it.
   function endPan() {
     dragRef.current = null
     setDragging(false)
@@ -272,6 +288,20 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
       panRafRef.current = null
     }
   }
+
+  // Hard fallback for gestures the browser never delivers a pointerup for
+  // (alt-tab away mid-drag) — without this, `dragging`/the grabbing cursor
+  // and <body>'s select-none lock can stay stuck indefinitely.
+  useEffect(() => {
+    if (!dragging) return
+    const stop = () => endPan()
+    window.addEventListener('blur', stop)
+    document.addEventListener('visibilitychange', stop)
+    return () => {
+      window.removeEventListener('blur', stop)
+      document.removeEventListener('visibilitychange', stop)
+    }
+  }, [dragging])
 
   function zoomBy(factor: number) {
     const viewport = viewportRef.current
@@ -422,7 +452,7 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endPan}
-      onPointerLeave={endPan}
+      onPointerCancel={endPan}
       onLostPointerCapture={endPan}
     >
       {domain === 'org' && (

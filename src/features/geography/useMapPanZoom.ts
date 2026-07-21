@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 
 const MIN_ZOOM = 0.6
 const MAX_ZOOM = 8
@@ -78,9 +78,14 @@ export function useMapPanZoom(viewportRef: RefObject<HTMLDivElement>) {
       setTransform((t) => ({ ...t, x: d.originX + (p.clientX - d.startX), y: d.originY + (p.clientY - d.startY) }))
     })
   }
-  // Shared by pointerup AND lostpointercapture — capture can be revoked
-  // mid-drag by the browser, and without this the pan state/cursor would be
-  // left stuck indefinitely.
+  // Shared by pointerup, pointercancel AND lostpointercapture — capture can
+  // be revoked mid-drag by the browser, and without this the pan state/cursor
+  // would be left stuck indefinitely. Deliberately NOT wired to pointerleave:
+  // once captured, panning routinely carries the pointer outside the
+  // viewport's bounds (that's the point of panning near an edge), and
+  // pointerleave still fires on hit-test boundary crossing even under
+  // capture — ending the drag there would make panning die the instant the
+  // cursor drifts past the edge, well before the mouse button is released.
   function endPan() {
     dragRef.current = null
     setDragging(false)
@@ -89,6 +94,20 @@ export function useMapPanZoom(viewportRef: RefObject<HTMLDivElement>) {
       rafRef.current = null
     }
   }
+
+  // Hard fallback for gestures the browser never delivers a pointerup for at
+  // all (alt-tab away mid-drag, releasing over another window) — without
+  // this, `dragging` (and the grabbing cursor) can stay stuck indefinitely.
+  useEffect(() => {
+    if (!dragging) return
+    const stop = () => endPan()
+    window.addEventListener('blur', stop)
+    document.addEventListener('visibilitychange', stop)
+    return () => {
+      window.removeEventListener('blur', stop)
+      document.removeEventListener('visibilitychange', stop)
+    }
+  }, [dragging])
 
   return { transform, setTransform, dragging, resetView, zoomBy, onWheel, onPointerDown, onPointerMove, endPan }
 }

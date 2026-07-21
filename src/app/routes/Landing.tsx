@@ -43,7 +43,7 @@ export function Landing() {
         </motion.div>
       </section>
 
-      <section className="relative min-h-[420px] survey-grid">
+      <section className="relative min-h-[420px]">
         <div className="absolute inset-0 p-4 sm:p-8">
           <IndiaMap />
         </div>

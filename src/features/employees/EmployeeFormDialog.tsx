@@ -242,33 +242,24 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, o
           </Field>
         )}
 
-        {!form.vacant && (
+        {!form.vacant && form.connected && (
           <div className="grid grid-cols-1 gap-4 rounded-card border border-line bg-panel/40 p-4 sm:grid-cols-2">
-            {/* These four are relationship-only: shown when Connected, hidden otherwise. */}
-            {form.connected && (
-              <Field label="Relationship quality">
-                <Select value={form.relationshipQuality} onChange={set('relationshipQuality')}>
-                  {QUALITIES.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
-                </Select>
-              </Field>
-            )}
-            {form.connected && (
-              <Field label="Relationship status">
-                <Select value={form.relationshipStatus} onChange={set('relationshipStatus')}>
-                  {STATUSES.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
-                </Select>
-              </Field>
-            )}
-            {form.connected && (
-              <Field label="Relationship type">
-                <Input value={form.relationshipType} onChange={set('relationshipType')} placeholder="e.g. Counterpart, Mentor" />
-              </Field>
-            )}
-            {form.connected && (
-              <Field label="Introduced by">
-                <Input value={form.introducedBy} onChange={set('introducedBy')} />
-              </Field>
-            )}
+            <Field label="Relationship quality">
+              <Select value={form.relationshipQuality} onChange={set('relationshipQuality')}>
+                {QUALITIES.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
+              </Select>
+            </Field>
+            <Field label="Relationship status">
+              <Select value={form.relationshipStatus} onChange={set('relationshipStatus')}>
+                {STATUSES.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
+              </Select>
+            </Field>
+            <Field label="Relationship type">
+              <Input value={form.relationshipType} onChange={set('relationshipType')} placeholder="e.g. Counterpart, Mentor" />
+            </Field>
+            <Field label="Introduced by">
+              <Input value={form.introducedBy} onChange={set('introducedBy')} />
+            </Field>
             <Field label="Preferred communication">
               <Select value={form.preferredComm} onChange={set('preferredComm')}>
                 {COMMS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}

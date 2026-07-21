@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { PhoneInput, isValidPhone } from '@/components/ui/PhoneInput'
 import { useToast } from '@/components/ui/Toast'
 import { useAllEmployees, useNodeMutations } from '@/lib/api'
 import { childTypesOf, NODE_TYPE_MAP } from '@/lib/node-types'
@@ -79,7 +80,7 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
     <Dialog
       open={open}
       onClose={onClose}
-      size={isDepartment ? 'lg' : 'md'}
+      size={isDepartment ? 'xl' : 'md'}
       title={title}
       description={description}
       footer={
@@ -110,19 +111,32 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
           />
         </Field>
         {isDepartment && <DepartmentFields meta={meta} setMeta={setMeta} employees={employees} />}
-        {fields.map((f) => (
-          <Field key={f.key} label={f.label}>
-            {f.type === 'text' ? (
-              <Textarea value={meta[f.key] ?? ''} onChange={(e) => setMeta((m) => ({ ...m, [f.key]: e.target.value }))} />
-            ) : (
-              <Input
-                type={f.type === 'email' ? 'email' : f.type === 'url' ? 'url' : 'text'}
-                value={meta[f.key] ?? ''}
-                onChange={(e) => setMeta((m) => ({ ...m, [f.key]: e.target.value }))}
-              />
-            )}
-          </Field>
-        ))}
+        {fields.map((f) => {
+          const value = meta[f.key] ?? ''
+          const phoneInvalid = f.type === 'phone' && !isValidPhone(value)
+          return (
+            <Field
+              key={f.key}
+              label={f.label}
+              hint={f.type === 'phone' ? '+91 · 2-digit area code · 8-digit number' : undefined}
+            >
+              {f.type === 'text' ? (
+                <Textarea value={value} onChange={(e) => setMeta((m) => ({ ...m, [f.key]: e.target.value }))} />
+              ) : f.type === 'phone' ? (
+                <>
+                  <PhoneInput value={value} onChange={(v) => setMeta((m) => ({ ...m, [f.key]: v }))} invalid={phoneInvalid} />
+                  {phoneInvalid && <span className="mt-1 block text-xs text-crimson">Enter a 2-digit area code and an 8-digit number.</span>}
+                </>
+              ) : (
+                <Input
+                  type={f.type === 'email' ? 'email' : f.type === 'url' ? 'url' : 'text'}
+                  value={value}
+                  onChange={(e) => setMeta((m) => ({ ...m, [f.key]: e.target.value }))}
+                />
+              )}
+            </Field>
+          )
+        })}
       </div>
     </Dialog>
   )

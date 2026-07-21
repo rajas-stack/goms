@@ -169,8 +169,13 @@ export function IndiaMap() {
       setTransform((t) => ({ ...t, x: d.originX + (p.clientX - d.startX), y: d.originY + (p.clientY - d.startY) }))
     })
   }
-  // Shared by pointerup AND lostpointercapture — capture can be revoked mid-drag
-  // by the browser, and without this the pan state/cursor would be left stuck.
+  // Shared by pointerup, pointercancel AND lostpointercapture — capture can be
+  // revoked mid-drag by the browser, and without this the pan state/cursor
+  // would be left stuck. Deliberately NOT wired to pointerleave: once
+  // captured, panning routinely carries the pointer outside the viewport's
+  // bounds, and pointerleave still fires on hit-test boundary crossing even
+  // under capture — ending the drag there would make panning die the instant
+  // the cursor drifts past the edge, well before the button is released.
   function endPan() {
     dragRef.current = null
     setDragging(false)
@@ -179,6 +184,20 @@ export function IndiaMap() {
       panRafRef.current = null
     }
   }
+
+  // Hard fallback for gestures the browser never delivers a pointerup for
+  // (alt-tab away mid-drag) — without this, `dragging` (and the grabbing
+  // cursor) can stay stuck indefinitely.
+  useEffect(() => {
+    if (!dragging) return
+    const stop = () => endPan()
+    window.addEventListener('blur', stop)
+    document.addEventListener('visibilitychange', stop)
+    return () => {
+      window.removeEventListener('blur', stop)
+      document.removeEventListener('visibilitychange', stop)
+    }
+  }, [dragging])
 
   // With a state/UT chosen from a dropdown, Enter opens it — the keyboard
   // counterpart to clicking the highlighted state. Skip while a text field is
@@ -254,7 +273,7 @@ export function IndiaMap() {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endPan}
-        onPointerLeave={endPan}
+        onPointerCancel={endPan}
         onLostPointerCapture={endPan}
       >
       <svg
@@ -352,17 +371,17 @@ export function IndiaMap() {
       <div className="absolute bottom-3 left-3 z-20 max-w-[230px] rounded-xl border border-line bg-paper/95 p-3 shadow-panel backdrop-blur" data-map-ui>
         <div className="min-w-[140px] space-y-1.5 text-[11px]">
           <LegendRow
-            swatch={<span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: NAVY }} />}
+            swatch={<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: NAVY }} />}
             label="Connected"
             count={legend.connected}
           />
           <LegendRow
-            swatch={<span className="h-2.5 w-2.5 rounded-sm bg-teal/20 ring-1 ring-teal-600" />}
+            swatch={<span className="h-2.5 w-2.5 rounded-full bg-teal/20 ring-1 ring-teal-600" />}
             label="Populated"
             count={legend.populated}
           />
           <LegendRow
-            swatch={<span className="h-2.5 w-2.5 rounded-sm bg-white ring-1 ring-ink-600/50" />}
+            swatch={<span className="h-2.5 w-2.5 rounded-full bg-white ring-1 ring-ink-600/50" />}
             label="Awaiting data"
             count={legend.awaiting}
           />

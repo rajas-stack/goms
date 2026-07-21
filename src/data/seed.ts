@@ -226,7 +226,7 @@ export function buildSeed(): GormsData {
               lastInteractionAt, followUpDate, notes: '',
               charges,
               visitingCards: [],
-              metadata: { cadre: pick(rng, ['IAS', 'State Civil Service', 'Technical', 'Ministerial']) },
+              metadata: {},
               status: 'active',
             })
             externalIds.push({ entityType: 'employee', entityId: id, system: 'HRMS', value: `H${100000 + empN}` })

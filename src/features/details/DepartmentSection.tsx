@@ -1,4 +1,3 @@
-import { initials } from '@/lib/utils'
 import { SALES_ROLES, parseWorks } from '@/features/nodes/department-meta'
 import type { Employee, HierNode } from '@/lib/types'
 
@@ -18,7 +17,16 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
     <>
       {head && (
         <Block title="Department head">
-          <PersonRow emp={head} />
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+            <div>
+              <dt className="text-[11px] uppercase tracking-wide text-muted">Name</dt>
+              <dd className="mt-0.5 text-sm text-ink-900">{head.name}</dd>
+            </div>
+            <div>
+              <dt className="text-[11px] uppercase tracking-wide text-muted">Designation</dt>
+              <dd className="mt-0.5 text-sm text-ink-900">{head.designation}</dd>
+            </div>
+          </dl>
         </Block>
       )}
 
@@ -73,19 +81,5 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
       <h3 className="mb-2.5 text-[13px] font-semibold text-ink-800">{title}</h3>
       {children}
     </section>
-  )
-}
-
-function PersonRow({ emp }: { emp: Employee }) {
-  return (
-    <div className="flex items-center gap-2.5 rounded-lg border border-line bg-white px-3 py-2">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-teal-100 text-[11px] font-semibold text-teal-600">
-        {initials(emp.name)}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-ink-900">{emp.name}</span>
-        <span className="block truncate text-xs text-muted">{emp.designation}</span>
-      </span>
-    </div>
   )
 }

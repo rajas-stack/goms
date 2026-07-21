@@ -14,12 +14,21 @@ export const SALES_ROLES: { key: string; label: string }[] = [
  *  closed enum; an existing saved value is always kept selectable. */
 export const WORK_COMPONENTS = [
   'Hardware', 'Software', 'Services', 'System Integration', 'AMC',
-  'Supply', 'Installation', 'Consulting', 'License', 'Support', 'Other',
+  'Supply', 'Installation', 'Consulting', 'License', 'Support',
+  // AMNEX product / OEM lines (amnex.com/products) — for works billed against a
+  // specific product rather than a generic component.
+  'Golden Record', 'IPMP', 'Locomate',
+  'Syncnex', 'Rapidgo', 'XUP', 'Elbtros',
+  'Outline', 'Spectator', 'IIon', 'Ecokeeper', 'Spotlock',
+  'Agrogate', 'Agrogate Finance', 'Croptrack', 'Farmlive', 'Recloud',
+  'Nirikshak', 'Eargo', 'Veintex', 'Trackous', 'Portvein', 'Samarth', 'Dairynex',
+  'BlocSafe',
+  'Other',
 ]
 
 export const WORK_VERTICALS = [
   'Traffic', 'Transit (Mobility)', 'Data Fabric & AI', 'Integrated (Smart City)',
-  'GIS', 'Agriculture', 'RNU (Resource & Utility)', 'Cloud', 'Other',
+  'GIS', 'Agriculture', 'Resource & Utility', 'Cloud', 'Other',
 ]
 
 export function parseWorks(raw: string | undefined): DepartmentWork[] {
@@ -34,10 +43,4 @@ export function parseWorks(raw: string | undefined): DepartmentWork[] {
 
 export function serializeWorks(works: DepartmentWork[]): string {
   return works.length ? JSON.stringify(works) : ''
-}
-
-/** Merge a saved value into an options list so a legacy/custom value never
- *  disappears from a <select>. */
-export function withValue(options: string[], value: string): string[] {
-  return value && !options.includes(value) ? [value, ...options] : options
 }

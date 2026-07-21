@@ -158,7 +158,7 @@ export function VisitingCard({ employeeId }: { employeeId: string }) {
             <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-2.5">
               <span className="text-[13px] font-semibold text-ink-900">Card {i + 1}</span>
               <div className="flex items-center gap-1">
-                <Button size="sm" onClick={() => pickup(card)} disabled={busy === card.id}>
+                <Button size="sm" onClick={() => pickup(card)} disabled={!!busy}>
                   <Icon name="Sparkles" size={14} /> {busy === card.id ? 'Reading…' : 'Pick up contact'}
                 </Button>
                 <Button size="sm" variant="ghost" className="text-crimson hover:bg-crimson-100" onClick={() => removeCard(card.id)}>

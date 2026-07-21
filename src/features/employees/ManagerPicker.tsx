@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
+import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 import type { Employee } from '@/lib/types'
 
@@ -14,6 +15,7 @@ interface Props {
  *  create a brand-new manager inline when no match exists. Replaces the
  *  plain <select> so a reporting manager never has to already exist. */
 export function ManagerPicker({ candidates, value, onChange, onCreate }: Props) {
+  const toast = useToast()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
@@ -38,6 +40,8 @@ export function ManagerPicker({ candidates, value, onChange, onCreate }: Props) 
       onChange(id)
       setQuery('')
       setOpen(false)
+    } catch {
+      toast('Could not create that manager — try again')
     } finally {
       setCreating(false)
     }

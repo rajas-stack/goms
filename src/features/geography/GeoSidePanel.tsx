@@ -63,7 +63,7 @@ export function GeoSidePanel({
                   <span className="block break-words text-[13px] font-medium text-ink-900">
                     Department of {d.name}
                   </span>
-                  {d.metadata.shortName && (
+                  {d.metadata.shortName && d.metadata.shortName !== d.name && (
                     <span className="block truncate text-[11px] text-muted">{d.metadata.shortName}</span>
                   )}
                 </span>

@@ -110,10 +110,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           )}
           <Button size="sm" onClick={() => ws.editEmployee(emp)}><Icon name="Pencil" size={14} /> Edit</Button>
           {!vacant && (
-            <>
-              <Button size="sm" onClick={() => setActive('event')}><Icon name="Calendar" size={14} /> Add event</Button>
-              <Button size="sm" onClick={() => setActive('charge')}><Icon name="Briefcase" size={14} /> Add charge</Button>
-            </>
+            <Button size="sm" onClick={() => setActive('event')}><Icon name="Calendar" size={14} /> Add event</Button>
           )}
 
           {/* Less-frequent / destructive actions tucked away so they can't be hit by accident. */}
@@ -137,6 +134,9 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
               <>
                 {!vacant && (
                   <>
+                    <MenuItem icon={<Icon name="Briefcase" size={15} />} onClick={() => { close(); setActive('charge') }}>
+                      Add charge
+                    </MenuItem>
                     <MenuItem icon={<Icon name="ArrowLeftRight" size={15} />} onClick={() => { close(); setActive('transfer') }}>
                       Transfer
                     </MenuItem>
@@ -187,11 +187,19 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
       />
 
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto scrollbar-thin px-6 py-5">
-        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {!vacant && <ContactCard icon="Mail" label="Email" value={emp.email || '—'} href={emp.email ? `mailto:${emp.email}` : undefined} />}
-          {!vacant && <ContactCard icon="Phone" label="Phone" value={emp.phone || '—'} href={emp.phone ? `tel:${emp.phone}` : undefined} />}
-          <ContactCard icon="Building" label="Posting" value={orgNode?.name ?? '—'} />
-        </section>
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+          {!vacant && (
+            <DetailRow label="Email">
+              {emp.email ? <a href={`mailto:${emp.email}`} className="hover:underline">{emp.email}</a> : '—'}
+            </DetailRow>
+          )}
+          {!vacant && (
+            <DetailRow label="Phone">
+              {emp.phone ? <a href={`tel:${emp.phone}`} className="hover:underline">{emp.phone}</a> : '—'}
+            </DetailRow>
+          )}
+          <DetailRow label="Posting" value={orgNode?.name ?? '—'} />
+        </dl>
 
         {/* Relationship fields are conditional on Connected — entirely hidden when not
            *  tracked as a contact, per the Connected badge shown in the header above. */}
@@ -388,20 +396,6 @@ function TimelineList({ events }: { events: TimelineEvent[] }) {
       </div>
     </div>
   )
-}
-
-function ContactCard({ icon, label, value, href }: { icon: string; label: string; value: string; href?: string }) {
-  const inner = (
-    <>
-      <Icon name={icon} size={15} className="mt-0.5 shrink-0 text-muted" />
-      <span className="min-w-0 flex-1">
-        <span className="block text-[11px] uppercase tracking-wide text-muted">{label}</span>
-        <span className="block break-words text-sm text-ink-900">{value}</span>
-      </span>
-    </>
-  )
-  const cls = 'flex min-w-0 items-start gap-2.5 rounded-lg border border-line bg-white px-3 py-2.5'
-  return href ? <a href={href} className={cn(cls, 'transition-colors hover:border-ink-600')}>{inner}</a> : <div className={cls}>{inner}</div>
 }
 
 function ChainRow({ emp, onClick, current, muted }: {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Icon } from './Icon'
+import { useClampToAncestor } from './useClampToAncestor'
 import { cn } from '@/lib/utils'
 
 export interface ComboboxOption {
@@ -39,6 +40,8 @@ export function Combobox({
   const [active, setActive] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLUListElement>(null)
+  const clampStyle = useClampToAncestor(open, listRef)
 
   const selectedLabel = useMemo(
     () => options.find((o) => o.value === value)?.label ?? '',
@@ -141,11 +144,13 @@ export function Combobox({
       <AnimatePresence>
         {open && (
           <motion.ul
+            ref={listRef}
             role="listbox"
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.1 }}
+            style={clampStyle}
             className="absolute z-40 mt-1 max-h-60 w-full overflow-y-auto scrollbar-thin rounded-xl border border-line bg-paper p-1 shadow-pop"
           >
             {matches.length === 0 ? (

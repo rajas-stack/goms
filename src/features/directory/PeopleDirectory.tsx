@@ -88,8 +88,7 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
       if (managerId && e.managerId !== managerId) return false
       if (q) {
         const managerName = e.managerId ? nameById.get(e.managerId) ?? '' : ''
-        const deptName = deptById[e.id]?.name ?? ''
-        const haystack = [e.name, e.designation, e.phone, e.email, managerName, deptName].join(' ').toLowerCase()
+        const haystack = [e.name, e.designation, e.phone, e.email, managerName].join(' ').toLowerCase()
         if (!haystack.includes(q)) return false
       }
       return true
