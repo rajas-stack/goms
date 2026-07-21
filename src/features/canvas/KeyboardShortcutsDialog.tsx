@@ -23,7 +23,7 @@ export function KeyboardShortcutsDialog({ open, onClose }: { open: boolean; onCl
     <Dialog open={open} onClose={onClose} title="Keyboard shortcuts">
       <div className="space-y-1.5">
         {SHORTCUTS.map((s) => (
-          <div key={s.action} className="flex items-center justify-between gap-4 py-1">
+          <div key={`${s.action}-${s.keys}`} className="flex items-center justify-between gap-4 py-1">
             <span className="text-sm text-ink-800">{s.action}</span>
             <kbd className="rounded border border-line bg-panel px-2 py-1 font-mono text-[11px] text-muted">{s.keys}</kbd>
           </div>

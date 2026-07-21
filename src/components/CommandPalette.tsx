@@ -47,12 +47,23 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   }
 
   return (
-    <AnimatePresence>
-      {open && (
-        <div className="fixed inset-0 z-[55] flex items-start justify-center p-4 pt-[12vh]">
-          <motion.div className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px]"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
-          <motion.div
+    // Always mounted (never gated behind AnimatePresence) so pointer-events
+    // tracks the live `open` value — otherwise the exiting backdrop keeps its
+    // full-screen onClick active for its whole fade-out, swallowing whatever
+    // the user clicks next. See Dialog.tsx for the same fix.
+    <div
+      data-canvas-ui
+      className={cn(
+        'fixed inset-0 z-[55] flex items-start justify-center p-4 pt-[12vh]',
+        open ? 'pointer-events-auto' : 'pointer-events-none',
+      )}
+    >
+      <AnimatePresence>
+        {open && (
+          <>
+            <motion.div className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px]"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
+            <motion.div
             className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-line bg-paper shadow-pop"
             initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.98 }} transition={{ type: 'spring', stiffness: 340, damping: 30 }}
@@ -133,9 +144,10 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                 </button>
               ))}
             </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }

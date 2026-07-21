@@ -44,6 +44,7 @@ export function Menu({ trigger, children, align = 'end', className }: MenuProps)
         {open && (
           <div
             ref={popupRef}
+            data-canvas-ui
             className={cn('absolute z-40 mt-1.5', align === 'end' ? 'right-0' : 'left-0')}
             style={clampStyle}
           >

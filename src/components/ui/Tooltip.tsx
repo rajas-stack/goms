@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
+import { useClampToAncestor } from './useClampToAncestor'
 import { cn } from '@/lib/utils'
 
 type Side = 'top' | 'bottom' | 'left' | 'right'
@@ -10,22 +11,37 @@ const POSITION: Record<Side, string> = {
   right: 'left-full top-1/2 ml-1.5 -translate-y-1/2',
 }
 
-/** Lightweight hover tooltip for icon-only buttons — CSS-only (no JS positioning),
- *  so it stays cheap to sprinkle across toolbars. Pick `side` to keep it clear
- *  of viewport edges and neighboring UI. */
+/** Hover tooltip for icon-only buttons. Tracks hover in JS (not pure CSS
+ *  `:hover`) so it can use the same edge-clamping (`useClampToAncestor`) as
+ *  Menu/Combobox — a tooltip centered under a trigger near the screen edge
+ *  (e.g. the leftmost "Back" button or the rightmost toolbar icon) would
+ *  otherwise render partly off-screen and get visually clipped. */
 export function Tooltip({ label, side = 'top', className, children }: {
   label: string
   side?: Side
   className?: string
   children: ReactNode
 }) {
+  const [open, setOpen] = useState(false)
+  const tooltipRef = useRef<HTMLSpanElement>(null)
+  const clampStyle = useClampToAncestor(open, tooltipRef)
+
   return (
-    <span className={cn('group/tooltip relative inline-flex', className)}>
+    <span
+      className={cn('relative inline-flex', className)}
+      onPointerEnter={() => setOpen(true)}
+      onPointerLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
+    >
       {children}
       <span
+        ref={tooltipRef}
         role="tooltip"
+        style={clampStyle}
         className={cn(
-          'pointer-events-none absolute z-30 whitespace-nowrap rounded-md bg-ink-900 px-2 py-1 text-[11px] font-medium text-paper opacity-0 shadow-pop transition-opacity duration-150 group-hover/tooltip:opacity-100',
+          'pointer-events-none absolute z-30 whitespace-nowrap rounded-md bg-ink-900 px-2 py-1 text-[11px] font-medium text-paper shadow-pop transition-opacity duration-150',
+          open ? 'opacity-100' : 'opacity-0',
           POSITION[side],
         )}
       >
