@@ -40,7 +40,7 @@ export function Combobox({
   const [active, setActive] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const listRef = useRef<HTMLUListElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
   const clampStyle = useClampToAncestor(open, listRef)
 
   const selectedLabel = useMemo(

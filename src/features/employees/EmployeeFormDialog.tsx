@@ -71,6 +71,8 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
         lastInteractionAt: employee.lastInteractionAt ?? '', followUpDate: employee.followUpDate ?? '',
         notes: employee.notes,
         relationshipOwner: employee.metadata.relationshipOwner ?? '',
+        selectedPersonId: '',
+        selectedPersonName: '',
       })
     } else {
       setForm({ ...EMPTY, managerId: presetManagerId ?? '' })
