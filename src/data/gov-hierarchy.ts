@@ -272,6 +272,77 @@ const INDUSTRY_BODIES_SPEC: OrgSpec = {
   ],
 }
 
+// --- Maharashtra (Housing Dept -> MHADA; General Administration -> MahaIT) -
+
+const MAHARASHTRA_DEPTS: OrgSpec[] = [
+  {
+    name: 'Housing', typeKey: 'department', code: 'MH-HSG',
+    description: 'Housing Department (Ministry of Housing), Government of Maharashtra.',
+    children: [
+      { name: 'Maharashtra Housing and Area Development Authority (MHADA)', typeKey: 'branch', code: 'MHADA' },
+    ],
+  },
+  {
+    name: 'General Administration – IT', typeKey: 'department', code: 'MH-GADIT',
+    description: 'General Administration Department – IT (GAD-IT / IT Department), Government of Maharashtra.',
+    children: [
+      { name: 'Maharashtra Information Technology Corporation Ltd. (MahaIT)', typeKey: 'branch', code: 'MAHAIT' },
+    ],
+  },
+]
+
+// --- The 8 other named states (State Government hierarchy image) ----------
+//
+// Acronym-to-state mapping verified by web search against each
+// organization's official identity (not assumed from image layout alone):
+// RSLDC = Rajasthan Skill and Livelihoods Development Corporation (Rajasthan);
+// UPDESCO = Uttar Pradesh Development Systems Corporation Ltd. (UP); GNIDA =
+// Greater Noida Industrial Development Authority, Gautam Buddha Nagar, UP (a
+// second, distinct UP body); BELTRON = Bihar State Electronics Development
+// Corporation Ltd. (Bihar); MPSEDC = Madhya Pradesh State Electronics
+// Development Corporation Ltd. (Madhya Pradesh); OCAC = Odisha Computer
+// Application Centre (Odisha); GiL = Gujarat Informatics Ltd. (Gujarat).
+//
+// BRCD could NOT be confirmed against any official Andhra Pradesh (or other)
+// source in this research pass — it's placed under Andhra Pradesh only
+// because that's the one state left unassigned in the image, and is flagged
+// as an explicit unverified TODO rather than asserted as fact. Confirm
+// against the source image before treating this entry as final.
+
+const KSITM_SPEC: OrgSpec = { name: 'Kerala State IT Mission (KSITM)', typeKey: 'department', code: 'KSITM' }
+const RSLDC_SPEC: OrgSpec = {
+  name: 'RSLDC', typeKey: 'department', code: 'RSLDC',
+  description: 'Rajasthan Skill and Livelihoods Development Corporation.',
+}
+const UPDESCO_SPEC: OrgSpec = {
+  name: 'UPDESCO', typeKey: 'department', code: 'UPDESCO',
+  description: 'Uttar Pradesh Development Systems Corporation Ltd.',
+}
+const GNIDA_SPEC: OrgSpec = {
+  name: 'GNIDA', typeKey: 'department', code: 'GNIDA',
+  description: 'Greater Noida Industrial Development Authority.',
+}
+const BELTRON_SPEC: OrgSpec = {
+  name: 'BELTRON', typeKey: 'department', code: 'BELTRON',
+  description: 'Bihar State Electronics Development Corporation Ltd.',
+}
+const MPSEDC_SPEC: OrgSpec = {
+  name: 'MPSEDC', typeKey: 'department', code: 'MPSEDC',
+  description: 'Madhya Pradesh State Electronics Development Corporation Ltd.',
+}
+const OCAC_SPEC: OrgSpec = {
+  name: 'OCAC', typeKey: 'department', code: 'OCAC',
+  description: 'Odisha Computer Application Centre.',
+}
+const GIL_SPEC: OrgSpec = {
+  name: 'GiL', typeKey: 'department', code: 'GIL',
+  description: 'Gujarat Informatics Ltd.',
+}
+const BRCD_SPEC: OrgSpec = {
+  name: 'BRCD', typeKey: 'department', code: 'BRCD',
+  notes: 'TODO — unverified: no organization matching this acronym could be confirmed against an official Andhra Pradesh source during this build. Confirm the exact body/full name against the reference image before treating this entry as final.',
+}
+
 // --- Group registry + builder entry point ---------------------------------
 
 /** Reserved stateCode for the virtual "Government of India (Central)" geo
@@ -286,9 +357,17 @@ interface StateOrgGroup {
   specs: OrgSpec[]
 }
 
-// Task 4 appends Maharashtra and the other 8 named states to this array.
 const GROUPS: StateOrgGroup[] = [
   { stateName: null, specs: [MOSPI_SPEC, MEITY_SPEC, MOEFCC_SPEC, NATIONAL_AGENCIES_SPEC, INDUSTRY_BODIES_SPEC] },
+  { stateName: 'Maharashtra', specs: MAHARASHTRA_DEPTS },
+  { stateName: 'Kerala', specs: [KSITM_SPEC] },
+  { stateName: 'Rajasthan', specs: [RSLDC_SPEC] },
+  { stateName: 'Uttar Pradesh', specs: [UPDESCO_SPEC, GNIDA_SPEC] },
+  { stateName: 'Bihar', specs: [BELTRON_SPEC] },
+  { stateName: 'Madhya Pradesh', specs: [MPSEDC_SPEC] },
+  { stateName: 'Odisha', specs: [OCAC_SPEC] },
+  { stateName: 'Gujarat', specs: [GIL_SPEC] },
+  { stateName: 'Andhra Pradesh', specs: [BRCD_SPEC] },
 ]
 
 function slug(s: string): string {
