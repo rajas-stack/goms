@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { IndiaMap } from '@/features/map/IndiaMap'
 import { useStates } from '@/lib/api'
@@ -31,6 +32,16 @@ export function Landing() {
             open its workspace.
           </motion.p>
         </div>
+
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+          <Link
+            to="/state/0"
+            className="group flex items-center gap-3 rounded-card border border-line bg-white px-4 py-3 text-sm font-medium text-ink-900 transition-colors hover:border-ink-600 hover:bg-panel/60"
+          >
+            Government of India (Central) — MoSPI, MeitY, CAQM & national agencies
+            <span aria-hidden className="ml-auto text-muted transition-transform group-hover:translate-x-0.5">→</span>
+          </Link>
+        </motion.div>
 
         <motion.div
           className="grid grid-cols-2 gap-3"
