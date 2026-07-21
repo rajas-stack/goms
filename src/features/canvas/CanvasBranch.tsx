@@ -21,7 +21,7 @@ export function itemKey(item: CanvasItem): string {
   return item.kind === 'node' ? `node:${item.node.id}` : `emp:${item.employee.id}`
 }
 
-const EMPLOYEE_ADDERS = new Set(['office', 'unit'])
+const EMPLOYEE_ADDERS = new Set(['department', 'branch', 'division', 'office', 'unit'])
 
 export interface Controlled {
   expanded: boolean

@@ -13,7 +13,7 @@ import { Badge, CodeChip } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 
-const EMPLOYEE_ADDERS = new Set(['office', 'unit'])
+const EMPLOYEE_ADDERS = new Set(['department', 'branch', 'division', 'office', 'unit'])
 
 export function NodeDetails({ nodeId }: { nodeId: string }) {
   const ws = useWorkspace()

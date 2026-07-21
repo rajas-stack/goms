@@ -9,7 +9,7 @@ import { nodeAccent } from '@/lib/node-colors'
 import { cn } from '@/lib/utils'
 import type { HierNode } from '@/lib/types'
 
-const EMPLOYEE_ADDERS = new Set(['office', 'unit'])
+const EMPLOYEE_ADDERS = new Set(['department', 'branch', 'division', 'office', 'unit'])
 
 interface Props {
   node: HierNode

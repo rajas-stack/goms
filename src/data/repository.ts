@@ -161,7 +161,7 @@ export function isoToday(): string {
 }
 
 /** Org node types an employee can be posted at. */
-const POSTING_TYPES = new Set(['office', 'unit'])
+const POSTING_TYPES = new Set(['department', 'branch', 'division', 'office', 'unit'])
 
 class InMemoryRepository implements Repository {
   private data: GormsData = buildSeed()
