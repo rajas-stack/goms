@@ -27,6 +27,7 @@ function clippingBounds(el: HTMLElement): { left: number; right: number; top: nu
  *  on both axes, and keeps it corrected across a window resize while open. */
 export function useClampToAncestor(open: boolean, popupRef: RefObject<HTMLElement>): CSSProperties | undefined {
   const [clampStyle, setClampStyle] = useState<CSSProperties>()
+  const clampRef = useRef({ dx: 0, dy: 0 })
   const recomputeRef = useRef<() => void>(() => {})
 
   recomputeRef.current = () => {
@@ -34,17 +35,30 @@ export function useClampToAncestor(open: boolean, popupRef: RefObject<HTMLElemen
     if (!popup) return
     const rect = popup.getBoundingClientRect()
     const bounds = clippingBounds(popup)
+    
+    const unx = rect.left - clampRef.current.dx
+    const uny = rect.top - clampRef.current.dy
+    const right = rect.right - clampRef.current.dx
+    const bottom = rect.bottom - clampRef.current.dy
+
     let dx = 0
-    if (rect.left < bounds.left) dx = bounds.left - rect.left
-    else if (rect.right > bounds.right) dx = bounds.right - rect.right
+    if (unx < bounds.left) dx = bounds.left - unx
+    else if (right > bounds.right) dx = bounds.right - right
+
     let dy = 0
-    if (rect.top < bounds.top) dy = bounds.top - rect.top
-    else if (rect.bottom > bounds.bottom) dy = bounds.bottom - rect.bottom
-    setClampStyle(dx !== 0 || dy !== 0 ? { transform: `translate(${dx}px, ${dy}px)` } : undefined)
+    if (uny < bounds.top) dy = bounds.top - uny
+    else if (bottom > bounds.bottom) dy = bounds.bottom - bottom
+
+    clampRef.current = { dx, dy }
+    setClampStyle(dx !== 0 || dy !== 0 ? { '--nudge-x': `${dx}px`, '--nudge-y': `${dy}px` } as CSSProperties : undefined)
   }
 
   useLayoutEffect(() => {
-    if (!open) { setClampStyle(undefined); return }
+    if (!open) {
+      clampRef.current = { dx: 0, dy: 0 }
+      setClampStyle(undefined)
+      return
+    }
     recomputeRef.current()
     const onResize = () => recomputeRef.current()
     window.addEventListener('resize', onResize)

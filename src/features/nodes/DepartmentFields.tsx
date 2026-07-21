@@ -9,10 +9,14 @@ import type { Employee } from '@/lib/types'
  *  rendered by NodeFormDialog when the node being edited is a department.
  *  Everything is stored on the node's metadata so the HierNode shape is
  *  untouched. */
-export function DepartmentFields({ meta, setMeta, employees }: {
+export function DepartmentFields({ meta, setMeta, employees, onCreateHead }: {
   meta: Record<string, string>
   setMeta: (updater: (m: Record<string, string>) => Record<string, string>) => void
   employees: Employee[]
+  /** Lets the department-head field create a person who isn't in the system
+   *  yet. Undefined while the department itself hasn't been saved (no
+   *  org node to attach a new employee to). */
+  onCreateHead?: (name: string, designation: string) => Promise<string>
 }) {
   const set = (key: string, value: string) => setMeta((m) => ({ ...m, [key]: value }))
 
@@ -22,8 +26,17 @@ export function DepartmentFields({ meta, setMeta, employees }: {
         <Input value={meta.shortName ?? ''} onChange={(e) => set('shortName', e.target.value)} placeholder="e.g. RDD" />
       </Field>
 
-      <Field label="Department head">
-        <EmployeePicker candidates={employees} value={meta.deptHead ?? ''} onChange={(id) => set('deptHead', id)} />
+      <Field
+        label="Department head"
+        hint={onCreateHead ? undefined : 'Save the department first to add someone new as head.'}
+      >
+        <EmployeePicker
+          candidates={employees}
+          value={meta.deptHead ?? ''}
+          onChange={(id) => set('deptHead', id)}
+          onCreate={onCreateHead}
+          createLabel={(name) => `Create new department head “${name}”`}
+        />
       </Field>
 
       <div className="rounded-card border border-line bg-panel/40 p-4">

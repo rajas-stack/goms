@@ -1,0 +1,22 @@
+image: node:20
+
+pages:
+  stage: deploy
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
+  script:
+    - npm ci --cache .npm --prefer-offline
+    - npm run build
+    # GitLab Pages expects the output in a 'public' directory
+    - rm -rf public
+    - mv dist public
+  artifacts:
+    paths:
+      - public
+    expire_in: 1 hour
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"

@@ -9,12 +9,14 @@ interface Props {
   value: string
   onChange: (id: string) => void
   onCreate: (name: string) => Promise<string>
+  createLabel?: (name: string) => string
+  onQueryChange?: (query: string) => void
 }
 
 /** Search-or-create manager combobox: type to filter existing peers, or
  *  create a brand-new manager inline when no match exists. Replaces the
  *  plain <select> so a reporting manager never has to already exist. */
-export function ManagerPicker({ candidates, value, onChange, onCreate }: Props) {
+export function ManagerPicker({ candidates, value, onChange, onCreate, placeholder, createLabel, onQueryChange }: Props) {
   const toast = useToast()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
@@ -66,10 +68,14 @@ export function ManagerPicker({ candidates, value, onChange, onCreate }: Props) 
       <input
         ref={inputRef}
         value={query}
-        onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
+        onChange={(e) => {
+          setQuery(e.target.value)
+          onQueryChange?.(e.target.value)
+          setOpen(true)
+        }}
         onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 120)}
-        placeholder="Search or type a new manager’s name…"
+        placeholder={placeholder ?? "Search or type a new manager’s name…"}
         className="h-10 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink placeholder:text-muted/70 focus:border-ink-600 focus-visible:focus-ring"
       />
       {open && (
@@ -108,7 +114,7 @@ export function ManagerPicker({ candidates, value, onChange, onCreate }: Props) 
               )}
             >
               <Icon name="UserPlus" size={14} />
-              {creating ? 'Creating…' : `Create new manager “${query.trim()}”`}
+              {creating ? 'Creating…' : createLabel ? createLabel(query.trim()) : `Create new manager “${query.trim()}”`}
             </button>
           )}
         </div>

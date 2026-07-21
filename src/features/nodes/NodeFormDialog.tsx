@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { PhoneInput, isValidPhone } from '@/components/ui/PhoneInput'
 import { useToast } from '@/components/ui/Toast'
-import { useAllEmployees, useNodeMutations } from '@/lib/api'
+import { useAllEmployees, useEmployeeMutations, useNodeMutations } from '@/lib/api'
 import { childTypesOf, NODE_TYPE_MAP } from '@/lib/node-types'
 import { fieldsForType } from './metadata-fields'
 import { DepartmentFields } from './DepartmentFields'
@@ -24,6 +24,7 @@ interface Props {
 export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepartment, onClose, onSaved }: Props) {
   const toast = useToast()
   const { create, update } = useNodeMutations()
+  const { create: createEmployee } = useEmployeeMutations()
 
   const childOptions = useMemo(() => (parent ? childTypesOf(parent.typeKey) : []), [parent])
   const [typeKey, setTypeKey] = useState<string>('')
@@ -47,6 +48,15 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
     setName(mode === 'edit' ? node?.name ?? '' : '')
     setMeta(mode === 'edit' ? { ...node?.metadata } : {})
   }, [open, mode, node, childOptions])
+
+  async function handleCreateHead(headName: string, designation: string) {
+    const targetNodeId = node?.id ?? parent?.id
+    if (!targetNodeId) throw new Error('No org node to attach to')
+    const created = await createEmployee.mutateAsync({
+      name: headName, designation, email: '', phone: '', orgNodeId: targetNodeId, managerId: null,
+    })
+    return created.id
+  }
 
   async function submit() {
     if (!name.trim()) return
@@ -110,7 +120,7 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
             autoFocus
           />
         </Field>
-        {isDepartment && <DepartmentFields meta={meta} setMeta={setMeta} employees={employees} />}
+        {isDepartment && <DepartmentFields meta={meta} setMeta={setMeta} employees={employees} onCreateHead={handleCreateHead} />}
         {fields.map((f) => {
           const value = meta[f.key] ?? ''
           const phoneInvalid = f.type === 'phone' && !isValidPhone(value)

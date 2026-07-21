@@ -175,7 +175,7 @@ function WorkspaceHeader({ stateName, stateCode, view, onView }: {
   const ws = useWorkspace()
 
   return (
-    <div className="z-10 flex flex-wrap items-center gap-3 border-b border-line bg-white/80 px-4 py-3 backdrop-blur">
+    <div className="z-20 flex flex-wrap items-center gap-3 border-b border-line bg-white/80 px-4 py-3 backdrop-blur">
       <Tooltip label="Back to the map" side="bottom">
         <button onClick={() => navigate('/map')} aria-label="Back to the map" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-panel hover:text-ink">
           <Icon name="ArrowLeft" size={15} />

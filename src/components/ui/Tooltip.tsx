@@ -5,10 +5,17 @@ import { cn } from '@/lib/utils'
 type Side = 'top' | 'bottom' | 'left' | 'right'
 
 const POSITION: Record<Side, string> = {
-  top: 'bottom-full left-1/2 mb-1.5 -translate-x-1/2',
-  bottom: 'top-full left-1/2 mt-1.5 -translate-x-1/2',
-  left: 'right-full top-1/2 mr-1.5 -translate-y-1/2',
-  right: 'left-full top-1/2 ml-1.5 -translate-y-1/2',
+  top: 'bottom-full left-1/2 mb-1.5',
+  bottom: 'top-full left-1/2 mt-1.5',
+  left: 'right-full top-1/2 mr-1.5',
+  right: 'left-full top-1/2 ml-1.5',
+}
+
+const CENTER: Record<Side, string> = {
+  top: 'translate(calc(-50% + var(--nudge-x, 0px)), var(--nudge-y, 0px))',
+  bottom: 'translate(calc(-50% + var(--nudge-x, 0px)), var(--nudge-y, 0px))',
+  left: 'translate(var(--nudge-x, 0px), calc(-50% + var(--nudge-y, 0px)))',
+  right: 'translate(var(--nudge-x, 0px), calc(-50% + var(--nudge-y, 0px)))',
 }
 
 /** Hover tooltip for icon-only buttons. Tracks hover in JS (not pure CSS
@@ -38,7 +45,7 @@ export function Tooltip({ label, side = 'top', className, children }: {
       <span
         ref={tooltipRef}
         role="tooltip"
-        style={clampStyle}
+        style={{ ...clampStyle, transform: CENTER[side] }}
         className={cn(
           'pointer-events-none absolute z-30 whitespace-nowrap rounded-md bg-ink-900 px-2 py-1 text-[11px] font-medium text-paper shadow-pop transition-opacity duration-150',
           open ? 'opacity-100' : 'opacity-0',

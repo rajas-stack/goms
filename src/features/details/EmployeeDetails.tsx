@@ -176,12 +176,16 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
         open={reporteeMode !== null}
         orgNode={orgNode ?? null}
         employee={null}
+        reporteeMode={reporteeMode}
         presetManagerId={reporteeMode === 'junior' ? emp.id : (emp.managerId ?? undefined)}
         onClose={() => setReporteeMode(null)}
         onSaved={async (newId) => {
           if (reporteeMode === 'manager') {
             await setManager.mutateAsync({ employeeId: emp.id, managerId: newId })
             toast(`${emp.name} now reports to the new manager`)
+          } else if (reporteeMode === 'junior') {
+            await setManager.mutateAsync({ employeeId: newId, managerId: emp.id })
+            toast(`Added junior to ${emp.name}`)
           }
           setReporteeMode(null)
           ws.select('employee', newId)
@@ -207,17 +211,19 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           />
         </dl>
 
-        {/* Relationship fields are conditional on Connected — entirely hidden when not
-           *  tracked as a contact, per the Connected badge shown in the header above. */}
-        {!vacant && emp.connected && (
+        {!vacant && (
           <Section title="Relationship" icon="Handshake">
             <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-              <DetailRow label="Quality">
-                <QualityBadge quality={emp.relationshipQuality} />
-              </DetailRow>
-              <DetailRow label="Status"><StatusBadge status={emp.relationshipStatus} /></DetailRow>
-              <DetailRow label="Type" value={emp.relationshipType || '—'} />
-              <DetailRow label="Introduced by" value={emp.introducedBy || '—'} />
+              {emp.connected && (
+                <>
+                  <DetailRow label="Quality">
+                    <QualityBadge quality={emp.relationshipQuality} />
+                  </DetailRow>
+                  <DetailRow label="Status"><StatusBadge status={emp.relationshipStatus} /></DetailRow>
+                  <DetailRow label="Type" value={emp.relationshipType || '—'} />
+                  <DetailRow label="Introduced by" value={emp.introducedBy || '—'} />
+                </>
+              )}
               <DetailRow label="Preferred contact" value={emp.preferredComm ? COMM_LABEL[emp.preferredComm] : '—'} />
               <DetailRow label="Important contact" value={emp.importantContact ? 'Yes' : 'No'} />
               <DetailRow label="Last interaction" value={emp.lastInteractionAt ?? '—'} />

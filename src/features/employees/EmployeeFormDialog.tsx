@@ -19,6 +19,7 @@ interface Props {
   orgNode: HierNode | null
   employee: Employee | null
   presetManagerId?: string
+  reporteeMode?: 'manager' | 'junior' | null
   onClose: () => void
   onSaved: (id: string) => void
 }
@@ -36,6 +37,8 @@ const COMMS: { value: PreferredComm; label: string }[] = [
 
 const EMPTY = {
   name: '', designation: '', email: '', phone: '', photoUrl: null as string | null, managerId: '',
+  selectedPersonId: '',
+  selectedPersonName: '',
   vacant: false,
   connected: true,
   relationshipStatus: 'new' as RelationshipStatus, relationshipQuality: 'neutral' as RelationshipQuality,
@@ -44,7 +47,7 @@ const EMPTY = {
   relationshipOwner: '',
 }
 
-export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, onClose, onSaved }: Props) {
+export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, reporteeMode, onClose, onSaved }: Props) {
   const toast = useToast()
   const { create, update, addTimelineEvent } = useEmployeeMutations()
   const { data: employeeOrgNode } = useNode(employee?.orgNodeId ?? null)
@@ -82,9 +85,9 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, o
   const emailValid = form.vacant || isValidEmail(form.email)
   const phoneValid = form.vacant || isValidPhone(form.phone)
   // A vacant seat only needs a title; a filled record needs a name + valid contacts.
-  const canSubmit = form.vacant
-    ? !!form.designation.trim()
-    : !!form.name.trim() && emailValid && phoneValid
+  const canSubmit = reporteeMode
+    ? (form.vacant ? !!form.designation.trim() : (!!form.selectedPersonId || !!form.selectedPersonName.trim()) && !!form.designation.trim())
+    : (form.vacant ? !!form.designation.trim() : !!form.name.trim() && emailValid && phoneValid)
   const wasVacant = !!employee?.vacant
   const fillingVacancy = wasVacant && !form.vacant
 
@@ -96,17 +99,53 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, o
     reader.readAsDataURL(file)
   }
 
-  async function createManager(name: string): Promise<string> {
+  async function createReportee(name: string): Promise<string> {
     if (!postingNode) throw new Error('No posting to attach the new manager to')
     const created = await create.mutateAsync({
-      name, designation: 'Manager', email: '', phone: '', orgNodeId: postingNode.id, managerId: null,
+      name, designation: reporteeMode === 'manager' ? 'Manager' : 'Junior', email: '', phone: '', orgNodeId: postingNode.id, managerId: null,
     })
-    toast(`Added ${name} as a new manager`)
+    toast(`Created new ${reporteeMode} ${name}`)
     return created.id
   }
 
   async function submit() {
     if (!canSubmit) return
+
+    if (reporteeMode) {
+      if (form.vacant) {
+        if (!orgNode) return
+        const created = await create.mutateAsync({
+          name: '', designation: form.designation.trim(), email: '', phone: '',
+          vacant: true, orgNodeId: orgNode.id, managerId: null,
+        })
+        onSaved(created.id)
+      } else {
+        const personId = form.selectedPersonId || await createReportee(form.selectedPersonName.trim())
+        if (!personId) return
+        await update.mutateAsync({
+          id: personId,
+          patch: { 
+            designation: form.designation.trim(), 
+            vacant: false,
+            connected: form.connected,
+            relationshipStatus: form.relationshipStatus, 
+            relationshipQuality: form.relationshipQuality,
+            relationshipType: form.relationshipType, 
+            introducedBy: form.introducedBy,
+            importantContact: form.importantContact, 
+            preferredComm: form.preferredComm,
+            lastInteractionAt: form.lastInteractionAt || null, 
+            followUpDate: form.followUpDate || null,
+            notes: form.notes,
+            metadata: { ...(employee?.metadata ?? {}), relationshipOwner: form.relationshipOwner },
+          },
+        })
+        onSaved(personId)
+      }
+      onClose()
+      return
+    }
+
     const patch = {
       name: form.vacant ? '' : form.name.trim(), designation: form.designation,
       email: form.vacant ? '' : form.email, phone: form.vacant ? '' : form.phone,
@@ -146,13 +185,13 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, o
       open={open}
       onClose={onClose}
       size="lg"
-      title={employee ? (wasVacant ? 'Assign / edit position' : 'Edit employee') : 'Add employee'}
+      title={employee ? (wasVacant ? 'Assign / edit position' : 'Edit employee') : reporteeMode === 'manager' ? 'Add Reporting Manager' : reporteeMode === 'junior' ? 'Add Junior' : 'Add employee'}
       description={orgNode ? `Posting: ${orgNode.name}` : employee?.designation}
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="primary" onClick={submit} disabled={!canSubmit}>
-            {employee ? 'Save changes' : form.vacant ? 'Add position' : 'Add employee'}
+            {employee ? 'Save changes' : reporteeMode === 'manager' ? 'Add manager' : reporteeMode === 'junior' ? 'Add junior' : form.vacant ? 'Add position' : 'Add employee'}
           </Button>
         </>
       }
@@ -170,7 +209,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, o
           </label>
         </Field>
 
-        {!form.vacant && (
+        {!reporteeMode && !form.vacant && (
           <Field label="Profile Picture">
             <div className="flex items-center gap-3">
               {form.photoUrl ? (
@@ -199,11 +238,29 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, o
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {!form.vacant && <Field label="Full name"><Input value={form.name} onChange={set('name')} autoFocus /></Field>}
+          {reporteeMode && !form.vacant && (
+            <div className="col-span-full">
+              <Field label={reporteeMode === 'manager' ? 'Reporting Manager Name' : 'Junior Name'}>
+                <ManagerPicker
+                  candidates={managerChoices}
+                  value={form.selectedPersonId}
+                  onChange={(id) => {
+                    const p = peers.find((c) => c.id === id)
+                    setForm((f) => ({ ...f, selectedPersonId: id, selectedPersonName: '', designation: p ? p.designation : f.designation }))
+                  }}
+                  onQueryChange={(q) => setForm((f) => ({ ...f, selectedPersonName: q }))}
+                  onCreate={createReportee}
+                  placeholder={`Search or type a new ${reporteeMode}'s name…`}
+                  createLabel={(name) => `Create new ${reporteeMode} “${name}”`}
+                />
+              </Field>
+            </div>
+          )}
+          {!reporteeMode && !form.vacant && <Field label="Full name"><Input value={form.name} onChange={set('name')} autoFocus /></Field>}
           <Field label={form.vacant ? 'Position title' : 'Designation'}>
             <Input value={form.designation} onChange={set('designation')} placeholder="e.g. Deputy Director" autoFocus={form.vacant} />
           </Field>
-          {!form.vacant && (
+          {!reporteeMode && !form.vacant && (
             <Field label="Email">
               <Input
                 type="email"
@@ -215,7 +272,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, o
               {!emailValid && <span className="mt-1 block text-xs text-crimson">Enter a valid email address.</span>}
             </Field>
           )}
-          {!form.vacant && (
+          {!reporteeMode && !form.vacant && (
             <Field label="Contact number" hint="+91 · 2-digit area code · 8-digit number">
               <PhoneInput value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} invalid={!phoneValid} />
               {!phoneValid && <span className="mt-1 block text-xs text-crimson">Enter a 2-digit area code and an 8-digit number.</span>}
@@ -223,14 +280,16 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, o
           )}
         </div>
 
-        <Field label="Reporting manager" hint="Search an existing person, or type a new name to create one.">
-          <ManagerPicker
-            candidates={managerChoices}
-            value={form.managerId}
-            onChange={(id) => setForm((f) => ({ ...f, managerId: id }))}
-            onCreate={createManager}
-          />
-        </Field>
+        {!reporteeMode && (
+          <Field label="Reporting manager" hint="Search an existing person, or type a new name to create one.">
+            <ManagerPicker
+              candidates={managerChoices}
+              value={form.managerId}
+              onChange={(id) => setForm((f) => ({ ...f, managerId: id }))}
+              onCreate={createReportee}
+            />
+          </Field>
+        )}
 
         <Field label="Relationship Owner / AMNEX Representative" hint="The AMNEX account manager who owns this relationship.">
           <SalesTeamPicker
@@ -253,24 +312,28 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, o
           </Field>
         )}
 
-        {!form.vacant && form.connected && (
+        {!form.vacant && (
           <div className="grid grid-cols-1 gap-4 rounded-card border border-line bg-panel/40 p-4 sm:grid-cols-2">
-            <Field label="Relationship quality">
-              <Select value={form.relationshipQuality} onChange={set('relationshipQuality')}>
-                {QUALITIES.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
-              </Select>
-            </Field>
-            <Field label="Relationship status">
-              <Select value={form.relationshipStatus} onChange={set('relationshipStatus')}>
-                {STATUSES.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
-              </Select>
-            </Field>
-            <Field label="Relationship type">
-              <Input value={form.relationshipType} onChange={set('relationshipType')} placeholder="e.g. Counterpart, Mentor" />
-            </Field>
-            <Field label="Introduced by">
-              <Input value={form.introducedBy} onChange={set('introducedBy')} />
-            </Field>
+            {form.connected && (
+              <>
+                <Field label="Relationship quality">
+                  <Select value={form.relationshipQuality} onChange={set('relationshipQuality')}>
+                    {QUALITIES.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
+                  </Select>
+                </Field>
+                <Field label="Relationship status">
+                  <Select value={form.relationshipStatus} onChange={set('relationshipStatus')}>
+                    {STATUSES.map((s) => <option key={s} value={s} className="capitalize">{s}</option>)}
+                  </Select>
+                </Field>
+                <Field label="Relationship type">
+                  <Input value={form.relationshipType} onChange={set('relationshipType')} placeholder="e.g. Counterpart, Mentor" />
+                </Field>
+                <Field label="Introduced by">
+                  <Input value={form.introducedBy} onChange={set('introducedBy')} />
+                </Field>
+              </>
+            )}
             <Field label="Preferred communication">
               <Select value={form.preferredComm} onChange={set('preferredComm')}>
                 {COMMS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}

@@ -143,17 +143,20 @@ export function Combobox({
 
       <AnimatePresence>
         {open && (
-          <motion.ul
+          <div
             ref={listRef}
-            role="listbox"
-            data-canvas-ui
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.1 }}
-            style={clampStyle}
-            className="absolute z-40 mt-1 max-h-60 w-full overflow-y-auto scrollbar-thin rounded-xl border border-line bg-paper p-1 shadow-pop"
+            style={{ ...clampStyle, transform: 'translate(var(--nudge-x, 0px), var(--nudge-y, 0px))' }}
+            className="absolute z-40 mt-1 w-full"
           >
+            <motion.ul
+              role="listbox"
+              data-canvas-ui
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.1 }}
+              className="max-h-60 w-full overflow-y-auto scrollbar-thin rounded-xl border border-line bg-paper p-1 shadow-pop"
+            >
             {matches.length === 0 ? (
               <li className="px-2.5 py-2 text-[13px] text-muted">No matches</li>
             ) : (
@@ -176,7 +179,8 @@ export function Combobox({
                 </li>
               ))
             )}
-          </motion.ul>
+            </motion.ul>
+          </div>
         )}
       </AnimatePresence>
     </div>

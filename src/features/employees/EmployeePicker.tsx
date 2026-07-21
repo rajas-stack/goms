@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
-import { initials } from '@/lib/utils'
+import { useToast } from '@/components/ui/Toast'
+import { cn, initials } from '@/lib/utils'
 import type { Employee } from '@/lib/types'
 
 interface Props {
@@ -9,16 +10,28 @@ interface Props {
   onChange: (id: string) => void
   placeholder?: string
   emptyLabel?: string
+  /** When provided, typing a name with no match offers an inline "create new
+   *  person" form (name + designation) instead of staying select-only. */
+  onCreate?: (name: string, designation: string) => Promise<string>
+  createLabel?: (name: string) => string
 }
 
-/** Searchable, select-only person picker (no inline create). Used wherever a
- *  field must reference someone already in the system — department head, sales
- *  ownership, etc. Mirrors ManagerPicker's look without the create affordance. */
+/** Searchable person picker. Select-only by default (candidates already in the
+ *  system — sales ownership, transfer targets, etc); pass `onCreate` to also
+ *  allow adding someone who isn't in the roster yet, capturing their
+ *  designation inline. Mirrors ManagerPicker's look. */
 export function EmployeePicker({
   candidates, value, onChange, placeholder = 'Search a person…', emptyLabel = '— None —',
+  onCreate, createLabel,
 }: Props) {
+  const toast = useToast()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  const [formOpen, setFormOpen] = useState(false)
+  const [formName, setFormName] = useState('')
+  const [formDesignation, setFormDesignation] = useState('')
+  const [creating, setCreating] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
   const selected = candidates.find((c) => c.id === value)
 
   const matches = useMemo(() => {
@@ -29,6 +42,44 @@ export function EmployeePicker({
       .filter((c) => c.name.toLowerCase().includes(q) || c.designation.toLowerCase().includes(q))
       .slice(0, 8)
   }, [candidates, query])
+
+  const exactMatch = candidates.some((c) => c.name.trim().toLowerCase() === query.trim().toLowerCase())
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false)
+        setFormOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [open])
+
+  function openCreateForm() {
+    setFormName(query.trim())
+    setFormDesignation('')
+    setFormOpen(true)
+  }
+
+  async function submitCreate() {
+    const name = formName.trim()
+    const designation = formDesignation.trim()
+    if (!name || !designation || !onCreate || creating) return
+    setCreating(true)
+    try {
+      const id = await onCreate(name, designation)
+      onChange(id)
+      setQuery('')
+      setFormOpen(false)
+      setOpen(false)
+    } catch {
+      toast('Could not create that person — try again')
+    } finally {
+      setCreating(false)
+    }
+  }
 
   if (selected) {
     return (
@@ -45,12 +96,11 @@ export function EmployeePicker({
   }
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <input
         value={query}
         onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
         onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
         placeholder={placeholder}
         className="h-10 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink placeholder:text-muted/70 focus:border-ink-600 focus-visible:focus-ring"
       />
@@ -79,6 +129,60 @@ export function EmployeePicker({
               </button>
             ))}
           </div>
+          {onCreate && query.trim() && !exactMatch && (
+            formOpen ? (
+              <div className="space-y-2 border-t border-line p-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted">Name</label>
+                  <input
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    autoFocus
+                    className="h-8 w-full rounded-md border border-line bg-white px-2 text-sm text-ink focus:border-ink-600 focus-visible:focus-ring"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted">Designation</label>
+                  <input
+                    value={formDesignation}
+                    onChange={(e) => setFormDesignation(e.target.value)}
+                    placeholder="e.g. Principal Secretary"
+                    className="h-8 w-full rounded-md border border-line bg-white px-2 text-sm text-ink focus:border-ink-600 focus-visible:focus-ring"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setFormOpen(false)}
+                    className="rounded-md px-2.5 py-1 text-xs font-medium text-muted hover:text-ink-900"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={submitCreate}
+                    disabled={!formName.trim() || !formDesignation.trim() || creating}
+                    className={cn(
+                      'rounded-md bg-teal-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-teal-700',
+                      (!formName.trim() || !formDesignation.trim() || creating) && 'opacity-50',
+                    )}
+                  >
+                    {creating ? 'Creating…' : 'Create'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={openCreateForm}
+                className="flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-sm font-medium text-teal-600 hover:bg-teal-100/40"
+              >
+                <Icon name="UserPlus" size={14} />
+                {createLabel ? createLabel(query.trim()) : `Create new person “${query.trim()}”`}
+              </button>
+            )
+          )}
         </div>
       )}
     </div>
