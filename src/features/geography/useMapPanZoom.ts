@@ -24,6 +24,15 @@ export function useMapPanZoom(viewportRef: RefObject<HTMLDivElement>) {
   } | null>(null)
   const rafRef = useRef<number | null>(null)
   const pointRef = useRef<{ clientX: number; clientY: number } | null>(null)
+  // Two-finger pinch-to-zoom: Pointer Events already deliver a distinct
+  // `pointerId` per touch point, so this just tracks every currently-down
+  // pointer and, once 2 are active, treats their distance/midpoint as a zoom
+  // gesture instead of a pan — mirroring `onWheel`'s centering math (scale
+  // ratio applied around a fixed screen point) frame-to-frame rather than
+  // against one fixed start distance, so pinch and two-finger drag compose
+  // naturally.
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map())
+  const pinchRef = useRef<{ dist: number } | null>(null)
 
   const resetView = useCallback(() => setTransform({ x: 0, y: 0, scale: 1 }), [])
 
@@ -54,12 +63,49 @@ export function useMapPanZoom(viewportRef: RefObject<HTMLDivElement>) {
 
   function onPointerDown(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest('[data-map-ui]')) return
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (pointersRef.current.size >= 2) {
+      // A second finger just landed — hand off from single-finger pan (if
+      // one was active/captured) to pinch-zoom. `pinchRef` starts null so
+      // the next move only baselines the start distance rather than jumping
+      // the zoom.
+      dragRef.current = null
+      setDragging(false)
+      pinchRef.current = null
+      ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+      return
+    }
     dragRef.current = {
       startX: e.clientX, startY: e.clientY, originX: transform.x, originY: transform.y,
       pointerId: e.pointerId, captured: false,
     }
   }
   function onPointerMove(e: React.PointerEvent) {
+    if (pointersRef.current.has(e.pointerId)) {
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    }
+    if (pointersRef.current.size >= 2) {
+      const [a, b] = Array.from(pointersRef.current.values())
+      const dist = Math.hypot(a.x - b.x, a.y - b.y)
+      const rect = viewportRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const cx = (a.x + b.x) / 2 - rect.left
+      const cy = (a.y + b.y) / 2 - rect.top
+      if (!pinchRef.current) {
+        // First move after the 2nd finger touches down — establish the
+        // baseline distance only, same as a fresh drag origin.
+        pinchRef.current = { dist }
+        return
+      }
+      const factor = dist / pinchRef.current.dist
+      pinchRef.current.dist = dist
+      setTransform((t) => {
+        const next = clamp(t.scale * factor, MIN_ZOOM, MAX_ZOOM)
+        const ratio = next / t.scale
+        return { scale: next, x: cx - (cx - t.x) * ratio, y: cy - (cy - t.y) * ratio }
+      })
+      return
+    }
     const drag = dragRef.current
     if (!drag) return
     if (!drag.captured) {
@@ -86,7 +132,17 @@ export function useMapPanZoom(viewportRef: RefObject<HTMLDivElement>) {
   // pointerleave still fires on hit-test boundary crossing even under
   // capture — ending the drag there would make panning die the instant the
   // cursor drifts past the edge, well before the mouse button is released.
-  function endPan() {
+  //
+  // Also removes the ending pointer from the pinch-tracking map. Lifting one
+  // finger out of a 2-finger pinch does NOT try to seamlessly resume a
+  // single-finger pan — the remaining finger has to be released and pressed
+  // again to start a fresh gesture (see the pinch-tracking comment above
+  // `pointersRef`), a deliberate simplification for this polish-level task.
+  function endPan(e?: React.PointerEvent) {
+    if (e) pointersRef.current.delete(e.pointerId)
+    else pointersRef.current.clear() // hard fallback (blur/visibilitychange): drop everything
+    if (pointersRef.current.size < 2) pinchRef.current = null
+    if (pointersRef.current.size > 0) return
     dragRef.current = null
     setDragging(false)
     if (rafRef.current != null) {

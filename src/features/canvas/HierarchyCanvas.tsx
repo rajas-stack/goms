@@ -56,6 +56,15 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
   const panRafRef = useRef<number | null>(null)
   const panPointRef = useRef<{ clientX: number; clientY: number } | null>(null)
+  // Two-finger pinch-to-zoom: Pointer Events already deliver a distinct
+  // `pointerId` per touch point, so this just tracks every currently-down
+  // pointer and, once 2 are active, treats their distance/midpoint as a
+  // zoom gesture instead of a pan — mirroring `onWheel`'s ctrl-zoom centering
+  // math (scale ratio applied around a fixed screen point) frame-to-frame
+  // rather than against a single fixed start distance, so a pinch and a
+  // two-finger drag can compose naturally.
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map())
+  const pinchRef = useRef<{ dist: number } | null>(null)
   const lastPeopleDeptRef = useRef<string | null>(null)
   const [dragging, setDragging] = useState(false)
   const userInteractedRef = useRef(false)
@@ -247,15 +256,50 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
   function onPointerDown(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest('[data-canvas-card], [data-canvas-ui]')) return
     userInteractedRef.current = true
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    if (pointersRef.current.size >= 2) {
+      // A second finger just landed — hand off from single-finger pan (if
+      // one was active) to pinch-zoom. `pinchRef` starts null so the next
+      // move only baselines the start distance rather than jumping the zoom.
+      dragRef.current = null
+      setDragging(false)
+      pinchRef.current = null
+      return
+    }
     dragRef.current = { startX: e.clientX, startY: e.clientY, originX: transform.x, originY: transform.y }
     setDragging(true)
     // Prevents the details sidebar's text from being selected mid-drag, which
     // otherwise swaps in a text-selection cursor and can leave the pointer
     // looking "stuck" once the drag crosses back onto the canvas.
     document.body.classList.add('select-none')
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
   }
   function onPointerMove(e: React.PointerEvent) {
+    if (pointersRef.current.has(e.pointerId)) {
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    }
+    if (pointersRef.current.size >= 2) {
+      const [a, b] = Array.from(pointersRef.current.values())
+      const dist = Math.hypot(a.x - b.x, a.y - b.y)
+      const rect = viewportRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const cx = (a.x + b.x) / 2 - rect.left
+      const cy = (a.y + b.y) / 2 - rect.top
+      if (!pinchRef.current) {
+        // First move after the 2nd finger touches down — establish the
+        // baseline distance only, same as a fresh `onPointerDown` origin.
+        pinchRef.current = { dist }
+        return
+      }
+      const factor = dist / pinchRef.current.dist
+      pinchRef.current.dist = dist
+      setTransform((t) => {
+        const next = clamp(t.scale * factor, MIN_ZOOM, MAX_ZOOM)
+        const ratio = next / t.scale
+        return { scale: next, x: cx - (cx - t.x) * ratio, y: cy - (cy - t.y) * ratio }
+      })
+      return
+    }
     if (!dragRef.current) return
     panPointRef.current = { clientX: e.clientX, clientY: e.clientY }
     if (panRafRef.current != null) return
@@ -279,7 +323,20 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
   // released, and leave `select-none` stuck on <body> since it's the
   // pointerup/lostpointercapture path (not pointerleave) that was meant to
   // clear it.
-  function endPan() {
+  //
+  // Also removes the ending pointer from the pinch-tracking map. Lifting one
+  // finger out of a 2-finger pinch does NOT try to seamlessly resume a
+  // single-finger pan — the remaining finger has to be released and pressed
+  // again to start a fresh gesture. That's a deliberate simplification (see
+  // the pinch-tracking comment above `pointersRef`): reconstructing a
+  // no-jump single-finger pan origin from mid-gesture state is real added
+  // complexity for a "mobile UX polish" task, and this still leaves pinch
+  // and pan both fully working, just not chainable without a full release.
+  function endPan(e?: React.PointerEvent) {
+    if (e) pointersRef.current.delete(e.pointerId)
+    else pointersRef.current.clear() // hard fallback (blur/visibilitychange): drop everything
+    if (pointersRef.current.size < 2) pinchRef.current = null
+    if (pointersRef.current.size > 0) return
     dragRef.current = null
     setDragging(false)
     document.body.classList.remove('select-none')
