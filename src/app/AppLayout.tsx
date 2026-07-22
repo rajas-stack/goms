@@ -6,6 +6,7 @@ import { Rail } from '@/components/Rail'
 import { TopBar } from '@/components/TopBar'
 import { MobileNavDrawer } from '@/components/MobileNavDrawer'
 import { CommandPalette } from '@/components/CommandPalette'
+import { GlobalFab } from '@/components/GlobalFab'
 import { ImportDialog } from '@/features/import/ImportDialog'
 import { ToastProvider } from '@/components/ui/Toast'
 import { isTypingTarget } from '@/lib/utils'
@@ -116,6 +117,7 @@ export function AppLayout() {
         <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
         <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
         <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+        <GlobalFab />
       </Ctx.Provider>
     </ToastProvider>
   )
