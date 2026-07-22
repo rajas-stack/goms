@@ -16,9 +16,10 @@ import type { MapFeature } from './GeoMapView'
  *  this app already uses as its taluka `code`, so joining is exact — no name
  *  matching needed. */
 
-// Proxied through the dev server (see vite.config.ts) — the release host
-// doesn't send CORS headers, so the browser can't range-fetch it directly.
-const PMTILES_URL = '/geo-tiles/LGD_Villages.pmtiles'
+// Mirrored to Vercel Blob storage (public access, CORS + range requests
+// enabled by default) — the original GitHub Releases host doesn't send CORS
+// headers, so the browser can't range-fetch it directly from there.
+const PMTILES_URL = 'https://wlqvonu1huloggay.public.blob.vercel-storage.com/geo-tiles/LGD_Villages.pmtiles'
 const LAYER_NAME = 'LGD_Villages'
 const ZOOM = 10
 
