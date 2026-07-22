@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { Icon } from '@/components/ui/Icon'
+import { Tooltip } from '@/components/ui/Tooltip'
 import { cn } from '@/lib/utils'
 import type { HierNode } from '@/lib/types'
 
@@ -8,7 +9,7 @@ import type { HierNode } from '@/lib/types'
  *  tiles rather than fake polygons that would imply false geographic
  *  precision. Every tile shows the entity's name and (where meaningful) how
  *  many of its own children it has. */
-export function EntityGrid({ items, counts, countNoun, icon, emptyMessage, onSelect }: {
+export function EntityGrid({ items, counts, countNoun, icon, emptyMessage, onSelect, onAdd, addLabel }: {
   items: HierNode[]
   /** child id → count of ITS active children (from `useChildCounts`). */
   counts: Record<string, number>
@@ -21,6 +22,13 @@ export function EntityGrid({ items, counts, countNoun, icon, emptyMessage, onSel
   /** Omit for a leaf level with nowhere to drill into (villages) — tiles
    *  render as plain, non-interactive name cards instead of buttons. */
   onSelect?: (node: HierNode) => void
+  /** Optional secondary "+" affordance per tile — mirrors the canvas card's
+   *  own onAdd (add a child / add an employee). Omit for domains/levels with
+   *  no such action (e.g. geography, which has none of these). Always shown
+   *  (not hover-only) since these grids are the touch-first list surfaces. */
+  onAdd?: (node: HierNode) => void
+  /** Accessible label for the "+" button, e.g. "Add employee" / "Add branch". */
+  addLabel?: (node: HierNode) => string
 }) {
   if (items.length === 0) {
     return (
@@ -39,16 +47,22 @@ export function EntityGrid({ items, counts, countNoun, icon, emptyMessage, onSel
       {items.map((node, i) => {
         const count = counts[node.id] ?? 0
         return (
-          <motion.button
+          // A plain `<button>` can't host the nested "+" button (invalid HTML,
+          // interactive-in-interactive), so this is a div playing the button
+          // role — same click/keyboard contract, `onAdd` just needs somewhere
+          // to live alongside it.
+          <motion.div
             key={node.id}
-            type="button"
+            role={onSelect ? 'button' : undefined}
+            tabIndex={onSelect ? 0 : undefined}
             onClick={onSelect ? () => onSelect(node) : undefined}
-            disabled={!onSelect}
+            onKeyDown={onSelect ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(node) } } : undefined}
+            aria-disabled={!onSelect}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.25 }}
             className={cn(
-              'flex flex-col items-start gap-2 rounded-card border border-line bg-white p-3.5 text-left transition-colors',
+              'group relative flex flex-col items-start gap-2 rounded-card border border-line bg-white p-3.5 text-left transition-colors',
               onSelect
                 ? 'cursor-pointer hover:border-ink-600 hover:bg-panel/60 focus-visible:focus-ring'
                 : 'cursor-default',
@@ -65,7 +79,20 @@ export function EntityGrid({ items, counts, countNoun, icon, emptyMessage, onSel
                 </span>
               )}
             </span>
-          </motion.button>
+
+            {onAdd && (
+              <Tooltip label={addLabel?.(node) ?? 'Add'} side="top" className="absolute -right-2 -top-2">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onAdd(node) }}
+                  aria-label={addLabel?.(node) ?? 'Add'}
+                  className="flex h-7 w-7 items-center justify-center rounded-full border border-line bg-white text-muted shadow-sm transition-colors hover:border-ink-900 hover:text-ink-900"
+                >
+                  <Icon name="Plus" size={14} />
+                </button>
+              </Tooltip>
+            )}
+          </motion.div>
         )
       })}
     </div>

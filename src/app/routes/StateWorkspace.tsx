@@ -1,18 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useStateNode } from '@/lib/api'
+import { useEmployeesByState, useStateNode } from '@/lib/api'
 import { WorkspaceProvider, useWorkspace } from '@/features/workspace/context'
 import { HierarchyCanvas, type CanvasView } from '@/features/canvas/HierarchyCanvas'
 import { GeographyExplorer } from '@/features/geography/GeographyExplorer'
+import { OrganizationList } from '@/features/organization/OrganizationList'
+import { PeopleDirectory } from '@/features/directory/PeopleDirectory'
 import { DetailsPanel } from '@/features/details/DetailsPanel'
 import { Tabs } from '@/components/ui/Tabs'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { CodeChip } from '@/components/ui/Badge'
+import { useMediaQuery } from '@/lib/useMediaQuery'
+import { cn } from '@/lib/utils'
 
 type View = CanvasView
+type DisplayMode = 'list' | 'canvas'
 
 const DETAILS_WIDTH_KEY = 'gorms:detailsPanelWidth'
 const MIN_DETAILS_WIDTH = 320
@@ -30,6 +35,13 @@ export function StateWorkspace() {
   const stateCode = Number(code)
   const { data: stateNode, isLoading } = useStateNode(stateCode)
   const [view, setView] = useState<View>('org')
+  // Canvas on desktop (≥ lg) preserves the existing web behavior; List on
+  // mobile suits touch better. Tracks the live breakpoint until the user
+  // explicitly picks a mode via the toggle, at which point their choice
+  // sticks regardless of viewport size.
+  const isDesktop = useMediaQuery('(min-width: 1024px)')
+  const [displayModeOverride, setDisplayModeOverride] = useState<DisplayMode | null>(null)
+  const displayMode: DisplayMode = displayModeOverride ?? (isDesktop ? 'canvas' : 'list')
   const [detailsWidth, setDetailsWidth] = useState(readStoredDetailsWidth)
   const [resizing, setResizing] = useState(false)
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null)
@@ -103,11 +115,22 @@ export function StateWorkspace() {
     <WorkspaceProvider stateCode={stateCode}>
       <div className="flex h-full flex-col lg:flex-row">
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-b border-line lg:border-b-0 lg:border-r">
-          <WorkspaceHeader stateName={stateNode.name} stateCode={stateNode.code} view={view} onView={setView} />
+          <WorkspaceHeader
+            stateName={stateNode.name}
+            stateCode={stateNode.code}
+            view={view}
+            onView={setView}
+            displayMode={displayMode}
+            onDisplayMode={setDisplayModeOverride}
+          />
           <div className="relative min-h-0 flex-1">
-            {view === 'geo'
-              ? <GeographyExplorer stateNodeId={stateNode.id} />
-              : <HierarchyCanvas domain={view} stateCode={stateCode} />}
+            {view === 'geo' ? (
+              <GeographyExplorer stateNodeId={stateNode.id} />
+            ) : displayMode === 'list' ? (
+              view === 'org' ? <OrganizationList stateCode={stateCode} /> : <PeopleList stateCode={stateCode} />
+            ) : (
+              <HierarchyCanvas domain={view} stateCode={stateCode} />
+            )}
           </div>
         </div>
 
@@ -167,14 +190,17 @@ export function MobileDetailsSheet() {
   )
 }
 
-function WorkspaceHeader({ stateName, stateCode, view, onView }: {
+function WorkspaceHeader({ stateName, stateCode, view, onView, displayMode, onDisplayMode }: {
   stateName: string
   stateCode: string | null
   view: View
   onView: (v: View) => void
+  displayMode: DisplayMode
+  onDisplayMode: (m: DisplayMode) => void
 }) {
   const navigate = useNavigate()
   const ws = useWorkspace()
+  const showDisplayToggle = view === 'org' || view === 'people'
 
   return (
     <div className="z-20 flex flex-wrap items-center gap-3 border-b border-line bg-white/80 px-4 py-3 backdrop-blur">
@@ -194,6 +220,8 @@ function WorkspaceHeader({ stateName, stateCode, view, onView }: {
         tabs={[{ value: 'org', label: 'Organization' }, { value: 'geo', label: 'Geography' }, { value: 'people', label: 'People' }]}
       />
 
+      {showDisplayToggle && <DisplayModeToggle value={displayMode} onChange={onDisplayMode} />}
+
       {view === 'org' && (
         <Button size="sm" variant="primary" className="ml-auto" onClick={ws.createDepartment}>
           <Icon name="Plus" size={14} /> Department
@@ -201,4 +229,39 @@ function WorkspaceHeader({ stateName, stateCode, view, onView }: {
       )}
     </div>
   )
+}
+
+/** Small List/Canvas switch shown next to the tabs for the Organization and
+ *  People tabs only — Geography stays canvas-less either way. Both modes
+ *  read the same data and route every action through the same `ws.*`
+ *  methods/DetailsPanel, so flipping this never changes selection or what
+ *  an action does, only how the tree is browsed. */
+function DisplayModeToggle({ value, onChange }: { value: DisplayMode; onChange: (m: DisplayMode) => void }) {
+  return (
+    <div className="flex items-center gap-0.5 rounded-lg border border-line bg-white p-0.5" role="group" aria-label="List or canvas view">
+      {(['list', 'canvas'] as const).map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => onChange(mode)}
+          aria-pressed={value === mode}
+          className={cn(
+            'flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[12px] font-medium capitalize transition-colors',
+            value === mode ? 'bg-ink-900 text-paper' : 'text-muted hover:text-ink-900',
+          )}
+        >
+          <Icon name={mode === 'list' ? 'List' : 'Network'} size={13} />
+          {mode}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Thin wrapper scoping the shared phonebook (`PeopleDirectory` — the same
+ *  component `/directory` uses) to this state's employees. Zero new row
+ *  code: search/filters/selection are all `PeopleDirectory`'s own. */
+function PeopleList({ stateCode }: { stateCode: number }) {
+  const { data: employees = [] } = useEmployeesByState(stateCode)
+  return <PeopleDirectory employees={employees} />
 }
