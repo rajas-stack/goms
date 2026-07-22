@@ -99,7 +99,10 @@ export const NodeCard = forwardRef<HTMLDivElement, Props>(
             <button
               onClick={(e) => { e.stopPropagation(); onToggle() }}
               className={cn(
-                'flex h-6 w-6 items-center justify-center rounded-full border bg-white text-muted shadow-sm transition-colors hover:border-ink-600 hover:text-ink-900',
+                // Visible circle stays 24px (unchanged look); `before:` grows the
+                // actual hit area to the ≥44dp touch-target minimum without
+                // shifting layout or the card's absolute positioning.
+                'relative flex h-6 w-6 items-center justify-center rounded-full border bg-white text-muted shadow-sm transition-colors before:absolute before:-inset-2.5 before:content-[\'\'] hover:border-ink-600 hover:text-ink-900',
                 expanded && 'border-ink-900 text-ink-900',
               )}
               aria-label={expanded ? 'Collapse' : 'Expand'}
@@ -116,7 +119,9 @@ export const NodeCard = forwardRef<HTMLDivElement, Props>(
             <button
               onClick={(e) => { e.stopPropagation(); onAdd() }}
               aria-label={`Add ${childLabel.toLowerCase()}`}
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-line bg-white text-muted shadow-sm transition-all hover:border-ink-900 hover:text-ink-900"
+              // Visible circle stays 28px; `before:` expands the hit area to
+              // ≥44dp without changing the visible affordance or its position.
+              className="relative flex h-7 w-7 items-center justify-center rounded-full border border-line bg-white text-muted shadow-sm transition-all before:absolute before:-inset-2 before:content-[''] hover:border-ink-900 hover:text-ink-900"
             >
               <Icon name="Plus" size={14} />
             </button>
