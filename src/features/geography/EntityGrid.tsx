@@ -9,7 +9,7 @@ import type { HierNode } from '@/lib/types'
  *  tiles rather than fake polygons that would imply false geographic
  *  precision. Every tile shows the entity's name and (where meaningful) how
  *  many of its own children it has. */
-export function EntityGrid({ items, counts, countNoun, icon, emptyMessage, onSelect, onAdd, addLabel }: {
+export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessage, onSelect, onAdd, addLabel }: {
   items: HierNode[]
   /** child id → count of ITS active children (from `useChildCounts`). */
   counts: Record<string, number>
@@ -17,7 +17,17 @@ export function EntityGrid({ items, counts, countNoun, icon, emptyMessage, onSel
    *  the count line entirely — villages are leaves, so a "0 somethings" count
    *  under a village tile would be meaningless rather than merely zero. */
   countNoun: string | null
+  /** Grid-wide fallback icon — used for the empty-state icon, and per-tile
+   *  whenever `getIcon` is omitted or returns nothing. Geography's siblings
+   *  are always one type (all districts, all talukas, …), so its 4 call
+   *  sites just pass this and skip `getIcon`. */
   icon: string
+  /** Optional per-tile icon resolver — needed wherever siblings can be a MIX
+   *  of node types (e.g. Organization: a Branch's children can be branches,
+   *  divisions, and offices together, each with its own icon in Canvas'
+   *  `NodeCard`). Falls back to `icon` when it returns nothing so a caller
+   *  can resolve icons for known types only. */
+  getIcon?: (item: HierNode) => string | undefined
   emptyMessage: string
   /** Omit for a leaf level with nowhere to drill into (villages) — tiles
    *  render as plain, non-interactive name cards instead of buttons. */
@@ -46,6 +56,7 @@ export function EntityGrid({ items, counts, countNoun, icon, emptyMessage, onSel
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       {items.map((node, i) => {
         const count = counts[node.id] ?? 0
+        const tileIcon = getIcon?.(node) ?? icon
         return (
           // A plain `<button>` can't host the nested "+" button (invalid HTML,
           // interactive-in-interactive), so this is a div playing the button
@@ -69,7 +80,7 @@ export function EntityGrid({ items, counts, countNoun, icon, emptyMessage, onSel
             )}
           >
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-100 text-teal-600">
-              <Icon name={icon} size={16} />
+              <Icon name={tileIcon} size={16} />
             </span>
             <span className="min-w-0">
               <span className="block truncate font-display text-sm font-semibold text-ink-900">{node.name}</span>

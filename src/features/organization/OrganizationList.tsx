@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useBreadcrumb, useChildCounts, useChildren, useNode, useOrgRoots } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
 import { EntityGrid } from '@/features/geography/EntityGrid'
@@ -37,26 +37,49 @@ export function OrganizationList({ stateCode }: { stateCode: number }) {
 
   const items = atRoot ? orgRoots : children
   const currentType = current ? NODE_TYPE_MAP[current.typeKey] : undefined
-  // EntityGrid takes one icon for the whole grid (same as geography, where a
-  // level's children are always one type) — org allows mixed child types at
-  // a branch, so this just samples the first tile as a reasonable stand-in.
-  const gridIcon = items[0] ? NODE_TYPE_MAP[items[0].typeKey]?.icon ?? 'Building2' : 'Building2'
 
   // Selecting a tile both drills into it AND selects it via `ws.select`, so
   // the DetailsPanel (edit/move/delete/add/etc.) comes up exactly as it
-  // would clicking the equivalent card on the canvas.
+  // would clicking the equivalent card on the canvas. `lastOwnSelectRef`
+  // records ids WE pushed to `ws.select` ourselves, so the external-selection
+  // sync effect below can tell "we just navigated here" apart from "something
+  // else changed the selection" without re-triggering itself.
+  const lastOwnSelectRef = useRef<string | null>(null)
   function drillAndSelect(node: HierNode) {
     ws.select('node', node.id)
+    lastOwnSelectRef.current = node.id
     setSelectedId(node.id)
   }
   function goTo(id: string | null) {
     setSelectedId(id)
-    if (id) ws.select('node', id)
+    if (id) {
+      ws.select('node', id)
+      lastOwnSelectRef.current = id
+    }
   }
   function back() {
     if (trail.length >= 2) goTo(trail[trail.length - 2].id)
     else goTo(null)
   }
+
+  // Canvas stays in sync with `ws.selection` from ANY source (header dialogs,
+  // DetailsPanel's own "Children"/"Positions" links, search, another tab's
+  // selection carrying over, …) because it renders the whole tree and just
+  // highlights whichever card matches. List drills into one level at a time,
+  // so it needs its own explicit sync: whenever the shared selection changes
+  // to an org node in this state that ISN'T the id we last drilled to
+  // ourselves, treat it exactly like a tile click — drill the browse position
+  // to that node so the grid and the DetailsPanel never disagree about where
+  // you are.
+  const wsSelectedNodeId = ws.selection?.kind === 'node' ? ws.selection.id : null
+  const { data: wsSelectedNode } = useNode(wsSelectedNodeId)
+  useEffect(() => {
+    if (!wsSelectedNode) return
+    if (wsSelectedNode.domain !== 'org' || wsSelectedNode.stateCode !== stateCode) return
+    if (wsSelectedNode.id === lastOwnSelectRef.current) return
+    lastOwnSelectRef.current = wsSelectedNode.id
+    setSelectedId(wsSelectedNode.id)
+  }, [wsSelectedNode, stateCode])
 
   // Mirrors CanvasBranch's onAdd exactly: a leaf/employee-adder type adds an
   // employee directly; anything else creates a child node.
@@ -123,7 +146,8 @@ export function OrganizationList({ stateCode }: { stateCode: number }) {
           items={items}
           counts={atRoot ? {} : counts}
           countNoun={atRoot ? null : 'item'}
-          icon={gridIcon}
+          icon="Building2"
+          getIcon={(node) => NODE_TYPE_MAP[node.typeKey]?.icon}
           emptyMessage={atRoot ? 'No departments recorded yet for this state.' : `${current?.name ?? 'This node'} has no children yet.`}
           onSelect={drillAndSelect}
           onAdd={handleAdd}
