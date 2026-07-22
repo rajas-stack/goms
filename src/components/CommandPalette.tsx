@@ -5,6 +5,7 @@ import { useSearch } from '@/lib/api'
 import type { SearchResult } from '@/lib/types'
 import { Icon } from './ui/Icon'
 import { Badge, CodeChip } from './ui/Badge'
+import { useMediaQuery } from '@/lib/useMediaQuery'
 import { cn } from '@/lib/utils'
 
 const EXAMPLES = [
@@ -19,6 +20,11 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
   const inputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   const { data: results = [] } = useSearch(q)
+  // Below `lg`, the palette is a full-screen page instead of a small
+  // dropped-in panel — matches the plan's explicit "CommandPalette
+  // (full-screen on mobile)" target, mirroring Dialog's own mobile variant.
+  // At `lg` and up, every class below reverts to the exact original layout.
+  const isMobile = useMediaQuery('(max-width: 1023.98px)')
 
   useEffect(() => {
     if (open) {
@@ -54,7 +60,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     <div
       data-canvas-ui
       className={cn(
-        'fixed inset-0 z-[55] flex items-start justify-center p-4 pt-[12vh]',
+        'fixed inset-0 z-[55] flex items-stretch justify-center p-0 lg:items-start lg:p-4 lg:pt-[12vh]',
         open ? 'pointer-events-auto' : 'pointer-events-none',
       )}
     >
@@ -64,11 +70,13 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             <motion.div className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px]"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
             <motion.div
-            className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-line bg-paper shadow-pop"
-            initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.98 }} transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+            className="relative flex h-full w-full flex-col overflow-hidden bg-paper lg:block lg:h-auto lg:max-w-xl lg:rounded-2xl lg:border lg:border-line lg:shadow-pop"
+            initial={isMobile ? { opacity: 0, y: 24 } : { opacity: 0, y: 12, scale: 0.98 }}
+            animate={isMobile ? { opacity: 1, y: 0 } : { opacity: 1, y: 0, scale: 1 }}
+            exit={isMobile ? { opacity: 0, y: 24 } : { opacity: 0, y: 8, scale: 0.98 }}
+            transition={isMobile ? { type: 'spring', stiffness: 340, damping: 32 } : { type: 'spring', stiffness: 340, damping: 30 }}
           >
-            <div className="flex items-center gap-3 border-b border-line px-4">
+            <div className="flex shrink-0 items-center gap-3 border-b border-line px-4">
               <Icon name="Search" className="text-muted" />
               <input
                 ref={inputRef}
@@ -96,7 +104,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
               </button>
             </div>
 
-            <div className="max-h-[52vh] overflow-y-auto scrollbar-thin p-2">
+            <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin p-2 lg:max-h-[52vh] lg:flex-none">
               {q && results.length === 0 && (
                 <p className="px-3 py-8 text-center text-sm text-muted">No matches for “{q}”.</p>
               )}
