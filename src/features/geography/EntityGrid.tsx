@@ -92,27 +92,40 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
             transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.25 }}
             className={cn(
               'group relative flex flex-col items-start gap-2 rounded-card border border-line bg-white p-3.5 text-left transition-colors',
-              // Skip layout/paint for tiles currently scrolled out of view —
-              // a cheap, browser-native stand-in for full grid virtualization
-              // at this component's realistic (low-hundreds) list sizes; see
-              // the component doc comment above for the full judgment call.
-              '[content-visibility:auto] [contain-intrinsic-size:0_140px]',
               onSelect
                 ? 'cursor-pointer hover:border-ink-600 hover:bg-panel/60 focus-visible:focus-ring'
                 : 'cursor-default',
             )}
           >
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-100 text-teal-600">
-              <Icon name={tileIcon} size={16} />
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate font-display text-sm font-semibold text-ink-900">{node.name}</span>
-              {countNoun && (
-                <span className="mt-0.5 block font-mono text-[11px] text-muted">
-                  {count} {countNoun}{count === 1 ? '' : 's'}
-                </span>
+            <div
+              className={cn(
+                'flex flex-col items-start gap-2',
+                // Skip layout/paint for tiles currently scrolled out of view —
+                // a cheap, browser-native stand-in for full grid virtualization
+                // at this component's realistic (low-hundreds) list sizes; see
+                // the component doc comment above for the full judgment call.
+                // Scoped to this inner wrapper (icon + name/count only) rather
+                // than the tile itself: `content-visibility: auto` always
+                // applies `contain: paint`, which clips descendants to the
+                // containing box — the "+" button below overhangs the tile
+                // edge (`-right-2 -top-2`) along with its tooltip and touch
+                // hit-slop, so it must stay OUTSIDE the contained subtree or
+                // paint containment would crop/hide all three.
+                '[content-visibility:auto] [contain-intrinsic-size:0_100px]',
               )}
-            </span>
+            >
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-100 text-teal-600">
+                <Icon name={tileIcon} size={16} />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate font-display text-sm font-semibold text-ink-900">{node.name}</span>
+                {countNoun && (
+                  <span className="mt-0.5 block font-mono text-[11px] text-muted">
+                    {count} {countNoun}{count === 1 ? '' : 's'}
+                  </span>
+                )}
+              </span>
+            </div>
 
             {showAdd && (
               <Tooltip label={addLabel?.(node) ?? 'Add'} side="top" className="absolute -right-2 -top-2">
