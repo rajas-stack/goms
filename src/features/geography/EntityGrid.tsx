@@ -9,7 +9,7 @@ import type { HierNode } from '@/lib/types'
  *  tiles rather than fake polygons that would imply false geographic
  *  precision. Every tile shows the entity's name and (where meaningful) how
  *  many of its own children it has. */
-export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessage, onSelect, onAdd, addLabel }: {
+export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessage, onSelect, onAdd, addLabel, canAdd }: {
   items: HierNode[]
   /** child id → count of ITS active children (from `useChildCounts`). */
   counts: Record<string, number>
@@ -39,6 +39,10 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
   onAdd?: (node: HierNode) => void
   /** Accessible label for the "+" button, e.g. "Add employee" / "Add branch". */
   addLabel?: (node: HierNode) => string
+  /** Per-tile gate on the "+" button, e.g. the global FAB's org target picker
+   *  only wants a "+" on nodes that can actually have the desired child type.
+   *  Defaults to true (current behavior) whenever `onAdd` is passed without it. */
+  canAdd?: (node: HierNode) => boolean
 }) {
   if (items.length === 0) {
     return (
@@ -57,6 +61,7 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
       {items.map((node, i) => {
         const count = counts[node.id] ?? 0
         const tileIcon = getIcon?.(node) ?? icon
+        const showAdd = !!onAdd && (canAdd?.(node) ?? true)
         return (
           // A plain `<button>` can't host the nested "+" button (invalid HTML,
           // interactive-in-interactive), so this is a div playing the button
@@ -91,7 +96,7 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
               )}
             </span>
 
-            {onAdd && (
+            {showAdd && (
               <Tooltip label={addLabel?.(node) ?? 'Add'} side="top" className="absolute -right-2 -top-2">
                 <button
                   type="button"

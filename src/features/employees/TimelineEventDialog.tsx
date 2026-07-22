@@ -17,10 +17,20 @@ import type { TimelineEventType } from '@/lib/types'
  * pre-selected person); once someone is picked, it proceeds into the exact
  * same create-event flow as the profile's "+ Add event" button, which always
  * passes a real `employeeId` and therefore never sees this step at all.
+ *
+ * `initialType`/`typeFilter` let the global FAB offer separate "Create
+ * Meeting" and "Create Event" entry points from this one dialog/mutation:
+ * both omitted (the profile's own "+ Add event" call site) preserves the
+ * original behavior exactly — type defaults to 'meeting', every manual type
+ * is selectable.
  */
-export function TimelineEventDialog({ open, employeeId, onClose }: {
+export function TimelineEventDialog({ open, employeeId, initialType, typeFilter, onClose }: {
   open: boolean
   employeeId: string | null
+  /** Type the Type field starts on. Defaults to 'meeting' (prior behavior). */
+  initialType?: TimelineEventType
+  /** Narrows the Type dropdown to this subset. Defaults to every manual type. */
+  typeFilter?: TimelineEventType[]
   onClose: () => void
 }) {
   const toast = useToast()
@@ -30,15 +40,18 @@ export function TimelineEventDialog({ open, employeeId, onClose }: {
   const activeEmployeeId = employeeId ?? pickedEmployeeId
   const showPicker = !activeEmployeeId
   const pickedEmployee = pickedEmployeeId ? allEmployees.find((e) => e.id === pickedEmployeeId) : undefined
+  const typeOptions = typeFilter && typeFilter.length > 0 ? typeFilter : MANUAL_EVENT_TYPES
+  const defaultType = initialType ?? 'meeting'
   const [form, setForm] = useState({
-    type: 'meeting' as TimelineEventType, title: '', date: isoToday(), time: '', note: '', attendees: [] as string[],
+    type: defaultType, title: '', date: isoToday(), time: '', note: '', attendees: [] as string[],
   })
 
   useEffect(() => {
     if (open) {
-      setForm({ type: 'meeting', title: '', date: isoToday(), time: '', note: '', attendees: [] })
+      setForm({ type: defaultType, title: '', date: isoToday(), time: '', note: '', attendees: [] })
       setPickedEmployeeId(null)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   function toggleAttendee(name: string) {
@@ -108,7 +121,7 @@ export function TimelineEventDialog({ open, employeeId, onClose }: {
               value={form.type}
               onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as TimelineEventType }))}
             >
-              {MANUAL_EVENT_TYPES.map((t) => (
+              {typeOptions.map((t) => (
                 <option key={t} value={t}>{TIMELINE_META[t].label}</option>
               ))}
             </Select>

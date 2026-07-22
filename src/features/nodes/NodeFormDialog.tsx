@@ -17,11 +17,17 @@ interface Props {
   parent: HierNode | null
   node: HierNode | null
   createDepartment: boolean
+  /** Preselects the child-type dropdown below (e.g. the global FAB's "Create
+   *  Office" needs 'office' preset even when the picked parent's other valid
+   *  child types would otherwise default to the first one alphabetically/by
+   *  registry order). Ignored if it isn't one of the parent's actual child
+   *  options; the dropdown remains fully editable either way. */
+  initialTypeKey?: string
   onClose: () => void
   onSaved: (id: string) => void
 }
 
-export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepartment, onClose, onSaved }: Props) {
+export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepartment, initialTypeKey, onClose, onSaved }: Props) {
   const toast = useToast()
   const { create, update } = useNodeMutations()
   const { create: createEmployee } = useEmployeeMutations()
@@ -44,10 +50,11 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
 
   useEffect(() => {
     if (!open) return
-    setTypeKey(childOptions[0]?.key ?? '')
+    const preset = initialTypeKey && childOptions.some((t) => t.key === initialTypeKey) ? initialTypeKey : childOptions[0]?.key ?? ''
+    setTypeKey(preset)
     setName(mode === 'edit' ? node?.name ?? '' : '')
     setMeta(mode === 'edit' ? { ...node?.metadata } : {})
-  }, [open, mode, node, childOptions])
+  }, [open, mode, node, childOptions, initialTypeKey])
 
   async function handleCreateHead(headName: string, designation: string) {
     const targetNodeId = node?.id ?? parent?.id

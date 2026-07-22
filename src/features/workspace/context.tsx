@@ -5,13 +5,13 @@ import { NodeFormDialog } from '@/features/nodes/NodeFormDialog'
 import { MoveDialog } from '@/features/nodes/MoveDialog'
 import { EmployeeFormDialog } from '@/features/employees/EmployeeFormDialog'
 import { ConfirmDialog } from '@/features/nodes/ConfirmDialog'
-import { registerWorkspaceDialogHandle } from './backButtonBridge'
+import { consumePendingWorkspaceAction, registerWorkspaceDialogHandle } from './backButtonBridge'
 
 export type Selection = { kind: 'node' | 'employee'; id: string } | null
 
 type Dialog =
   | { type: 'none' }
-  | { type: 'createChild'; parent: HierNode }
+  | { type: 'createChild'; parent: HierNode; initialTypeKey?: string }
   | { type: 'createDepartment' }
   | { type: 'editNode'; node: HierNode }
   | { type: 'move'; node: HierNode }
@@ -24,7 +24,7 @@ interface WorkspaceApi {
   selection: Selection
   select: (kind: 'node' | 'employee', id: string) => void
   clearSelection: () => void
-  createChild: (parent: HierNode) => void
+  createChild: (parent: HierNode, initialTypeKey?: string) => void
   createDepartment: () => void
   editNode: (node: HierNode) => void
   moveNode: (node: HierNode) => void
@@ -45,15 +45,37 @@ export function WorkspaceProvider({ stateCode, children }: { stateCode: number; 
   const [dialog, setDialog] = useState<Dialog>({ type: 'none' })
   const close = () => setDialog({ type: 'none' })
 
-  // Expose live dialog state to the Android back-button handler in
-  // AppLayout (see backButtonBridge.ts for why this can't just be context).
+  // Expose live dialog state (and the create actions below) to AppLayout-level
+  // code — the Android back-button handler and the global "+" FAB — neither of
+  // which can reach this context directly (see backButtonBridge.ts).
   const dialogRef = useRef(dialog)
   dialogRef.current = dialog
+  const stateCodeRef = useRef(stateCode)
+  stateCodeRef.current = stateCode
   useEffect(() => {
-    registerWorkspaceDialogHandle({ isOpen: () => dialogRef.current.type !== 'none', close })
+    registerWorkspaceDialogHandle({
+      isOpen: () => dialogRef.current.type !== 'none',
+      close,
+      stateCode: () => stateCodeRef.current,
+      createChild: (parent, initialTypeKey) => setDialog({ type: 'createChild', parent, initialTypeKey }),
+      createDepartment: () => setDialog({ type: 'createDepartment' }),
+      addEmployee: (orgNode) => setDialog({ type: 'addEmployee', orgNode }),
+    })
     return () => registerWorkspaceDialogHandle(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Runs a FAB-enqueued action once this provider is mounted for the state it
+  // targets — on initial mount, and again if this same instance's `stateCode`
+  // ever changes (route param update without unmount). `consumePendingWorkspaceAction`
+  // clears the queue slot as it returns, so this can never double-fire.
+  useEffect(() => {
+    const action = consumePendingWorkspaceAction(stateCode)
+    if (!action) return
+    if (action.action === 'createChild') setDialog({ type: 'createChild', parent: action.parent, initialTypeKey: action.initialTypeKey })
+    else if (action.action === 'createDepartment') setDialog({ type: 'createDepartment' })
+    else if (action.action === 'addEmployee') setDialog({ type: 'addEmployee', orgNode: action.orgNode })
+  }, [stateCode])
 
   const selection: Selection = useMemo(() => {
     const id = params.get('sel')
@@ -67,7 +89,7 @@ export function WorkspaceProvider({ stateCode, children }: { stateCode: number; 
     selection,
     select: (kind, id) => setParams((p) => { p.set('sel', id); p.set('kind', kind); return p }, { replace: true }),
     clearSelection: () => setParams((p) => { p.delete('sel'); p.delete('kind'); return p }, { replace: true }),
-    createChild: (parent) => setDialog({ type: 'createChild', parent }),
+    createChild: (parent, initialTypeKey) => setDialog({ type: 'createChild', parent, initialTypeKey }),
     createDepartment: () => setDialog({ type: 'createDepartment' }),
     editNode: (node) => setDialog({ type: 'editNode', node }),
     moveNode: (node) => setDialog({ type: 'move', node }),
@@ -86,6 +108,7 @@ export function WorkspaceProvider({ stateCode, children }: { stateCode: number; 
         parent={dialog.type === 'createChild' ? dialog.parent : null}
         node={dialog.type === 'editNode' ? dialog.node : null}
         createDepartment={dialog.type === 'createDepartment'}
+        initialTypeKey={dialog.type === 'createChild' ? dialog.initialTypeKey : undefined}
         onClose={close}
         onSaved={(id) => api.select('node', id)}
       />
