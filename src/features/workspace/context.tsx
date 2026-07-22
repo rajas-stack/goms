@@ -1,10 +1,11 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import type { Employee, HierNode } from '@/lib/types'
 import { NodeFormDialog } from '@/features/nodes/NodeFormDialog'
 import { MoveDialog } from '@/features/nodes/MoveDialog'
 import { EmployeeFormDialog } from '@/features/employees/EmployeeFormDialog'
 import { ConfirmDialog } from '@/features/nodes/ConfirmDialog'
+import { registerWorkspaceDialogHandle } from './backButtonBridge'
 
 export type Selection = { kind: 'node' | 'employee'; id: string } | null
 
@@ -43,6 +44,16 @@ export function WorkspaceProvider({ stateCode, children }: { stateCode: number; 
   const [params, setParams] = useSearchParams()
   const [dialog, setDialog] = useState<Dialog>({ type: 'none' })
   const close = () => setDialog({ type: 'none' })
+
+  // Expose live dialog state to the Android back-button handler in
+  // AppLayout (see backButtonBridge.ts for why this can't just be context).
+  const dialogRef = useRef(dialog)
+  dialogRef.current = dialog
+  useEffect(() => {
+    registerWorkspaceDialogHandle({ isOpen: () => dialogRef.current.type !== 'none', close })
+    return () => registerWorkspaceDialogHandle(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const selection: Selection = useMemo(() => {
     const id = params.get('sel')

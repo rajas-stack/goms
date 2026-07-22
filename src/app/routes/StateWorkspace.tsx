@@ -145,7 +145,9 @@ export function MobileDetailsSheet() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 24 }}
           transition={{ type: 'spring', stiffness: 340, damping: 32 }}
-          className="fixed inset-x-0 bottom-0 z-30 max-h-[75vh] overflow-hidden rounded-t-2xl border-t border-line bg-paper shadow-pop lg:hidden"
+          // z-[45]: above the mobile bottom-nav rail (z-40) so the sheet
+          // fully covers it while open, but below real dialogs (z-50).
+          className="fixed inset-x-0 bottom-0 z-[45] max-h-[75vh] overflow-hidden rounded-t-2xl border-t border-line bg-paper shadow-pop lg:hidden"
         >
           <Tooltip label="Close details" side="left" className="absolute right-3 top-3 z-10">
             <button
