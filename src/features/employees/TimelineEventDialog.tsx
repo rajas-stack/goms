@@ -3,13 +3,21 @@ import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
-import { useEmployeeMutations } from '@/lib/api'
+import { useAllEmployees, useEmployeeMutations } from '@/lib/api'
 import { isoToday } from '@/data/repository'
 import { MANUAL_EVENT_TYPES, TIMELINE_META } from '@/lib/timeline-meta'
 import { SALES_TEAM } from '@/data/sales-team'
+import { EmployeePicker } from './EmployeePicker'
 import { cn } from '@/lib/utils'
 import type { TimelineEventType } from '@/lib/types'
 
+/**
+ * `employeeId: null` opens the dialog with an employee-search/pick step
+ * first (used by the global "add event" entry point, which has no
+ * pre-selected person); once someone is picked, it proceeds into the exact
+ * same create-event flow as the profile's "+ Add event" button, which always
+ * passes a real `employeeId` and therefore never sees this step at all.
+ */
 export function TimelineEventDialog({ open, employeeId, onClose }: {
   open: boolean
   employeeId: string | null
@@ -17,12 +25,20 @@ export function TimelineEventDialog({ open, employeeId, onClose }: {
 }) {
   const toast = useToast()
   const { addTimelineEvent } = useEmployeeMutations()
+  const { data: allEmployees = [] } = useAllEmployees()
+  const [pickedEmployeeId, setPickedEmployeeId] = useState<string | null>(null)
+  const activeEmployeeId = employeeId ?? pickedEmployeeId
+  const showPicker = !activeEmployeeId
+  const pickedEmployee = pickedEmployeeId ? allEmployees.find((e) => e.id === pickedEmployeeId) : undefined
   const [form, setForm] = useState({
     type: 'meeting' as TimelineEventType, title: '', date: isoToday(), time: '', note: '', attendees: [] as string[],
   })
 
   useEffect(() => {
-    if (open) setForm({ type: 'meeting', title: '', date: isoToday(), time: '', note: '', attendees: [] })
+    if (open) {
+      setForm({ type: 'meeting', title: '', date: isoToday(), time: '', note: '', attendees: [] })
+      setPickedEmployeeId(null)
+    }
   }, [open])
 
   function toggleAttendee(name: string) {
@@ -33,13 +49,34 @@ export function TimelineEventDialog({ open, employeeId, onClose }: {
   }
 
   async function submit() {
-    if (!employeeId || !form.title.trim()) return
+    if (!activeEmployeeId || !form.title.trim()) return
     await addTimelineEvent.mutateAsync({
-      employeeId, type: form.type, title: form.title.trim(), date: form.date, time: form.time,
+      employeeId: activeEmployeeId, type: form.type, title: form.title.trim(), date: form.date, time: form.time,
       note: form.note, attendees: form.attendees,
     })
     toast('Timeline event added')
     onClose()
+  }
+
+  if (showPicker) {
+    return (
+      <Dialog
+        open={open}
+        onClose={onClose}
+        title="Add timeline event"
+        description="Choose who this event is for"
+        footer={<Button onClick={onClose}>Cancel</Button>}
+      >
+        <Field label="Person" hint="Search by name or designation">
+          <EmployeePicker
+            candidates={allEmployees}
+            value=""
+            onChange={(id) => { if (id) setPickedEmployeeId(id) }}
+            placeholder="Search a person…"
+          />
+        </Field>
+      </Dialog>
+    )
   }
 
   return (
@@ -47,6 +84,7 @@ export function TimelineEventDialog({ open, employeeId, onClose }: {
       open={open}
       onClose={onClose}
       title="Add timeline event"
+      description={!employeeId && pickedEmployee ? `For ${pickedEmployee.name}` : undefined}
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
@@ -55,6 +93,15 @@ export function TimelineEventDialog({ open, employeeId, onClose }: {
       }
     >
       <div className="space-y-4">
+        {!employeeId && pickedEmployee && (
+          <button
+            type="button"
+            onClick={() => setPickedEmployeeId(null)}
+            className="text-[12px] font-medium text-teal-600 hover:underline"
+          >
+            Change person
+          </button>
+        )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Type">
             <Select

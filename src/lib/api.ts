@@ -3,7 +3,7 @@ import {
   repository, type AddTimelineInput, type CreateEmployeeInput, type CreateNodeInput,
   type TransferInput,
 } from '@/data/repository'
-import type { Charge, Employee, HierNode, Status } from './types'
+import type { Charge, Employee, HierNode, Status, TimelineEventType } from './types'
 
 export const qk = {
   states: ['states'] as const,
@@ -17,6 +17,7 @@ export const qk = {
   reports: (id: string) => ['reports', id] as const,
   chain: (id: string) => ['chain', id] as const,
   timeline: (id: string) => ['timeline', id] as const,
+  allTimelineEvents: (types?: TimelineEventType[]) => ['allTimelineEvents', types ? [...types].sort() : null] as const,
   transfers: (id: string) => ['transfers', id] as const,
 }
 
@@ -57,6 +58,13 @@ export const useReportingChain = (id: string | null) =>
   useQuery({ queryKey: qk.chain(id ?? ''), queryFn: () => repository.reportingChain(id!), enabled: !!id })
 export const useTimeline = (id: string | null) =>
   useQuery({ queryKey: qk.timeline(id ?? ''), queryFn: () => repository.listTimeline(id!), enabled: !!id })
+/** Cross-employee timeline events (Meetings & Events screen), optionally
+ *  narrowed to a set of event types. */
+export const useAllTimelineEvents = (filter?: { types?: TimelineEventType[] }) =>
+  useQuery({
+    queryKey: qk.allTimelineEvents(filter?.types),
+    queryFn: () => repository.listAllTimelineEvents(filter),
+  })
 export const useTransfers = (id: string | null) =>
   useQuery({ queryKey: qk.transfers(id ?? ''), queryFn: () => repository.listTransfers(id!), enabled: !!id })
 
@@ -124,6 +132,7 @@ export function useEmployeeMutations() {
     qc.invalidateQueries({ queryKey: ['chain'] })
     qc.invalidateQueries({ queryKey: ['states'] })
     qc.invalidateQueries({ queryKey: ['timeline'] })
+    qc.invalidateQueries({ queryKey: ['allTimelineEvents'] })
     qc.invalidateQueries({ queryKey: ['transfers'] })
     qc.invalidateQueries({ queryKey: ['relationshipAnalytics'] })
   }

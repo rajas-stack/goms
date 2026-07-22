@@ -139,6 +139,10 @@ export interface Repository {
   deleteEmployee(id: string): Promise<void>
 
   listTimeline(employeeId: string): Promise<TimelineEvent[]>
+  /** Every timeline event across every employee, newest first — powers the
+   *  cross-employee Meetings & Events screen. Optionally narrowed to a set of
+   *  event types. */
+  listAllTimelineEvents(filter?: { types?: TimelineEventType[] }): Promise<TimelineEvent[]>
   addTimelineEvent(input: AddTimelineInput): Promise<TimelineEvent>
   deleteTimelineEvent(id: string): Promise<void>
 
@@ -528,6 +532,16 @@ class InMemoryRepository implements Repository {
     return this.data.timeline
       .filter((t) => t.employeeId === employeeId)
       .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))
+  }
+
+  async listAllTimelineEvents(filter?: { types?: TimelineEventType[] }) {
+    const types = filter?.types
+    let events = this.data.timeline
+    if (types && types.length > 0) {
+      const wanted = new Set(types)
+      events = events.filter((t) => wanted.has(t.type))
+    }
+    return events.slice().sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))
   }
 
   async addTimelineEvent(input: AddTimelineInput) {

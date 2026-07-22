@@ -48,6 +48,7 @@ export function Rail() {
       <RailLink to="/map" icon="Map" label="Map" />
       <RailLink to="/directory" icon="Network" label="Directory" />
       <RailLink to="/analytics" icon="BarChart3" label="Insights" />
+      <RailLink to="/meetings" icon="CalendarClock" label="Meetings" />
     </nav>
   )
 }
