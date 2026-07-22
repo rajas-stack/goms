@@ -8,7 +8,20 @@ import type { HierNode } from '@/lib/types'
  *  project, so they're deliberately rendered as a grid of named, clickable
  *  tiles rather than fake polygons that would imply false geographic
  *  precision. Every tile shows the entity's name and (where meaningful) how
- *  many of its own children it has. */
+ *  many of its own children it has.
+ *
+ *  Deliberately NOT using `@tanstack/react-virtual`'s grid-aware windowing
+ *  here (unlike `Meetings`/`PeopleDirectory`) — this grid is responsive
+ *  (`grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`), and every call site owns a
+ *  different scroll container (`OrganizationList`'s own div, Geography's
+ *  `TilePane`, the small `FallbackTiles` strip), so true virtualization would
+ *  need a column-count-aware size model threaded through several unrelated
+ *  parents to recompute row height × dynamic column count on every resize —
+ *  real complexity and regression risk for a grid whose seed data (see
+ *  `src/data/gov-hierarchy.ts`) tops out in the low hundreds of items, never
+ *  tens of thousands. `content-visibility: auto` gets most of the same
+ *  render-cost win (skips layout/paint for off-screen tiles) for near-zero
+ *  risk, so that's what's applied per-tile below instead. */
 export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessage, onSelect, onAdd, addLabel, canAdd }: {
   items: HierNode[]
   /** child id → count of ITS active children (from `useChildCounts`). */
@@ -79,6 +92,11 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
             transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.25 }}
             className={cn(
               'group relative flex flex-col items-start gap-2 rounded-card border border-line bg-white p-3.5 text-left transition-colors',
+              // Skip layout/paint for tiles currently scrolled out of view —
+              // a cheap, browser-native stand-in for full grid virtualization
+              // at this component's realistic (low-hundreds) list sizes; see
+              // the component doc comment above for the full judgment call.
+              '[content-visibility:auto] [contain-intrinsic-size:0_140px]',
               onSelect
                 ? 'cursor-pointer hover:border-ink-600 hover:bg-panel/60 focus-visible:focus-ring'
                 : 'cursor-default',
@@ -102,7 +120,9 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onAdd(node) }}
                   aria-label={addLabel?.(node) ?? 'Add'}
-                  className="flex h-7 w-7 items-center justify-center rounded-full border border-line bg-white text-muted shadow-sm transition-colors hover:border-ink-900 hover:text-ink-900"
+                  // Visible circle stays 28px; `before:` expands the hit area to
+                  // ≥44dp without changing the visible affordance or its position.
+                  className="relative flex h-7 w-7 items-center justify-center rounded-full border border-line bg-white text-muted shadow-sm transition-colors before:absolute before:-inset-2 before:content-[''] hover:border-ink-900 hover:text-ink-900"
                 >
                   <Icon name="Plus" size={14} />
                 </button>

@@ -1,11 +1,20 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useAllEmployees, useAllTimelineEvents, useEmployeeDepartments } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
 import { Badge } from '@/components/ui/Badge'
 import { TIMELINE_META } from '@/lib/timeline-meta'
 import { cn } from '@/lib/utils'
 import type { Employee, TimelineEvent, TimelineEventType } from '@/lib/types'
+
+// Row height is fixed (same markup on every row, single-line content), so a
+// static estimate is exact rather than approximate — no per-row measurement
+// needed. `space-y-2` between rows in the old non-virtualized markup is
+// folded into this constant (row box + gap) so virtualized rows line up
+// identically to the plain-map version.
+const ROW_HEIGHT = 56
+const ROW_GAP = 8
 
 /** `meeting` gets its own tab; every other manually-loggable type is grouped
  *  as "Events". Lifecycle events (`joined`/`promoted`/`transferred`) are
@@ -38,6 +47,17 @@ export function Meetings() {
     navigate(`/directory?sel=${employeeId}&kind=employee`)
   }
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+  // `measureElement` re-measures each row's real rendered height after first
+  // paint and self-corrects — `estimateSize` only needs to be a reasonable
+  // starting guess (row height + the old `space-y-2` gap), not exact.
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT + ROW_GAP,
+    overscan: 8,
+  })
+
   return (
     <div className="flex h-full flex-col">
       <div className="z-10 border-b border-line bg-white/80 px-6 py-4 backdrop-blur">
@@ -51,22 +71,32 @@ export function Meetings() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-6 py-5">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-6 py-5">
         {rows.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted">
             {tab === 'meetings' ? 'No meetings logged yet.' : 'No events logged yet.'}
           </p>
         ) : (
-          <div className="space-y-2">
-            {rows.map((e) => (
-              <EventRow
-                key={e.id}
-                event={e}
-                employee={employeeById.get(e.employeeId)!}
-                department={deptById[e.employeeId]?.name}
-                onClick={() => openPerson(e.employeeId)}
-              />
-            ))}
+          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+            {virtualizer.getVirtualItems().map((vi) => {
+              const e = rows[vi.index]
+              return (
+                <div
+                  key={e.id}
+                  data-index={vi.index}
+                  ref={virtualizer.measureElement}
+                  style={{ position: 'absolute', top: 0, left: 0, right: 0, transform: `translateY(${vi.start}px)` }}
+                  className="pb-2"
+                >
+                  <EventRow
+                    event={e}
+                    employee={employeeById.get(e.employeeId)!}
+                    department={deptById[e.employeeId]?.name}
+                    onClick={() => openPerson(e.employeeId)}
+                  />
+                </div>
+              )
+            })}
           </div>
         )}
       </div>

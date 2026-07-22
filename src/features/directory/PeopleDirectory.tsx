@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useWorkspace } from '@/features/workspace/context'
 import { useEmployeeDepartments } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
@@ -9,10 +10,26 @@ import type { Employee } from '@/lib/types'
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 
+// Fallback estimates for the virtualizer — `measureElement` re-measures each
+// row/header's real rendered height after first paint and self-corrects, so
+// these only need to be reasonable starting guesses.
+const HEADER_ESTIMATE = 30
+const ROW_ESTIMATE = 58
+
 function letterOf(name: string): string {
   const c = name.trim()[0]?.toUpperCase() ?? ''
   return /[A-Z]/.test(c) ? c : '#'
 }
+
+/** A-Z jump-to-letter needs a stable anchor per letter even though the list
+ *  itself is virtualized — rather than DOM-id anchors (which only exist for
+ *  currently-rendered rows), the letter headers are flattened into the same
+ *  virtualized sequence as the rows, so `scrollToIndex` on a header's index
+ *  works exactly like the old `scrollIntoView` did, without ever needing
+ *  every row mounted at once. */
+type FlatRow =
+  | { kind: 'header'; letter: string }
+  | { kind: 'person'; employee: Employee }
 
 /** Phonebook-style list with advanced search + filters: a free-text search
  *  (name, designation, contact number, email, reporting manager) plus
@@ -107,8 +124,34 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
 
   const availableLetters = new Set(groups.keys())
 
+  // Flatten letter groups + people into one sequence so headers and rows
+  // share a single virtualized list (see `FlatRow` above).
+  const flatRows = useMemo(() => {
+    const out: FlatRow[] = []
+    for (const [letter, people] of groups) {
+      out.push({ kind: 'header', letter })
+      for (const p of people) out.push({ kind: 'person', employee: p })
+    }
+    return out
+  }, [groups])
+
+  const letterToIndex = useMemo(() => {
+    const map = new Map<string, number>()
+    flatRows.forEach((row, i) => { if (row.kind === 'header') map.set(row.letter, i) })
+    return map
+  }, [flatRows])
+
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const rowVirtualizer = useVirtualizer({
+    count: flatRows.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (i) => (flatRows[i]?.kind === 'header' ? HEADER_ESTIMATE : ROW_ESTIMATE),
+    overscan: 12,
+  })
+
   function jumpTo(letter: string) {
-    document.getElementById(`directory-letter-${letter}`)?.scrollIntoView({ block: 'start' })
+    const idx = letterToIndex.get(letter)
+    if (idx != null) rowVirtualizer.scrollToIndex(idx, { align: 'start' })
   }
 
   const selectedEmp = ws.selection?.kind === 'employee'
@@ -199,45 +242,42 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-4 py-3">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto scrollbar-thin px-4 py-3">
           {groups.size === 0 && (
             <p className="px-1 py-8 text-center text-sm text-muted">No people match your filters.</p>
           )}
-          {[...groups.entries()].map(([letter, people]) => (
-            <section key={letter} id={`directory-letter-${letter}`} className="mb-4 scroll-mt-2">
-              <h3 className="mb-1.5 font-mono text-[11px] font-semibold uppercase tracking-wide text-muted">{letter}</h3>
-              <div className="space-y-1">
-                {people.map((e) => {
-                  const selected = ws.selection?.kind === 'employee' && ws.selection.id === e.id
-                  return (
-                    <button
-                      key={e.id}
-                      onClick={() => ws.select('employee', e.id)}
-                      className={cn(
-                        'flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors',
-                        selected ? 'bg-ink-900 text-paper' : 'hover:bg-ink-900/[0.05]',
-                      )}
-                    >
-                      {e.photoUrl ? (
-                        <img src={e.photoUrl} alt={e.name} className="h-8 w-8 shrink-0 rounded-lg object-cover" />
-                      ) : (
-                        <span className={cn(
-                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-mono text-[11px] font-semibold',
-                          selected ? 'bg-indigo text-paper' : 'bg-teal-100 text-teal-600',
-                        )}>
-                          {initials(e.name)}
-                        </span>
-                      )}
-                      <span className="min-w-0 flex-1">
-                        <span className={cn('block truncate text-[13px] font-medium', selected ? 'text-paper' : 'text-ink-900')}>{e.name}</span>
-                        <span className={cn('block truncate text-[11px]', selected ? 'text-paper/70' : 'text-muted')}>{e.designation}</span>
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            </section>
-          ))}
+          {groups.size > 0 && (
+            <div style={{ height: rowVirtualizer.getTotalSize(), position: 'relative' }}>
+              {rowVirtualizer.getVirtualItems().map((vi) => {
+                const row = flatRows[vi.index]
+                return (
+                  <div
+                    key={vi.key}
+                    data-index={vi.index}
+                    ref={rowVirtualizer.measureElement}
+                    style={{ position: 'absolute', top: 0, left: 0, right: 0, transform: `translateY(${vi.start}px)` }}
+                    className={row.kind === 'person' ? 'pb-1' : undefined}
+                  >
+                    {row.kind === 'header' ? (
+                      // `first:` can't reach here — virtualization wraps every
+                      // row in its own sibling container, so each header is
+                      // always its wrapper's only child. Use the flat index
+                      // instead to skip the top gap on the very first header.
+                      <h3 className={cn('mb-1.5 font-mono text-[11px] font-semibold uppercase tracking-wide text-muted', vi.index === 0 ? 'pt-0' : 'pt-4')}>
+                        {row.letter}
+                      </h3>
+                    ) : (
+                      <PersonRow
+                        employee={row.employee}
+                        selected={ws.selection?.kind === 'employee' && ws.selection.id === row.employee.id}
+                        onSelect={() => ws.select('employee', row.employee.id)}
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -257,5 +297,35 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
         ))}
       </nav>
     </div>
+  )
+}
+
+/** Extracted unchanged from the old inline row markup (same classes, same
+ *  behavior) — just given its own component so the virtualized list above
+ *  can render it per flattened row without inlining the JSX there. */
+function PersonRow({ employee: e, selected, onSelect }: { employee: Employee; selected: boolean; onSelect: () => void }) {
+  return (
+    <button
+      onClick={onSelect}
+      className={cn(
+        'flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors',
+        selected ? 'bg-ink-900 text-paper' : 'hover:bg-ink-900/[0.05]',
+      )}
+    >
+      {e.photoUrl ? (
+        <img src={e.photoUrl} alt={e.name} className="h-8 w-8 shrink-0 rounded-lg object-cover" />
+      ) : (
+        <span className={cn(
+          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-mono text-[11px] font-semibold',
+          selected ? 'bg-indigo text-paper' : 'bg-teal-100 text-teal-600',
+        )}>
+          {initials(e.name)}
+        </span>
+      )}
+      <span className="min-w-0 flex-1">
+        <span className={cn('block truncate text-[13px] font-medium', selected ? 'text-paper' : 'text-ink-900')}>{e.name}</span>
+        <span className={cn('block truncate text-[11px]', selected ? 'text-paper/70' : 'text-muted')}>{e.designation}</span>
+      </span>
+    </button>
   )
 }
