@@ -52,6 +52,11 @@ export function WorkspaceProvider({ stateCode, children }: { stateCode: number; 
   dialogRef.current = dialog
   const stateCodeRef = useRef(stateCode)
   stateCodeRef.current = stateCode
+  // `selection` (declared below) needs to be readable from the same
+  // registered handle — kept as a ref, updated every render, so the back
+  // button's `hasSelection()`/`clearSelection()` always see the live value
+  // without re-registering the handle on every selection change.
+  const selectionRef = useRef<Selection>(null)
   useEffect(() => {
     registerWorkspaceDialogHandle({
       isOpen: () => dialogRef.current.type !== 'none',
@@ -60,6 +65,8 @@ export function WorkspaceProvider({ stateCode, children }: { stateCode: number; 
       createChild: (parent, initialTypeKey) => setDialog({ type: 'createChild', parent, initialTypeKey }),
       createDepartment: () => setDialog({ type: 'createDepartment' }),
       addEmployee: (orgNode) => setDialog({ type: 'addEmployee', orgNode }),
+      hasSelection: () => selectionRef.current != null,
+      clearSelection: () => api.clearSelection(),
     })
     return () => registerWorkspaceDialogHandle(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -83,6 +90,7 @@ export function WorkspaceProvider({ stateCode, children }: { stateCode: number; 
     if (id && (kind === 'node' || kind === 'employee')) return { kind, id }
     return null
   }, [params])
+  selectionRef.current = selection
 
   const api: WorkspaceApi = {
     stateCode,

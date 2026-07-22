@@ -16,7 +16,8 @@ import type { HierNode } from '@/lib/types'
  *
  *  - The Android hardware back-button handler (original use) — checks/closes
  *    whatever workspace dialog is open, via `isWorkspaceDialogOpen`/
- *    `closeWorkspaceDialog`.
+ *    `closeWorkspaceDialog`, and (below) whether `MobileDetailsSheet` is
+ *    currently showing, via `isWorkspaceSelectionActive`/`clearWorkspaceSelection`.
  *  - The global "+" FAB (`GlobalFab.tsx`) — triggers the exact same
  *    `createChild`/`createDepartment`/`addEmployee` a contextual "+" would,
  *    via `invokeWorkspace*` below, when a `WorkspaceProvider` for the target
@@ -35,6 +36,13 @@ interface WorkspaceDialogHandle {
   createChild: (parent: HierNode, initialTypeKey?: string) => void
   createDepartment: () => void
   addEmployee: (orgNode: HierNode) => void
+  /** True whenever `ws.selection` is non-null — i.e. `MobileDetailsSheet`
+   *  (`StateWorkspace.tsx`) is showing on viewports below `lg`. The desktop
+   *  details `<aside>` also reflects a non-null selection but isn't an
+   *  overlay, so the back-button handler additionally gates this on the
+   *  live viewport width before treating it as something to close. */
+  hasSelection: () => boolean
+  clearSelection: () => void
 }
 
 let active: WorkspaceDialogHandle | null = null
@@ -49,6 +57,14 @@ export function isWorkspaceDialogOpen(): boolean {
 
 export function closeWorkspaceDialog() {
   active?.close()
+}
+
+export function isWorkspaceSelectionActive(): boolean {
+  return active?.hasSelection() ?? false
+}
+
+export function clearWorkspaceSelection() {
+  active?.clearSelection()
 }
 
 /** True + runs immediately when a `WorkspaceProvider` for exactly this state

@@ -10,7 +10,10 @@ import { GlobalFab } from '@/components/GlobalFab'
 import { ImportDialog } from '@/features/import/ImportDialog'
 import { ToastProvider } from '@/components/ui/Toast'
 import { isTypingTarget } from '@/lib/utils'
-import { closeWorkspaceDialog, isWorkspaceDialogOpen } from '@/features/workspace/backButtonBridge'
+import { useMediaQuery } from '@/lib/useMediaQuery'
+import {
+  clearWorkspaceSelection, closeWorkspaceDialog, isWorkspaceDialogOpen, isWorkspaceSelectionActive,
+} from '@/features/workspace/backButtonBridge'
 
 interface ShellCtx {
   openSearch: () => void
@@ -24,6 +27,12 @@ export function AppLayout() {
   const [importOpen, setImportOpen] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const navigate = useNavigate()
+  // `MobileDetailsSheet` only renders as an overlay below `lg` (it's
+  // `lg:hidden`) — at `lg` and up the same selection drives the always-visible
+  // desktop `<aside>`, which isn't an overlay to close on back, so the
+  // back-button handler below needs the live breakpoint alongside the
+  // selection state itself.
+  const isMobile = useMediaQuery('(max-width: 1023.98px)')
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -52,6 +61,8 @@ export function AppLayout() {
   importOpenRef.current = importOpen
   const drawerOpenRef = useRef(drawerOpen)
   drawerOpenRef.current = drawerOpen
+  const isMobileRef = useRef(isMobile)
+  isMobileRef.current = isMobile
 
   // Android hardware back-button wiring. Only registers inside the native
   // Capacitor shell — `Capacitor.isNativePlatform()` is false in every
@@ -62,7 +73,12 @@ export function AppLayout() {
   // whatever overlay is open before ever navigating, and never do both on
   // the same press. Workspace dialogs (create/edit/move/delete node,
   // add/edit employee) live below this component in the tree, so they're
-  // checked via the backButtonBridge module rather than useWorkspace().
+  // checked via the backButtonBridge module rather than useWorkspace(). The
+  // `MobileDetailsSheet` check below is the same story: it's driven by
+  // `ws.selection`, owned by whichever `WorkspaceProvider` is mounted, not by
+  // this component — hence the same bridge, gated on the live viewport width
+  // since the sheet is an overlay only below `lg` (at `lg`+ the same
+  // selection just drives the always-visible desktop details `<aside>`).
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return
     let cancelled = false
@@ -82,6 +98,10 @@ export function AppLayout() {
       }
       if (drawerOpenRef.current) {
         setDrawerOpen(false)
+        return
+      }
+      if (isMobileRef.current && isWorkspaceSelectionActive()) {
+        clearWorkspaceSelection()
         return
       }
       if (canGoBack) {

@@ -23,7 +23,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={push}>
       {children}
-      <div className="pointer-events-none fixed bottom-5 left-1/2 z-[60] flex -translate-x-1/2 flex-col gap-2">
+      {/* `bottom-20` clears the mobile bottom-nav rail (`Rail.tsx`, ~56px tall
+          plus its border, docked `<lg`, z-40) so toasts never appear crowded
+          by/obscured behind it; `lg:bottom-5` restores the exact original
+          desktop position, where the rail is a side rail instead. */}
+      <div className="pointer-events-none fixed bottom-20 left-1/2 z-[60] flex -translate-x-1/2 flex-col gap-2 lg:bottom-5">
         <AnimatePresence>
           {toasts.map((t) => (
             <motion.div
