@@ -1,5 +1,39 @@
 apply plugin: 'com.android.application'
 
+// --- Release signing (internal/sideload distribution) -----------------------
+// Reads keystore location/passwords from Gradle properties, never from
+// hardcoded literals in this file. Properties can come from either:
+//   1. android/keystore.properties (git-ignored local file), or
+//   2. -P/gradle.properties/environment-style Gradle project properties
+//      (e.g. `ORG_GRADLE_PROJECT_MYAPP_RELEASE_STORE_PASSWORD=...`).
+// See android/README.md for full setup instructions.
+//
+// If the properties are absent, `signingProps` stays empty and the
+// `release` build type below falls back to the default (unsigned) signing
+// config, so `assembleRelease` still succeeds for anyone who hasn't set up
+// signing — it just won't be installable until it's signed some other way.
+def signingProps = new Properties()
+def keystorePropsFile = rootProject.file('keystore.properties')
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { signingProps.load(it) }
+}
+
+def signingPropOrEnv = { String propName, String envName ->
+    if (signingProps.containsKey(propName)) return signingProps[propName]
+    if (project.hasProperty(propName)) return project.property(propName)
+    def envVal = System.getenv(envName)
+    if (envVal != null) return envVal
+    return null
+}
+
+def releaseStoreFile = signingPropOrEnv('MYAPP_RELEASE_STORE_FILE', 'MYAPP_RELEASE_STORE_FILE')
+def releaseStorePassword = signingPropOrEnv('MYAPP_RELEASE_STORE_PASSWORD', 'MYAPP_RELEASE_STORE_PASSWORD')
+def releaseKeyAlias = signingPropOrEnv('MYAPP_RELEASE_KEY_ALIAS', 'MYAPP_RELEASE_KEY_ALIAS')
+def releaseKeyPassword = signingPropOrEnv('MYAPP_RELEASE_KEY_PASSWORD', 'MYAPP_RELEASE_KEY_PASSWORD')
+
+def hasReleaseSigningConfig = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+// ------------------------------------------------------------------------
+
 android {
     namespace = "com.gorms.app"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,8 +50,22 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (hasReleaseSigningConfig) {
+            release {
+                storeFile rootProject.file(releaseStoreFile)
+                storePassword releaseStorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
         release {
+            // Falls back to the default (unsigned) signing when the
+            // properties above aren't set, so this build type never
+            // hard-fails just because signing hasn't been configured yet.
+            signingConfig hasReleaseSigningConfig ? signingConfigs.release : null
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
