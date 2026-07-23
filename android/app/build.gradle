@@ -32,6 +32,30 @@ def releaseKeyAlias = signingPropOrEnv('MYAPP_RELEASE_KEY_ALIAS', 'MYAPP_RELEASE
 def releaseKeyPassword = signingPropOrEnv('MYAPP_RELEASE_KEY_PASSWORD', 'MYAPP_RELEASE_KEY_PASSWORD')
 
 def hasReleaseSigningConfig = releaseStoreFile && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+
+// Loudly warn on a PARTIAL config (some but not all four properties set) --
+// this is almost always a typo/omission (e.g. keystore + passwords set but
+// the key alias forgotten), and without this warning it silently produces
+// an unsigned "release" APK with no diagnostic at all. A fully-absent
+// config (the expected default/dev case) intentionally stays silent.
+def releaseSigningPropsSet = [releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword]
+def releaseSigningPropsPresentCount = releaseSigningPropsSet.count { it }
+if (releaseSigningPropsPresentCount > 0 && !hasReleaseSigningConfig) {
+    def missing = []
+    if (!releaseStoreFile) missing << 'MYAPP_RELEASE_STORE_FILE'
+    if (!releaseStorePassword) missing << 'MYAPP_RELEASE_STORE_PASSWORD'
+    if (!releaseKeyAlias) missing << 'MYAPP_RELEASE_KEY_ALIAS'
+    if (!releaseKeyPassword) missing << 'MYAPP_RELEASE_KEY_PASSWORD'
+    logger.warn(
+        "WARNING: Partial release-signing configuration detected " +
+        "(${releaseSigningPropsPresentCount}/4 of the MYAPP_RELEASE_* signing " +
+        "properties are set). Missing: ${missing.join(', ')}. All four " +
+        "properties (store file, store password, key alias, key password) " +
+        "must be set together for the release build to be signed - " +
+        "assembleRelease/bundleRelease will still succeed, but will silently " +
+        "produce an UNSIGNED release artifact. See android/README.md for setup."
+    )
+}
 // ------------------------------------------------------------------------
 
 android {

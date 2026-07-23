@@ -91,6 +91,19 @@ or pass them as `-P` Gradle project properties on the command line:
 If none of these are set, `assembleRelease`/`bundleRelease` still run — the
 output just won't be signed with your release key.
 
+**Footgun: partial configuration.** All four properties must be set
+*together* — if you set only some of them (e.g. you set the keystore path
+and both passwords but forget the key alias), the build does **not** fail
+and does **not** get signed either; it silently falls back to the same
+unsigned output as the "nothing configured" case. To catch this,
+`build.gradle` prints a `logger.warn(...)` diagnostic during Gradle
+evaluation (visible in the `./gradlew assembleRelease` output, even without
+`--info`/`--debug`) whenever some but not all four properties are set,
+naming exactly which ones are missing. If you don't see a signed APK and
+suspect this, re-run the build and check the top of the Gradle output for a
+line starting with `WARNING: Partial release-signing configuration
+detected`.
+
 ### 3. Build
 
 From the repo root, rebuild the web assets and sync them into the native
