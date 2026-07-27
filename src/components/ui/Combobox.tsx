@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { Icon } from './Icon'
-import { useClampToAncestor } from './useClampToAncestor'
+import { PopoverPanel } from './popover/PopoverPanel'
+import { useRovingIndex } from './popover/useRovingIndex'
 import { cn } from '@/lib/utils'
 
 export interface ComboboxOption {
@@ -18,14 +19,17 @@ interface ComboboxProps {
   /** Accessible name for the control. */
   'aria-label'?: string
   className?: string
+  /** Renders a read-only display of the current selection instead of the
+   *  editable control — for fields auto-filled from another selection. */
+  disabled?: boolean
 }
 
 /**
  * Typeahead select: an input that filters `options` as you type and commits a
  * value on pick. An empty value means nothing is selected (the placeholder
  * shows). Built on the same border/height tokens as Input/Select so it drops in
- * beside them. Closes on outside click / Escape; ↑/↓ move the active option and
- * Enter commits it.
+ * beside them. Closes on outside click / Escape; ↑/↓/Home/End move the active
+ * option and Enter commits it.
  */
 export function Combobox({
   value,
@@ -33,15 +37,14 @@ export function Combobox({
   options,
   placeholder = 'Select…',
   className,
+  disabled = false,
   ...aria
 }: ComboboxProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [active, setActive] = useState(0)
   const rootRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const listRef = useRef<HTMLDivElement>(null)
-  const clampStyle = useClampToAncestor(open, listRef)
+  const listRef = useRef<HTMLUListElement>(null)
 
   const selectedLabel = useMemo(
     () => options.find((o) => o.value === value)?.label ?? '',
@@ -61,19 +64,8 @@ export function Combobox({
   const placeholderText = open && selectedLabel ? selectedLabel : placeholder
 
   useEffect(() => {
-    if (!open) {
-      setQuery('')
-      return
-    }
-    const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
+    if (!open) setQuery('')
   }, [open])
-
-  // Reset the highlighted row whenever the visible match set changes.
-  useEffect(() => setActive(0), [query, open])
 
   function commit(option: ComboboxOption) {
     onChange(option.value)
@@ -86,21 +78,28 @@ export function Combobox({
     setOpen(false)
   }
 
-  function onKeyDown(e: KeyboardEvent) {
-    if (e.key === 'ArrowDown') {
+  const roving = useRovingIndex({
+    count: matches.length,
+    resetKey: `${query}:${open}`,
+    onCommit: (i) => { const opt = matches[i]; if (opt) commit(opt) },
+    containerRef: listRef,
+  })
+
+  function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'ArrowDown' && !open) {
       e.preventDefault()
-      if (!open) setOpen(true)
-      else setActive((i) => Math.min(i + 1, matches.length - 1))
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      setActive((i) => Math.max(i - 1, 0))
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      const opt = matches[active]
-      if (opt) commit(opt)
-    } else if (e.key === 'Escape') {
-      setOpen(false)
+      setOpen(true)
+      return
     }
+    roving.onKeyDown(e)
+  }
+
+  if (disabled) {
+    return (
+      <div className={cn('flex h-9 w-full items-center rounded-lg border border-line bg-panel px-3 text-[13px] text-ink-700', className)}>
+        {selectedLabel || <span className="text-muted/70">{placeholder}</span>}
+      </div>
+    )
   }
 
   return (
@@ -141,36 +140,33 @@ export function Combobox({
         )}
       </div>
 
-      <AnimatePresence>
-        {open && (
-          <div
+      <PopoverPanel open={open} anchorRef={rootRef} onClose={() => setOpen(false)} matchAnchorWidth maxPanelHeight={240}>
+        {({ maxHeight }) => (
+          <motion.ul
             ref={listRef}
-            style={{ ...clampStyle, transform: 'translate(var(--nudge-x, 0px), var(--nudge-y, 0px))' }}
-            className="absolute z-40 mt-1 w-full"
+            role="listbox"
+            data-canvas-ui
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.1 }}
+            style={{ maxHeight }}
+            className="w-full overflow-y-auto scrollbar-thin rounded-xl border border-line bg-paper p-1 shadow-pop"
           >
-            <motion.ul
-              role="listbox"
-              data-canvas-ui
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.1 }}
-              className="max-h-60 w-full overflow-y-auto scrollbar-thin rounded-xl border border-line bg-paper p-1 shadow-pop"
-            >
             {matches.length === 0 ? (
               <li className="px-2.5 py-2 text-[13px] text-muted">No matches</li>
             ) : (
               matches.map((o, i) => (
-                <li key={o.value}>
+                <li key={o.value} data-roving-index={i}>
                   <button
                     type="button"
                     role="option"
                     aria-selected={o.value === value}
-                    onMouseEnter={() => setActive(i)}
+                    onMouseEnter={() => roving.setActive(i)}
                     onClick={() => commit(o)}
                     className={cn(
-                      'flex w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors',
-                      i === active ? 'bg-ink-900/[0.06] text-ink-900' : 'text-ink',
+                      'flex min-h-11 w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors lg:min-h-0',
+                      i === roving.active ? 'bg-ink-900/[0.06] text-ink-900' : 'text-ink',
                       o.value === value && 'font-semibold',
                     )}
                   >
@@ -179,10 +175,9 @@ export function Combobox({
                 </li>
               ))
             )}
-            </motion.ul>
-          </div>
+          </motion.ul>
         )}
-      </AnimatePresence>
+      </PopoverPanel>
     </div>
   )
 }
