@@ -140,7 +140,7 @@ export interface Repository {
 
   listTimeline(employeeId: string): Promise<TimelineEvent[]>
   /** Every timeline event across every employee, newest first — powers the
-   *  cross-employee Meetings screen. Optionally narrowed to a set of
+   *  cross-employee Meetings & Events screen. Optionally narrowed to a set of
    *  event types. */
   listAllTimelineEvents(filter?: { types?: TimelineEventType[] }): Promise<TimelineEvent[]>
   addTimelineEvent(input: AddTimelineInput): Promise<TimelineEvent>
