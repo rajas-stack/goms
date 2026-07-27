@@ -2,9 +2,11 @@ import { useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useAllEmployees, useAllTimelineEvents, useEmployeeDepartments } from '@/lib/api'
+import { useHighlightOnArrival } from '@/lib/useHighlightOnArrival'
 import { Icon } from '@/components/ui/Icon'
 import { Badge } from '@/components/ui/Badge'
 import { TIMELINE_META } from '@/lib/timeline-meta'
+import { cn } from '@/lib/utils'
 import type { Employee, TimelineEvent, TimelineEventType } from '@/lib/types'
 
 // Row height is fixed (same markup on every row, single-line content), so a
@@ -49,6 +51,15 @@ export function Meetings() {
     overscan: 8,
   })
 
+  // Lets a search-palette Meeting result land here scrolled-to and briefly
+  // highlighted (?highlight=<entryId>) — search-categories.ts's meeting
+  // category is the only current producer of this query param.
+  const highlightedId = useHighlightOnArrival(
+    rows,
+    (r) => r.id,
+    (index) => virtualizer.scrollToIndex(index, { align: 'center' }),
+  )
+
   return (
     <div className="flex h-full flex-col">
       <div className="z-10 border-b border-line bg-white/80 px-6 py-4 backdrop-blur">
@@ -76,6 +87,7 @@ export function Meetings() {
                     entry={e}
                     employee={employeeById.get(e.employeeId)!}
                     department={deptById[e.employeeId]?.name}
+                    highlighted={e.id === highlightedId}
                     onClick={() => openPerson(e.employeeId)}
                   />
                 </div>
@@ -88,17 +100,21 @@ export function Meetings() {
   )
 }
 
-function TimelineRow({ entry, employee, department, onClick }: {
+function TimelineRow({ entry, employee, department, highlighted, onClick }: {
   entry: TimelineEvent
   employee: Employee
   department?: string
+  highlighted?: boolean
   onClick: () => void
 }) {
   const meta = TIMELINE_META[entry.type]
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center gap-3 rounded-lg border border-line bg-white px-3 py-2.5 text-left transition-colors hover:border-ink-600"
+      className={cn(
+        'flex w-full items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors',
+        highlighted ? 'border-teal-600 bg-teal-100/40' : 'border-line bg-white hover:border-ink-600',
+      )}
     >
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-line bg-panel">
         <Icon name={meta.icon} size={15} className="text-ink-700" />
