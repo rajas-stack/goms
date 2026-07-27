@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Icon } from '@/components/ui/Icon'
+import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
+import { useRovingIndex } from '@/components/ui/popover/useRovingIndex'
 import { cn } from '@/lib/utils'
 import type { HierNode } from '@/lib/types'
 
@@ -18,8 +20,9 @@ interface Props {
 export function DepartmentCombobox({ departments, value, onSelect, placeholder, className }: Props) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
-  const [active, setActive] = useState(0)
+  const anchorRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   const selected = departments.find((d) => d.id === value) ?? null
 
@@ -29,8 +32,6 @@ export function DepartmentCombobox({ departments, value, onSelect, placeholder, 
     return list.slice(0, 50)
   }, [departments, query, open])
 
-  useEffect(() => setActive(0), [query, open])
-
   function choose(id: string) {
     onSelect(id)
     setQuery('')
@@ -38,23 +39,27 @@ export function DepartmentCombobox({ departments, value, onSelect, placeholder, 
     inputRef.current?.blur()
   }
 
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === 'ArrowDown') { e.preventDefault(); setActive((a) => Math.min(a + 1, matches.length - 1)) }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)) }
-    else if (e.key === 'Enter') { e.preventDefault(); if (matches[active]) choose(matches[active].id) }
-    else if (e.key === 'Escape') { setOpen(false); inputRef.current?.blur() }
+  const roving = useRovingIndex({
+    count: matches.length,
+    resetKey: `${query}:${open}`,
+    onCommit: (i) => { const m = matches[i]; if (m) choose(m.id) },
+    containerRef: listRef,
+  })
+
+  function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Escape') { setOpen(false); inputRef.current?.blur(); return }
+    roving.onKeyDown(e)
   }
 
   return (
     <div data-canvas-ui className={cn('pointer-events-auto relative', className)}>
-      <div className="flex h-7 items-center gap-1.5 rounded-lg border border-line bg-white px-2">
+      <div ref={anchorRef} className="flex h-7 items-center gap-1.5 rounded-lg border border-line bg-white px-2">
         <Icon name="Search" size={13} className="shrink-0 text-muted" />
         <input
           ref={inputRef}
           value={open ? query : selected?.name ?? ''}
           onChange={(e) => { setQuery(e.target.value); setOpen(true) }}
           onFocus={() => { setQuery(''); setOpen(true) }}
-          onBlur={() => setTimeout(() => setOpen(false), 120)}
           onKeyDown={onKeyDown}
           disabled={departments.length === 0}
           placeholder={departments.length === 0 ? 'No departments yet' : placeholder ?? 'Search departments…'}
@@ -62,28 +67,33 @@ export function DepartmentCombobox({ departments, value, onSelect, placeholder, 
         />
       </div>
 
-      {open && matches.length > 0 && (
-        <div className="absolute left-0 top-full z-20 mt-1 max-h-64 w-[16rem] overflow-y-auto scrollbar-thin rounded-lg border border-line bg-white shadow-pop">
-          {matches.map((d, i) => (
-            <button
-              key={d.id}
-              type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onMouseEnter={() => setActive(i)}
-              onClick={() => choose(d.id)}
-              className={cn(
-                'flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition-colors',
-                i === active ? 'bg-ink-900/[0.06]' : 'hover:bg-ink-900/[0.03]',
-                d.id === value ? 'font-semibold text-ink-900' : 'text-ink-800',
-              )}
-            >
-              <Icon name="Landmark" size={13} className="shrink-0 text-muted" />
-              <span className="min-w-0 flex-1 truncate">{d.name}</span>
-              {d.id === value && <Icon name="Check" size={13} className="shrink-0 text-teal-600" />}
-            </button>
-          ))}
-        </div>
-      )}
+      <PopoverPanel open={open && matches.length > 0} anchorRef={anchorRef} onClose={() => setOpen(false)} maxPanelHeight={256}>
+        {() => (
+          <div
+            ref={listRef}
+            data-canvas-ui
+            className="w-[16rem] overflow-y-auto scrollbar-thin rounded-lg border border-line bg-white shadow-pop"
+          >
+            {matches.map((d, i) => (
+              <button
+                key={d.id}
+                type="button"
+                data-roving-index={i}
+                onClick={() => choose(d.id)}
+                className={cn(
+                  'flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition-colors lg:min-h-0',
+                  i === roving.active ? 'bg-ink-900/[0.06]' : 'hover:bg-ink-900/[0.03]',
+                  d.id === value ? 'font-semibold text-ink-900' : 'text-ink-800',
+                )}
+              >
+                <Icon name="Landmark" size={13} className="shrink-0 text-muted" />
+                <span className="min-w-0 flex-1 truncate">{d.name}</span>
+                {d.id === value && <Icon name="Check" size={13} className="shrink-0 text-teal-600" />}
+              </button>
+            ))}
+          </div>
+        )}
+      </PopoverPanel>
     </div>
   )
 }
