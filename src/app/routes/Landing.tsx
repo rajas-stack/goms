@@ -44,13 +44,15 @@ export function Landing() {
         </motion.div>
 
         <motion.div
-          className="grid grid-cols-2 gap-3"
           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.18 }}
         >
-          <StatCard label="States & UTs" value={totals.states} accent="teal" />
-          <StatCard label="Departments" value={totals.departments} accent="ink" />
-          <StatCard label="Offices" value={totals.offices} accent="ink" />
-          <StatCard label="Employees" value={totals.employees} accent="indigo" />
+          <span className="eyebrow">Mapping Statistics</span>
+          <div className="mt-2 grid grid-cols-2 gap-3">
+            <StatCard label="States & UTs" value={totals.states} accent="teal" />
+            <StatCard label="Departments" value={totals.departments} accent="ink" />
+            <StatCard label="Offices" value={totals.offices} accent="ink" />
+            <StatCard label="Employees" value={totals.employees} accent="indigo" />
+          </div>
         </motion.div>
       </section>
 
