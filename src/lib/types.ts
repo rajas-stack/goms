@@ -153,7 +153,15 @@ export interface ExternalId {
 }
 
 export interface SearchResult {
-  kind: 'node' | 'employee'
+  /** Navigation discriminant only. 'node'/'employee' route via the existing
+   *  ws.select() workspace-selection mechanism; 'other' routes via the
+   *  owning category's `path()` instead (see search-categories.ts). Adding a
+   *  new entity type never adds a new value here — it's 'other' unless it's
+   *  literally backed by HierNode or Employee. */
+  kind: 'node' | 'employee' | 'other'
+  /** Open string key into SEARCH_CATEGORIES (search-categories.ts) — not a
+   *  closed union, same "data not enum" convention as HierNode.typeKey. */
+  category: string
   id: string
   title: string
   subtitle: string

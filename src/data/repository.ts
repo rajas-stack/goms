@@ -140,7 +140,7 @@ export interface Repository {
 
   listTimeline(employeeId: string): Promise<TimelineEvent[]>
   /** Every timeline event across every employee, newest first — powers the
-   *  cross-employee Meetings & Events screen. Optionally narrowed to a set of
+   *  cross-employee Meetings screen. Optionally narrowed to a set of
    *  event types. */
   listAllTimelineEvents(filter?: { types?: TimelineEventType[] }): Promise<TimelineEvent[]>
   addTimelineEvent(input: AddTimelineInput): Promise<TimelineEvent>
@@ -635,14 +635,17 @@ class InMemoryRepository implements Repository {
     const transferredIds = new Set(this.data.transfers.map((t) => t.employeeId))
     const today = isoToday()
 
+    const categoryForNode = (n: HierNode): string =>
+      n.domain === 'geo' ? 'geography' : n.typeKey === 'department' ? 'department' : 'office'
+
     const empResult = (e: Employee, note?: string): SearchResult => ({
-      kind: 'employee', id: e.id,
+      kind: 'employee', category: 'employee', id: e.id,
       title: e.vacant ? `${e.designation || 'Vacant position'} · Vacant` : e.name,
       subtitle: e.designation || nodeById.get(e.orgNodeId)?.name || '—',
       code: e.code, domain: null, stateCode: nodeById.get(e.orgNodeId)?.stateCode ?? null, note,
     })
     const nodeResult = (n: HierNode, note?: string): SearchResult => ({
-      kind: 'node', id: n.id, title: n.name,
+      kind: 'node', category: categoryForNode(n), id: n.id, title: n.name,
       subtitle: NODE_TYPE_MAP[n.typeKey]?.label ?? n.typeKey,
       code: n.code, domain: n.domain, stateCode: n.stateCode, note,
     })
