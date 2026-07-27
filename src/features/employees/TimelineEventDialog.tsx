@@ -67,7 +67,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
       employeeId: activeEmployeeId, type: form.type, title: form.title.trim(), date: form.date, time: form.time,
       note: form.note, attendees: form.attendees,
     })
-    toast('Timeline event added')
+    toast('Added to timeline')
     onClose()
   }
 
@@ -76,8 +76,8 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
       <Dialog
         open={open}
         onClose={onClose}
-        title="Add timeline event"
-        description="Choose who this event is for"
+        title="Log to timeline"
+        description="Choose who this is for"
         footer={<Button onClick={onClose}>Cancel</Button>}
       >
         <Field label="Person" hint="Search by name or designation">
@@ -96,12 +96,12 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
     <Dialog
       open={open}
       onClose={onClose}
-      title="Add timeline event"
+      title="Log to timeline"
       description={!employeeId && pickedEmployee ? `For ${pickedEmployee.name}` : undefined}
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!form.title.trim()}>Add event</Button>
+          <Button variant="primary" onClick={submit} disabled={!form.title.trim()}>Add entry</Button>
         </>
       }
     >
@@ -162,7 +162,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             ))}
           </div>
         </Field>
-        <Field label="Note" hint="Optional details about this event.">
+        <Field label="Note" hint="Optional details.">
           <Textarea value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
         </Field>
       </div>

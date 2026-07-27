@@ -112,7 +112,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           )}
           <Button size="sm" onClick={() => ws.editEmployee(emp)}><Icon name="Pencil" size={14} /> Edit</Button>
           {!vacant && (
-            <Button size="sm" onClick={() => setActive('event')}><Icon name="Calendar" size={14} /> Add event</Button>
+            <Button size="sm" onClick={() => setActive('event')}><Icon name="Calendar" size={14} /> Add entry</Button>
           )}
 
           {/* Less-frequent / destructive actions tucked away so they can't be hit by accident. */}
@@ -261,7 +261,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
               <h3 className="flex items-center gap-2 text-[13px] font-semibold text-ink-800">
                 <Icon name="Clock" size={14} className="text-muted" /> Timeline · {timeline.length}
               </h3>
-              <button onClick={() => setActive('event')} className="text-[12px] font-medium text-teal-600 hover:underline">+ Add event</button>
+              <button onClick={() => setActive('event')} className="text-[12px] font-medium text-teal-600 hover:underline">+ Add entry</button>
             </div>
             <TimelineList events={timeline} />
           </section>
@@ -377,7 +377,7 @@ function TransferRow({ transfer }: { transfer: Transfer }) {
 
 function TimelineList({ events }: { events: TimelineEvent[] }) {
   if (events.length === 0) {
-    return <p className="text-sm text-muted">No events yet. Add meetings, calls, or notes to build a history.</p>
+    return <p className="text-sm text-muted">Nothing logged yet. Add meetings, calls, or notes to build a history.</p>
   }
   return (
     <div className="relative">

@@ -1,15 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Icon } from '@/components/ui/Icon'
 import { useShell } from '@/app/AppLayout'
 import {
   enqueueWorkspaceAction, invokeWorkspaceAddEmployee, invokeWorkspaceCreateChild, invokeWorkspaceCreateDepartment,
-  type WorkspaceCreateAction,
+  registerFabOverlayHandle, type WorkspaceCreateAction,
 } from '@/features/workspace/backButtonBridge'
 import { StatePicker } from '@/features/workspace/StatePicker'
 import { OrgTargetPicker } from '@/features/organization/OrgTargetPicker'
-import { GeoTargetPicker } from '@/features/geography/GeoTargetPicker'
 import { TimelineEventDialog } from '@/features/employees/TimelineEventDialog'
 import { MANUAL_EVENT_TYPES } from '@/lib/timeline-meta'
 import { cn } from '@/lib/utils'
@@ -26,16 +25,15 @@ type FabItem =
   | { id: string; label: string; icon: string; kind: 'event' }
   | { id: string; label: string; icon: string; kind: 'department' }
   | { id: string; label: string; icon: string; kind: 'person' }
-  | { id: string; label: string; icon: string; kind: 'location' }
   | { id: string; label: string; icon: string; kind: 'orgChild'; childKey: string }
 
-// Exhaustive per the plan's §5 / task-5 brief — 10 items, flat and unordered
-// (no context-aware reordering; that's explicitly out of scope here).
+// 9 items, flat and unordered (no context-aware reordering; that's
+// explicitly out of scope here). "Create Location" (geo domain) was removed
+// per explicit request — no `GeoTargetPicker`/`pick-geo` flow step remains.
 const MENU: FabItem[] = [
   { id: 'import', label: 'Import Records', icon: 'Upload', kind: 'import' },
   { id: 'meeting', label: 'Create Meeting', icon: 'Users', kind: 'meeting' },
-  { id: 'event', label: 'Create Event', icon: 'CalendarClock', kind: 'event' },
-  { id: 'location', label: 'Create Location', icon: 'MapPin', kind: 'location' },
+  { id: 'event', label: 'Log Interaction', icon: 'CalendarClock', kind: 'event' },
   { id: 'unit', label: 'Create Unit', icon: 'Boxes', kind: 'orgChild', childKey: 'unit' },
   { id: 'office', label: 'Create Office', icon: 'DoorOpen', kind: 'orgChild', childKey: 'office' },
   { id: 'division', label: 'Create Division', icon: 'Layers', kind: 'orgChild', childKey: 'division' },
@@ -50,13 +48,14 @@ type Flow =
   | { step: 'closed' }
   | { step: 'pick-state'; item: FabItem }
   | { step: 'pick-org'; stateCode: number; item: Extract<FabItem, { kind: 'orgChild' | 'person' }> }
-  | { step: 'pick-geo'; stateCode: number; item: Extract<FabItem, { kind: 'location' }> }
 
 /** Resolves the state a `/state/:code` (or `/state/:code/...`) URL is
- *  currently on. `/directory`'s sentinel workspace isn't a real state, so it
- *  deliberately does NOT match here — per the task-5 design decision, it's
- *  treated the same as "no state context yet" and still routes through the
- *  state-picker. */
+ *  currently on, used only to pre-fill the state-picker's default selection
+ *  as a convenience — the picker itself is always shown (see `onItemClick`),
+ *  never skipped, so State vs. Government of India stays an explicit choice
+ *  every time. `/directory`'s sentinel workspace isn't a real state, so it
+ *  deliberately does NOT match here — the picker opens with nothing
+ *  pre-filled in that case. */
 function stateCodeFromPath(pathname: string): number | null {
   const m = pathname.match(/^\/state\/(-?\d+)/)
   if (!m) return null
@@ -92,7 +91,6 @@ export function GlobalFab() {
 
   function proceedWithState(item: FabItem, stateCode: number) {
     if (item.kind === 'department') { runAction(stateCode, { action: 'createDepartment' }); return }
-    if (item.kind === 'location') { setFlow({ step: 'pick-geo', stateCode, item }); return }
     if (item.kind === 'orgChild' || item.kind === 'person') { setFlow({ step: 'pick-org', stateCode, item }); return }
   }
 
@@ -100,9 +98,7 @@ export function GlobalFab() {
     setMenuOpen(false)
     if (item.kind === 'import') { openImport(); return }
     if (item.kind === 'meeting' || item.kind === 'event') { setTimelineKind(item.kind); return }
-    const current = stateCodeFromPath(location.pathname)
-    if (current != null) proceedWithState(item, current)
-    else setFlow({ step: 'pick-state', item })
+    setFlow({ step: 'pick-state', item })
   }
 
   function onOrgPick(node: HierNode) {
@@ -117,6 +113,34 @@ export function GlobalFab() {
   const orgPickLabel = (node: HierNode) => flow.step === 'pick-org'
     ? (flow.item.kind === 'person' ? `Post here (${node.name})` : `Add ${flow.item.childKey} here`)
     : ''
+
+  // Live-state refs for the back-button bridge below — read at call time
+  // (whenever the hardware back button fires), never captured stale, since
+  // the registration effect itself only runs once (mirrors the identical
+  // pattern `AppLayout.tsx` uses for its own search/import/drawer refs).
+  const menuOpenRef = useRef(menuOpen)
+  menuOpenRef.current = menuOpen
+  const flowRef = useRef(flow)
+  flowRef.current = flow
+  const timelineKindRef = useRef(timelineKind)
+  timelineKindRef.current = timelineKind
+
+  useEffect(() => {
+    registerFabOverlayHandle({
+      isOpen: () => menuOpenRef.current || flowRef.current.step !== 'closed' || timelineKindRef.current !== null,
+      // Closes exactly one layer per call, topmost/most-recently-opened
+      // first — mirrors Escape's dialog-first semantics elsewhere in the
+      // app. A picker step and the menu itself are never open at the same
+      // time in practice (opening a picker always closes the menu first),
+      // but the ordering below is still correct if that ever changes.
+      close: () => {
+        if (timelineKindRef.current !== null) { setTimelineKind(null); return }
+        if (flowRef.current.step !== 'closed') { setFlow({ step: 'closed' }); return }
+        if (menuOpenRef.current) setMenuOpen(false)
+      },
+    })
+    return () => registerFabOverlayHandle(null)
+  }, [])
 
   return (
     <>
@@ -167,6 +191,7 @@ export function GlobalFab() {
       <StatePicker
         open={flow.step === 'pick-state'}
         title={flow.step === 'pick-state' ? flow.item.label : ''}
+        defaultCode={stateCodeFromPath(location.pathname) ?? undefined}
         onPick={(stateCode) => { if (flow.step === 'pick-state') proceedWithState(flow.item, stateCode) }}
         onClose={() => setFlow({ step: 'closed' })}
       />
@@ -178,15 +203,6 @@ export function GlobalFab() {
         requireChildType={flow.step === 'pick-org' && flow.item.kind === 'orgChild' ? flow.item.childKey : undefined}
         pickLabel={orgPickLabel}
         onPick={onOrgPick}
-        onClose={() => setFlow({ step: 'closed' })}
-      />
-
-      <GeoTargetPicker
-        open={flow.step === 'pick-geo'}
-        stateCode={flow.step === 'pick-geo' ? flow.stateCode : -1}
-        title="Pick where the new location goes"
-        pickLabel={(node) => `Add location under ${node.name}`}
-        onPick={(node) => { if (flow.step === 'pick-geo') runAction(flow.stateCode, { action: 'createChild', parent: node }) }}
         onClose={() => setFlow({ step: 'closed' })}
       />
 

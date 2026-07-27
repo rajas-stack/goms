@@ -14,7 +14,7 @@ export const TIMELINE_META: Record<TimelineEventType, { label: string; icon: str
   followup: { label: 'Follow-up', icon: 'CalendarClock', tone: 'amber' },
   note: { label: 'Note Added', icon: 'StickyNote', tone: 'neutral' },
   document: { label: 'Document Uploaded', icon: 'FileText', tone: 'purple' },
-  custom: { label: 'Custom Event', icon: 'Sparkles', tone: 'gray' },
+  custom: { label: 'Custom', icon: 'Sparkles', tone: 'gray' },
 }
 
 /** Categories a user can add by hand (system-only kinds like `joined` and
