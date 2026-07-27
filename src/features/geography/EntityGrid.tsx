@@ -12,7 +12,7 @@ import type { HierNode } from '@/lib/types'
  *
  *  Deliberately NOT using `@tanstack/react-virtual`'s grid-aware windowing
  *  here (unlike `Meetings`/`PeopleDirectory`) — this grid is responsive
- *  (`grid-cols-2 sm:grid-cols-3 lg:grid-cols-4`), and every call site owns a
+ *  (`grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`), and every call site owns a
  *  different scroll container (`OrganizationList`'s own div, Geography's
  *  `TilePane`, the small `FallbackTiles` strip), so true virtualization would
  *  need a column-count-aware size model threaded through several unrelated
@@ -70,7 +70,7 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {items.map((node, i) => {
         const count = counts[node.id] ?? 0
         const tileIcon = getIcon?.(node) ?? icon
@@ -99,7 +99,14 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
           >
             <div
               className={cn(
-                'flex flex-col items-start gap-2',
+                // `w-full min-w-0`: this div is itself a flex item of the
+                // tile above (`items-start`), so without an explicit width it
+                // shrink-wraps to its children's max-content size (the full,
+                // untruncated name) instead of the tile's actual (grid-track-
+                // constrained) width — the name span's own `w-full` further
+                // down can only resolve against ITS parent's width if that
+                // parent has one, so the constraint has to start here too.
+                'flex w-full min-w-0 flex-col items-start gap-2',
                 // Skip layout/paint for tiles currently scrolled out of view —
                 // a cheap, browser-native stand-in for full grid virtualization
                 // at this component's realistic (low-hundreds) list sizes; see
@@ -111,14 +118,21 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
                 // edge (`-right-2 -top-2`) along with its tooltip and touch
                 // hit-slop, so it must stay OUTSIDE the contained subtree or
                 // paint containment would crop/hide all three.
-                '[content-visibility:auto] [contain-intrinsic-size:0_100px]',
+                '[content-visibility:auto] [contain-intrinsic-size:0_120px]',
               )}
             >
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-100 text-teal-600">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-teal-100 text-teal-600">
                 <Icon name={tileIcon} size={16} />
               </span>
-              <span className="min-w-0">
-                <span className="block truncate font-display text-sm font-semibold text-ink-900">{node.name}</span>
+              {/* `w-full`: this span's parent is a `flex-col items-start`
+                 *  container, which shrink-wraps children to content width
+                 *  instead of stretching them — without an explicit width,
+                 *  the name below has no boundary to wrap against and would
+                 *  overflow the tile instead. Wraps (no `truncate`) so the
+                 *  full name is always visible, at the cost of a taller tile
+                 *  for longer names. */}
+              <span className="w-full min-w-0">
+                <span className="block break-words font-display text-sm font-semibold text-ink-900">{node.name}</span>
                 {countNoun && (
                   <span className="mt-0.5 block font-mono text-[11px] text-muted">
                     {count} {countNoun}{count === 1 ? '' : 's'}

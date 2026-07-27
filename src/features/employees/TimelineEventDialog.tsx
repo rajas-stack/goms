@@ -13,14 +13,14 @@ import type { TimelineEventType } from '@/lib/types'
 
 /**
  * `employeeId: null` opens the dialog with an employee-search/pick step
- * first (used by the global "add event" entry point, which has no
+ * first (used by the global "+ Add entry" entry point, which has no
  * pre-selected person); once someone is picked, it proceeds into the exact
- * same create-event flow as the profile's "+ Add event" button, which always
+ * same logging flow as the profile's "+ Add entry" button, which always
  * passes a real `employeeId` and therefore never sees this step at all.
  *
  * `initialType`/`typeFilter` let the global FAB offer separate "Create
- * Meeting" and "Create Event" entry points from this one dialog/mutation:
- * both omitted (the profile's own "+ Add event" call site) preserves the
+ * Meeting" and "Log Interaction" entry points from this one dialog/mutation:
+ * both omitted (the profile's own "+ Add entry" call site) preserves the
  * original behavior exactly — type defaults to 'meeting', every manual type
  * is selectable.
  */

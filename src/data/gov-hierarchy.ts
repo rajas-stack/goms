@@ -345,7 +345,7 @@ const BRCD_SPEC: OrgSpec = {
 
 // --- Group registry + builder entry point ---------------------------------
 
-/** Reserved stateCode for the virtual "Government of India (Central)" geo
+/** Reserved stateCode for the virtual "Central Ministries (Govt. of India)" geo
  *  node this plan adds in Task 5 — real LGD codes start at 1, and -1 is
  *  already reserved by the Directory's cross-state view. */
 export const CENTRAL_STATE_CODE = 0

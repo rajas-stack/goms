@@ -23,6 +23,11 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
+# Raw village-boundary shapefiles (per-state). Bulky source archives used
+# only by scripts/generate-village-data.cjs to build src/assets/village-shapes/;
+# not needed at runtime once converted.
+/*.zip
+
 # Vite
 .vite/
 

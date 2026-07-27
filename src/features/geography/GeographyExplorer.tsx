@@ -120,17 +120,10 @@ export function GeographyExplorer({ stateNodeId }: { stateNodeId: string }) {
 
   // --- Village boundaries (taluka + village levels) -------------------------
   const talukaCode = realLevel === 'taluka' ? current?.code ?? null : null
-  // The current taluka's own boundary (independent of talukaFeats, which is
-  // only built at the district level) — its bbox is what village tiles are
-  // fetched for.
-  const currentTalukaGeometry = useMemo(() => {
-    if (!talukaShapes || !talukaCode) return null
-    return talukaShapes.features.find((f) => f.properties.code === talukaCode)?.geometry ?? null
-  }, [talukaShapes, talukaCode])
   const { data: villageFeats, isLoading: villagesLoading } = useQuery({
     queryKey: ['villageShapes', talukaCode],
-    queryFn: () => loadVillageShapes(currentTalukaGeometry!, talukaCode!, stateCode!),
-    enabled: level === 'taluka' || level === 'village' ? !!talukaCode && !!currentTalukaGeometry : false,
+    queryFn: () => loadVillageShapes(talukaCode!, stateCode!),
+    enabled: (level === 'taluka' || level === 'village') && !!talukaCode,
   })
   const hasVillageMap = !!villageFeats && villageFeats.length > 0
 

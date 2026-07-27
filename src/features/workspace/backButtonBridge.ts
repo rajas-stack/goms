@@ -26,6 +26,12 @@ import type { HierNode } from '@/lib/types'
  *    instead enqueues a `PendingWorkspaceAction` and navigates to
  *    `/state/:code`; the freshly-mounted `WorkspaceProvider` for that state
  *    consumes (and clears) exactly one pending action meant for it.
+ *
+ * A second, separate single-slot registration (below) covers the FAB's OWN
+ * menu/pickers (`GlobalFab.tsx` is always mounted, unlike `WorkspaceProvider`,
+ * but its open/closed state is still private `useState` the back-button
+ * handler can't see directly) — same problem, same shape of fix, just a
+ * different handle.
  */
 interface WorkspaceDialogHandle {
   isOpen: () => boolean
@@ -116,4 +122,29 @@ export function consumePendingWorkspaceAction(stateCode: number): PendingWorkspa
   const p = pending
   pending = null
   return p
+}
+
+// --- FAB overlay handle ----------------------------------------------------
+// `GlobalFab` is a single, always-mounted component (not route-scoped like
+// `WorkspaceProvider`), but its menu/pickers are still private `useState` the
+// Android back-button handler in `AppLayout` can't see. Registered once on
+// mount with an `isOpen`/`close` pair that always reads GlobalFab's *live*
+// state via refs, mirroring the workspace dialog handle above.
+interface FabOverlayHandle {
+  isOpen: () => boolean
+  close: () => void
+}
+
+let activeFab: FabOverlayHandle | null = null
+
+export function registerFabOverlayHandle(handle: FabOverlayHandle | null) {
+  activeFab = handle
+}
+
+export function isFabOverlayOpen(): boolean {
+  return activeFab?.isOpen() ?? false
+}
+
+export function closeFabOverlay() {
+  activeFab?.close()
 }

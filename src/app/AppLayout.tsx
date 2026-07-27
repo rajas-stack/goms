@@ -12,7 +12,8 @@ import { ToastProvider } from '@/components/ui/Toast'
 import { isTypingTarget } from '@/lib/utils'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import {
-  clearWorkspaceSelection, closeWorkspaceDialog, isWorkspaceDialogOpen, isWorkspaceSelectionActive,
+  clearWorkspaceSelection, closeFabOverlay, closeWorkspaceDialog, isFabOverlayOpen, isWorkspaceDialogOpen,
+  isWorkspaceSelectionActive,
 } from '@/features/workspace/backButtonBridge'
 
 interface ShellCtx {
@@ -79,11 +80,23 @@ export function AppLayout() {
   // this component — hence the same bridge, gated on the live viewport width
   // since the sheet is an overlay only below `lg` (at `lg`+ the same
   // selection just drives the always-visible desktop details `<aside>`).
+  //
+  // The global FAB (menu + its own state/org/geo/timeline pickers) is
+  // checked FIRST: it's the newest/topmost overlay a back press could be
+  // dismissing, and — unlike the checks below it — nothing else in this
+  // chain can be open AT THE SAME TIME as one of the FAB's own picker steps
+  // (picking a target always closes the FAB's flow before it hands off to
+  // an actual workspace dialog), so there's no ordering conflict either way,
+  // but checking it first matches how it visually layers on top.
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return
     let cancelled = false
     let handle: PluginListenerHandle | undefined
     CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+      if (isFabOverlayOpen()) {
+        closeFabOverlay()
+        return
+      }
       if (isWorkspaceDialogOpen()) {
         closeWorkspaceDialog()
         return

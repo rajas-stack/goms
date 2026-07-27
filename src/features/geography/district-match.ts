@@ -64,6 +64,7 @@ const ALIASES: Record<string, string> = {
   west: 'west sikkim',
   north: 'north sikkim',
   south: 'south sikkim',
+  'leh ladakh': 'leh', // Ladakh — LGD boundary source labels Leh as "Leh Ladakh"
 }
 
 function normalize(name: string): string {

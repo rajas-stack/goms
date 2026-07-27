@@ -3,7 +3,7 @@ import {
   repository, type AddTimelineInput, type CreateEmployeeInput, type CreateNodeInput,
   type TransferInput,
 } from '@/data/repository'
-import type { Charge, Employee, HierNode, Status, TimelineEventType } from './types'
+import type { Charge, Employee, HierNode, SearchResult, Status, TimelineEventType } from './types'
 
 export const qk = {
   states: ['states'] as const,
@@ -22,8 +22,12 @@ export const qk = {
 }
 
 export const useStates = () => useQuery({ queryKey: qk.states, queryFn: () => repository.listStates() })
+// `code: -1` is the Directory sentinel (never a real state or the Government
+// of India's stateCode 0) — disabled rather than queried, so a consumer
+// passed the sentinel doesn't fire a query with no matching node, which
+// react-query rejects (queryFn must not return undefined).
 export const useStateNode = (code: number) =>
-  useQuery({ queryKey: qk.state(code), queryFn: () => repository.getState(code) })
+  useQuery({ queryKey: qk.state(code), queryFn: () => repository.getState(code), enabled: code >= 0 })
 export const useNode = (id: string | null) =>
   useQuery({ queryKey: qk.node(id ?? ''), queryFn: () => repository.getNode(id!), enabled: !!id })
 export const useChildren = (parentId: string | null) =>
@@ -58,7 +62,7 @@ export const useReportingChain = (id: string | null) =>
   useQuery({ queryKey: qk.chain(id ?? ''), queryFn: () => repository.reportingChain(id!), enabled: !!id })
 export const useTimeline = (id: string | null) =>
   useQuery({ queryKey: qk.timeline(id ?? ''), queryFn: () => repository.listTimeline(id!), enabled: !!id })
-/** Cross-employee timeline events (Meetings & Events screen), optionally
+/** Cross-employee timeline events (Meetings screen), optionally
  *  narrowed to a set of event types. */
 export const useAllTimelineEvents = (filter?: { types?: TimelineEventType[] }) =>
   useQuery({
@@ -76,6 +80,16 @@ export function useSearch(query: string, stateCode?: number) {
     queryKey: ['search', query, stateCode ?? null],
     queryFn: () => repository.search(query, stateCode),
     enabled: query.trim().length > 0,
+  })
+}
+
+/** Lazy — only fetches once a palette row is actually expanded (`result`
+ *  becomes non-null), never for every visible row up front. */
+export function useRelatedRecords(result: SearchResult | null) {
+  return useQuery({
+    queryKey: ['relatedRecords', result?.category ?? '', result?.id ?? ''],
+    queryFn: () => repository.relatedRecords(result!),
+    enabled: !!result,
   })
 }
 

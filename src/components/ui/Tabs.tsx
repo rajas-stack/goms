@@ -1,4 +1,4 @@
-import { motion } from 'framer-motion'
+import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
 export function Tabs<T extends string>({ tabs, value, onChange }: {
@@ -20,13 +20,15 @@ export function Tabs<T extends string>({ tabs, value, onChange }: {
             )}
           >
             {t.label}
-            {active && (
-              <motion.span
-                layoutId="tab-underline"
-                className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-indigo"
-                transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-              />
-            )}
+            <AnimatePresence>
+              {active && (
+                <motion.span
+                  layoutId="tab-underline"
+                  className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-indigo"
+                  transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                />
+              )}
+            </AnimatePresence>
           </button>
         )
       })}
