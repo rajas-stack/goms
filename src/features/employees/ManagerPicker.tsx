@@ -1,6 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { useToast } from '@/components/ui/Toast'
+import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
+import { useRovingIndex } from '@/components/ui/popover/useRovingIndex'
 import { cn } from '@/lib/utils'
 import type { Employee } from '@/lib/types'
 
@@ -22,7 +24,8 @@ export function ManagerPicker({ candidates, value, onChange, onCreate, placehold
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
   const [creating, setCreating] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const anchorRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   const selected = candidates.find((c) => c.id === value)
 
@@ -33,6 +36,11 @@ export function ManagerPicker({ candidates, value, onChange, onCreate, placehold
   }, [candidates, query])
 
   const exactMatch = candidates.some((c) => c.name.toLowerCase() === query.trim().toLowerCase())
+  const showCreateRow = query.trim() !== '' && !exactMatch
+  // Row order: [0] "None" sentinel, [1..matches.length] the candidates, then
+  // an optional trailing "Create new…" row — fixed so the roving index lines
+  // up with what's actually rendered.
+  const rowCount = 1 + matches.length + (showCreateRow ? 1 : 0)
 
   async function createAndSelect() {
     const name = query.trim()
@@ -50,6 +58,25 @@ export function ManagerPicker({ candidates, value, onChange, onCreate, placehold
     }
   }
 
+  function commitRow(index: number) {
+    if (index === 0) { onChange(''); setOpen(false); return }
+    const candidateIndex = index - 1
+    if (candidateIndex < matches.length) {
+      onChange(matches[candidateIndex].id)
+      setQuery('')
+      setOpen(false)
+      return
+    }
+    createAndSelect()
+  }
+
+  const roving = useRovingIndex({
+    count: rowCount,
+    resetKey: `${query}:${open}`,
+    onCommit: commitRow,
+    containerRef: listRef,
+  })
+
   if (selected) {
     return (
       <div className="flex h-10 items-center gap-2 rounded-lg border border-line bg-white px-3">
@@ -65,9 +92,8 @@ export function ManagerPicker({ candidates, value, onChange, onCreate, placehold
   }
 
   return (
-    <div className="relative">
+    <div ref={anchorRef} className="relative">
       <input
-        ref={inputRef}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value)
@@ -75,51 +101,60 @@ export function ManagerPicker({ candidates, value, onChange, onCreate, placehold
           setOpen(true)
         }}
         onFocus={() => setOpen(true)}
-        onBlur={() => setTimeout(() => setOpen(false), 120)}
+        onKeyDown={(e) => roving.onKeyDown(e)}
         placeholder={placeholder ?? "Search or type a new manager’s name…"}
         className="h-10 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink placeholder:text-muted/70 focus:border-ink-600 focus-visible:focus-ring"
       />
-      {open && (
-        <div className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-line bg-white shadow-pop">
-          <button
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => onChange('')}
-            className="flex w-full items-center px-3 py-2 text-left text-sm text-muted hover:bg-ink-900/[0.04]"
-          >
-            — None (top of chain) —
-          </button>
-          <div className="max-h-48 overflow-y-auto scrollbar-thin">
-            {matches.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => { onChange(c.id); setQuery('') }}
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-ink-900/[0.04]"
-              >
-                <span className="min-w-0 flex-1 truncate text-sm text-ink-900">{c.name}</span>
-                <span className="shrink-0 truncate text-xs text-muted">{c.designation}</span>
-              </button>
-            ))}
-          </div>
-          {query.trim() && !exactMatch && (
+      <PopoverPanel open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} matchAnchorWidth maxPanelHeight={320}>
+        {() => (
+          <div ref={listRef} className="w-full overflow-hidden rounded-lg border border-line bg-white shadow-pop">
             <button
               type="button"
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={createAndSelect}
-              disabled={creating}
+              data-roving-index={0}
+              onClick={() => commitRow(0)}
               className={cn(
-                'flex w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-sm font-medium text-teal-600 hover:bg-teal-100/40',
-                creating && 'opacity-60',
+                'flex min-h-11 w-full items-center px-3 py-2 text-left text-sm text-muted hover:bg-ink-900/[0.04] lg:min-h-0',
+                roving.active === 0 && 'bg-ink-900/[0.04]',
               )}
             >
-              <Icon name="UserPlus" size={14} />
-              {creating ? 'Creating…' : createLabel ? createLabel(query.trim()) : `Create new manager “${query.trim()}”`}
+              — None (top of chain) —
             </button>
-          )}
-        </div>
-      )}
+            <div className="max-h-48 overflow-y-auto scrollbar-thin">
+              {matches.map((c, i) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  data-roving-index={i + 1}
+                  onClick={() => commitRow(i + 1)}
+                  className={cn(
+                    'flex min-h-11 w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-ink-900/[0.04] lg:min-h-0',
+                    roving.active === i + 1 && 'bg-ink-900/[0.04]',
+                  )}
+                >
+                  <span className="min-w-0 flex-1 truncate text-sm text-ink-900">{c.name}</span>
+                  <span className="shrink-0 truncate text-xs text-muted">{c.designation}</span>
+                </button>
+              ))}
+            </div>
+            {showCreateRow && (
+              <button
+                type="button"
+                data-roving-index={1 + matches.length}
+                onClick={() => commitRow(1 + matches.length)}
+                disabled={creating}
+                className={cn(
+                  'flex min-h-11 w-full items-center gap-2 border-t border-line px-3 py-2 text-left text-sm font-medium text-teal-600 hover:bg-teal-100/40 lg:min-h-0',
+                  roving.active === 1 + matches.length && 'bg-teal-100/40',
+                  creating && 'opacity-60',
+                )}
+              >
+                <Icon name="UserPlus" size={14} />
+                {creating ? 'Creating…' : createLabel ? createLabel(query.trim()) : `Create new manager “${query.trim()}”`}
+              </button>
+            )}
+          </div>
+        )}
+      </PopoverPanel>
     </div>
   )
 }
