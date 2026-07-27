@@ -62,8 +62,8 @@ export const NodeCard = forwardRef<HTMLDivElement, Props>(
             <Icon name={type?.icon ?? 'Hash'} size={16} />
           </span>
           <div className="min-w-0 flex-1">
-            {!isDepartment && <div className="eyebrow truncate text-[10px]">{type?.label}</div>}
-            <div className="truncate text-[13px] font-semibold text-ink-900">
+            {!isDepartment && <div className="eyebrow break-words text-[10px]">{type?.label}</div>}
+            <div className="break-words text-[13px] font-semibold text-ink-900">
               {isDepartment ? `Department of ${node.name}` : node.name}
             </div>
           </div>
@@ -77,7 +77,7 @@ export const NodeCard = forwardRef<HTMLDivElement, Props>(
         ) : null}
 
         {headNames && headNames.length > 0 && (
-          <div className="truncate text-[11px] text-muted">
+          <div className="break-words text-[11px] text-muted">
             <span className="font-medium text-ink-700">{headNames.length === 1 ? 'Head' : 'Heads'}:</span>{' '}
             {headNames.slice(0, 2).join(', ')}
             {headNames.length > 2 && ` +${headNames.length - 2}`}
@@ -85,7 +85,7 @@ export const NodeCard = forwardRef<HTMLDivElement, Props>(
         )}
 
         {metaField && (
-          <div className="truncate text-[11px] text-muted">
+          <div className="break-words text-[11px] text-muted">
             <span className="font-medium text-ink-700">{metaField.label}:</span> {node.metadata[metaField.key]}
           </div>
         )}

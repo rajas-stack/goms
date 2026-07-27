@@ -83,7 +83,7 @@ export function ManagerPicker({ candidates, value, onChange, onCreate, placehold
         <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-teal-100 text-[10px] font-semibold text-teal-600">
           {selected.name.split(' ').map((p) => p[0]).slice(0, 2).join('')}
         </span>
-        <span className="min-w-0 flex-1 truncate text-sm text-ink-900">{selected.name} · {selected.designation}</span>
+        <span className="min-w-0 flex-1 break-words text-sm text-ink-900">{selected.name} · {selected.designation}</span>
         <button type="button" onClick={() => onChange('')} className="text-muted hover:text-ink-900" aria-label="Clear reporting manager">
           <Icon name="X" size={14} />
         </button>
@@ -131,8 +131,8 @@ export function ManagerPicker({ candidates, value, onChange, onCreate, placehold
                     roving.active === i + 1 && 'bg-ink-900/[0.04]',
                   )}
                 >
-                  <span className="min-w-0 flex-1 truncate text-sm text-ink-900">{c.name}</span>
-                  <span className="shrink-0 truncate text-xs text-muted">{c.designation}</span>
+                  <span className="min-w-0 flex-1 break-words text-sm text-ink-900">{c.name}</span>
+                  <span className="shrink-0 break-words text-xs text-muted">{c.designation}</span>
                 </button>
               ))}
             </div>

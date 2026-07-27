@@ -235,9 +235,9 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
               </span>
             )}
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-ink-900">{selectedEmp.name}</p>
-              <p className="truncate text-xs text-muted">{selectedEmp.designation}</p>
-              {deptById[selectedEmp.id] && <p className="truncate text-xs text-muted">{deptById[selectedEmp.id].name}</p>}
+              <p className="break-words text-sm font-semibold text-ink-900">{selectedEmp.name}</p>
+              <p className="break-words text-xs text-muted">{selectedEmp.designation}</p>
+              {deptById[selectedEmp.id] && <p className="break-words text-xs text-muted">{deptById[selectedEmp.id].name}</p>}
             </div>
           </div>
         )}
@@ -323,8 +323,8 @@ function PersonRow({ employee: e, selected, onSelect }: { employee: Employee; se
         </span>
       )}
       <span className="min-w-0 flex-1">
-        <span className={cn('block truncate text-[13px] font-medium', selected ? 'text-paper' : 'text-ink-900')}>{e.name}</span>
-        <span className={cn('block truncate text-[11px]', selected ? 'text-paper/70' : 'text-muted')}>{e.designation}</span>
+        <span className={cn('block break-words text-[13px] font-medium', selected ? 'text-paper' : 'text-ink-900')}>{e.name}</span>
+        <span className={cn('block break-words text-[11px]', selected ? 'text-paper/70' : 'text-muted')}>{e.designation}</span>
       </span>
     </button>
   )

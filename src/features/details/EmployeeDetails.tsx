@@ -82,7 +82,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           )}
           <div className="min-w-0 flex-1">
             <span className="eyebrow">{department ? (department.metadata.shortName || department.name) : (orgNode?.name ?? 'Unassigned')}</span>
-            <h2 className="mt-0.5 truncate font-display text-2xl font-bold text-ink-900">
+            <h2 className="mt-0.5 break-words font-display text-2xl font-bold text-ink-900">
               {vacant ? emp.designation || 'Vacant position' : emp.name}
             </h2>
             {!vacant && <p className="text-sm text-muted">{emp.designation}</p>}
@@ -355,9 +355,9 @@ function TransferRow({ transfer }: { transfer: Transfer }) {
   return (
     <div className="rounded-lg border border-line bg-white px-3 py-2.5">
       <div className="flex items-center gap-2 text-sm text-ink-900">
-        <span className="truncate">{transfer.fromOfficeName}</span>
+        <span className="break-words">{transfer.fromOfficeName}</span>
         <Icon name="ArrowLeftRight" size={13} className="shrink-0 text-blue-600" />
-        <span className="truncate font-medium">{transfer.toOfficeName}</span>
+        <span className="break-words font-medium">{transfer.toOfficeName}</span>
       </div>
       <div className="mt-1 grid grid-cols-2 gap-x-4 gap-y-0.5 text-[12px] text-muted">
         <span>Department: {transfer.fromDepartmentName} → {transfer.toDepartmentName}</span>
@@ -430,10 +430,10 @@ function ChainRow({ emp, onClick, current, muted }: {
           {emp.vacant ? <Icon name="UserX" size={13} /> : initials(emp.name)}
         </span>
         <span className="min-w-0 flex-1">
-          <span className={cn('block truncate text-[13px] font-medium', current ? 'text-paper' : 'text-ink-900')}>
+          <span className={cn('block break-words text-[13px] font-medium', current ? 'text-paper' : 'text-ink-900')}>
             {emp.vacant ? emp.designation || 'Vacant position' : emp.name}
           </span>
-          <span className={cn('block truncate text-[11px]', current ? 'text-paper/70' : 'text-muted')}>{emp.designation}</span>
+          <span className={cn('block break-words text-[11px]', current ? 'text-paper/70' : 'text-muted')}>{emp.designation}</span>
         </span>
       </button>
     </div>

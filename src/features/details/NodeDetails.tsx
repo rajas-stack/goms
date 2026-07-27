@@ -70,11 +70,11 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
           <div className="min-w-0 flex-1">
             {(!isDepartment || archived) && (
               <div className="flex items-center gap-2">
-                {!isDepartment && <span className="eyebrow truncate">{type?.label}</span>}
+                {!isDepartment && <span className="eyebrow break-words">{type?.label}</span>}
                 {archived && <Badge tone="crimson">Archived</Badge>}
               </div>
             )}
-            <h2 className="mt-0.5 truncate font-display text-2xl font-bold text-ink-900">
+            <h2 className="mt-0.5 break-words font-display text-2xl font-bold text-ink-900">
               {isDepartment ? `Department of ${node.name}` : node.name}
             </h2>
             {!isDepartment && (
@@ -188,10 +188,10 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
                     {e.vacant ? <Icon name="UserX" size={14} /> : e.name.split(' ').map((p) => p[0]).slice(0, 2).join('')}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className={cn('block truncate text-sm font-medium', e.vacant ? 'text-amber-600' : 'text-ink-900')}>
+                    <span className={cn('block break-words text-sm font-medium', e.vacant ? 'text-amber-600' : 'text-ink-900')}>
                       {e.vacant ? 'Vacant position' : e.name}
                     </span>
-                    <span className="block truncate text-xs text-muted">{e.designation}</span>
+                    <span className="block break-words text-xs text-muted">{e.designation}</span>
                   </span>
                 </button>
               ))}
@@ -211,7 +211,7 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
                   className="flex items-center gap-2.5 rounded-lg border border-line bg-white px-3 py-2 text-left transition-colors hover:border-ink-600"
                 >
                   <Icon name={NODE_TYPE_MAP[c.typeKey]?.icon ?? 'Hash'} size={15} className="shrink-0 text-muted" />
-                  <span className="min-w-0 flex-1 truncate text-sm text-ink-900">{c.name}</span>
+                  <span className="min-w-0 flex-1 break-words text-sm text-ink-900">{c.name}</span>
                 </button>
               ))}
             </div>

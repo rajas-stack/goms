@@ -28,8 +28,8 @@ export function GeoBreadcrumb({ root, trail, onSelect }: {
               onClick={() => onSelect(i === 0 ? null : node.id)}
               className={
                 isLast
-                  ? 'truncate font-semibold text-ink-900'
-                  : 'truncate text-muted transition-colors hover:text-ink-900 hover:underline'
+                  ? 'break-words font-semibold text-ink-900'
+                  : 'break-words text-muted transition-colors hover:text-ink-900 hover:underline'
               }
             >
               {node.name}
