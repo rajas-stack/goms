@@ -4,6 +4,7 @@ import type {
 } from '@/lib/types'
 import { uid } from '@/lib/utils'
 import { NODE_TYPE_MAP } from '@/lib/node-types'
+import { SEARCH_CATEGORIES, SEARCH_CATEGORY_MAP, type SearchContext } from '@/lib/search-categories'
 import { buildSeed, type GormsData } from './seed'
 
 export interface StateSummary {
@@ -153,6 +154,7 @@ export interface Repository {
   removeCharge(employeeId: string, chargeId: string): Promise<void>
 
   search(query: string, stateCode?: number): Promise<SearchResult[]>
+  relatedRecords(result: SearchResult): Promise<SearchResult[]>
   importChildren(parentId: string, names: string[]): Promise<number>
   moveTargets(nodeId: string): Promise<HierNode[]>
   reorderNode(id: string, beforeId: string | null): Promise<void>
@@ -622,6 +624,27 @@ class InMemoryRepository implements Repository {
     emp.charges = emp.charges.filter((c) => c.id !== chargeId)
   }
 
+  private buildSearchContext(scopeState: number | null): SearchContext {
+    const nodeById = new Map(this.data.nodes.map((n) => [n.id, n] as const))
+    return {
+      nodeById,
+      activeNodes: this.data.nodes.filter((n) => n.status === 'active'),
+      activeEmployees: this.data.employees.filter((e) => e.status === 'active'),
+      timeline: this.data.timeline,
+      scopeState,
+      inScope: (nodeId) => scopeState == null || nodeById.get(nodeId)?.stateCode === scopeState,
+      subtreeIds: (id) => this.subtreeIds(id),
+      departmentOf: (orgNodeId) => {
+        let cur = nodeById.get(orgNodeId)
+        while (cur) {
+          if (cur.typeKey === 'department') return cur
+          cur = cur.parentId ? nodeById.get(cur.parentId) : undefined
+        }
+        return undefined
+      },
+    }
+  }
+
   /** Natural-language-aware search. Recognises intent keywords ("connected",
    *  "vacant", "transferred", "follow-ups due"), a state scope by name, and
    *  relational phrases ("under X", "reporting to X"), then falls back to
@@ -735,22 +758,28 @@ class InMemoryRepository implements Repository {
       return results.slice(0, 24).map((e) => empResult(e, label))
     }
 
-    // --- fuzzy fallback -------------------------------------------------------
+    // --- fuzzy fallback: one call per registered category, capped per-category -----
+    const ctx = this.buildSearchContext(scopeState)
     const results: SearchResult[] = []
-    for (const n of this.data.nodes) {
-      if (n.status !== 'active') continue
-      if (scopeState != null && n.stateCode !== scopeState && n.typeKey !== 'state') continue
-      const hay = `${n.name} ${n.code ?? ''} ${n.metadata.location ?? ''}`.toLowerCase()
-      if (rest.split(/\s+/).every((t) => !t || hay.includes(t))) results.push(nodeResult(n))
-      if (results.length > 40) break
+    for (const category of SEARCH_CATEGORIES) {
+      try {
+        results.push(...category.match(rest, ctx).slice(0, category.cap))
+      } catch {
+        // one category's bug never blanks the rest of the palette
+      }
     }
-    for (const e of activeEmps) {
-      if (scopeState != null && nodeById.get(e.orgNodeId)?.stateCode !== scopeState) continue
-      const hay = `${e.name} ${e.designation} ${e.code}`.toLowerCase()
-      if (rest.split(/\s+/).every((t) => !t || hay.includes(t))) results.push(empResult(e))
-      if (results.length > 60) break
+    return results
+  }
+
+  async relatedRecords(result: SearchResult): Promise<SearchResult[]> {
+    const category = SEARCH_CATEGORY_MAP[result.category]
+    if (!category) return []
+    const ctx = this.buildSearchContext(null)
+    try {
+      return category.related(result, ctx)
+    } catch {
+      return []
     }
-    return results.slice(0, 24)
   }
 
   async moveTargets(nodeId: string) {
