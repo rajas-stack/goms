@@ -115,7 +115,7 @@ export function buildSeed(): GormsData {
   // sentinel. No district/taluka children: this is not a real place.
   nodes.push({
     id: `geo_st_${CENTRAL_STATE_CODE}`, domain: 'geo', typeKey: 'state', parentId: india.id,
-    stateCode: CENTRAL_STATE_CODE, name: 'Government of India (Central)', code: String(CENTRAL_STATE_CODE),
+    stateCode: CENTRAL_STATE_CODE, name: 'Central Ministries (Govt. of India)', code: String(CENTRAL_STATE_CODE),
     sortOrder: -1, metadata: {}, status: 'active',
   })
 

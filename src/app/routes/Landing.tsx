@@ -38,7 +38,7 @@ export function Landing() {
             to="/state/0"
             className="group flex items-center gap-3 rounded-card border border-line bg-white px-4 py-3 text-sm font-medium text-ink-900 transition-colors hover:border-ink-600 hover:bg-panel/60"
           >
-            Government of India (Central) — MoSPI, MeitY, CAQM & national agencies
+            Central Ministries (Govt. of India) — MoSPI, MeitY, CAQM & national agencies
             <span aria-hidden className="ml-auto text-muted transition-transform group-hover:translate-x-0.5">→</span>
           </Link>
         </motion.div>
