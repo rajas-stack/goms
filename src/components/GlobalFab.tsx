@@ -52,7 +52,7 @@ type Flow =
 /** Resolves the state a `/state/:code` (or `/state/:code/...`) URL is
  *  currently on, used only to pre-fill the state-picker's default selection
  *  as a convenience — the picker itself is always shown (see `onItemClick`),
- *  never skipped, so State vs. Government of India stays an explicit choice
+ *  never skipped, so State vs. Central Ministries stays an explicit choice
  *  every time. `/directory`'s sentinel workspace isn't a real state, so it
  *  deliberately does NOT match here — the picker opens with nothing
  *  pre-filled in that case. */

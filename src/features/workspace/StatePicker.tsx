@@ -11,7 +11,7 @@ type Stage = 'choice' | 'search'
 
 /** First step of every state/org-scoped FAB flow: resolve which state's
  *  workspace a create should land in. Always presents an explicit
- *  Government of India vs. a-specific-state choice FIRST (never skipped,
+ *  Central Ministries vs. a-specific-state choice FIRST (never skipped,
  *  and never buried as just another alphabetical entry in the state list)
  *  — only after "Choose a State" does the searchable state list (`IndiaMap`'s
  *  own `useStates()` list, minus the virtual central entry) appear. Always
@@ -22,7 +22,7 @@ export function StatePicker({ open, title, defaultCode, onPick, onClose }: {
   title: string
   /** Pre-fills the state search step with the state currently being browsed
    *  (if any) as a convenience once "Choose a State" is picked — never
-   *  skips the Government of India / Choose a State step itself. */
+   *  skips the Central Ministries / Choose a State step itself. */
   defaultCode?: number
   onPick: (stateCode: number) => void
   onClose: () => void
@@ -30,7 +30,7 @@ export function StatePicker({ open, title, defaultCode, onPick, onClose }: {
   const { data: states = [] } = useStates()
   const [stage, setStage] = useState<Stage>('choice')
   const [code, setCode] = useState('')
-  // The virtual "Government of India (Central)" entry is its own first-class
+  // The virtual "Central Ministries (Govt. of India)" entry is its own first-class
   // choice above, not just another item in this searchable list.
   const options = states
     .filter((s) => s.code !== CENTRAL_STATE_CODE)
@@ -63,7 +63,7 @@ export function StatePicker({ open, title, defaultCode, onPick, onClose }: {
       open={open}
       onClose={() => { reset(); onClose() }}
       title={title}
-      description={stage === 'choice' ? 'Government of India, or a specific state?' : 'Choose a state to work in'}
+      description={stage === 'choice' ? 'Central Ministries, or a specific state?' : 'Choose a state to work in'}
       footer={
         stage === 'choice' ? (
           <Button onClick={() => { reset(); onClose() }}>Cancel</Button>

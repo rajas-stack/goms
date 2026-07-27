@@ -52,7 +52,7 @@ export function Meetings() {
   return (
     <div className="flex h-full flex-col">
       <div className="z-10 border-b border-line bg-white/80 px-6 py-4 backdrop-blur">
-        <span className="eyebrow">Meetings</span>
+        <span className="eyebrow">Engagement</span>
         <h1 className="font-display text-xl font-bold leading-tight text-ink-900">Meetings</h1>
         <p className="text-[12px] text-muted">Every logged meeting and interaction, across every employee</p>
       </div>
