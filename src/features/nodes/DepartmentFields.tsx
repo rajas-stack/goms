@@ -3,7 +3,15 @@ import { EmployeePicker } from '@/features/employees/EmployeePicker'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
 import { WorksEditor } from './WorksEditor'
 import { SALES_ROLES, parseWorks, serializeWorks } from './department-meta'
+import { resolveSalesChain } from '@/data/sales-hierarchy'
 import type { Employee } from '@/lib/types'
+import type { SalesTier } from '@/data/sales-team'
+
+const DERIVED_SALES_ROLES: { tier: SalesTier; label: string }[] = [
+  { tier: 'rm', label: 'RM' },
+  { tier: 'gm', label: 'GM' },
+  { tier: 'salesHead', label: 'Sales Head' },
+]
 
 /** Department-only form controls (short name, head, sales ownership, works),
  *  rendered by NodeFormDialog when the node being edited is a department.
@@ -19,6 +27,7 @@ export function DepartmentFields({ meta, setMeta, employees, onCreateHead }: {
   onCreateHead?: (name: string, designation: string) => Promise<string>
 }) {
   const set = (key: string, value: string) => setMeta((m) => ({ ...m, [key]: value }))
+  const chain = resolveSalesChain(meta.salesGeo ?? '')
 
   return (
     <>
@@ -45,6 +54,11 @@ export function DepartmentFields({ meta, setMeta, employees, onCreateHead }: {
           {SALES_ROLES.map((r) => (
             <Field key={r.key} label={r.label}>
               <SalesTeamPicker value={meta[r.key] ?? ''} onChange={(email) => set(r.key, email)} />
+            </Field>
+          ))}
+          {DERIVED_SALES_ROLES.map((r) => (
+            <Field key={r.tier} label={r.label} hint="Auto-filled from Geo Sales">
+              <SalesTeamPicker value={chain[r.tier]?.email ?? ''} onChange={() => {}} disabled />
             </Field>
           ))}
         </div>

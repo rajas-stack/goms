@@ -1,15 +1,34 @@
 import { SALES_ROLES, parseWorks } from '@/features/nodes/department-meta'
 import { SALES_TEAM } from '@/data/sales-team'
+import { resolveSalesChain } from '@/data/sales-hierarchy'
 import type { Employee, HierNode } from '@/lib/types'
+import type { SalesTeamMember } from '@/data/sales-team'
+
+const DERIVED_SALES_ROLES: { tier: 'rm' | 'gm' | 'salesHead'; label: string }[] = [
+  { tier: 'rm', label: 'RM' },
+  { tier: 'gm', label: 'GM' },
+  { tier: 'salesHead', label: 'Sales Head' },
+]
 
 /** Read-only display of a department's head, sales ownership, and works.
  *  Rendered inside NodeDetails when the selected node is a department. */
 export function DepartmentSection({ node, employees }: { node: HierNode; employees: Employee[] }) {
   const byId = new Map(employees.map((e) => [e.id, e]))
   const head = node.metadata.deptHead ? byId.get(node.metadata.deptHead) : undefined
-  const owners = SALES_ROLES
-    .map((r) => ({ ...r, member: SALES_TEAM.find((m) => m.email === node.metadata[r.key]) }))
-    .filter((o): o is typeof o & { member: (typeof SALES_TEAM)[number] } => !!o.member)
+
+  const geoEmail = node.metadata.salesGeo
+  const geo = geoEmail ? SALES_TEAM.find((m) => m.email === geoEmail) : undefined
+  const chain = resolveSalesChain(geoEmail ?? '')
+  const geoRole = SALES_ROLES[0]
+
+  const owners: { key: string; label: string; member: SalesTeamMember }[] = [
+    ...(geo ? [{ key: geoRole.key, label: geoRole.label, member: geo }] : []),
+    ...DERIVED_SALES_ROLES.flatMap((r) => {
+      const member = chain[r.tier]
+      return member ? [{ key: r.tier, label: r.label, member }] : []
+    }),
+  ]
+
   const works = parseWorks(node.metadata.works)
 
   if (!head && owners.length === 0 && works.length === 0) return null

@@ -4,10 +4,6 @@ import type { DepartmentWork } from '@/lib/types'
  *  on the department node's metadata under these keys. */
 export const SALES_ROLES: { key: string; label: string }[] = [
   { key: 'salesGeo', label: 'Geo Sales' },
-  { key: 'salesBU', label: 'BU Sales' },
-  { key: 'salesGM', label: 'GM' },
-  { key: 'salesRM', label: 'RM' },
-  { key: 'salesHead', label: 'Sales Head' },
 ]
 
 /** Default dropdown options for a work line-item. Editable defaults — not a
