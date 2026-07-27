@@ -424,7 +424,7 @@ export function IndiaMap() {
       </svg>
       </div>
 
-      <div className="absolute bottom-3 left-3 z-20 max-w-[230px] rounded-xl border border-line bg-paper/95 p-3 shadow-panel backdrop-blur" data-map-ui>
+      <div className="absolute top-3 left-3 md:top-auto md:bottom-3 z-20 max-w-[200px] md:max-w-[230px] rounded-xl border border-line bg-paper/95 p-3 shadow-panel backdrop-blur origin-top-left scale-90 md:scale-100 pointer-events-auto" data-map-ui>
         <div className="min-w-[140px] space-y-1.5 text-[11px]">
           <LegendRow
             swatch={<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: NAVY }} />}
