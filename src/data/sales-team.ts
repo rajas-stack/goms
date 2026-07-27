@@ -1,6 +1,20 @@
 /** AMNEX internal sales team roster, seeded from Sales Team.xlsx (Master sheet).
  *  Powers the "Attending AMNEX Sales Team Members" multi-select on timeline events. */
-export interface SalesTeamMember { name: string; email: string; designation: string }
+export type SalesTier = 'rm' | 'gm' | 'salesHead'
+
+export interface SalesTeamMember {
+  name: string
+  email: string
+  designation: string
+  /** Direct manager's email. Unset = top of chain, or not wired up yet. */
+  reportsTo?: string
+  /** Explicit override of which role tier(s) this person occupies in the
+   *  sales-ownership chain. Only needed where the designation is ambiguous
+   *  (e.g. "Regional Manager & Head") — the actual reporting relationship
+   *  always wins over the designation string. Leave unset to use the
+   *  designation-derived default (see `defaultTiers`). */
+  tiers?: SalesTier[]
+}
 
 export const SALES_TEAM: SalesTeamMember[] = [
   { name: 'Jayendrasinh Puwar', email: 'jayendra@amnex.com', designation: 'Sales Head' },
@@ -34,3 +48,17 @@ export const SALES_TEAM: SalesTeamMember[] = [
   { name: 'Shubham Mehra', email: 'shubham16@amnex.com', designation: 'BU Sales Data Fabrics' },
   { name: 'Siddharth Biswas', email: 'siddharth2@amnex.com', designation: 'BU Sales Highways & Traffic' },
 ]
+
+/** Designation-derived default tier(s) for a member with no explicit `tiers`
+ *  override. Ambiguous titles (e.g. "Regional Manager & Head") deliberately
+ *  derive to no tier until someone sets `tiers` explicitly for that person. */
+export function defaultTiers(designation: string): SalesTier[] {
+  if (designation === 'Sales Head') return ['salesHead']
+  if (designation === 'Regional Head') return ['gm']
+  if (designation === 'Regional Manager') return ['rm']
+  return []
+}
+
+export function tiersOf(member: SalesTeamMember): SalesTier[] {
+  return member.tiers ?? defaultTiers(member.designation)
+}
