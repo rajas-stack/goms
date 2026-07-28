@@ -47,7 +47,11 @@ export function Tooltip({ label, side = 'top', className, children }: {
         role="tooltip"
         style={{ ...clampStyle, transform: CENTER[side] }}
         className={cn(
-          'pointer-events-none absolute z-30 whitespace-nowrap rounded-md bg-ink-900 px-2 py-1 text-[11px] font-medium text-paper shadow-pop transition-opacity duration-150',
+          // `hidden lg:block`: a hover tooltip has no meaning on a touch
+          // device, and — being `whitespace-nowrap` — its laid-out box was
+          // widening every scroll container it sat in on narrow screens
+          // (phantom horizontal scrollbars), even at `opacity-0`.
+          'pointer-events-none absolute z-30 hidden whitespace-nowrap rounded-md bg-ink-900 px-2 py-1 text-[11px] font-medium text-paper shadow-pop transition-opacity duration-150 lg:block',
           open ? 'opacity-100' : 'opacity-0',
           POSITION[side],
         )}

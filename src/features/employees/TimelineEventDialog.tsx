@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
 import { useAllEmployees, useEmployeeMutations } from '@/lib/api'
 import { isoToday } from '@/data/repository'
+import { useFormDraft } from '@/lib/useFormDraft'
 import { MANUAL_EVENT_TYPES, TIMELINE_META } from '@/lib/timeline-meta'
 import { SALES_TEAM } from '@/data/sales-team'
 import { EmployeePicker } from './EmployeePicker'
@@ -42,13 +44,19 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   const pickedEmployee = pickedEmployeeId ? allEmployees.find((e) => e.id === pickedEmployeeId) : undefined
   const typeOptions = typeFilter && typeFilter.length > 0 ? typeFilter : MANUAL_EVENT_TYPES
   const defaultType = initialType ?? 'meeting'
-  const [form, setForm] = useState({
-    type: defaultType, title: '', date: isoToday(), time: '', note: '', attendees: [] as string[],
-  })
+  const EMPTY_FORM = { type: defaultType, title: '', date: isoToday(), time: '', note: '', attendees: [] as string[] }
+  const [form, setForm] = useState(EMPTY_FORM)
+
+  // Keyed on the target person, not on this render's `defaultType` — a draft
+  // must survive the dialog closing and reopening for the same person even
+  // though `defaultType` (derived from `initialType`) could differ between
+  // entry points ("Log Interaction" vs "Create Meeting" on the FAB).
+  const draftKey = activeEmployeeId ? `timeline:${activeEmployeeId}` : null
+  const draft = useFormDraft(draftKey, form, open, () => setForm(EMPTY_FORM))
 
   useEffect(() => {
     if (open) {
-      setForm({ type: defaultType, title: '', date: isoToday(), time: '', note: '', attendees: [] })
+      setForm(draft.take(EMPTY_FORM) ?? EMPTY_FORM)
       setPickedEmployeeId(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -68,6 +76,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
       note: form.note, attendees: form.attendees,
     })
     toast('Added to timeline')
+    draft.clear()
     onClose()
   }
 
@@ -100,12 +109,15 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
       description={!employeeId && pickedEmployee ? `For ${pickedEmployee.name}` : undefined}
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!form.title.trim()}>Add entry</Button>
+          <Button onClick={onClose} disabled={addTimelineEvent.isPending}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={!form.title.trim() || addTimelineEvent.isPending}>
+            {addTimelineEvent.isPending ? 'Adding…' : 'Add entry'}
+          </Button>
         </>
       }
     >
       <div className="space-y-4">
+        {draft.restored && <DraftNotice onDiscard={draft.discard} />}
         {!employeeId && pickedEmployee && (
           <button
             type="button"

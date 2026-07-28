@@ -26,16 +26,23 @@ export const useStates = () => useQuery({ queryKey: qk.states, queryFn: () => re
 // of India's stateCode 0) — disabled rather than queried, so a consumer
 // passed the sentinel doesn't fire a query with no matching node, which
 // react-query rejects (queryFn must not return undefined).
+// The three lookups below can legitimately miss — a reload or a shared link
+// can carry an id/code that no longer resolves (a deleted record, a stale
+// `?sel=`, a hand-edited URL). Their repository methods return `undefined` for
+// that, which react-query treats as a programming error and throws on
+// ("Query data cannot be undefined"), so each normalizes to `null`: a real,
+// cacheable "looked, found nothing" that the UI renders as an empty state.
+// `undefined` still means "not loaded yet", as everywhere else.
 export const useStateNode = (code: number) =>
-  useQuery({ queryKey: qk.state(code), queryFn: () => repository.getState(code), enabled: code >= 0 })
+  useQuery({ queryKey: qk.state(code), queryFn: async () => (await repository.getState(code)) ?? null, enabled: code >= 0 })
 export const useNode = (id: string | null) =>
-  useQuery({ queryKey: qk.node(id ?? ''), queryFn: () => repository.getNode(id!), enabled: !!id })
+  useQuery({ queryKey: qk.node(id ?? ''), queryFn: async () => (await repository.getNode(id!)) ?? null, enabled: !!id })
 export const useChildren = (parentId: string | null) =>
   useQuery({ queryKey: qk.children(parentId ?? ''), queryFn: () => repository.listChildren(parentId!), enabled: !!parentId })
 export const useOrgRoots = (code: number) =>
   useQuery({ queryKey: qk.orgRoots(code), queryFn: () => repository.listOrgRoots(code) })
 export const useGeoRoot = () =>
-  useQuery({ queryKey: ['geoRoot'], queryFn: () => repository.geoRoot() })
+  useQuery({ queryKey: ['geoRoot'], queryFn: async () => (await repository.geoRoot()) ?? null })
 export const useChildCounts = (parentId: string | null) =>
   useQuery({ queryKey: ['childCounts', parentId ?? ''], queryFn: () => repository.childCounts(parentId!), enabled: !!parentId })
 export const usePostingNodes = (code: number | null) =>
@@ -166,6 +173,10 @@ export function useEmployeeMutations() {
   const deleteTimelineEvent = useMutation({
     mutationFn: (id: string) => repository.deleteTimelineEvent(id), onSuccess: invalidate,
   })
+  const setTimelineEventAttended = useMutation({
+    mutationFn: (a: { id: string; attended: boolean | undefined }) => repository.setTimelineEventAttended(a.id, a.attended),
+    onSuccess: invalidate,
+  })
   const transfer = useMutation({
     mutationFn: (i: TransferInput) => repository.transferEmployee(i), onSuccess: invalidate,
   })
@@ -177,5 +188,8 @@ export function useEmployeeMutations() {
     mutationFn: (a: { employeeId: string; chargeId: string }) => repository.removeCharge(a.employeeId, a.chargeId),
     onSuccess: invalidate,
   })
-  return { create, update, remove, setManager, addTimelineEvent, deleteTimelineEvent, transfer, addCharge, removeCharge }
+  return {
+    create, update, remove, setManager, addTimelineEvent, deleteTimelineEvent, setTimelineEventAttended,
+    transfer, addCharge, removeCharge,
+  }
 }

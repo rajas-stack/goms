@@ -168,14 +168,17 @@ export function MobileDetailsSheet() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 24 }}
           transition={{ type: 'spring', stiffness: 340, damping: 32 }}
-          // z-[45]: above the mobile bottom-nav rail (z-40) so the sheet
-          // fully covers it while open, but below real dialogs (z-50).
-          className="fixed inset-x-0 bottom-0 z-[45] max-h-[75vh] overflow-hidden rounded-t-2xl border-t border-line bg-paper shadow-pop lg:hidden"
+          // Sits ON TOP OF the mobile bottom nav rather than over it:
+          // `bottom-14` matches SecondaryNav's `h-14`, so the Map/Directory/
+          // Insights/Meetings bar stays visible and tappable the whole time a
+          // record's details are open. z-[45] keeps it above the nav's own
+          // z-40 stacking context but below real dialogs (z-50).
+          className="fixed inset-x-0 bottom-14 z-[45] max-h-[70vh] overflow-hidden rounded-t-2xl border-t border-line bg-paper shadow-pop lg:hidden"
         >
           <Tooltip label="Close details" side="left" className="absolute right-3 top-3 z-10">
             <button
               onClick={ws.clearSelection}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-ink-900/[0.06] hover:text-ink"
+              className="relative flex h-7 w-7 items-center justify-center rounded-md text-muted before:absolute before:-inset-2 before:content-[''] hover:bg-ink-900/[0.06] hover:text-ink"
               aria-label="Close details"
             >
               <Icon name="X" size={15} />
@@ -205,7 +208,7 @@ function WorkspaceHeader({ stateName, stateCode, view, onView, displayMode, onDi
   return (
     <div className="z-20 flex flex-wrap items-center gap-3 border-b border-line bg-white/80 px-4 py-3 backdrop-blur">
       <Tooltip label="Back to the map" side="bottom">
-        <button onClick={() => navigate('/map')} aria-label="Back to the map" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-panel hover:text-ink">
+        <button onClick={() => navigate('/map')} aria-label="Back to the map" className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted before:absolute before:-inset-2 before:content-[''] hover:bg-panel hover:text-ink">
           <Icon name="ArrowLeft" size={15} />
         </button>
       </Tooltip>

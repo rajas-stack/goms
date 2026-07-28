@@ -3,8 +3,10 @@ import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { PhoneInput, isValidPhone } from '@/components/ui/PhoneInput'
+import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
 import { useAllEmployees, useEmployeeMutations, useNodeMutations } from '@/lib/api'
+import { useFormDraft } from '@/lib/useFormDraft'
 import { childTypesOf, NODE_TYPE_MAP } from '@/lib/node-types'
 import { fieldsForType } from './metadata-fields'
 import { DepartmentFields } from './DepartmentFields'
@@ -37,6 +39,16 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
   const [name, setName] = useState('')
   const [meta, setMeta] = useState<Record<string, string>>({})
 
+  // The three pieces of state above, bundled into one value so `useFormDraft`
+  // can save/restore them together — a name typed with a metadata field
+  // half-filled is one in-progress edit, not two independent ones.
+  const draftForm = { typeKey, name, meta }
+  const draftKey = mode === 'edit'
+    ? (node ? `node:${node.id}` : null)
+    : createDepartment
+      ? `node:new:dept:${stateCode}`
+      : (parent ? `node:new:${parent.id}` : null)
+
   const effectiveTypeKey = createDepartment
     ? 'department'
     : mode === 'edit'
@@ -48,12 +60,22 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
   const isDepartment = effectiveTypeKey === 'department'
   const { data: employees = [] } = useAllEmployees()
 
-  useEffect(() => {
-    if (!open) return
+  const draft = useFormDraft(draftKey, draftForm, open, () => {
     const preset = initialTypeKey && childOptions.some((t) => t.key === initialTypeKey) ? initialTypeKey : childOptions[0]?.key ?? ''
     setTypeKey(preset)
     setName(mode === 'edit' ? node?.name ?? '' : '')
     setMeta(mode === 'edit' ? { ...node?.metadata } : {})
+  })
+
+  useEffect(() => {
+    if (!open) return
+    const preset = initialTypeKey && childOptions.some((t) => t.key === initialTypeKey) ? initialTypeKey : childOptions[0]?.key ?? ''
+    const base = { typeKey: preset, name: mode === 'edit' ? node?.name ?? '' : '', meta: mode === 'edit' ? { ...node?.metadata } : {} }
+    const restored = draft.take(base)
+    setTypeKey(restored?.typeKey ?? base.typeKey)
+    setName(restored?.name ?? base.name)
+    setMeta(restored?.meta ?? base.meta)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode, node, childOptions, initialTypeKey])
 
   async function handleCreateHead(headName: string, designation: string) {
@@ -83,6 +105,7 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
       toast(`Added ${typeLabel.toLowerCase()} “${name.trim()}”`)
       onSaved(created.id)
     }
+    draft.clear()
     onClose()
   }
 
@@ -102,14 +125,17 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
       description={description}
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!name.trim()}>
-            {mode === 'edit' ? 'Save changes' : `Create ${typeLabel.toLowerCase()}`}
+          <Button onClick={onClose} disabled={create.isPending || update.isPending}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={!name.trim() || create.isPending || update.isPending}>
+            {mode === 'edit'
+              ? (update.isPending ? 'Saving…' : 'Save changes')
+              : (create.isPending ? 'Creating…' : `Create ${typeLabel.toLowerCase()}`)}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
+        {draft.restored && <DraftNotice onDiscard={draft.discard} />}
         {mode === 'create' && !createDepartment && childOptions.length > 1 && (
           <Field label="Type">
             <Select value={typeKey} onChange={(e) => setTypeKey(e.target.value)}>
@@ -135,14 +161,14 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
             <Field
               key={f.key}
               label={f.label}
-              hint={f.type === 'phone' ? '+91 · 2-digit area code · 8-digit number' : undefined}
+              hint={f.type === 'phone' ? '+91 · 10-digit number' : undefined}
             >
               {f.type === 'text' ? (
                 <Textarea value={value} onChange={(e) => setMeta((m) => ({ ...m, [f.key]: e.target.value }))} />
               ) : f.type === 'phone' ? (
                 <>
                   <PhoneInput value={value} onChange={(v) => setMeta((m) => ({ ...m, [f.key]: v }))} invalid={phoneInvalid} />
-                  {phoneInvalid && <span className="mt-1 block text-xs text-crimson">Enter a 2-digit area code and an 8-digit number.</span>}
+                  {phoneInvalid && <span className="mt-1 block text-xs text-crimson">Enter a valid 10-digit number.</span>}
                 </>
               ) : (
                 <Input

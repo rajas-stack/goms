@@ -204,19 +204,22 @@ export function GeoMapView({
         </div>
       )}
 
-      <div className="pointer-events-none absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel backdrop-blur" data-map-ui>
-        <Tooltip label="Fit to screen">
+      {/* Bottom-LEFT on a phone — the global FAB owns the bottom-right corner. */}
+      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel backdrop-blur sm:left-auto sm:right-3" data-map-ui>
+        {/* Desktop-only duplicate of Reset (below) — both call `resetView`, and
+            the full 5-slot cluster doesn't fit a phone-width map. */}
+        <Tooltip label="Fit to screen" className="hidden sm:inline-flex">
           <button onClick={resetView} className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Fit to screen">
             <Icon name="Maximize" size={14} />
           </button>
         </Tooltip>
-        <span className="mx-0.5 h-5 w-px bg-line" />
+        <span className="mx-0.5 hidden h-5 w-px bg-line sm:block" />
         <Tooltip label="Zoom out">
           <button onClick={() => zoomBy(0.85)} className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Zoom out">
             <span className="text-base leading-none">−</span>
           </button>
         </Tooltip>
-        <span className="pointer-events-auto w-11 text-center font-mono text-[11px] text-muted">{Math.round(transform.scale * 100)}%</span>
+        <span className="pointer-events-auto w-10 text-center font-mono text-[11px] text-muted sm:w-11">{Math.round(transform.scale * 100)}%</span>
         <Tooltip label="Zoom in">
           <button onClick={() => zoomBy(1 / 0.85)} className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Zoom in">
             <span className="text-base leading-none">+</span>

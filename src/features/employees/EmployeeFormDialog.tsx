@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { PhoneInput, isValidPhone } from '@/components/ui/PhoneInput'
 import { Icon } from '@/components/ui/Icon'
+import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
+import { useFormDraft } from '@/lib/useFormDraft'
 import { useEmployeeMutations, useEmployeesByState, useNode } from '@/lib/api'
 import { isoToday } from '@/data/repository'
 import { isValidEmail } from '@/lib/utils'
@@ -27,7 +29,6 @@ interface Props {
 const STATUSES: RelationshipStatus[] = ['new', 'developing', 'engaged', 'dormant']
 const QUALITIES: RelationshipQuality[] = ['excellent', 'good', 'neutral', 'weak', 'poor']
 const COMMS: { value: PreferredComm; label: string }[] = [
-  { value: '', label: '—' },
   { value: 'phone', label: 'Phone' },
   { value: 'email', label: 'Email' },
   { value: 'whatsapp', label: 'WhatsApp' },
@@ -36,13 +37,14 @@ const COMMS: { value: PreferredComm; label: string }[] = [
 ]
 
 const EMPTY = {
-  name: '', designation: '', email: '', phone: '', photoUrl: null as string | null, managerId: '',
+  name: '', designation: '', email: '', phone: '', company: '', address: '', website: '',
+  photoUrl: null as string | null, managerId: '',
   selectedPersonId: '',
   selectedPersonName: '',
   vacant: false,
   connected: true,
   relationshipStatus: 'new' as RelationshipStatus, relationshipQuality: 'neutral' as RelationshipQuality,
-  relationshipType: '', introducedBy: '', importantContact: false, preferredComm: '' as PreferredComm,
+  relationshipType: '', introducedBy: '', importantContact: false, preferredComm: [] as PreferredComm[],
   lastInteractionAt: '', followUpDate: '', notes: '',
   relationshipOwner: '',
 }
@@ -50,6 +52,7 @@ const EMPTY = {
 export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, reporteeMode, onClose, onSaved }: Props) {
   const toast = useToast()
   const { create, update, addTimelineEvent } = useEmployeeMutations()
+  const isSaving = create.isPending || update.isPending || addTimelineEvent.isPending
   const { data: employeeOrgNode } = useNode(employee?.orgNodeId ?? null)
   const postingNode = orgNode ?? employeeOrgNode ?? null
   const { data: peers = [] } = useEmployeesByState(postingNode?.stateCode ?? -1)
@@ -57,12 +60,22 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
 
   const [form, setForm] = useState(EMPTY)
 
-  useEffect(() => {
-    if (!open) return
+  // Draft key must pin down which form this is: per-record when editing, and
+  // per-posting (plus the reportee flavour) when creating, so an abandoned
+  // draft can never resurface in a different person's form.
+  const draftKey = employee
+    ? `employee:${employee.id}`
+    : postingNode ? `employee:new:${postingNode.id}:${reporteeMode ?? 'plain'}` : null
+
+  /** The values this form shows with no draft in play — from the record when
+   *  editing, empty when creating. Used both to seed on open and to restore
+   *  when the user discards a draft. */
+  function seeded() {
     if (employee) {
-      setForm({
+      return {
         name: employee.name, designation: employee.designation, email: employee.email,
-        phone: employee.phone, photoUrl: employee.photoUrl, managerId: employee.managerId ?? '',
+        phone: employee.phone, company: employee.company, address: employee.address, website: employee.website,
+        photoUrl: employee.photoUrl, managerId: employee.managerId ?? '',
         vacant: employee.vacant,
         connected: employee.connected,
         relationshipStatus: employee.relationshipStatus, relationshipQuality: employee.relationshipQuality,
@@ -73,11 +86,22 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
         relationshipOwner: employee.metadata.relationshipOwner ?? '',
         selectedPersonId: '',
         selectedPersonName: '',
-      })
-    } else {
-      setForm({ ...EMPTY, managerId: presetManagerId ?? '' })
+      }
     }
+    return { ...EMPTY, managerId: presetManagerId ?? '' }
+  }
+
+  const draft = useFormDraft(draftKey, form, open, () => setForm(seeded()))
+
+  useEffect(() => {
+    if (!open) return
+    const base = seeded()
+    setForm(draft.take(base) ?? base)
+    // `draft`/`seeded` are stable for a given open dialog; re-running on their
+    // identity would re-seed the form out from under the user mid-edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, employee, presetManagerId])
+
 
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [k]: e.target.value }))
@@ -144,6 +168,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
         })
         onSaved(personId)
       }
+      draft.clear()
       onClose()
       return
     }
@@ -151,6 +176,8 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
     const patch = {
       name: form.vacant ? '' : form.name.trim(), designation: form.designation,
       email: form.vacant ? '' : form.email, phone: form.vacant ? '' : form.phone,
+      company: form.vacant ? '' : form.company, address: form.vacant ? '' : form.address,
+      website: form.vacant ? '' : form.website,
       photoUrl: form.vacant ? null : form.photoUrl,
       managerId: form.managerId || null,
       vacant: form.vacant,
@@ -179,6 +206,9 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
       toast(form.vacant ? 'Added vacant position' : `Added ${form.name.trim()}`)
       onSaved(created.id)
     }
+    // The record now holds these values, so the draft has nothing left to
+    // protect — keeping it would re-restore stale input on the next open.
+    draft.clear()
     onClose()
   }
 
@@ -191,14 +221,17 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
       description={orgNode ? `Posting: ${orgNode.name}` : employee?.designation}
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!canSubmit}>
-            {employee ? 'Save changes' : reporteeMode === 'manager' ? 'Add manager' : reporteeMode === 'junior' ? 'Add junior' : form.vacant ? 'Add position' : 'Add employee'}
+          <Button onClick={onClose} disabled={isSaving}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={!canSubmit || isSaving}>
+            {isSaving
+              ? 'Saving…'
+              : employee ? 'Save changes' : reporteeMode === 'manager' ? 'Add manager' : reporteeMode === 'junior' ? 'Add junior' : form.vacant ? 'Add position' : 'Add employee'}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
+        {draft.restored && <DraftNotice onDiscard={draft.discard} />}
         <Field label="Position status">
           <label className="flex h-10 w-fit cursor-pointer items-center gap-2 rounded-lg border border-line bg-white px-3">
             <input
@@ -228,7 +261,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
                 </span>
               ) : (
                 <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-panel text-muted">
-                  <Icon name="Camera" size={18} />
+                  <Icon name="User" size={18} />
                 </span>
               )}
               <Button size="sm" onClick={() => photoRef.current?.click()}>
@@ -275,10 +308,27 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
             </Field>
           )}
           {!reporteeMode && !form.vacant && (
-            <Field label="Contact number" hint="+91 · 2-digit area code · 8-digit number">
+            <Field label="Contact number" hint="+91 · 10-digit number">
               <PhoneInput value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} invalid={!phoneValid} />
-              {!phoneValid && <span className="mt-1 block text-xs text-crimson">Enter a 2-digit area code and an 8-digit number.</span>}
+              {!phoneValid && <span className="mt-1 block text-xs text-crimson">Enter a valid 10-digit number.</span>}
             </Field>
+          )}
+          {!reporteeMode && !form.vacant && (
+            <Field label="Company" hint="From a visiting card, when this isn't a direct government posting.">
+              <Input value={form.company} onChange={set('company')} placeholder="e.g. Acme Systems Pvt Ltd" />
+            </Field>
+          )}
+          {!reporteeMode && !form.vacant && (
+            <Field label="Website">
+              <Input value={form.website} onChange={set('website')} placeholder="e.g. www.example.com" />
+            </Field>
+          )}
+          {!reporteeMode && !form.vacant && (
+            <div className="col-span-full">
+              <Field label="Address">
+                <Textarea value={form.address} onChange={set('address')} />
+              </Field>
+            </div>
           )}
         </div>
 
@@ -302,15 +352,23 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
 
         {!form.vacant && (
           <Field label="Connected">
-            <label className="flex h-10 w-fit cursor-pointer items-center gap-2 rounded-lg border border-line bg-white px-3">
-              <input
-                type="checkbox"
-                checked={form.connected}
-                onChange={(e) => setForm((f) => ({ ...f, connected: e.target.checked }))}
-                className="accent-ink-900"
-              />
-              <span className="text-sm text-ink-800">Tracked as a relationship contact</span>
-            </label>
+            {/* `min-h-[44px]` per option below `sm`: a bare native radio is
+                ~16px, well under a comfortable thumb target — the label
+                carries the extra height rather than the control growing. */}
+            <div className="flex items-center gap-4" role="radiogroup" aria-label="Connected">
+              {([true, false] as const).map((v) => (
+                <label key={String(v)} className="flex min-h-[44px] cursor-pointer items-center gap-1.5 pr-2 sm:min-h-0 sm:pr-0">
+                  <input
+                    type="radio"
+                    name="connected"
+                    checked={form.connected === v}
+                    onChange={() => setForm((f) => ({ ...f, connected: v }))}
+                    className="accent-ink-900"
+                  />
+                  <span className="text-sm text-ink-800">{v ? 'Yes' : 'No'}</span>
+                </label>
+              ))}
+            </div>
           </Field>
         )}
 
@@ -337,9 +395,25 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
               </>
             )}
             <Field label="Preferred communication">
-              <Select value={form.preferredComm} onChange={set('preferredComm')}>
-                {COMMS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-              </Select>
+              {/* Same touch-target reasoning as the Connected radios above. */}
+              <div className="flex flex-wrap gap-3">
+                {COMMS.map((c) => (
+                  <label key={c.value} className="flex min-h-[44px] cursor-pointer items-center gap-1.5 pr-2 sm:min-h-0 sm:pr-0">
+                    <input
+                      type="checkbox"
+                      checked={form.preferredComm.includes(c.value)}
+                      onChange={(e) => setForm((f) => ({
+                        ...f,
+                        preferredComm: e.target.checked
+                          ? [...f.preferredComm, c.value]
+                          : f.preferredComm.filter((v) => v !== c.value),
+                      }))}
+                      className="accent-ink-900"
+                    />
+                    <span className="text-sm text-ink-800">{c.label}</span>
+                  </label>
+                ))}
+              </div>
             </Field>
             <Field label="Important contact">
               <label className="flex h-10 w-fit cursor-pointer items-center gap-2 rounded-lg border border-line bg-white px-3">
@@ -353,7 +427,6 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
               </label>
             </Field>
             <Field label="Last interaction"><Input type="date" value={form.lastInteractionAt} onChange={set('lastInteractionAt')} /></Field>
-            <Field label="Next follow-up"><Input type="date" value={form.followUpDate} onChange={set('followUpDate')} /></Field>
             <div className="sm:col-span-2">
               <Field label="Personal notes"><Textarea value={form.notes} onChange={set('notes')} /></Field>
             </div>

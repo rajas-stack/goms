@@ -9,6 +9,7 @@ import { repository } from '@/data/repository'
 import { Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
+import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import { cn } from '@/lib/utils'
 
 const W = 760
@@ -46,6 +47,8 @@ export function IndiaMap() {
   const [showStates, setShowStates] = useState(true)
   const [showUTs, setShowUTs] = useState(true)
   const [selectedCode, setSelectedCode] = useState<number | null>(null)
+  const [filterOpen, setFilterOpen] = useState(false)
+  const filterAnchorRef = useRef<HTMLButtonElement>(null)
 
   // Per-state "connected" tally: a state counts as connected when at least one
   // active employee posted anywhere under it has `connected === true`. Derived
@@ -321,7 +324,12 @@ export function IndiaMap() {
   }
 
   return (
-    <div className="relative h-full w-full">
+    // `pt-20` below `md`: reserves a strip at the top for the mobile Filter
+    // button and legend so neither sits ON the map (80px clears the taller of
+    // the two — the 3-row legend). Absolutely positioned children offset from
+    // this element's PADDING box, so they land in the strip, while the pan
+    // viewport (`h-full`, below) starts under it.
+    <div className="relative h-full w-full pt-20 md:pt-0">
       <div
         ref={viewportRef}
         className={cn('h-full w-full touch-none select-none', dragging ? 'cursor-grabbing' : 'cursor-grab')}
@@ -424,7 +432,9 @@ export function IndiaMap() {
       </svg>
       </div>
 
-      <div className="absolute top-3 left-3 md:top-auto md:bottom-3 z-20 max-w-[200px] md:max-w-[230px] rounded-xl border border-line bg-paper/95 p-3 shadow-panel backdrop-blur origin-top-left scale-90 md:scale-100 pointer-events-auto" data-map-ui>
+      {/* Desktop (md+) — untouched from before: one combined legend + State/UT
+          filter + jump-to panel, always visible, bottom-left. */}
+      <div className="hidden md:block absolute bottom-3 left-3 z-20 max-w-[230px] rounded-xl border border-line bg-paper/95 p-3 shadow-panel backdrop-blur pointer-events-auto" data-map-ui>
         <div className="min-w-[140px] space-y-1.5 text-[11px]">
           <LegendRow
             swatch={<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: NAVY }} />}
@@ -488,19 +498,121 @@ export function IndiaMap() {
         </div>
       </div>
 
-      <div className="pointer-events-none absolute bottom-3 right-3 z-20 flex items-center gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel backdrop-blur" data-map-ui>
-        <Tooltip label="Fit to screen">
+      {/* Mobile only (below md) — legend and Filter button both live in the
+          reserved top strip (see the container's `pt-[74px]`), so the map
+          itself is never covered. State/UT filter + jump-to sit behind the
+          Filter button's popup. */}
+      <div className="md:hidden absolute top-2 right-3 z-20 w-[124px] rounded-lg border border-line bg-paper/95 p-2 shadow-panel backdrop-blur pointer-events-auto" data-map-ui>
+        <div className="space-y-1 text-[10px]">
+          <LegendRow
+            swatch={<span className="h-2 w-2 rounded-full" style={{ backgroundColor: NAVY }} />}
+            label="Connected"
+            count={legend.connected}
+          />
+          <LegendRow
+            swatch={<span className="h-2 w-2 rounded-full bg-teal/20 ring-1 ring-teal-600" />}
+            label="Populated"
+            count={legend.populated}
+          />
+          <LegendRow
+            swatch={<span className="h-2 w-2 rounded-full bg-white ring-1 ring-ink-600/50" />}
+            label="Awaiting"
+            count={legend.awaiting}
+          />
+        </div>
+      </div>
+
+      <button
+        ref={filterAnchorRef}
+        type="button"
+        onClick={() => setFilterOpen((v) => !v)}
+        aria-label="Filter states and union territories"
+        className={cn(
+          'md:hidden absolute top-2 left-3 z-20 flex h-11 items-center gap-1.5 rounded-lg border border-line bg-paper/95 px-3 text-[12px] font-medium text-ink-800 shadow-panel backdrop-blur transition-colors pointer-events-auto hover:border-ink-600',
+          filterOpen && 'border-ink-600 bg-panel',
+        )}
+        data-map-ui
+      >
+        <Icon name="SlidersHorizontal" size={14} />
+        Filter
+        {selectedFeat && <span className="rounded-full bg-ink-900 px-1.5 py-0.5 text-[10px] text-paper">1</span>}
+      </button>
+      <PopoverPanel open={filterOpen} anchorRef={filterAnchorRef} onClose={() => setFilterOpen(false)} align="start" gap={6}>
+        {() => (
+          <motion.div
+            data-canvas-ui
+            initial={{ opacity: 0, y: -4, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+            transition={{ duration: 0.12 }}
+            className="w-64 space-y-2 rounded-xl border border-line bg-paper p-3 shadow-pop"
+          >
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] font-medium text-ink-800">
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input type="checkbox" checked={showStates} onChange={(e) => setShowStates(e.target.checked)} className="accent-ink-900" />
+                States
+              </label>
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input type="checkbox" checked={showUTs} onChange={(e) => setShowUTs(e.target.checked)} className="accent-ink-900" />
+                Union Territories
+              </label>
+            </div>
+            <div className="space-y-2 border-t border-line pt-2">
+              <Select
+                aria-label="Jump to a state"
+                value={stateFeats.some((f) => f.code === selectedCode) ? String(selectedCode) : ''}
+                onChange={(e) => setSelectedCode(e.target.value ? Number(e.target.value) : null)}
+                className="h-9 w-full py-0 text-[12px]"
+              >
+                <option value="">Jump to state…</option>
+                {stateFeats.map((f) => (
+                  <option key={f.code} value={f.code}>{f.name}</option>
+                ))}
+              </Select>
+              <Select
+                aria-label="Jump to a union territory"
+                value={utFeats.some((f) => f.code === selectedCode) ? String(selectedCode) : ''}
+                onChange={(e) => setSelectedCode(e.target.value ? Number(e.target.value) : null)}
+                className="h-9 w-full py-0 text-[12px]"
+              >
+                <option value="">Jump to territory…</option>
+                {utFeats.map((f) => (
+                  <option key={f.code} value={f.code}>{f.name}</option>
+                ))}
+              </Select>
+              {selectedFeat && (
+                <button
+                  type="button"
+                  onClick={() => { setFilterOpen(false); navigate(`/state/${selectedFeat.code}`) }}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-ink-900 px-3 py-2 text-[12px] font-medium text-paper transition-colors hover:bg-ink-800"
+                >
+                  Open {selectedFeat.name}
+                  <span aria-hidden>→</span>
+                </button>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </PopoverPanel>
+
+      {/* Bottom-LEFT on a phone: the global FAB owns the bottom-right corner
+          there, and the two clusters were colliding. */}
+      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel backdrop-blur sm:left-auto sm:right-3" data-map-ui>
+        {/* Fit-to-screen and Reset (below) both just call `resetView`, so the
+            phone keeps one of them — the full 5-slot desktop cluster overran
+            the map's own width at 390px. */}
+        <Tooltip label="Fit to screen" className="hidden sm:inline-flex">
           <button onClick={resetView} className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Fit to screen">
             <Icon name="Maximize" size={14} />
           </button>
         </Tooltip>
-        <span className="mx-0.5 h-5 w-px bg-line" />
+        <span className="mx-0.5 hidden h-5 w-px bg-line sm:block" />
         <Tooltip label="Zoom out">
           <button onClick={() => zoomBy(0.85)} className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Zoom out">
             <span className="text-base leading-none">−</span>
           </button>
         </Tooltip>
-        <span className="pointer-events-auto w-11 text-center font-mono text-[11px] text-muted">{Math.round(transform.scale * 100)}%</span>
+        <span className="pointer-events-auto w-10 text-center font-mono text-[11px] text-muted sm:w-11">{Math.round(transform.scale * 100)}%</span>
         <Tooltip label="Zoom in">
           <button onClick={() => zoomBy(1 / 0.85)} className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Zoom in">
             <span className="text-base leading-none">+</span>

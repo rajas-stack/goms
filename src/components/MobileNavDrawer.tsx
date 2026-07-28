@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useShell } from '@/app/AppLayout'
 import { Icon } from './ui/Icon'
@@ -9,12 +10,15 @@ interface Props {
   onClose: () => void
 }
 
-/** Mobile-only hamburger drawer, triggered from TopBar's menu button. It
- *  doesn't own any dialogs itself — it just surfaces the same Search/Import
- *  actions TopBar already exposes via `useShell()`; the CommandPalette and
- *  ImportDialog it opens stay mounted once, in AppLayout. */
+/** Mobile-only hamburger drawer, triggered from TopBar's menu button. It hosts
+ *  the "Account Mapping" entry that `AccountMappingRail` renders as a left rail
+ *  on desktop — below `lg` that rail is hidden, so this is its mobile home.
+ *  Search and Import deliberately DON'T appear here: both already have their
+ *  own always-visible controls in TopBar at every viewport, and duplicating
+ *  them in the drawer just gave the same action two homes. */
 export function MobileNavDrawer({ open, onClose }: Props) {
-  const { openSearch, openImport } = useShell()
+  const { navExpanded } = useShell()
+  const navigate = useNavigate()
 
   useEffect(() => {
     if (!open) return
@@ -63,22 +67,17 @@ export function MobileNavDrawer({ open, onClose }: Props) {
               <button
                 onClick={() => {
                   onClose()
-                  openSearch()
+                  navigate('/map')
                 }}
-                className="flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-ink hover:bg-ink-900/[0.05]"
+                className={cn(
+                  'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
+                  navExpanded
+                    ? 'bg-white text-ink-900 shadow-sm'
+                    : 'text-ink hover:bg-ink-900/[0.05]',
+                )}
               >
-                <Icon name="Search" size={17} />
-                Search
-              </button>
-              <button
-                onClick={() => {
-                  onClose()
-                  openImport()
-                }}
-                className="flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-ink hover:bg-ink-900/[0.05]"
-              >
-                <Icon name="Upload" size={17} />
-                Import records
+                <Icon name="Map" size={17} />
+                Account Mapping
               </button>
             </motion.div>
           </>

@@ -6,6 +6,7 @@ import { uid } from '@/lib/utils'
 import { NODE_TYPE_MAP } from '@/lib/node-types'
 import { SEARCH_CATEGORIES, SEARCH_CATEGORY_MAP, type SearchContext } from '@/lib/search-categories'
 import { buildSeed, type GormsData } from './seed'
+import { clearSnapshot, loadSnapshot, scheduleSave } from './persist'
 
 export interface StateSummary {
   code: number
@@ -23,14 +24,6 @@ export interface InteractionSummary {
   date: string
 }
 
-export interface FollowUpSummary {
-  employeeId: string
-  name: string
-  designation: string
-  date: string
-  overdue: boolean
-}
-
 /** Aggregate relationship metrics powering the analytics dashboard. */
 export interface RelationshipAnalytics {
   total: number
@@ -39,11 +32,11 @@ export interface RelationshipAnalytics {
   vacant: number
   transfers: number
   highPriority: number
-  followUpsDue: number
   qualityDist: Record<RelationshipQuality, number>
   statusDist: Record<RelationshipStatus, number>
   recentInteractions: InteractionSummary[]
-  upcomingFollowUps: FollowUpSummary[]
+  /** Logged `meeting`/`inPerson` entries dated after today, soonest first. */
+  upcomingMeetings: InteractionSummary[]
 }
 
 export interface CreateNodeInput {
@@ -61,6 +54,9 @@ export interface CreateEmployeeInput {
   email: string
   phone: string
   photoUrl?: string | null
+  company?: string
+  address?: string
+  website?: string
   orgNodeId: string
   managerId: string | null
   vacant?: boolean
@@ -70,7 +66,7 @@ export interface CreateEmployeeInput {
   relationshipType?: string
   introducedBy?: string
   importantContact?: boolean
-  preferredComm?: PreferredComm
+  preferredComm?: PreferredComm[]
   lastInteractionAt?: string | null
   followUpDate?: string | null
   notes?: string
@@ -131,7 +127,7 @@ export interface Repository {
   /** Map of active employee id → the department node they sit under (if any).
    *  Powers the Directory's Department filter without walking the tree per row. */
   listEmployeeDepartments(): Promise<Record<string, { id: string; name: string }>>
-  getEmployee(id: string): Promise<Employee | undefined>
+  getEmployee(id: string): Promise<Employee | null>
   directReports(employeeId: string): Promise<Employee[]>
   reportingChain(employeeId: string): Promise<Employee[]>
   createEmployee(input: CreateEmployeeInput): Promise<Employee>
@@ -145,6 +141,9 @@ export interface Repository {
    *  event types. */
   listAllTimelineEvents(filter?: { types?: TimelineEventType[] }): Promise<TimelineEvent[]>
   addTimelineEvent(input: AddTimelineInput): Promise<TimelineEvent>
+  /** Marks (or un-marks) attendance on an existing entry — the only field
+   *  editable after logging. */
+  setTimelineEventAttended(id: string, attended: boolean | undefined): Promise<void>
   deleteTimelineEvent(id: string): Promise<void>
 
   listTransfers(employeeId: string): Promise<Transfer[]>
@@ -173,10 +172,26 @@ class InMemoryRepository implements Repository {
   private data: GormsData = buildSeed()
 
   constructor() {
-    // Enforce the branch invariants on load: no duplicate branches, and every
-    // department carries a default Root branch.
+    // Collapse any duplicate same-name branches under the same parent.
     this.dedupeBranches()
-    this.ensureRootBranches()
+  }
+
+  /** Replaces the whole store — used to restore the locally persisted snapshot
+   *  at startup, and to reset back to seed data. Not part of `Repository`: it's
+   *  an implementation detail of the in-memory store, and a server-backed
+   *  implementation would have no use for it. */
+  hydrate(data: GormsData) {
+    this.data = data
+    // A snapshot written by an older build can still carry duplicates that
+    // today's seed no longer produces, so re-run the same cleanup the seed gets.
+    this.dedupeBranches()
+  }
+
+  /** The live store, for persisting. Returned by reference (not cloned): the
+   *  caller hands it straight to IndexedDB, which structured-clones it during
+   *  the write anyway. */
+  snapshot(): GormsData {
+    return this.data
   }
 
   /** Collapse branches that share a name under the same parent, reassigning the
@@ -206,23 +221,6 @@ class InMemoryRepository implements Repository {
       }
     }
     if (removeIds.size) this.data.nodes = this.data.nodes.filter((n) => !removeIds.has(n.id))
-  }
-
-  /** Give every department a default "Root" branch if it doesn't have one. */
-  private ensureRootBranches() {
-    for (const dept of this.data.nodes.filter((n) => n.typeKey === 'department')) {
-      const hasRoot = this.data.nodes.some(
-        (n) => n.parentId === dept.id && n.typeKey === 'branch' && n.name.trim().toLowerCase() === 'root',
-      )
-      if (!hasRoot) this.data.nodes.push(this.makeRootBranch(dept))
-    }
-  }
-
-  private makeRootBranch(dept: HierNode): HierNode {
-    return {
-      id: uid('org'), domain: 'org', typeKey: 'branch', parentId: dept.id,
-      stateCode: dept.stateCode, name: 'Root', code: null, sortOrder: -1, metadata: {}, status: 'active',
-    }
   }
 
   private activeChildren(parentId: string): HierNode[] {
@@ -339,8 +337,6 @@ class InMemoryRepository implements Repository {
       status: 'active',
     }
     this.data.nodes.push(node)
-    // A new department is born with its default Root branch.
-    if (node.typeKey === 'department') this.data.nodes.push(this.makeRootBranch(node))
     return node
   }
 
@@ -439,7 +435,11 @@ class InMemoryRepository implements Repository {
   }
 
   async getEmployee(id: string) {
-    return this.data.employees.find((e) => e.id === id)
+    // react-query's queryFn must never resolve to undefined (see useEmployee
+    // in api.ts) — a removed employee's id can still be in flight in a
+    // stale/invalidated query for a moment after deletion, so this must
+    // resolve to null, not undefined, once the record is gone.
+    return this.data.employees.find((e) => e.id === id) ?? null
   }
 
   async directReports(employeeId: string) {
@@ -467,6 +467,9 @@ class InMemoryRepository implements Repository {
       designation: input.designation,
       email: input.email,
       phone: input.phone,
+      company: input.company ?? '',
+      address: input.address ?? '',
+      website: input.website ?? '',
       photoUrl: input.photoUrl ?? null,
       orgNodeId: input.orgNodeId,
       managerId: input.managerId,
@@ -477,7 +480,7 @@ class InMemoryRepository implements Repository {
       relationshipType: input.relationshipType ?? '',
       introducedBy: input.introducedBy ?? '',
       importantContact: input.importantContact ?? false,
-      preferredComm: input.preferredComm ?? '',
+      preferredComm: input.preferredComm ?? [],
       lastInteractionAt: input.lastInteractionAt ?? null,
       followUpDate: input.followUpDate ?? null,
       notes: input.notes ?? '',
@@ -490,7 +493,7 @@ class InMemoryRepository implements Repository {
     if (!vacant) {
       this.data.timeline.push({
         id: uid('evt'), employeeId: emp.id, type: 'joined',
-        title: `Joined as ${emp.designation || 'employee'}`, date: isoToday(),
+        title: 'Contact created', date: isoToday(),
         note: '', source: 'system',
       })
     }
@@ -554,6 +557,11 @@ class InMemoryRepository implements Repository {
     }
     this.data.timeline.push(evt)
     return evt
+  }
+
+  async setTimelineEventAttended(id: string, attended: boolean | undefined) {
+    const evt = this.data.timeline.find((t) => t.id === id)
+    if (evt) evt.attended = attended
   }
 
   async deleteTimelineEvent(id: string) {
@@ -848,11 +856,12 @@ class InMemoryRepository implements Repository {
       .slice(0, 8)
       .map((t) => ({ employeeId: t.employeeId, name: nameById.get(t.employeeId)!.name, type: t.type, title: t.title, date: t.date }))
 
-    const upcomingFollowUps: FollowUpSummary[] = connected
-      .filter((e) => e.followUpDate)
-      .sort((a, b) => a.followUpDate!.localeCompare(b.followUpDate!))
+    const upcomingMeetings: InteractionSummary[] = this.data.timeline
+      .filter((t) => (t.type === 'meeting' || t.type === 'inPerson') && t.date > today
+        && nameById.get(t.employeeId) && !nameById.get(t.employeeId)!.vacant)
+      .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 8)
-      .map((e) => ({ employeeId: e.id, name: e.name, designation: e.designation, date: e.followUpDate!, overdue: e.followUpDate! < today }))
+      .map((t) => ({ employeeId: t.employeeId, name: nameById.get(t.employeeId)!.name, type: t.type, title: t.title, date: t.date }))
 
     return {
       total: people.length,
@@ -861,10 +870,76 @@ class InMemoryRepository implements Repository {
       vacant: active.filter((e) => e.vacant).length,
       transfers: this.data.transfers.length,
       highPriority: people.filter((e) => e.importantContact).length,
-      followUpsDue: connected.filter((e) => e.followUpDate && e.followUpDate <= today).length,
-      qualityDist, statusDist, recentInteractions, upcomingFollowUps,
+      qualityDist, statusDist, recentInteractions, upcomingMeetings,
     }
   }
 }
 
-export const repository: Repository = new InMemoryRepository()
+/** Every `Repository` method that changes stored data. The proxy below saves a
+ *  snapshot after each of these resolves, so a new mutating method MUST be
+ *  listed here or its effects won't survive a reload. */
+const MUTATOR_KEYS = [
+  'createNode', 'updateNode', 'setNodeStatus', 'deleteNode', 'moveNode', 'duplicateNode',
+  'reorderNode', 'importChildren',
+  'createEmployee', 'updateEmployee', 'setManager', 'deleteEmployee',
+  'addTimelineEvent', 'setTimelineEventAttended', 'deleteTimelineEvent',
+  'transferEmployee', 'addCharge', 'removeCharge',
+] as const
+
+/** Read-only methods. Listed only so the exhaustiveness check below can tell
+ *  "classified as a read" apart from "nobody classified it". */
+const READER_KEYS = [
+  'listStates', 'getState', 'getNode', 'listChildren', 'listOrgRoots', 'listPostingNodes',
+  'breadcrumb', 'childCount', 'geoRoot', 'childCounts',
+  'listEmployeesUnder', 'listEmployeesDirect', 'listEmployeesByState', 'listAllEmployees',
+  'listEmployeeDepartments', 'getEmployee', 'directReports', 'reportingChain',
+  'listTimeline', 'listAllTimelineEvents', 'listTransfers',
+  'search', 'relatedRecords', 'moveTargets', 'relationshipAnalytics',
+] as const
+
+// Adding a method to `Repository` without classifying it above breaks the
+// build here, rather than silently not persisting at runtime: `Unclassified`
+// stops being `never`, so it no longer satisfies the constraint.
+type Unclassified = Exclude<keyof Repository, (typeof MUTATOR_KEYS | typeof READER_KEYS)[number]>
+const _allMethodsClassified: [Unclassified] extends [never] ? true : Unclassified = true
+void _allMethodsClassified
+
+const MUTATORS: ReadonlySet<keyof Repository> = new Set(MUTATOR_KEYS)
+
+const impl = new InMemoryRepository()
+
+/** Hydrates the store from the locally persisted snapshot, if there is one.
+ *  Call once, before the first render (see main.tsx) — every read goes straight
+ *  at `this.data`, so swapping it in afterwards would race the first queries. */
+export async function bootstrapRepository(): Promise<void> {
+  const saved = await loadSnapshot()
+  if (saved) impl.hydrate(saved)
+}
+
+/** Discards the local snapshot and returns the store to pure seed data. */
+export async function resetLocalData(): Promise<void> {
+  await clearSnapshot()
+  impl.hydrate(buildSeed())
+}
+
+/** The store, wrapped so that every mutation schedules a save. A proxy rather
+ *  than a `persist()` call at the end of ~18 methods: one place to get right,
+ *  and impossible to forget in a method body. Methods are bound to the concrete
+ *  instance so their private-field access still works. */
+export const repository: Repository = new Proxy(impl, {
+  get(target, prop, receiver) {
+    const value = Reflect.get(target, prop, receiver)
+    if (typeof value !== 'function') return value
+    const key = prop as keyof Repository
+    if (!MUTATORS.has(key)) return (value as (...a: unknown[]) => unknown).bind(target)
+    return (...args: unknown[]) => {
+      const out = (value as (...a: unknown[]) => unknown).apply(target, args)
+      // Save only once the mutation has actually resolved, so a rejected call
+      // (e.g. a validation throw) doesn't persist a half-applied state.
+      return Promise.resolve(out).then((result) => {
+        scheduleSave(() => target.snapshot())
+        return result
+      })
+    }
+  },
+}) as Repository

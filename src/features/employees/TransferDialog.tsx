@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
 import {
   useAllEmployees, useBreadcrumb, useEmployeeMutations, useEmployeesUnder, useNode,
   useOrgRoots, usePostingNodes,
 } from '@/lib/api'
 import { isoToday } from '@/data/repository'
+import { useFormDraft } from '@/lib/useFormDraft'
 import { NODE_TYPE_MAP } from '@/lib/node-types'
 import { EmployeePicker } from './EmployeePicker'
 import type { Employee } from '@/lib/types'
@@ -26,9 +28,14 @@ export function TransferDialog({ open, employee, onClose }: {
   const { data: postings = [] } = usePostingNodes(stateCode)
   const { data: allEmployees = [] } = useAllEmployees()
 
-  const [form, setForm] = useState({
-    toDepartmentId: '', toOrgNodeId: '', toDesignation: '', toManagerId: '', effectiveDate: isoToday(), reason: '', remarks: '',
+  const emptyForm = () => ({
+    toDepartmentId: '', toOrgNodeId: '', toDesignation: employee?.designation ?? '',
+    toManagerId: employee?.managerId ?? '', effectiveDate: isoToday(), reason: '', remarks: '',
   })
+  const [form, setForm] = useState(emptyForm)
+
+  const draftKey = employee ? `transfer:${employee.id}` : null
+  const draft = useFormDraft(draftKey, form, open, () => setForm(emptyForm()))
 
   // Offices/units that sit under the picked department. There's no flat
   // office→department index, so we derive it from the people posted in the
@@ -43,11 +50,10 @@ export function TransferDialog({ open, employee, onClose }: {
 
   useEffect(() => {
     if (open && employee) {
-      setForm({
-        toDepartmentId: '', toOrgNodeId: '', toDesignation: employee.designation,
-        toManagerId: employee.managerId ?? '', effectiveDate: isoToday(), reason: '', remarks: '',
-      })
+      const base = emptyForm()
+      setForm(draft.take(base) ?? base)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, employee])
 
   // Default the department to the employee's current one once the breadcrumb
@@ -84,6 +90,7 @@ export function TransferDialog({ open, employee, onClose }: {
       remarks: form.remarks.trim(),
     })
     toast(`Transferred ${employee.name}`)
+    draft.clear()
     onClose()
   }
 
@@ -96,12 +103,15 @@ export function TransferDialog({ open, employee, onClose }: {
       description={employee ? employee.name : undefined}
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!form.toOrgNodeId}>Record transfer</Button>
+          <Button onClick={onClose} disabled={transfer.isPending}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={!form.toOrgNodeId || transfer.isPending}>
+            {transfer.isPending ? 'Recording…' : 'Record transfer'}
+          </Button>
         </>
       }
     >
       <div className="space-y-4">
+        {draft.restored && <DraftNotice onDiscard={draft.discard} />}
         <div className="rounded-lg border border-line bg-panel/50 px-3 py-2.5 text-[13px]">
           <span className="text-[11px] uppercase tracking-wide text-muted">Current posting</span>
           <p className="mt-0.5 text-ink-900">{currentPosting?.name ?? '—'} · {employee?.designation}</p>

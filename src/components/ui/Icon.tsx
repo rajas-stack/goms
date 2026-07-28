@@ -6,7 +6,8 @@ import {
   Maximize, ChevronsDown, ChevronsUp, Eye, EyeOff, Keyboard, Camera, IdCard, UserPlus, Calendar,
   MessageCircle, PhoneCall, Clock, FileText, StickyNote, TrendingUp, ArrowLeftRight, Star,
   GripVertical, BarChart3, PieChart, UserX, UserCheck, Briefcase, Handshake, CalendarClock,
-  Circle, CircleDot, Link2, Send, Flag, ArrowUp, ArrowDown, Type, Menu, List,
+  Circle, CircleDot, Link2, Send, Flag, ArrowUp, ArrowDown, Type, Menu, List, SlidersHorizontal,
+  RotateCcw,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -18,7 +19,8 @@ const REGISTRY: Record<string, LucideIcon> = {
   Maximize, ChevronsDown, ChevronsUp, Eye, EyeOff, Keyboard, Camera, IdCard, UserPlus, Calendar,
   MessageCircle, PhoneCall, Clock, FileText, StickyNote, TrendingUp, ArrowLeftRight, Star,
   GripVertical, BarChart3, PieChart, UserX, UserCheck, Briefcase, Handshake, CalendarClock,
-  Circle, CircleDot, Link2, Send, Flag, ArrowUp, ArrowDown, Type, Menu, List,
+  Circle, CircleDot, Link2, Send, Flag, ArrowUp, ArrowDown, Type, Menu, List, SlidersHorizontal,
+  RotateCcw,
 }
 
 export function Icon({ name, className, size = 16 }: { name: string; className?: string; size?: number }) {

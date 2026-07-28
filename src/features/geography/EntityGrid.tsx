@@ -141,8 +141,11 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
               </span>
             </div>
 
+            {/* The "+" overhangs the tile corner from `sm:` up; on a phone it's
+                tucked inside instead, where the negative offsets widened the
+                enclosing scroll container into a stray horizontal scrollbar. */}
             {showAdd && (
-              <Tooltip label={addLabel?.(node) ?? 'Add'} side="top" className="absolute -right-2 -top-2">
+              <Tooltip label={addLabel?.(node) ?? 'Add'} side="top" className="absolute right-2 top-2 sm:-right-2 sm:-top-2">
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onAdd(node) }}

@@ -36,11 +36,13 @@ export function TopBar({ onOpenDrawer }: Props) {
 
       <button
         onClick={openSearch}
-        className="group ml-auto flex h-11 w-full max-w-[12rem] items-center gap-2 rounded-lg border border-line bg-white px-3 text-sm text-muted transition-colors hover:border-ink-600 lg:h-9"
+        className="group ml-auto flex h-11 w-full min-w-0 max-w-[12rem] items-center gap-2 rounded-lg border border-line bg-white px-3 text-sm text-muted transition-colors hover:border-ink-600 lg:h-9"
       >
-        <Icon name="Search" size={15} />
+        <Icon name="Search" size={15} className="shrink-0" />
         <span className="truncate">Search…</span>
-        <kbd className="ml-auto flex items-center gap-0.5 rounded border border-line bg-panel px-1.5 py-0.5 font-mono text-[10px] text-muted">
+        {/* Keyboard hint is desktop-only — there's no ⌘/Ctrl key on a phone,
+            and the badge was crowding the mobile top bar. */}
+        <kbd className="ml-auto hidden items-center gap-0.5 rounded border border-line bg-panel px-1.5 py-0.5 font-mono text-[10px] text-muted lg:flex">
           ⌘K
         </kbd>
       </button>

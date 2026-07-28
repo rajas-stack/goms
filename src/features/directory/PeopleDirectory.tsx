@@ -5,7 +5,9 @@ import { useEmployeeDepartments } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
 import { Combobox } from '@/components/ui/Combobox'
+import { MobileFilterBar } from '@/components/MobileFilterBar'
 import { cn, initials } from '@/lib/utils'
+import { useMediaQuery } from '@/lib/useMediaQuery'
 import type { Employee } from '@/lib/types'
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
@@ -38,6 +40,7 @@ type FlatRow =
  *  details panel in place — the same reusable pattern the canvas uses. */
 export function PeopleDirectory({ employees: allEmployees }: { employees: Employee[] }) {
   const ws = useWorkspace()
+  const isNarrow = useMediaQuery('(max-width: 639.98px)')
   const { data: deptById = {} } = useEmployeeDepartments()
   // Vacant positions are seats, not people — the phonebook only lists actual employees.
   const employees = useMemo(() => allEmployees.filter((e) => !e.vacant), [allEmployees])
@@ -90,6 +93,9 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
   )
 
   const hasFilters = query.trim() !== '' || designation !== '' || managerId !== '' || departmentId !== ''
+  // Only the three dropdowns — the free-text query has its own always-visible
+  // field, so counting it on the collapsed Filter button would be misleading.
+  const activeFilterCount = [departmentId, designation, managerId].filter(Boolean).length
   function clearFilters() {
     setQuery('')
     setDesignation('')
@@ -162,13 +168,15 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
     <div className="flex h-full min-h-0">
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="space-y-2.5 border-b border-line px-4 py-3">
-          <label className="flex h-10 items-center gap-2 rounded-lg border border-line bg-white px-3">
-            <Icon name="Search" size={15} className="text-muted" />
+          <label className="flex h-11 items-center gap-2 rounded-lg border border-line bg-white px-3 sm:h-10">
+            <Icon name="Search" size={15} className="shrink-0 text-muted" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by name, designation, phone, email, or manager…"
-              className="h-full flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted/70"
+              // The full field list doesn't fit a phone's input — it was
+              // clipped mid-word there, so narrow screens get the short form.
+              placeholder={isNarrow ? 'Search people…' : 'Search by name, designation, phone, email, or manager…'}
+              className="h-full min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-muted/70"
             />
             {query && (
               <button
@@ -181,14 +189,20 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
             )}
           </label>
 
-          <div className="flex flex-wrap items-center gap-2">
+          {/* Below `sm` the three dropdowns live behind a Filter button (free-text
+              search stays visible — it's the primary action); from `sm` up they're
+              inline as before. One per row on a phone once opened (`grid-cols-1`):
+              wrapped inline, the third got squeezed to its 9rem minimum and its
+              placeholder was clipped mid-word. */}
+          <MobileFilterBar activeCount={activeFilterCount}>
+          <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-center">
             <Combobox
               value={departmentId}
               onChange={setDepartmentId}
               options={departmentOptions}
               placeholder="All departments"
               aria-label="Filter by department"
-              className="min-w-[9rem] flex-1"
+              className="w-full sm:min-w-[9rem] sm:flex-1"
             />
 
             <Combobox
@@ -197,7 +211,7 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
               options={designationOptions}
               placeholder="All designations"
               aria-label="Filter by designation"
-              className="min-w-[9rem] flex-1"
+              className="w-full sm:min-w-[9rem] sm:flex-1"
             />
 
             <Combobox
@@ -206,7 +220,7 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
               options={managerOptions}
               placeholder="All reporting managers"
               aria-label="Filter by reporting manager"
-              className="min-w-[9rem] flex-1"
+              className="w-full sm:min-w-[9rem] sm:flex-1"
             />
 
             <Button
@@ -214,11 +228,12 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
               variant="ghost"
               onClick={clearFilters}
               disabled={!hasFilters}
-              className="shrink-0"
+              className="h-11 w-full justify-center sm:h-auto sm:w-auto sm:shrink-0"
             >
               <Icon name="X" size={14} /> Clear filters
             </Button>
           </div>
+          </MobileFilterBar>
 
           <p className="text-[12px] text-muted">
             {hasFilters ? `${filtered.length} of ${employees.length} people` : `${employees.length} people`}

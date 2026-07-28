@@ -2,12 +2,11 @@ import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { useRelationshipAnalytics } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
-import { Badge } from '@/components/ui/Badge'
 import { TIMELINE_META } from '@/lib/timeline-meta'
 import { QUALITY_DOT } from '@/lib/node-colors'
-import { cn, initials } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import type { RelationshipQuality, RelationshipStatus } from '@/lib/types'
-import type { FollowUpSummary, InteractionSummary } from '@/data/repository'
+import type { InteractionSummary } from '@/data/repository'
 
 const QUALITY_ORDER: RelationshipQuality[] = ['excellent', 'good', 'neutral', 'weak', 'poor']
 const STATUS_ORDER: RelationshipStatus[] = ['engaged', 'developing', 'new', 'dormant']
@@ -24,10 +23,10 @@ export function RelationshipAnalytics() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="z-10 border-b border-line bg-white/80 px-6 py-4 backdrop-blur">
+      <div className="z-10 border-b border-line bg-white/80 px-4 py-4 backdrop-blur sm:px-6">
         <span className="eyebrow">Relationships</span>
         <h1 className="font-display text-xl font-bold leading-tight text-ink-900">Relationship Analytics</h1>
-        <p className="text-[12px] text-muted">Connection health, quality mix, and follow-ups across every state</p>
+        <p className="text-[12px] text-muted">Connection health, quality mix, and meetings across every state</p>
       </div>
 
       {!a ? (
@@ -37,20 +36,21 @@ export function RelationshipAnalytics() {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
-          className="min-h-0 flex-1 space-y-6 overflow-y-auto scrollbar-thin px-6 py-6"
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto scrollbar-thin px-4 py-4 sm:space-y-6 sm:px-6 sm:py-6"
         >
-          <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <section className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <StatCard icon="Users" tone="emerald" label="Connected officials" value={a.connected} sub={`${a.total} total`} />
-            <StatCard icon="CalendarClock" tone="amber" label="Follow-ups due" value={a.followUpsDue} />
             <StatCard icon="Star" tone="crimson" label="High-priority contacts" value={a.highPriority} />
             <StatCard icon="UserX" tone="amber" label="Vacant positions" value={a.vacant} />
           </section>
 
           <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Panel title="Connected vs not connected" icon="PieChart">
-              <div className="flex items-center gap-6">
+              {/* Stacks on a phone — side-by-side, the 128px donut left the
+                  legend too narrow and its "n · nn%" values overflowed. */}
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-6">
                 <Donut connected={a.connected} notConnected={a.notConnected} />
-                <div className="space-y-2">
+                <div className="w-full min-w-0 space-y-2 sm:w-auto sm:flex-1">
                   <LegendRow swatch="bg-emerald" label="Connected" value={a.connected} total={a.total} />
                   <LegendRow swatch="bg-line" label="Not connected" value={a.notConnected} total={a.total} />
                   <LegendRow swatch="bg-amber" label="Vacant (excluded)" value={a.vacant} />
@@ -76,12 +76,14 @@ export function RelationshipAnalytics() {
               </div>
             </Panel>
 
-            <Panel title={`Upcoming follow-ups · ${a.upcomingFollowUps.length}`} icon="CalendarClock">
-              {a.upcomingFollowUps.length === 0 ? (
-                <Empty label="No follow-ups scheduled." />
+            <Panel title={`Upcoming meetings · ${a.upcomingMeetings.length}`} icon="CalendarClock">
+              {a.upcomingMeetings.length === 0 ? (
+                <Empty label="No meetings scheduled." />
               ) : (
-                <div className="space-y-1">
-                  {a.upcomingFollowUps.map((f) => <FollowUpRow key={f.employeeId} f={f} onClick={() => openPerson(f.employeeId)} />)}
+                <div className="space-y-1.5">
+                  {a.upcomingMeetings.map((it, i) => (
+                    <InteractionRow key={`${it.employeeId}-${i}`} it={it} onClick={() => openPerson(it.employeeId)} />
+                  ))}
                 </div>
               )}
             </Panel>
@@ -129,7 +131,7 @@ function StatCard({ icon, label, value, sub, tone }: {
 
 function Panel({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-card border border-line bg-white p-5 shadow-panel">
+    <div className="rounded-card border border-line bg-white p-4 shadow-panel sm:p-5">
       <h3 className="mb-4 flex items-center gap-2 text-[13px] font-semibold text-ink-800">
         <Icon name={icon} size={15} className="text-muted" />{title}
       </h3>
@@ -181,20 +183,6 @@ function Bar({ label, value, max, barClass }: { label: string; value: number; ma
   )
 }
 
-function FollowUpRow({ f, onClick }: { f: FollowUpSummary; onClick: () => void }) {
-  return (
-    <button onClick={onClick} className="flex w-full items-center gap-3 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-ink-900/[0.04]">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 font-mono text-[11px] font-semibold text-emerald-600">
-        {initials(f.name)}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-medium text-ink-900">{f.name}</span>
-        <span className="block truncate text-[11px] text-muted">{f.designation}</span>
-      </span>
-      <Badge tone={f.overdue ? 'crimson' : 'amber'}>{f.overdue ? 'Overdue' : f.date}</Badge>
-    </button>
-  )
-}
 
 function InteractionRow({ it, onClick }: { it: InteractionSummary; onClick: () => void }) {
   const meta = TIMELINE_META[it.type]
@@ -204,8 +192,8 @@ function InteractionRow({ it, onClick }: { it: InteractionSummary; onClick: () =
         <Icon name={meta.icon} size={14} className="text-ink-700" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-medium text-ink-900">{it.name}</span>
-        <span className="block truncate text-[11px] text-muted">{it.title}</span>
+        <span className="block break-words text-[13px] font-medium text-ink-900">{it.name}</span>
+        <span className="block break-words text-[11px] text-muted">{it.title}</span>
       </span>
       <span className="shrink-0 text-[11px] text-muted">{it.date}</span>
     </button>

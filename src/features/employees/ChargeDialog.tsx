@@ -2,10 +2,16 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
 import { useEmployeeMutations } from '@/lib/api'
 import { isoToday } from '@/data/repository'
+import { useFormDraft } from '@/lib/useFormDraft'
 import type { Charge } from '@/lib/types'
+
+const emptyForm = () => ({
+  kind: 'additional' as Charge['kind'], title: '', startDate: isoToday(), endDate: '', reason: '',
+})
 
 export function ChargeDialog({ open, employeeId, onClose }: {
   open: boolean
@@ -14,13 +20,15 @@ export function ChargeDialog({ open, employeeId, onClose }: {
 }) {
   const toast = useToast()
   const { addCharge } = useEmployeeMutations()
-  const [form, setForm] = useState({
-    kind: 'additional' as Charge['kind'], title: '', startDate: isoToday(), endDate: '', reason: '',
-  })
+  const [form, setForm] = useState(emptyForm)
+
+  const draftKey = employeeId ? `charge:${employeeId}` : null
+  const draft = useFormDraft(draftKey, form, open, () => setForm(emptyForm()))
 
   useEffect(() => {
-    if (open) setForm({ kind: 'additional', title: '', startDate: isoToday(), endDate: '', reason: '' })
-  }, [open])
+    if (open) setForm(draft.take(emptyForm()) ?? emptyForm())
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, employeeId])
 
   const isActing = form.kind === 'acting'
 
@@ -36,6 +44,7 @@ export function ChargeDialog({ open, employeeId, onClose }: {
       },
     })
     toast(`${isActing ? 'Acting' : 'Additional'} charge added`)
+    draft.clear()
     onClose()
   }
 
@@ -47,12 +56,15 @@ export function ChargeDialog({ open, employeeId, onClose }: {
       description="Acting (temporary) or Additional (concurrently held) posting."
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!form.title.trim()}>Add charge</Button>
+          <Button onClick={onClose} disabled={addCharge.isPending}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={!form.title.trim() || addCharge.isPending}>
+            {addCharge.isPending ? 'Adding…' : 'Add charge'}
+          </Button>
         </>
       }
     >
       <div className="space-y-4">
+        {draft.restored && <DraftNotice onDiscard={draft.discard} />}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Charge type">
             <Select value={form.kind} onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value as Charge['kind'] }))}>

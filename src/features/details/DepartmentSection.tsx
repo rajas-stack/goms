@@ -1,6 +1,8 @@
-import { SALES_ROLES, parseWorks } from '@/features/nodes/department-meta'
+import { SALES_ROLES, parseWorks, serializeWorks } from '@/features/nodes/department-meta'
+import { WorksEditor } from '@/features/nodes/WorksEditor'
 import { SALES_TEAM } from '@/data/sales-team'
 import { resolveSalesChain } from '@/data/sales-hierarchy'
+import { useNodeMutations } from '@/lib/api'
 import type { Employee, HierNode } from '@/lib/types'
 import type { SalesTeamMember } from '@/data/sales-team'
 
@@ -10,9 +12,12 @@ const DERIVED_SALES_ROLES: { tier: 'rm' | 'gm' | 'salesHead'; label: string }[] 
   { tier: 'salesHead', label: 'Sales Head' },
 ]
 
-/** Read-only display of a department's head, sales ownership, and works.
- *  Rendered inside NodeDetails when the selected node is a department. */
+/** Department head and sales-ownership (read-only, shown only when set),
+ *  plus the opportunity/Works pipeline (always shown, with its own "Create
+ *  Opportunity" button). Rendered inside NodeDetails when the selected node
+ *  is a department. */
 export function DepartmentSection({ node, employees }: { node: HierNode; employees: Employee[] }) {
+  const { update } = useNodeMutations()
   const byId = new Map(employees.map((e) => [e.id, e]))
   const head = node.metadata.deptHead ? byId.get(node.metadata.deptHead) : undefined
 
@@ -30,8 +35,8 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
   ]
 
   const works = parseWorks(node.metadata.works)
-
-  if (!head && owners.length === 0 && works.length === 0) return null
+  const setWorks = (next: typeof works) =>
+    update.mutate({ id: node.id, patch: { metadata: { ...node.metadata, works: serializeWorks(next) } } })
 
   return (
     <>
@@ -63,34 +68,9 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
         </Block>
       )}
 
-      {works.length > 0 && (
-        <Block title={`Works · ${works.length}`}>
-          <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full min-w-[560px] text-sm">
-              <thead>
-                <tr className="text-left text-[11px] uppercase tracking-wide text-muted">
-                  <th className="pb-1.5 pr-3 font-medium">Work</th>
-                  <th className="pb-1.5 pr-3 font-medium">Component</th>
-                  <th className="pb-1.5 pr-3 font-medium">Qty</th>
-                  <th className="pb-1.5 pr-3 font-medium">Value</th>
-                  <th className="pb-1.5 font-medium">Vertical / OEM</th>
-                </tr>
-              </thead>
-              <tbody>
-                {works.map((w) => (
-                  <tr key={w.id} className="border-t border-line">
-                    <td className="py-1.5 pr-3 text-ink-900">{w.name || '—'}</td>
-                    <td className="py-1.5 pr-3 text-ink-700">{w.component || '—'}</td>
-                    <td className="py-1.5 pr-3 text-ink-700">{w.quantity || '—'}</td>
-                    <td className="py-1.5 pr-3 text-ink-700">{w.value || '—'}</td>
-                    <td className="py-1.5 text-ink-700">{w.vertical || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Block>
-      )}
+      <Block title={works.length > 0 ? `Works · ${works.length}` : 'Works'}>
+        <WorksEditor works={works} onChange={setWorks} draftKeyPrefix={`work:${node.id}`} />
+      </Block>
     </>
   )
 }

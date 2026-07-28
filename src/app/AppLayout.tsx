@@ -1,15 +1,16 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { Outlet, useNavigate } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
-import { Rail } from '@/components/Rail'
+import { AccountMappingRail } from '@/components/AccountMappingRail'
+import { SecondaryNav } from '@/components/SecondaryNav'
 import { TopBar } from '@/components/TopBar'
 import { MobileNavDrawer } from '@/components/MobileNavDrawer'
 import { CommandPalette } from '@/components/CommandPalette'
 import { GlobalFab } from '@/components/GlobalFab'
 import { ImportDialog } from '@/features/import/ImportDialog'
 import { ToastProvider } from '@/components/ui/Toast'
-import { isTypingTarget } from '@/lib/utils'
+import { cn, isTypingTarget } from '@/lib/utils'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import {
   clearWorkspaceSelection, closeFabOverlay, closeWorkspaceDialog, isFabOverlayOpen, isWorkspaceDialogOpen,
@@ -19,8 +20,12 @@ import {
 interface ShellCtx {
   openSearch: () => void
   openImport: () => void
+  /** Whether SecondaryNav (Map/Directory/Insights/Meetings) is showing —
+   *  derived straight from the route (anywhere but Home), so it can never
+   *  drift out of sync with a reload, deep link, or browser back/forward. */
+  navExpanded: boolean
 }
-const Ctx = createContext<ShellCtx>({ openSearch: () => {}, openImport: () => {} })
+const Ctx = createContext<ShellCtx>({ openSearch: () => {}, openImport: () => {}, navExpanded: false })
 export const useShell = () => useContext(Ctx)
 
 export function AppLayout() {
@@ -28,6 +33,8 @@ export function AppLayout() {
   const [importOpen, setImportOpen] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
+  const navExpanded = location.pathname !== '/'
   // `MobileDetailsSheet` only renders as an overlay below `lg` (it's
   // `lg:hidden`) — at `lg` and up the same selection drives the always-visible
   // desktop `<aside>`, which isn't an overlay to close on back, so the
@@ -137,12 +144,16 @@ export function AppLayout() {
 
   return (
     <ToastProvider>
-      <Ctx.Provider value={{ openSearch: () => setSearchOpen(true), openImport: () => setImportOpen(true) }}>
+      <Ctx.Provider value={{
+        openSearch: () => setSearchOpen(true), openImport: () => setImportOpen(true), navExpanded,
+      }}>
         <div className="flex h-screen overflow-hidden bg-paper">
-          <Rail />
+          <AccountMappingRail />
           <div className="flex min-w-0 flex-1 flex-col">
             <TopBar onOpenDrawer={() => setDrawerOpen(true)} />
-            <main className="min-h-0 flex-1 overflow-hidden pb-16 lg:pb-0">
+            {navExpanded && <SecondaryNav />}
+            {/* `pb-14` matches SecondaryNav's fixed mobile bar height. */}
+            <main className={cn('min-h-0 flex-1 overflow-hidden', navExpanded && 'pb-14 lg:pb-0')}>
               <Outlet />
             </main>
           </div>

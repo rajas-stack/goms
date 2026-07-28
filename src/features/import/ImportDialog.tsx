@@ -1,13 +1,17 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
+import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
 import { useNodeMutations, useStates } from '@/lib/api'
+import { useFormDraft } from '@/lib/useFormDraft'
 import { NODE_TYPE_MAP, childTypesOf } from '@/lib/node-types'
 import { useOrgRoots } from '@/lib/api'
+
+const EMPTY_IMPORT = { stateCode: null as number | null, parentId: '', raw: '', fileName: null as string | null }
 
 function parseNames(raw: string): string[] {
   return raw
@@ -51,6 +55,26 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
   const [fileName, setFileName] = useState<string | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // A single global draft slot — unlike the record-editing dialogs, an import
+  // in progress isn't "for" any particular record, so there's nothing to key
+  // it by except "the Import dialog". A pasted or uploaded batch can be
+  // sizeable, so losing it to a reload would be the most painful case here.
+  const draftForm = { stateCode, parentId, raw, fileName }
+  const draft = useFormDraft('import', draftForm, open, () => {
+    setStateCode(EMPTY_IMPORT.stateCode); setParentId(EMPTY_IMPORT.parentId)
+    setRaw(EMPTY_IMPORT.raw); setFileName(EMPTY_IMPORT.fileName)
+  })
+
+  useEffect(() => {
+    if (!open) return
+    const restored = draft.take(EMPTY_IMPORT)
+    if (restored) {
+      setStateCode(restored.stateCode); setParentId(restored.parentId)
+      setRaw(restored.raw); setFileName(restored.fileName)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+
   const rows = parseNames(raw)
   const parent = departments.find((d) => d.id === parentId)
   const childLabel = parent ? childTypesOf(parent.typeKey)[0]?.label ?? 'record' : 'record'
@@ -78,6 +102,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     const count = await importChildren.mutateAsync({ parentId, names: rows })
     toast(`Imported ${count} ${childLabel.toLowerCase()}${count === 1 ? '' : 's'}`)
     reset()
+    draft.clear()
     onClose()
   }
 
@@ -90,14 +115,15 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
       size="lg"
       footer={
         <>
-          <Button onClick={() => { reset(); onClose() }}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!parentId || rows.length === 0}>
-            Import {rows.length > 0 ? `${rows.length} rows` : ''}
+          <Button onClick={() => { reset(); onClose() }} disabled={importChildren.isPending}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={!parentId || rows.length === 0 || importChildren.isPending}>
+            {importChildren.isPending ? 'Importing…' : `Import ${rows.length > 0 ? `${rows.length} rows` : ''}`}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
+        {draft.restored && <DraftNotice onDiscard={draft.discard} />}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="State">
             <Select value={stateCode ?? ''} onChange={(e) => { setStateCode(e.target.value ? Number(e.target.value) : null); setParentId('') }}>
@@ -106,8 +132,8 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
             </Select>
           </Field>
           <Field label="Department to import into">
-            <Select value={parentId} onChange={(e) => setParentId(e.target.value)} disabled={!stateCode}>
-              <option value="">{stateCode ? 'Select a department…' : 'Choose a state first'}</option>
+            <Select value={parentId} onChange={(e) => setParentId(e.target.value)} disabled={stateCode === null}>
+              <option value="">{stateCode !== null ? 'Select a department…' : 'Choose a state first'}</option>
               {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </Select>
           </Field>
