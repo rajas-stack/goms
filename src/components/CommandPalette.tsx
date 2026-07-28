@@ -166,11 +166,13 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                     const isExpanded = expanded != null && resultKey(expanded) === resultKey(r)
                     return (
                       <div key={resultKey(r)}>
-                        <button
+                        <div
+                          role="button"
+                          tabIndex={-1}
                           onMouseEnter={() => setActive(i)}
                           onClick={() => go(r)}
                           className={cn(
-                            'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
+                            'flex w-full cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
                             i === active ? 'bg-ink-900/[0.06]' : 'hover:bg-ink-900/[0.03]',
                           )}
                         >
@@ -192,7 +194,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                             <Icon name="ChevronDown" size={13} className={cn('transition-transform', isExpanded && 'rotate-180')} />
                           </button>
                           <Icon name="CornerDownLeft" size={13} className={cn('text-muted', i === active ? 'opacity-100' : 'opacity-0')} />
-                        </button>
+                        </div>
                         {isExpanded && (
                           <div className="ml-11 mt-1 space-y-0.5 border-l border-line pl-3">
                             {relatedLoading ? (
