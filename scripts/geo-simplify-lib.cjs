@@ -100,16 +100,29 @@ function simplifyRing(ring) {
   return ring
 }
 
+/** Rounds a ring, but only if rounding doesn't collapse it into a degenerate
+ *  one (two points within ~1.1m of each other becoming numerically identical
+ *  once rounded, zeroing out an already-tiny ring's area). Falls back to the
+ *  unrounded (but still simplified) ring in that case — rounding is a pure
+ *  byte-shaving step, never something that should be allowed to break a ring
+ *  simplifyRing already confirmed was usable. */
+function roundRingSafely(ring) {
+  const rounded = roundCoords(ring, ROUND_DECIMALS)
+  return isUsableRing(rounded) ? rounded : ring
+}
+
 /** Processes one Polygon's ring list: drops holes (index >= 1) whose area
  *  is negligible relative to the exterior ring's own bounding box — dissolve
  *  artifact slivers, not real geography — then simplifies + rounds whatever
- *  rings survive. The exterior ring (index 0) is never dropped, only
- *  simplified: no landmass, island, or exclave can disappear this way. */
+ *  rings survive. The exterior ring (index 0) is never dropped by this
+ *  function, only simplified — see processGeometry for the one case where a
+ *  whole part can still disappear (a MultiPolygon part whose exterior was
+ *  *already* degenerate before this ever ran). */
 function processPolygonRings(rings) {
   const exterior = rings[0]
   const threshold = HOLE_AREA_FRACTION * bboxArea(exterior)
   const survivors = [exterior, ...rings.slice(1).filter((ring) => Math.abs(ringArea(ring)) >= threshold)]
-  return survivors.map((ring) => roundCoords(simplifyRing(ring), ROUND_DECIMALS))
+  return survivors.map((ring) => roundRingSafely(simplifyRing(ring)))
 }
 
 function processGeometry(geometry) {
@@ -117,7 +130,20 @@ function processGeometry(geometry) {
     return { type: 'Polygon', coordinates: processPolygonRings(geometry.coordinates) }
   }
   if (geometry.type === 'MultiPolygon') {
-    return { type: 'MultiPolygon', coordinates: geometry.coordinates.map(processPolygonRings) }
+    // A part whose exterior (ring 0) is already degenerate going in (e.g. a
+    // sub-meter sliver left over from an earlier processing pass, before
+    // roundRingSafely existed) can't be repaired — simplifyRing's own
+    // ring.length <= 4 early-return means such a ring passes straight
+    // through unchanged. Rather than keep an unusable, invisible part
+    // around, drop it: every part dropped this way already has zero visible
+    // area, and the feature's other parts (every one of these is a
+    // MultiPolygon with more than one part) are untouched.
+    const processed = geometry.coordinates.map(processPolygonRings)
+    const usable = processed.filter((rings) => isUsableRing(rings[0]))
+    // Never drop down to zero parts (would make the feature invisible) — in
+    // the pathological case where every part is degenerate, keep them all
+    // rather than erase the feature entirely.
+    return { type: 'MultiPolygon', coordinates: usable.length > 0 ? usable : processed }
   }
   return geometry
 }

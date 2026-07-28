@@ -3,7 +3,7 @@
 // node scripts/geo-simplify-lib.test.cjs
 const assert = require('assert')
 const {
-  bboxDiagonal, roundCoords, isUsableRing, simplifyRing, processPolygonRings,
+  bboxDiagonal, roundCoords, isUsableRing, simplifyRing, processPolygonRings, processGeometry,
 } = require('./geo-simplify-lib.cjs')
 
 // bboxDiagonal
@@ -56,6 +56,38 @@ const {
   const result = processPolygonRings([exterior, tinyHole, substantialHole])
   assert.strictEqual(result.length, 2, 'tiny hole should be pruned, substantial hole should survive')
   assert.strictEqual(result[0].length, exterior.length, 'exterior ring point count preserved (already at simplify floor)')
+}
+
+// processPolygonRings never lets rounding collapse an already-tiny exterior
+// ring into a degenerate one — regression test for a real bug found while
+// running this against production data: a sub-meter-scale MultiPolygon part
+// (a genuinely tiny disconnected sliver) had all 4 of its points round to
+// the same coordinate at 5-decimal precision, zeroing its area.
+{
+  const tinyExterior = [[0, 0], [0.000001, 0], [0.000001, 0.000001], [0, 0.000001], [0, 0]]
+  const result = processPolygonRings([tinyExterior])
+  assert.ok(isUsableRing(result[0]), 'tiny exterior ring must stay usable even though rounding it to 5 decimals would collapse it')
+}
+
+// processGeometry drops a MultiPolygon part whose exterior is already
+// degenerate going in (simulating a part that survived an earlier
+// processing pass before the rounding-safety fix existed), while leaving
+// the feature's other, healthy parts untouched
+{
+  const healthyPart = [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]]
+  const degenerateExteriorPart = [[[5, 5], [5, 5], [5, 5], [5, 5]]]
+  const result = processGeometry({ type: 'MultiPolygon', coordinates: [healthyPart, degenerateExteriorPart] })
+  assert.strictEqual(result.coordinates.length, 1, 'the degenerate part should be dropped')
+  assert.ok(isUsableRing(result.coordinates[0][0]), 'the surviving part must be the healthy one')
+}
+
+// processGeometry never drops down to zero parts, even if every part is
+// degenerate — an empty MultiPolygon would make the whole feature invisible,
+// which is worse than leaving the (already broken) data as-is
+{
+  const onlyDegeneratePart = [[[5, 5], [5, 5], [5, 5], [5, 5]]]
+  const result = processGeometry({ type: 'MultiPolygon', coordinates: [onlyDegeneratePart] })
+  assert.strictEqual(result.coordinates.length, 1, 'must not drop the only part even though it is degenerate')
 }
 
 console.log('geo-simplify-lib: all tests passed')
