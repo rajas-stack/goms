@@ -41,6 +41,9 @@ export interface TimelineEvent {
   employeeId: string
   type: TimelineEventType
   title: string
+  /** User-supplied name for the category, shown instead of the generic
+   *  "Custom" badge text. Only meaningful when `type === 'custom'`. */
+  customLabel?: string
   /** ISO date (YYYY-MM-DD) the event happened on. */
   date: string
   /** Optional time of day (HH:MM), alongside `date`. */
@@ -147,7 +150,28 @@ export interface DepartmentWork {
   vertical: string
   component: string
   quantity: string
-  value: string
+  /** ISO 4217 code the value/EMD amounts below are denominated in — see
+   *  `WORK_CURRENCIES`. */
+  currency: string
+  /** Raw number the user entered, scaled by `valueUnit`. */
+  valueAmount: string
+  /** Scale `valueAmount` is expressed in — see `WORK_VALUE_UNITS`. */
+  valueUnit: string
+  /** Whether the opportunity's budget figure is confirmed. `''` = not yet
+   *  answered, so existing works don't force a choice. */
+  budgetKnown: string
+  /** EMD amount stated in the tender, scaled by `emdUnit` — informational,
+   *  shown alongside the (still independently editable) value once the
+   *  budget isn't confirmed. */
+  emdAmount: string
+  emdUnit: string
+  /** EMD as a percentage of the (unconfirmed) contract value. */
+  emdPercent: string
+  /** AMNEX sales-team member's email who owns this specific opportunity — same
+   *  convention as `Employee.metadata.relationshipOwner` / a department's
+   *  `metadata.salesGeo`. Empty string when unset (including on works parsed
+   *  from data saved before this field existed). */
+  salesPersonEmail: string
 }
 
 /** One visiting card: a required front and an optional back, each an image or

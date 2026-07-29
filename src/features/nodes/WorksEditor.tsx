@@ -3,6 +3,8 @@ import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { WorkFormDialog } from './WorkFormDialog'
+import { formatWorkValue, workUnitLabel } from './department-meta'
+import { SALES_TEAM } from '@/data/sales-team'
 import type { DepartmentWork } from '@/lib/types'
 
 /** A department's opportunity pipeline, shown as collapsible cards (each
@@ -47,6 +49,7 @@ export function WorksEditor({ works, onChange, draftKeyPrefix }: {
         <div className="space-y-2">
           {works.map((w) => {
             const expanded = openId === w.id
+            const valueLabel = formatWorkValue(w)
             return (
               <div key={w.id} className="rounded-lg border border-line bg-white">
                 <div
@@ -60,7 +63,7 @@ export function WorksEditor({ works, onChange, draftKeyPrefix }: {
                     <Icon name="ChevronRight" size={14} />
                   </motion.span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{w.opportunityName || 'Untitled opportunity'}</span>
-                  {w.value && <span className="shrink-0 font-mono text-[12px] text-ink-700">{w.value}</span>}
+                  {valueLabel && <span className="shrink-0 font-mono text-[12px] text-ink-700">{valueLabel}</span>}
                   <button
                     type="button"
                     aria-label="Edit opportunity"
@@ -87,6 +90,15 @@ export function WorksEditor({ works, onChange, draftKeyPrefix }: {
                     <Detail label="Submission" value={w.submissionDate} />
                     <Detail label="Component" value={w.component} />
                     <Detail label="Quantity" value={w.quantity} />
+                    <Detail label="Sales person" value={SALES_TEAM.find((m) => m.email === w.salesPersonEmail)?.name ?? ''} />
+                    <Detail label="Value" value={valueLabel} />
+                    <Detail label="Budget confirmed" value={w.budgetKnown === 'yes' ? 'Yes' : w.budgetKnown === 'no' ? 'No' : ''} />
+                    {w.budgetKnown === 'no' && (
+                      <>
+                        <Detail label="EMD amount" value={w.emdAmount ? `${w.emdAmount} ${workUnitLabel(w.emdUnit)}` : ''} />
+                        <Detail label="EMD %" value={w.emdPercent ? `${w.emdPercent}%` : ''} />
+                      </>
+                    )}
                   </dl>
                 )}
               </div>
