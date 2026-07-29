@@ -224,7 +224,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
                   <DetailRow label="Introduced by" value={emp.introducedBy || '—'} />
                 </>
               )}
-              <DetailRow label="Preferred contact" value={emp.preferredComm ? COMM_LABEL[emp.preferredComm] : '—'} />
+              <DetailRow label="Preferred contact" value={emp.preferredComm.length ? emp.preferredComm.map((c) => COMM_LABEL[c]).join(', ') : '—'} />
               <DetailRow label="Important contact" value={emp.importantContact ? 'Yes' : 'No'} />
               <DetailRow label="Last interaction" value={emp.lastInteractionAt ?? '—'} />
               <DetailRow label="Next follow-up" value={emp.followUpDate ?? '—'} />

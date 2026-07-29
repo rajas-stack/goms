@@ -36,12 +36,12 @@ interface BuildAccumulator {
 }
 
 const EMPTY_EMPLOYEE_DEFAULTS = {
-  name: '', code: '', email: '', phone: '', photoUrl: null as string | null,
+  name: '', code: '', email: '', phone: '', company: '', address: '', website: '', photoUrl: null as string | null,
   connected: false as const,
   relationshipStatus: 'new' as const,
   relationshipQuality: 'neutral' as const,
   relationshipType: '', introducedBy: '', importantContact: false,
-  preferredComm: '' as const,
+  preferredComm: [],
   lastInteractionAt: null, followUpDate: null,
   charges: [], visitingCards: [], metadata: {},
   status: 'active' as const,
