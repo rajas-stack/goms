@@ -3,18 +3,19 @@ import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { AddableSelect } from '@/components/ui/AddableSelect'
+import { MultiSelectDropdown } from '@/components/ui/MultiSelectDropdown'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useFormDraft } from '@/lib/useFormDraft'
 import { uid } from '@/lib/utils'
 import {
-  WORK_COMPONENTS, WORK_CURRENCIES, WORK_VALUE_UNITS, WORK_VERTICALS, estimateBudgetFromEmd, workUnitLabel,
+  WORK_COMPONENT_GROUPS, WORK_CURRENCIES, WORK_VALUE_UNITS, WORK_VERTICALS, estimateBudgetFromEmd, workUnitLabel,
 } from './department-meta'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
 import type { DepartmentWork } from '@/lib/types'
 
 const EMPTY: Omit<DepartmentWork, 'id'> = {
   opportunityName: '', gemTenderId: '', publishDate: '', submissionDate: '',
-  vertical: WORK_VERTICALS[0], component: WORK_COMPONENTS[0], quantity: '',
+  vertical: WORK_VERTICALS[0], component: [], quantity: '',
   currency: WORK_CURRENCIES[0].code, valueAmount: '', valueUnit: 'lakh',
   budgetKnown: '', emdAmount: '', emdUnit: 'lakh', emdPercent: '',
   salesPersonEmail: '',
@@ -96,7 +97,7 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
             <Input type="date" value={form.submissionDate} onChange={(e) => set('submissionDate', e.target.value)} />
           </Field>
           <Field label="Component">
-            <AddableSelect value={form.component} onChange={(v) => set('component', v)} options={WORK_COMPONENTS} storageKey="work-component" />
+            <MultiSelectDropdown value={form.component} onChange={(v) => set('component', v)} groups={WORK_COMPONENT_GROUPS} storageKey="work-component" />
           </Field>
           <Field label="Quantity">
             <Input value={form.quantity} onChange={(e) => set('quantity', e.target.value)} inputMode="numeric" placeholder="0" />

@@ -88,7 +88,7 @@ export function WorksEditor({ works, onChange, draftKeyPrefix }: {
                     <Detail label="Vertical" value={w.vertical} />
                     <Detail label="Published" value={w.publishDate} />
                     <Detail label="Submission" value={w.submissionDate} />
-                    <Detail label="Component" value={w.component} />
+                    <Detail label="Component" value={w.component.join(', ')} />
                     <Detail label="Quantity" value={w.quantity} />
                     <Detail label="Sales person" value={SALES_TEAM.find((m) => m.email === w.salesPersonEmail)?.name ?? ''} />
                     <Detail label="Value" value={valueLabel} />
