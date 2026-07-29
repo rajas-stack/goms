@@ -1,5 +1,7 @@
 import { NODE_TYPE_MAP } from './node-types'
-import type { Employee, HierNode, SearchResult, TimelineEvent } from './types'
+import { parseWorks } from '@/features/nodes/department-meta'
+import { SALES_TEAM } from '@/data/sales-team'
+import type { DepartmentWork, Employee, HierNode, SearchResult, TimelineEvent } from './types'
 
 export interface SearchContext {
   nodeById: Map<string, HierNode>
@@ -193,8 +195,41 @@ export const geographyCategory: SearchCategoryDef = {
   },
 }
 
+function toWorkResult(work: DepartmentWork, node: HierNode): SearchResult {
+  return {
+    kind: 'other', category: 'work', id: work.id,
+    title: work.opportunityName || 'Untitled opportunity',
+    subtitle: `${node.name} · ${work.vertical}`,
+    code: null, domain: node.domain, stateCode: node.stateCode,
+    containerId: node.id,
+  }
+}
+
+export const worksCategory: SearchCategoryDef = {
+  key: 'work', label: 'Works', icon: 'Briefcase', color: 'blue', order: 5, cap: 5,
+  match(query, ctx) {
+    const out: SearchResult[] = []
+    for (const node of ctx.activeNodes) {
+      if (node.typeKey !== 'department' || !ctx.inScope(node.id)) continue
+      for (const w of parseWorks(node.metadata.works)) {
+        const salesName = SALES_TEAM.find((m) => m.email === w.salesPersonEmail)?.name ?? ''
+        const hay = `${w.opportunityName} ${w.gemTenderId} ${w.vertical} ${w.component.join(' ')} ${salesName}`.toLowerCase()
+        if (matches(hay, query)) out.push(toWorkResult(w, node))
+      }
+    }
+    return out
+  },
+  related(result, ctx) {
+    const node = result.containerId ? ctx.nodeById.get(result.containerId) : undefined
+    return node ? [toNodeResult(node, 'department')] : []
+  },
+  path: (result) => (result.containerId && result.stateCode != null
+    ? `/state/${result.stateCode}?sel=${result.containerId}&kind=node`
+    : '/'),
+}
+
 export const SEARCH_CATEGORIES: SearchCategoryDef[] = [
-  departmentCategory, employeeCategory, officeCategory, meetingCategory, geographyCategory,
+  departmentCategory, employeeCategory, officeCategory, meetingCategory, geographyCategory, worksCategory,
 ]
 export const SEARCH_CATEGORY_MAP: Record<string, SearchCategoryDef> =
   Object.fromEntries(SEARCH_CATEGORIES.map((c) => [c.key, c]))
