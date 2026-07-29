@@ -148,7 +148,10 @@ export interface DepartmentWork {
   /** ISO date (YYYY-MM-DD) the bid is due. */
   submissionDate: string
   vertical: string
-  component: string
+  /** One or more component/product-line tags. A work saved before this field
+   *  became a multiselect may have a legacy single string here on disk —
+   *  `parseWorks` (department-meta.ts) migrates it to a one-item array on read. */
+  component: string[]
   quantity: string
   /** ISO 4217 code the value/EMD amounts below are denominated in — see
    *  `WORK_CURRENCIES`. */
