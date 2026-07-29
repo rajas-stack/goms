@@ -1,6 +1,12 @@
 image: node:20
 
 variables:
+  # Bumped from 4096 after the district/taluka/village-shapes geometry
+  # simplification (see docs/superpowers/specs/2026-07-28-load-time-optimization-design.md):
+  # the build OOM'd at 4096 even before that change, from Rollup's module
+  # graph holding one chunk per lazy-loaded geo asset file (~5,800 files),
+  # not from JSON payload size. TODO once this branch is merged: re-test
+  # with 4096 on main — if it now builds reliably, lower this back down.
   NODE_OPTIONS: "--max-old-space-size=8192"
 
 pages:
