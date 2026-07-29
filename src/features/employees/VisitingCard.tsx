@@ -118,6 +118,9 @@ export function VisitingCard({ employeeId }: { employeeId: string }) {
       if (found.phone) patch.phone = found.phone
       if (found.name && !emp!.name) patch.name = found.name
       if (found.designation && !emp!.designation) patch.designation = found.designation
+      if (found.company && !emp!.company) patch.company = found.company
+      if (found.address && !emp!.address) patch.address = found.address
+      if (found.website && !emp!.website) patch.website = found.website
       const keys = Object.keys(patch)
       if (keys.length === 0) {
         toast('No contact details found on the card')
@@ -147,6 +150,8 @@ export function VisitingCard({ employeeId }: { employeeId: string }) {
   return (
     <div className="space-y-4">
       <input ref={fileRef} type="file" accept={ACCEPT} onChange={onFile} className="hidden" />
+
+      <p className="text-[12px] text-muted">For best results, upload a clear, well-lit photo of the card.</p>
 
       {cards.length === 0 && (
         <p className="text-sm text-muted">No visiting cards yet. Upload the front (and optionally the back) of a card.</p>
