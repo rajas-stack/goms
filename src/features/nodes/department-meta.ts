@@ -81,6 +81,23 @@ export function workUnitLabel(key: string): string {
   return WORK_VALUE_UNITS.find((u) => u.key === key)?.label ?? key
 }
 
+/** Each unit's size relative to "thousand" (1 Lakh = 100 Thousand, 1 Cr = 100
+ *  Lakh = 10,000 Thousand) — the Indian numbering scale `WORK_VALUE_UNITS`
+ *  uses. */
+const WORK_VALUE_UNIT_FACTORS: Record<string, number> = { thousand: 1, lakh: 100, cr: 10000 }
+
+/** Converts a value/EMD amount from one `WORK_VALUE_UNITS` scale to another,
+ *  preserving the actual monetary figure — e.g. "50" Lakh → "0.5" Cr — so
+ *  switching the unit dropdown never silently changes what was entered.
+ *  Blank/non-numeric input passes through unchanged. */
+export function convertWorkAmount(amount: string, fromUnit: string, toUnit: string): string {
+  const n = Number(amount)
+  if (!amount.trim() || !Number.isFinite(n)) return amount
+  const fromFactor = WORK_VALUE_UNIT_FACTORS[fromUnit] ?? 1
+  const toFactor = WORK_VALUE_UNIT_FACTORS[toUnit] ?? 1
+  return String(Number((n * (fromFactor / toFactor)).toFixed(6)))
+}
+
 /** Display string for a work's value, e.g. "INR 50 Lakh" — empty until an
  *  amount has been entered. */
 export function formatWorkValue(w: Pick<DepartmentWork, 'currency' | 'valueAmount' | 'valueUnit'>): string {

@@ -8,7 +8,8 @@ import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useFormDraft } from '@/lib/useFormDraft'
 import { uid } from '@/lib/utils'
 import {
-  WORK_COMPONENT_GROUPS, WORK_CURRENCIES, WORK_VALUE_UNITS, WORK_VERTICALS, estimateBudgetRangeFromEmd, workUnitLabel,
+  WORK_COMPONENT_GROUPS, WORK_CURRENCIES, WORK_VALUE_UNITS, WORK_VERTICALS,
+  convertWorkAmount, estimateBudgetRangeFromEmd, workUnitLabel,
 } from './department-meta'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
 import type { DepartmentWork } from '@/lib/types'
@@ -144,7 +145,10 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
                 />
                 <Select
                   value={form.valueUnit}
-                  onChange={(e) => set('valueUnit', e.target.value)}
+                  onChange={(e) => {
+                    const nextUnit = e.target.value
+                    setForm((f) => ({ ...f, valueUnit: nextUnit, valueAmount: convertWorkAmount(f.valueAmount, f.valueUnit, nextUnit) }))
+                  }}
                   disabled={form.budgetKnown === 'no'}
                   className="w-28 shrink-0 disabled:cursor-not-allowed disabled:bg-panel disabled:text-muted"
                 >
@@ -164,7 +168,14 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
                     placeholder="0"
                     className="flex-1"
                   />
-                  <Select value={form.emdUnit} onChange={(e) => set('emdUnit', e.target.value)} className="w-28 shrink-0">
+                  <Select
+                    value={form.emdUnit}
+                    onChange={(e) => {
+                      const nextUnit = e.target.value
+                      setForm((f) => ({ ...f, emdUnit: nextUnit, emdAmount: convertWorkAmount(f.emdAmount, f.emdUnit, nextUnit) }))
+                    }}
+                    className="w-28 shrink-0"
+                  >
                     {WORK_VALUE_UNITS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
                   </Select>
                 </div>
