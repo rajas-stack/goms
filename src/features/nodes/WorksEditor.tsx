@@ -3,7 +3,7 @@ import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { WorkFormDialog } from './WorkFormDialog'
-import { formatWorkValue, workUnitLabel } from './department-meta'
+import { formatBudgetRange, formatWorkValue, workUnitLabel } from './department-meta'
 import { SALES_TEAM } from '@/data/sales-team'
 import type { DepartmentWork } from '@/lib/types'
 
@@ -96,7 +96,7 @@ export function WorksEditor({ works, onChange, draftKeyPrefix }: {
                     {w.budgetKnown === 'no' && (
                       <>
                         <Detail label="EMD amount" value={w.emdAmount ? `${w.emdAmount} ${workUnitLabel(w.emdUnit)}` : ''} />
-                        <Detail label="EMD %" value={w.emdPercent ? `${w.emdPercent}%` : ''} />
+                        <Detail label="Budget (derived)" value={formatBudgetRange(w)} />
                       </>
                     )}
                   </dl>

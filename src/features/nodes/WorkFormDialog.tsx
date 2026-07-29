@@ -8,7 +8,7 @@ import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useFormDraft } from '@/lib/useFormDraft'
 import { uid } from '@/lib/utils'
 import {
-  WORK_COMPONENT_GROUPS, WORK_CURRENCIES, WORK_VALUE_UNITS, WORK_VERTICALS, estimateBudgetFromEmd, workUnitLabel,
+  WORK_COMPONENT_GROUPS, WORK_CURRENCIES, WORK_VALUE_UNITS, WORK_VERTICALS, estimateBudgetRangeFromEmd, workUnitLabel,
 } from './department-meta'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
 import type { DepartmentWork } from '@/lib/types'
@@ -17,7 +17,7 @@ const EMPTY: Omit<DepartmentWork, 'id'> = {
   opportunityName: '', gemTenderId: '', publishDate: '', submissionDate: '',
   vertical: WORK_VERTICALS[0], component: [], quantity: '',
   currency: WORK_CURRENCIES[0].code, valueAmount: '', valueUnit: 'lakh',
-  budgetKnown: '', emdAmount: '', emdUnit: 'lakh', emdPercent: '',
+  budgetKnown: '', emdAmount: '', emdUnit: 'lakh',
   salesPersonEmail: '',
 }
 
@@ -124,9 +124,14 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
             </Field>
           </div>
           <div className="sm:col-span-2">
-            <Field label="Value">
+            <Field label="Value" hint={form.budgetKnown === 'no' ? "Disabled while the budget isn't confirmed — use the EMD fields below instead." : undefined}>
               <div className="flex gap-2">
-                <Select value={form.currency} onChange={(e) => set('currency', e.target.value)} className="w-32 shrink-0">
+                <Select
+                  value={form.currency}
+                  onChange={(e) => set('currency', e.target.value)}
+                  disabled={form.budgetKnown === 'no'}
+                  className="w-32 shrink-0 disabled:cursor-not-allowed disabled:bg-panel disabled:text-muted"
+                >
                   {WORK_CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.label}</option>)}
                 </Select>
                 <Input
@@ -134,9 +139,15 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
                   onChange={(e) => set('valueAmount', e.target.value)}
                   inputMode="decimal"
                   placeholder="0"
-                  className="flex-1"
+                  disabled={form.budgetKnown === 'no'}
+                  className="flex-1 disabled:cursor-not-allowed disabled:bg-panel disabled:text-muted"
                 />
-                <Select value={form.valueUnit} onChange={(e) => set('valueUnit', e.target.value)} className="w-28 shrink-0">
+                <Select
+                  value={form.valueUnit}
+                  onChange={(e) => set('valueUnit', e.target.value)}
+                  disabled={form.budgetKnown === 'no'}
+                  className="w-28 shrink-0 disabled:cursor-not-allowed disabled:bg-panel disabled:text-muted"
+                >
                   {WORK_VALUE_UNITS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
                 </Select>
               </div>
@@ -144,7 +155,7 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
           </div>
           {form.budgetKnown === 'no' && (
             <div className="sm:col-span-2 grid grid-cols-1 gap-4 rounded-card border border-line bg-panel/40 p-4 sm:grid-cols-2">
-              <Field label="EMD amount" hint="Informational only — doesn't change the value above">
+              <Field label="EMD amount" hint="Used to derive an estimated budget range below">
                 <div className="flex gap-2">
                   <Input
                     value={form.emdAmount}
@@ -158,20 +169,14 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
                   </Select>
                 </div>
               </Field>
-              <Field label="EMD %">
-                <Input
-                  value={form.emdPercent}
-                  onChange={(e) => set('emdPercent', e.target.value)}
-                  inputMode="decimal"
-                  placeholder="e.g. 2"
-                />
-              </Field>
               {(() => {
-                const estimate = estimateBudgetFromEmd(form.emdAmount, form.emdPercent)
-                return estimate !== null && (
-                  <p className="text-xs text-muted sm:col-span-2">
-                    Estimated budget: ≈ {Number(estimate.toFixed(2))} {workUnitLabel(form.emdUnit)}
-                  </p>
+                const range = estimateBudgetRangeFromEmd(form.emdAmount)
+                return range !== null && (
+                  <Field label="Budget (derived)">
+                    <p className="flex h-10 items-center rounded-lg border border-line bg-panel px-3 text-sm text-ink-700">
+                      ≈ {Number(range.low.toFixed(2))}–{Number(range.high.toFixed(2))} {workUnitLabel(form.emdUnit)}
+                    </p>
+                  </Field>
                 )
               })()}
             </div>

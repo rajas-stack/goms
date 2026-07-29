@@ -58,15 +58,23 @@ export const WORK_VALUE_UNITS: { key: string; label: string }[] = [
   { key: 'thousand', label: 'Thousand' },
 ]
 
-/** Read-only budget estimate from EMD info — amount × (100 ÷ percent), in
- *  the same unit the EMD amount was entered in. `null` until both fields
- *  parse as positive numbers, so the caller can hide the estimate rather
- *  than show a bogus value. */
-export function estimateBudgetFromEmd(emdAmount: string, emdPercent: string): number | null {
+/** Conservative EMD-as-percent-of-contract-value band seen on GEM/government
+ *  tenders — used to derive a budget range from just the EMD amount, since
+ *  the exact percent isn't asked for anymore. A lower assumed percent implies
+ *  a larger contract value, so the low/high percent bounds invert into
+ *  high/low budget bounds. */
+const EMD_PERCENT_RANGE = { low: 2, high: 5 }
+
+/** Read-only derived budget range from an EMD amount, in the same unit the
+ *  EMD was entered in. `null` until the amount parses as a positive number,
+ *  so the caller can hide the estimate rather than show a bogus range. */
+export function estimateBudgetRangeFromEmd(emdAmount: string): { low: number; high: number } | null {
   const amount = Number(emdAmount)
-  const percent = Number(emdPercent)
-  if (!(amount > 0) || !(percent > 0)) return null
-  return amount * (100 / percent)
+  if (!(amount > 0)) return null
+  return {
+    low: amount * (100 / EMD_PERCENT_RANGE.high),
+    high: amount * (100 / EMD_PERCENT_RANGE.low),
+  }
 }
 
 export function workUnitLabel(key: string): string {
@@ -78,6 +86,15 @@ export function workUnitLabel(key: string): string {
 export function formatWorkValue(w: Pick<DepartmentWork, 'currency' | 'valueAmount' | 'valueUnit'>): string {
   if (!w.valueAmount) return ''
   return `${w.currency} ${w.valueAmount} ${workUnitLabel(w.valueUnit)}`
+}
+
+/** Display string for the EMD-derived budget range, e.g. "≈ 40–100 Lakh" —
+ *  empty until the EMD amount parses as a positive number. */
+export function formatBudgetRange(w: Pick<DepartmentWork, 'emdAmount' | 'emdUnit'>): string {
+  const range = estimateBudgetRangeFromEmd(w.emdAmount)
+  if (!range) return ''
+  const unit = workUnitLabel(w.emdUnit)
+  return `≈ ${Number(range.low.toFixed(2))}–${Number(range.high.toFixed(2))} ${unit}`
 }
 
 const ABBREVIATION_STOPWORDS = new Set(['of', 'and', 'the', 'for', 'in', 'to', '&'])

@@ -163,13 +163,11 @@ export interface DepartmentWork {
   /** Whether the opportunity's budget figure is confirmed. `''` = not yet
    *  answered, so existing works don't force a choice. */
   budgetKnown: string
-  /** EMD amount stated in the tender, scaled by `emdUnit` — informational,
-   *  shown alongside the (still independently editable) value once the
-   *  budget isn't confirmed. */
+  /** EMD amount stated in the tender, scaled by `emdUnit` — the value field
+   *  is disabled once the budget isn't confirmed, and this is used instead to
+   *  derive a budget range (see `estimateBudgetRangeFromEmd`). */
   emdAmount: string
   emdUnit: string
-  /** EMD as a percentage of the (unconfirmed) contract value. */
-  emdPercent: string
   /** AMNEX sales-team member's email who owns this specific opportunity — same
    *  convention as `Employee.metadata.relationshipOwner` / a department's
    *  `metadata.salesGeo`. Empty string when unset (including on works parsed
