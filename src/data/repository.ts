@@ -1,6 +1,6 @@
 import type {
   Charge, Domain, Employee, HierNode, PreferredComm, RelationshipQuality, RelationshipStatus,
-  SearchResult, Status, TimelineEvent, TimelineEventType, Transfer,
+  SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
 import { uid } from '@/lib/utils'
 import { NODE_TYPE_MAP } from '@/lib/node-types'
@@ -71,6 +71,9 @@ export interface CreateEmployeeInput {
   followUpDate?: string | null
   notes?: string
   charges?: Charge[]
+  /** A card scanned during creation, if any — attached from the start rather
+   *  than requiring a separate post-create upload step. */
+  visitingCards?: VisitingCardItem[]
   metadata?: Record<string, string>
 }
 
@@ -78,6 +81,7 @@ export interface AddTimelineInput {
   employeeId: string
   type: TimelineEventType
   title: string
+  customLabel?: string
   date: string
   time?: string
   note?: string
@@ -485,7 +489,7 @@ class InMemoryRepository implements Repository {
       followUpDate: input.followUpDate ?? null,
       notes: input.notes ?? '',
       charges: input.charges ?? [],
-      visitingCards: [],
+      visitingCards: input.visitingCards ?? [],
       metadata: input.metadata ?? {},
       status: 'active',
     }
@@ -552,7 +556,8 @@ class InMemoryRepository implements Repository {
   async addTimelineEvent(input: AddTimelineInput) {
     const evt: TimelineEvent = {
       id: uid('evt'), employeeId: input.employeeId, type: input.type,
-      title: input.title, date: input.date, time: input.time || undefined,
+      title: input.title, customLabel: input.type === 'custom' ? input.customLabel?.trim() || undefined : undefined,
+      date: input.date, time: input.time || undefined,
       note: input.note ?? '', source: 'manual', attendees: input.attendees,
     }
     this.data.timeline.push(evt)
