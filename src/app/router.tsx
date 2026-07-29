@@ -1,12 +1,14 @@
+import { lazy } from 'react'
 import { createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './AppLayout'
-import { Home } from './routes/Home'
-import { Landing } from './routes/Landing'
-import { StateWorkspace } from './routes/StateWorkspace'
-import { Directory } from './routes/Directory'
-import { RelationshipAnalytics } from './routes/RelationshipAnalytics'
-import { Meetings } from './routes/Meetings'
-import { NotFound } from './routes/NotFound'
+
+const Home = lazy(() => import('./routes/Home').then((m) => ({ default: m.Home })))
+const Landing = lazy(() => import('./routes/Landing').then((m) => ({ default: m.Landing })))
+const StateWorkspace = lazy(() => import('./routes/StateWorkspace').then((m) => ({ default: m.StateWorkspace })))
+const Directory = lazy(() => import('./routes/Directory').then((m) => ({ default: m.Directory })))
+const RelationshipAnalytics = lazy(() => import('./routes/RelationshipAnalytics').then((m) => ({ default: m.RelationshipAnalytics })))
+const Meetings = lazy(() => import('./routes/Meetings').then((m) => ({ default: m.Meetings })))
+const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
 export const router = createBrowserRouter([
   {

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, Suspense, useContext, useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
@@ -8,6 +8,7 @@ import { TopBar } from '@/components/TopBar'
 import { MobileNavDrawer } from '@/components/MobileNavDrawer'
 import { CommandPalette } from '@/components/CommandPalette'
 import { GlobalFab } from '@/components/GlobalFab'
+import { RouteFallback } from '@/components/RouteFallback'
 import { ImportDialog } from '@/features/import/ImportDialog'
 import { ToastProvider } from '@/components/ui/Toast'
 import { cn, isTypingTarget } from '@/lib/utils'
@@ -154,7 +155,9 @@ export function AppLayout() {
             {navExpanded && <SecondaryNav />}
             {/* `pb-14` matches SecondaryNav's fixed mobile bar height. */}
             <main className={cn('min-h-0 flex-1 overflow-hidden', navExpanded && 'pb-14 lg:pb-0')}>
-              <Outlet />
+              <Suspense fallback={<RouteFallback />}>
+                <Outlet />
+              </Suspense>
             </main>
           </div>
         </div>
