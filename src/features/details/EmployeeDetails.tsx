@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { Dialog } from '@/components/ui/Dialog'
 import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
+import { FitText } from '@/components/ui/FitText'
 import {
   Badge, ChargeBadge, ConnectionBadge, ImportantBadge, QualityBadge, StatusBadge, VacantBadge,
 } from '@/components/ui/Badge'
@@ -18,9 +19,11 @@ import { TimelineEventDialog } from '@/features/employees/TimelineEventDialog'
 import { TransferDialog } from '@/features/employees/TransferDialog'
 import { ChargeDialog } from '@/features/employees/ChargeDialog'
 import { EmployeeFormDialog } from '@/features/employees/EmployeeFormDialog'
+import { MarkDuplicateDialog } from '@/features/employees/MarkDuplicateDialog'
 import { AddReporteeMenu } from '@/features/employees/AddReporteeMenu'
+import { abbreviateDepartmentName } from '@/features/nodes/department-meta'
 import { employeeAccent } from '@/lib/node-colors'
-import { TIMELINE_META } from '@/lib/timeline-meta'
+import { MEETING_LOG_TYPES, TIMELINE_META, timelineEventLabel } from '@/lib/timeline-meta'
 import { cn, initials } from '@/lib/utils'
 import { SALES_TEAM } from '@/data/sales-team'
 import type { Charge, Employee, TimelineEvent, Transfer } from '@/lib/types'
@@ -32,7 +35,7 @@ const COMM_LABEL: Record<string, string> = {
 export function EmployeeDetails({ employeeId }: { employeeId: string }) {
   const ws = useWorkspace()
   const toast = useToast()
-  const { remove, removeCharge, setManager } = useEmployeeMutations()
+  const { remove, removeCharge, setManager, setTimelineEventAttended, update } = useEmployeeMutations()
   const { data: emp } = useEmployee(employeeId)
   const { data: chain = [] } = useReportingChain(employeeId)
   const { data: reports = [] } = useDirectReports(employeeId)
@@ -43,12 +46,23 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
   const [cardOpen, setCardOpen] = useState(false)
   const [active, setActive] = useState<'none' | 'event' | 'transfer' | 'charge'>('none')
   const [reporteeMode, setReporteeMode] = useState<'junior' | 'manager' | null>(null)
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
+  // Resolves to `undefined` when unset (query disabled) or when the flagged-to
+  // employee no longer exists (deleted) — either way the banner below just
+  // doesn't render, no error state.
+  const { data: duplicateOfEmp } = useEmployee(emp?.metadata.duplicateOf || null)
 
   if (!emp) return null
   const vacant = emp.vacant
   const accent = employeeAccent(emp)
   const department = trail.find((t) => t.typeKey === 'department')
   const relationshipOwner = SALES_TEAM.find((m) => m.email === emp.metadata.relationshipOwner)
+
+  async function unflagDuplicate() {
+    const { duplicateOf: _dropped, ...rest } = emp!.metadata
+    await update.mutateAsync({ id: emp!.id, patch: { metadata: rest } })
+    toast('Unflagged')
+  }
 
   return (
     <motion.div
@@ -68,6 +82,21 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           ))}
         </nav>
 
+        {duplicateOfEmp && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-600/40 bg-amber-100/40 px-3 py-2 text-[13px] text-ink-800">
+            <Icon name="Copy" size={14} className="shrink-0 text-amber-600" />
+            <span className="min-w-0 flex-1">
+              Possible duplicate of{' '}
+              <button onClick={() => ws.select('employee', duplicateOfEmp.id)} className="font-semibold hover:underline">
+                {duplicateOfEmp.name}
+              </button>
+            </span>
+            <button onClick={unflagDuplicate} className="shrink-0 text-[12px] font-medium text-teal-600 hover:underline">
+              Unflag
+            </button>
+          </div>
+        )}
+
         <div className="flex items-start gap-4">
           {vacant ? (
             <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
@@ -81,7 +110,11 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
             </span>
           )}
           <div className="min-w-0 flex-1">
-            <span className="eyebrow">{department ? (department.metadata.shortName || department.name) : (orgNode?.name ?? 'Unassigned')}</span>
+            <span className="eyebrow">
+              {department
+                ? (department.metadata.shortName || abbreviateDepartmentName(`Department of ${department.name}`))
+                : (orgNode?.name ?? 'Unassigned')}
+            </span>
             <h2 className="mt-0.5 break-words font-display text-2xl font-bold text-ink-900">
               {vacant ? emp.designation || 'Vacant position' : emp.name}
             </h2>
@@ -112,7 +145,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           )}
           <Button size="sm" onClick={() => ws.editEmployee(emp)}><Icon name="Pencil" size={14} /> Edit</Button>
           {!vacant && (
-            <Button size="sm" onClick={() => setActive('event')}><Icon name="Calendar" size={14} /> Add entry</Button>
+            <Button size="sm" onClick={() => setActive('event')}><Icon name="Calendar" size={14} /> Add meeting</Button>
           )}
 
           {/* Less-frequent / destructive actions tucked away so they can't be hit by accident. */}
@@ -145,6 +178,9 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
                     <MenuItem icon={<Icon name="IdCard" size={15} />} onClick={() => { close(); setCardOpen(true) }}>
                       Visiting card
                     </MenuItem>
+                    <MenuItem icon={<Icon name="Copy" size={15} />} onClick={() => { close(); setDuplicateDialogOpen(true) }}>
+                      Mark as duplicate of…
+                    </MenuItem>
                     <MenuDivider />
                   </>
                 )}
@@ -169,7 +205,13 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
       <Dialog open={cardOpen} onClose={() => setCardOpen(false)} title="Visiting card" description={emp.name}>
         <VisitingCard employeeId={emp.id} />
       </Dialog>
-      <TimelineEventDialog open={active === 'event'} employeeId={emp.id} onClose={() => setActive('none')} />
+      <MarkDuplicateDialog open={duplicateDialogOpen} employee={emp} onClose={() => setDuplicateDialogOpen(false)} />
+      <TimelineEventDialog
+        open={active === 'event'}
+        employeeId={emp.id}
+        typeFilter={MEETING_LOG_TYPES}
+        onClose={() => setActive('none')}
+      />
       <TransferDialog open={active === 'transfer'} employee={emp} onClose={() => setActive('none')} />
       <ChargeDialog open={active === 'charge'} employeeId={emp.id} onClose={() => setActive('none')} />
       <EmployeeFormDialog
@@ -195,19 +237,34 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto scrollbar-thin px-6 py-5">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
           {!vacant && (
-            <DetailRow label="Email">
+            <DetailRow label="Email" icon="Mail">
               {emp.email ? <a href={`mailto:${emp.email}`} className="hover:underline">{emp.email}</a> : '—'}
             </DetailRow>
           )}
           {!vacant && (
-            <DetailRow label="Phone">
+            <DetailRow label="Phone" icon="Phone">
               {emp.phone ? <a href={`tel:${emp.phone}`} className="hover:underline">{emp.phone}</a> : '—'}
             </DetailRow>
           )}
-          <DetailRow label="Posting" value={orgNode?.name ?? '—'} />
+          {!vacant && emp.company && <DetailRow label="Company" value={emp.company} icon="Building2" />}
+          {!vacant && emp.website && (
+            <DetailRow label="Website" icon="Globe">
+              <a
+                href={emp.website.startsWith('http') ? emp.website : `https://${emp.website}`}
+                target="_blank"
+                rel="noreferrer"
+                className="hover:underline"
+              >
+                {emp.website}
+              </a>
+            </DetailRow>
+          )}
+          {!vacant && emp.address && <DetailRow label="Address" value={emp.address} icon="MapPin" />}
+          <DetailRow label="Posting" value={orgNode?.name ?? '—'} icon="Landmark" />
           <DetailRow
             label="Relationship Owner / AMNEX Representative"
             value={relationshipOwner ? `${relationshipOwner.name} · ${relationshipOwner.designation}` : '—'}
+            icon="UserCheck"
           />
         </dl>
 
@@ -220,14 +277,18 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
                     <QualityBadge quality={emp.relationshipQuality} />
                   </DetailRow>
                   <DetailRow label="Status"><StatusBadge status={emp.relationshipStatus} /></DetailRow>
-                  <DetailRow label="Type" value={emp.relationshipType || '—'} />
-                  <DetailRow label="Introduced by" value={emp.introducedBy || '—'} />
+                  <DetailRow label="Type" value={emp.relationshipType || '—'} icon="Type" />
+                  <DetailRow label="Introduced by" value={emp.introducedBy || '—'} icon="UserPlus" />
                 </>
               )}
-              <DetailRow label="Preferred contact" value={emp.preferredComm.length ? emp.preferredComm.map((c) => COMM_LABEL[c]).join(', ') : '—'} />
-              <DetailRow label="Important contact" value={emp.importantContact ? 'Yes' : 'No'} />
-              <DetailRow label="Last interaction" value={emp.lastInteractionAt ?? '—'} />
-              <DetailRow label="Next follow-up" value={emp.followUpDate ?? '—'} />
+              <DetailRow
+                label="Preferred contact"
+                value={emp.preferredComm.length ? emp.preferredComm.map((c) => COMM_LABEL[c]).join(', ') : '—'}
+                icon="MessageCircle"
+              />
+              <DetailRow label="Important contact" value={emp.importantContact ? 'Yes' : 'No'} icon="Star" />
+              <DetailRow label="Last interaction" value={emp.lastInteractionAt ?? '—'} icon="Clock" />
+              <DetailRow label="Next follow-up" value={emp.followUpDate ?? '—'} icon="Calendar" />
             </dl>
             {emp.notes && (
               <p className="mt-3 whitespace-pre-wrap break-words rounded-lg border border-line bg-white px-3 py-2.5 text-sm text-ink-800">{emp.notes}</p>
@@ -261,9 +322,12 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
               <h3 className="flex items-center gap-2 text-[13px] font-semibold text-ink-800">
                 <Icon name="Clock" size={14} className="text-muted" /> Timeline · {timeline.length}
               </h3>
-              <button onClick={() => setActive('event')} className="text-[12px] font-medium text-teal-600 hover:underline">+ Add entry</button>
+              <button onClick={() => setActive('event')} className="text-[12px] font-medium text-teal-600 hover:underline">+ Add meeting</button>
             </div>
-            <TimelineList events={timeline} />
+            <TimelineList
+              events={timeline}
+              onSetAttended={(id, attended) => setTimelineEventAttended.mutate({ id, attended })}
+            />
           </section>
         )}
 
@@ -318,11 +382,18 @@ function Section({ title, icon, children }: { title: string; icon?: string; chil
   )
 }
 
-function DetailRow({ label, value, children }: { label: string; value?: string; children?: React.ReactNode }) {
+function DetailRow({ label, value, icon, children }: {
+  label: string; value?: string; icon?: string; children?: React.ReactNode
+}) {
   return (
-    <div>
-      <dt className="text-[11px] uppercase tracking-wide text-muted">{label}</dt>
-      <dd className="mt-0.5 break-words text-sm text-ink-900">{children ?? value}</dd>
+    <div className="min-w-0">
+      <dt className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted">
+        {icon && <Icon name={icon} size={12} className="shrink-0" />}
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-sm text-ink-900">
+        <FitText>{children ?? value}</FitText>
+      </dd>
     </div>
   )
 }
@@ -375,7 +446,12 @@ function TransferRow({ transfer }: { transfer: Transfer }) {
   )
 }
 
-function TimelineList({ events }: { events: TimelineEvent[] }) {
+const ATTENDANCE_TYPES = new Set(['meeting', 'inPerson'])
+
+function TimelineList({ events, onSetAttended }: {
+  events: TimelineEvent[]
+  onSetAttended: (id: string, attended: boolean | undefined) => void
+}) {
   if (events.length === 0) {
     return <p className="text-sm text-muted">Nothing logged yet. Add meetings, calls, or notes to build a history.</p>
   }
@@ -385,6 +461,7 @@ function TimelineList({ events }: { events: TimelineEvent[] }) {
       <div className="space-y-3">
         {events.map((e) => {
           const meta = TIMELINE_META[e.type]
+          const canMarkAttendance = e.source === 'manual' && ATTENDANCE_TYPES.has(e.type)
           return (
             <div key={e.id} className="relative flex gap-3">
               <span className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-white">
@@ -393,7 +470,7 @@ function TimelineList({ events }: { events: TimelineEvent[] }) {
               <div className="min-w-0 flex-1 pt-0.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[13px] font-medium text-ink-900">{e.title}</span>
-                  <Badge tone={meta.tone}>{meta.label}</Badge>
+                  {e.type !== 'joined' && <Badge tone={meta.tone}>{timelineEventLabel(e)}</Badge>}
                   {e.source === 'system' && <span className="text-[10px] uppercase tracking-wide text-muted">auto</span>}
                 </div>
                 <div className="text-[11px] text-muted">{e.date}{e.time && ` · ${e.time}`}</div>
@@ -401,12 +478,51 @@ function TimelineList({ events }: { events: TimelineEvent[] }) {
                 {e.attendees && e.attendees.length > 0 && (
                   <p className="mt-0.5 break-words text-[12px] text-muted">Attendees: {e.attendees.join(', ')}</p>
                 )}
+                {canMarkAttendance && (
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <AttendanceToggle
+                      label="Attended"
+                      active={e.attended === true}
+                      activeTone="emerald"
+                      onClick={() => onSetAttended(e.id, e.attended === true ? undefined : true)}
+                    />
+                    <AttendanceToggle
+                      label="Not attended"
+                      active={e.attended === false}
+                      activeTone="crimson"
+                      onClick={() => onSetAttended(e.id, e.attended === false ? undefined : false)}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )
         })}
       </div>
     </div>
+  )
+}
+
+function AttendanceToggle({ label, active, activeTone, onClick }: {
+  label: string
+  active: boolean
+  activeTone: 'emerald' | 'crimson'
+  onClick: () => void
+}) {
+  const activeClass = activeTone === 'emerald'
+    ? 'border-emerald-600 bg-emerald-100 text-emerald-700'
+    : 'border-crimson bg-crimson-100 text-crimson'
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors',
+        active ? activeClass : 'border-line text-muted hover:border-ink-600 hover:text-ink',
+      )}
+    >
+      {label}
+    </button>
   )
 }
 
