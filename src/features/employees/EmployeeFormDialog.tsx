@@ -9,9 +9,10 @@ import { useToast } from '@/components/ui/Toast'
 import { useFormDraft } from '@/lib/useFormDraft'
 import { useEmployeeMutations, useEmployeesByState, useNode } from '@/lib/api'
 import { isoToday } from '@/data/repository'
-import { isValidEmail } from '@/lib/utils'
+import { isValidEmail, uid } from '@/lib/utils'
 import { ManagerPicker } from './ManagerPicker'
 import { SalesTeamPicker } from './SalesTeamPicker'
+import { extractContact } from './contact-ocr'
 import type {
   Employee, HierNode, PreferredComm, RelationshipQuality, RelationshipStatus,
 } from '@/lib/types'
@@ -59,6 +60,14 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
   const photoRef = useRef<HTMLInputElement>(null)
 
   const [form, setForm] = useState(EMPTY)
+  // Staged only for the create flow — packaged into a VisitingCardItem on
+  // submit. Never touched in edit mode (the section that sets these doesn't
+  // render then), so it can never clobber an existing employee's cards.
+  const [cardFront, setCardFront] = useState<{ url: string; name: string } | null>(null)
+  const [cardBack, setCardBack] = useState<{ url: string; name: string } | null>(null)
+  const [ocrBusy, setOcrBusy] = useState(false)
+  const cardFrontRef = useRef<HTMLInputElement>(null)
+  const cardBackRef = useRef<HTMLInputElement>(null)
 
   // Draft key must pin down which form this is: per-record when editing, and
   // per-posting (plus the reportee flavour) when creating, so an abandoned
@@ -97,6 +106,8 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
     if (!open) return
     const base = seeded()
     setForm(draft.take(base) ?? base)
+    setCardFront(null)
+    setCardBack(null)
     // `draft`/`seeded` are stable for a given open dialog; re-running on their
     // identity would re-seed the form out from under the user mid-edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -123,6 +134,44 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
     const reader = new FileReader()
     reader.onload = () => setForm((f) => ({ ...f, photoUrl: String(reader.result) }))
     reader.readAsDataURL(file)
+  }
+
+  function onCardFile(e: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      const entry = { url: String(reader.result), name: file.name }
+      if (side === 'front') setCardFront(entry)
+      else setCardBack(entry)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  async function pickupContact() {
+    if (!cardFront || ocrBusy) return
+    setOcrBusy(true)
+    toast('Reading card…')
+    try {
+      const urls = [cardFront.url, cardBack?.url].filter((u): u is string => !!u)
+      const found = await extractContact(urls)
+      setForm((f) => ({
+        ...f,
+        name: f.name || found.name || '',
+        designation: f.designation || found.designation || '',
+        email: f.email || found.email || '',
+        phone: f.phone || found.phone || '',
+        company: f.company || found.company || '',
+        address: f.address || found.address || '',
+        website: f.website || found.website || '',
+      }))
+      toast('Picked up contact details from the card')
+    } catch {
+      toast('Could not read the card — check the image or enter details manually')
+    } finally {
+      setOcrBusy(false)
+    }
   }
 
   async function createReportee(name: string): Promise<string> {
@@ -202,7 +251,12 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
       }
       onSaved(employee.id)
     } else if (orgNode) {
-      const created = await create.mutateAsync({ ...patch, orgNodeId: orgNode.id })
+      const created = await create.mutateAsync({
+        ...patch, orgNodeId: orgNode.id,
+        visitingCards: cardFront
+          ? [{ id: uid('card'), frontUrl: cardFront.url, frontName: cardFront.name, backUrl: cardBack?.url ?? null, backName: cardBack?.name ?? null }]
+          : [],
+      })
       toast(form.vacant ? 'Added vacant position' : `Added ${form.name.trim()}`)
       onSaved(created.id)
     }
@@ -243,6 +297,36 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
             <span className="text-sm text-ink-800">Vacant position (no incumbent yet)</span>
           </label>
         </Field>
+
+        {!employee && !reporteeMode && !form.vacant && (
+          <Field label="Visiting card" hint="Scan a card to auto-fill the fields below. For best results, upload a clear, well-lit photo of the card.">
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" onClick={() => cardFrontRef.current?.click()}>
+                  <Icon name="Upload" size={13} /> {cardFront ? 'Replace front' : 'Upload front'}
+                </Button>
+                {cardFront && (
+                  <Button size="sm" onClick={() => cardBackRef.current?.click()}>
+                    <Icon name="Upload" size={13} /> {cardBack ? 'Replace back' : 'Add back'}
+                  </Button>
+                )}
+                {cardFront && (
+                  <Button size="sm" onClick={pickupContact} disabled={ocrBusy}>
+                    <Icon name="Sparkles" size={13} /> {ocrBusy ? 'Reading…' : 'Pick up contact'}
+                  </Button>
+                )}
+              </div>
+              {cardFront && (
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-lg border border-line bg-panel/40 px-2.5 py-1 text-[12px] text-ink-700">{cardFront.name}</span>
+                  {cardBack && <span className="rounded-lg border border-line bg-panel/40 px-2.5 py-1 text-[12px] text-ink-700">{cardBack.name}</span>}
+                </div>
+              )}
+              <input ref={cardFrontRef} type="file" accept="image/*,application/pdf" onChange={(e) => onCardFile(e, 'front')} className="hidden" />
+              <input ref={cardBackRef} type="file" accept="image/*,application/pdf" onChange={(e) => onCardFile(e, 'back')} className="hidden" />
+            </div>
+          </Field>
+        )}
 
         {!reporteeMode && !form.vacant && (
           <Field label="Profile Picture">
