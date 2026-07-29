@@ -23,7 +23,7 @@ export function RelationshipAnalytics() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="z-10 border-b border-line bg-white/80 px-4 py-4 backdrop-blur sm:px-6">
+      <div className="z-10 border-b border-line bg-white/80 px-4 py-4 sm:px-6">
         <span className="eyebrow">Relationships</span>
         <h1 className="font-display text-xl font-bold leading-tight text-ink-900">Relationship Analytics</h1>
         <p className="text-[12px] text-muted">Connection health, quality mix, and meetings across every state</p>

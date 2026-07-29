@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   repository, type AddTimelineInput, type CreateEmployeeInput, type CreateNodeInput,
-  type TransferInput,
+  type ImportChildRow, type ImportEmployeeRow, type TransferInput,
 } from '@/data/repository'
 import type { Charge, Employee, HierNode, SearchResult, Status, TimelineEventType } from './types'
 
@@ -41,6 +41,8 @@ export const useChildren = (parentId: string | null) =>
   useQuery({ queryKey: qk.children(parentId ?? ''), queryFn: () => repository.listChildren(parentId!), enabled: !!parentId })
 export const useOrgRoots = (code: number) =>
   useQuery({ queryKey: qk.orgRoots(code), queryFn: () => repository.listOrgRoots(code) })
+export const useDepartments = () =>
+  useQuery({ queryKey: ['departments'], queryFn: () => repository.listDepartments() })
 export const useGeoRoot = () =>
   useQuery({ queryKey: ['geoRoot'], queryFn: async () => (await repository.geoRoot()) ?? null })
 export const useChildCounts = (parentId: string | null) =>
@@ -105,6 +107,7 @@ function useInvalidateTree() {
   return () => {
     qc.invalidateQueries({ queryKey: ['children'] })
     qc.invalidateQueries({ queryKey: ['orgRoots'] })
+    qc.invalidateQueries({ queryKey: ['departments'] })
     qc.invalidateQueries({ queryKey: ['node'] })
     qc.invalidateQueries({ queryKey: ['states'] })
     qc.invalidateQueries({ queryKey: ['employeesUnder'] })
@@ -130,7 +133,7 @@ export function useNodeMutations() {
   })
   const duplicate = useMutation({ mutationFn: (id: string) => repository.duplicateNode(id), onSuccess: invalidate })
   const importChildren = useMutation({
-    mutationFn: (a: { parentId: string; names: string[] }) => repository.importChildren(a.parentId, a.names),
+    mutationFn: (a: { parentId: string; rows: ImportChildRow[] }) => repository.importChildren(a.parentId, a.rows),
     onSuccess: invalidate,
   })
   const reorder = useMutation({
@@ -188,8 +191,12 @@ export function useEmployeeMutations() {
     mutationFn: (a: { employeeId: string; chargeId: string }) => repository.removeCharge(a.employeeId, a.chargeId),
     onSuccess: invalidate,
   })
+  const importEmployees = useMutation({
+    mutationFn: (a: { orgNodeId: string; rows: ImportEmployeeRow[] }) => repository.importEmployees(a.orgNodeId, a.rows),
+    onSuccess: invalidate,
+  })
   return {
     create, update, remove, setManager, addTimelineEvent, deleteTimelineEvent, setTimelineEventAttended,
-    transfer, addCharge, removeCharge,
+    transfer, addCharge, removeCharge, importEmployees,
   }
 }

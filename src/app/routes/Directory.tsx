@@ -14,7 +14,7 @@ export function Directory() {
     <WorkspaceProvider stateCode={-1}>
       <div className="flex h-full flex-col lg:flex-row">
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-b border-line lg:border-b-0 lg:border-r">
-          <div className="z-10 border-b border-line bg-white/80 px-4 py-3 backdrop-blur">
+          <div className="z-10 border-b border-line bg-white/80 px-4 py-3">
             <h1 className="font-display text-[15px] font-semibold leading-tight text-ink-900">Directory</h1>
             <p className="text-[12px] text-muted">Every employee across every state</p>
           </div>

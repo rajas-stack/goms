@@ -75,11 +75,19 @@ export function GeographyExplorer({ stateNodeId }: { stateNodeId: string }) {
     queryFn: () => loadStateDistrictShapes(stateCode!),
     enabled: stateCode != null,
   })
+  // The district layer is dissolved from the taluka layer by LGD district code
+  // (scripts/dissolve-districts.cjs), so every feature carries the same code as
+  // its hierarchy node and joins exactly. The name match is only a fallback for
+  // a feature whose code somehow isn't in this state's node list.
   const districtFeats = useMemo<MapFeature[]>(() => {
     if (!districtShapes || stateDistricts.length === 0) return []
+    const byCode = new Map(
+      stateDistricts.filter((d) => d.code).map((d) => [String(Number(d.code)), d] as const),
+    )
     const out: MapFeature[] = []
     for (const f of districtShapes.features) {
-      const match = matchDistrictName(f.properties.name, stateDistricts as HierNode[])
+      const match = byCode.get(String(Number(f.properties.code)))
+        ?? matchDistrictName(f.properties.name, stateDistricts as HierNode[])
       if (match) out.push({ code: match.id, name: match.name, geometry: f.geometry })
     }
     return out
@@ -158,13 +166,13 @@ export function GeographyExplorer({ stateNodeId }: { stateNodeId: string }) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="z-10 flex flex-wrap items-center gap-3 border-b border-line bg-white/80 px-4 py-2.5 backdrop-blur">
+      <div className="z-10 flex flex-wrap items-center gap-3 border-b border-line bg-white/80 px-4 py-2.5">
         <Tooltip label="Back one level" side="bottom">
           <button
             onClick={back}
             disabled={atRoot}
             aria-label="Back one level"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-panel hover:text-ink disabled:opacity-30 disabled:pointer-events-none"
+            className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted before:absolute before:-inset-2 before:content-[''] hover:bg-panel hover:text-ink disabled:opacity-30 disabled:pointer-events-none"
           >
             <Icon name="ArrowLeft" size={15} />
           </button>

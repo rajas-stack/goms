@@ -1,5 +1,6 @@
 import { useOrgRoots } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
+import { abbreviateDepartmentName } from '@/features/nodes/department-meta'
 import { Icon } from '@/components/ui/Icon'
 import type { HierNode } from '@/lib/types'
 
@@ -63,9 +64,9 @@ export function GeoSidePanel({
                   <span className="block break-words text-[13px] font-medium text-ink-900">
                     Department of {d.name}
                   </span>
-                  {d.metadata.shortName && d.metadata.shortName !== d.name && (
-                    <span className="block truncate text-[11px] text-muted">{d.metadata.shortName}</span>
-                  )}
+                  <span className="block truncate text-[11px] text-muted">
+                    {d.metadata.shortName || abbreviateDepartmentName(`Department of ${d.name}`)}
+                  </span>
                 </span>
               </button>
             ))}

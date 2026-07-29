@@ -124,5 +124,59 @@ export function buildSeed(): GormsData {
   employees.push(...gov.employees)
   externalIds.push(...gov.externalIds)
 
+  // --- QA test fixture -------------------------------------------------
+  // A small, clearly-labeled sandbox department with two real (non-vacant,
+  // connected) employees — every other seeded employee above is a vacant
+  // government seat with no fabricated contact info, which makes hands-on
+  // testing of manager-picking, transfer, search, and delete hard to
+  // exercise without creating records first. These are ordinary records —
+  // deletable via the normal Delete/Remove UI like anything else, nothing
+  // protected about them.
+  const qaDeptId = 'org_qa_test_department'
+  nodes.push({
+    id: qaDeptId, domain: 'org', typeKey: 'department', parentId: null,
+    // Bare noun, not "... Department" — department-typed nodes render as
+    // "Department of {name}" (see gov-hierarchy.ts's OrgSpec convention).
+    stateCode: CENTRAL_STATE_CODE, name: 'QA Test', code: 'QATD',
+    sortOrder: 9999, metadata: {}, status: 'active',
+  })
+  const qaManagerId = 'emp_qa_vikram_rao'
+  const qaAnalystId = 'emp_qa_priya_nair'
+  employees.push(
+    {
+      id: qaManagerId, code: 'QA-001', name: 'Vikram Rao', designation: 'Senior QA Manager',
+      email: 'vikram.rao@example.com', phone: '+91 9876543210', company: '', address: '', website: '', photoUrl: null,
+      orgNodeId: qaDeptId, managerId: null, vacant: false, connected: true,
+      relationshipStatus: 'engaged', relationshipQuality: 'good', relationshipType: 'Test Contact',
+      introducedBy: 'QA fixture', importantContact: true, preferredComm: ['email', 'phone'],
+      lastInteractionAt: null, followUpDate: null, notes: 'Seed fixture for manual testing.',
+      charges: [], visitingCards: [], metadata: {}, status: 'active',
+    },
+    {
+      id: qaAnalystId, code: 'QA-002', name: 'Priya Nair', designation: 'QA Analyst',
+      email: 'priya.nair@example.com', phone: '+91 9812345678', company: '', address: '', website: '', photoUrl: null,
+      orgNodeId: qaDeptId, managerId: qaManagerId, vacant: false, connected: true,
+      relationshipStatus: 'new', relationshipQuality: 'neutral', relationshipType: 'Test Contact',
+      introducedBy: 'QA fixture', importantContact: false, preferredComm: ['phone', 'whatsapp'],
+      lastInteractionAt: null, followUpDate: null, notes: 'Seed fixture for manual testing.',
+      charges: [], visitingCards: [], metadata: {}, status: 'active',
+    },
+  )
+  timeline.push(
+    {
+      id: 'evt_qa_join_vikram', employeeId: qaManagerId, type: 'joined',
+      title: 'Contact created', date: '2026-01-05', note: '', source: 'system',
+    },
+    {
+      id: 'evt_qa_join_priya', employeeId: qaAnalystId, type: 'joined',
+      title: 'Contact created', date: '2026-01-06', note: '', source: 'system',
+    },
+    {
+      id: 'evt_qa_meeting_priya', employeeId: qaAnalystId, type: 'meeting',
+      title: 'QA Kickoff Meeting', date: '2026-01-10', time: '14:30',
+      note: 'Discussed feature test coverage', source: 'manual', attendees: ['Mr. Rohit Tiku'],
+    },
+  )
+
   return { nodes, employees, externalIds, timeline, transfers }
 }

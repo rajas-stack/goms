@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { Combobox, type ComboboxOption } from '@/components/ui/Combobox'
 import { MobileFilterBar } from '@/components/MobileFilterBar'
 import { Input } from '@/components/ui/Field'
-import { TIMELINE_META } from '@/lib/timeline-meta'
+import { TIMELINE_META, timelineEventLabel } from '@/lib/timeline-meta'
 import { cn } from '@/lib/utils'
 import type { Employee, TimelineEvent, TimelineEventType } from '@/lib/types'
 
@@ -116,7 +116,7 @@ export function Meetings() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="z-10 space-y-3 border-b border-line bg-white/80 px-4 py-4 backdrop-blur sm:px-6">
+      <div className="z-10 space-y-3 border-b border-line bg-white/80 px-4 py-4 sm:px-6">
         <div>
           <span className="eyebrow">Engagement</span>
           <h1 className="font-display text-xl font-bold leading-tight text-ink-900">Meetings</h1>
@@ -229,7 +229,7 @@ function TimelineRow({ entry, employee, department, highlighted, onClick }: {
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-2">
           <span className="text-[13px] font-medium text-ink-900">{entry.title}</span>
-          <Badge tone={meta.tone}>{meta.label}</Badge>
+          <Badge tone={meta.tone}>{timelineEventLabel(entry)}</Badge>
           {entry.attended === true && <Badge tone="emerald">Attended</Badge>}
           {entry.attended === false && <Badge tone="crimson">Not attended</Badge>}
         </span>

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -22,7 +23,7 @@ import type { HierNode } from '@/lib/types'
  *  tens of thousands. `content-visibility: auto` gets most of the same
  *  render-cost win (skips layout/paint for off-screen tiles) for near-zero
  *  risk, so that's what's applied per-tile below instead. */
-export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessage, onSelect, onAdd, addLabel, canAdd }: {
+export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessage, onSelect, onAdd, addLabel, canAdd, emptyAction }: {
   items: HierNode[]
   /** child id → count of ITS active children (from `useChildCounts`). */
   counts: Record<string, number>
@@ -56,6 +57,11 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
    *  only wants a "+" on nodes that can actually have the desired child type.
    *  Defaults to true (current behavior) whenever `onAdd` is passed without it. */
   canAdd?: (node: HierNode) => boolean
+  /** Optional action rendered inside the empty state itself (e.g. the FAB's
+   *  org picker offering "Add X here" for the node just drilled into) — shown
+   *  centered alongside the empty message instead of pinned below the grid,
+   *  since there's no grid left to pin it under once `items` is empty. */
+  emptyAction?: ReactNode
 }) {
   if (items.length === 0) {
     return (
@@ -65,6 +71,7 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
         </div>
         <p className="max-w-xs text-sm font-medium text-ink-900">{emptyMessage}</p>
         <p className="text-xs text-muted">Use the breadcrumb or Back button to explore elsewhere.</p>
+        {emptyAction}
       </div>
     )
   }

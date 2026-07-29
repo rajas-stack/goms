@@ -4,6 +4,7 @@ import type { Employee, HierNode } from '@/lib/types'
 import { NodeFormDialog } from '@/features/nodes/NodeFormDialog'
 import { MoveDialog } from '@/features/nodes/MoveDialog'
 import { EmployeeFormDialog } from '@/features/employees/EmployeeFormDialog'
+import { SelectEmployeeDialog } from '@/features/employees/SelectEmployeeDialog'
 import { ConfirmDialog } from '@/features/nodes/ConfirmDialog'
 import { consumePendingWorkspaceAction, registerWorkspaceDialogHandle } from './backButtonBridge'
 
@@ -17,6 +18,7 @@ type Dialog =
   | { type: 'move'; node: HierNode }
   | { type: 'delete'; node: HierNode }
   | { type: 'addEmployee'; orgNode: HierNode; presetManagerId?: string }
+  | { type: 'selectEmployee'; orgNode: HierNode }
   | { type: 'editEmployee'; employee: Employee }
 
 interface WorkspaceApi {
@@ -30,6 +32,7 @@ interface WorkspaceApi {
   moveNode: (node: HierNode) => void
   deleteNode: (node: HierNode) => void
   addEmployee: (orgNode: HierNode, presetManagerId?: string) => void
+  selectEmployee: (orgNode: HierNode) => void
   editEmployee: (employee: Employee) => void
 }
 
@@ -103,6 +106,7 @@ export function WorkspaceProvider({ stateCode, children }: { stateCode: number; 
     moveNode: (node) => setDialog({ type: 'move', node }),
     deleteNode: (node) => setDialog({ type: 'delete', node }),
     addEmployee: (orgNode, presetManagerId) => setDialog({ type: 'addEmployee', orgNode, presetManagerId }),
+    selectEmployee: (orgNode) => setDialog({ type: 'selectEmployee', orgNode }),
     editEmployee: (employee) => setDialog({ type: 'editEmployee', employee }),
   }
 
@@ -139,6 +143,11 @@ export function WorkspaceProvider({ stateCode, children }: { stateCode: number; 
         presetManagerId={dialog.type === 'addEmployee' ? dialog.presetManagerId : undefined}
         onClose={close}
         onSaved={(id) => api.select('employee', id)}
+      />
+      <SelectEmployeeDialog
+        open={dialog.type === 'selectEmployee'}
+        orgNode={dialog.type === 'selectEmployee' ? dialog.orgNode : null}
+        onClose={close}
       />
     </Ctx.Provider>
   )

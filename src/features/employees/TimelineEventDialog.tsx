@@ -43,8 +43,10 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   const showPicker = !activeEmployeeId
   const pickedEmployee = pickedEmployeeId ? allEmployees.find((e) => e.id === pickedEmployeeId) : undefined
   const typeOptions = typeFilter && typeFilter.length > 0 ? typeFilter : MANUAL_EVENT_TYPES
-  const defaultType = initialType ?? 'meeting'
-  const EMPTY_FORM = { type: defaultType, title: '', date: isoToday(), time: '', note: '', attendees: [] as string[] }
+  const defaultType = initialType ?? typeOptions[0]
+  const EMPTY_FORM = {
+    type: defaultType, title: '', customLabel: '', date: isoToday(), time: '', note: '', attendees: [] as string[],
+  }
   const [form, setForm] = useState(EMPTY_FORM)
 
   // Keyed on the target person, not on this render's `defaultType` — a draft
@@ -72,8 +74,9 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   async function submit() {
     if (!activeEmployeeId || !form.title.trim()) return
     await addTimelineEvent.mutateAsync({
-      employeeId: activeEmployeeId, type: form.type, title: form.title.trim(), date: form.date, time: form.time,
-      note: form.note, attendees: form.attendees,
+      employeeId: activeEmployeeId, type: form.type, title: form.title.trim(),
+      customLabel: form.type === 'custom' ? form.customLabel.trim() : undefined,
+      date: form.date, time: form.time, note: form.note, attendees: form.attendees,
     })
     toast('Added to timeline')
     draft.clear()
@@ -128,7 +131,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
           </button>
         )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Type">
+          <Field label="Meeting type">
             <Select
               value={form.type}
               onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as TimelineEventType }))}
@@ -138,6 +141,15 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
               ))}
             </Select>
           </Field>
+          {form.type === 'custom' && (
+            <Field label="Custom type label" hint="Shown on the entry instead of “Custom”">
+              <Input
+                value={form.customLabel}
+                onChange={(e) => setForm((f) => ({ ...f, customLabel: e.target.value }))}
+                placeholder="e.g. Site visit"
+              />
+            </Field>
+          )}
           <Field label="Date">
             <Input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
           </Field>

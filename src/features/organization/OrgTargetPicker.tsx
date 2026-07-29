@@ -67,7 +67,7 @@ export function OrgTargetPicker({ open, stateCode, title, requireChildType, pick
               onClick={back}
               disabled={atRoot}
               aria-label="Back one level"
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-white hover:text-ink disabled:opacity-30 disabled:pointer-events-none"
+              className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted before:absolute before:-inset-2 before:content-[''] hover:bg-white hover:text-ink disabled:opacity-30 disabled:pointer-events-none"
             >
               <Icon name="ArrowLeft" size={15} />
             </button>
@@ -78,7 +78,7 @@ export function OrgTargetPicker({ open, stateCode, title, requireChildType, pick
               type="button"
               onClick={() => setSelectedId(null)}
               disabled={atRoot}
-              className={cn('truncate', atRoot ? 'font-semibold text-ink-900' : 'text-muted transition-colors hover:text-ink-900 hover:underline')}
+              className={cn('break-words', atRoot ? 'font-semibold text-ink-900' : 'text-muted transition-colors hover:text-ink-900 hover:underline')}
             >
               Departments
             </button>
@@ -91,7 +91,7 @@ export function OrgTargetPicker({ open, stateCode, title, requireChildType, pick
                     type="button"
                     onClick={() => setSelectedId(t.id)}
                     disabled={isLast}
-                    className={cn('truncate', isLast ? 'font-semibold text-ink-900' : 'text-muted transition-colors hover:text-ink-900 hover:underline')}
+                    className={cn('break-words', isLast ? 'font-semibold text-ink-900' : 'text-muted transition-colors hover:text-ink-900 hover:underline')}
                   >
                     {t.name}
                   </button>
@@ -118,13 +118,25 @@ export function OrgTargetPicker({ open, stateCode, title, requireChildType, pick
             onAdd={(node) => { onPick(node); close() }}
             canAdd={canPick}
             addLabel={pickLabel}
+            emptyAction={current && canPick(current) && (
+              <button
+                type="button"
+                onClick={() => { onPick(current); close() }}
+                className="mt-1 flex items-center gap-2 rounded-lg border border-dashed border-line px-4 py-2 text-[13px] font-medium text-teal-600 hover:border-teal-600 hover:bg-teal-100/40"
+              >
+                <Icon name="Plus" size={14} /> {pickLabel(current)}
+              </button>
+            )}
           />
           {/* The tile grid above only offers picking a CHILD of the node
              *  currently being browsed — this is the only way to pick the
              *  node you've just drilled INTO (there's no single virtual
              *  "root" tile for it once you're past the Departments crossroads,
-             *  same reasoning as OrganizationList's own drill model). */}
-          {current && canPick(current) && (
+             *  same reasoning as OrganizationList's own drill model). Only
+             *  needed here when there ARE still children to show; once
+             *  `items` is empty, `EntityGrid`'s `emptyAction` above already
+             *  renders this same affordance centered in the empty state. */}
+          {items.length > 0 && current && canPick(current) && (
             <button
               type="button"
               onClick={() => { onPick(current); close() }}

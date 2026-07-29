@@ -114,6 +114,22 @@ export function GeoMapView({
 
   const clickable = selectedCode == null
 
+  // Entering/leaving a feature flips the viewport's cursor between `grab` and
+  // `pointer`. Chrome on Windows can fail to redraw the OS cursor for a
+  // `cursor` value change that isn't accompanied by a fresh native mousemove
+  // (as here, where it's driven by React state), leaving it invisible until
+  // the pointer exits and re-enters the window. Forcing an explicit cursor
+  // value and releasing it a frame later makes Chrome recompute it right away
+  // instead of waiting for that — the same fix already confirmed working for
+  // the card-drag cursor bug on the org/people canvas.
+  const isOverFeature = hoverCode != null && clickable
+  useEffect(() => {
+    const root = document.documentElement
+    root.style.cursor = 'default'
+    const raf = requestAnimationFrame(() => { root.style.cursor = '' })
+    return () => cancelAnimationFrame(raf)
+  }, [isOverFeature])
+
   const feats = useMemo<Feat[]>(() => {
     if (selectedCode == null) return buildFeats(features, 24)
     const only = features.filter((f) => f.code === selectedCode)
@@ -127,7 +143,17 @@ export function GeoMapView({
     <div className="relative h-full w-full overflow-hidden rounded-card border border-line bg-white">
       <div
         ref={viewportRef}
-        className={cn('h-full w-full touch-none select-none', dragging ? 'cursor-grabbing' : 'cursor-grab')}
+        className={cn(
+          'h-full w-full touch-none select-none',
+          // Cursor lives here, on the one ancestor div, instead of on each
+          // <path> below. Chrome on Windows can render the OS cursor invisible
+          // (until the pointer leaves and re-enters the window) when it
+          // crosses an SVG element that sets its own `cursor` value that
+          // differs from an ancestor's — and this map flips that per-path
+          // value on every boundary crossing. Deriving it here from
+          // `hoverCode` instead keeps exactly one element's cursor changing.
+          dragging ? 'cursor-grabbing' : hoverCode && clickable ? 'cursor-pointer' : 'cursor-grab',
+        )}
         onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -164,7 +190,6 @@ export function GeoMapView({
                       onClick={() => clickable && onSelect(f.code)}
                       className={cn(
                         'transition-colors duration-150',
-                        clickable ? 'cursor-pointer' : 'cursor-default',
                         isHighlight ? 'fill-teal/30' : isHover && clickable ? 'fill-teal/25' : 'fill-white',
                       )}
                       stroke={isHighlight ? '#22695B' : isHover && clickable ? '#22695B' : '#2B4A70'}
@@ -205,7 +230,7 @@ export function GeoMapView({
       )}
 
       {/* Bottom-LEFT on a phone — the global FAB owns the bottom-right corner. */}
-      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel backdrop-blur sm:left-auto sm:right-3" data-map-ui>
+      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel sm:left-auto sm:right-3" data-map-ui>
         {/* Desktop-only duplicate of Reset (below) — both call `resetView`, and
             the full 5-slot cluster doesn't fit a phone-width map. */}
         <Tooltip label="Fit to screen" className="hidden sm:inline-flex">

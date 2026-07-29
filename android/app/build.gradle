@@ -71,7 +71,12 @@ android {
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
-            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+             // `!*.gz:!*.br` added for the vite-plugin-compression2 build output (see vite.config.ts):
+             // AAPT normalizes "foo.js.gz"/"foo.js.br" to the same resource path as "foo.js", so
+             // without this the pre-compressed siblings collide with their originals as "Duplicate
+             // resources". The WebView never negotiates content-encoding locally, so these
+             // GitLab-Pages-only siblings are unneeded (and unused) inside the native app anyway.
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.gz:!*.br'
         }
     }
     signingConfigs {

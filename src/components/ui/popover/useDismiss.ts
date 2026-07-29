@@ -19,8 +19,15 @@ export function useDismiss({ open, onClose, anchorRef, panelRef }: UseDismissOpt
     if (!open) return
 
     function onPointerDown(e: PointerEvent) {
-      const target = e.target as Node
+      const target = e.target as HTMLElement
       if (anchorRef.current?.contains(target) || panelRef.current?.contains(target)) return
+      // A popover nested inside this one (e.g. a Combobox's own dropdown
+      // opened from within this panel) portals to `document.body` as a
+      // sibling, not a DOM descendant of `panelRef` — so without this check,
+      // clicking an option in it would read as "outside" and close this
+      // panel out from under it. `data-canvas-ui` already marks exactly this
+      // kind of floating popover chrome elsewhere in the app.
+      if (target.closest?.('[data-canvas-ui]')) return
       onCloseRef.current()
     }
     function onKeyDown(e: KeyboardEvent) {

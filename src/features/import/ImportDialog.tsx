@@ -3,53 +3,113 @@ import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
+import { Tabs } from '@/components/ui/Tabs'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
-import { useNodeMutations, useStates } from '@/lib/api'
+import { useEmployeeMutations, useNodeMutations, useOrgRoots, usePostingNodes, useStates } from '@/lib/api'
 import { useFormDraft } from '@/lib/useFormDraft'
-import { NODE_TYPE_MAP, childTypesOf } from '@/lib/node-types'
-import { useOrgRoots } from '@/lib/api'
+import { downloadCsv, toCsv } from '@/lib/csv'
+import { childTypesOf } from '@/lib/node-types'
+import type { ImportChildRow, ImportEmployeeRow } from '@/data/repository'
 
-const EMPTY_IMPORT = { stateCode: null as number | null, parentId: '', raw: '', fileName: null as string | null }
+type Mode = 'nodes' | 'employees'
 
-function parseNames(raw: string): string[] {
-  return raw
-    .split(/\r?\n|,/)
-    .map((s) => s.trim())
-    .filter(Boolean)
+const MODES: { value: Mode; label: string }[] = [
+  { value: 'nodes', label: 'Org records' },
+  { value: 'employees', label: 'People' },
+]
+
+const EMPTY_IMPORT = {
+  mode: 'nodes' as Mode, stateCode: null as number | null, parentId: '', raw: '', fileName: null as string | null,
 }
 
-function csvCell(value: string): string {
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
+/** Columns each mode reads, in order — drives the sample CSV, the format
+ *  notes, and `parseRows` below, so all three can't drift apart. */
+const SCHEMA: Record<Mode, { key: string; label: string; required: boolean; hint?: string }[]> = {
+  nodes: [
+    { key: 'name', label: 'Name', required: true },
+    { key: 'type', label: 'Type', required: false, hint: 'blank falls back to the parent’s default child type' },
+  ],
+  employees: [
+    { key: 'name', label: 'Name', required: true },
+    { key: 'designation', label: 'Designation', required: true },
+    { key: 'email', label: 'Email', required: false },
+    { key: 'phone', label: 'Phone', required: false },
+    { key: 'connected', label: 'Connected', required: false, hint: 'yes/no — defaults to yes' },
+  ],
 }
 
-/** Mirrors exactly what `onFile` below parses: row 1 is a header (skipped),
- *  then only the first column of every following row is read as a name. */
-function downloadSampleCsv(childLabel: string) {
-  const label = childLabel || 'Record'
-  const rows = [
-    ['Name'],
-    [`${label} Example 1`],
-    [`${label} Example 2`],
-    [`${label} Example 3`],
-  ]
-  const csv = rows.map((r) => r.map(csvCell).join(',')).join('\r\n')
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `import-sample-${label.toLowerCase().replace(/\s+/g, '-')}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
+/** Splits one CSV line, honouring double-quoted fields (and "" escapes) so a
+ *  quoted address or designation containing a comma stays one column. */
+function splitCsvLine(line: string): string[] {
+  const out: string[] = []
+  let field = ''
+  let quoted = false
+  for (let i = 0; i < line.length; i += 1) {
+    const c = line[i]
+    if (quoted) {
+      if (c === '"') {
+        if (line[i + 1] === '"') { field += '"'; i += 1 }
+        else quoted = false
+      } else field += c
+    } else if (c === '"') quoted = true
+    else if (c === ',') { out.push(field); field = '' }
+    else field += c
+  }
+  out.push(field)
+  return out.map((f) => f.trim())
+}
+
+/** The single source of truth for what a pasted/uploaded batch means: the raw
+ *  text is kept verbatim (so a restored draft round-trips) and re-parsed into
+ *  typed rows on every render. Row 1 is never treated as a header here — the
+ *  file reader strips it before this sees the text. */
+function parseRows(raw: string, mode: Mode): (ImportChildRow | ImportEmployeeRow)[] {
+  const lines = raw.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  if (mode === 'nodes') {
+    return lines.flatMap((line) => {
+      const [name, type] = splitCsvLine(line)
+      return name ? [{ name, ...(type ? { type } : {}) } satisfies ImportChildRow] : []
+    })
+  }
+  return lines.flatMap((line) => {
+    const [name, designation, email, phone, connected] = splitCsvLine(line)
+    if (!name || !designation) return []
+    const row: ImportEmployeeRow = { name, designation, email, phone }
+    if (connected) row.connected = !/^(no|false|0|n)$/i.test(connected)
+    return [row]
+  })
+}
+
+function downloadSampleCsv(mode: Mode, childLabel: string) {
+  const cols = SCHEMA[mode]
+  const example = (n: number) => cols.map((c) => {
+    if (c.key === 'name') return mode === 'nodes' ? `${childLabel} Example ${n}` : `Example Person ${n}`
+    if (c.key === 'type') return childLabel
+    if (c.key === 'designation') return 'Deputy Director'
+    if (c.key === 'email') return `person${n}@example.gov.in`
+    if (c.key === 'phone') return `98765 4321${n}`
+    if (c.key === 'connected') return 'yes'
+    return ''
+  })
+  const rows = [cols.map((c) => c.label), example(1), example(2), example(3)]
+  downloadCsv(`import-sample-${mode}.csv`, toCsv(rows))
 }
 
 export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const toast = useToast()
   const { importChildren } = useNodeMutations()
+  const { importEmployees } = useEmployeeMutations()
   const { data: states = [] } = useStates()
+  const [mode, setMode] = useState<Mode>('nodes')
   const [stateCode, setStateCode] = useState<number | null>(null)
+  // Org records land under a department; people are posted at any posting-type
+  // node (department/branch/division/office/unit), so each mode picks its
+  // target from a different list.
   const { data: departments = [] } = useOrgRoots(stateCode ?? -1)
+  const { data: postings = [] } = usePostingNodes(stateCode)
+  const targets = mode === 'nodes' ? departments : postings
   const [parentId, setParentId] = useState('')
   const [raw, setRaw] = useState('')
   const [fileName, setFileName] = useState<string | null>(null)
@@ -59,9 +119,9 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
   // in progress isn't "for" any particular record, so there's nothing to key
   // it by except "the Import dialog". A pasted or uploaded batch can be
   // sizeable, so losing it to a reload would be the most painful case here.
-  const draftForm = { stateCode, parentId, raw, fileName }
+  const draftForm = { mode, stateCode, parentId, raw, fileName }
   const draft = useFormDraft('import', draftForm, open, () => {
-    setStateCode(EMPTY_IMPORT.stateCode); setParentId(EMPTY_IMPORT.parentId)
+    setMode(EMPTY_IMPORT.mode); setStateCode(EMPTY_IMPORT.stateCode); setParentId(EMPTY_IMPORT.parentId)
     setRaw(EMPTY_IMPORT.raw); setFileName(EMPTY_IMPORT.fileName)
   })
 
@@ -69,15 +129,18 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     if (!open) return
     const restored = draft.take(EMPTY_IMPORT)
     if (restored) {
-      setStateCode(restored.stateCode); setParentId(restored.parentId)
+      setMode(restored.mode); setStateCode(restored.stateCode); setParentId(restored.parentId)
       setRaw(restored.raw); setFileName(restored.fileName)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  const rows = parseNames(raw)
-  const parent = departments.find((d) => d.id === parentId)
-  const childLabel = parent ? childTypesOf(parent.typeKey)[0]?.label ?? 'record' : 'record'
+  const rows = parseRows(raw, mode)
+  const parent = targets.find((d) => d.id === parentId)
+  const childLabel = mode === 'employees'
+    ? 'person'
+    : parent ? childTypesOf(parent.typeKey)[0]?.label ?? 'record' : 'record'
+  const isPending = importChildren.isPending || importEmployees.isPending
 
   function reset() {
     setStateCode(null); setParentId(''); setRaw(''); setFileName(null)
@@ -87,20 +150,19 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     const f = e.target.files?.[0]
     if (!f) return
     setFileName(f.name)
-    f.text().then((text) => {
-      const firstCol = text
-        .split(/\r?\n/)
-        .slice(1)
-        .map((line) => line.split(',')[0]?.replace(/^"|"$/g, ''))
-        .filter(Boolean)
-      setRaw(firstCol.join('\n'))
-    })
+    // Row 1 is dropped as the header; the rest is kept verbatim so `parseRows`
+    // stays the only thing that decides what the columns mean.
+    f.text().then((text) => setRaw(text.split(/\r?\n/).slice(1).join('\n')))
   }
 
   async function submit() {
     if (!parentId || rows.length === 0) return
-    const count = await importChildren.mutateAsync({ parentId, names: rows })
-    toast(`Imported ${count} ${childLabel.toLowerCase()}${count === 1 ? '' : 's'}`)
+    const count = mode === 'nodes'
+      ? await importChildren.mutateAsync({ parentId, rows: rows as ImportChildRow[] })
+      : await importEmployees.mutateAsync({ orgNodeId: parentId, rows: rows as ImportEmployeeRow[] })
+    const noun = mode === 'nodes' ? childLabel.toLowerCase() : 'person'
+    const plural = mode === 'nodes' ? `${noun}s` : 'people'
+    toast(`Imported ${count} ${count === 1 ? noun : plural}`)
     reset()
     draft.clear()
     onClose()
@@ -111,19 +173,31 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
       open={open}
       onClose={() => { reset(); onClose() }}
       title="Import records"
-      description="Bring in a batch of names as new nodes under an existing department. A full mapping-driven engine (external identifiers, upserts) lands in a later phase."
+      description="Bring in a batch of org records or people from a CSV. A full mapping-driven engine (external identifiers, upserts) lands in a later phase."
       size="lg"
       footer={
         <>
-          <Button onClick={() => { reset(); onClose() }} disabled={importChildren.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!parentId || rows.length === 0 || importChildren.isPending}>
-            {importChildren.isPending ? 'Importing…' : `Import ${rows.length > 0 ? `${rows.length} rows` : ''}`}
+          <Button onClick={() => { reset(); onClose() }} disabled={isPending}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={!parentId || rows.length === 0 || isPending}>
+            {isPending ? 'Importing…' : `Import ${rows.length > 0 ? `${rows.length} rows` : ''}`}
           </Button>
         </>
       }
     >
       <div className="space-y-4">
         {draft.restored && <DraftNotice onDiscard={draft.discard} />}
+
+        <Tabs
+          tabs={MODES}
+          value={mode}
+          onChange={(next) => {
+            // The column meanings differ per mode, so a batch parsed for one
+            // schema is meaningless under the other — cleared rather than
+            // silently reinterpreted.
+            setMode(next); setParentId(''); setRaw(''); setFileName(null)
+          }}
+        />
+
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="State">
             <Select value={stateCode ?? ''} onChange={(e) => { setStateCode(e.target.value ? Number(e.target.value) : null); setParentId('') }}>
@@ -131,10 +205,14 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
               {states.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
             </Select>
           </Field>
-          <Field label="Department to import into">
+          <Field label={mode === 'nodes' ? 'Department to import into' : 'Posting to import into'}>
             <Select value={parentId} onChange={(e) => setParentId(e.target.value)} disabled={stateCode === null}>
-              <option value="">{stateCode !== null ? 'Select a department…' : 'Choose a state first'}</option>
-              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              <option value="">
+                {stateCode !== null
+                  ? (mode === 'nodes' ? 'Select a department…' : 'Select a posting…')
+                  : 'Choose a state first'}
+              </option>
+              {targets.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </Select>
           </Field>
         </div>
@@ -144,7 +222,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
           <Tooltip label="Download a ready-to-fill CSV with sample rows in the exact format this importer expects" side="left">
             <button
               type="button"
-              onClick={() => downloadSampleCsv(childLabel)}
+              onClick={() => downloadSampleCsv(mode, childLabel)}
               className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium text-teal-600 transition-colors hover:bg-teal-100"
             >
               <Icon name="Download" size={13} /> Download sample file
@@ -160,7 +238,8 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-medium text-ink-900">{fileName ?? 'Upload a CSV file'}</span>
             <span className="block text-xs text-muted">
-              First column is used as the record name{parent ? ` — added as ${childLabel.toLowerCase()} under “${parent.name}”` : ''}.
+              {SCHEMA[mode].map((c) => c.label).join(', ')}
+              {parent ? ` — added under “${parent.name}”` : ''}.
             </span>
           </span>
           <span className="code-chip">.csv</span>
@@ -176,10 +255,20 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
         <div className="rounded-lg border border-line bg-panel/60 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
           <p className="mb-1 font-medium text-ink-800">File format notes</p>
           <ul className="list-disc space-y-0.5 pl-4">
-            <li><span className="font-medium text-ink-700">Required:</span> a single “Name” column — the header row (row 1) is skipped.</li>
-            <li><span className="font-medium text-ink-700">Optional:</span> none yet — any columns after the first are ignored.</li>
-            <li>Column order: the name must be in column A.</li>
-            <li>One {childLabel.toLowerCase()} per row; blank rows are skipped automatically.</li>
+            <li>
+              <span className="font-medium text-ink-700">Required:</span>{' '}
+              {SCHEMA[mode].filter((c) => c.required).map((c) => c.label).join(', ')} — the header row (row 1) is skipped.
+            </li>
+            <li>
+              <span className="font-medium text-ink-700">Optional:</span>{' '}
+              {SCHEMA[mode].filter((c) => !c.required).map((c) => c.hint ? `${c.label} (${c.hint})` : c.label).join(', ') || 'none'}.
+            </li>
+            <li>Column order: {SCHEMA[mode].map((c, i) => `${String.fromCharCode(65 + i)} = ${c.label}`).join(', ')}.</li>
+            <li>
+              One {mode === 'nodes' ? childLabel.toLowerCase() : 'person'} per row; blank rows are skipped, and rows missing a
+              required column are ignored rather than half-imported.
+            </li>
+            <li>Wrap a value in double quotes if it contains a comma.</li>
           </ul>
         </div>
       </div>

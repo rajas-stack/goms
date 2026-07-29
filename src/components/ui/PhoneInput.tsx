@@ -1,30 +1,30 @@
 import { Input } from './Field'
 
-const AREA_LEN = 2
-const NUMBER_LEN = 8
+const NUMBER_LEN = 10
 
 const onlyDigits = (s: string) => s.replace(/\D/g, '')
 
-/** Parse any stored phone string into its two editable parts (best-effort).
+/** Parse any stored phone string down to its bare digits (best-effort).
  *  Handles values already in canonical form, bare 10-digit numbers, and
- *  numbers that still carry a leading 91 country code. */
-export function parsePhone(value: string): { area: string; number: string } {
-  let d = onlyDigits(value)
-  if (d.length > AREA_LEN + NUMBER_LEN && d.startsWith('91')) d = d.slice(2)
-  return { area: d.slice(0, AREA_LEN), number: d.slice(AREA_LEN, AREA_LEN + NUMBER_LEN) }
+ *  numbers that still carry a leading 91 country code — stripped textually
+ *  first, not by digit-counting on the fully-digit-stripped string (a
+ *  length-based guard can't tell the literal "+91" prefix's digits apart
+ *  from real number digits once digits and prefix are already mixed). */
+export function parsePhone(value: string): string {
+  const rest = value.trim().replace(/^\+?91[\s-]?/, '')
+  return onlyDigits(rest).slice(0, NUMBER_LEN)
 }
 
-/** Canonical stored form: "+91 79 12345678". Empty parts → empty string. */
-export function formatPhone(area: string, number: string): string {
-  if (!area && !number) return ''
-  return `+91 ${area}${number ? ` ${number}` : ''}`.trimEnd()
+/** Canonical stored form: "+91 9812345678". Empty → empty string. */
+export function formatPhone(number: string): string {
+  const d = onlyDigits(number).slice(0, NUMBER_LEN)
+  return d ? `+91 ${d}` : ''
 }
 
-/** Valid when empty (optional) or exactly 2 + 8 digits after the +91 prefix. */
+/** Valid when empty (optional) or exactly 10 digits after the +91 prefix. */
 export function isValidPhone(value: string): boolean {
   if (!value.trim()) return true
-  const { area, number } = parsePhone(value)
-  return area.length === AREA_LEN && number.length === NUMBER_LEN
+  return parsePhone(value).length === NUMBER_LEN
 }
 
 interface Props {
@@ -33,10 +33,10 @@ interface Props {
   invalid?: boolean
 }
 
-/** Three-part Indian contact number: a fixed +91 prefix, a 2-digit area code,
- *  and an 8-digit local number. Emits the combined canonical string. */
+/** Indian contact number: a fixed +91 prefix plus a single 10-digit field.
+ *  Emits the combined canonical string. */
 export function PhoneInput({ value, onChange, invalid }: Props) {
-  const { area, number } = parsePhone(value)
+  const number = parsePhone(value)
   const errorCls = invalid ? 'border-crimson focus:border-crimson' : ''
 
   return (
@@ -45,21 +45,12 @@ export function PhoneInput({ value, onChange, invalid }: Props) {
         +91
       </span>
       <Input
-        value={area}
-        onChange={(e) => onChange(formatPhone(onlyDigits(e.target.value).slice(0, AREA_LEN), number))}
-        inputMode="numeric"
-        maxLength={AREA_LEN}
-        placeholder="79"
-        aria-label="Area code (2 digits)"
-        className={`w-16 text-center ${errorCls}`}
-      />
-      <Input
         value={number}
-        onChange={(e) => onChange(formatPhone(area, onlyDigits(e.target.value).slice(0, NUMBER_LEN)))}
+        onChange={(e) => onChange(formatPhone(e.target.value))}
         inputMode="numeric"
         maxLength={NUMBER_LEN}
-        placeholder="12345678"
-        aria-label="Number (8 digits)"
+        placeholder="9812345678"
+        aria-label="Phone number (10 digits)"
         className={`flex-1 ${errorCls}`}
       />
     </div>

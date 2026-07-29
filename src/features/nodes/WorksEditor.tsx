@@ -120,10 +120,11 @@ export function WorksEditor({ works, onChange, draftKeyPrefix }: {
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
+  if (!value) return null
   return (
     <div>
       <dt className="text-[11px] uppercase tracking-wide text-muted">{label}</dt>
-      <dd className="mt-0.5 text-ink-900">{value || '—'}</dd>
+      <dd className="mt-0.5 text-ink-900">{value}</dd>
     </div>
   )
 }

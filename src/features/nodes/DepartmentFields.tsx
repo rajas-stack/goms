@@ -1,8 +1,7 @@
 import { Field, Input } from '@/components/ui/Field'
 import { EmployeePicker } from '@/features/employees/EmployeePicker'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
-import { WorksEditor } from './WorksEditor'
-import { SALES_ROLES, parseWorks, serializeWorks } from './department-meta'
+import { SALES_ROLES } from './department-meta'
 import { resolveSalesChain } from '@/data/sales-hierarchy'
 import type { Employee } from '@/lib/types'
 import type { SalesTier } from '@/data/sales-team'
@@ -13,10 +12,11 @@ const DERIVED_SALES_ROLES: { tier: SalesTier; label: string }[] = [
   { tier: 'salesHead', label: 'Sales Head' },
 ]
 
-/** Department-only form controls (short name, head, sales ownership, works),
+/** Department-only form controls (short name, head, sales ownership),
  *  rendered by NodeFormDialog when the node being edited is a department.
  *  Everything is stored on the node's metadata so the HierNode shape is
- *  untouched. */
+ *  untouched. Works/opportunities are managed separately, from the
+ *  department's details view — never inside this form. */
 export function DepartmentFields({ meta, setMeta, employees, onCreateHead }: {
   meta: Record<string, string>
   setMeta: (updater: (m: Record<string, string>) => Record<string, string>) => void
@@ -31,8 +31,8 @@ export function DepartmentFields({ meta, setMeta, employees, onCreateHead }: {
 
   return (
     <>
-      <Field label="Short name" hint="Abbreviation shown on cards, e.g. RDD or GSRDC">
-        <Input value={meta.shortName ?? ''} onChange={(e) => set('shortName', e.target.value)} placeholder="e.g. RDD" />
+      <Field label="Short name" hint="Optional — auto-derived from the full name (e.g. RDD, SPI) when left blank">
+        <Input value={meta.shortName ?? ''} onChange={(e) => set('shortName', e.target.value)} placeholder="Auto-derived if left blank" />
       </Field>
 
       <Field
@@ -62,11 +62,6 @@ export function DepartmentFields({ meta, setMeta, employees, onCreateHead }: {
             </Field>
           ))}
         </div>
-      </div>
-
-      <div>
-        <p className="mb-2 text-[13px] font-medium text-ink-800">Works</p>
-        <WorksEditor works={parseWorks(meta.works)} onChange={(w) => set('works', serializeWorks(w))} />
       </div>
     </>
   )

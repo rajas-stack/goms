@@ -1,0 +1,6943 @@
+[
+ {
+  "zip": "ANDAMAN_&_NICOBAR_ISLANDS.zip",
+  "states": [
+   "Andaman and Nicobar Islands"
+  ],
+  "rows": 582,
+  "talukas": 9,
+  "counts": {
+   "code": 9,
+   "name": 0,
+   "fuzzy": 0,
+   "extra": 0
+  },
+  "unknownDistrict": 0,
+  "extras": []
+ },
+ {
+  "zip": "ANDHRA_PRADESH.zip",
+  "states": [
+   "Telangana",
+   "Andhra Pradesh",
+   "Uttar Pradesh"
+  ],
+  "rows": 18050,
+  "talukas": 686,
+  "counts": {
+   "code": 281,
+   "name": 10,
+   "fuzzy": 0,
+   "extra": 395
+  },
+  "unknownDistrict": 0,
+  "extras": [
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4881",
+    "name": "Payakaraopeta",
+    "villages": 19
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4880",
+    "name": "Nakkapalli",
+    "villages": 32
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4856",
+    "name": "Ravikamatham",
+    "villages": 36
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4857",
+    "name": "Madugula",
+    "villages": 54
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4873",
+    "name": "Butchayyapeta",
+    "villages": 40
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4872",
+    "name": "Chodavaram",
+    "villages": 31
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4874",
+    "name": "Kotauratla",
+    "villages": 22
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4861",
+    "name": "Sabbavaram",
+    "villages": 31
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4858",
+    "name": "Cheedikada",
+    "villages": 34
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4859",
+    "name": "Devarapalli",
+    "villages": 43
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4882",
+    "name": "S.Rayavaram",
+    "villages": 22
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4855",
+    "name": "Rolugunta",
+    "villages": 30
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4854",
+    "name": "Narsipatnam",
+    "villages": 12
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4878",
+    "name": "Atchuthapuram",
+    "villages": 35
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4876",
+    "name": "Kasimkota",
+    "villages": 28
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4870",
+    "name": "Paravada",
+    "villages": 22
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4853",
+    "name": "Golugonda",
+    "villages": 37
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4871",
+    "name": "Anakapalli",
+    "villages": 30
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4852",
+    "name": "Nathavaram",
+    "villages": 40
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4883",
+    "name": "Rambilli",
+    "villages": 32
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4875",
+    "name": "Makavarapalem",
+    "villages": 25
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4877",
+    "name": "Munagapaka",
+    "villages": 28
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4879",
+    "name": "Yelamanchili",
+    "villages": 12
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "743",
+    "district": "Vikarabad",
+    "code": "4860",
+    "name": "K.Kotapadu",
+    "villages": 32
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4923",
+    "name": "Kajuluru",
+    "villages": 20
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4930",
+    "name": "Tallarevu",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4913",
+    "name": "Kakinada (Rural)",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4910",
+    "name": "Samalkota",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4900",
+    "name": "Prathipadu",
+    "villages": 41
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4893",
+    "name": "Yeleswaram",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4915",
+    "name": "Pedapudi",
+    "villages": 17
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4914",
+    "name": "Kakinada (Urban)",
+    "villages": 1
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4912",
+    "name": "U.Kothapalli",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4903",
+    "name": "Peddapuram",
+    "villages": 22
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4911",
+    "name": "Pithapuram",
+    "villages": 27
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4904",
+    "name": "Gandepalli",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4899",
+    "name": "Kirlampudi",
+    "villages": 17
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4898",
+    "name": "Jaggampeta",
+    "villages": 19
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4902",
+    "name": "Gollaprolu",
+    "villages": 12
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4891",
+    "name": "Rowthulapudi",
+    "villages": 45
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4892",
+    "name": "Sankhavaram",
+    "villages": 33
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4922",
+    "name": "Karapa",
+    "villages": 19
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4901",
+    "name": "Thondangi",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4889",
+    "name": "Kotananduru",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "745",
+    "district": "Wanaparthy",
+    "code": "4890",
+    "name": "Tuni",
+    "villages": 22
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4784",
+    "name": "Palakonda",
+    "villages": 43
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4769",
+    "name": "Veeraghattam",
+    "villages": 42
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4770",
+    "name": "Seethampeta",
+    "villages": 119
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4771",
+    "name": "Bhamini",
+    "villages": 23
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4814",
+    "name": "Seethanagaram",
+    "villages": 44
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4811",
+    "name": "Garugubilli",
+    "villages": 34
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4815",
+    "name": "Balijipeta",
+    "villages": 34
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4812",
+    "name": "Parvathipuram",
+    "villages": 50
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4817",
+    "name": "Salur",
+    "villages": 87
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4810",
+    "name": "Jiyyammavalasa",
+    "villages": 58
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4807",
+    "name": "Komarada",
+    "villages": 99
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4818",
+    "name": "Pachipenta",
+    "villages": 54
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4813",
+    "name": "Makkuva",
+    "villages": 54
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4808",
+    "name": "Gummalakshmipuram",
+    "villages": 126
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "742",
+    "district": "Medchal Malkajgiri",
+    "code": "4809",
+    "name": "Kurupam",
+    "villages": 96
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4935",
+    "name": "Ambajipeta",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4928",
+    "name": "Kapileswarapuram",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4919",
+    "name": "Atreyapuram",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4943",
+    "name": "Katrenikona",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4941",
+    "name": "Amalapuram",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4934",
+    "name": "P.Gannavaram",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4932",
+    "name": "Mummidivaram",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4925",
+    "name": "Alamuru",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4929",
+    "name": "K. Gangavaram",
+    "villages": 24
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4926",
+    "name": "Ravulapalem",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4924",
+    "name": "Ramachandrapuram",
+    "villages": 21
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4921",
+    "name": "Rayavaram",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4933",
+    "name": "Ainavilli",
+    "villages": 17
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4931",
+    "name": "I. Polavaram",
+    "villages": 12
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4927",
+    "name": "Kothapeta",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4939",
+    "name": "Sakhinetipalli",
+    "villages": 8
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4938",
+    "name": "Malikipuram",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4937",
+    "name": "Razole",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4936",
+    "name": "Mamidikuduru",
+    "villages": 17
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4940",
+    "name": "Allavaram",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4942",
+    "name": "Uppalaguptam",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "746",
+    "district": "Nagarkurnool",
+    "code": "4920",
+    "name": "Mandapeta",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "5020",
+    "name": "Mudinepalle",
+    "villages": 33
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "5015",
+    "name": "Mandavalli",
+    "villages": 31
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "5017",
+    "name": "Kalidindi",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "5016",
+    "name": "Kaikaluru",
+    "villages": 23
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "5003",
+    "name": "Nuzividu",
+    "villages": 26
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "5002",
+    "name": "Musunuru",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "5005",
+    "name": "Agiripalli",
+    "villages": 24
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "5001",
+    "name": "Chatrai",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4967",
+    "name": "Denduluru",
+    "villages": 26
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4968",
+    "name": "Nidamarru",
+    "villages": 24
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4964",
+    "name": "Pedavegi",
+    "villages": 28
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4952",
+    "name": "Koyyalagudem",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4948",
+    "name": "Buttayagudem",
+    "villages": 54
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4947",
+    "name": "Jeelugu Milli",
+    "villages": 30
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4944",
+    "name": "Chintalapudi",
+    "villages": 39
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4946",
+    "name": "T.Narasapuram",
+    "villages": 24
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4965",
+    "name": "Pedapadu",
+    "villages": 26
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4962",
+    "name": "Unguturu",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4955",
+    "name": "Dwaraka Tirumala",
+    "villages": 34
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4963",
+    "name": "Bheemadole",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4945",
+    "name": "Lingapalem",
+    "villages": 26
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4949",
+    "name": "Polavaram",
+    "villages": 24
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4953",
+    "name": "Jangareddigudem",
+    "villages": 22
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4954",
+    "name": "Kamavarapukota",
+    "villages": 17
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4966",
+    "name": "Eluru Rural",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "7392",
+    "name": "Eluru Urban",
+    "villages": 1
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4734",
+    "name": "Velairpadu",
+    "villages": 22
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "747",
+    "district": "Yadadri Bhuvanagiri",
+    "code": "4735",
+    "name": "Kukunoor",
+    "villages": 26
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "547",
+    "district": "Krishna",
+    "code": "7391",
+    "name": "Machilipatnam South",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5088",
+    "name": "Kolluru",
+    "villages": 12
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5087",
+    "name": "Vemuru",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5093",
+    "name": "Bapatla",
+    "villages": 22
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5094",
+    "name": "Nizampatnam",
+    "villages": 9
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5096",
+    "name": "Repalle",
+    "villages": 19
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5092",
+    "name": "Karlapalem",
+    "villages": 5
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5091",
+    "name": "Pittalavanipalem",
+    "villages": 6
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5095",
+    "name": "Nagaram",
+    "villages": 12
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5090",
+    "name": "Cherukupalli",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5086",
+    "name": "Amarthalur",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5089",
+    "name": "Bhattiprolu",
+    "villages": 12
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5108",
+    "name": "Parchur",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5105",
+    "name": "Ballikurava",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5122",
+    "name": "Korisapadu",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5109",
+    "name": "Karamchedu",
+    "villages": 7
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5107",
+    "name": "Yeddanapudi",
+    "villages": 8
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5110",
+    "name": "Inkollu",
+    "villages": 9
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5112",
+    "name": "Addanki",
+    "villages": 20
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5111",
+    "name": "J.Pangulur",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5106",
+    "name": "Martur",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5104",
+    "name": "Santhamaguluru",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5125",
+    "name": "Chinaganjam",
+    "villages": 7
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5124",
+    "name": "Vetapalem",
+    "villages": 5
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5123",
+    "name": "Chirala",
+    "villages": 5
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "750",
+    "district": "Jayashankar Bhupalapally",
+    "code": "5085",
+    "name": "Tsunduru",
+    "villages": 12
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "4999",
+    "name": "Reddigudem",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "4995",
+    "name": "Mylavaram",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "5007",
+    "name": "Kanchikacherla",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "4996",
+    "name": "Gampalagudem",
+    "villages": 21
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "6862",
+    "name": "Vijayawada North",
+    "villages": 1
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "5009",
+    "name": "Ibrahimpatnam",
+    "villages": 17
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "4993",
+    "name": "Nandigama",
+    "villages": 26
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "4992",
+    "name": "Penuganchiprolu",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "4997",
+    "name": "Tiruvuru",
+    "villages": 17
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "4994",
+    "name": "Veerullapadu",
+    "villages": 27
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "4990",
+    "name": "Vatsavai",
+    "villages": 26
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "5008",
+    "name": "Chandarlapadu",
+    "villages": 23
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "5006",
+    "name": "Gaddamanugu Konduru",
+    "villages": 28
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "4998",
+    "name": "Atlapragada Konduru",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "5000",
+    "name": "Vissannapeta",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "5011",
+    "name": "Vijayawada (Rural)",
+    "villages": 19
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "4991",
+    "name": "Jaggaiahpeta",
+    "villages": 25
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "5010",
+    "name": "Vijayawada Central",
+    "villages": 1
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "6864",
+    "name": "Vijayawada West",
+    "villages": 1
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "748",
+    "district": "Suryapet",
+    "code": "6863",
+    "name": "Vijayawada East",
+    "villages": 1
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5060",
+    "name": "Nekarikallu",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5070",
+    "name": "Chilakaluripet H/O.Purushotha Patnam",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5071",
+    "name": "Edlapadu",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5061",
+    "name": "Bollapalli",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5041",
+    "name": "Veldurthy",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5046",
+    "name": "Karempudi",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5042",
+    "name": "Durgi",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5059",
+    "name": "Rajupalem",
+    "villages": 9
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5047",
+    "name": "Piduguralla",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5058",
+    "name": "Sattenapalli",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5066",
+    "name": "Rompicharla",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5067",
+    "name": "Narasaraopet",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5065",
+    "name": "Ipuru",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5049",
+    "name": "Bellamkonda",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5044",
+    "name": "Gurajala",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5051",
+    "name": "Krosuru",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5050",
+    "name": "Atchampet",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5045",
+    "name": "Dachepalli",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5068",
+    "name": "Muppalla",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5043",
+    "name": "Rentachintala",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5052",
+    "name": "Amaravathi",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5048",
+    "name": "Machavaram",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5063",
+    "name": "Nuzendla",
+    "villages": 21
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5062",
+    "name": "Vinukonda",
+    "villages": 23
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5069",
+    "name": "Nadendla",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5040",
+    "name": "Macherla",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5057",
+    "name": "Pedakurapadu",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "749",
+    "district": "Warangal Rural",
+    "code": "5064",
+    "name": "Savalyapuram H/O Kanamarlapudi",
+    "villages": 7
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5097",
+    "name": "Yerragondapalem",
+    "villages": 34
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5098",
+    "name": "Pullalacheruvu",
+    "villages": 20
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5130",
+    "name": "Hanumanthunipadu",
+    "villages": 28
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5146",
+    "name": "Pamur",
+    "villages": 29
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5145",
+    "name": "Chandrasekharapuram",
+    "villages": 38
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5135",
+    "name": "Veligandla",
+    "villages": 27
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5120",
+    "name": "Podili",
+    "villages": 27
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5134",
+    "name": "Komarolu",
+    "villages": 22
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5136",
+    "name": "Kanigiri",
+    "villages": 38
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5119",
+    "name": "Konakanamitla",
+    "villages": 35
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5132",
+    "name": "Racherla",
+    "villages": 15
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5133",
+    "name": "Giddalur",
+    "villages": 21
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5115",
+    "name": "Markapuram",
+    "villages": 24
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5118",
+    "name": "Tarlupadu",
+    "villages": 26
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5144",
+    "name": "Pedacherlopalle",
+    "villages": 22
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5099",
+    "name": "Tripuranthakam",
+    "villages": 19
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5131",
+    "name": "Bestavaripeta",
+    "villages": 22
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5117",
+    "name": "Cumbum",
+    "villages": 16
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5100",
+    "name": "Dornala",
+    "villages": 20
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5116",
+    "name": "Ardhaveedu",
+    "villages": 14
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "549",
+    "district": "Prakasam",
+    "code": "5101",
+    "name": "Peddaaraveedu",
+    "villages": 16
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5169",
+    "name": "Kodavalur",
+    "villages": 16
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5178",
+    "name": "Kovur",
+    "villages": 10
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5176",
+    "name": "Podalakur",
+    "villages": 36
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5172",
+    "name": "Chejerla",
+    "villages": 18
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5179",
+    "name": "Indukurpet",
+    "villages": 16
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5168",
+    "name": "Vidavalur",
+    "villages": 11
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5173",
+    "name": "Ananthasagaram",
+    "villages": 20
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5164",
+    "name": "Atmakur",
+    "villages": 20
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5171",
+    "name": "Sangam",
+    "villages": 17
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5167",
+    "name": "Allur",
+    "villages": 12
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5166",
+    "name": "Dagadarthi",
+    "villages": 23
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5182",
+    "name": "Venkatachalam",
+    "villages": 20
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5174",
+    "name": "Kaluvoya",
+    "villages": 23
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5157",
+    "name": "Jaladanki",
+    "villages": 12
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5162",
+    "name": "Duttalur",
+    "villages": 16
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5183",
+    "name": "Manubolu",
+    "villages": 18
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5175",
+    "name": "Rapur",
+    "villages": 40
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5185",
+    "name": "Sydapuram",
+    "villages": 36
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5170",
+    "name": "Buchireddipalem",
+    "villages": 15
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5165",
+    "name": "Anumasamudrampeta",
+    "villages": 23
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5163",
+    "name": "Marripadu",
+    "villages": 22
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5160",
+    "name": "Kaligiri",
+    "villages": 20
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5180",
+    "name": "Thotapalli Gudur",
+    "villages": 20
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5151",
+    "name": "Gudluru",
+    "villages": 18
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5150",
+    "name": "Lingasamudram",
+    "villages": 20
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5161",
+    "name": "Vinjamur",
+    "villages": 15
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5156",
+    "name": "Kondapuram",
+    "villages": 26
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5155",
+    "name": "Varikuntapadu",
+    "villages": 28
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5153",
+    "name": "Seetharamapuram",
+    "villages": 22
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5154",
+    "name": "Udayagiri",
+    "villages": 18
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5181",
+    "name": "Muthukur",
+    "villages": 15
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5158",
+    "name": "Kavali",
+    "villages": 15
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5177",
+    "name": "Nellore Rural",
+    "villages": 18
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5159",
+    "name": "Bogole",
+    "villages": 12
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "6866",
+    "name": "Nellore Urban",
+    "villages": 1
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5152",
+    "name": "Ulavapadu",
+    "villages": 12
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5147",
+    "name": "Voletivaripalem",
+    "villages": 21
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "550",
+    "district": "S.P.S. Nellore",
+    "code": "5148",
+    "name": "Kandukuru",
+    "villages": 19
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5398",
+    "name": "Ramachandrapuram",
+    "villages": 18
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5396",
+    "name": "Pakala",
+    "villages": 16
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5382",
+    "name": "Kumara Venkata Bhupala Puram",
+    "villages": 40
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5402",
+    "name": "Satyavedu",
+    "villages": 32
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5378",
+    "name": "Srikalahasti",
+    "villages": 64
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5379",
+    "name": "Thottambedu",
+    "villages": 42
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5399",
+    "name": "Vadamalapet",
+    "villages": 22
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5400",
+    "name": "Narayanavanam",
+    "villages": 17
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5380",
+    "name": "Buchi Naidu Kandriga",
+    "villages": 24
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5381",
+    "name": "Varadaiahpalem",
+    "villages": 31
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5401",
+    "name": "Pichatur",
+    "villages": 17
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5403",
+    "name": "Nagalapuram",
+    "villages": 13
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5377",
+    "name": "Yerpedu",
+    "villages": 35
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5383",
+    "name": "Tirupati (Urban)",
+    "villages": 5
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5385",
+    "name": "Chinnagottigallu",
+    "villages": 11
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5376",
+    "name": "Renigunta",
+    "villages": 32
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5375",
+    "name": "Tirupati (Rural)",
+    "villages": 29
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5407",
+    "name": "Puttur",
+    "villages": 13
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5384",
+    "name": "Chandragiri",
+    "villages": 24
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5189",
+    "name": "Ozili",
+    "villages": 49
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5191",
+    "name": "Kota",
+    "villages": 19
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5188",
+    "name": "Balayapalli",
+    "villages": 51
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5187",
+    "name": "Venkatagiri",
+    "villages": 71
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5186",
+    "name": "Dakkili",
+    "villages": 50
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5374",
+    "name": "Yerravaripalem",
+    "villages": 11
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5195",
+    "name": "Pellakur",
+    "villages": 28
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5192",
+    "name": "Vakadu",
+    "villages": 41
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5193",
+    "name": "Chittamur",
+    "villages": 41
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5194",
+    "name": "Naidupet",
+    "villages": 31
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5197",
+    "name": "Sullurpeta",
+    "villages": 32
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5196",
+    "name": "Doravarisatram",
+    "villages": 45
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5190",
+    "name": "Chillakur",
+    "villages": 30
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5184",
+    "name": "Gudur",
+    "villages": 21
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "754",
+    "district": "Sambhal",
+    "code": "5198",
+    "name": "Tada",
+    "villages": 25
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5391",
+    "name": "Beerongi Kothakota",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5392",
+    "name": "Madanapalle",
+    "villages": 20
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5248",
+    "name": "Obulavaripalle",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5247",
+    "name": "Pullampeta",
+    "villages": 26
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5242",
+    "name": "Veeraballe",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5245",
+    "name": "Chitvel",
+    "villages": 20
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5386",
+    "name": "Pileru",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5388",
+    "name": "Valmikipuram",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5414",
+    "name": "Ramasamudram",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5387",
+    "name": "Kalikiri",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5393",
+    "name": "Nimmanapalle",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5389",
+    "name": "Kurabalakota",
+    "villages": 8
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5390",
+    "name": "Pedda Thippasamudram",
+    "villages": 19
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5370",
+    "name": "Gurramkonda",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5371",
+    "name": "Kalakada",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5367",
+    "name": "Mulakalacheruvu",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5235",
+    "name": "Galiveedu",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5241",
+    "name": "Ramapuram",
+    "villages": 12
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5368",
+    "name": "Thamballapalle",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5243",
+    "name": "Nandalur",
+    "villages": 22
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5372",
+    "name": "Kambhamvaripalle",
+    "villages": 22
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5237",
+    "name": "Sambepalle",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5238",
+    "name": "T.Sundupalle",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5249",
+    "name": "Kodur",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5236",
+    "name": "Chinnamandem",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5246",
+    "name": "Rajampet",
+    "villages": 25
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5369",
+    "name": "Peddamandyam",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5239",
+    "name": "Rayachoti",
+    "villages": 19
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5240",
+    "name": "Lakkireddipalli",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "753",
+    "district": "Bhadradri Kothagudem",
+    "code": "5244",
+    "name": "Penagalur",
+    "villages": 30
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4887",
+    "name": "Addateegala",
+    "villages": 100
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4894",
+    "name": "Gangavaram",
+    "villages": 61
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4885",
+    "name": "Devipatnam",
+    "villages": 47
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4888",
+    "name": "Rajavommangi",
+    "villages": 63
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4884",
+    "name": "Maredumilli",
+    "villages": 72
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4849",
+    "name": "Chinthapalli",
+    "villages": 250
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4844",
+    "name": "Araku Valley",
+    "villages": 171
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4846",
+    "name": "Hukumpeta",
+    "villages": 169
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4848",
+    "name": "G.Madugula",
+    "villages": 329
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4845",
+    "name": "Ananthagiri",
+    "villages": 316
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4850",
+    "name": "Gudem Kotha Veedhi",
+    "villages": 175
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4847",
+    "name": "Paderu",
+    "villages": 215
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4843",
+    "name": "Dumbriguda",
+    "villages": 88
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4851",
+    "name": "Koyyuru",
+    "villages": 163
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4895",
+    "name": "Rampachodavaram",
+    "villages": 78
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "6861",
+    "name": "Yetapaka",
+    "villages": 74
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4733",
+    "name": "Vararamachandrapuram",
+    "villages": 63
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4731",
+    "name": "Kunavaram",
+    "villages": 57
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4732",
+    "name": "Chinturu",
+    "villages": 90
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4886",
+    "name": "Y. Ramavaram",
+    "villages": 138
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4841",
+    "name": "Munchingi Puttu",
+    "villages": 326
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "744",
+    "district": "Jogulamba Gadwal",
+    "code": "4842",
+    "name": "Peda Bayalu",
+    "villages": 272
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5301",
+    "name": "Kolimigundla",
+    "villages": 21
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5300",
+    "name": "Sanjamala",
+    "villages": 21
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5295",
+    "name": "Owk",
+    "villages": 20
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5302",
+    "name": "Uyyalawada",
+    "villages": 20
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5298",
+    "name": "Allagadda",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5288",
+    "name": "Banaganapalli",
+    "villages": 40
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5260",
+    "name": "Nandikotkur",
+    "villages": 12
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5299",
+    "name": "Dornipadu",
+    "villages": 9
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5296",
+    "name": "Koilakuntla",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5303",
+    "name": "Chagalamarri",
+    "villages": 20
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5284",
+    "name": "Nandyal Rural",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5294",
+    "name": "Peapully",
+    "villages": 20
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5289",
+    "name": "Dhone",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5280",
+    "name": "Panyam",
+    "villages": 19
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5283",
+    "name": "Bandi Atmakur",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5297",
+    "name": "Rudravaram",
+    "villages": 20
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5286",
+    "name": "Sirvel",
+    "villages": 12
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5282",
+    "name": "Velugodu",
+    "villages": 9
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5267",
+    "name": "Midthur",
+    "villages": 17
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5262",
+    "name": "Jupadu Bunglow",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5285",
+    "name": "Mahanandi",
+    "villages": 9
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5281",
+    "name": "Gadivemula",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5261",
+    "name": "Pagidyala",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5263",
+    "name": "Kothapalle",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5265",
+    "name": "Atmakur",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "7388",
+    "name": "Nandyal Urban",
+    "villages": 4
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5279",
+    "name": "Bethamcherla",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5287",
+    "name": "Gospadu",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5266",
+    "name": "Pamulapadu",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "751",
+    "district": "Mahabubabad",
+    "code": "5264",
+    "name": "Srisailam",
+    "villages": 4
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5364",
+    "name": "Hindupur",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5360",
+    "name": "Tanakal",
+    "villages": 21
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5365",
+    "name": "Lepakshi",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5354",
+    "name": "Agali",
+    "villages": 9
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5353",
+    "name": "Rolla",
+    "villages": 7
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5366",
+    "name": "Chilamathur",
+    "villages": 21
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5361",
+    "name": "Amadagur",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5355",
+    "name": "Parigi",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5350",
+    "name": "Madakasira",
+    "villages": 19
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5342",
+    "name": "Gandlapenta",
+    "villages": 14
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5363",
+    "name": "Somandepalli",
+    "villages": 20
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5356",
+    "name": "Penukonda",
+    "villages": 16
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5346",
+    "name": "Kothacheruvu",
+    "villages": 23
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5340",
+    "name": "Talupula",
+    "villages": 12
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5339",
+    "name": "Mudigubba",
+    "villages": 28
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5345",
+    "name": "Bukkapatnam",
+    "villages": 9
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5358",
+    "name": "Obuladevaracheruvu",
+    "villages": 15
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5352",
+    "name": "Gudibanda",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5362",
+    "name": "Gorantla",
+    "villages": 21
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5359",
+    "name": "Nallachervu",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5341",
+    "name": "Nambulapulakunta",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5349",
+    "name": "Roddam",
+    "villages": 21
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5351",
+    "name": "Amarapuram",
+    "villages": 9
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5343",
+    "name": "Kadiri",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5344",
+    "name": "Nallamada",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5357",
+    "name": "Puttaparthy",
+    "villages": 9
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5348",
+    "name": "Ramagiri",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5347",
+    "name": "Chennekothapalli",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5335",
+    "name": "Kanaganipalli",
+    "villages": 10
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5337",
+    "name": "Bathalapalli",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5338",
+    "name": "Tadimarri",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "752",
+    "district": "Jangaon",
+    "code": "5336",
+    "name": "Dharmavaram",
+    "villages": 14
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "554",
+    "district": "Chittoor",
+    "code": "5412",
+    "name": "Somala",
+    "villages": 14
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "554",
+    "district": "Chittoor",
+    "code": "5415",
+    "name": "Punganuru",
+    "villages": 19
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "554",
+    "district": "Chittoor",
+    "code": "5413",
+    "name": "Chowdepalle",
+    "villages": 15
+   },
+   {
+    "stateCode": 37,
+    "districtCode": "554",
+    "district": "Chittoor",
+    "code": "5394",
+    "name": "Sodam",
+    "villages": 14
+   }
+  ]
+ },
+ {
+  "zip": "BIHAR.zip",
+  "states": [
+   "Bihar"
+  ],
+  "rows": 44082,
+  "talukas": 535,
+  "counts": {
+   "code": 534,
+   "name": 0,
+   "fuzzy": 0,
+   "extra": 1
+  },
+  "unknownDistrict": 0,
+  "extras": [
+   {
+    "stateCode": 10,
+    "districtCode": "219",
+    "district": "Saran",
+    "code": "1328",
+    "name": "Parbatta",
+    "villages": 1
+   }
+  ]
+ },
+ {
+  "zip": "CHANDIGARH.zip",
+  "states": [
+   "Chandigarh"
+  ],
+  "rows": 35,
+  "talukas": 1,
+  "counts": {
+   "code": 1,
+   "name": 0,
+   "fuzzy": 0,
+   "extra": 0
+  },
+  "unknownDistrict": 0,
+  "extras": []
+ },
+ {
+  "zip": "CHHATTISGARH.zip",
+  "states": [
+   "Chhattisgarh",
+   "Assam",
+   "Arunachal Pradesh",
+   "Telangana"
+  ],
+  "rows": 15894,
+  "talukas": 181,
+  "counts": {
+   "code": 92,
+   "name": 47,
+   "fuzzy": 0,
+   "extra": 42
+  },
+  "unknownDistrict": 6119,
+  "extras": [
+   {
+    "stateCode": 18,
+    "districtCode": "759",
+    "district": "West Karbi Anglong",
+    "code": "3302",
+    "name": "Chhuikhadan",
+    "villages": 110
+   },
+   {
+    "stateCode": 18,
+    "districtCode": "759",
+    "district": "West Karbi Anglong",
+    "code": "7330",
+    "name": "Salhewara",
+    "villages": 79
+   },
+   {
+    "stateCode": 18,
+    "districtCode": "759",
+    "district": "West Karbi Anglong",
+    "code": "3303",
+    "name": "Khairagarh",
+    "villages": 226
+   },
+   {
+    "stateCode": 18,
+    "districtCode": "759",
+    "district": "West Karbi Anglong",
+    "code": "7171",
+    "name": "Gandai",
+    "villages": 76
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "761",
+    "district": "Longding",
+    "code": "7282",
+    "name": "Aundhi",
+    "villages": 51
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "761",
+    "district": "Longding",
+    "code": "3309",
+    "name": "Manpur",
+    "villages": 86
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "761",
+    "district": "Longding",
+    "code": "7283",
+    "name": "Khadgaon",
+    "villages": 36
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "761",
+    "district": "Longding",
+    "code": "3308",
+    "name": "Mohla",
+    "villages": 172
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "761",
+    "district": "Longding",
+    "code": "3310",
+    "name": "Ambagarh Chouki",
+    "villages": 158
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "763",
+    "district": "Kra Daadi",
+    "code": "7274",
+    "name": "Sariya",
+    "villages": 81
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "763",
+    "district": "Kra Daadi",
+    "code": "3271",
+    "name": "Baramkela",
+    "villages": 167
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "763",
+    "district": "Kra Daadi",
+    "code": "3329",
+    "name": "Bilaigarh",
+    "villages": 75
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "763",
+    "district": "Kra Daadi",
+    "code": "7296",
+    "name": "Bhatgaon",
+    "villages": 75
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "763",
+    "district": "Kra Daadi",
+    "code": "7427",
+    "name": "Sarsiwa",
+    "villages": 76
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "734",
+    "district": "Nirmal",
+    "code": "3287",
+    "name": "Pendra Road",
+    "villages": 87
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "734",
+    "district": "Nirmal",
+    "code": "3288",
+    "name": "Marwahi",
+    "villages": 78
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "734",
+    "district": "Nirmal",
+    "code": "7298",
+    "name": "Sakola",
+    "villages": 35
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "734",
+    "district": "Nirmal",
+    "code": "3289",
+    "name": "Pendra",
+    "villages": 25
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "404",
+    "district": "Korba",
+    "code": "7163",
+    "name": "Korba",
+    "villages": 21
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "763",
+    "district": "Kra Daadi",
+    "code": "3270",
+    "name": "Sarangarh",
+    "villages": 282
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "762",
+    "district": "Namsai",
+    "code": "7167",
+    "name": "BARADWAR",
+    "villages": 36
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "762",
+    "district": "Namsai",
+    "code": "7327",
+    "name": "Hasoud",
+    "villages": 42
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "762",
+    "district": "Namsai",
+    "code": "7381",
+    "name": "Chandrapur",
+    "villages": 40
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "762",
+    "district": "Namsai",
+    "code": "3284",
+    "name": "Dabhra",
+    "villages": 87
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "762",
+    "district": "Namsai",
+    "code": "3285",
+    "name": "Malkharoda",
+    "villages": 61
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "762",
+    "district": "Namsai",
+    "code": "3286",
+    "name": "Jaijaipur",
+    "villages": 25
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "762",
+    "district": "Namsai",
+    "code": "7426",
+    "name": "Bhothiya",
+    "villages": 37
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "762",
+    "district": "Namsai",
+    "code": "7279",
+    "name": "Adbhar",
+    "villages": 48
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "762",
+    "district": "Namsai",
+    "code": "3282",
+    "name": "Sakti",
+    "villages": 91
+   },
+   {
+    "stateCode": 12,
+    "districtCode": "762",
+    "district": "Namsai",
+    "code": "7165",
+    "name": "BARADWAR",
+    "villages": 1
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "417",
+    "district": "Bijapur",
+    "code": "3368",
+    "name": "Kutru",
+    "villages": 1
+   },
+   {
+    "stateCode": 18,
+    "districtCode": "760",
+    "district": "Majuli",
+    "code": "3235",
+    "name": "Khadganva",
+    "villages": 45
+   },
+   {
+    "stateCode": 18,
+    "districtCode": "760",
+    "district": "Majuli",
+    "code": "3234",
+    "name": "Manendragarh",
+    "villages": 59
+   },
+   {
+    "stateCode": 18,
+    "districtCode": "760",
+    "district": "Majuli",
+    "code": "7160",
+    "name": "Kelhari",
+    "villages": 75
+   },
+   {
+    "stateCode": 18,
+    "districtCode": "760",
+    "district": "Majuli",
+    "code": "3231",
+    "name": "Bharatpur",
+    "villages": 109
+   },
+   {
+    "stateCode": 18,
+    "districtCode": "760",
+    "district": "Majuli",
+    "code": "7273",
+    "name": "Kotadol",
+    "villages": 76
+   },
+   {
+    "stateCode": 18,
+    "districtCode": "760",
+    "district": "Majuli",
+    "code": "6745",
+    "name": "Chirmiri",
+    "villages": 14
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "400",
+    "district": "Koriya",
+    "code": "7270",
+    "name": "Pondi (Bachra)",
+    "villages": 37
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "400",
+    "district": "Koriya",
+    "code": "3233",
+    "name": "Sonhat",
+    "villages": 106
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "400",
+    "district": "Koriya",
+    "code": "3232",
+    "name": "Baikunthpur",
+    "villages": 94
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "400",
+    "district": "Koriya",
+    "code": "7224",
+    "name": "Patna",
+    "villages": 49
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "415",
+    "district": "Narayanpur",
+    "code": "3353",
+    "name": "Narayanpur",
+    "villages": 1
+   }
+  ]
+ },
+ {
+  "zip": "DELHI.zip",
+  "states": [
+   "Delhi"
+  ],
+  "rows": 369,
+  "talukas": 33,
+  "counts": {
+   "code": 33,
+   "name": 0,
+   "fuzzy": 0,
+   "extra": 0
+  },
+  "unknownDistrict": 0,
+  "extras": []
+ },
+ {
+  "zip": "Dadra Nagar Haveli & Daman Diu.zip",
+  "states": [
+   "Dadra and Nagar Haveli and Daman and Diu"
+  ],
+  "rows": 91,
+  "talukas": 3,
+  "counts": {
+   "code": 3,
+   "name": 0,
+   "fuzzy": 0,
+   "extra": 0
+  },
+  "unknownDistrict": 0,
+  "extras": []
+ },
+ {
+  "zip": "GOA.zip",
+  "states": [
+   "Goa"
+  ],
+  "rows": 433,
+  "talukas": 14,
+  "counts": {
+   "code": 8,
+   "name": 0,
+   "fuzzy": 0,
+   "extra": 6
+  },
+  "unknownDistrict": 0,
+  "extras": [
+   {
+    "stateCode": 30,
+    "districtCode": "586",
+    "district": "South Goa",
+    "code": "5619",
+    "name": "CANACONA",
+    "villages": 9
+   },
+   {
+    "stateCode": 30,
+    "districtCode": "586",
+    "district": "South Goa",
+    "code": "5618",
+    "name": "SANGUEM",
+    "villages": 38
+   },
+   {
+    "stateCode": 30,
+    "districtCode": "586",
+    "district": "South Goa",
+    "code": "5617",
+    "name": "QUEPEM",
+    "villages": 38
+   },
+   {
+    "stateCode": 30,
+    "districtCode": "586",
+    "district": "South Goa",
+    "code": "5620",
+    "name": "DHARBANDORA",
+    "villages": 15
+   },
+   {
+    "stateCode": 30,
+    "districtCode": "585",
+    "district": "North Goa",
+    "code": "5614",
+    "name": "SATARI",
+    "villages": 1
+   },
+   {
+    "stateCode": 30,
+    "districtCode": "586",
+    "district": "South Goa",
+    "code": "0",
+    "name": "MORMUGAO",
+    "villages": 18
+   }
+  ]
+ },
+ {
+  "zip": "GUJARAT.zip",
+  "states": [
+   "Gujarat",
+   "Tamil Nadu"
+  ],
+  "rows": 16217,
+  "talukas": 218,
+  "counts": {
+   "code": 184,
+   "name": 20,
+   "fuzzy": 0,
+   "extra": 14
+  },
+  "unknownDistrict": 3607,
+  "extras": [
+   {
+    "stateCode": 24,
+    "districtCode": "469",
+    "district": "Banaskantha",
+    "code": "3742",
+    "name": "BHABHAR",
+    "villages": 52
+   },
+   {
+    "stateCode": 24,
+    "districtCode": "469",
+    "district": "Banaskantha",
+    "code": "3741",
+    "name": "DEODAR",
+    "villages": 64
+   },
+   {
+    "stateCode": 24,
+    "districtCode": "469",
+    "district": "Banaskantha",
+    "code": "6833",
+    "name": "LAKHANI",
+    "villages": 53
+   },
+   {
+    "stateCode": 24,
+    "districtCode": "469",
+    "district": "Banaskantha",
+    "code": "6832",
+    "name": "SUIGAM",
+    "villages": 39
+   },
+   {
+    "stateCode": 24,
+    "districtCode": "469",
+    "district": "Banaskantha",
+    "code": "3733",
+    "name": "THARAD",
+    "villages": 123
+   },
+   {
+    "stateCode": 24,
+    "districtCode": "469",
+    "district": "Banaskantha",
+    "code": "3732",
+    "name": "VAV",
+    "villages": 76
+   },
+   {
+    "stateCode": 24,
+    "districtCode": "476",
+    "district": "Rajkot",
+    "code": "6840",
+    "name": "VINCHHIYA",
+    "villages": 46
+   },
+   {
+    "stateCode": 24,
+    "districtCode": "470",
+    "district": "Patan",
+    "code": "6835",
+    "name": "SHANKHESHWAR",
+    "villages": 36
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "0",
+    "district": "Tirupathur",
+    "code": "0",
+    "name": "VAV",
+    "villages": 33
+   },
+   {
+    "stateCode": 24,
+    "districtCode": "489",
+    "district": "Dang",
+    "code": "6851",
+    "name": "VAGHAI",
+    "villages": 96
+   },
+   {
+    "stateCode": 24,
+    "districtCode": "480",
+    "district": "Amreli",
+    "code": "0",
+    "name": "JAFRABAD",
+    "villages": 1
+   },
+   {
+    "stateCode": 24,
+    "districtCode": "481",
+    "district": "Bhavnagar",
+    "code": "0",
+    "name": "MAHUVA",
+    "villages": 1
+   },
+   {
+    "stateCode": 24,
+    "districtCode": "488",
+    "district": "Bharuch",
+    "code": "0",
+    "name": "VAGRA",
+    "villages": 1
+   },
+   {
+    "stateCode": 24,
+    "districtCode": "468",
+    "district": "Kutch",
+    "code": "0",
+    "name": "MUNDRA",
+    "villages": 1
+   }
+  ]
+ },
+ {
+  "zip": "HARYANA.zip",
+  "states": [
+   "Haryana"
+  ],
+  "rows": 6834,
+  "talukas": 112,
+  "counts": {
+   "code": 70,
+   "name": 37,
+   "fuzzy": 0,
+   "extra": 5
+  },
+  "unknownDistrict": 172,
+  "extras": [
+   {
+    "stateCode": 6,
+    "districtCode": "80",
+    "district": "Hisar",
+    "code": "6169",
+    "name": "Bass",
+    "villages": 20
+   },
+   {
+    "stateCode": 6,
+    "districtCode": "80",
+    "district": "Hisar",
+    "code": "396",
+    "name": "Hansi",
+    "villages": 37
+   },
+   {
+    "stateCode": 6,
+    "districtCode": "80",
+    "district": "Hisar",
+    "code": "0",
+    "name": "Kheri Jalab ST",
+    "villages": 52
+   },
+   {
+    "stateCode": 6,
+    "districtCode": "80",
+    "district": "Hisar",
+    "code": "395",
+    "name": "Narnaund",
+    "villages": 16
+   },
+   {
+    "stateCode": 6,
+    "districtCode": "71",
+    "district": "Yamunanagar",
+    "code": "0",
+    "name": "Khizrabad ST",
+    "villages": 175
+   }
+  ]
+ },
+ {
+  "zip": "JHARKHAND.zip",
+  "states": [
+   "Jharkhand",
+   "Tamil Nadu"
+  ],
+  "rows": 32565,
+  "talukas": 267,
+  "counts": {
+   "code": 259,
+   "name": 2,
+   "fuzzy": 0,
+   "extra": 6
+  },
+  "unknownDistrict": 0,
+  "extras": [
+   {
+    "stateCode": 20,
+    "districtCode": "346",
+    "district": "Garhwa",
+    "code": "6423",
+    "name": "Bargad",
+    "villages": 40
+   },
+   {
+    "stateCode": 20,
+    "districtCode": "359",
+    "district": "Latehar",
+    "code": "6427",
+    "name": "SARYU",
+    "villages": 33
+   },
+   {
+    "stateCode": 20,
+    "districtCode": "354",
+    "district": "Dhanbad",
+    "code": "6424",
+    "name": "KALIASOL",
+    "villages": 95
+   },
+   {
+    "stateCode": 20,
+    "districtCode": "350",
+    "district": "Deoghar",
+    "code": "2537",
+    "name": "BENGABAD",
+    "villages": 1
+   },
+   {
+    "stateCode": 20,
+    "districtCode": "360",
+    "district": "Hazaribagh",
+    "code": "2541",
+    "name": "BAGODAR",
+    "villages": 1
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "0",
+    "district": "Tirupathur",
+    "code": "0",
+    "name": "Disputed (Jharkhand)",
+    "villages": 1
+   }
+  ]
+ },
+ {
+  "zip": "KARNATAKA.zip",
+  "states": [
+   "Karnataka",
+   "Telangana"
+  ],
+  "rows": 31024,
+  "talukas": 244,
+  "counts": {
+   "code": 167,
+   "name": 51,
+   "fuzzy": 3,
+   "extra": 23
+  },
+  "unknownDistrict": 0,
+  "extras": [
+   {
+    "stateCode": 29,
+    "districtCode": "575",
+    "district": "Dakshina Kannada",
+    "code": "6907",
+    "name": "Mudabidri",
+    "villages": 24
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "738",
+    "district": "Peddapalli",
+    "code": "5498",
+    "name": "Hosapete",
+    "villages": 53
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "584",
+    "district": "Ramanagara",
+    "code": "5607",
+    "name": "Channapatna",
+    "villages": 146
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "556",
+    "district": "Bagalkote",
+    "code": "6872",
+    "name": "Guledagudda",
+    "villages": 38
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "556",
+    "district": "Bagalkote",
+    "code": "6874",
+    "name": "Rabkavi Banhatti",
+    "villages": 23
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "572",
+    "district": "Bengaluru Urban",
+    "code": "6906",
+    "name": "Bengaluru North",
+    "villages": 126
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "572",
+    "district": "Bengaluru Urban",
+    "code": "99999",
+    "name": "BBMP (M Corp.)",
+    "villages": 1
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "556",
+    "district": "Bagalkote",
+    "code": "6906",
+    "name": "Badami",
+    "villages": 1
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "558",
+    "district": "Bidar",
+    "code": "6884",
+    "name": "Chitguppa",
+    "villages": 44
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "582",
+    "district": "Chikkaballapura",
+    "code": "7405",
+    "name": "Manchenahalli",
+    "villages": 51
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "562",
+    "district": "Dharwad",
+    "code": "5473",
+    "name": "Dharwad",
+    "villages": 105
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "579",
+    "district": "Kalaburagi",
+    "code": "6912",
+    "name": "Chittapur",
+    "villages": 84
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "584",
+    "district": "Ramanagara",
+    "code": "7406",
+    "name": "Harohalli",
+    "villages": 85
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "584",
+    "district": "Ramanagara",
+    "code": "5608",
+    "name": "Kanakapura",
+    "villages": 207
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "584",
+    "district": "Ramanagara",
+    "code": "5605",
+    "name": "Magadi",
+    "villages": 305
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "584",
+    "district": "Ramanagara",
+    "code": "5606",
+    "name": "Ramanagara",
+    "villages": 136
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "569",
+    "district": "Udupi",
+    "code": "6902",
+    "name": "Bramhavara",
+    "villages": 49
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "738",
+    "district": "Peddapalli",
+    "code": "5496",
+    "name": "Hadagalli",
+    "villages": 72
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "738",
+    "district": "Peddapalli",
+    "code": "5497",
+    "name": "Hagaribommanahalli",
+    "villages": 66
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "738",
+    "district": "Peddapalli",
+    "code": "5510",
+    "name": "Harapanahalli",
+    "villages": 92
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "738",
+    "district": "Peddapalli",
+    "code": "6897",
+    "name": "Kotturu",
+    "villages": 45
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "738",
+    "district": "Peddapalli",
+    "code": "5502",
+    "name": "Kudligi",
+    "villages": 74
+   },
+   {
+    "stateCode": 29,
+    "districtCode": "557",
+    "district": "Vijayapura",
+    "code": "5449",
+    "name": "Vijayapura",
+    "villages": 58
+   }
+  ]
+ },
+ {
+  "zip": "KERALA.zip",
+  "states": [
+   "Kerala"
+  ],
+  "rows": 1664,
+  "talukas": 78,
+  "counts": {
+   "code": 63,
+   "name": 14,
+   "fuzzy": 0,
+   "extra": 1
+  },
+  "unknownDistrict": 0,
+  "extras": [
+   {
+    "stateCode": 32,
+    "districtCode": "593",
+    "district": "Palakkad",
+    "code": "NaN",
+    "name": "Attappadi Trbal Taluk",
+    "villages": 7
+   }
+  ]
+ },
+ {
+  "zip": "LAKSHYADWEEP.zip",
+  "states": [
+   "Lakshadweep"
+  ],
+  "rows": 30,
+  "talukas": 10,
+  "counts": {
+   "code": 10,
+   "name": 0,
+   "fuzzy": 0,
+   "extra": 0
+  },
+  "unknownDistrict": 0,
+  "extras": []
+ },
+ {
+  "zip": "MADHYA_PRADESH.zip",
+  "states": [
+   "Madhya Pradesh",
+   "Manipur",
+   "Chhattisgarh"
+  ],
+  "rows": 58169,
+  "talukas": 443,
+  "counts": {
+   "code": 319,
+   "name": 78,
+   "fuzzy": 2,
+   "extra": 44
+  },
+  "unknownDistrict": 528,
+  "extras": [
+   {
+    "stateCode": 23,
+    "districtCode": "450",
+    "district": "Katni",
+    "code": "6806",
+    "name": "DHIMARKHEDA",
+    "villages": 87
+   },
+   {
+    "stateCode": 14,
+    "districtCode": "768",
+    "district": "Kakching",
+    "code": "3468",
+    "name": "AMARPATAN",
+    "villages": 141
+   },
+   {
+    "stateCode": 14,
+    "districtCode": "768",
+    "district": "Kakching",
+    "code": "3470",
+    "name": "MAIHAR",
+    "villages": 252
+   },
+   {
+    "stateCode": 14,
+    "districtCode": "768",
+    "district": "Kakching",
+    "code": "3469",
+    "name": "RAMNAGAR",
+    "villages": 205
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "426",
+    "district": "Panna",
+    "code": "6766",
+    "name": "SIMARIYA",
+    "villages": 67
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "463",
+    "district": "Singrauli",
+    "code": "7400",
+    "name": "DUDHAMANIYA",
+    "villages": 84
+   },
+   {
+    "stateCode": 14,
+    "districtCode": "766",
+    "district": "Jiribam",
+    "code": "3476",
+    "name": "Hanumana",
+    "villages": 341
+   },
+   {
+    "stateCode": 14,
+    "districtCode": "766",
+    "district": "Jiribam",
+    "code": "7442",
+    "name": "DEVTALAB",
+    "villages": 237
+   },
+   {
+    "stateCode": 14,
+    "districtCode": "766",
+    "district": "Jiribam",
+    "code": "3477",
+    "name": "MAUGANJ",
+    "villages": 194
+   },
+   {
+    "stateCode": 14,
+    "districtCode": "766",
+    "district": "Jiribam",
+    "code": "3478",
+    "name": "NAIGARHI",
+    "villages": 303
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "446",
+    "district": "Raisen",
+    "code": "7449",
+    "name": "SULTANGANG",
+    "villages": 72
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "446",
+    "district": "Raisen",
+    "code": "7443",
+    "name": "BANHORI",
+    "villages": 70
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "436",
+    "district": "Shajapur",
+    "code": "6783",
+    "name": "AWANTIPUR_BADODIYA",
+    "villages": 25
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "446",
+    "district": "Raisen",
+    "code": "6801",
+    "name": "DEVARI",
+    "villages": 59
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "465",
+    "district": "Alirajpur",
+    "code": "6828",
+    "name": "KATHIWADA",
+    "villages": 132
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "465",
+    "district": "Alirajpur",
+    "code": "6829",
+    "name": "SONDWA",
+    "villages": 139
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "439",
+    "district": "Indore",
+    "code": "6788",
+    "name": "BHICHOLI_HAPSI",
+    "villages": 26
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "439",
+    "district": "Indore",
+    "code": "6787",
+    "name": "KANADIYA",
+    "villages": 26
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "439",
+    "district": "Indore",
+    "code": "6790",
+    "name": "KHUDAIL",
+    "villages": 52
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "435",
+    "district": "Ujjain",
+    "code": "6779",
+    "name": "MAAKDON",
+    "villages": 104
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "433",
+    "district": "Mandsaur",
+    "code": "7448",
+    "name": "KAYAMPUR",
+    "villages": 74
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "451",
+    "district": "Jabalpur",
+    "code": "7453",
+    "name": "KATANGI",
+    "villages": 97
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "451",
+    "district": "Jabalpur",
+    "code": "7451",
+    "name": "PONDA",
+    "villages": 100
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "451",
+    "district": "Jabalpur",
+    "code": "6809",
+    "name": "RANJHI",
+    "villages": 5
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "447",
+    "district": "Betul",
+    "code": "6804",
+    "name": "PRABHAT PATTAN",
+    "villages": 131
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "449",
+    "district": "Hoshangabad",
+    "code": "3618",
+    "name": "PIPARIYA",
+    "villages": 153
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "449",
+    "district": "Hoshangabad",
+    "code": "3613",
+    "name": "ITARSI",
+    "villages": 169
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "449",
+    "district": "Hoshangabad",
+    "code": "3615",
+    "name": "DOLARIYA",
+    "villages": 52
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "449",
+    "district": "Hoshangabad",
+    "code": "3614",
+    "name": "NARMADAPURAM",
+    "villages": 41
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "449",
+    "district": "Hoshangabad",
+    "code": "6805",
+    "name": "NARMADAPURAM",
+    "villages": 7
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "449",
+    "district": "Hoshangabad",
+    "code": "3616",
+    "name": "MAKHAN NAGAR (BABAI)",
+    "villages": 120
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "449",
+    "district": "Hoshangabad",
+    "code": "3617",
+    "name": "SOHAGPUR",
+    "villages": 161
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "449",
+    "district": "Hoshangabad",
+    "code": "3612",
+    "name": "SEONIMALWA",
+    "villages": 139
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "449",
+    "district": "Hoshangabad",
+    "code": "7444",
+    "name": "SEONIMALWA",
+    "villages": 56
+   },
+   {
+    "stateCode": 14,
+    "districtCode": "767",
+    "district": "Kangpokpi",
+    "code": "3658",
+    "name": "PANDHURNA",
+    "villages": 191
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "449",
+    "district": "Hoshangabad",
+    "code": "3619",
+    "name": "BANKHEDI",
+    "villages": 131
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "452",
+    "district": "Narsinghpur",
+    "code": "6811",
+    "name": "SAINKHEDA",
+    "villages": 92
+   },
+   {
+    "stateCode": 14,
+    "districtCode": "767",
+    "district": "Kangpokpi",
+    "code": "3656",
+    "name": "SAUSAR",
+    "villages": 163
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "422",
+    "district": "Datia",
+    "code": "6758",
+    "name": "BADHONI",
+    "villages": 78
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "420",
+    "district": "Bhind",
+    "code": "7395",
+    "name": "AMAYAN",
+    "villages": 64
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "722",
+    "district": "Kondagaon",
+    "code": "3415",
+    "name": "NIWARI",
+    "villages": 116
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "722",
+    "district": "Kondagaon",
+    "code": "3416",
+    "name": "ORACHHA",
+    "villages": 41
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "722",
+    "district": "Kondagaon",
+    "code": "3417",
+    "name": "PRITHVIPUR",
+    "villages": 157
+   },
+   {
+    "stateCode": 23,
+    "districtCode": "423",
+    "district": "Shivpuri",
+    "code": "6819",
+    "name": "PICHHORE",
+    "villages": 8
+   }
+  ]
+ },
+ {
+  "zip": "MAHARASHTRA.zip",
+  "states": [
+   "Maharashtra",
+   "Kerala",
+   "Tamil Nadu"
+  ],
+  "rows": 44658,
+  "talukas": 398,
+  "counts": {
+   "code": 315,
+   "name": 0,
+   "fuzzy": 0,
+   "extra": 83
+  },
+  "unknownDistrict": 1,
+  "extras": [
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4202",
+    "name": "SANGAMNER",
+    "villages": 175
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4208",
+    "name": "PATHARDI",
+    "villages": 143
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4214",
+    "name": "JAMKHED",
+    "villages": 80
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4213",
+    "name": "KARJAT",
+    "villages": 116
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4201",
+    "name": "AKOLE",
+    "villages": 192
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4212",
+    "name": "SHRIGONDA",
+    "villages": 116
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4210",
+    "name": "RAHURI",
+    "villages": 99
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4206",
+    "name": "NEVASA",
+    "villages": 130
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4203",
+    "name": "KOPARGAON",
+    "villages": 80
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4211",
+    "name": "PARNER",
+    "villages": 132
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4205",
+    "name": "RAHURI",
+    "villages": 57
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4024",
+    "name": "AKOLE",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4207",
+    "name": "SHEVGAON",
+    "villages": 114
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4209",
+    "name": "NAGAR",
+    "villages": 116
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "522",
+    "district": "Ahmednagar",
+    "code": "4204",
+    "name": "RAHTA",
+    "villages": 61
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "501",
+    "district": "Akola",
+    "code": "4024",
+    "name": "AKOT",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "501",
+    "district": "Akola",
+    "code": "3996",
+    "name": "MANGRULPIR",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "503",
+    "district": "Amravati",
+    "code": "4024",
+    "name": "CHIKHALDARA",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "515",
+    "district": "Aurangabad",
+    "code": "NaN",
+    "name": "PAITHAN",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "506",
+    "district": "Bhandara",
+    "code": "4024",
+    "name": "TUMSAR",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "500",
+    "district": "Buldhana",
+    "code": "4024",
+    "name": "JALGAON (JAMOD)",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "509",
+    "district": "Chandrapur",
+    "code": "4024",
+    "name": "CHIMUR",
+    "villages": 2
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "509",
+    "district": "Chandrapur",
+    "code": "4274",
+    "name": "RAJURA",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "515",
+    "district": "Aurangabad",
+    "code": "4133",
+    "name": "KANNAD",
+    "villages": 207
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "515",
+    "district": "Aurangabad",
+    "code": "4139",
+    "name": "VAIJAPUR",
+    "villages": 166
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "515",
+    "district": "Aurangabad",
+    "code": "4136",
+    "name": "PHULAMBRI",
+    "villages": 90
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "515",
+    "district": "Aurangabad",
+    "code": "4138",
+    "name": "KHULDABAD",
+    "villages": 78
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "515",
+    "district": "Aurangabad",
+    "code": "4137",
+    "name": "CHHATRAPATI SAMBHAJINAGAR",
+    "villages": 186
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "515",
+    "district": "Aurangabad",
+    "code": "4140",
+    "name": "GANGAPUR",
+    "villages": 226
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "515",
+    "district": "Aurangabad",
+    "code": "4135",
+    "name": "SILLOD",
+    "villages": 131
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "515",
+    "district": "Aurangabad",
+    "code": "4141",
+    "name": "PAITHAN",
+    "villages": 190
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "515",
+    "district": "Aurangabad",
+    "code": "4024",
+    "name": "PAITHAN",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "515",
+    "district": "Aurangabad",
+    "code": "4134",
+    "name": "SOEGAON",
+    "villages": 83
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "515",
+    "district": "Aurangabad",
+    "code": "4125",
+    "name": "PHULAMBRI",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "525",
+    "district": "Osmanabad",
+    "code": "4236",
+    "name": "PARANDA",
+    "villages": 96
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "525",
+    "district": "Osmanabad",
+    "code": "4237",
+    "name": "BHUM",
+    "villages": 98
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "525",
+    "district": "Osmanabad",
+    "code": "4238",
+    "name": "PARANDA",
+    "villages": 66
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "525",
+    "district": "Osmanabad",
+    "code": "4239",
+    "name": "PARANDA",
+    "villages": 93
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "525",
+    "district": "Osmanabad",
+    "code": "4241",
+    "name": "TULJAPUR",
+    "villages": 123
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "525",
+    "district": "Osmanabad",
+    "code": "4243",
+    "name": "OMARGA",
+    "villages": 100
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "525",
+    "district": "Osmanabad",
+    "code": "4240",
+    "name": "DHARASHIV",
+    "villages": 119
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "525",
+    "district": "Osmanabad",
+    "code": "4242",
+    "name": "DHARASHIV",
+    "villages": 50
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "525",
+    "district": "Osmanabad",
+    "code": "NaN",
+    "name": "LOHARA",
+    "villages": 2
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "525",
+    "district": "Osmanabad",
+    "code": "4024",
+    "name": "KALAMB",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "498",
+    "district": "Dhule",
+    "code": "4024",
+    "name": "DHULE",
+    "villages": 4
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "508",
+    "district": "Gadchiroli",
+    "code": "4024",
+    "name": "AHERI",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "507",
+    "district": "Gondia",
+    "code": "4024",
+    "name": "ARJUNI MORGAON",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "499",
+    "district": "Jalgaon",
+    "code": "4024",
+    "name": "PAROLA",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "514",
+    "district": "Jalna",
+    "code": "4136",
+    "name": "MANTHA",
+    "villages": 3
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "530",
+    "district": "Kolhapur",
+    "code": "4301",
+    "name": "RADHANAGARI",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "530",
+    "district": "Kolhapur",
+    "code": "4024",
+    "name": "RADHANAGARI",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "530",
+    "district": "Kolhapur",
+    "code": "4295",
+    "name": "HATKANANGLE",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "524",
+    "district": "Latur",
+    "code": "4149",
+    "name": "SHIRUR ANANTPAL",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "511",
+    "district": "Nanded",
+    "code": "NaN",
+    "name": "ARDHAPUR",
+    "villages": 8
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "497",
+    "district": "Nandurbar",
+    "code": "4024",
+    "name": "AKKALKUWA",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "516",
+    "district": "Nashik",
+    "code": "4024",
+    "name": "NASHIK",
+    "villages": 1
+   },
+   {
+    "stateCode": 32,
+    "districtCode": "601",
+    "district": "Thiruvananthapuram",
+    "code": "4163",
+    "name": "PALGHAR",
+    "villages": 217
+   },
+   {
+    "stateCode": 32,
+    "districtCode": "601",
+    "district": "Thiruvananthapuram",
+    "code": "4159",
+    "name": "VIKRAMGAD",
+    "villages": 92
+   },
+   {
+    "stateCode": 32,
+    "districtCode": "601",
+    "district": "Thiruvananthapuram",
+    "code": "4158",
+    "name": "VIKRAMGAD",
+    "villages": 175
+   },
+   {
+    "stateCode": 32,
+    "districtCode": "601",
+    "district": "Thiruvananthapuram",
+    "code": "4164",
+    "name": "VASAI",
+    "villages": 43
+   },
+   {
+    "stateCode": 32,
+    "districtCode": "601",
+    "district": "Thiruvananthapuram",
+    "code": "4160",
+    "name": "VIKRAMGAD",
+    "villages": 110
+   },
+   {
+    "stateCode": 32,
+    "districtCode": "601",
+    "district": "Thiruvananthapuram",
+    "code": "4151",
+    "name": "TRIMBAKESHWAR",
+    "villages": 5
+   },
+   {
+    "stateCode": 32,
+    "districtCode": "601",
+    "district": "Thiruvananthapuram",
+    "code": "4162",
+    "name": "WADA",
+    "villages": 172
+   },
+   {
+    "stateCode": 32,
+    "districtCode": "601",
+    "district": "Thiruvananthapuram",
+    "code": "4024",
+    "name": "PALGHAR",
+    "villages": 1
+   },
+   {
+    "stateCode": 32,
+    "districtCode": "601",
+    "district": "Thiruvananthapuram",
+    "code": "4161",
+    "name": "MOKHADA",
+    "villages": 57
+   },
+   {
+    "stateCode": 32,
+    "districtCode": "601",
+    "district": "Thiruvananthapuram",
+    "code": "4157",
+    "name": "TALASARI",
+    "villages": 42
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "521",
+    "district": "Pune",
+    "code": "4024",
+    "name": "MAWAL",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "520",
+    "district": "Raigad",
+    "code": "4024",
+    "name": "MURUD",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "520",
+    "district": "Raigad",
+    "code": "4197",
+    "name": "MAHAD",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "520",
+    "district": "Raigad",
+    "code": "4094",
+    "name": "ALIBAG",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "520",
+    "district": "Raigad",
+    "code": "4100",
+    "name": "MANGAON",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "528",
+    "district": "Ratnagiri",
+    "code": "4264",
+    "name": "GUHAGAR",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "531",
+    "district": "Sangli",
+    "code": "4024",
+    "name": "SHIRALA",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "527",
+    "district": "Satara",
+    "code": "4024",
+    "name": "PATAN",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "526",
+    "district": "Solapur",
+    "code": "4225",
+    "name": "MADHA",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "526",
+    "district": "Solapur",
+    "code": "4024",
+    "name": "SOLAPUR NORTH",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "526",
+    "district": "Solapur",
+    "code": "NaN",
+    "name": "BARSHI",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "517",
+    "district": "Thane",
+    "code": "4024",
+    "name": "THANE",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "504",
+    "district": "Wardha",
+    "code": "4024",
+    "name": "KARANJA",
+    "villages": 2
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "502",
+    "district": "Washim",
+    "code": "4083",
+    "name": "DARWHA",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "510",
+    "district": "Yavatmal",
+    "code": "4024",
+    "name": "UMARKHED",
+    "villages": 1
+   },
+   {
+    "stateCode": 27,
+    "districtCode": "519",
+    "district": "Mumbai",
+    "code": "519",
+    "name": "MUMBAI",
+    "villages": 1
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "0",
+    "district": "Tirupathur",
+    "code": "0",
+    "name": "ALIBAG",
+    "villages": 1
+   }
+  ]
+ },
+ {
+  "zip": "ODISHA.zip",
+  "states": [
+   "Odisha"
+  ],
+  "rows": 53025,
+  "talukas": 310,
+  "counts": {
+   "code": 0,
+   "name": 220,
+   "fuzzy": 9,
+   "extra": 81
+  },
+  "unknownDistrict": 0,
+  "extras": [
+   {
+    "stateCode": 21,
+    "districtCode": "398",
+    "district": "Koraput",
+    "code": "6726",
+    "name": "DASMANTPUR",
+    "villages": 180
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "398",
+    "district": "Koraput",
+    "code": "6729",
+    "name": "NARAYANPATNA",
+    "villages": 129
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "398",
+    "district": "Koraput",
+    "code": "6735",
+    "name": "MACHKUND",
+    "villages": 186
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "398",
+    "district": "Koraput",
+    "code": "6730",
+    "name": "SEMILIGUDA",
+    "villages": 86
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "398",
+    "district": "Koraput",
+    "code": "6733",
+    "name": "KUNDRA",
+    "villages": 81
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "398",
+    "district": "Koraput",
+    "code": "6727",
+    "name": "LAXMIPUR",
+    "villages": 105
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "398",
+    "district": "Koraput",
+    "code": "6725",
+    "name": "BORIGUMMA",
+    "villages": 149
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "399",
+    "district": "Malkangiri",
+    "code": "6741",
+    "name": "CHITAKONDA",
+    "villages": 288
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "399",
+    "district": "Malkangiri",
+    "code": "6740",
+    "name": "KUDUMULUGUMMA",
+    "villages": 81
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "399",
+    "district": "Malkangiri",
+    "code": "6739",
+    "name": "KHAIRAPUT",
+    "villages": 108
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "374",
+    "district": "Sundargarh",
+    "code": "6460",
+    "name": "TANGARPALLI",
+    "villages": 84
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "374",
+    "district": "Sundargarh",
+    "code": "6472",
+    "name": "BONAI",
+    "villages": 118
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "374",
+    "district": "Sundargarh",
+    "code": "6473",
+    "name": "LAHUNIPADA",
+    "villages": 218
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "374",
+    "district": "Sundargarh",
+    "code": "6467",
+    "name": "RAJGANGPUR",
+    "villages": 75
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "374",
+    "district": "Sundargarh",
+    "code": "6463",
+    "name": "BARGAON",
+    "villages": 68
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "383",
+    "district": "Dhenkanal",
+    "code": "6579",
+    "name": "GONDIA",
+    "villages": 195
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "383",
+    "district": "Dhenkanal",
+    "code": "6577",
+    "name": "KAMAKHYANAGAR",
+    "villages": 173
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "383",
+    "district": "Dhenkanal",
+    "code": "6576",
+    "name": "PARJANG",
+    "villages": 97
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "375",
+    "district": "Kendujhar",
+    "code": "6478",
+    "name": "PATNA",
+    "villages": 158
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "375",
+    "district": "Kendujhar",
+    "code": "6483",
+    "name": "GHATAGAON",
+    "villages": 141
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "375",
+    "district": "Kendujhar",
+    "code": "6484",
+    "name": "SAHARPADA",
+    "villages": 137
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "386",
+    "district": "Khordha",
+    "code": "6599",
+    "name": "BOLAGARH",
+    "villages": 230
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "386",
+    "district": "Khordha",
+    "code": "6605",
+    "name": "JATNI",
+    "villages": 110
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "386",
+    "district": "Khordha",
+    "code": "6604",
+    "name": "BALIPATANA",
+    "villages": 88
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "372",
+    "district": "Sambalpur",
+    "code": "6451",
+    "name": "JUJUMURA",
+    "villages": 129
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "372",
+    "district": "Sambalpur",
+    "code": "6446",
+    "name": "KUCHINDA",
+    "villages": 136
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "372",
+    "district": "Sambalpur",
+    "code": "6445",
+    "name": "BAMRA",
+    "villages": 134
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "392",
+    "district": "Subarnapur",
+    "code": "6670",
+    "name": "TARAVA",
+    "villages": 181
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "392",
+    "district": "Subarnapur",
+    "code": "6669",
+    "name": "SUBARNAPUR",
+    "villages": 151
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "392",
+    "district": "Subarnapur",
+    "code": "6667",
+    "name": "ULLUNDA",
+    "villages": 224
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "396",
+    "district": "Rayagada",
+    "code": "6713",
+    "name": "KASIPUR",
+    "villages": 435
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "396",
+    "district": "Rayagada",
+    "code": "6709",
+    "name": "BISSAMCUTTACK",
+    "villages": 313
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "396",
+    "district": "Rayagada",
+    "code": "6710",
+    "name": "KALYANASINGHPUR",
+    "villages": 257
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "390",
+    "district": "Kandhamal",
+    "code": "6652",
+    "name": "KHAJURIBADA",
+    "villages": 246
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "390",
+    "district": "Kandhamal",
+    "code": "6651",
+    "name": "PHULBANI",
+    "villages": 218
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "371",
+    "district": "Jharsuguda",
+    "code": "6441",
+    "name": "LAKHANPUR",
+    "villages": 78
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "389",
+    "district": "Gajapati",
+    "code": "6648",
+    "name": "PARLAKHEMUNDI",
+    "villages": 140
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "381",
+    "district": "Cuttack",
+    "code": "6555",
+    "name": "ATHAGARH",
+    "villages": 201
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "381",
+    "district": "Cuttack",
+    "code": "6551",
+    "name": "BADAMBA",
+    "villages": 139
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "381",
+    "district": "Cuttack",
+    "code": "6553",
+    "name": "DAMPADA",
+    "villages": 117
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "381",
+    "district": "Cuttack",
+    "code": "6550",
+    "name": "NARASINGHPUR",
+    "villages": 250
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "381",
+    "district": "Cuttack",
+    "code": "6559",
+    "name": "SALEPUR",
+    "villages": 137
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "379",
+    "district": "Kendrapara",
+    "code": "6540",
+    "name": "MARSHAGHAI",
+    "villages": 108
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "379",
+    "district": "Kendrapara",
+    "code": "6535",
+    "name": "AUL",
+    "villages": 128
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "395",
+    "district": "Kalahandi",
+    "code": "6697",
+    "name": "NARLA",
+    "villages": 174
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "395",
+    "district": "Kalahandi",
+    "code": "6701",
+    "name": "JAIPATNA",
+    "villages": 167
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "393",
+    "district": "Balangir",
+    "code": "6673",
+    "name": "LOISINGHA",
+    "villages": 108
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "393",
+    "district": "Balangir",
+    "code": "6684",
+    "name": "TITILAGARH",
+    "villages": 134
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "393",
+    "district": "Balangir",
+    "code": "6680",
+    "name": "BELPADA",
+    "villages": 121
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "384",
+    "district": "Angul",
+    "code": "6588",
+    "name": "ATHAMALLIK",
+    "villages": 342
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "380",
+    "district": "Jagatsinghpur",
+    "code": "6546",
+    "name": "ERASAMA",
+    "villages": 210
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "380",
+    "district": "Jagatsinghpur",
+    "code": "6543",
+    "name": "RAGHUNATHPUR",
+    "villages": 88
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "380",
+    "district": "Jagatsinghpur",
+    "code": "6548",
+    "name": "JAGATSINGHPUR",
+    "villages": 167
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "380",
+    "district": "Jagatsinghpur",
+    "code": "6549",
+    "name": "NUAGAON",
+    "villages": 92
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "373",
+    "district": "Deogarh",
+    "code": "6454",
+    "name": "DEOGARH",
+    "villages": 228
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "377",
+    "district": "Balasore",
+    "code": "6520",
+    "name": "NILGIRI",
+    "villages": 233
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "387",
+    "district": "Puri",
+    "code": "6611",
+    "name": "NIMAPARA",
+    "villages": 242
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "394",
+    "district": "Nuapada",
+    "code": "6689",
+    "name": "SINAPALLI",
+    "villages": 124
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "376",
+    "district": "Mayurbhanj",
+    "code": "6492",
+    "name": "BIJATOLA",
+    "villages": 151
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "376",
+    "district": "Mayurbhanj",
+    "code": "6507",
+    "name": "BARSAHI",
+    "villages": 224
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "376",
+    "district": "Mayurbhanj",
+    "code": "6506",
+    "name": "BETANATI",
+    "villages": 227
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "376",
+    "district": "Mayurbhanj",
+    "code": "6505",
+    "name": "RASAGOBINDPUR",
+    "villages": 177
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "376",
+    "district": "Mayurbhanj",
+    "code": "6490",
+    "name": "JAMADA",
+    "villages": 79
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "376",
+    "district": "Mayurbhanj",
+    "code": "6489",
+    "name": "BAHALADA",
+    "villages": 104
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "376",
+    "district": "Mayurbhanj",
+    "code": "6510",
+    "name": "SAMAKHUNTA",
+    "villages": 139
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "376",
+    "district": "Mayurbhanj",
+    "code": "6504",
+    "name": "MORODA",
+    "villages": 171
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "376",
+    "district": "Mayurbhanj",
+    "code": "6496",
+    "name": "SUKURULI",
+    "villages": 90
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "397",
+    "district": "Nabarangapur",
+    "code": "6722",
+    "name": "NABARANGPUR",
+    "villages": 55
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "397",
+    "district": "Nabarangapur",
+    "code": "6719",
+    "name": "PAPADAHANDI",
+    "villages": 90
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "397",
+    "district": "Nabarangapur",
+    "code": "6717",
+    "name": "JHARIGAM",
+    "villages": 113
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "397",
+    "district": "Nabarangapur",
+    "code": "6715",
+    "name": "UMERKOTE",
+    "villages": 110
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "397",
+    "district": "Nabarangapur",
+    "code": "6718",
+    "name": "DABUGAM",
+    "villages": 71
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "382",
+    "district": "Jajpur",
+    "code": "6570",
+    "name": "JAJAPUR",
+    "villages": 191
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "382",
+    "district": "Jajpur",
+    "code": "6571",
+    "name": "DASARATHAPUR",
+    "villages": 157
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "382",
+    "district": "Jajpur",
+    "code": "6566",
+    "name": "DANAGADI",
+    "villages": 116
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "378",
+    "district": "Bhadrak",
+    "code": "6529",
+    "name": "CHANDABALI",
+    "villages": 267
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "388",
+    "district": "Ganjam",
+    "code": "6620",
+    "name": "GHUMSUR",
+    "villages": 133
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "388",
+    "district": "Ganjam",
+    "code": "6628",
+    "name": "KHALIKOTE",
+    "villages": 233
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "388",
+    "district": "Ganjam",
+    "code": "6631",
+    "name": "SERAGAD",
+    "villages": 110
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "388",
+    "district": "Ganjam",
+    "code": "6636",
+    "name": "PURUSOTTAMPUR",
+    "villages": 92
+   },
+   {
+    "stateCode": 21,
+    "districtCode": "388",
+    "district": "Ganjam",
+    "code": "6627",
+    "name": "POLSARA",
+    "villages": 140
+   }
+  ]
+ },
+ {
+  "zip": "PUNDUCHERRY.zip",
+  "states": [
+   "Puducherry"
+  ],
+  "rows": 129,
+  "talukas": 8,
+  "counts": {
+   "code": 8,
+   "name": 0,
+   "fuzzy": 0,
+   "extra": 0
+  },
+  "unknownDistrict": 0,
+  "extras": []
+ },
+ {
+  "zip": "PUNJAB.zip",
+  "states": [
+   "Punjab",
+   "Telangana"
+  ],
+  "rows": 11944,
+  "talukas": 91,
+  "counts": {
+   "code": 70,
+   "name": 18,
+   "fuzzy": 0,
+   "extra": 3
+  },
+  "unknownDistrict": 886,
+  "extras": [
+   {
+    "stateCode": 36,
+    "districtCode": "737",
+    "district": "Jagtial",
+    "code": "269",
+    "name": "MALER KOTLA",
+    "villages": 87
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "737",
+    "district": "Jagtial",
+    "code": "6122",
+    "name": "AHMEDGARH",
+    "villages": 53
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "737",
+    "district": "Jagtial",
+    "code": "7191",
+    "name": "AMARGARH",
+    "villages": 46
+   }
+  ]
+ },
+ {
+  "zip": "RAJASTHAN.zip",
+  "states": [
+   "Rajasthan"
+  ],
+  "rows": 40891,
+  "talukas": 248,
+  "counts": {
+   "code": 214,
+   "name": 29,
+   "fuzzy": 0,
+   "extra": 5
+  },
+  "unknownDistrict": 5923,
+  "extras": [
+   {
+    "stateCode": 8,
+    "districtCode": "110",
+    "district": "Jaipur",
+    "code": "566",
+    "name": "Phulera (Hq.Sambhar)",
+    "villages": 1
+   },
+   {
+    "stateCode": 8,
+    "districtCode": "124",
+    "district": "Dungarpur",
+    "code": "NaN",
+    "name": "Cheekhli",
+    "villages": 550
+   },
+   {
+    "stateCode": 8,
+    "districtCode": "126",
+    "district": "Chittorgarh",
+    "code": "NaN",
+    "name": "Bhoopal Sagar",
+    "villages": 194
+   },
+   {
+    "stateCode": 8,
+    "districtCode": "115",
+    "district": "Barmer",
+    "code": "NaN",
+    "name": "Dhorimanna",
+    "villages": 855
+   },
+   {
+    "stateCode": 8,
+    "districtCode": "115",
+    "district": "Barmer",
+    "code": "581",
+    "name": "Gudha Malani",
+    "villages": 114
+   }
+  ]
+ },
+ {
+  "zip": "SIKKIM.zip",
+  "states": [
+   "Sikkim",
+   "Telangana"
+  ],
+  "rows": 447,
+  "talukas": 18,
+  "counts": {
+   "code": 13,
+   "name": 0,
+   "fuzzy": 0,
+   "extra": 5
+  },
+  "unknownDistrict": 0,
+  "extras": [
+   {
+    "stateCode": 36,
+    "districtCode": "741",
+    "district": "Siddipet",
+    "code": "6326",
+    "name": "Rangpo",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "741",
+    "district": "Siddipet",
+    "code": "1554",
+    "name": "Pakyong",
+    "villages": 27
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "741",
+    "district": "Siddipet",
+    "code": "1555",
+    "name": "Rongli",
+    "villages": 21
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "740",
+    "district": "Sangareddy",
+    "code": "1550",
+    "name": "Soreng",
+    "villages": 34
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "740",
+    "district": "Sangareddy",
+    "code": "7233",
+    "name": "Mangalbarey",
+    "villages": 19
+   }
+  ]
+ },
+ {
+  "zip": "TAMILNADU.zip",
+  "states": [
+   "Tamil Nadu"
+  ],
+  "rows": 15042,
+  "talukas": 225,
+  "counts": {
+   "code": 193,
+   "name": 0,
+   "fuzzy": 0,
+   "extra": 32
+  },
+  "unknownDistrict": 2337,
+  "extras": [
+   {
+    "stateCode": 33,
+    "districtCode": "604",
+    "district": "Kancheepuram",
+    "code": "NaN",
+    "name": "",
+    "villages": 160
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "616",
+    "district": "Ariyalur",
+    "code": "NaN",
+    "name": "",
+    "villages": 37
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "613",
+    "district": "Karur",
+    "code": "NaN",
+    "name": "",
+    "villages": 47
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "631",
+    "district": "Krishnagiri",
+    "code": "NaN",
+    "name": "",
+    "villages": 155
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "615",
+    "district": "Perambalur",
+    "code": "NaN",
+    "name": "",
+    "villages": 42
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "615",
+    "district": "Perambalur",
+    "code": "5784",
+    "name": "",
+    "villages": 48
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "615",
+    "district": "Perambalur",
+    "code": "5783",
+    "name": "",
+    "villages": 29
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "615",
+    "district": "Perambalur",
+    "code": "5782",
+    "name": "",
+    "villages": 45
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "621",
+    "district": "Pudukkottai",
+    "code": "NaN",
+    "name": "",
+    "villages": 37
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "620",
+    "district": "Thanjavur",
+    "code": "NaN",
+    "name": "",
+    "villages": 107
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "614",
+    "district": "Tiruchirappalli",
+    "code": "NaN",
+    "name": "",
+    "villages": 44
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "628",
+    "district": "Tirunelveli",
+    "code": "NaN",
+    "name": "",
+    "villages": 97
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "625",
+    "district": "Virudhunagar",
+    "code": "NaN",
+    "name": "",
+    "villages": 66
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "609",
+    "district": "Namakkal",
+    "code": "NaN",
+    "name": "",
+    "villages": 120
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "626",
+    "district": "Ramanathapuram",
+    "code": "NaN",
+    "name": "",
+    "villages": 65
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "605",
+    "district": "Vellore",
+    "code": "NaN",
+    "name": "",
+    "villages": 186
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "617",
+    "district": "Cuddalore",
+    "code": "NaN",
+    "name": "",
+    "villages": 182
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "632",
+    "district": "Coimbatore",
+    "code": "NaN",
+    "name": "",
+    "villages": 143
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "630",
+    "district": "Dharmapuri",
+    "code": "NaN",
+    "name": "",
+    "villages": 73
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "612",
+    "district": "Dindigul",
+    "code": "NaN",
+    "name": "",
+    "villages": 106
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "612",
+    "district": "Dindigul",
+    "code": "5765",
+    "name": "",
+    "villages": 23
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "610",
+    "district": "Erode",
+    "code": "NaN",
+    "name": "",
+    "villages": 139
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "619",
+    "district": "Thiruvarur",
+    "code": "NaN",
+    "name": "",
+    "villages": 204
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "607",
+    "district": "Viluppuram",
+    "code": "NaN",
+    "name": "",
+    "villages": 386
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "606",
+    "district": "Tiruvannamalai",
+    "code": "NaN",
+    "name": "",
+    "villages": 347
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "629",
+    "district": "Kanyakumari",
+    "code": "NaN",
+    "name": "",
+    "villages": 49
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "623",
+    "district": "Madurai",
+    "code": "NaN",
+    "name": "",
+    "villages": 182
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "608",
+    "district": "Salem",
+    "code": "NaN",
+    "name": "",
+    "villages": 208
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "627",
+    "district": "Thoothukkudi",
+    "code": "NaN",
+    "name": "",
+    "villages": 102
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "602",
+    "district": "Thiruvallur",
+    "code": "NaN",
+    "name": "",
+    "villages": 42
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "622",
+    "district": "Sivaganga",
+    "code": "NaN",
+    "name": "",
+    "villages": 159
+   },
+   {
+    "stateCode": 33,
+    "districtCode": "633",
+    "district": "Tiruppur",
+    "code": "NaN",
+    "name": "",
+    "villages": 62
+   }
+  ]
+ },
+ {
+  "zip": "TELANGANA.zip",
+  "states": [
+   "Telangana",
+   "Chhattisgarh"
+  ],
+  "rows": 3985,
+  "talukas": 239,
+  "counts": {
+   "code": 150,
+   "name": 43,
+   "fuzzy": 2,
+   "extra": 44
+  },
+  "unknownDistrict": 6470,
+  "extras": [
+   {
+    "stateCode": 36,
+    "districtCode": "532",
+    "district": "Adilabad",
+    "code": "7020",
+    "name": "ADILABAD URBAN",
+    "villages": 1
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "533",
+    "district": "Nizamabad",
+    "code": "7044",
+    "name": "MOSRA",
+    "villages": 6
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "533",
+    "district": "Nizamabad",
+    "code": "7041",
+    "name": "NIZAMABAD NORTH",
+    "villages": 1
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "537",
+    "district": "Ranga Reddy",
+    "code": "4516",
+    "name": "SERILINGAMPALLY",
+    "villages": 1
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "535",
+    "district": "Medak",
+    "code": "7072",
+    "name": "HAVELIGHANPUR",
+    "villages": 22
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "534",
+    "district": "Karimnagar",
+    "code": "4428",
+    "name": "KARIMNAGAR",
+    "villages": 2
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "541",
+    "district": "Khammam",
+    "code": "4757",
+    "name": "KHAMMAM URBAN",
+    "villages": 1
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "539",
+    "district": "Nalgonda",
+    "code": "7119",
+    "name": "ADAVIDEVULAPALLY",
+    "villages": 6
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "540",
+    "district": "Warangal Urban",
+    "code": "4693",
+    "name": "DUGGONDI",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "540",
+    "district": "Warangal Urban",
+    "code": "4704",
+    "name": "WARDHANNAPET",
+    "villages": 12
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "540",
+    "district": "Warangal Urban",
+    "code": "4714",
+    "name": "PARVATGIRI",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "540",
+    "district": "Warangal Urban",
+    "code": "4712",
+    "name": "CHENNARAOPET",
+    "villages": 11
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "540",
+    "district": "Warangal Urban",
+    "code": "4713",
+    "name": "NEKKONDA",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "540",
+    "district": "Warangal Urban",
+    "code": "4707",
+    "name": "GEESUGONDA",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "540",
+    "district": "Warangal Urban",
+    "code": "4705",
+    "name": "SANGAM",
+    "villages": 17
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "540",
+    "district": "Warangal Urban",
+    "code": "4692",
+    "name": "NALLABELLY",
+    "villages": 19
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "540",
+    "district": "Warangal Urban",
+    "code": "4703",
+    "name": "RAYAPARTHY",
+    "villages": 18
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "540",
+    "district": "Warangal Urban",
+    "code": "4708",
+    "name": "NARSAMPET",
+    "villages": 13
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "540",
+    "district": "Warangal Urban",
+    "code": "4709",
+    "name": "KHANAPUR",
+    "villages": 14
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "720",
+    "district": "Gariaband",
+    "code": "4724",
+    "name": "VENKATAPURAM",
+    "villages": 73
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "720",
+    "district": "Gariaband",
+    "code": "4723",
+    "name": "WAZEED",
+    "villages": 62
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "720",
+    "district": "Gariaband",
+    "code": "4689",
+    "name": "MULUG",
+    "villages": 19
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "720",
+    "district": "Gariaband",
+    "code": "4688",
+    "name": "GOVINDARAOPET",
+    "villages": 14
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "720",
+    "district": "Gariaband",
+    "code": "4686",
+    "name": "MANGAPET",
+    "villages": 23
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "720",
+    "district": "Gariaband",
+    "code": "4684",
+    "name": "VENKATAPUR",
+    "villages": 11
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "720",
+    "district": "Gariaband",
+    "code": "4685",
+    "name": "ETURNAGARAM",
+    "villages": 40
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "720",
+    "district": "Gariaband",
+    "code": "4687",
+    "name": "TADVAI(SAMMAKKA SARAKKA)",
+    "villages": 73
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "720",
+    "district": "Gariaband",
+    "code": "7137",
+    "name": "KANNAIGUDEM",
+    "villages": 25
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "721",
+    "district": "Baloda Bazar",
+    "code": "4570",
+    "name": "NARAYANPET",
+    "villages": 26
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "721",
+    "district": "Baloda Bazar",
+    "code": "4589",
+    "name": "MAKTHAL",
+    "villages": 35
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "721",
+    "district": "Baloda Bazar",
+    "code": "4553",
+    "name": "DAMARAGIDDA",
+    "villages": 27
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "721",
+    "district": "Baloda Bazar",
+    "code": "4588",
+    "name": "NARWA",
+    "villages": 20
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "721",
+    "district": "Baloda Bazar",
+    "code": "7308",
+    "name": "GUNDUMAL",
+    "villages": 10
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "721",
+    "district": "Baloda Bazar",
+    "code": "4554",
+    "name": "MADDUR",
+    "villages": 17
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "721",
+    "district": "Baloda Bazar",
+    "code": "4590",
+    "name": "MAGANOOR",
+    "villages": 20
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "721",
+    "district": "Baloda Bazar",
+    "code": "7101",
+    "name": "MARIKAL",
+    "villages": 14
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "721",
+    "district": "Baloda Bazar",
+    "code": "7102",
+    "name": "KRISHNA",
+    "villages": 14
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "721",
+    "district": "Baloda Bazar",
+    "code": "4571",
+    "name": "UTKOOR",
+    "villages": 27
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "721",
+    "district": "Baloda Bazar",
+    "code": "4551",
+    "name": "KOSGI",
+    "villages": 16
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "721",
+    "district": "Baloda Bazar",
+    "code": "7309",
+    "name": "KOTHAPALLE",
+    "villages": 11
+   },
+   {
+    "stateCode": 22,
+    "districtCode": "721",
+    "district": "Baloda Bazar",
+    "code": "4572",
+    "name": "DHANWADA",
+    "villages": 9
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "540",
+    "district": "Warangal Urban",
+    "code": "7134",
+    "name": "KHILA WARANGAL",
+    "villages": 1
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "540",
+    "district": "Warangal Urban",
+    "code": "4706",
+    "name": "WARANGAL",
+    "villages": 1
+   },
+   {
+    "stateCode": 36,
+    "districtCode": "537",
+    "district": "Ranga Reddy",
+    "code": "NaN",
+    "name": "CHOWDERGUDEM",
+    "villages": 1
+   }
+  ]
+ },
+ {
+  "zip": "TRIPURA.zip",
+  "states": [
+   "Nagaland",
+   "Manipur"
+  ],
+  "rows": 491,
+  "talukas": 13,
+  "counts": {
+   "code": 0,
+   "name": 0,
+   "fuzzy": 0,
+   "extra": 13
+  },
+  "unknownDistrict": 408,
+  "extras": [
+   {
+    "stateCode": 13,
+    "districtCode": "271",
+    "district": "Peren",
+    "code": "6683",
+    "name": "Santirbazar",
+    "villages": 37
+   },
+   {
+    "stateCode": 13,
+    "districtCode": "271",
+    "district": "Peren",
+    "code": "6687",
+    "name": "Belonia",
+    "villages": 49
+   },
+   {
+    "stateCode": 13,
+    "districtCode": "271",
+    "district": "Peren",
+    "code": "6688",
+    "name": "Sabroom",
+    "villages": 51
+   },
+   {
+    "stateCode": 14,
+    "districtCode": "272",
+    "district": "Senapati",
+    "code": "6696",
+    "name": "Sadar",
+    "villages": 45
+   },
+   {
+    "stateCode": 14,
+    "districtCode": "272",
+    "district": "Senapati",
+    "code": "6689",
+    "name": "Mohanpur",
+    "villages": 33
+   },
+   {
+    "stateCode": 14,
+    "districtCode": "272",
+    "district": "Senapati",
+    "code": "6679",
+    "name": "Jirania",
+    "villages": 34
+   },
+   {
+    "stateCode": 13,
+    "districtCode": "269",
+    "district": "Kiphire",
+    "code": "6681",
+    "name": "Kamalpur",
+    "villages": 47
+   },
+   {
+    "stateCode": 13,
+    "districtCode": "269",
+    "district": "Kiphire",
+    "code": "6697",
+    "name": "Ambassa",
+    "villages": 36
+   },
+   {
+    "stateCode": 13,
+    "districtCode": "269",
+    "district": "Kiphire",
+    "code": "6686",
+    "name": "Gandacherra",
+    "villages": 36
+   },
+   {
+    "stateCode": 13,
+    "districtCode": "269",
+    "district": "Kiphire",
+    "code": "6692",
+    "name": "Longtharai Valley",
+    "villages": 35
+   },
+   {
+    "stateCode": 13,
+    "districtCode": "270",
+    "district": "Kohima",
+    "code": "6691",
+    "name": "Dharmanagar",
+    "villages": 35
+   },
+   {
+    "stateCode": 13,
+    "districtCode": "270",
+    "district": "Kohima",
+    "code": "6685",
+    "name": "Kanchanpur",
+    "villages": 34
+   },
+   {
+    "stateCode": 13,
+    "districtCode": "270",
+    "district": "Kohima",
+    "code": "6678",
+    "name": "Panisagar",
+    "villages": 19
+   }
+  ]
+ },
+ {
+  "zip": "UTTARAKHAND.zip",
+  "states": [
+   "Uttarakhand"
+  ],
+  "rows": 16779,
+  "talukas": 90,
+  "counts": {
+   "code": 78,
+   "name": 10,
+   "fuzzy": 1,
+   "extra": 1
+  },
+  "unknownDistrict": 0,
+  "extras": [
+   {
+    "stateCode": 5,
+    "districtCode": "61",
+    "district": "Pauri Garhwal",
+    "code": "NaN",
+    "name": "BEERONKHAL",
+    "villages": 495
+   }
+  ]
+ },
+ {
+  "zip": "UTTAR_PRADESH.zip",
+  "states": [
+   "Uttar Pradesh"
+  ],
+  "rows": 102266,
+  "talukas": 339,
+  "counts": {
+   "code": 301,
+   "name": 34,
+   "fuzzy": 1,
+   "extra": 3
+  },
+  "unknownDistrict": 2697,
+  "extras": [
+   {
+    "stateCode": 9,
+    "districtCode": "151",
+    "district": "Pilibhit",
+    "code": "793",
+    "name": "Puranpur",
+    "villages": 1
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "160",
+    "district": "Kannauj",
+    "code": "6296",
+    "name": "Haseran",
+    "villages": 146
+   },
+   {
+    "stateCode": 9,
+    "districtCode": "180",
+    "district": "Bahraich",
+    "code": "6308",
+    "name": "Mihipurwa (Motipur)",
+    "villages": 145
+   }
+  ]
+ },
+ {
+  "zip": "WEST_BENGAL.zip",
+  "states": [
+   "West Bengal"
+  ],
+  "rows": 37294,
+  "talukas": 320,
+  "counts": {
+   "code": 315,
+   "name": 3,
+   "fuzzy": 0,
+   "extra": 2
+  },
+  "unknownDistrict": 4028,
+  "extras": [
+   {
+    "stateCode": 19,
+    "districtCode": "342",
+    "district": "Kolkata",
+    "code": "99999",
+    "name": "Kolkata",
+    "villages": 1
+   },
+   {
+    "stateCode": 19,
+    "districtCode": "343",
+    "district": "South 24 Parganas",
+    "code": "2393",
+    "name": "Balarampur",
+    "villages": 1
+   }
+  ]
+ }
+]

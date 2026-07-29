@@ -6,7 +6,7 @@ import { motion } from 'framer-motion'
 import statesGeo from '@/assets/india-states.json'
 import { useStates } from '@/lib/api'
 import { repository } from '@/data/repository'
-import { Select } from '@/components/ui/Field'
+import { Combobox } from '@/components/ui/Combobox'
 import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
@@ -96,6 +96,22 @@ export function IndiaMap() {
   useEffect(() => () => {
     if (hoverRafRef.current != null) cancelAnimationFrame(hoverRafRef.current)
   }, [])
+
+  // Entering/leaving a state flips the viewport's cursor between `grab` and
+  // `pointer`. Chrome on Windows can fail to redraw the OS cursor for a
+  // `cursor` value change that isn't accompanied by a fresh native mousemove
+  // (as here, where it's driven by React state), leaving it invisible until
+  // the pointer exits and re-enters the window. Forcing an explicit cursor
+  // value and releasing it a frame later makes Chrome recompute it right away
+  // instead of waiting for that — the same fix already confirmed working for
+  // the card-drag cursor bug on the org/people canvas.
+  const isOverFeature = hover != null
+  useEffect(() => {
+    const root = document.documentElement
+    root.style.cursor = 'default'
+    const raf = requestAnimationFrame(() => { root.style.cursor = '' })
+    return () => cancelAnimationFrame(raf)
+  }, [isOverFeature])
 
   // Pan/zoom — same manual transform technique as the Geography explorer's
   // map (GeoMapView): a {x,y,scale} applied to a wrapping <g>, wheel-to-zoom
@@ -306,6 +322,11 @@ export function IndiaMap() {
   const featByCode = useMemo(() => new Map(feats.map((f) => [f.code, f])), [feats])
   const selectedFeat = selectedCode != null ? featByCode.get(selectedCode) : undefined
 
+  // Combobox options for the two "jump to" pickers — typing filters in real
+  // time, same as every other searchable dropdown in the app.
+  const stateOptions = useMemo(() => stateFeats.map((f) => ({ value: String(f.code), label: f.name })), [stateFeats])
+  const utOptions = useMemo(() => utFeats.map((f) => ({ value: String(f.code), label: f.name })), [utFeats])
+
   const active = hover ? byCode.get(hover.code) : undefined
   const hoverConnected = hover ? connectedCountOf(hover.code) : 0
   const visibleFeats = feats.filter((f) => (UT_NAMES.has(f.name) ? showUTs : showStates))
@@ -332,7 +353,17 @@ export function IndiaMap() {
     <div className="relative h-full w-full pt-20 md:pt-0">
       <div
         ref={viewportRef}
-        className={cn('h-full w-full touch-none select-none', dragging ? 'cursor-grabbing' : 'cursor-grab')}
+        className={cn(
+          'h-full w-full touch-none select-none',
+          // Cursor lives here, on the one ancestor div, instead of on each
+          // <path> below. Chrome on Windows can render the OS cursor invisible
+          // (until the pointer leaves and re-enters the window) when it
+          // crosses an SVG element that sets its own `cursor` value that
+          // differs from an ancestor's — and this map flips that per-path
+          // value on every state boundary crossing. Deriving it here from
+          // `hover` instead keeps exactly one element's cursor ever changing.
+          dragging ? 'cursor-grabbing' : hover ? 'cursor-pointer' : 'cursor-grab',
+        )}
         onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
@@ -347,13 +378,15 @@ export function IndiaMap() {
         role="img"
         aria-label="Map of India — select a state to open its workspace"
       >
-        <defs>
-          <filter id="mapshadow" x="-10%" y="-10%" width="120%" height="120%">
-            <feDropShadow dx="0" dy="6" stdDeviation="10" floodColor="#0F2942" floodOpacity="0.14" />
-          </filter>
-        </defs>
+        {/* This group used to sit inside an SVG <filter> (a feDropShadow):
+            Chrome on Windows forces a software-rasterized cursor — missing
+            its usual outline — for any region painted under an active SVG
+            filter, and the filter's bounding box covered this entire map, not
+            just the state shapes. That's why the cursor's border went
+            missing hovering anywhere over the map, and why changing the
+            `cursor` CSS value didn't help — the filter was the trigger, not
+            the cursor value. */}
         <g transform={`translate(${transform.x} ${transform.y}) scale(${transform.scale})`}>
-        <g filter="url(#mapshadow)">
           {visibleFeats.map((f, i) => {
             const summary = byCode.get(f.code)
             const populated = (summary?.employees ?? 0) > 0
@@ -385,12 +418,11 @@ export function IndiaMap() {
                 onMouseMove={(e) => scheduleHover({ code: f.code, x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setHoverNow(null)}
                 onClick={() => navigate(`/state/${f.code}`)}
-                className={cn('cursor-pointer transition-[fill,stroke] duration-150', fillClass, strokeClass)}
+                className={cn('transition-[fill,stroke] duration-150', fillClass, strokeClass)}
                 strokeWidth={isSelected ? 2.2 : isHover ? 1.1 : 0.6}
               />
             )
           })}
-        </g>
         {visibleFeats
           .filter((f) => (byCode.get(f.code)?.employees ?? 0) > 0)
           .map((f) => (
@@ -434,7 +466,7 @@ export function IndiaMap() {
 
       {/* Desktop (md+) — untouched from before: one combined legend + State/UT
           filter + jump-to panel, always visible, bottom-left. */}
-      <div className="hidden md:block absolute bottom-3 left-3 z-20 max-w-[230px] rounded-xl border border-line bg-paper/95 p-3 shadow-panel backdrop-blur pointer-events-auto" data-map-ui>
+      <div className="hidden md:block absolute bottom-3 left-3 z-20 max-w-[230px] rounded-xl border border-line bg-paper/95 p-3 shadow-panel pointer-events-auto" data-map-ui>
         <div className="min-w-[140px] space-y-1.5 text-[11px]">
           <LegendRow
             swatch={<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: NAVY }} />}
@@ -463,28 +495,24 @@ export function IndiaMap() {
           </label>
         </div>
         <div className="mt-2 space-y-2 border-t border-line pt-2">
-          <Select
-            aria-label="Jump to a state"
-            value={stateFeats.some((f) => f.code === selectedCode) ? String(selectedCode) : ''}
-            onChange={(e) => setSelectedCode(e.target.value ? Number(e.target.value) : null)}
-            className="h-9 w-full py-0 text-[12px]"
-          >
-            <option value="">Jump to state…</option>
-            {stateFeats.map((f) => (
-              <option key={f.code} value={f.code}>{f.name}</option>
-            ))}
-          </Select>
-          <Select
-            aria-label="Jump to a union territory"
-            value={utFeats.some((f) => f.code === selectedCode) ? String(selectedCode) : ''}
-            onChange={(e) => setSelectedCode(e.target.value ? Number(e.target.value) : null)}
-            className="h-9 w-full py-0 text-[12px]"
-          >
-            <option value="">Jump to territory…</option>
-            {utFeats.map((f) => (
-              <option key={f.code} value={f.code}>{f.name}</option>
-            ))}
-          </Select>
+          {showStates && (
+            <Combobox
+              aria-label="Jump to a state"
+              value={stateFeats.some((f) => f.code === selectedCode) ? String(selectedCode) : ''}
+              onChange={(v) => setSelectedCode(v ? Number(v) : null)}
+              options={stateOptions}
+              placeholder="Jump to state…"
+            />
+          )}
+          {showUTs && (
+            <Combobox
+              aria-label="Jump to a union territory"
+              value={utFeats.some((f) => f.code === selectedCode) ? String(selectedCode) : ''}
+              onChange={(v) => setSelectedCode(v ? Number(v) : null)}
+              options={utOptions}
+              placeholder="Jump to territory…"
+            />
+          )}
           {selectedFeat && (
             <button
               type="button"
@@ -502,7 +530,7 @@ export function IndiaMap() {
           reserved top strip (see the container's `pt-[74px]`), so the map
           itself is never covered. State/UT filter + jump-to sit behind the
           Filter button's popup. */}
-      <div className="md:hidden absolute top-2 right-3 z-20 w-[124px] rounded-lg border border-line bg-paper/95 p-2 shadow-panel backdrop-blur pointer-events-auto" data-map-ui>
+      <div className="md:hidden absolute top-2 right-3 z-20 w-[124px] rounded-lg border border-line bg-paper/95 p-2 shadow-panel pointer-events-auto" data-map-ui>
         <div className="space-y-1 text-[10px]">
           <LegendRow
             swatch={<span className="h-2 w-2 rounded-full" style={{ backgroundColor: NAVY }} />}
@@ -528,7 +556,7 @@ export function IndiaMap() {
         onClick={() => setFilterOpen((v) => !v)}
         aria-label="Filter states and union territories"
         className={cn(
-          'md:hidden absolute top-2 left-3 z-20 flex h-11 items-center gap-1.5 rounded-lg border border-line bg-paper/95 px-3 text-[12px] font-medium text-ink-800 shadow-panel backdrop-blur transition-colors pointer-events-auto hover:border-ink-600',
+          'md:hidden absolute top-2 left-3 z-20 flex h-11 items-center gap-1.5 rounded-lg border border-line bg-paper/95 px-3 text-[12px] font-medium text-ink-800 shadow-panel transition-colors pointer-events-auto hover:border-ink-600',
           filterOpen && 'border-ink-600 bg-panel',
         )}
         data-map-ui
@@ -558,28 +586,24 @@ export function IndiaMap() {
               </label>
             </div>
             <div className="space-y-2 border-t border-line pt-2">
-              <Select
-                aria-label="Jump to a state"
-                value={stateFeats.some((f) => f.code === selectedCode) ? String(selectedCode) : ''}
-                onChange={(e) => setSelectedCode(e.target.value ? Number(e.target.value) : null)}
-                className="h-9 w-full py-0 text-[12px]"
-              >
-                <option value="">Jump to state…</option>
-                {stateFeats.map((f) => (
-                  <option key={f.code} value={f.code}>{f.name}</option>
-                ))}
-              </Select>
-              <Select
-                aria-label="Jump to a union territory"
-                value={utFeats.some((f) => f.code === selectedCode) ? String(selectedCode) : ''}
-                onChange={(e) => setSelectedCode(e.target.value ? Number(e.target.value) : null)}
-                className="h-9 w-full py-0 text-[12px]"
-              >
-                <option value="">Jump to territory…</option>
-                {utFeats.map((f) => (
-                  <option key={f.code} value={f.code}>{f.name}</option>
-                ))}
-              </Select>
+              {showStates && (
+                <Combobox
+                  aria-label="Jump to a state"
+                  value={stateFeats.some((f) => f.code === selectedCode) ? String(selectedCode) : ''}
+                  onChange={(v) => setSelectedCode(v ? Number(v) : null)}
+                  options={stateOptions}
+                  placeholder="Jump to state…"
+                />
+              )}
+              {showUTs && (
+                <Combobox
+                  aria-label="Jump to a union territory"
+                  value={utFeats.some((f) => f.code === selectedCode) ? String(selectedCode) : ''}
+                  onChange={(v) => setSelectedCode(v ? Number(v) : null)}
+                  options={utOptions}
+                  placeholder="Jump to territory…"
+                />
+              )}
               {selectedFeat && (
                 <button
                   type="button"
@@ -597,7 +621,7 @@ export function IndiaMap() {
 
       {/* Bottom-LEFT on a phone: the global FAB owns the bottom-right corner
           there, and the two clusters were colliding. */}
-      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel backdrop-blur sm:left-auto sm:right-3" data-map-ui>
+      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel sm:left-auto sm:right-3" data-map-ui>
         {/* Fit-to-screen and Reset (below) both just call `resetView`, so the
             phone keeps one of them — the full 5-slot desktop cluster overran
             the map's own width at 390px. */}

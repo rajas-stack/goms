@@ -105,13 +105,27 @@ export function formatWorkValue(w: Pick<DepartmentWork, 'currency' | 'valueAmoun
   return `${w.currency} ${w.valueAmount} ${workUnitLabel(w.valueUnit)}`
 }
 
+/** `estimateBudgetRangeFromEmd`'s range, rescaled into Cr once its high end
+ *  would otherwise read as more than 99 Lakh (e.g. "40–150 Lakh" becomes
+ *  "0.4–1.5 Cr") — matches how these figures are normally read/spoken in
+ *  Indian usage. Never demotes an already-Cr range. `null` under the same
+ *  conditions `estimateBudgetRangeFromEmd` returns null. */
+export function estimateBudgetRangeDisplay(emdAmount: string, emdUnit: string): { low: number; high: number; unit: string } | null {
+  const range = estimateBudgetRangeFromEmd(emdAmount)
+  if (!range) return null
+  const fromFactor = WORK_VALUE_UNIT_FACTORS[emdUnit] ?? 1
+  const highInLakh = (range.high * fromFactor) / WORK_VALUE_UNIT_FACTORS.lakh
+  const unit = emdUnit !== 'cr' && highInLakh > 99 ? 'cr' : emdUnit
+  const scale = fromFactor / (WORK_VALUE_UNIT_FACTORS[unit] ?? 1)
+  return { low: range.low * scale, high: range.high * scale, unit }
+}
+
 /** Display string for the EMD-derived budget range, e.g. "≈ 40–100 Lakh" —
  *  empty until the EMD amount parses as a positive number. */
 export function formatBudgetRange(w: Pick<DepartmentWork, 'emdAmount' | 'emdUnit'>): string {
-  const range = estimateBudgetRangeFromEmd(w.emdAmount)
-  if (!range) return ''
-  const unit = workUnitLabel(w.emdUnit)
-  return `≈ ${Number(range.low.toFixed(2))}–${Number(range.high.toFixed(2))} ${unit}`
+  const display = estimateBudgetRangeDisplay(w.emdAmount, w.emdUnit)
+  if (!display) return ''
+  return `≈ ${Number(display.low.toFixed(2))}–${Number(display.high.toFixed(2))} ${workUnitLabel(display.unit)}`
 }
 
 const ABBREVIATION_STOPWORDS = new Set(['of', 'and', 'the', 'for', 'in', 'to', '&'])

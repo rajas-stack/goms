@@ -38,7 +38,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
         {open && (
           <>
             <motion.div
-              className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px]"
+              className="fixed inset-0 bg-ink-900/40"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}

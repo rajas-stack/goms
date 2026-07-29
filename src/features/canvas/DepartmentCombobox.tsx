@@ -87,7 +87,7 @@ export function DepartmentCombobox({ departments, value, onSelect, placeholder, 
                 )}
               >
                 <Icon name="Landmark" size={13} className="shrink-0 text-muted" />
-                <span className="min-w-0 flex-1 truncate">{d.name}</span>
+                <span className="min-w-0 flex-1 break-words">{d.name}</span>
                 {d.id === value && <Icon name="Check" size={13} className="shrink-0 text-teal-600" />}
               </button>
             ))}

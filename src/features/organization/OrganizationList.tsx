@@ -96,13 +96,13 @@ export function OrganizationList({ stateCode }: { stateCode: number }) {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="z-10 flex flex-wrap items-center gap-3 border-b border-line bg-white/80 px-4 py-2.5 backdrop-blur">
+      <div className="z-10 flex flex-wrap items-center gap-3 border-b border-line bg-white/80 px-4 py-2.5">
         <Tooltip label="Back one level" side="bottom">
           <button
             onClick={back}
             disabled={atRoot}
             aria-label="Back one level"
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-panel hover:text-ink disabled:opacity-30 disabled:pointer-events-none"
+            className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted before:absolute before:-inset-2 before:content-[''] hover:bg-panel hover:text-ink disabled:opacity-30 disabled:pointer-events-none"
           >
             <Icon name="ArrowLeft" size={15} />
           </button>
@@ -113,7 +113,7 @@ export function OrganizationList({ stateCode }: { stateCode: number }) {
             type="button"
             onClick={() => goTo(null)}
             disabled={atRoot}
-            className={cn('truncate', atRoot ? 'font-semibold text-ink-900' : 'text-muted transition-colors hover:text-ink-900 hover:underline')}
+            className={cn('break-words', atRoot ? 'font-semibold text-ink-900' : 'text-muted transition-colors hover:text-ink-900 hover:underline')}
           >
             Departments
           </button>
@@ -126,7 +126,7 @@ export function OrganizationList({ stateCode }: { stateCode: number }) {
                   type="button"
                   onClick={() => goTo(t.id)}
                   disabled={isLast}
-                  className={cn('truncate', isLast ? 'font-semibold text-ink-900' : 'text-muted transition-colors hover:text-ink-900 hover:underline')}
+                  className={cn('break-words', isLast ? 'font-semibold text-ink-900' : 'text-muted transition-colors hover:text-ink-900 hover:underline')}
                 >
                   {t.name}
                 </button>

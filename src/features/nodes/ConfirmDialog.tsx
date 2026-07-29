@@ -29,8 +29,10 @@ export function ConfirmDialog({ open, node, onClose, onDeleted }: {
       description="This removes the node and everything beneath it, including any employees posted there. This can't be undone."
       footer={
         <>
-          <Button onClick={onClose}>Keep</Button>
-          <Button variant="danger" onClick={confirm}>Delete permanently</Button>
+          <Button onClick={onClose} disabled={remove.isPending}>Keep</Button>
+          <Button variant="danger" onClick={confirm} disabled={remove.isPending}>
+            {remove.isPending ? 'Deleting…' : 'Delete permanently'}
+          </Button>
         </>
       }
     >

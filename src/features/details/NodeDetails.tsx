@@ -5,15 +5,21 @@ import {
 import { NODE_TYPE_MAP, childTypesOf } from '@/lib/node-types'
 import { useWorkspace } from '@/features/workspace/context'
 import { fieldsForType } from '@/features/nodes/metadata-fields'
+import { abbreviateDepartmentName } from '@/features/nodes/department-meta'
 import { DepartmentSection } from './DepartmentSection'
 import { Button } from '@/components/ui/Button'
 import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
+import { FitText } from '@/components/ui/FitText'
 import { Icon } from '@/components/ui/Icon'
 import { Badge, CodeChip } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 
 const EMPLOYEE_ADDERS = new Set(['department', 'branch', 'division', 'office', 'unit'])
+
+const FIELD_ICON: Record<string, string> = {
+  url: 'Globe', email: 'Mail', phone: 'Phone', text: 'FileText', string: 'Type',
+}
 
 export function NodeDetails({ nodeId }: { nodeId: string }) {
   const ws = useWorkspace()
@@ -29,6 +35,11 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
   if (!node) return null
   const type = NODE_TYPE_MAP[node.typeKey]
   const childType = childTypesOf(node.typeKey)[0]
+  // `childTypesOf` falls back to every type in the domain once a type's own
+  // `childKeys` is empty (used elsewhere so a bare leaf still offers a full
+  // type picker) — that fallback would wrongly suggest a real child type here
+  // for true leaves like `unit`, so this only trusts an explicitly declared one.
+  const hasRealChildType = (NODE_TYPE_MAP[node.typeKey]?.childKeys.length ?? 0) > 0
   const allFields = fieldsForType(node.typeKey, node.domain).filter((f) => node.metadata[f.key])
   const descriptionField = allFields.find((f) => f.key === 'description')
   const fields = allFields.filter((f) => f.key !== 'description')
@@ -68,12 +79,15 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
             <Icon name={type?.icon ?? 'Hash'} size={20} />
           </span>
           <div className="min-w-0 flex-1">
-            {(!isDepartment || archived) && (
-              <div className="flex items-center gap-2">
-                {!isDepartment && <span className="eyebrow break-words">{type?.label}</span>}
-                {archived && <Badge tone="crimson">Archived</Badge>}
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {!isDepartment && <span className="eyebrow break-words">{type?.label}</span>}
+              {isDepartment && (
+                <span className="eyebrow break-words">
+                  {node.metadata.shortName || abbreviateDepartmentName(`Department of ${node.name}`)}
+                </span>
+              )}
+              {archived && <Badge tone="crimson">Archived</Badge>}
+            </div>
             <h2 className="mt-0.5 break-words font-display text-2xl font-bold text-ink-900">
               {isDepartment ? `Department of ${node.name}` : node.name}
             </h2>
@@ -86,10 +100,33 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          {childType && (
-            <Button variant="primary" size="sm" onClick={() => (isOrgLeaf ? ws.addEmployee(node) : ws.createChild(node))}>
-              <Icon name={isOrgLeaf ? 'User' : 'Plus'} size={14} />
-              {isOrgLeaf ? 'Add employee' : `Add ${childType.label.toLowerCase()}`}
+          {isOrgLeaf ? (
+            <Menu
+              trigger={({ toggle }) => (
+                <Button variant="primary" size="sm" onClick={toggle}>
+                  <Icon name="Plus" size={14} /> Add employee
+                </Button>
+              )}
+            >
+              {(close) => (
+                <>
+                  <MenuItem icon={<Icon name="UserPlus" size={15} />} onClick={() => { close(); ws.addEmployee(node) }}>
+                    Add employee
+                  </MenuItem>
+                  <MenuItem icon={<Icon name="Users" size={15} />} onClick={() => { close(); ws.selectEmployee(node) }}>
+                    Select employee
+                  </MenuItem>
+                  {hasRealChildType && (
+                    <MenuItem icon={<Icon name="GitBranch" size={15} />} onClick={() => { close(); ws.createChild(node) }}>
+                      Add {childType!.label.toLowerCase()}
+                    </MenuItem>
+                  )}
+                </>
+              )}
+            </Menu>
+          ) : childType && (
+            <Button variant="primary" size="sm" onClick={() => ws.createChild(node)}>
+              <Icon name="Plus" size={14} /> Add {childType.label.toLowerCase()}
             </Button>
           )}
           <Button size="sm" onClick={() => ws.editNode(node)}><Icon name="Pencil" size={14} /> Edit</Button>
@@ -151,7 +188,7 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
           <Section title={isDepartment ? 'Department Contact' : 'Details'}>
             <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
               {fields.map((f) => (
-                <DetailRow key={f.key} label={f.label}>
+                <DetailRow key={f.key} label={f.label} icon={FIELD_ICON[f.type]}>
                   {f.type === 'url' ? (
                     <a
                       href={node.metadata[f.key]}
@@ -160,6 +197,14 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
                       className="inline-flex items-center gap-1 break-words text-teal-600 hover:underline"
                     >
                       <span className="break-all">{node.metadata[f.key]}</span> <Icon name="ExternalLink" size={12} className="shrink-0" />
+                    </a>
+                  ) : f.type === 'email' ? (
+                    <a href={`mailto:${node.metadata[f.key]}`} className="break-all text-teal-600 hover:underline">
+                      {node.metadata[f.key]}
+                    </a>
+                  ) : f.type === 'phone' ? (
+                    <a href={`tel:${node.metadata[f.key]}`} className="text-teal-600 hover:underline">
+                      {node.metadata[f.key]}
                     </a>
                   ) : (
                     node.metadata[f.key]
@@ -231,11 +276,16 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+function DetailRow({ label, icon, children }: { label: string; icon?: string; children: React.ReactNode }) {
   return (
-    <div>
-      <dt className="text-[11px] uppercase tracking-wide text-muted">{label}</dt>
-      <dd className="mt-0.5 break-words text-sm text-ink-900">{children}</dd>
+    <div className="min-w-0">
+      <dt className="flex items-center gap-1.5 text-[11px] uppercase tracking-wide text-muted">
+        {icon && <Icon name={icon} size={12} className="shrink-0" />}
+        {label}
+      </dt>
+      <dd className="mt-0.5 text-sm text-ink-900">
+        <FitText>{children}</FitText>
+      </dd>
     </div>
   )
 }

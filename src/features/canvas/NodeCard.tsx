@@ -2,6 +2,7 @@ import { forwardRef } from 'react'
 import { motion } from 'framer-motion'
 import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
+import { Menu, MenuItem } from '@/components/ui/Menu'
 import { CodeChip } from '@/components/ui/Badge'
 import { fieldsForType } from '@/features/nodes/metadata-fields'
 import { NODE_TYPE_MAP, childTypesOf } from '@/lib/node-types'
@@ -28,16 +29,29 @@ interface Props {
   onSelect: () => void
   onToggle: () => void
   onAdd: () => void
+  /** Opens the "move an existing employee here" flow instead of creating a
+   *  new one. Only meaningful (and only rendered) on employee-adder nodes. */
+  onSelectEmployee?: () => void
+  /** Creates a real child node (e.g. a branch under a department) alongside
+   *  the employee actions above. Only meaningful (and only rendered) on
+   *  employee-adder nodes that also have a declared child type — a plain
+   *  `unit` has neither, so it never gets this third option. */
+  onAddChild?: () => void
 }
 
 export const NodeCard = forwardRef<HTMLDivElement, Props>(
-  ({ node, selected, expanded, canExpand, showMetadata, dropActive, dragging, childCountLabel, headNames, onSelect, onToggle, onAdd }, ref) => {
+  ({ node, selected, expanded, canExpand, showMetadata, dropActive, dragging, childCountLabel, headNames, onSelect, onToggle, onAdd, onSelectEmployee, onAddChild }, ref) => {
     const type = NODE_TYPE_MAP[node.typeKey]
     const accent = nodeAccent(node)
     const isDepartment = node.typeKey === 'department'
     const isBranch = node.typeKey === 'branch'
     const addsEmployee = node.domain === 'org' && EMPLOYEE_ADDERS.has(node.typeKey)
-    const childLabel = addsEmployee ? 'Employee' : childTypesOf(node.typeKey)[0]?.label
+    // `childTypesOf` falls back to every type in the domain once a type's own
+    // `childKeys` is empty, so a real child type is only trusted when the
+    // type declares one explicitly — otherwise a true leaf like `unit` would
+    // wrongly get an "Add department" option.
+    const realChildType = (NODE_TYPE_MAP[node.typeKey]?.childKeys.length ?? 0) > 0 ? childTypesOf(node.typeKey)[0] : undefined
+    const childLabel = addsEmployee ? 'Employee' : realChildType?.label
     const metaField = showMetadata
       ? fieldsForType(node.typeKey, node.domain).find((f) => node.metadata[f.key])
       : undefined
@@ -114,7 +128,39 @@ export const NodeCard = forwardRef<HTMLDivElement, Props>(
           </Tooltip>
         )}
 
-        {childLabel && (
+        {childLabel && addsEmployee && onSelectEmployee ? (
+          <div className="absolute -right-3 -top-3 opacity-0 group-hover:opacity-100">
+            <Menu
+              trigger={({ toggle }) => (
+                <button
+                  onClick={(e) => { e.stopPropagation(); toggle() }}
+                  aria-label="Add"
+                  // Visible circle stays 28px; `before:` expands the hit area to
+                  // ≥44dp without changing the visible affordance or its position.
+                  className="relative flex h-7 w-7 items-center justify-center rounded-full border border-line bg-white text-muted shadow-sm transition-all before:absolute before:-inset-2 before:content-[''] hover:border-ink-900 hover:text-ink-900"
+                >
+                  <Icon name="Plus" size={14} />
+                </button>
+              )}
+            >
+              {(close) => (
+                <>
+                  <MenuItem icon={<Icon name="UserPlus" size={15} />} onClick={() => { close(); onAdd() }}>
+                    Add employee
+                  </MenuItem>
+                  <MenuItem icon={<Icon name="Users" size={15} />} onClick={() => { close(); onSelectEmployee() }}>
+                    Select employee
+                  </MenuItem>
+                  {realChildType && onAddChild && (
+                    <MenuItem icon={<Icon name="GitBranch" size={15} />} onClick={() => { close(); onAddChild() }}>
+                      Add {realChildType.label.toLowerCase()}
+                    </MenuItem>
+                  )}
+                </>
+              )}
+            </Menu>
+          </div>
+        ) : childLabel && (
           <Tooltip label={`Add ${childLabel.toLowerCase()}`} side="left" className="absolute -right-3 -top-3 opacity-0 group-hover:opacity-100">
             <button
               onClick={(e) => { e.stopPropagation(); onAdd() }}

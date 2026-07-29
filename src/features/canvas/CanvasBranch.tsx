@@ -103,6 +103,14 @@ export function CanvasBranch({ item, depth, parentKey, controlled }: {
     }
     setExpanded(true)
   }
+  function onSelectEmployee() {
+    if (isNode && addsEmployee) ws.selectEmployee(node!)
+    setExpanded(true)
+  }
+  function onAddChild() {
+    if (isNode) ws.createChild(node!)
+    setExpanded(true)
+  }
 
   // --- drag & drop reorganization ------------------------------------------
   const dragPayload = canvas.dragPayload
@@ -149,6 +157,14 @@ export function CanvasBranch({ item, depth, parentKey, controlled }: {
   function onDragEnd() {
     canvas.setDragPayload(null)
     canvas.setOverKey(null)
+    // Chrome on Windows hides the OS cursor for the duration of a native
+    // HTML5 drag and sometimes fails to restore it afterward — it then stays
+    // invisible until the pointer leaves and re-enters the window. Forcing an
+    // explicit cursor value and releasing it one frame later makes Chrome
+    // recompute the cursor immediately instead of waiting for that.
+    const root = document.documentElement
+    root.style.cursor = 'default'
+    requestAnimationFrame(() => { root.style.cursor = '' })
   }
   async function onDrop(e: React.DragEvent) {
     e.preventDefault()
@@ -208,6 +224,8 @@ export function CanvasBranch({ item, depth, parentKey, controlled }: {
             onSelect={onSelect}
             onToggle={onToggle}
             onAdd={onAdd}
+            onSelectEmployee={addsEmployee ? onSelectEmployee : undefined}
+            onAddChild={addsEmployee ? onAddChild : undefined}
           />
         ) : (
           <EmployeeCard

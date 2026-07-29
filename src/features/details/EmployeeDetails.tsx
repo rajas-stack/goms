@@ -236,14 +236,14 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
 
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto scrollbar-thin px-6 py-5">
         <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-          {!vacant && (
+          {!vacant && emp.email && (
             <DetailRow label="Email" icon="Mail">
-              {emp.email ? <a href={`mailto:${emp.email}`} className="hover:underline">{emp.email}</a> : '—'}
+              <a href={`mailto:${emp.email}`} className="hover:underline">{emp.email}</a>
             </DetailRow>
           )}
-          {!vacant && (
+          {!vacant && emp.phone && (
             <DetailRow label="Phone" icon="Phone">
-              {emp.phone ? <a href={`tel:${emp.phone}`} className="hover:underline">{emp.phone}</a> : '—'}
+              <a href={`tel:${emp.phone}`} className="hover:underline">{emp.phone}</a>
             </DetailRow>
           )}
           {!vacant && emp.company && <DetailRow label="Company" value={emp.company} icon="Building2" />}
@@ -260,12 +260,14 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
             </DetailRow>
           )}
           {!vacant && emp.address && <DetailRow label="Address" value={emp.address} icon="MapPin" />}
-          <DetailRow label="Posting" value={orgNode?.name ?? '—'} icon="Landmark" />
-          <DetailRow
-            label="Relationship Owner / AMNEX Representative"
-            value={relationshipOwner ? `${relationshipOwner.name} · ${relationshipOwner.designation}` : '—'}
-            icon="UserCheck"
-          />
+          {orgNode && <DetailRow label="Posting" value={orgNode.name} icon="Landmark" />}
+          {relationshipOwner && (
+            <DetailRow
+              label="Relationship Owner / AMNEX Representative"
+              value={`${relationshipOwner.name} · ${relationshipOwner.designation}`}
+              icon="UserCheck"
+            />
+          )}
         </dl>
 
         {!vacant && (
@@ -277,18 +279,20 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
                     <QualityBadge quality={emp.relationshipQuality} />
                   </DetailRow>
                   <DetailRow label="Status"><StatusBadge status={emp.relationshipStatus} /></DetailRow>
-                  <DetailRow label="Type" value={emp.relationshipType || '—'} icon="Type" />
-                  <DetailRow label="Introduced by" value={emp.introducedBy || '—'} icon="UserPlus" />
+                  {emp.relationshipType && <DetailRow label="Type" value={emp.relationshipType} icon="Type" />}
+                  {emp.introducedBy && <DetailRow label="Introduced by" value={emp.introducedBy} icon="UserPlus" />}
                 </>
               )}
-              <DetailRow
-                label="Preferred contact"
-                value={emp.preferredComm.length ? emp.preferredComm.map((c) => COMM_LABEL[c]).join(', ') : '—'}
-                icon="MessageCircle"
-              />
+              {emp.preferredComm.length > 0 && (
+                <DetailRow
+                  label="Preferred contact"
+                  value={emp.preferredComm.map((c) => COMM_LABEL[c]).join(', ')}
+                  icon="MessageCircle"
+                />
+              )}
               <DetailRow label="Important contact" value={emp.importantContact ? 'Yes' : 'No'} icon="Star" />
-              <DetailRow label="Last interaction" value={emp.lastInteractionAt ?? '—'} icon="Clock" />
-              <DetailRow label="Next follow-up" value={emp.followUpDate ?? '—'} icon="Calendar" />
+              {emp.lastInteractionAt && <DetailRow label="Last interaction" value={emp.lastInteractionAt} icon="Clock" />}
+              {emp.followUpDate && <DetailRow label="Next follow-up" value={emp.followUpDate} icon="Calendar" />}
             </dl>
             {emp.notes && (
               <p className="mt-3 whitespace-pre-wrap break-words rounded-lg border border-line bg-white px-3 py-2.5 text-sm text-ink-800">{emp.notes}</p>

@@ -10,6 +10,7 @@ import { CommandPalette } from '@/components/CommandPalette'
 import { GlobalFab } from '@/components/GlobalFab'
 import { RouteFallback } from '@/components/RouteFallback'
 import { ImportDialog } from '@/features/import/ImportDialog'
+import { ExportDialog } from '@/features/import/ExportDialog'
 import { ToastProvider } from '@/components/ui/Toast'
 import { cn, isTypingTarget } from '@/lib/utils'
 import { useMediaQuery } from '@/lib/useMediaQuery'
@@ -21,17 +22,21 @@ import {
 interface ShellCtx {
   openSearch: () => void
   openImport: () => void
+  openExport: () => void
   /** Whether SecondaryNav (Map/Directory/Insights/Meetings) is showing —
    *  derived straight from the route (anywhere but Home), so it can never
    *  drift out of sync with a reload, deep link, or browser back/forward. */
   navExpanded: boolean
 }
-const Ctx = createContext<ShellCtx>({ openSearch: () => {}, openImport: () => {}, navExpanded: false })
+const Ctx = createContext<ShellCtx>({
+  openSearch: () => {}, openImport: () => {}, openExport: () => {}, navExpanded: false,
+})
 export const useShell = () => useContext(Ctx)
 
 export function AppLayout() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
@@ -68,6 +73,8 @@ export function AppLayout() {
   searchOpenRef.current = searchOpen
   const importOpenRef = useRef(importOpen)
   importOpenRef.current = importOpen
+  const exportOpenRef = useRef(exportOpen)
+  exportOpenRef.current = exportOpen
   const drawerOpenRef = useRef(drawerOpen)
   drawerOpenRef.current = drawerOpen
   const isMobileRef = useRef(isMobile)
@@ -117,6 +124,10 @@ export function AppLayout() {
         setImportOpen(false)
         return
       }
+      if (exportOpenRef.current) {
+        setExportOpen(false)
+        return
+      }
       if (drawerOpenRef.current) {
         setDrawerOpen(false)
         return
@@ -146,7 +157,8 @@ export function AppLayout() {
   return (
     <ToastProvider>
       <Ctx.Provider value={{
-        openSearch: () => setSearchOpen(true), openImport: () => setImportOpen(true), navExpanded,
+        openSearch: () => setSearchOpen(true), openImport: () => setImportOpen(true),
+        openExport: () => setExportOpen(true), navExpanded,
       }}>
         <div className="flex h-screen overflow-hidden bg-paper">
           <AccountMappingRail />
@@ -163,6 +175,7 @@ export function AppLayout() {
         </div>
         <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
         <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
+        <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
         <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
         <GlobalFab />
       </Ctx.Provider>

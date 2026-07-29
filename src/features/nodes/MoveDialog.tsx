@@ -41,8 +41,10 @@ export function MoveDialog({ open, node, stateCode, onClose }: {
       description="Choose a new parent. Its subtree moves with it."
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={pick === null}>Move here</Button>
+          <Button onClick={onClose} disabled={move.isPending}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={pick === null || move.isPending}>
+            {move.isPending ? 'Moving…' : 'Move here'}
+          </Button>
         </>
       }
     >
@@ -89,7 +91,7 @@ function Row({ active, onClick, icon, label, typeLabel, code }: {
     >
       <Icon name={icon} className="text-muted" />
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-ink-900">{label}</span>
+        <span className="block break-words text-sm font-medium text-ink-900">{label}</span>
         <span className="text-[11px] uppercase tracking-wide text-muted">{typeLabel}</span>
       </span>
       <CodeChip code={code} />

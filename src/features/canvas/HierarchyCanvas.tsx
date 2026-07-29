@@ -513,7 +513,7 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
       onLostPointerCapture={endPan}
     >
       {domain === 'org' && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-white/90 px-4 py-2.5 text-[12px] backdrop-blur">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-white/90 px-4 py-2.5 text-[12px]">
           <Icon name="Landmark" size={13} className="text-muted" />
           <span className="font-medium text-ink-900">{stateNode?.name ?? 'State'}</span>
           <Icon name="ChevronRight" size={12} className="text-line" />
@@ -530,7 +530,7 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
         </div>
       )}
       {domain === 'people' && (
-        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-white/90 px-4 py-2.5 text-[12px] backdrop-blur">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-white/90 px-4 py-2.5 text-[12px]">
           <Icon name="Landmark" size={13} className="text-muted" />
           <span className="font-medium text-ink-900">{stateNode?.name ?? 'State'}</span>
           <Icon name="ChevronRight" size={12} className="text-line" />
@@ -598,7 +598,7 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
         )}
       </div>
 
-      <div data-canvas-ui className="pointer-events-none absolute bottom-5 right-5 flex flex-wrap items-center justify-end gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel backdrop-blur">
+      <div data-canvas-ui className="pointer-events-none absolute bottom-5 right-5 flex flex-wrap items-center justify-end gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel">
         <Tooltip label="Fit to screen (F)" className="pointer-events-auto">
           <button onClick={fitToScreen} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Fit to screen">
             <Icon name="Maximize" size={14} />

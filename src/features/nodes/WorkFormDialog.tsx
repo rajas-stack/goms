@@ -9,7 +9,7 @@ import { useFormDraft } from '@/lib/useFormDraft'
 import { uid } from '@/lib/utils'
 import {
   WORK_COMPONENT_GROUPS, WORK_CURRENCIES, WORK_VALUE_UNITS, WORK_VERTICALS,
-  convertWorkAmount, estimateBudgetRangeFromEmd, workUnitLabel,
+  convertWorkAmount, estimateBudgetRangeDisplay, workUnitLabel,
 } from './department-meta'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
 import type { DepartmentWork } from '@/lib/types'
@@ -181,11 +181,11 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
                 </div>
               </Field>
               {(() => {
-                const range = estimateBudgetRangeFromEmd(form.emdAmount)
-                return range !== null && (
+                const display = estimateBudgetRangeDisplay(form.emdAmount, form.emdUnit)
+                return display !== null && (
                   <Field label="Budget (derived)">
                     <p className="flex h-10 items-center rounded-lg border border-line bg-panel px-3 text-sm text-ink-700">
-                      ≈ {Number(range.low.toFixed(2))}–{Number(range.high.toFixed(2))} {workUnitLabel(form.emdUnit)}
+                      ≈ {Number(display.low.toFixed(2))}–{Number(display.high.toFixed(2))} {workUnitLabel(display.unit)}
                     </p>
                   </Field>
                 )

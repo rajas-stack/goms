@@ -3,7 +3,7 @@ import type {
   SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
 import { uid } from '@/lib/utils'
-import { NODE_TYPE_MAP } from '@/lib/node-types'
+import { NODE_TYPE_MAP, childTypesOf } from '@/lib/node-types'
 import { SEARCH_CATEGORIES, SEARCH_CATEGORY_MAP, type SearchContext } from '@/lib/search-categories'
 import { buildSeed, type GormsData } from './seed'
 import { clearSnapshot, loadSnapshot, scheduleSave } from './persist'
@@ -88,6 +88,23 @@ export interface AddTimelineInput {
   attendees?: string[]
 }
 
+export interface ImportChildRow {
+  name: string
+  /** Child type label (e.g. "Office", "Division") matched case-insensitively
+   *  against the parent's valid child types — falls back to the parent's
+   *  first child type (prior single-type-per-import behavior) when blank or
+   *  unrecognized. */
+  type?: string
+}
+
+export interface ImportEmployeeRow {
+  name: string
+  designation: string
+  email?: string
+  phone?: string
+  connected?: boolean
+}
+
 export interface TransferInput {
   employeeId: string
   toOrgNodeId: string
@@ -108,6 +125,9 @@ export interface Repository {
   getNode(id: string): Promise<HierNode | undefined>
   listChildren(parentId: string): Promise<HierNode[]>
   listOrgRoots(stateCode: number): Promise<HierNode[]>
+  /** Every active department node across every state — powers the export,
+   *  which is cross-state (unlike `listOrgRoots`, which is per-state). */
+  listDepartments(): Promise<HierNode[]>
   listPostingNodes(stateCode: number): Promise<HierNode[]>
   breadcrumb(id: string): Promise<HierNode[]>
   childCount(id: string): Promise<number>
@@ -158,7 +178,8 @@ export interface Repository {
 
   search(query: string, stateCode?: number): Promise<SearchResult[]>
   relatedRecords(result: SearchResult): Promise<SearchResult[]>
-  importChildren(parentId: string, names: string[]): Promise<number>
+  importChildren(parentId: string, rows: ImportChildRow[]): Promise<number>
+  importEmployees(orgNodeId: string, rows: ImportEmployeeRow[]): Promise<number>
   moveTargets(nodeId: string): Promise<HierNode[]>
   reorderNode(id: string, beforeId: string | null): Promise<void>
   relationshipAnalytics(): Promise<RelationshipAnalytics>
@@ -283,6 +304,12 @@ class InMemoryRepository implements Repository {
     return this.data.nodes
       .filter((n) => n.domain === 'org' && n.typeKey === 'department' && n.stateCode === stateCode && n.status === 'active')
       .sort((a, b) => a.sortOrder - b.sortOrder)
+  }
+
+  async listDepartments() {
+    return this.data.nodes
+      .filter((n) => n.domain === 'org' && n.typeKey === 'department' && n.status === 'active')
+      .sort((a, b) => (a.stateCode ?? 0) - (b.stateCode ?? 0) || a.name.localeCompare(b.name))
   }
 
   /** Org nodes an employee can be posted at (offices/units) in a state — used
@@ -808,17 +835,45 @@ class InMemoryRepository implements Repository {
     })
   }
 
-  async importChildren(parentId: string, names: string[]) {
+  async importChildren(parentId: string, rows: ImportChildRow[]) {
     const parent = this.data.nodes.find((n) => n.id === parentId)
     if (!parent) return 0
-    const childType = NODE_TYPE_MAP[parent.typeKey]?.childKeys[0] ?? 'district'
+    const validTypes = childTypesOf(parent.typeKey)
+    const defaultType = NODE_TYPE_MAP[parent.typeKey]?.childKeys[0] ?? 'district'
     let added = 0
-    for (const name of names) {
-      const trimmed = name.trim()
+    for (const row of rows) {
+      const trimmed = row.name.trim()
       if (!trimmed) continue
+      const matched = row.type
+        ? validTypes.find((t) => t.label.toLowerCase() === row.type!.trim().toLowerCase())
+        : undefined
       await this.createNode({
-        domain: parent.domain, typeKey: childType, parentId,
+        domain: parent.domain, typeKey: matched?.key ?? defaultType, parentId,
         stateCode: parent.stateCode, name: trimmed,
+      })
+      added += 1
+    }
+    return added
+  }
+
+  /** Bulk-creates employees under an existing org node — the employee
+   *  counterpart to `importChildren` above. Rows missing a name or
+   *  designation (both required on `Employee`) are skipped rather than
+   *  creating a half-filled record. */
+  async importEmployees(orgNodeId: string, rows: ImportEmployeeRow[]) {
+    const node = this.data.nodes.find((n) => n.id === orgNodeId)
+    if (!node) return 0
+    let added = 0
+    for (const row of rows) {
+      const name = row.name.trim()
+      const designation = row.designation.trim()
+      if (!name || !designation) continue
+      await this.createEmployee({
+        name, designation,
+        email: row.email?.trim() ?? '',
+        phone: row.phone?.trim() ?? '',
+        orgNodeId, managerId: null,
+        connected: row.connected,
       })
       added += 1
     }
@@ -885,7 +940,7 @@ class InMemoryRepository implements Repository {
  *  listed here or its effects won't survive a reload. */
 const MUTATOR_KEYS = [
   'createNode', 'updateNode', 'setNodeStatus', 'deleteNode', 'moveNode', 'duplicateNode',
-  'reorderNode', 'importChildren',
+  'reorderNode', 'importChildren', 'importEmployees',
   'createEmployee', 'updateEmployee', 'setManager', 'deleteEmployee',
   'addTimelineEvent', 'setTimelineEventAttended', 'deleteTimelineEvent',
   'transferEmployee', 'addCharge', 'removeCharge',
@@ -894,7 +949,7 @@ const MUTATOR_KEYS = [
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
  *  "classified as a read" apart from "nobody classified it". */
 const READER_KEYS = [
-  'listStates', 'getState', 'getNode', 'listChildren', 'listOrgRoots', 'listPostingNodes',
+  'listStates', 'getState', 'getNode', 'listChildren', 'listOrgRoots', 'listDepartments', 'listPostingNodes',
   'breadcrumb', 'childCount', 'geoRoot', 'childCounts',
   'listEmployeesUnder', 'listEmployeesDirect', 'listEmployeesByState', 'listAllEmployees',
   'listEmployeeDepartments', 'getEmployee', 'directReports', 'reportingChain',

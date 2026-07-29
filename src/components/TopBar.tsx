@@ -11,10 +11,10 @@ interface Props {
 }
 
 export function TopBar({ onOpenDrawer }: Props) {
-  const { openSearch, openImport } = useShell()
+  const { openSearch, openImport, openExport } = useShell()
   const isHome = useLocation().pathname === '/'
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-paper/90 px-3 backdrop-blur sm:gap-3 sm:px-5">
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-paper/90 px-3 sm:gap-3 sm:px-5">
       <button
         onClick={onOpenDrawer}
         aria-label="Open menu"
@@ -51,6 +51,13 @@ export function TopBar({ onOpenDrawer }: Props) {
         <Button variant="primary" size="sm" onClick={openImport} aria-label="Import records" className="h-11 lg:h-8">
           <Icon name="Upload" size={15} />
           <span className="hidden sm:inline">Import</span>
+        </Button>
+      </Tooltip>
+
+      <Tooltip label="Export departments, people, or meetings as CSV" side="bottom" className="shrink-0">
+        <Button size="sm" onClick={openExport} aria-label="Export records" className="h-11 lg:h-8">
+          <Icon name="Download" size={15} />
+          <span className="hidden sm:inline">Export</span>
         </Button>
       </Tooltip>
     </header>

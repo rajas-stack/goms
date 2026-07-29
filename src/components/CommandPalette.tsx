@@ -97,7 +97,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       <AnimatePresence>
         {open && (
           <>
-            <motion.div className="fixed inset-0 bg-ink-900/40 backdrop-blur-[2px]"
+            <motion.div className="fixed inset-0 bg-ink-900/40"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
             <motion.div
             className="relative flex h-full w-full flex-col overflow-hidden bg-paper lg:block lg:h-auto lg:max-w-xl lg:rounded-2xl lg:border lg:border-line lg:shadow-pop"
