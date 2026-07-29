@@ -8,9 +8,16 @@ import { Combobox } from '@/components/ui/Combobox'
 import { MobileFilterBar } from '@/components/MobileFilterBar'
 import { cn, initials } from '@/lib/utils'
 import { useMediaQuery } from '@/lib/useMediaQuery'
-import type { Employee } from '@/lib/types'
+import type { Employee, RelationshipStatus } from '@/lib/types'
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
+
+const RELATIONSHIP_STATUS_OPTIONS: { value: RelationshipStatus; label: string }[] = [
+  { value: 'engaged', label: 'Engaged' },
+  { value: 'developing', label: 'Developing' },
+  { value: 'dormant', label: 'Dormant' },
+  { value: 'new', label: 'New' },
+]
 
 // Fallback estimates for the virtualizer — `measureElement` re-measures each
 // row/header's real rendered height after first paint and self-corrects, so
@@ -48,6 +55,7 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
   const [designation, setDesignation] = useState('')
   const [managerId, setManagerId] = useState('')
   const [departmentId, setDepartmentId] = useState('')
+  const [relationshipStatus, setRelationshipStatus] = useState('')
 
   // Resolve manager names from the same in-scope list so we can both search
   // and filter by reporting manager without an extra fetch.
@@ -92,15 +100,16 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
     [managers],
   )
 
-  const hasFilters = query.trim() !== '' || designation !== '' || managerId !== '' || departmentId !== ''
-  // Only the three dropdowns — the free-text query has its own always-visible
+  const hasFilters = query.trim() !== '' || designation !== '' || managerId !== '' || departmentId !== '' || relationshipStatus !== ''
+  // Only the dropdowns — the free-text query has its own always-visible
   // field, so counting it on the collapsed Filter button would be misleading.
-  const activeFilterCount = [departmentId, designation, managerId].filter(Boolean).length
+  const activeFilterCount = [departmentId, designation, managerId, relationshipStatus].filter(Boolean).length
   function clearFilters() {
     setQuery('')
     setDesignation('')
     setManagerId('')
     setDepartmentId('')
+    setRelationshipStatus('')
   }
 
   const filtered = useMemo(() => {
@@ -109,6 +118,7 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
       if (departmentId && deptById[e.id]?.id !== departmentId) return false
       if (designation && e.designation !== designation) return false
       if (managerId && e.managerId !== managerId) return false
+      if (relationshipStatus && e.relationshipStatus !== relationshipStatus) return false
       if (q) {
         const managerName = e.managerId ? nameById.get(e.managerId) ?? '' : ''
         const haystack = [e.name, e.designation, e.phone, e.email, managerName].join(' ').toLowerCase()
@@ -116,7 +126,7 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
       }
       return true
     })
-  }, [employees, query, designation, managerId, departmentId, deptById, nameById])
+  }, [employees, query, designation, managerId, departmentId, relationshipStatus, deptById, nameById])
 
   const groups = useMemo(() => {
     const byLetter = new Map<string, Employee[]>()
@@ -220,6 +230,15 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
               options={managerOptions}
               placeholder="All reporting managers"
               aria-label="Filter by reporting manager"
+              className="w-full sm:min-w-[9rem] sm:flex-1"
+            />
+
+            <Combobox
+              value={relationshipStatus}
+              onChange={setRelationshipStatus}
+              options={RELATIONSHIP_STATUS_OPTIONS}
+              placeholder="All relationship statuses"
+              aria-label="Filter by relationship status"
               className="w-full sm:min-w-[9rem] sm:flex-1"
             />
 
