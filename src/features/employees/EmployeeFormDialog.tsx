@@ -343,12 +343,15 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
           </Field>
         )}
 
-        <Field label="Relationship Owner / AMNEX Representative" hint="The AMNEX account manager who owns this relationship.">
-          <SalesTeamPicker
-            value={form.relationshipOwner}
-            onChange={(email) => setForm((f) => ({ ...f, relationshipOwner: email }))}
-          />
-        </Field>
+        <div className="rounded-card border border-line bg-panel/40 p-4">
+          <p className="mb-3 text-[13px] font-semibold text-ink-800">Amnex details</p>
+          <Field label="Relationship Owner / AMNEX Representative" hint="The AMNEX account manager who owns this relationship.">
+            <SalesTeamPicker
+              value={form.relationshipOwner}
+              onChange={(email) => setForm((f) => ({ ...f, relationshipOwner: email }))}
+            />
+          </Field>
+        </div>
 
         {!form.vacant && (
           <Field label="Connected">
