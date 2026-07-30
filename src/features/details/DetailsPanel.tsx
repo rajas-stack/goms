@@ -2,6 +2,7 @@ import { AnimatePresence } from 'framer-motion'
 import { useWorkspace } from '@/features/workspace/context'
 import { NodeDetails } from './NodeDetails'
 import { EmployeeDetails } from './EmployeeDetails'
+import { SalesPersonDetails } from './SalesPersonDetails'
 import { Icon } from '@/components/ui/Icon'
 
 export function DetailsPanel() {
@@ -24,6 +25,8 @@ export function DetailsPanel() {
     <AnimatePresence mode="wait">
       {selection.kind === 'node' ? (
         <NodeDetails key={selection.id} nodeId={selection.id} />
+      ) : selection.kind === 'salesPerson' ? (
+        <SalesPersonDetails key={selection.id} salesPersonId={selection.id} />
       ) : (
         <EmployeeDetails key={selection.id} employeeId={selection.id} />
       )}

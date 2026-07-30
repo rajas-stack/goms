@@ -1,7 +1,7 @@
 import type {
   Charge, Domain, Employee, FollowUp, HierNode, Opportunity, OpportunityStageChange, PreferredComm,
-  RelationshipQuality, RelationshipStatus, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer,
-  VisitingCardItem,
+  RelationshipQuality, RelationshipStatus, SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent,
+  TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
 import { uid } from '@/lib/utils'
 import { isoToday } from '@/lib/dates'
@@ -215,6 +215,16 @@ export interface Repository {
   updateOpportunity(id: string, patch: Partial<Opportunity>): Promise<Opportunity>
   deleteOpportunity(id: string): Promise<void>
 
+  /** The AMNEX sales roster, name-sorted. Includes every status — the UI
+   *  filters, so a resigned person stays reachable from their history. */
+  listSalesPersons(): Promise<SalesPerson[]>
+  getSalesPerson(id: string): Promise<SalesPerson | null>
+  /** Postings for one person, most recent first. */
+  listSalesPostings(salesPersonId: string): Promise<SalesPosting[]>
+  /** Each person's currently-open posting, keyed by person id — one pass, so a
+   *  roster list can show designation and tier without a query per row. */
+  currentPostings(): Promise<Record<string, SalesPosting>>
+
   /** Follow-ups against one entity, soonest due first. */
   listFollowUps(entityType: string, entityId: string): Promise<FollowUp[]>
   /** Every open follow-up across every entity, soonest due first. */
@@ -264,6 +274,8 @@ class InMemoryRepository implements Repository {
       opportunities: data.opportunities ?? [],
       opportunityStageChanges: data.opportunityStageChanges ?? [],
       followUps: data.followUps ?? [],
+      salesPersons: data.salesPersons ?? [],
+      salesPostings: data.salesPostings ?? [],
     }
     // A snapshot written by an older build can still carry duplicates that
     // today's seed no longer produces, so re-run the same cleanup the seed gets.
@@ -799,6 +811,28 @@ class InMemoryRepository implements Repository {
     this.data.opportunityStageChanges = this.data.opportunityStageChanges.filter((c) => c.opportunityId !== id)
   }
 
+  async listSalesPersons() {
+    return [...this.data.salesPersons].sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  async getSalesPerson(id: string) {
+    return this.data.salesPersons.find((p) => p.id === id) ?? null
+  }
+
+  async listSalesPostings(salesPersonId: string) {
+    return this.data.salesPostings
+      .filter((p) => p.salesPersonId === salesPersonId)
+      .sort((a, b) => b.startDate.localeCompare(a.startDate))
+  }
+
+  async currentPostings() {
+    const out: Record<string, SalesPosting> = {}
+    for (const p of this.data.salesPostings) {
+      if (p.endDate === null) out[p.salesPersonId] = p
+    }
+    return out
+  }
+
   async listFollowUps(entityType: string, entityId: string) {
     return this.data.followUps
       .filter((f) => f.entityType === entityType && f.entityId === entityId)
@@ -1149,6 +1183,7 @@ const READER_KEYS = [
   'listTimeline', 'listAllTimelineEvents', 'listTransfers',
   'listOpportunities', 'listOpportunitiesByDepartment', 'getOpportunity', 'listOpportunityStageChanges',
   'listFollowUps', 'listOpenFollowUps',
+  'listSalesPersons', 'getSalesPerson', 'listSalesPostings', 'currentPostings',
   'search', 'relatedRecords', 'moveTargets', 'relationshipAnalytics',
 ] as const
 

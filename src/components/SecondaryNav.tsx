@@ -55,6 +55,10 @@ export function SecondaryNav() {
       <NavTile to="/directory" icon="Network" label="Directory" />
       <NavTile to="/analytics" icon="BarChart3" label="Insights" />
       <NavTile to="/meetings" icon="CalendarClock" label="Meetings" />
+      {/* "Sales Team" is the users' own word for this group (the meeting form
+          already says "Attending AMNEX Sales Team Members"). Shortened to
+          "Sales" below lg, where five flex-1 tiles get ~78px each at 390px. */}
+      <NavTile to="/sales" icon="Briefcase" label="Sales Team" />
     </nav>
   )
 }

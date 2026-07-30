@@ -1,4 +1,5 @@
 import { uid } from '@/lib/utils'
+import { buildSalesRoster } from './sales-roster-seed'
 import type { GormsData } from './seed'
 
 /** Bump when `GormsData`'s shape changes, and add a matching entry to
@@ -9,8 +10,9 @@ import type { GormsData } from './seed'
  *  v1  the original shape (nodes, employees, externalIds, timeline, transfers)
  *  v2  opportunities + opportunityStageChanges; works leave node metadata
  *  v3  followUps
+ *  v4  salesPersons + salesPostings, seeded from the SALES_TEAM constant
  */
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -106,11 +108,23 @@ function toV3(data: SnapshotShape): SnapshotShape {
   return { ...data, followUps }
 }
 
+/** v3 → v4. Seeds `salesPersons` + `salesPostings` from the `SALES_TEAM`
+ *  constant, using the same builder a fresh install uses so the two paths
+ *  cannot drift. See `sales-roster-seed.ts` for what the mapping does. */
+function toV4(data: SnapshotShape): SnapshotShape {
+  // Already migrated, or hand-populated — never clobber real records.
+  if (Array.isArray(data.salesPersons) && data.salesPersons.length > 0) {
+    return { ...data, salesPostings: asArray(data.salesPostings) }
+  }
+  return { ...data, ...buildSalesRoster() }
+}
+
 /** Keyed by the version each step PRODUCES, so applying every key from
  *  `fromVersion + 1` up to `SCHEMA_VERSION` walks the chain in order. */
 export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> = {
   2: toV2,
   3: toV3,
+  4: toV4,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

@@ -1,9 +1,11 @@
 import type {
-  Employee, ExternalId, FollowUp, HierNode, Opportunity, OpportunityStageChange, TimelineEvent, Transfer,
+  Employee, ExternalId, FollowUp, HierNode, Opportunity, OpportunityStageChange, SalesPerson, SalesPosting,
+  TimelineEvent, Transfer,
 } from '@/lib/types'
 import adminRaw from './india-admin.json'
 import subdistrictsRaw from './subdistricts.json'
 import { buildGovHierarchy, CENTRAL_STATE_CODE } from './gov-hierarchy'
+import { buildSalesRoster } from './sales-roster-seed'
 
 interface AdminState {
   st_code: number
@@ -68,6 +70,9 @@ export interface GormsData {
   /** Added by Task 12. Declared here so `GormsData` matches the migrated
    *  snapshot shape; Task 12 adds the `FollowUp` type and the seed value. */
   followUps: FollowUp[]
+  /** AMNEX sales roster. Populated by the v4 migration from `SALES_TEAM`. */
+  salesPersons: SalesPerson[]
+  salesPostings: SalesPosting[]
 }
 
 export function buildSeed(): GormsData {
@@ -79,6 +84,9 @@ export function buildSeed(): GormsData {
   const opportunities: Opportunity[] = []
   const opportunityStageChanges: OpportunityStageChange[] = []
   const followUps: FollowUp[] = []
+  // Same builder the v4 migration uses, so a fresh install and an upgraded
+  // snapshot produce the same roster.
+  const { salesPersons, salesPostings } = buildSalesRoster()
 
   const india: HierNode = {
     id: 'geo_india', domain: 'geo', typeKey: 'country', parentId: null, stateCode: null,
@@ -188,5 +196,8 @@ export function buildSeed(): GormsData {
     },
   )
 
-  return { nodes, employees, externalIds, timeline, transfers, opportunities, opportunityStageChanges, followUps }
+  return {
+    nodes, employees, externalIds, timeline, transfers,
+    opportunities, opportunityStageChanges, followUps, salesPersons, salesPostings,
+  }
 }

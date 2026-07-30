@@ -8,6 +8,7 @@ const StateWorkspace = lazy(() => import('./routes/StateWorkspace').then((m) => 
 const Directory = lazy(() => import('./routes/Directory').then((m) => ({ default: m.Directory })))
 const RelationshipAnalytics = lazy(() => import('./routes/RelationshipAnalytics').then((m) => ({ default: m.RelationshipAnalytics })))
 const Meetings = lazy(() => import('./routes/Meetings').then((m) => ({ default: m.Meetings })))
+const SalesWorkspace = lazy(() => import('./routes/SalesWorkspace').then((m) => ({ default: m.SalesWorkspace })))
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
 export const router = createBrowserRouter([
@@ -20,6 +21,8 @@ export const router = createBrowserRouter([
       { path: '/directory', element: <Directory /> },
       { path: '/analytics', element: <RelationshipAnalytics /> },
       { path: '/meetings', element: <Meetings /> },
+      { path: '/sales', element: <SalesWorkspace /> },
+      { path: '/sales/:section', element: <SalesWorkspace /> },
       { path: '*', element: <NotFound /> },
     ],
   },

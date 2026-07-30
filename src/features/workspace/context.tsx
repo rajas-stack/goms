@@ -96,7 +96,10 @@ export function WorkspaceProvider({ stateCode, children }: { stateCode: number; 
   const selection: Selection = useMemo(() => {
     const id = params.get('sel')
     const kind = params.get('kind')
-    if (id && (kind === 'node' || kind === 'employee')) return { kind, id }
+    // Whitelisted rather than cast: a hand-edited `?kind=` must not reach the
+    // details panel as a kind it has no branch for. `salesPerson` joins the
+    // list now that SalesPersonDetails renders it.
+    if (id && (kind === 'node' || kind === 'employee' || kind === 'salesPerson')) return { kind, id }
     return null
   }, [params])
   selectionRef.current = selection

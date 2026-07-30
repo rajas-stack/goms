@@ -24,6 +24,10 @@ export const qk = {
   opportunity: (id: string) => ['opportunity', id] as const,
   opportunityStageChanges: (id: string) => ['opportunityStageChanges', id] as const,
   followUps: (entityType: string, entityId: string) => ['followUps', entityType, entityId] as const,
+  salesPersons: ['salesPersons'] as const,
+  salesPerson: (id: string) => ['salesPerson', id] as const,
+  salesPostings: (id: string) => ['salesPostings', id] as const,
+  currentPostings: ['currentPostings'] as const,
   openFollowUps: ['openFollowUps'] as const,
 }
 
@@ -120,6 +124,15 @@ export function useOpportunityMutations() {
   const remove = useMutation({ mutationFn: (id: string) => repository.deleteOpportunity(id), onSuccess: invalidate })
   return { create, update, remove }
 }
+
+export const useSalesPersons = () =>
+  useQuery({ queryKey: qk.salesPersons, queryFn: () => repository.listSalesPersons() })
+export const useSalesPerson = (id: string | null) =>
+  useQuery({ queryKey: qk.salesPerson(id ?? ''), queryFn: () => repository.getSalesPerson(id!), enabled: !!id })
+export const useSalesPostings = (id: string | null) =>
+  useQuery({ queryKey: qk.salesPostings(id ?? ''), queryFn: () => repository.listSalesPostings(id!), enabled: !!id })
+export const useCurrentPostings = () =>
+  useQuery({ queryKey: qk.currentPostings, queryFn: () => repository.currentPostings() })
 
 export const useFollowUps = (entityType: string, entityId: string | null) =>
   useQuery({

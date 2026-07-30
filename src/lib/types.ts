@@ -269,3 +269,52 @@ export interface FieldDef {
   label: string
   type: 'string' | 'text' | 'url' | 'email' | 'phone'
 }
+
+export type SalesPersonStatus = 'active' | 'onLeave' | 'resigned' | 'inactive'
+
+/** An AMNEX salesperson. Deliberately holds no designation, tier, or manager:
+ *  those are time-bounded and live on `SalesPosting`, so a promotion or reorg
+ *  is a new interval rather than an overwrite that destroys history.
+ *  Spec §6.2. Photo/documents are `Attachment`s — never inline data URLs. */
+export interface SalesPerson {
+  id: string
+  employeeCode: string
+  name: string
+  /** Unique — the join key for the email-keyed data that predates this table. */
+  officialEmail: string
+  personalEmail: string
+  mobile: string
+  altMobile: string
+  joinedOn: string | null
+  leftOn: string | null
+  status: SalesPersonStatus
+  /** Plain text, not rich HTML. */
+  notes: string
+  metadata: Record<string, string>
+  createdAt: string
+  createdBy: string | null
+}
+
+/** Half-open interval: `startDate` inclusive, `endDate` exclusive, null = current.
+ *  `changeType` is DERIVED by comparing `SalesTierDef.rank` across the closing
+ *  and opening posting, never typed by the user. Spec §6.3.
+ *
+ *  There is deliberately no `team`, `region`, or `salesNodeIds` here: team is
+ *  derived from shared manager, and coverage is ownership of a coverage area.
+ *  Storing placement here as well would recreate the two-sources-of-truth
+ *  problem this design exists to remove. */
+export interface SalesPosting {
+  id: string
+  salesPersonId: string
+  /** Free text — the printed title. */
+  designation: string
+  tierKey: string
+  managerId: string | null
+  office: string
+  startDate: string
+  endDate: string | null
+  changeType: 'initial' | 'promotion' | 'demotion' | 'lateralMove' | 'reorg' | 'correction'
+  reason: string
+  createdAt: string
+  createdBy: string | null
+}
