@@ -96,7 +96,7 @@ export function WorkspaceProvider({ stateCode, children }: { stateCode: number; 
   const selection: Selection = useMemo(() => {
     const id = params.get('sel')
     const kind = params.get('kind')
-    if (id && (kind === 'node' || kind === 'employee' || kind === 'salesPerson')) return { kind, id }
+    if (id && (kind === 'node' || kind === 'employee')) return { kind, id }
     return null
   }, [params])
   selectionRef.current = selection
