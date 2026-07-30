@@ -7,7 +7,7 @@ import { Icon } from '@/components/ui/Icon'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
 import { useFormDraft } from '@/lib/useFormDraft'
-import { useEmployeeMutations, useEmployeesByState, useNode } from '@/lib/api'
+import { useEmployeeMutations, useEmployeesByState, useFollowUpMutations, useNode } from '@/lib/api'
 import { isoToday } from '@/data/repository'
 import { isValidEmail, uid } from '@/lib/utils'
 import { ManagerPicker } from './ManagerPicker'
@@ -53,6 +53,7 @@ const EMPTY = {
 export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, reporteeMode, onClose, onSaved }: Props) {
   const toast = useToast()
   const { create, update, addTimelineEvent } = useEmployeeMutations()
+  const { create: createFollowUp } = useFollowUpMutations()
   const isSaving = create.isPending || update.isPending || addTimelineEvent.isPending
   const { data: employeeOrgNode } = useNode(employee?.orgNodeId ?? null)
   const postingNode = orgNode ?? employeeOrgNode ?? null
@@ -183,6 +184,16 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
     return created.id
   }
 
+  // `Employee.followUpDate` still holds the single date the form and search
+  // read; this mirrors it into a real FollowUp record so the new collection
+  // is populated going forward. Guarded on the date actually changing so an
+  // unrelated edit to the same contact doesn't create a duplicate.
+  async function mirrorFollowUp(contactId: string, previousDate: string | null | undefined) {
+    if (form.followUpDate && form.followUpDate !== previousDate) {
+      await createFollowUp.mutateAsync({ entityType: 'contact', entityId: contactId, dueDate: form.followUpDate })
+    }
+  }
+
   async function submit() {
     if (!canSubmit) return
 
@@ -215,6 +226,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
             metadata: { ...(employee?.metadata ?? {}), relationshipOwner: form.relationshipOwner },
           },
         })
+        await mirrorFollowUp(personId, employee?.followUpDate)
         onSaved(personId)
       }
       draft.clear()
@@ -249,6 +261,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
       } else {
         toast(`Updated ${form.name.trim() || 'vacant position'}`)
       }
+      await mirrorFollowUp(employee.id, employee.followUpDate)
       onSaved(employee.id)
     } else if (orgNode) {
       const created = await create.mutateAsync({
@@ -258,6 +271,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
           : [],
       })
       toast(form.vacant ? 'Added vacant position' : `Added ${form.name.trim()}`)
+      await mirrorFollowUp(created.id, null)
       onSaved(created.id)
     }
     // The record now holds these values, so the draft has nothing left to

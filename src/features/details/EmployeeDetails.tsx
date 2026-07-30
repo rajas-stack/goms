@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  useBreadcrumb, useDirectReports, useEmployee, useEmployeeMutations, useNode,
+  useBreadcrumb, useDirectReports, useEmployee, useEmployeeMutations, useFollowUps, useNode,
   useReportingChain, useTimeline, useTransfers,
 } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
@@ -43,6 +43,8 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
   const { data: trail = [] } = useBreadcrumb(emp?.orgNodeId ?? null)
   const { data: timeline = [] } = useTimeline(employeeId)
   const { data: transfers = [] } = useTransfers(employeeId)
+  const { data: followUps = [] } = useFollowUps('contact', employeeId)
+  const openFollowUps = followUps.filter((f) => f.status === 'open')
   const [cardOpen, setCardOpen] = useState(false)
   const [active, setActive] = useState<'none' | 'event' | 'transfer' | 'charge'>('none')
   const [reporteeMode, setReporteeMode] = useState<'junior' | 'manager' | null>(null)
@@ -292,7 +294,11 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
               )}
               <DetailRow label="Important contact" value={emp.importantContact ? 'Yes' : 'No'} icon="Star" />
               {emp.lastInteractionAt && <DetailRow label="Last interaction" value={emp.lastInteractionAt} icon="Clock" />}
-              {emp.followUpDate && <DetailRow label="Next follow-up" value={emp.followUpDate} icon="Calendar" />}
+              {openFollowUps.length > 0
+                ? openFollowUps.map((f) => (
+                    <DetailRow key={f.id} label="Follow-up" value={f.dueDate} icon="Calendar" />
+                  ))
+                : emp.followUpDate && <DetailRow label="Next follow-up" value={emp.followUpDate} icon="Calendar" />}
             </dl>
             {emp.notes && (
               <p className="mt-3 whitespace-pre-wrap break-words rounded-lg border border-line bg-white px-3 py-2.5 text-sm text-ink-800">{emp.notes}</p>

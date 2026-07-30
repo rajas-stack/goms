@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  repository, type AddTimelineInput, type CreateEmployeeInput, type CreateNodeInput, type CreateOpportunityInput,
-  type ImportChildRow, type ImportEmployeeRow, type TransferInput,
+  repository, type AddTimelineInput, type CreateEmployeeInput, type CreateFollowUpInput, type CreateNodeInput,
+  type CreateOpportunityInput, type ImportChildRow, type ImportEmployeeRow, type TransferInput,
 } from '@/data/repository'
-import type { Charge, Employee, HierNode, Opportunity, SearchResult, Status, TimelineEventType } from './types'
+import type { Charge, Employee, FollowUp, HierNode, Opportunity, SearchResult, Status, TimelineEventType } from './types'
 
 export const qk = {
   states: ['states'] as const,
@@ -23,6 +23,8 @@ export const qk = {
   opportunitiesByDepartment: (id: string) => ['opportunitiesByDepartment', id] as const,
   opportunity: (id: string) => ['opportunity', id] as const,
   opportunityStageChanges: (id: string) => ['opportunityStageChanges', id] as const,
+  followUps: (entityType: string, entityId: string) => ['followUps', entityType, entityId] as const,
+  openFollowUps: ['openFollowUps'] as const,
 }
 
 export const useStates = () => useQuery({ queryKey: qk.states, queryFn: () => repository.listStates() })
@@ -117,6 +119,30 @@ export function useOpportunityMutations() {
   })
   const remove = useMutation({ mutationFn: (id: string) => repository.deleteOpportunity(id), onSuccess: invalidate })
   return { create, update, remove }
+}
+
+export const useFollowUps = (entityType: string, entityId: string | null) =>
+  useQuery({
+    queryKey: qk.followUps(entityType, entityId ?? ''),
+    queryFn: () => repository.listFollowUps(entityType, entityId!),
+    enabled: !!entityId,
+  })
+export const useOpenFollowUps = () =>
+  useQuery({ queryKey: qk.openFollowUps, queryFn: () => repository.listOpenFollowUps() })
+
+export function useFollowUpMutations() {
+  const qc = useQueryClient()
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['followUps'] })
+    qc.invalidateQueries({ queryKey: ['openFollowUps'] })
+  }
+  const create = useMutation({ mutationFn: (i: CreateFollowUpInput) => repository.createFollowUp(i), onSuccess: invalidate })
+  const setStatus = useMutation({
+    mutationFn: (a: { id: string; status: FollowUp['status'] }) => repository.setFollowUpStatus(a.id, a.status),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteFollowUp(id), onSuccess: invalidate })
+  return { create, setStatus, remove }
 }
 
 export const useMoveTargets = (nodeId: string | null) =>

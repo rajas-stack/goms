@@ -1,6 +1,7 @@
 import type {
-  Charge, Domain, Employee, HierNode, Opportunity, OpportunityStageChange, PreferredComm, RelationshipQuality,
-  RelationshipStatus, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
+  Charge, Domain, Employee, FollowUp, HierNode, Opportunity, OpportunityStageChange, PreferredComm,
+  RelationshipQuality, RelationshipStatus, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer,
+  VisitingCardItem,
 } from '@/lib/types'
 import { uid } from '@/lib/utils'
 import { isoToday } from '@/lib/dates'
@@ -139,6 +140,15 @@ export interface CreateOpportunityInput {
   stageKey?: string
 }
 
+export interface CreateFollowUpInput {
+  entityType: string
+  entityId: string
+  dueDate: string
+  note?: string
+  /** → `SalesPerson.id`. Always null until the Roster phase. */
+  assigneeId?: string | null
+}
+
 /** All persistence flows through this interface. The in-memory implementation
  *  below can be replaced by a Supabase-backed one with no UI changes. */
 export interface Repository {
@@ -204,6 +214,14 @@ export interface Repository {
   createOpportunity(input: CreateOpportunityInput): Promise<Opportunity>
   updateOpportunity(id: string, patch: Partial<Opportunity>): Promise<Opportunity>
   deleteOpportunity(id: string): Promise<void>
+
+  /** Follow-ups against one entity, soonest due first. */
+  listFollowUps(entityType: string, entityId: string): Promise<FollowUp[]>
+  /** Every open follow-up across every entity, soonest due first. */
+  listOpenFollowUps(): Promise<FollowUp[]>
+  createFollowUp(input: CreateFollowUpInput): Promise<FollowUp>
+  setFollowUpStatus(id: string, status: FollowUp['status']): Promise<void>
+  deleteFollowUp(id: string): Promise<void>
 
   addCharge(employeeId: string, charge: Omit<Charge, 'id'>): Promise<Charge>
   removeCharge(employeeId: string, chargeId: string): Promise<void>
@@ -608,6 +626,7 @@ class InMemoryRepository implements Repository {
     this.data.employees = this.data.employees.filter((e) => e.id !== id)
     this.data.timeline = this.data.timeline.filter((t) => t.employeeId !== id)
     this.data.transfers = this.data.transfers.filter((t) => t.employeeId !== id)
+    this.data.followUps = this.data.followUps.filter((f) => !(f.entityType === 'contact' && f.entityId === id))
     // Orphaned reports fall back to the removed person's manager.
     const removed = this.data.employees.find((e) => e.id === id)
     for (const e of this.data.employees) {
@@ -778,6 +797,43 @@ class InMemoryRepository implements Repository {
   async deleteOpportunity(id: string) {
     this.data.opportunities = this.data.opportunities.filter((o) => o.id !== id)
     this.data.opportunityStageChanges = this.data.opportunityStageChanges.filter((c) => c.opportunityId !== id)
+  }
+
+  async listFollowUps(entityType: string, entityId: string) {
+    return this.data.followUps
+      .filter((f) => f.entityType === entityType && f.entityId === entityId)
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  }
+
+  async listOpenFollowUps() {
+    return this.data.followUps
+      .filter((f) => f.status === 'open')
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  }
+
+  async createFollowUp(input: CreateFollowUpInput) {
+    const followUp: FollowUp = {
+      id: uid('fup'),
+      entityType: input.entityType,
+      entityId: input.entityId,
+      assigneeId: input.assigneeId ?? null,
+      dueDate: input.dueDate,
+      status: 'open',
+      note: input.note ?? '',
+      createdAt: isoToday(),
+      createdBy: null,
+    }
+    this.data.followUps.push(followUp)
+    return followUp
+  }
+
+  async setFollowUpStatus(id: string, status: FollowUp['status']) {
+    const f = this.data.followUps.find((x) => x.id === id)
+    if (f) f.status = status
+  }
+
+  async deleteFollowUp(id: string) {
+    this.data.followUps = this.data.followUps.filter((f) => f.id !== id)
   }
 
   async addCharge(employeeId: string, charge: Omit<Charge, 'id'>) {
@@ -1080,6 +1136,7 @@ const MUTATOR_KEYS = [
   'addTimelineEvent', 'setTimelineEventAttended', 'deleteTimelineEvent',
   'transferEmployee', 'addCharge', 'removeCharge',
   'createOpportunity', 'updateOpportunity', 'deleteOpportunity',
+  'createFollowUp', 'setFollowUpStatus', 'deleteFollowUp',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -1091,6 +1148,7 @@ const READER_KEYS = [
   'listEmployeeDepartments', 'getEmployee', 'directReports', 'reportingChain',
   'listTimeline', 'listAllTimelineEvents', 'listTransfers',
   'listOpportunities', 'listOpportunitiesByDepartment', 'getOpportunity', 'listOpportunityStageChanges',
+  'listFollowUps', 'listOpenFollowUps',
   'search', 'relatedRecords', 'moveTargets', 'relationshipAnalytics',
 ] as const
 
