@@ -1,11 +1,24 @@
+import { useState } from 'react'
 import { motion } from 'framer-motion'
-import { useDepartments, useOwnedBy, useSalesPerson, useSalesPersons, useSalesPostings } from '@/lib/api'
+import {
+  useAllEmployees, useDepartments, useOpportunities, useOwnedBy, useSalesPerson, useSalesPersonMutations,
+  useSalesPersons, useSalesPostings,
+} from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
+import { useToast } from '@/components/ui/Toast'
+import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
+import { Menu, MenuItem } from '@/components/ui/Menu'
 import { tierLabel } from '@/data/sales-tiers'
 import { displayEndDate } from '@/lib/intervals'
 import { isoToday } from '@/lib/dates'
 import { cn, initials } from '@/lib/utils'
+import { SalesPersonFormDialog } from '@/features/sales/SalesPersonFormDialog'
+import type { SalesPerson } from '@/lib/types'
+
+const STATUS_LABEL: Record<SalesPerson['status'], string> = {
+  active: 'Active', onLeave: 'On leave', resigned: 'Resigned', inactive: 'Inactive',
+}
 
 function Row({ label, value, icon }: { label: string; value: string; icon: string }) {
   return (
@@ -24,11 +37,16 @@ function Row({ label, value, icon }: { label: string; value: string; icon: strin
  *  not fit a 380px aside — and arrives with the rest of Phase 1. */
 export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string }) {
   const ws = useWorkspace()
+  const toast = useToast()
   const { data: person } = useSalesPerson(salesPersonId)
   const { data: postings = [] } = useSalesPostings(salesPersonId)
   const { data: people = [] } = useSalesPersons()
   const { data: owned = [] } = useOwnedBy(salesPersonId, isoToday())
   const { data: departments = [] } = useDepartments()
+  const { data: employees = [] } = useAllEmployees()
+  const { data: opportunities = [] } = useOpportunities()
+  const { setStatus, remove } = useSalesPersonMutations()
+  const [editOpen, setEditOpen] = useState(false)
 
   if (!person) {
     return <p className="p-4 text-sm text-muted">This salesperson no longer exists.</p>
@@ -37,13 +55,16 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   const current = postings.find((p) => p.endDate === null)
   const manager = current?.managerId ? people.find((p) => p.id === current.managerId) : undefined
   const deptById = new Map(departments.map((d) => [d.id, d]))
-  // Book of Business: only orgNode entities have a lookup wired up in this
-  // slice — contact/opportunity ownership renders with its raw id rather
-  // than silently vanishing, so a row is never lost, just less pretty.
-  const bookRows = owned.map((a) => ({
-    assignment: a,
-    label: a.entityType === 'orgNode' ? deptById.get(a.entityId)?.name ?? a.entityId : `${a.entityType}:${a.entityId}`,
-  }))
+  const empById = new Map(employees.map((e) => [e.id, e]))
+  const oppById = new Map(opportunities.map((o) => [o.id, o]))
+
+  // Book of Business, split by entity kind (spec: departments / contacts /
+  // opportunities as separate groups) rather than one flat list.
+  const byKind = {
+    orgNode: owned.filter((a) => a.entityType === 'orgNode'),
+    contact: owned.filter((a) => a.entityType === 'contact'),
+    opportunity: owned.filter((a) => a.entityType === 'opportunity'),
+  }
 
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="flex h-full flex-col overflow-y-auto">
@@ -51,10 +72,50 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-panel text-sm font-semibold text-ink-700">
           {initials(person.name)}
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h2 className="truncate text-base font-semibold text-ink-900">{person.name}</h2>
           <p className="truncate text-[13px] text-muted">{current?.designation || 'No current posting'}</p>
         </div>
+        <Button size="sm" onClick={() => setEditOpen(true)}><Icon name="Pencil" size={14} /> Edit</Button>
+        <Menu
+          align="end"
+          trigger={({ open, toggle }) => (
+            <Button
+              size="icon" variant="ghost" aria-label="More actions" aria-haspopup="menu" aria-expanded={open}
+              onClick={toggle} className={cn(open && 'bg-ink-900/[0.05] text-ink')}
+            >
+              <Icon name="MoreHorizontal" size={16} />
+            </Button>
+          )}
+        >
+          {(close) => (
+            <>
+              {(['active', 'onLeave', 'resigned', 'inactive'] as const)
+                .filter((s) => s !== person.status)
+                .map((s) => (
+                  <MenuItem
+                    key={s}
+                    icon={<Icon name="CircleDot" size={15} />}
+                    onClick={async () => { close(); await setStatus.mutateAsync({ id: person.id, status: s }); toast(`Marked ${STATUS_LABEL[s]}`) }}
+                  >
+                    Mark {STATUS_LABEL[s]}
+                  </MenuItem>
+                ))}
+              <MenuItem
+                icon={<Icon name="Trash2" size={15} />}
+                danger
+                onClick={async () => {
+                  close()
+                  await remove.mutateAsync(person.id)
+                  toast(`Removed ${person.name}`)
+                  ws.clearSelection()
+                }}
+              >
+                Remove
+              </MenuItem>
+            </>
+          )}
+        </Menu>
       </div>
 
       <div className="px-4 py-3">
@@ -64,8 +125,18 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
           {person.mobile && <Row label="Mobile" value={person.mobile} icon="Phone" />}
           {current && <Row label="Tier" value={tierLabel(current.tierKey)} icon="Layers" />}
           {manager && <Row label="Reports to" value={manager.name} icon="Network" />}
-          <Row label="Status" value={person.status} icon="CircleDot" />
+          <Row label="Status" value={STATUS_LABEL[person.status]} icon="CircleDot" />
+          {person.notes && <Row label="Notes" value={person.notes} icon="StickyNote" />}
         </dl>
+      </div>
+
+      {/* Placeholder — the real attachment store (blobs.ts) exists from Phase
+          0 but no upload UI is wired to SalesPerson in this demo slice. */}
+      <div className="border-t border-line px-4 py-3">
+        <h3 className="mb-1 text-[13px] font-semibold text-ink-900">Attachments</h3>
+        <p className="rounded-lg border border-dashed border-line px-3 py-2.5 text-[12px] text-muted">
+          Photo and document uploads arrive later in Phase 1.
+        </p>
       </div>
 
       <div className="border-t border-line px-4 py-3">
@@ -100,32 +171,64 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
 
       <div className="border-t border-line px-4 py-3">
         <h3 className="mb-1 text-[13px] font-semibold text-ink-900">
-          {bookRows.length > 0 ? `Book of Business · ${bookRows.length}` : 'Book of Business'}
+          {owned.length > 0 ? `Book of Business · ${owned.length}` : 'Book of Business'}
         </h3>
-        {bookRows.length === 0 ? (
+        {owned.length === 0 ? (
           <p className="text-sm text-muted">Nothing directly assigned as of today.</p>
         ) : (
-          <ul className="flex flex-col gap-1">
-            {bookRows.map(({ assignment, label }) => (
-              <li key={assignment.id}>
-                <button
-                  onClick={() => assignment.entityType === 'orgNode' && ws.select('node', assignment.entityId)}
-                  disabled={assignment.entityType !== 'orgNode'}
-                  className={cn(
-                    'flex w-full items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-2 text-left',
-                    assignment.entityType === 'orgNode' && 'hover:bg-panel',
-                  )}
-                >
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink-900">{label}</span>
-                  {assignment.role !== 'owner' && (
-                    <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] text-sky-800">delegate</span>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div className="flex flex-col gap-3">
+            <BookGroup
+              label="Departments" rows={byKind.orgNode}
+              nameOf={(id) => deptById.get(id)?.name ?? id}
+              onOpen={(id) => ws.select('node', id)}
+            />
+            <BookGroup
+              label="Contacts" rows={byKind.contact}
+              nameOf={(id) => empById.get(id)?.name ?? id}
+              onOpen={(id) => ws.select('employee', id)}
+            />
+            <BookGroup
+              label="Opportunities" rows={byKind.opportunity}
+              nameOf={(id) => oppById.get(id)?.opportunityName ?? id}
+              onOpen={(id) => {
+                const dept = oppById.get(id)?.departmentId
+                if (dept) ws.select('node', dept)
+              }}
+            />
+          </div>
         )}
       </div>
+
+      <SalesPersonFormDialog open={editOpen} personId={person.id} onClose={() => setEditOpen(false)} />
     </motion.div>
+  )
+}
+
+function BookGroup({ label, rows, nameOf, onOpen }: {
+  label: string
+  rows: { id: string; entityId: string; role: string }[]
+  nameOf: (entityId: string) => string
+  onOpen: (entityId: string) => void
+}) {
+  if (rows.length === 0) return null
+  return (
+    <div>
+      <p className="mb-1 text-[11px] uppercase tracking-wide text-muted">{label} · {rows.length}</p>
+      <ul className="flex flex-col gap-1">
+        {rows.map((a) => (
+          <li key={a.id}>
+            <button
+              onClick={() => onOpen(a.entityId)}
+              className="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-2 text-left hover:bg-panel"
+            >
+              <span className="min-w-0 flex-1 truncate text-[13px] text-ink-900">{nameOf(a.entityId)}</span>
+              {a.role !== 'owner' && (
+                <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] text-sky-800">delegate</span>
+              )}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

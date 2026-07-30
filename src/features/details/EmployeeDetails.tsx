@@ -26,6 +26,9 @@ import { employeeAccent } from '@/lib/node-colors'
 import { MEETING_LOG_TYPES, TIMELINE_META, timelineEventLabel } from '@/lib/timeline-meta'
 import { cn, initials } from '@/lib/utils'
 import { SALES_TEAM } from '@/data/sales-team'
+import { useResolvedOwners } from '@/lib/api'
+import { OwnershipBlock } from '@/features/sales/OwnershipBlock'
+import { isoToday } from '@/lib/dates'
 import type { Charge, Employee, TimelineEvent, Transfer } from '@/lib/types'
 
 const COMM_LABEL: Record<string, string> = {
@@ -53,6 +56,8 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
   // employee no longer exists (deleted) — either way the banner below just
   // doesn't render, no error state.
   const { data: duplicateOfEmp } = useEmployee(emp?.metadata.duplicateOf || null)
+
+  const { data: contactOwners = {} } = useResolvedOwners('contact', emp ? [emp.id] : [], isoToday())
 
   if (!emp) return null
   const vacant = emp.vacant
@@ -304,6 +309,18 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
               <p className="mt-3 whitespace-pre-wrap break-words rounded-lg border border-line bg-white px-3 py-2.5 text-sm text-ink-800">{emp.notes}</p>
             )}
           </Section>
+        )}
+
+        {!vacant && (
+          <section className="mb-4 rounded-xl border border-line bg-panel/40 p-3">
+            <OwnershipBlock
+              entityType="contact"
+              entityId={emp.id}
+              entityLabel={emp.name}
+              owner={contactOwners[emp.id]}
+              viaLabel={department?.name}
+            />
+          </section>
         )}
 
         {emp.charges.length > 0 && (

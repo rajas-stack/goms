@@ -1,6 +1,6 @@
 import { NODE_TYPE_MAP } from './node-types'
 import { SALES_TEAM } from '@/data/sales-team'
-import type { Employee, HierNode, Opportunity, SearchResult, TimelineEvent } from './types'
+import type { Employee, HierNode, Opportunity, SalesPerson, SearchResult, TimelineEvent } from './types'
 
 export interface SearchContext {
   nodeById: Map<string, HierNode>
@@ -9,6 +9,8 @@ export interface SearchContext {
   timeline: TimelineEvent[]
   /** Every opportunity, for the `work` category. */
   opportunities: Opportunity[]
+  /** Every AMNEX salesperson, for the `salesPerson` category. */
+  salesPersons: SalesPerson[]
   /** Non-null when results should be scoped to one state. */
   scopeState: number | null
   inScope(nodeId: string): boolean
@@ -227,8 +229,32 @@ export const worksCategory: SearchCategoryDef = {
     : '/'),
 }
 
+function toSalesPersonResult(p: SalesPerson): SearchResult {
+  return {
+    // Not 'employee': that kind routes via ws.select on the government-side
+    // Employee record. A SalesPerson is a distinct record type, so — per the
+    // rule above — this is 'other', routed via this category's own `path()`.
+    kind: 'other', category: 'salesPerson', id: p.id, title: p.name,
+    subtitle: p.officialEmail, code: null, domain: null, stateCode: null,
+  }
+}
+
+export const salesPersonCategory: SearchCategoryDef = {
+  key: 'salesPerson', label: 'Sales Team', icon: 'Briefcase', color: 'purple', order: 6, cap: 5,
+  match(query, ctx) {
+    return ctx.salesPersons
+      .filter((p) => matches(`${p.name} ${p.officialEmail}`.toLowerCase(), query))
+      .map(toSalesPersonResult)
+  },
+  related() {
+    return []
+  },
+  path: (result) => `/sales/roster?sel=${result.id}&kind=salesPerson`,
+}
+
 export const SEARCH_CATEGORIES: SearchCategoryDef[] = [
   departmentCategory, employeeCategory, officeCategory, meetingCategory, geographyCategory, worksCategory,
+  salesPersonCategory,
 ]
 export const SEARCH_CATEGORY_MAP: Record<string, SearchCategoryDef> =
   Object.fromEntries(SEARCH_CATEGORIES.map((c) => [c.key, c]))

@@ -145,6 +145,20 @@ export interface CreateOpportunityInput {
   stageKey?: string
 }
 
+export interface CreateSalesPersonInput {
+  name: string
+  officialEmail: string
+  personalEmail?: string
+  mobile?: string
+  altMobile?: string
+  notes?: string
+  /** Initial posting — a person is created WITH a posting, never without one;
+   *  a posting-less person can't appear correctly in the org chart or reports. */
+  designation: string
+  tierKey: string
+  managerId?: string | null
+}
+
 export interface AssignOwnerInput {
   entityType: string
   entityId: string
@@ -249,6 +263,10 @@ export interface Repository {
   listOwnershipFor(entityType: string, entityId: string): Promise<OwnershipAssignment[]>
   /** Everything one person owns or is delegated, open rows only at `asOf`. */
   listOwnedBy(salesPersonId: string, asOf: string): Promise<OwnershipAssignment[]>
+  createSalesPerson(input: CreateSalesPersonInput): Promise<SalesPerson>
+  updateSalesPerson(id: string, patch: Partial<SalesPerson>): Promise<SalesPerson>
+  setSalesPersonStatus(id: string, status: SalesPerson['status']): Promise<void>
+  deleteSalesPerson(id: string): Promise<void>
   /** Who effectively owns this entity — direct, or inherited from an ancestor. */
   resolveOwner(entityType: string, entityId: string, asOf: string): Promise<OwnerResolution | null>
   /** Batch form. Use this for lists: the per-entity call re-walks the ancestor
@@ -892,6 +910,59 @@ class InMemoryRepository implements Repository {
     )
   }
 
+  async createSalesPerson(input: CreateSalesPersonInput) {
+    const person: SalesPerson = {
+      id: uid('sp'),
+      employeeCode: '',
+      name: input.name,
+      officialEmail: input.officialEmail,
+      personalEmail: input.personalEmail ?? '',
+      mobile: input.mobile ?? '',
+      altMobile: input.altMobile ?? '',
+      joinedOn: null,
+      leftOn: null,
+      status: 'active',
+      notes: input.notes ?? '',
+      metadata: {},
+      createdAt: isoToday(),
+      createdBy: null,
+    }
+    this.data.salesPersons.push(person)
+    this.data.salesPostings.push({
+      id: uid('spost'),
+      salesPersonId: person.id,
+      designation: input.designation,
+      tierKey: input.tierKey,
+      managerId: input.managerId ?? null,
+      office: '',
+      startDate: isoToday(),
+      endDate: null,
+      changeType: 'initial',
+      reason: '',
+      createdAt: isoToday(),
+      createdBy: null,
+    })
+    return person
+  }
+
+  async updateSalesPerson(id: string, patch: Partial<SalesPerson>) {
+    const person = this.data.salesPersons.find((p) => p.id === id)
+    if (!person) throw new Error(`No such salesperson: ${id}`)
+    Object.assign(person, patch)
+    return person
+  }
+
+  async setSalesPersonStatus(id: string, status: SalesPerson['status']) {
+    const person = this.data.salesPersons.find((p) => p.id === id)
+    if (person) person.status = status
+  }
+
+  async deleteSalesPerson(id: string) {
+    this.data.salesPersons = this.data.salesPersons.filter((p) => p.id !== id)
+    this.data.salesPostings = this.data.salesPostings.filter((p) => p.salesPersonId !== id)
+    this.data.ownershipAssignments = this.data.ownershipAssignments.filter((a) => a.salesPersonId !== id)
+  }
+
   async resolveOwner(entityType: string, entityId: string, asOf: string) {
     return effectiveOwner(this.data.ownershipAssignments, entityType, entityId, asOf, this.ownershipContext())
   }
@@ -1024,6 +1095,7 @@ class InMemoryRepository implements Repository {
       activeEmployees: this.data.employees.filter((e) => e.status === 'active'),
       timeline: this.data.timeline,
       opportunities: this.data.opportunities,
+      salesPersons: this.data.salesPersons,
       scopeState,
       inScope: (nodeId) => scopeState == null || nodeById.get(nodeId)?.stateCode === scopeState,
       subtreeIds: (id) => this.subtreeIds(id),
@@ -1300,6 +1372,7 @@ const MUTATOR_KEYS = [
   'createOpportunity', 'updateOpportunity', 'deleteOpportunity',
   'createFollowUp', 'setFollowUpStatus', 'deleteFollowUp',
   'assignOwner', 'endOwnership',
+  'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell

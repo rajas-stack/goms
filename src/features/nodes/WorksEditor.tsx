@@ -5,7 +5,11 @@ import { Icon } from '@/components/ui/Icon'
 import { WorkFormDialog } from './WorkFormDialog'
 import { formatBudgetRange, formatWorkValue, workUnitLabel } from './department-meta'
 import { stageLabel } from '@/data/pipeline-stages'
-import { useOpportunityMutations } from '@/lib/api'
+import { useOpportunityMutations, useResolvedOwners, useSalesPersons } from '@/lib/api'
+import { useWorkspace } from '@/features/workspace/context'
+import { OwnerBadge } from '@/features/sales/OwnerBadge'
+import { AssignOwnerDialog } from '@/features/sales/AssignOwnerDialog'
+import { isoToday } from '@/lib/dates'
 import { SALES_TEAM } from '@/data/sales-team'
 import type { Opportunity } from '@/lib/types'
 
@@ -19,10 +23,15 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
   opportunities: Opportunity[]
   draftKeyPrefix?: string
 }) {
+  const ws = useWorkspace()
   const { create, update, remove } = useOpportunityMutations()
+  const { data: people = [] } = useSalesPersons()
+  const oppIds = opportunities.map((w) => w.id)
+  const { data: owners = {} } = useResolvedOwners('opportunity', oppIds, isoToday())
   const [openId, setOpenId] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Opportunity | null>(null)
+  const [assignFor, setAssignFor] = useState<Opportunity | null>(null)
 
   function openCreate() {
     setEditing(null)
@@ -66,6 +75,21 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                     {stageLabel(w.stageKey)}
                   </span>
                   {valueLabel && <span className="shrink-0 font-mono text-[12px] text-ink-700">{valueLabel}</span>}
+                  {/* Clicking the owner opens their profile rather than toggling
+                      this row's expand/collapse. */}
+                  {owners[w.id] ? (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); ws.select('salesPerson', owners[w.id].salesPersonId) }}
+                      className="shrink-0"
+                    >
+                      <OwnerBadge owner={owners[w.id]} people={people} className="cursor-pointer" />
+                    </button>
+                  ) : (
+                    <span className="shrink-0">
+                      <OwnerBadge owner={owners[w.id]} people={people} />
+                    </span>
+                  )}
                   <button
                     type="button"
                     aria-label="Edit opportunity"
@@ -103,6 +127,14 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                     )}
                   </dl>
                 )}
+                {expanded && (
+                  <div className="border-t border-line px-2.5 py-2 flex items-center justify-between gap-2">
+                    <span className="text-[11px] uppercase tracking-wide text-muted">AMNEX ownership</span>
+                    <Button size="sm" onClick={() => setAssignFor(w)}>
+                      {owners[w.id] ? 'Reassign' : 'Assign'}
+                    </Button>
+                  </div>
+                )}
               </div>
             )
           })}
@@ -117,6 +149,16 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
         onClose={() => setDialogOpen(false)}
         onSave={save}
       />
+
+      {assignFor && (
+        <AssignOwnerDialog
+          open={!!assignFor}
+          entityType="opportunity"
+          entityId={assignFor.id}
+          entityLabel={assignFor.opportunityName || 'Untitled opportunity'}
+          onClose={() => setAssignFor(null)}
+        />
+      )}
     </div>
   )
 }

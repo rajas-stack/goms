@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   repository, type AddTimelineInput, type AssignOwnerInput, type CreateEmployeeInput, type CreateFollowUpInput,
-  type CreateNodeInput,
+  type CreateNodeInput, type CreateSalesPersonInput,
   type CreateOpportunityInput, type ImportChildRow, type ImportEmployeeRow, type TransferInput,
 } from '@/data/repository'
-import type { Charge, Employee, FollowUp, HierNode, Opportunity, SearchResult, Status, TimelineEventType } from './types'
+import type {
+  Charge, Employee, FollowUp, HierNode, Opportunity, SalesPerson, SearchResult, Status, TimelineEventType,
+} from './types'
 
 export const qk = {
   states: ['states'] as const,
@@ -137,6 +139,27 @@ export const useSalesPostings = (id: string | null) =>
   useQuery({ queryKey: qk.salesPostings(id ?? ''), queryFn: () => repository.listSalesPostings(id!), enabled: !!id })
 export const useCurrentPostings = () =>
   useQuery({ queryKey: qk.currentPostings, queryFn: () => repository.currentPostings() })
+
+export function useSalesPersonMutations() {
+  const qc = useQueryClient()
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['salesPersons'] })
+    qc.invalidateQueries({ queryKey: ['salesPerson'] })
+    qc.invalidateQueries({ queryKey: ['salesPostings'] })
+    qc.invalidateQueries({ queryKey: ['currentPostings'] })
+  }
+  const create = useMutation({ mutationFn: (i: CreateSalesPersonInput) => repository.createSalesPerson(i), onSuccess: invalidate })
+  const update = useMutation({
+    mutationFn: (a: { id: string; patch: Partial<SalesPerson> }) => repository.updateSalesPerson(a.id, a.patch),
+    onSuccess: invalidate,
+  })
+  const setStatus = useMutation({
+    mutationFn: (a: { id: string; status: SalesPerson['status'] }) => repository.setSalesPersonStatus(a.id, a.status),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteSalesPerson(id), onSuccess: invalidate })
+  return { create, update, setStatus, remove }
+}
 
 export const useOwnershipFor = (entityType: string, entityId: string | null) =>
   useQuery({

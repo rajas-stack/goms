@@ -7,6 +7,8 @@ import { DetailsPanel } from '@/features/details/DetailsPanel'
 import { Icon } from '@/components/ui/Icon'
 import { Input } from '@/components/ui/Field'
 import { OwnerBadge } from '@/features/sales/OwnerBadge'
+import { SalesPersonFormDialog } from '@/features/sales/SalesPersonFormDialog'
+import { Button } from '@/components/ui/Button'
 import { tierLabel, tierRank } from '@/data/sales-tiers'
 import { isoToday } from '@/lib/dates'
 import { cn, initials } from '@/lib/utils'
@@ -21,12 +23,9 @@ import type { SalesPerson, SalesPosting } from '@/lib/types'
  *  hidden so the intended shape is visible and each lands in its own phase;
  *  they render an explicit "coming in phase N" panel instead of a dead tab. */
 const SECTIONS = [
-  { key: 'overview', label: 'Overview', phase: 6 },
   { key: 'roster', label: 'Roster', phase: 1 },
-  { key: 'coverage', label: 'Coverage', phase: 4 },
+  { key: 'orgchart', label: 'Org Chart', phase: 2 },
   { key: 'ownership', label: 'Ownership', phase: 3 },
-  { key: 'transfers', label: 'Transfers', phase: 5 },
-  { key: 'performance', label: 'Performance', phase: 6 },
 ] as const
 
 const STATUS_STYLE: Record<string, string> = {
@@ -98,6 +97,8 @@ function Roster() {
     })
   }, [people, postings, query])
 
+  const [formOpen, setFormOpen] = useState(false)
+
   return (
     <div className="flex h-full flex-col gap-3 p-3">
       <div className="flex items-center gap-2">
@@ -113,6 +114,9 @@ function Roster() {
         <span className="shrink-0 text-[12px] text-muted">
           {rows.length}{rows.length !== people.length && ` of ${people.length}`} people
         </span>
+        <Button size="sm" variant="primary" onClick={() => setFormOpen(true)}>
+          + Add
+        </Button>
       </div>
 
       {isLoading ? (
@@ -134,6 +138,8 @@ function Roster() {
           ))}
         </div>
       )}
+
+      <SalesPersonFormDialog open={formOpen} personId={null} onClose={() => setFormOpen(false)} />
     </div>
   )
 }
@@ -201,22 +207,90 @@ function Ownership() {
   )
 }
 
-function ComingSoon({ label, phase }: { label: string; phase: number }) {
+/** Manager → direct reports, as a simple indented tree — not the heavyweight
+ *  HierarchyCanvas (659 lines fused to Employee/HierNode/stateCode), which
+ *  the spec explicitly warns against forking for this. ~40 people doesn't
+ *  need drag-to-reparent or pan/zoom for a demo; that machinery is real
+ *  Phase 2 scope. */
+function OrgChartNode({ person, childrenOf, postings, depth, ws }: {
+  person: SalesPerson
+  childrenOf: Map<string, SalesPerson[]>
+  postings: Record<string, SalesPosting>
+  depth: number
+  ws: ReturnType<typeof useWorkspace>
+}) {
+  const kids = childrenOf.get(person.id) ?? []
+  const posting = postings[person.id]
+  const selected = ws.selection?.kind === 'salesPerson' && ws.selection.id === person.id
+
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-panel text-muted">
-        <Icon name="Hammer" size={20} />
-      </div>
-      <p className="max-w-[300px] text-sm text-muted">
-        <span className="font-medium text-ink-700">{label}</span> arrives in phase {phase}.
-      </p>
+    <div style={{ marginLeft: depth > 0 ? 20 : 0 }}>
+      <button
+        onClick={() => ws.select('salesPerson', person.id)}
+        className={cn(
+          'flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left',
+          selected ? 'border-ink-900/20 bg-ink-900/[0.04]' : 'border-line bg-white hover:bg-panel',
+        )}
+      >
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-panel text-[10px] font-semibold text-ink-700">
+          {initials(person.name)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13px] font-medium text-ink-900">{person.name}</div>
+          <div className="truncate text-[11px] text-muted">{posting?.designation || '—'}</div>
+        </div>
+        {kids.length > 0 && (
+          <span className="shrink-0 rounded-full bg-panel px-1.5 py-0.5 text-[10px] text-ink-600">{kids.length}</span>
+        )}
+      </button>
+      {kids.length > 0 && (
+        <div className="mt-1.5 flex flex-col gap-1.5 border-l border-line pl-2.5">
+          {kids.map((k) => (
+            <OrgChartNode key={k.id} person={k} childrenOf={childrenOf} postings={postings} depth={depth + 1} ws={ws} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function OrgChart() {
+  const ws = useWorkspace()
+  const { data: people = [] } = useSalesPersons()
+  const { data: postings = {} } = useCurrentPostings()
+
+  const { roots, childrenOf } = useMemo(() => {
+    const map = new Map<string, SalesPerson[]>()
+    const rootList: SalesPerson[] = []
+    for (const p of people) {
+      const managerId = postings[p.id]?.managerId ?? null
+      if (managerId && people.some((m) => m.id === managerId)) {
+        map.set(managerId, [...(map.get(managerId) ?? []), p])
+      } else {
+        rootList.push(p)
+      }
+    }
+    for (const [, kids] of map) kids.sort((a, b) => a.name.localeCompare(b.name))
+    rootList.sort((a, b) => a.name.localeCompare(b.name))
+    return { roots: rootList, childrenOf: map }
+  }, [people, postings])
+
+  if (people.length === 0) {
+    return <p className="p-4 text-sm text-muted">No sales people yet.</p>
+  }
+
+  return (
+    <div className="flex h-full flex-col gap-1.5 overflow-y-auto p-3">
+      {roots.map((p) => (
+        <OrgChartNode key={p.id} person={p} childrenOf={childrenOf} postings={postings} depth={0} ws={ws} />
+      ))}
     </div>
   )
 }
 
 function SalesWorkspaceBody() {
   const { section } = useParams()
-  const active = SECTIONS.find((s) => s.key === section) ?? SECTIONS[1]
+  const active = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0]
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -240,13 +314,7 @@ function SalesWorkspaceBody() {
 
       <div className="flex min-h-0 flex-1">
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-w-0 flex-1 overflow-hidden">
-          {active.key === 'roster' ? (
-            <Roster />
-          ) : active.key === 'ownership' ? (
-            <Ownership />
-          ) : (
-            <ComingSoon label={active.label} phase={active.phase} />
-          )}
+          {active.key === 'roster' ? <Roster /> : active.key === 'orgchart' ? <OrgChart /> : <Ownership />}
         </motion.div>
         <aside className="hidden w-[380px] shrink-0 border-l border-line lg:block">
           <DetailsPanel />
