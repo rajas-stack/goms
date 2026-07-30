@@ -237,7 +237,16 @@ class InMemoryRepository implements Repository {
    *  an implementation detail of the in-memory store, and a server-backed
    *  implementation would have no use for it. */
   hydrate(data: GormsData) {
-    this.data = data
+    // Defensive against a snapshot that predates these collections but is
+    // already stamped at the current SCHEMA_VERSION (so migrateSnapshot runs
+    // no steps for it) — without this, every opportunity/followUp method
+    // throws on `undefined.slice()`/`.push()` the first time it's called.
+    this.data = {
+      ...data,
+      opportunities: data.opportunities ?? [],
+      opportunityStageChanges: data.opportunityStageChanges ?? [],
+      followUps: data.followUps ?? [],
+    }
     // A snapshot written by an older build can still carry duplicates that
     // today's seed no longer produces, so re-run the same cleanup the seed gets.
     this.dedupeBranches()
@@ -420,6 +429,17 @@ class InMemoryRepository implements Repository {
     const ids = new Set(this.subtreeIds(id))
     this.data.nodes = this.data.nodes.filter((n) => !ids.has(n.id))
     this.data.employees = this.data.employees.filter((e) => !ids.has(e.orgNodeId))
+    // Opportunities used to live inside the node's own metadata, so they died
+    // with it automatically. Now they're a separate collection keyed by
+    // departmentId, so a node delete has to cascade to them explicitly —
+    // otherwise a deleted department's opportunities (and their stage
+    // history) would live on forever, unreachable from the tree.
+    const deletedOppIds = new Set(
+      this.data.opportunities.filter((o) => ids.has(o.departmentId)).map((o) => o.id),
+    )
+    this.data.opportunities = this.data.opportunities.filter((o) => !ids.has(o.departmentId))
+    this.data.opportunityStageChanges = this.data.opportunityStageChanges
+      .filter((c) => !deletedOppIds.has(c.opportunityId))
   }
 
   async moveNode(id: string, newParentId: string | null) {
