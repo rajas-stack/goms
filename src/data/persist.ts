@@ -1,3 +1,4 @@
+import { SCHEMA_VERSION, migrateSnapshot } from './migrations'
 import type { GormsData } from './seed'
 
 /** Local persistence for the in-memory store, so a reload — or the Android
@@ -15,17 +16,16 @@ import type { GormsData } from './seed'
  *  deliberate trade: this store exists until the Supabase-backed `Repository`
  *  lands (see repository.ts), so the simplest correct thing wins over the
  *  cheapest payload. Writes are debounced and coalesced, so a burst of edits
- *  costs one write. */
+ *  costs one write.
+ *
+ *  Schema versioning lives in `migrations.ts`: a snapshot written by an
+ *  older build is upgraded in place rather than discarded, so hand-entered
+ *  data survives a schema change. Only genuinely unmigratable input (a
+ *  newer build's snapshot, a corrupt payload) falls back to the seed. */
 
 const DB_NAME = 'gorms'
 const STORE = 'snapshot'
 const KEY = 'data'
-
-/** Bump this whenever `GormsData`'s shape changes, or whenever a seed change
- *  needs to reach users who already have a snapshot — a stored snapshot always
- *  wins over the seed, so without a bump a stale copy would shadow the new
- *  seed data forever. A mismatched snapshot is discarded, not migrated. */
-const SCHEMA_VERSION = 1
 
 interface Envelope {
   version: number
@@ -64,8 +64,11 @@ export async function loadSnapshot(): Promise<GormsData | null> {
       req.onsuccess = () => resolve(req.result as Envelope | undefined)
       req.onerror = () => resolve(undefined)
     })
-    if (!envelope || envelope.version !== SCHEMA_VERSION) return null
-    return envelope.data
+    if (!envelope) return null
+    // A version mismatch is now an upgrade, not a discard — see
+    // migrations.ts. `null` here means genuinely unmigratable, and the
+    // caller falls back to seed data exactly as before.
+    return migrateSnapshot(envelope.data, envelope.version)
   } catch {
     return null
   } finally {

@@ -1,0 +1,163 @@
+import { describe, expect, it } from 'vitest'
+import { MIGRATIONS, SCHEMA_VERSION, migrateSnapshot } from './migrations'
+
+/** A minimal v1 snapshot — the shape shipped before Phase 0. */
+function v1Snapshot() {
+  return {
+    nodes: [
+      { id: 'org_a', domain: 'org', typeKey: 'department', parentId: null, stateCode: 1,
+        name: 'Agriculture', code: null, sortOrder: 0, metadata: {}, status: 'active' },
+    ],
+    employees: [],
+    externalIds: [],
+    timeline: [],
+    transfers: [],
+  }
+}
+
+describe('migrateSnapshot', () => {
+  it('returns the data unchanged when already at the current version', () => {
+    const current = migrateSnapshot(v1Snapshot(), SCHEMA_VERSION)
+    expect(current).not.toBeNull()
+    expect(current!.nodes).toHaveLength(1)
+  })
+
+  it('migrates a v1 snapshot all the way forward', () => {
+    const out = migrateSnapshot(v1Snapshot(), 1)
+    expect(out).not.toBeNull()
+    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
+    expect(Array.isArray(out!.opportunities)).toBe(true)
+    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
+    expect(Array.isArray(out!.opportunityStageChanges)).toBe(true)
+    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
+    expect(Array.isArray(out!.followUps)).toBe(true)
+  })
+
+  it('preserves existing collections while migrating', () => {
+    const out = migrateSnapshot(v1Snapshot(), 1)
+    expect(out!.nodes).toHaveLength(1)
+    expect(out!.nodes[0].name).toBe('Agriculture')
+  })
+
+  it('discards a snapshot from a NEWER build than this one', () => {
+    expect(migrateSnapshot(v1Snapshot(), SCHEMA_VERSION + 1)).toBeNull()
+  })
+
+  it('discards a snapshot with a nonsensical version', () => {
+    expect(migrateSnapshot(v1Snapshot(), 0)).toBeNull()
+    expect(migrateSnapshot(v1Snapshot(), -3)).toBeNull()
+  })
+
+  it('discards a snapshot that is not an object', () => {
+    expect(migrateSnapshot(null, 1)).toBeNull()
+    expect(migrateSnapshot('nope', 1)).toBeNull()
+    expect(migrateSnapshot([], 1)).toBeNull()
+  })
+
+  it('discards rather than throwing when a step fails', () => {
+    // `nodes` missing entirely — the v2 step iterates it.
+    expect(migrateSnapshot({ employees: [] }, 1)).toBeNull()
+  })
+
+  it('has a migration step for every version above 1', () => {
+    for (let v = 2; v <= SCHEMA_VERSION; v++) {
+      expect(MIGRATIONS[v], `missing migration to v${v}`).toBeTypeOf('function')
+    }
+  })
+})
+
+describe('v2 — opportunities extracted from department metadata', () => {
+  it('moves a legacy works blob into the opportunities collection', () => {
+    const snap = v1Snapshot()
+    snap.nodes[0].metadata = {
+      works: JSON.stringify([{
+        id: 'work_1', opportunityName: 'ATCS rollout', gemTenderId: 'GEM/1',
+        publishDate: '2026-01-01', submissionDate: '2026-02-01', vertical: 'Traffic',
+        component: ['Hardware'], quantity: '10', currency: 'INR',
+        valueAmount: '50', valueUnit: 'lakh', budgetKnown: 'yes',
+        emdAmount: '', emdUnit: 'lakh', salesPersonEmail: 'rohitt@amnex.com',
+      }]),
+    }
+
+    const out = migrateSnapshot(snap, 1)!
+    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
+    expect(out.opportunities).toHaveLength(1)
+    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
+    expect(out.opportunities[0]).toMatchObject({
+      id: 'work_1',
+      departmentId: 'org_a',
+      stateCode: 1,
+      opportunityName: 'ATCS rollout',
+      stageKey: 'pipeline',
+      closedOn: null,
+      salesPersonEmail: 'rohitt@amnex.com',
+    })
+  })
+
+  it('deletes the legacy metadata key so it cannot be read again', () => {
+    const snap = v1Snapshot()
+    snap.nodes[0].metadata = { works: JSON.stringify([]), shortName: 'DoA' }
+    const out = migrateSnapshot(snap, 1)!
+    expect(out.nodes[0].metadata.works).toBeUndefined()
+    expect(out.nodes[0].metadata.shortName).toBe('DoA')
+  })
+
+  it('writes NO stage-change rows for migrated opportunities', () => {
+    // Their real stage history is unknown. Fabricating one would put false
+    // data into the analytics substrate.
+    const snap = v1Snapshot()
+    snap.nodes[0].metadata = {
+      works: JSON.stringify([{ id: 'work_1', opportunityName: 'X', component: [] }]),
+    }
+    const out = migrateSnapshot(snap, 1)!
+    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
+    expect(out.opportunityStageChanges).toHaveLength(0)
+  })
+
+  it('survives malformed works JSON by dropping it', () => {
+    const snap = v1Snapshot()
+    snap.nodes[0].metadata = { works: '{not json' }
+    const out = migrateSnapshot(snap, 1)!
+    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
+    expect(out.opportunities).toHaveLength(0)
+    expect(out.nodes[0].metadata.works).toBeUndefined()
+  })
+
+  it('migrates a legacy single-string component to an array', () => {
+    const snap = v1Snapshot()
+    snap.nodes[0].metadata = {
+      works: JSON.stringify([{ id: 'w', opportunityName: 'X', component: 'Hardware' }]),
+    }
+    const out = migrateSnapshot(snap, 1)!
+    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
+    expect(out.opportunities[0].component).toEqual(['Hardware'])
+  })
+})
+
+describe('v3 — follow-ups extracted from employees', () => {
+  it('creates a FollowUp row for each employee with a followUpDate', () => {
+    const snap = v1Snapshot()
+    snap.employees = [
+      { id: 'emp_1', name: 'A', followUpDate: '2026-08-01', status: 'active' },
+      { id: 'emp_2', name: 'B', followUpDate: null, status: 'active' },
+    ] as never
+    const out = migrateSnapshot(snap, 1)!
+    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
+    expect(out.followUps).toHaveLength(1)
+    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
+    expect(out.followUps[0]).toMatchObject({
+      entityType: 'contact',
+      entityId: 'emp_1',
+      dueDate: '2026-08-01',
+      status: 'open',
+      assigneeId: null,
+    })
+  })
+
+  it('leaves employee.followUpDate in place for Phase 3 to remove', () => {
+    const snap = v1Snapshot()
+    snap.employees = [{ id: 'emp_1', name: 'A', followUpDate: '2026-08-01', status: 'active' }] as never
+    const out = migrateSnapshot(snap, 1)!
+    expect((out.employees[0] as { followUpDate?: string }).followUpDate).toBe('2026-08-01')
+  })
+})
