@@ -25,7 +25,11 @@ import type { GormsData } from './seed'
 
 const DB_NAME = 'gorms'
 const STORE = 'snapshot'
+const BLOB_STORE = 'blobs'
 const KEY = 'data'
+/** IndexedDB database version — distinct from the DATA schema version in
+ *  migrations.ts. Bump only when adding or removing an object store. */
+const DB_VERSION = 2
 
 interface Envelope {
   version: number
@@ -40,7 +44,7 @@ function openDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     let req: IDBOpenDBRequest
     try {
-      req = indexedDB.open(DB_NAME, 1)
+      req = indexedDB.open(DB_NAME, DB_VERSION)
     } catch {
       resolve(null)
       return
@@ -48,6 +52,7 @@ function openDb(): Promise<IDBDatabase | null> {
     req.onupgradeneeded = () => {
       const db = req.result
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)
+      if (!db.objectStoreNames.contains(BLOB_STORE)) db.createObjectStore(BLOB_STORE)
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => resolve(null)
@@ -148,3 +153,6 @@ export async function clearSnapshot(): Promise<void> {
     db.close()
   }
 }
+
+export { BLOB_STORE, DB_NAME, DB_VERSION }
+export { openDb as openGormsDb }
