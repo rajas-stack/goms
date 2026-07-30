@@ -1,4 +1,7 @@
-export type Domain = 'geo' | 'org'
+/** Three hierarchies over one node engine. `'sales'` carries AMNEX coverage
+ *  areas (Zone/Region/Cluster/…); its NODE_TYPES rows arrive with the
+ *  Coverage phase, so today the value is admitted but unused. */
+export type Domain = 'geo' | 'org' | 'sales'
 export type Status = 'active' | 'archived'
 
 export interface NodeType {

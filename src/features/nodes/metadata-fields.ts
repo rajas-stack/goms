@@ -1,4 +1,4 @@
-import type { FieldDef } from '@/lib/types'
+import type { Domain, FieldDef } from '@/lib/types'
 
 /** Per-type metadata field definitions. In production these come from
  *  node_type_versions.field_schema; here they seed the schema-driven form. */
@@ -18,7 +18,7 @@ const FIELDS: Record<string, FieldDef[]> = {
 
 const GEO_FIELDS: FieldDef[] = [{ key: 'notes', label: 'Notes', type: 'text' }]
 
-export function fieldsForType(typeKey: string, domain: 'geo' | 'org'): FieldDef[] {
+export function fieldsForType(typeKey: string, domain: Domain): FieldDef[] {
   if (domain === 'geo') return GEO_FIELDS
   return FIELDS[typeKey] ?? [{ key: 'notes', label: 'Notes', type: 'text' }]
 }

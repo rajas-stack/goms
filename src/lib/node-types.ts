@@ -1,4 +1,4 @@
-import type { NodeType } from './types'
+import type { Domain, NodeType } from './types'
 
 /** Node types are DATA, not hardcoded enums. This registry seeds the initial
  *  set; admins can extend it. Nothing in the engine assumes these specific keys. */
@@ -20,7 +20,7 @@ export const NODE_TYPE_MAP: Record<string, NodeType> = Object.fromEntries(
   NODE_TYPES.map((t) => [t.key, t]),
 )
 
-export function typesForDomain(domain: 'geo' | 'org'): NodeType[] {
+export function typesForDomain(domain: Domain): NodeType[] {
   return NODE_TYPES.filter((t) => t.domain === domain)
 }
 
