@@ -1096,6 +1096,9 @@ class InMemoryRepository implements Repository {
       timeline: this.data.timeline,
       opportunities: this.data.opportunities,
       salesPersons: this.data.salesPersons,
+      currentDesignationOf: new Map(
+        this.data.salesPostings.filter((p) => p.endDate === null).map((p) => [p.salesPersonId, p.designation]),
+      ),
       scopeState,
       inScope: (nodeId) => scopeState == null || nodeById.get(nodeId)?.stateCode === scopeState,
       subtreeIds: (id) => this.subtreeIds(id),

@@ -11,6 +11,8 @@ export interface SearchContext {
   opportunities: Opportunity[]
   /** Every AMNEX salesperson, for the `salesPerson` category. */
   salesPersons: SalesPerson[]
+  /** Each salesperson's current designation, for the result subtitle. */
+  currentDesignationOf: Map<string, string>
   /** Non-null when results should be scoped to one state. */
   scopeState: number | null
   inScope(nodeId: string): boolean
@@ -229,13 +231,16 @@ export const worksCategory: SearchCategoryDef = {
     : '/'),
 }
 
-function toSalesPersonResult(p: SalesPerson): SearchResult {
+function toSalesPersonResult(p: SalesPerson, ctx: SearchContext): SearchResult {
   return {
     // Not 'employee': that kind routes via ws.select on the government-side
     // Employee record. A SalesPerson is a distinct record type, so — per the
     // rule above — this is 'other', routed via this category's own `path()`.
     kind: 'other', category: 'salesPerson', id: p.id, title: p.name,
-    subtitle: p.officialEmail, code: null, domain: null, stateCode: null,
+    // Designation over email — it's what the palette's avatar+subtitle row
+    // benefits from most; email is still indexed for matching below.
+    subtitle: ctx.currentDesignationOf.get(p.id) || p.officialEmail,
+    code: null, domain: null, stateCode: null,
   }
 }
 
@@ -243,8 +248,9 @@ export const salesPersonCategory: SearchCategoryDef = {
   key: 'salesPerson', label: 'Sales Team', icon: 'Briefcase', color: 'purple', order: 6, cap: 5,
   match(query, ctx) {
     return ctx.salesPersons
-      .filter((p) => matches(`${p.name} ${p.officialEmail}`.toLowerCase(), query))
-      .map(toSalesPersonResult)
+      .filter((p) =>
+        matches(`${p.name} ${p.officialEmail} ${ctx.currentDesignationOf.get(p.id) ?? ''}`.toLowerCase(), query))
+      .map((p) => toSalesPersonResult(p, ctx))
   },
   related() {
     return []

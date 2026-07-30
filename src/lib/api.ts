@@ -161,6 +161,9 @@ export function useSalesPersonMutations() {
   return { create, update, setStatus, remove }
 }
 
+export const useOwnershipAssignments = () =>
+  useQuery({ queryKey: ['ownershipAssignments'], queryFn: () => repository.listOwnershipAssignments() })
+
 export const useOwnershipFor = (entityType: string, entityId: string | null) =>
   useQuery({
     queryKey: qk.ownershipFor(entityType, entityId ?? ''),
@@ -188,6 +191,7 @@ export function useOwnershipMutations() {
     qc.invalidateQueries({ queryKey: ['ownershipFor'] })
     qc.invalidateQueries({ queryKey: ['ownedBy'] })
     qc.invalidateQueries({ queryKey: ['resolvedOwners'] })
+    qc.invalidateQueries({ queryKey: ['ownershipAssignments'] })
   }
   const assign = useMutation({ mutationFn: (i: AssignOwnerInput) => repository.assignOwner(i), onSuccess: invalidate })
   const end = useMutation({

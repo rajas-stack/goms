@@ -170,25 +170,30 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
       </div>
 
       <div className="border-t border-line px-4 py-3">
-        <h3 className="mb-1 text-[13px] font-semibold text-ink-900">
-          {owned.length > 0 ? `Book of Business · ${owned.length}` : 'Book of Business'}
-        </h3>
+        <h3 className="mb-2 text-[13px] font-semibold text-ink-900">Book of Business</h3>
         {owned.length === 0 ? (
-          <p className="text-sm text-muted">Nothing directly assigned as of today.</p>
+          <p className="rounded-lg border border-dashed border-line px-3 py-2.5 text-[12px] text-muted">
+            Nothing directly assigned as of today.
+          </p>
         ) : (
           <div className="flex flex-col gap-3">
+            <div className="grid grid-cols-3 gap-2">
+              <BobCountCard label="Departments" count={byKind.orgNode.length} icon="Building2" />
+              <BobCountCard label="Contacts" count={byKind.contact.length} icon="User" />
+              <BobCountCard label="Opportunities" count={byKind.opportunity.length} icon="Briefcase" />
+            </div>
             <BookGroup
-              label="Departments" rows={byKind.orgNode}
+              label="Departments" rows={byKind.orgNode} emptyMessage="No departments owned"
               nameOf={(id) => deptById.get(id)?.name ?? id}
               onOpen={(id) => ws.select('node', id)}
             />
             <BookGroup
-              label="Contacts" rows={byKind.contact}
+              label="Contacts" rows={byKind.contact} emptyMessage="No contacts yet"
               nameOf={(id) => empById.get(id)?.name ?? id}
               onOpen={(id) => ws.select('employee', id)}
             />
             <BookGroup
-              label="Opportunities" rows={byKind.opportunity}
+              label="Opportunities" rows={byKind.opportunity} emptyMessage="No opportunities assigned"
               nameOf={(id) => oppById.get(id)?.opportunityName ?? id}
               onOpen={(id) => {
                 const dept = oppById.get(id)?.departmentId
@@ -204,22 +209,47 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   )
 }
 
-function BookGroup({ label, rows, nameOf, onOpen }: {
+function BobCountCard({ label, count, icon }: { label: string; count: number; icon: string }) {
+  return (
+    <div className="flex flex-col items-center gap-0.5 rounded-lg border border-line bg-panel/50 px-2 py-2.5 text-center">
+      <Icon name={icon} size={14} className="mb-0.5 text-muted" />
+      <span className="text-lg font-semibold leading-none text-ink-900">{count}</span>
+      <span className="text-[10px] text-muted">{label}</span>
+    </div>
+  )
+}
+
+/** Shows the first few rows, with "View all" expanding the rest in place —
+ *  a Book of Business can run to dozens of opportunities, and a full list by
+ *  default buries the summary counts above it. */
+const COLLAPSED_ROWS = 3
+
+function BookGroup({ label, rows, nameOf, onOpen, emptyMessage }: {
   label: string
   rows: { id: string; entityId: string; role: string }[]
   nameOf: (entityId: string) => string
   onOpen: (entityId: string) => void
+  emptyMessage: string
 }) {
-  if (rows.length === 0) return null
+  const [expanded, setExpanded] = useState(false)
+  if (rows.length === 0) {
+    return (
+      <div>
+        <p className="mb-1 text-[11px] uppercase tracking-wide text-muted">{label}</p>
+        <p className="rounded-lg border border-dashed border-line px-2.5 py-2 text-[12px] text-muted">{emptyMessage}</p>
+      </div>
+    )
+  }
+  const visible = expanded ? rows : rows.slice(0, COLLAPSED_ROWS)
   return (
     <div>
       <p className="mb-1 text-[11px] uppercase tracking-wide text-muted">{label} · {rows.length}</p>
       <ul className="flex flex-col gap-1">
-        {rows.map((a) => (
+        {visible.map((a) => (
           <li key={a.id}>
             <button
               onClick={() => onOpen(a.entityId)}
-              className="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-2 text-left hover:bg-panel"
+              className="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-2 text-left transition-colors hover:bg-panel"
             >
               <span className="min-w-0 flex-1 truncate text-[13px] text-ink-900">{nameOf(a.entityId)}</span>
               {a.role !== 'owner' && (
@@ -229,6 +259,14 @@ function BookGroup({ label, rows, nameOf, onOpen }: {
           </li>
         ))}
       </ul>
+      {rows.length > COLLAPSED_ROWS && (
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-1 text-[12px] font-medium text-ink-600 hover:text-ink-900"
+        >
+          {expanded ? 'Show less' : `View all ${rows.length} →`}
+        </button>
+      )}
     </div>
   )
 }

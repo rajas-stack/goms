@@ -7,7 +7,7 @@ import type { SearchResult } from '@/lib/types'
 import { Icon } from './ui/Icon'
 import { Badge, CodeChip } from './ui/Badge'
 import { useMediaQuery } from '@/lib/useMediaQuery'
-import { cn } from '@/lib/utils'
+import { cn, initials } from '@/lib/utils'
 
 const EXAMPLES = [
   'Connected officers', 'Vacant positions', 'Follow-ups due today',
@@ -177,7 +177,13 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                           )}
                         >
                           <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', CATEGORY_CHIP[g.category.color])}>
-                            <Icon name={g.category.icon} size={15} />
+                            {/* Sales Team rows get an initials avatar — a
+                                person, not a category, is what's being
+                                identified here. Every other category keeps
+                                its icon unchanged. */}
+                            {g.category.key === 'salesPerson'
+                              ? <span className="text-[11px] font-semibold">{initials(r.title)}</span>
+                              : <Icon name={g.category.icon} size={15} />}
                           </span>
                           <span className="min-w-0 flex-1">
                             <span className="block break-words text-sm font-medium text-ink-900">{r.title}</span>

@@ -2,11 +2,17 @@ import { SALES_ROLES } from '@/features/nodes/department-meta'
 import { WorksEditor } from '@/features/nodes/WorksEditor'
 import { SALES_TEAM } from '@/data/sales-team'
 import { resolveSalesChain } from '@/data/sales-hierarchy'
-import { useNode, useOpportunitiesByDepartment, useResolvedOwners } from '@/lib/api'
+import {
+  useNode, useOpportunitiesByDepartment, useResolvedOwners, useSalesPerson, useSalesPostings,
+} from '@/lib/api'
 import { OwnershipBlock } from '@/features/sales/OwnershipBlock'
+import { OwnerBadge } from '@/features/sales/OwnerBadge'
+import { Icon } from '@/components/ui/Icon'
+import { useWorkspace } from '@/features/workspace/context'
 import { isoToday } from '@/lib/dates'
 import type { Employee, HierNode } from '@/lib/types'
 import type { SalesTeamMember } from '@/data/sales-team'
+import type { OwnerResolution } from '@/data/ownership'
 
 const DERIVED_SALES_ROLES: { tier: 'rm' | 'gm' | 'salesHead'; label: string }[] = [
   { tier: 'rm', label: 'RM' },
@@ -39,6 +45,7 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
   const { data: resolvedOwners = {} } = useResolvedOwners('orgNode', [node.id], isoToday())
   const resolvedOwner = resolvedOwners[node.id]
   const { data: viaNode } = useNode(resolvedOwner?.source === 'inherited' ? resolvedOwner.viaEntityId ?? null : null)
+  const contactCount = employees.filter((e) => e.orgNodeId === node.id && !e.vacant).length
 
   return (
     <>
@@ -69,6 +76,14 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
           </dl>
         </Block>
       )}
+
+      <Block title="Sales information">
+        <SalesInfoGrid
+          owner={resolvedOwner}
+          opportunityCount={opportunities.length}
+          contactCount={contactCount}
+        />
+      </Block>
 
       {/* The record-based ownership system (spec §6.4/§7), shown alongside the
           legacy metadata-driven block above rather than replacing it — Phase 3
@@ -102,5 +117,65 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
       <h3 className="mb-2.5 text-[13px] font-semibold text-ink-800">{title}</h3>
       {children}
     </section>
+  )
+}
+
+const STATUS_LABEL: Record<string, string> = {
+  active: 'Active', onLeave: 'On leave', resigned: 'Resigned', inactive: 'Inactive',
+}
+
+/** A compact "at a glance" row above the full ownership block below — owner,
+ *  their current designation and status, and the two counts a manager checks
+ *  first. Reads the owner's own posting/status directly rather than through
+ *  Book of Business, since this is the department's view of them, not theirs
+ *  of the department. */
+function SalesInfoGrid({ owner, opportunityCount, contactCount }: {
+  owner: OwnerResolution | null | undefined
+  opportunityCount: number
+  contactCount: number
+}) {
+  const ws = useWorkspace()
+  const { data: ownerPerson } = useSalesPerson(owner?.salesPersonId ?? null)
+  const { data: postings = [] } = useSalesPostings(owner?.salesPersonId ?? null)
+  const currentPosting = postings.find((p) => p.endDate === null)
+
+  return (
+    <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+      <div>
+        <dt className="text-[11px] uppercase tracking-wide text-muted">Owner</dt>
+        <dd className="mt-0.5 text-sm text-ink-900">
+          {owner ? (
+            <button onClick={() => ws.select('salesPerson', owner.salesPersonId)} className="cursor-pointer">
+              <OwnerBadge owner={owner} people={ownerPerson ? [ownerPerson] : []} />
+            </button>
+          ) : (
+            <OwnerBadge owner={owner} people={[]} />
+          )}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-[11px] uppercase tracking-wide text-muted">Designation</dt>
+        <dd className="mt-0.5 flex items-center gap-1.5 text-sm text-ink-900">
+          <Icon name="Layers" size={13} className="text-muted" />
+          {currentPosting?.designation || '—'}
+        </dd>
+      </div>
+      <div>
+        <dt className="text-[11px] uppercase tracking-wide text-muted">Status</dt>
+        <dd className="mt-0.5 text-sm text-ink-900">
+          {ownerPerson ? (STATUS_LABEL[ownerPerson.status] ?? ownerPerson.status) : '—'}
+        </dd>
+      </div>
+      <div className="flex gap-4">
+        <div>
+          <dt className="text-[11px] uppercase tracking-wide text-muted">Opportunities</dt>
+          <dd className="mt-0.5 text-sm font-semibold text-ink-900">{opportunityCount}</dd>
+        </div>
+        <div>
+          <dt className="text-[11px] uppercase tracking-wide text-muted">Contacts</dt>
+          <dd className="mt-0.5 text-sm font-semibold text-ink-900">{contactCount}</dd>
+        </div>
+      </div>
+    </dl>
   )
 }
