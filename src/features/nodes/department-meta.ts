@@ -1,5 +1,5 @@
 import type { MultiSelectGroup } from '@/components/ui/MultiSelectDropdown'
-import type { DepartmentWork } from '@/lib/types'
+import type { Opportunity } from '@/lib/types'
 
 /** Sales-ownership roles kept per department. Values are employee ids stored
  *  on the department node's metadata under these keys. */
@@ -100,7 +100,7 @@ export function convertWorkAmount(amount: string, fromUnit: string, toUnit: stri
 
 /** Display string for a work's value, e.g. "INR 50 Lakh" — empty until an
  *  amount has been entered. */
-export function formatWorkValue(w: Pick<DepartmentWork, 'currency' | 'valueAmount' | 'valueUnit'>): string {
+export function formatWorkValue(w: Pick<Opportunity, 'currency' | 'valueAmount' | 'valueUnit'>): string {
   if (!w.valueAmount) return ''
   return `${w.currency} ${w.valueAmount} ${workUnitLabel(w.valueUnit)}`
 }
@@ -122,7 +122,7 @@ export function estimateBudgetRangeDisplay(emdAmount: string, emdUnit: string): 
 
 /** Display string for the EMD-derived budget range, e.g. "≈ 40–100 Lakh" —
  *  empty until the EMD amount parses as a positive number. */
-export function formatBudgetRange(w: Pick<DepartmentWork, 'emdAmount' | 'emdUnit'>): string {
+export function formatBudgetRange(w: Pick<Opportunity, 'emdAmount' | 'emdUnit'>): string {
   const display = estimateBudgetRangeDisplay(w.emdAmount, w.emdUnit)
   if (!display) return ''
   return `≈ ${Number(display.low.toFixed(2))}–${Number(display.high.toFixed(2))} ${workUnitLabel(display.unit)}`
@@ -146,23 +146,3 @@ export function abbreviateDepartmentName(name: string): string {
     .join('')
 }
 
-export function parseWorks(raw: string | undefined): DepartmentWork[] {
-  if (!raw) return []
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    // Migrate a legacy single-string `component` (saved before it became a
-    // multiselect) to a one-item array; an already-migrated array or a
-    // missing key both fall through cleanly.
-    return (parsed as (Omit<DepartmentWork, 'component'> & { component?: string | string[] })[]).map((w) => ({
-      ...w,
-      component: Array.isArray(w.component) ? w.component : w.component ? [w.component] : [],
-    })) as DepartmentWork[]
-  } catch {
-    return []
-  }
-}
-
-export function serializeWorks(works: DepartmentWork[]): string {
-  return works.length ? JSON.stringify(works) : ''
-}

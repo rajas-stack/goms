@@ -1,13 +1,14 @@
 import { NODE_TYPE_MAP } from './node-types'
-import { parseWorks } from '@/features/nodes/department-meta'
 import { SALES_TEAM } from '@/data/sales-team'
-import type { DepartmentWork, Employee, HierNode, SearchResult, TimelineEvent } from './types'
+import type { Employee, HierNode, Opportunity, SearchResult, TimelineEvent } from './types'
 
 export interface SearchContext {
   nodeById: Map<string, HierNode>
   activeNodes: HierNode[]
   activeEmployees: Employee[]
   timeline: TimelineEvent[]
+  /** Every opportunity, for the `work` category. */
+  opportunities: Opportunity[]
   /** Non-null when results should be scoped to one state. */
   scopeState: number | null
   inScope(nodeId: string): boolean
@@ -195,13 +196,13 @@ export const geographyCategory: SearchCategoryDef = {
   },
 }
 
-function toWorkResult(work: DepartmentWork, node: HierNode): SearchResult {
+function toWorkResult(work: Opportunity, node: HierNode | undefined): SearchResult {
   return {
     kind: 'other', category: 'work', id: work.id,
     title: work.opportunityName || 'Untitled opportunity',
-    subtitle: `${node.name} · ${work.vertical}`,
-    code: null, domain: node.domain, stateCode: node.stateCode,
-    containerId: node.id,
+    subtitle: `${node?.name ?? 'Unknown department'} · ${work.vertical}`,
+    code: null, domain: node?.domain ?? null, stateCode: work.stateCode,
+    containerId: work.departmentId,
   }
 }
 
@@ -209,13 +210,11 @@ export const worksCategory: SearchCategoryDef = {
   key: 'work', label: 'Works', icon: 'Briefcase', color: 'blue', order: 5, cap: 5,
   match(query, ctx) {
     const out: SearchResult[] = []
-    for (const node of ctx.activeNodes) {
-      if (node.typeKey !== 'department' || !ctx.inScope(node.id)) continue
-      for (const w of parseWorks(node.metadata.works)) {
-        const salesName = SALES_TEAM.find((m) => m.email === w.salesPersonEmail)?.name ?? ''
-        const hay = `${w.opportunityName} ${w.gemTenderId} ${w.vertical} ${w.component.join(' ')} ${salesName}`.toLowerCase()
-        if (matches(hay, query)) out.push(toWorkResult(w, node))
-      }
+    for (const w of ctx.opportunities) {
+      if (!ctx.inScope(w.departmentId)) continue
+      const salesName = SALES_TEAM.find((m) => m.email === w.salesPersonEmail)?.name ?? ''
+      const hay = `${w.opportunityName} ${w.gemTenderId} ${w.vertical} ${w.component.join(' ')} ${salesName}`.toLowerCase()
+      if (matches(hay, query)) out.push(toWorkResult(w, ctx.nodeById.get(w.departmentId)))
     }
     return out
   },

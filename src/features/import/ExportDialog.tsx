@@ -5,20 +5,22 @@ import { Field, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { useToast } from '@/components/ui/Toast'
 import {
-  useAllEmployees, useAllTimelineEvents, useDepartments, useEmployeeDepartments, useStates,
+  useAllEmployees, useAllTimelineEvents, useDepartments, useEmployeeDepartments, useOpportunities, useStates,
 } from '@/lib/api'
 import { downloadCsv, toCsv } from '@/lib/csv'
 import { timelineEventLabel } from '@/lib/timeline-meta'
-import { abbreviateDepartmentName } from '@/features/nodes/department-meta'
+import { abbreviateDepartmentName, workUnitLabel } from '@/features/nodes/department-meta'
+import { stageLabel } from '@/data/pipeline-stages'
 import { cn } from '@/lib/utils'
-import type { Employee, HierNode, TimelineEvent } from '@/lib/types'
+import type { Employee, HierNode, Opportunity, TimelineEvent } from '@/lib/types'
 
-type DatasetKey = 'departments' | 'people' | 'meetings'
+type DatasetKey = 'departments' | 'people' | 'meetings' | 'opportunities'
 
 const DATASETS: { key: DatasetKey; label: string; icon: string; describe: string }[] = [
   { key: 'departments', label: 'Departments', icon: 'Building2', describe: 'Every department with its state, code, and contact details' },
   { key: 'people', label: 'People', icon: 'Users', describe: 'Every contact with posting, department, and relationship fields' },
   { key: 'meetings', label: 'Meetings & interactions', icon: 'CalendarClock', describe: 'Every logged timeline entry with its person and attendees' },
+  { key: 'opportunities', label: 'Opportunities', icon: 'Briefcase', describe: 'Every opportunity with its department, stage, and value' },
 ]
 
 interface Ctx {
@@ -27,6 +29,7 @@ interface Ctx {
   employees: Employee[]
   employeeDepartments: Record<string, { id: string; name: string }>
   events: TimelineEvent[]
+  opportunities: Opportunity[]
 }
 
 function stateName(ctx: Ctx, code: number | null): string {
@@ -105,10 +108,44 @@ function meetingRows(ctx: Ctx): string[][] {
   ]
 }
 
+function opportunityRows(ctx: Ctx): string[][] {
+  const deptById = new Map(ctx.departments.map((d) => [d.id, d] as const))
+  return [
+    [
+      'Opportunity', 'Department', 'Department ID', 'State', 'Stage', 'Closed on', 'GEM / Tender ID',
+      'Vertical', 'Component', 'Quantity', 'Publish date', 'Submission date', 'Currency', 'Value',
+      'Value unit', 'Budget confirmed', 'EMD amount', 'EMD unit', 'Sales person', 'Created at',
+    ],
+    ...ctx.opportunities.map((o) => [
+      o.opportunityName,
+      deptById.get(o.departmentId)?.name ?? '',
+      o.departmentId,
+      stateName(ctx, o.stateCode),
+      stageLabel(o.stageKey),
+      o.closedOn ?? '',
+      o.gemTenderId,
+      o.vertical,
+      o.component.join('; '),
+      o.quantity,
+      o.publishDate,
+      o.submissionDate,
+      o.currency,
+      o.valueAmount,
+      workUnitLabel(o.valueUnit),
+      o.budgetKnown === 'yes' ? 'Yes' : o.budgetKnown === 'no' ? 'No' : '',
+      o.emdAmount,
+      workUnitLabel(o.emdUnit),
+      o.salesPersonEmail,
+      o.createdAt,
+    ]),
+  ]
+}
+
 const BUILDERS: Record<DatasetKey, (ctx: Ctx) => string[][]> = {
   departments: departmentRows,
   people: peopleRows,
   meetings: meetingRows,
+  opportunities: opportunityRows,
 }
 
 /** Bulk CSV export, the read counterpart to `ImportDialog`. Pick one or more
@@ -124,6 +161,7 @@ export function ExportDialog({ open, onClose }: { open: boolean; onClose: () => 
   const { data: employees = [] } = useAllEmployees()
   const { data: employeeDepartments = {} } = useEmployeeDepartments()
   const { data: events = [] } = useAllTimelineEvents()
+  const { data: opportunities = [] } = useOpportunities()
 
   // Scoping to a state filters departments by their own stateCode, and people
   // (plus their meetings) by the department they sit under — so a state export
@@ -138,15 +176,18 @@ export function ExportDialog({ open, onClose }: { open: boolean; onClose: () => 
     })
   const scopedEmployeeIds = new Set(scopedEmployees.map((e) => e.id))
   const scopedEvents = stateCode === null ? events : events.filter((t) => scopedEmployeeIds.has(t.employeeId))
+  const scopedOpportunities = stateCode === null ? opportunities : opportunities.filter((o) => o.stateCode === stateCode)
 
   const ctx: Ctx = {
     states, departments: scopedDepartments, employees: scopedEmployees, employeeDepartments, events: scopedEvents,
+    opportunities: scopedOpportunities,
   }
 
   const COUNTS: Record<DatasetKey, number> = {
     departments: scopedDepartments.length,
     people: scopedEmployees.length,
     meetings: scopedEvents.length,
+    opportunities: scopedOpportunities.length,
   }
 
   function toggle(key: DatasetKey) {

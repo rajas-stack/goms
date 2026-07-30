@@ -25,11 +25,8 @@ describe('migrateSnapshot', () => {
   it('migrates a v1 snapshot all the way forward', () => {
     const out = migrateSnapshot(v1Snapshot(), 1)
     expect(out).not.toBeNull()
-    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
     expect(Array.isArray(out!.opportunities)).toBe(true)
-    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
     expect(Array.isArray(out!.opportunityStageChanges)).toBe(true)
-    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
     expect(Array.isArray(out!.followUps)).toBe(true)
   })
 
@@ -80,9 +77,7 @@ describe('v2 — opportunities extracted from department metadata', () => {
     }
 
     const out = migrateSnapshot(snap, 1)!
-    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
     expect(out.opportunities).toHaveLength(1)
-    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
     expect(out.opportunities[0]).toMatchObject({
       id: 'work_1',
       departmentId: 'org_a',
@@ -110,7 +105,6 @@ describe('v2 — opportunities extracted from department metadata', () => {
       works: JSON.stringify([{ id: 'work_1', opportunityName: 'X', component: [] }]),
     }
     const out = migrateSnapshot(snap, 1)!
-    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
     expect(out.opportunityStageChanges).toHaveLength(0)
   })
 
@@ -118,7 +112,6 @@ describe('v2 — opportunities extracted from department metadata', () => {
     const snap = v1Snapshot()
     snap.nodes[0].metadata = { works: '{not json' }
     const out = migrateSnapshot(snap, 1)!
-    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
     expect(out.opportunities).toHaveLength(0)
     expect(out.nodes[0].metadata.works).toBeUndefined()
   })
@@ -129,7 +122,6 @@ describe('v2 — opportunities extracted from department metadata', () => {
       works: JSON.stringify([{ id: 'w', opportunityName: 'X', component: 'Hardware' }]),
     }
     const out = migrateSnapshot(snap, 1)!
-    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
     expect(out.opportunities[0].component).toEqual(['Hardware'])
   })
 })
@@ -142,9 +134,7 @@ describe('v3 — follow-ups extracted from employees', () => {
       { id: 'emp_2', name: 'B', followUpDate: null, status: 'active' },
     ] as never
     const out = migrateSnapshot(snap, 1)!
-    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
     expect(out.followUps).toHaveLength(1)
-    // @ts-expect-error property doesn't exist on GormsData yet (added in Tasks 6-7)
     expect(out.followUps[0]).toMatchObject({
       entityType: 'contact',
       entityId: 'emp_1',

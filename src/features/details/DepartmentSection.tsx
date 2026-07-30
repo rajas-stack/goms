@@ -1,8 +1,8 @@
-import { SALES_ROLES, parseWorks, serializeWorks } from '@/features/nodes/department-meta'
+import { SALES_ROLES } from '@/features/nodes/department-meta'
 import { WorksEditor } from '@/features/nodes/WorksEditor'
 import { SALES_TEAM } from '@/data/sales-team'
 import { resolveSalesChain } from '@/data/sales-hierarchy'
-import { useNodeMutations } from '@/lib/api'
+import { useOpportunitiesByDepartment } from '@/lib/api'
 import type { Employee, HierNode } from '@/lib/types'
 import type { SalesTeamMember } from '@/data/sales-team'
 
@@ -17,7 +17,6 @@ const DERIVED_SALES_ROLES: { tier: 'rm' | 'gm' | 'salesHead'; label: string }[] 
  *  Opportunity" button). Rendered inside NodeDetails when the selected node
  *  is a department. */
 export function DepartmentSection({ node, employees }: { node: HierNode; employees: Employee[] }) {
-  const { update } = useNodeMutations()
   const byId = new Map(employees.map((e) => [e.id, e]))
   const head = node.metadata.deptHead ? byId.get(node.metadata.deptHead) : undefined
 
@@ -34,9 +33,7 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
     }),
   ]
 
-  const works = parseWorks(node.metadata.works)
-  const setWorks = (next: typeof works) =>
-    update.mutate({ id: node.id, patch: { metadata: { ...node.metadata, works: serializeWorks(next) } } })
+  const { data: opportunities = [] } = useOpportunitiesByDepartment(node.id)
 
   return (
     <>
@@ -68,8 +65,12 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
         </Block>
       )}
 
-      <Block title={works.length > 0 ? `Works · ${works.length}` : 'Works'}>
-        <WorksEditor works={works} onChange={setWorks} draftKeyPrefix={`work:${node.id}`} />
+      <Block title={opportunities.length > 0 ? `Works · ${opportunities.length}` : 'Works'}>
+        <WorksEditor
+          departmentId={node.id}
+          opportunities={opportunities}
+          draftKeyPrefix={`work:${node.id}`}
+        />
       </Block>
     </>
   )

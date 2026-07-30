@@ -1,10 +1,11 @@
 import type {
-  Charge, Domain, Employee, HierNode, PreferredComm, RelationshipQuality, RelationshipStatus,
-  SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
+  Charge, Domain, Employee, HierNode, Opportunity, OpportunityStageChange, PreferredComm, RelationshipQuality,
+  RelationshipStatus, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
 import { uid } from '@/lib/utils'
 import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, childTypesOf } from '@/lib/node-types'
+import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from './pipeline-stages'
 import { SEARCH_CATEGORIES, SEARCH_CATEGORY_MAP, type SearchContext } from '@/lib/search-categories'
 import { buildSeed, type GormsData } from './seed'
 import { clearSnapshot, loadSnapshot, scheduleSave } from './persist'
@@ -118,6 +119,26 @@ export interface TransferInput {
   remarks?: string
 }
 
+export interface CreateOpportunityInput {
+  departmentId: string
+  opportunityName: string
+  gemTenderId?: string
+  publishDate?: string
+  submissionDate?: string
+  vertical?: string
+  component?: string[]
+  quantity?: string
+  currency?: string
+  valueAmount?: string
+  valueUnit?: string
+  budgetKnown?: string
+  emdAmount?: string
+  emdUnit?: string
+  salesPersonEmail?: string
+  /** Defaults to `DEFAULT_STAGE_KEY`. */
+  stageKey?: string
+}
+
 /** All persistence flows through this interface. The in-memory implementation
  *  below can be replaced by a Supabase-backed one with no UI changes. */
 export interface Repository {
@@ -173,6 +194,16 @@ export interface Repository {
 
   listTransfers(employeeId: string): Promise<Transfer[]>
   transferEmployee(input: TransferInput): Promise<Transfer>
+
+  /** Every opportunity across every department, newest first. */
+  listOpportunities(): Promise<Opportunity[]>
+  listOpportunitiesByDepartment(departmentId: string): Promise<Opportunity[]>
+  getOpportunity(id: string): Promise<Opportunity | null>
+  /** Append-only stage history for one opportunity, oldest first. */
+  listOpportunityStageChanges(opportunityId: string): Promise<OpportunityStageChange[]>
+  createOpportunity(input: CreateOpportunityInput): Promise<Opportunity>
+  updateOpportunity(id: string, patch: Partial<Opportunity>): Promise<Opportunity>
+  deleteOpportunity(id: string): Promise<void>
 
   addCharge(employeeId: string, charge: Omit<Charge, 'id'>): Promise<Charge>
   removeCharge(employeeId: string, chargeId: string): Promise<void>
@@ -646,6 +677,89 @@ class InMemoryRepository implements Repository {
     return transfer
   }
 
+  async listOpportunities() {
+    return this.data.opportunities
+      .slice()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.opportunityName.localeCompare(b.opportunityName))
+  }
+
+  async listOpportunitiesByDepartment(departmentId: string) {
+    return this.data.opportunities
+      .filter((o) => o.departmentId === departmentId)
+      .sort((a, b) => a.opportunityName.localeCompare(b.opportunityName))
+  }
+
+  async getOpportunity(id: string) {
+    // null, not undefined — react-query rejects an undefined queryFn result,
+    // and a deleted id can still be in flight in a stale query.
+    return this.data.opportunities.find((o) => o.id === id) ?? null
+  }
+
+  async listOpportunityStageChanges(opportunityId: string) {
+    return this.data.opportunityStageChanges
+      .filter((c) => c.opportunityId === opportunityId)
+      .sort((a, b) => a.changedAt.localeCompare(b.changedAt) || a.id.localeCompare(b.id))
+  }
+
+  async createOpportunity(input: CreateOpportunityInput) {
+    const dept = this.data.nodes.find((n) => n.id === input.departmentId)
+    const stageKey = input.stageKey ?? DEFAULT_STAGE_KEY
+    const opp: Opportunity = {
+      id: uid('opp'),
+      departmentId: input.departmentId,
+      stateCode: dept?.stateCode ?? null,
+      stageKey,
+      closedOn: PIPELINE_STAGE_MAP[stageKey]?.isClosed ? isoToday() : null,
+      opportunityName: input.opportunityName,
+      gemTenderId: input.gemTenderId ?? '',
+      publishDate: input.publishDate ?? '',
+      submissionDate: input.submissionDate ?? '',
+      vertical: input.vertical ?? '',
+      component: input.component ?? [],
+      quantity: input.quantity ?? '',
+      currency: input.currency ?? 'INR',
+      valueAmount: input.valueAmount ?? '',
+      valueUnit: input.valueUnit ?? 'lakh',
+      budgetKnown: input.budgetKnown ?? '',
+      emdAmount: input.emdAmount ?? '',
+      emdUnit: input.emdUnit ?? 'lakh',
+      salesPersonEmail: input.salesPersonEmail ?? '',
+      createdAt: isoToday(),
+      createdBy: null,
+    }
+    this.data.opportunities.push(opp)
+    // The opening row of the stage log. Migrated opportunities deliberately
+    // get none (their real history is unknown — see migrations.ts), so a
+    // missing opening row means "pre-existing", not "lost".
+    this.data.opportunityStageChanges.push({
+      id: uid('stg'), opportunityId: opp.id, fromStageKey: null, toStageKey: stageKey,
+      changedAt: opp.createdAt, changedBy: null, note: 'Opportunity created',
+    })
+    return opp
+  }
+
+  async updateOpportunity(id: string, patch: Partial<Opportunity>) {
+    const opp = this.data.opportunities.find((o) => o.id === id)!
+    const previousStage = opp.stageKey
+    Object.assign(opp, patch)
+    // A stage change is a logged event, not a silent field write — this log
+    // is the only way "what was the pipeline on <date>?" is ever answerable.
+    if (patch.stageKey !== undefined && patch.stageKey !== previousStage) {
+      const nowClosed = PIPELINE_STAGE_MAP[opp.stageKey]?.isClosed ?? false
+      opp.closedOn = nowClosed ? opp.closedOn ?? isoToday() : null
+      this.data.opportunityStageChanges.push({
+        id: uid('stg'), opportunityId: opp.id, fromStageKey: previousStage,
+        toStageKey: opp.stageKey, changedAt: isoToday(), changedBy: null, note: '',
+      })
+    }
+    return opp
+  }
+
+  async deleteOpportunity(id: string) {
+    this.data.opportunities = this.data.opportunities.filter((o) => o.id !== id)
+    this.data.opportunityStageChanges = this.data.opportunityStageChanges.filter((c) => c.opportunityId !== id)
+  }
+
   async addCharge(employeeId: string, charge: Omit<Charge, 'id'>) {
     const emp = this.data.employees.find((e) => e.id === employeeId)!
     const full: Charge = { ...charge, id: uid('chg') }
@@ -671,6 +785,7 @@ class InMemoryRepository implements Repository {
       activeNodes: this.data.nodes.filter((n) => n.status === 'active'),
       activeEmployees: this.data.employees.filter((e) => e.status === 'active'),
       timeline: this.data.timeline,
+      opportunities: this.data.opportunities,
       scopeState,
       inScope: (nodeId) => scopeState == null || nodeById.get(nodeId)?.stateCode === scopeState,
       subtreeIds: (id) => this.subtreeIds(id),
@@ -944,6 +1059,7 @@ const MUTATOR_KEYS = [
   'createEmployee', 'updateEmployee', 'setManager', 'deleteEmployee',
   'addTimelineEvent', 'setTimelineEventAttended', 'deleteTimelineEvent',
   'transferEmployee', 'addCharge', 'removeCharge',
+  'createOpportunity', 'updateOpportunity', 'deleteOpportunity',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -954,6 +1070,7 @@ const READER_KEYS = [
   'listEmployeesUnder', 'listEmployeesDirect', 'listEmployeesByState', 'listAllEmployees',
   'listEmployeeDepartments', 'getEmployee', 'directReports', 'reportingChain',
   'listTimeline', 'listAllTimelineEvents', 'listTransfers',
+  'listOpportunities', 'listOpportunitiesByDepartment', 'getOpportunity', 'listOpportunityStageChanges',
   'search', 'relatedRecords', 'moveTargets', 'relationshipAnalytics',
 ] as const
 

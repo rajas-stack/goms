@@ -1,4 +1,6 @@
-import type { Employee, ExternalId, HierNode, TimelineEvent, Transfer } from '@/lib/types'
+import type {
+  Employee, ExternalId, FollowUp, HierNode, Opportunity, OpportunityStageChange, TimelineEvent, Transfer,
+} from '@/lib/types'
 import adminRaw from './india-admin.json'
 import subdistrictsRaw from './subdistricts.json'
 import { buildGovHierarchy, CENTRAL_STATE_CODE } from './gov-hierarchy'
@@ -61,6 +63,11 @@ export interface GormsData {
   externalIds: ExternalId[]
   timeline: TimelineEvent[]
   transfers: Transfer[]
+  opportunities: Opportunity[]
+  opportunityStageChanges: OpportunityStageChange[]
+  /** Added by Task 12. Declared here so `GormsData` matches the migrated
+   *  snapshot shape; Task 12 adds the `FollowUp` type and the seed value. */
+  followUps: FollowUp[]
 }
 
 export function buildSeed(): GormsData {
@@ -69,6 +76,9 @@ export function buildSeed(): GormsData {
   const externalIds: ExternalId[] = []
   const timeline: TimelineEvent[] = []
   const transfers: Transfer[] = []
+  const opportunities: Opportunity[] = []
+  const opportunityStageChanges: OpportunityStageChange[] = []
+  const followUps: FollowUp[] = []
 
   const india: HierNode = {
     id: 'geo_india', domain: 'geo', typeKey: 'country', parentId: null, stateCode: null,
@@ -178,5 +188,5 @@ export function buildSeed(): GormsData {
     },
   )
 
-  return { nodes, employees, externalIds, timeline, transfers }
+  return { nodes, employees, externalIds, timeline, transfers, opportunities, opportunityStageChanges, followUps }
 }

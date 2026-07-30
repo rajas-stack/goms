@@ -6,20 +6,23 @@ import { AddableSelect } from '@/components/ui/AddableSelect'
 import { MultiSelectDropdown } from '@/components/ui/MultiSelectDropdown'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useFormDraft } from '@/lib/useFormDraft'
-import { uid } from '@/lib/utils'
 import {
   WORK_COMPONENT_GROUPS, WORK_CURRENCIES, WORK_VALUE_UNITS, WORK_VERTICALS,
   convertWorkAmount, estimateBudgetRangeDisplay, workUnitLabel,
 } from './department-meta'
+import { DEFAULT_STAGE_KEY, PIPELINE_STAGES } from '@/data/pipeline-stages'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
-import type { DepartmentWork } from '@/lib/types'
+import type { Opportunity } from '@/lib/types'
 
-const EMPTY: Omit<DepartmentWork, 'id'> = {
+type OpportunityDraft = Omit<Opportunity, 'id' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>
+
+const EMPTY: OpportunityDraft = {
   opportunityName: '', gemTenderId: '', publishDate: '', submissionDate: '',
   vertical: WORK_VERTICALS[0], component: [], quantity: '',
   currency: WORK_CURRENCIES[0].code, valueAmount: '', valueUnit: 'lakh',
   budgetKnown: '', emdAmount: '', emdUnit: 'lakh',
   salesPersonEmail: '',
+  stageKey: DEFAULT_STAGE_KEY, closedOn: null,
 }
 
 /** Create/edit form for a single sales opportunity ("work"). Opened via the
@@ -27,15 +30,13 @@ const EMPTY: Omit<DepartmentWork, 'id'> = {
  *  rendered as part of the add/edit department form. */
 export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
   open: boolean
-  /** Existing work to edit, or null when creating a new one. */
-  work: DepartmentWork | null
-  /** Identifies this exact form for draft persistence — see `WorksEditor`.
-   *  `null`/omitted disables drafting. */
+  /** Existing opportunity to edit, or null when creating. */
+  work: Opportunity | null
   draftKey?: string | null
   onClose: () => void
-  onSave: (work: DepartmentWork) => void
+  onSave: (draft: OpportunityDraft) => void
 }) {
-  const [form, setForm] = useState<Omit<DepartmentWork, 'id'>>(EMPTY)
+  const [form, setForm] = useState<OpportunityDraft>(EMPTY)
   const set = <K extends keyof typeof EMPTY>(key: K, value: (typeof EMPTY)[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
 
@@ -54,7 +55,7 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
 
   function submit() {
     if (!form.opportunityName.trim()) return
-    onSave({ id: work?.id ?? uid('work'), ...form, opportunityName: form.opportunityName.trim() })
+    onSave({ ...form, opportunityName: form.opportunityName.trim() })
     draft.clear()
     onClose()
   }
@@ -90,6 +91,11 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
           </Field>
           <Field label="Vertical">
             <AddableSelect value={form.vertical} onChange={(v) => set('vertical', v)} options={WORK_VERTICALS} storageKey="work-vertical" />
+          </Field>
+          <Field label="Stage">
+            <Select value={form.stageKey} onChange={(e) => set('stageKey', e.target.value)}>
+              {PIPELINE_STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </Select>
           </Field>
           <Field label="Publish date">
             <Input type="date" value={form.publishDate} onChange={(e) => set('publishDate', e.target.value)} />

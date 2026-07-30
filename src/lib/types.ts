@@ -138,11 +138,24 @@ export interface Employee {
   status: Status
 }
 
-/** A single sales opportunity/work item a department is pursuing or executing.
- *  Stored JSON-serialized in the department node's `metadata.works`, so the
- *  generic HierNode shape stays unchanged. */
-export interface DepartmentWork {
+/** A single sales opportunity a department is pursuing or executing.
+ *
+ *  A first-class record with a real `departmentId` foreign key. It was
+ *  previously JSON-serialized into the department node's `metadata.works`,
+ *  which meant an opportunity could not be found without knowing its
+ *  department and could not be aggregated without parsing every one. */
+export interface Opportunity {
   id: string
+  /** Owning department node. Real FK — was implicit containment. */
+  departmentId: string
+  /** Denormalized from the department for state-scoped queries and search.
+   *  Kept in sync by `createOpportunity`; a department never changes state. */
+  stateCode: number | null
+  /** → `PipelineStageDef.key`. Open string, never a union. */
+  stageKey: string
+  /** ISO date the opportunity reached a closed stage; null while open. */
+  closedOn: string | null
+
   opportunityName: string
   /** GEM bid number or tender ID, whichever applies. */
   gemTenderId: string
@@ -151,31 +164,63 @@ export interface DepartmentWork {
   /** ISO date (YYYY-MM-DD) the bid is due. */
   submissionDate: string
   vertical: string
-  /** One or more component/product-line tags. A work saved before this field
-   *  became a multiselect may have a legacy single string here on disk —
-   *  `parseWorks` (department-meta.ts) migrates it to a one-item array on read. */
+  /** One or more component/product-line tags. */
   component: string[]
   quantity: string
-  /** ISO 4217 code the value/EMD amounts below are denominated in — see
-   *  `WORK_CURRENCIES`. */
+  /** ISO 4217 code the value/EMD amounts below are denominated in. */
   currency: string
   /** Raw number the user entered, scaled by `valueUnit`. */
   valueAmount: string
-  /** Scale `valueAmount` is expressed in — see `WORK_VALUE_UNITS`. */
   valueUnit: string
-  /** Whether the opportunity's budget figure is confirmed. `''` = not yet
-   *  answered, so existing works don't force a choice. */
+  /** Whether the budget figure is confirmed. `''` = not yet answered. */
   budgetKnown: string
-  /** EMD amount stated in the tender, scaled by `emdUnit` — the value field
-   *  is disabled once the budget isn't confirmed, and this is used instead to
-   *  derive a budget range (see `estimateBudgetRangeFromEmd`). */
   emdAmount: string
   emdUnit: string
-  /** AMNEX sales-team member's email who owns this specific opportunity — same
-   *  convention as `Employee.metadata.relationshipOwner` / a department's
-   *  `metadata.salesGeo`. Empty string when unset (including on works parsed
-   *  from data saved before this field existed). */
+  /** AMNEX sales-team member's email who owns this opportunity.
+   *
+   *  TRANSITIONAL. Replaced by `OwnershipAssignment('opportunity', id)` in
+   *  the Ownership phase, which deletes this field alongside a department's
+   *  `metadata.salesGeo` and a contact's `metadata.relationshipOwner` — all
+   *  three go together so there is never a period with two answers to "who
+   *  owns this". Until then it remains the only owner record. */
   salesPersonEmail: string
+
+  createdAt: string
+  createdBy: string | null
+}
+
+/** Append-only log of an opportunity's stage transitions.
+ *
+ *  Exists so "what was the pipeline on 1 June?", stage velocity, and
+ *  conversion rates are answerable. Stage history CANNOT be reconstructed
+ *  after the fact, which is why this ships before any dashboard needs it.
+ *  Rows are never updated or deleted while their opportunity exists. */
+export interface OpportunityStageChange {
+  id: string
+  opportunityId: string
+  /** null for the row recording an opportunity's creation. */
+  fromStageKey: string | null
+  toStageKey: string
+  /** ISO date (YYYY-MM-DD). */
+  changedAt: string
+  changedBy: string | null
+  note: string
+}
+
+/** A scheduled piece of follow-up work against any entity. Replaces the
+ *  single `Employee.followUpDate` field, which could hold only one, could
+ *  not be assigned, and could not be closed. */
+export interface FollowUp {
+  id: string
+  entityType: string
+  entityId: string
+  /** → `SalesPerson.id`. Always null until the Roster phase creates them. */
+  assigneeId: string | null
+  dueDate: string
+  status: 'open' | 'done' | 'cancelled'
+  note: string
+  createdAt: string
+  createdBy: string | null
 }
 
 /** One visiting card: a required front and an optional back, each an image or

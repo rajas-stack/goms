@@ -4,50 +4,49 @@ import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { WorkFormDialog } from './WorkFormDialog'
 import { formatBudgetRange, formatWorkValue, workUnitLabel } from './department-meta'
+import { stageLabel } from '@/data/pipeline-stages'
+import { useOpportunityMutations } from '@/lib/api'
 import { SALES_TEAM } from '@/data/sales-team'
-import type { DepartmentWork } from '@/lib/types'
+import type { Opportunity } from '@/lib/types'
 
-/** A department's opportunity pipeline, shown as collapsible cards (each
- *  collapsed to its name + value, expandable for the rest — the same
- *  expand/collapse affordance as a branch card, sized for a narrow sidebar
- *  instead of a wide multi-column table) plus the "Create Opportunity"
- *  button that opens WorkFormDialog. Rendered read/manage-style wherever a
- *  department's Works are shown (DepartmentSection) — never as part of the
- *  add/edit department form. */
-export function WorksEditor({ works, onChange, draftKeyPrefix }: {
-  works: DepartmentWork[]
-  onChange: (works: DepartmentWork[]) => void
-  /** Identifies the owning department for draft persistence — e.g.
-   *  `work:${node.id}`. Omit to disable drafting (no stable id available). */
+/** A department's opportunity pipeline, shown as collapsible cards plus the
+ *  "Create Opportunity" button that opens WorkFormDialog. Opportunities are
+ *  repository records — this component owns their mutations directly rather
+ *  than handing an array back to a parent, since there is no longer a
+ *  serialized blob for the parent to write. */
+export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
+  departmentId: string
+  opportunities: Opportunity[]
   draftKeyPrefix?: string
 }) {
+  const { create, update, remove } = useOpportunityMutations()
   const [openId, setOpenId] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
-  const [editing, setEditing] = useState<DepartmentWork | null>(null)
+  const [editing, setEditing] = useState<Opportunity | null>(null)
 
   function openCreate() {
     setEditing(null)
     setDialogOpen(true)
   }
-  function openEdit(w: DepartmentWork) {
+  function openEdit(w: Opportunity) {
     setEditing(w)
     setDialogOpen(true)
   }
-  function save(work: DepartmentWork) {
-    const exists = works.some((w) => w.id === work.id)
-    onChange(exists ? works.map((w) => (w.id === work.id ? work : w)) : [...works, work])
+  function save(draft: Omit<Opportunity, 'id' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>) {
+    if (editing) update.mutate({ id: editing.id, patch: draft })
+    else create.mutate({ departmentId, ...draft })
   }
-  function remove(id: string) {
-    onChange(works.filter((w) => w.id !== id))
+  function removeOpportunity(id: string) {
+    remove.mutate(id)
   }
 
   return (
     <div className="space-y-3">
-      {works.length === 0 ? (
+      {opportunities.length === 0 ? (
         <p className="text-sm text-muted">No opportunities added yet.</p>
       ) : (
         <div className="space-y-2">
-          {works.map((w) => {
+          {opportunities.map((w) => {
             const expanded = openId === w.id
             const valueLabel = formatWorkValue(w)
             return (
@@ -63,6 +62,9 @@ export function WorksEditor({ works, onChange, draftKeyPrefix }: {
                     <Icon name="ChevronRight" size={14} />
                   </motion.span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{w.opportunityName || 'Untitled opportunity'}</span>
+                  <span className="shrink-0 rounded-full bg-panel px-2 py-0.5 text-[11px] font-medium text-ink-700">
+                    {stageLabel(w.stageKey)}
+                  </span>
                   {valueLabel && <span className="shrink-0 font-mono text-[12px] text-ink-700">{valueLabel}</span>}
                   <button
                     type="button"
@@ -75,7 +77,7 @@ export function WorksEditor({ works, onChange, draftKeyPrefix }: {
                   <button
                     type="button"
                     aria-label="Remove opportunity"
-                    onClick={(e) => { e.stopPropagation(); remove(w.id) }}
+                    onClick={(e) => { e.stopPropagation(); removeOpportunity(w.id) }}
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-crimson-100 hover:text-crimson"
                   >
                     <Icon name="Trash2" size={13} />

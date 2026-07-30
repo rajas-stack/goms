@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  repository, type AddTimelineInput, type CreateEmployeeInput, type CreateNodeInput,
+  repository, type AddTimelineInput, type CreateEmployeeInput, type CreateNodeInput, type CreateOpportunityInput,
   type ImportChildRow, type ImportEmployeeRow, type TransferInput,
 } from '@/data/repository'
-import type { Charge, Employee, HierNode, SearchResult, Status, TimelineEventType } from './types'
+import type { Charge, Employee, HierNode, Opportunity, SearchResult, Status, TimelineEventType } from './types'
 
 export const qk = {
   states: ['states'] as const,
@@ -19,6 +19,10 @@ export const qk = {
   timeline: (id: string) => ['timeline', id] as const,
   allTimelineEvents: (types?: TimelineEventType[]) => ['allTimelineEvents', types ? [...types].sort() : null] as const,
   transfers: (id: string) => ['transfers', id] as const,
+  opportunities: ['opportunities'] as const,
+  opportunitiesByDepartment: (id: string) => ['opportunitiesByDepartment', id] as const,
+  opportunity: (id: string) => ['opportunity', id] as const,
+  opportunityStageChanges: (id: string) => ['opportunityStageChanges', id] as const,
 }
 
 export const useStates = () => useQuery({ queryKey: qk.states, queryFn: () => repository.listStates() })
@@ -80,6 +84,40 @@ export const useAllTimelineEvents = (filter?: { types?: TimelineEventType[] }) =
   })
 export const useTransfers = (id: string | null) =>
   useQuery({ queryKey: qk.transfers(id ?? ''), queryFn: () => repository.listTransfers(id!), enabled: !!id })
+
+export const useOpportunities = () =>
+  useQuery({ queryKey: qk.opportunities, queryFn: () => repository.listOpportunities() })
+export const useOpportunitiesByDepartment = (departmentId: string | null) =>
+  useQuery({
+    queryKey: qk.opportunitiesByDepartment(departmentId ?? ''),
+    queryFn: () => repository.listOpportunitiesByDepartment(departmentId!),
+    enabled: !!departmentId,
+  })
+export const useOpportunity = (id: string | null) =>
+  useQuery({ queryKey: qk.opportunity(id ?? ''), queryFn: () => repository.getOpportunity(id!), enabled: !!id })
+export const useOpportunityStageChanges = (id: string | null) =>
+  useQuery({
+    queryKey: qk.opportunityStageChanges(id ?? ''),
+    queryFn: () => repository.listOpportunityStageChanges(id!),
+    enabled: !!id,
+  })
+
+export function useOpportunityMutations() {
+  const qc = useQueryClient()
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['opportunities'] })
+    qc.invalidateQueries({ queryKey: ['opportunitiesByDepartment'] })
+    qc.invalidateQueries({ queryKey: ['opportunity'] })
+    qc.invalidateQueries({ queryKey: ['opportunityStageChanges'] })
+  }
+  const create = useMutation({ mutationFn: (i: CreateOpportunityInput) => repository.createOpportunity(i), onSuccess: invalidate })
+  const update = useMutation({
+    mutationFn: (a: { id: string; patch: Partial<Opportunity> }) => repository.updateOpportunity(a.id, a.patch),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteOpportunity(id), onSuccess: invalidate })
+  return { create, update, remove }
+}
 
 export const useMoveTargets = (nodeId: string | null) =>
   useQuery({ queryKey: ['moveTargets', nodeId ?? ''], queryFn: () => repository.moveTargets(nodeId!), enabled: !!nodeId })
