@@ -1,12 +1,17 @@
 import type {
   Charge, Domain, Employee, FollowUp, HierNode, Opportunity, OpportunityStageChange, PreferredComm,
-  RelationshipQuality, RelationshipStatus, SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent,
-  TimelineEventType, Transfer, VisitingCardItem,
+  OwnershipAssignment, RelationshipQuality, RelationshipStatus, SalesPerson, SalesPosting, SearchResult, Status,
+  TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
 import { uid } from '@/lib/utils'
 import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, childTypesOf } from '@/lib/node-types'
 import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from './pipeline-stages'
+import { coversDate } from '@/lib/intervals'
+import {
+  buildOwnerMap, effectiveOwner, OWNABLE_ENTITY_MAP,
+  type OwnerResolution, type OwnershipContext,
+} from './ownership'
 import { SEARCH_CATEGORIES, SEARCH_CATEGORY_MAP, type SearchContext } from '@/lib/search-categories'
 import { buildSeed, type GormsData } from './seed'
 import { clearSnapshot, loadSnapshot, scheduleSave } from './persist'
@@ -140,6 +145,19 @@ export interface CreateOpportunityInput {
   stageKey?: string
 }
 
+export interface AssignOwnerInput {
+  entityType: string
+  entityId: string
+  salesPersonId: string
+  /** 'owner' replaces the current open owner; 'delegate' runs in parallel and
+   *  MUST carry an endDate (spec §6.4). */
+  role?: string
+  startDate: string
+  endDate?: string | null
+  reason?: OwnershipAssignment['reason']
+  note?: string
+}
+
 export interface CreateFollowUpInput {
   entityType: string
   entityId: string
@@ -225,6 +243,23 @@ export interface Repository {
    *  roster list can show designation and tier without a query per row. */
   currentPostings(): Promise<Record<string, SalesPosting>>
 
+  /** Every ownership/delegation row, newest start first. */
+  listOwnershipAssignments(): Promise<OwnershipAssignment[]>
+  /** Rows touching one entity, including closed ones — this is its history. */
+  listOwnershipFor(entityType: string, entityId: string): Promise<OwnershipAssignment[]>
+  /** Everything one person owns or is delegated, open rows only at `asOf`. */
+  listOwnedBy(salesPersonId: string, asOf: string): Promise<OwnershipAssignment[]>
+  /** Who effectively owns this entity — direct, or inherited from an ancestor. */
+  resolveOwner(entityType: string, entityId: string, asOf: string): Promise<OwnerResolution | null>
+  /** Batch form. Use this for lists: the per-entity call re-walks the ancestor
+   *  chain for every row, which §13 names the design's largest perf risk. */
+  resolveOwners(entityType: string, entityIds: string[], asOf: string): Promise<Record<string, OwnerResolution>>
+  /** Assigns an owner, closing any existing open owner on the same entity as of
+   *  `startDate`. Rejects rather than warns on a bad write — see spec §8. */
+  assignOwner(input: AssignOwnerInput): Promise<OwnershipAssignment>
+  /** Closes an open assignment as of `endDate` (exclusive). */
+  endOwnership(id: string, endDate: string): Promise<void>
+
   /** Follow-ups against one entity, soonest due first. */
   listFollowUps(entityType: string, entityId: string): Promise<FollowUp[]>
   /** Every open follow-up across every entity, soonest due first. */
@@ -276,6 +311,7 @@ class InMemoryRepository implements Repository {
       followUps: data.followUps ?? [],
       salesPersons: data.salesPersons ?? [],
       salesPostings: data.salesPostings ?? [],
+      ownershipAssignments: data.ownershipAssignments ?? [],
     }
     // A snapshot written by an older build can still carry duplicates that
     // today's seed no longer produces, so re-run the same cleanup the seed gets.
@@ -833,6 +869,98 @@ class InMemoryRepository implements Repository {
     return out
   }
 
+  /** The slices ownership resolution walks. Rebuilt per call rather than
+   *  cached: these arrays are mutated in place by other methods, so a cached
+   *  context would silently go stale. */
+  private ownershipContext(): OwnershipContext {
+    return { nodes: this.data.nodes, employees: this.data.employees, opportunities: this.data.opportunities }
+  }
+
+  async listOwnershipAssignments() {
+    return [...this.data.ownershipAssignments].sort((a, b) => b.startDate.localeCompare(a.startDate))
+  }
+
+  async listOwnershipFor(entityType: string, entityId: string) {
+    return this.data.ownershipAssignments
+      .filter((a) => a.entityType === entityType && a.entityId === entityId)
+      .sort((a, b) => b.startDate.localeCompare(a.startDate))
+  }
+
+  async listOwnedBy(salesPersonId: string, asOf: string) {
+    return this.data.ownershipAssignments.filter(
+      (a) => a.salesPersonId === salesPersonId && coversDate(a, asOf),
+    )
+  }
+
+  async resolveOwner(entityType: string, entityId: string, asOf: string) {
+    return effectiveOwner(this.data.ownershipAssignments, entityType, entityId, asOf, this.ownershipContext())
+  }
+
+  async resolveOwners(entityType: string, entityIds: string[], asOf: string) {
+    const map = buildOwnerMap(this.data.ownershipAssignments, entityType, entityIds, asOf, this.ownershipContext())
+    return Object.fromEntries(map)
+  }
+
+  async assignOwner(input: AssignOwnerInput) {
+    const role = input.role ?? 'owner'
+    // Invariants are rejected writes, not warnings: a warning means the bad
+    // data is already stored (spec §8).
+    if (!this.data.salesPersons.some((p) => p.id === input.salesPersonId)) {
+      throw new Error(`No such salesperson: ${input.salesPersonId}`)
+    }
+    if (!OWNABLE_ENTITY_MAP[input.entityType]) {
+      throw new Error(`Not an ownable entity type: ${input.entityType}`)
+    }
+    if (role === 'delegate' && !input.endDate) {
+      throw new Error('A delegation must have an end date')
+    }
+    if (input.endDate && input.endDate <= input.startDate) {
+      throw new Error('An assignment cannot end on or before it starts')
+    }
+
+    // One open owner per entity. Reassigning closes the incumbent at the new
+    // start date, which keeps the two intervals exactly adjacent — no gap, no
+    // overlap — because the end is exclusive.
+    if (role === 'owner') {
+      for (const a of this.data.ownershipAssignments) {
+        if (a.entityType !== input.entityType || a.entityId !== input.entityId) continue
+        if (a.role !== 'owner' || a.endDate !== null) continue
+        if (input.startDate <= a.startDate) {
+          throw new Error(
+            `The current owner's assignment starts on ${a.startDate}; a replacement must start after that.`,
+          )
+        }
+        a.endDate = input.startDate
+      }
+    }
+
+    const row: OwnershipAssignment = {
+      id: uid('own'),
+      entityType: input.entityType,
+      entityId: input.entityId,
+      salesPersonId: input.salesPersonId,
+      role,
+      startDate: input.startDate,
+      endDate: input.endDate ?? null,
+      reason: input.reason ?? 'initial',
+      batchId: null,
+      note: input.note ?? '',
+      createdAt: isoToday(),
+      createdBy: null,
+    }
+    this.data.ownershipAssignments.push(row)
+    return row
+  }
+
+  async endOwnership(id: string, endDate: string) {
+    const a = this.data.ownershipAssignments.find((x) => x.id === id)
+    if (!a) return
+    if (endDate <= a.startDate) {
+      throw new Error('An assignment cannot end on or before it starts')
+    }
+    a.endDate = endDate
+  }
+
   async listFollowUps(entityType: string, entityId: string) {
     return this.data.followUps
       .filter((f) => f.entityType === entityType && f.entityId === entityId)
@@ -1171,6 +1299,7 @@ const MUTATOR_KEYS = [
   'transferEmployee', 'addCharge', 'removeCharge',
   'createOpportunity', 'updateOpportunity', 'deleteOpportunity',
   'createFollowUp', 'setFollowUpStatus', 'deleteFollowUp',
+  'assignOwner', 'endOwnership',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -1184,6 +1313,7 @@ const READER_KEYS = [
   'listOpportunities', 'listOpportunitiesByDepartment', 'getOpportunity', 'listOpportunityStageChanges',
   'listFollowUps', 'listOpenFollowUps',
   'listSalesPersons', 'getSalesPerson', 'listSalesPostings', 'currentPostings',
+  'listOwnershipAssignments', 'listOwnershipFor', 'listOwnedBy', 'resolveOwner', 'resolveOwners',
   'search', 'relatedRecords', 'moveTargets', 'relationshipAnalytics',
 ] as const
 

@@ -2,7 +2,9 @@ import { SALES_ROLES } from '@/features/nodes/department-meta'
 import { WorksEditor } from '@/features/nodes/WorksEditor'
 import { SALES_TEAM } from '@/data/sales-team'
 import { resolveSalesChain } from '@/data/sales-hierarchy'
-import { useOpportunitiesByDepartment } from '@/lib/api'
+import { useNode, useOpportunitiesByDepartment, useResolvedOwners } from '@/lib/api'
+import { OwnershipBlock } from '@/features/sales/OwnershipBlock'
+import { isoToday } from '@/lib/dates'
 import type { Employee, HierNode } from '@/lib/types'
 import type { SalesTeamMember } from '@/data/sales-team'
 
@@ -34,6 +36,9 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
   ]
 
   const { data: opportunities = [] } = useOpportunitiesByDepartment(node.id)
+  const { data: resolvedOwners = {} } = useResolvedOwners('orgNode', [node.id], isoToday())
+  const resolvedOwner = resolvedOwners[node.id]
+  const { data: viaNode } = useNode(resolvedOwner?.source === 'inherited' ? resolvedOwner.viaEntityId ?? null : null)
 
   return (
     <>
@@ -64,6 +69,21 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
           </dl>
         </Block>
       )}
+
+      {/* The record-based ownership system (spec §6.4/§7), shown alongside the
+          legacy metadata-driven block above rather than replacing it — Phase 3
+          proper is what deletes salesGeo/relationshipOwner, once every reader
+          of them has moved to this. Not wrapped in <Block>: OwnershipBlock
+          renders its own heading, and Block always renders one too. */}
+      <section>
+        <OwnershipBlock
+          entityType="orgNode"
+          entityId={node.id}
+          entityLabel={node.name}
+          owner={resolvedOwner}
+          viaLabel={viaNode?.name}
+        />
+      </section>
 
       <Block title={opportunities.length > 0 ? `Works · ${opportunities.length}` : 'Works'}>
         <WorksEditor

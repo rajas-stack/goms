@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  repository, type AddTimelineInput, type CreateEmployeeInput, type CreateFollowUpInput, type CreateNodeInput,
+  repository, type AddTimelineInput, type AssignOwnerInput, type CreateEmployeeInput, type CreateFollowUpInput,
+  type CreateNodeInput,
   type CreateOpportunityInput, type ImportChildRow, type ImportEmployeeRow, type TransferInput,
 } from '@/data/repository'
 import type { Charge, Employee, FollowUp, HierNode, Opportunity, SearchResult, Status, TimelineEventType } from './types'
@@ -28,6 +29,9 @@ export const qk = {
   salesPerson: (id: string) => ['salesPerson', id] as const,
   salesPostings: (id: string) => ['salesPostings', id] as const,
   currentPostings: ['currentPostings'] as const,
+  ownershipFor: (t: string, id: string) => ['ownershipFor', t, id] as const,
+  ownedBy: (id: string, asOf: string) => ['ownedBy', id, asOf] as const,
+  resolvedOwners: (t: string, asOf: string, ids: string[]) => ['resolvedOwners', t, asOf, ids] as const,
   openFollowUps: ['openFollowUps'] as const,
 }
 
@@ -133,6 +137,42 @@ export const useSalesPostings = (id: string | null) =>
   useQuery({ queryKey: qk.salesPostings(id ?? ''), queryFn: () => repository.listSalesPostings(id!), enabled: !!id })
 export const useCurrentPostings = () =>
   useQuery({ queryKey: qk.currentPostings, queryFn: () => repository.currentPostings() })
+
+export const useOwnershipFor = (entityType: string, entityId: string | null) =>
+  useQuery({
+    queryKey: qk.ownershipFor(entityType, entityId ?? ''),
+    queryFn: () => repository.listOwnershipFor(entityType, entityId!),
+    enabled: !!entityId,
+  })
+export const useOwnedBy = (salesPersonId: string | null, asOf: string) =>
+  useQuery({
+    queryKey: qk.ownedBy(salesPersonId ?? '', asOf),
+    queryFn: () => repository.listOwnedBy(salesPersonId!, asOf),
+    enabled: !!salesPersonId,
+  })
+/** Batch owner resolution for a list. `ids` is part of the key, so a changed
+ *  list refetches rather than showing a stale map. */
+export const useResolvedOwners = (entityType: string, ids: string[], asOf: string) =>
+  useQuery({
+    queryKey: qk.resolvedOwners(entityType, asOf, ids),
+    queryFn: () => repository.resolveOwners(entityType, ids, asOf),
+    enabled: ids.length > 0,
+  })
+
+export function useOwnershipMutations() {
+  const qc = useQueryClient()
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['ownershipFor'] })
+    qc.invalidateQueries({ queryKey: ['ownedBy'] })
+    qc.invalidateQueries({ queryKey: ['resolvedOwners'] })
+  }
+  const assign = useMutation({ mutationFn: (i: AssignOwnerInput) => repository.assignOwner(i), onSuccess: invalidate })
+  const end = useMutation({
+    mutationFn: (a: { id: string; endDate: string }) => repository.endOwnership(a.id, a.endDate),
+    onSuccess: invalidate,
+  })
+  return { assign, end }
+}
 
 export const useFollowUps = (entityType: string, entityId: string | null) =>
   useQuery({

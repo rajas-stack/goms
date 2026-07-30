@@ -1,10 +1,11 @@
 import type {
-  Employee, ExternalId, FollowUp, HierNode, Opportunity, OpportunityStageChange, SalesPerson, SalesPosting,
-  TimelineEvent, Transfer,
+  Employee, ExternalId, FollowUp, HierNode, Opportunity, OpportunityStageChange, OwnershipAssignment,
+  SalesPerson, SalesPosting, TimelineEvent, Transfer,
 } from '@/lib/types'
 import adminRaw from './india-admin.json'
 import subdistrictsRaw from './subdistricts.json'
 import { buildGovHierarchy, CENTRAL_STATE_CODE } from './gov-hierarchy'
+import { buildOwnershipFixture } from './ownership-fixture'
 import { buildSalesRoster } from './sales-roster-seed'
 
 interface AdminState {
@@ -73,6 +74,7 @@ export interface GormsData {
   /** AMNEX sales roster. Populated by the v4 migration from `SALES_TEAM`. */
   salesPersons: SalesPerson[]
   salesPostings: SalesPosting[]
+  ownershipAssignments: OwnershipAssignment[]
 }
 
 export function buildSeed(): GormsData {
@@ -87,6 +89,7 @@ export function buildSeed(): GormsData {
   // Same builder the v4 migration uses, so a fresh install and an upgraded
   // snapshot produce the same roster.
   const { salesPersons, salesPostings } = buildSalesRoster()
+  const ownershipAssignments: OwnershipAssignment[] = []
 
   const india: HierNode = {
     id: 'geo_india', domain: 'geo', typeKey: 'country', parentId: null, stateCode: null,
@@ -196,8 +199,13 @@ export function buildSeed(): GormsData {
     },
   )
 
+  // Small labeled fixture so the ownership UI has something to show — see
+  // ownership-fixture.ts for exactly which states it demonstrates.
+  ownershipAssignments.push(...buildOwnershipFixture(nodes, salesPersons))
+
   return {
     nodes, employees, externalIds, timeline, transfers,
     opportunities, opportunityStageChanges, followUps, salesPersons, salesPostings,
+    ownershipAssignments,
   }
 }

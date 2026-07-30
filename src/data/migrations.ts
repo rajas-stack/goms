@@ -1,4 +1,5 @@
 import { uid } from '@/lib/utils'
+import { buildOwnershipFixture } from './ownership-fixture'
 import { buildSalesRoster } from './sales-roster-seed'
 import type { GormsData } from './seed'
 
@@ -11,8 +12,9 @@ import type { GormsData } from './seed'
  *  v2  opportunities + opportunityStageChanges; works leave node metadata
  *  v3  followUps
  *  v4  salesPersons + salesPostings, seeded from the SALES_TEAM constant
+ *  v5  ownershipAssignments
  */
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -119,12 +121,29 @@ function toV4(data: SnapshotShape): SnapshotShape {
   return { ...data, ...buildSalesRoster() }
 }
 
+/** v4 → v5. Adds the ownership table. Starts empty by design: there is no
+ *  legacy field that reliably says who owned what as of when. The three
+ *  email-keyed metadata fields that hint at it (`salesGeo`,
+ *  `relationshipOwner`, `Opportunity.salesPersonEmail`) carry no dates, so
+ *  converting them would invent start dates for intervals the whole ownership
+ *  model depends on. They are read as a fallback in the UI instead, and Phase 3
+ *  proper migrates them once a real effective date can be captured. */
+function toV5(data: SnapshotShape): SnapshotShape {
+  const existing = asArray(data.ownershipAssignments)
+  if (existing.length > 0) return { ...data, ownershipAssignments: existing }
+  // Demo fixture, same as a fresh install — see ownership-fixture.ts.
+  const nodes = asArray(data.nodes) as unknown as Parameters<typeof buildOwnershipFixture>[0]
+  const salesPersons = asArray(data.salesPersons) as unknown as Parameters<typeof buildOwnershipFixture>[1]
+  return { ...data, ownershipAssignments: buildOwnershipFixture(nodes, salesPersons) }
+}
+
 /** Keyed by the version each step PRODUCES, so applying every key from
  *  `fromVersion + 1` up to `SCHEMA_VERSION` walks the chain in order. */
 export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> = {
   2: toV2,
   3: toV3,
   4: toV4,
+  5: toV5,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useCurrentPostings, useSalesPersons } from '@/lib/api'
+import { useCurrentPostings, useDepartments, useResolvedOwners, useSalesPersons } from '@/lib/api'
 import { WorkspaceProvider, useWorkspace } from '@/features/workspace/context'
 import { DetailsPanel } from '@/features/details/DetailsPanel'
 import { Icon } from '@/components/ui/Icon'
 import { Input } from '@/components/ui/Field'
+import { OwnerBadge } from '@/features/sales/OwnerBadge'
 import { tierLabel, tierRank } from '@/data/sales-tiers'
+import { isoToday } from '@/lib/dates'
 import { cn, initials } from '@/lib/utils'
 import type { SalesPerson, SalesPosting } from '@/lib/types'
 
@@ -136,6 +138,69 @@ function Roster() {
   )
 }
 
+/** Accounts (every department + its resolved owner) and Gaps (unassigned
+ *  only) — the two views spec §5.3 lists for Ownership. Delegations is left
+ *  for the full Phase 3 build; it needs the batch/wizard machinery this hour
+ *  deliberately skips.
+ *
+ *  Resolution is batched through `useResolvedOwners` (one call for every
+ *  department), not per row — a per-row `effectiveOwner` call would re-walk
+ *  the ancestor chain for each of them, which spec §13 names the design's
+ *  single largest performance risk. */
+function Ownership() {
+  const ws = useWorkspace()
+  const [gapsOnly, setGapsOnly] = useState(false)
+  const { data: departments = [] } = useDepartments()
+  const asOf = isoToday()
+  const ids = useMemo(() => departments.map((d) => d.id), [departments])
+  const { data: owners = {} } = useResolvedOwners('orgNode', ids, asOf)
+  const { data: people = [] } = useSalesPersons()
+
+  const rows = gapsOnly ? departments.filter((d) => !owners[d.id]) : departments
+  const gapCount = departments.filter((d) => !owners[d.id]).length
+
+  return (
+    <div className="flex h-full flex-col gap-3 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex gap-1 rounded-lg bg-panel p-0.5">
+          <button
+            onClick={() => setGapsOnly(false)}
+            className={cn('rounded-md px-2.5 py-1 text-[12px] font-medium', !gapsOnly ? 'bg-white shadow-sm' : 'text-muted')}
+          >
+            Accounts
+          </button>
+          <button
+            onClick={() => setGapsOnly(true)}
+            className={cn('rounded-md px-2.5 py-1 text-[12px] font-medium', gapsOnly ? 'bg-white shadow-sm' : 'text-muted')}
+          >
+            Gaps{gapCount > 0 && ` · ${gapCount}`}
+          </button>
+        </div>
+        <span className="text-[12px] text-muted">{rows.length} of {departments.length} departments</span>
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="px-1 text-sm text-muted">
+          {gapsOnly ? 'No gaps — every department resolves to an owner.' : 'No departments.'}
+        </p>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
+          {rows.map((d) => (
+            <button
+              key={d.id}
+              onClick={() => ws.select('node', d.id)}
+              className="flex w-full items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5 text-left hover:bg-panel"
+            >
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{d.name}</span>
+              <OwnerBadge owner={owners[d.id]} people={people} className="shrink-0" />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ComingSoon({ label, phase }: { label: string; phase: number }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-8 text-center">
@@ -175,7 +240,13 @@ function SalesWorkspaceBody() {
 
       <div className="flex min-h-0 flex-1">
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-w-0 flex-1 overflow-hidden">
-          {active.key === 'roster' ? <Roster /> : <ComingSoon label={active.label} phase={active.phase} />}
+          {active.key === 'roster' ? (
+            <Roster />
+          ) : active.key === 'ownership' ? (
+            <Ownership />
+          ) : (
+            <ComingSoon label={active.label} phase={active.phase} />
+          )}
         </motion.div>
         <aside className="hidden w-[380px] shrink-0 border-l border-line lg:block">
           <DetailsPanel />

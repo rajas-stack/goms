@@ -318,3 +318,28 @@ export interface SalesPosting {
   createdAt: string
   createdBy: string | null
 }
+
+/** Ownership and delegation as a half-open interval — spec §6.4.
+ *
+ *  Delegation is a different ROLE, not a transfer: during one, the owner's row
+ *  stays open and a parallel `role: 'delegate'` row exists with an end date. On
+ *  expiry the delegate row simply stops resolving and the owner shows again,
+ *  because it never stopped being theirs. No scheduled job, no restoration
+ *  logic, no state machine. */
+export interface OwnershipAssignment {
+  id: string
+  /** Open string → OWNABLE_ENTITIES. Never a TS union. */
+  entityType: string
+  entityId: string
+  salesPersonId: string
+  /** 'owner' | 'delegate' today; 'collaborator' is a future addition. */
+  role: string
+  startDate: string
+  /** Exclusive. Mandatory when `role === 'delegate'`. */
+  endDate: string | null
+  reason: 'initial' | 'transfer' | 'delegation' | 'reassignment' | 'correction'
+  batchId: string | null
+  note: string
+  createdAt: string
+  createdBy: string | null
+}
