@@ -8,7 +8,13 @@ import { SelectEmployeeDialog } from '@/features/employees/SelectEmployeeDialog'
 import { ConfirmDialog } from '@/features/nodes/ConfirmDialog'
 import { consumePendingWorkspaceAction, registerWorkspaceDialogHandle } from './backButtonBridge'
 
-export type Selection = { kind: 'node' | 'employee'; id: string } | null
+/** `'salesPerson'` is admitted here so the shared details panel, `?sel=`
+ *  deep links, and the Android back-button chain all address AMNEX
+ *  salespeople through the same mechanism as government records. The panel
+ *  gains its rendering branch with the Roster phase. */
+export type Selection = { kind: 'node' | 'employee' | 'salesPerson'; id: string } | null
+
+export type SelectionKind = NonNullable<Selection>['kind']
 
 type Dialog =
   | { type: 'none' }
@@ -24,7 +30,7 @@ type Dialog =
 interface WorkspaceApi {
   stateCode: number
   selection: Selection
-  select: (kind: 'node' | 'employee', id: string) => void
+  select: (kind: SelectionKind, id: string) => void
   clearSelection: () => void
   createChild: (parent: HierNode, initialTypeKey?: string) => void
   createDepartment: () => void
@@ -90,7 +96,7 @@ export function WorkspaceProvider({ stateCode, children }: { stateCode: number; 
   const selection: Selection = useMemo(() => {
     const id = params.get('sel')
     const kind = params.get('kind')
-    if (id && (kind === 'node' || kind === 'employee')) return { kind, id }
+    if (id && (kind === 'node' || kind === 'employee' || kind === 'salesPerson')) return { kind, id }
     return null
   }, [params])
   selectionRef.current = selection
