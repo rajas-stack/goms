@@ -188,6 +188,13 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
   // read; this mirrors it into a real FollowUp record so the new collection
   // is populated going forward. Guarded on the date actually changing so an
   // unrelated edit to the same contact doesn't create a duplicate.
+  //
+  // DORMANT TODAY: this dialog has no follow-up-date input (it never had one —
+  // the field is only ever seeded from the existing record), so `form.followUpDate`
+  // always equals `previousDate` here and the guard never passes. Migrated
+  // records come from the v3 migration instead. This goes live unchanged as
+  // soon as a follow-up input exists; adding one is a visible UI change and
+  // Phase 0 is deliberately invisible, so it is not done here.
   async function mirrorFollowUp(contactId: string, previousDate: string | null | undefined) {
     if (form.followUpDate && form.followUpDate !== previousDate) {
       await createFollowUp.mutateAsync({ entityType: 'contact', entityId: contactId, dueDate: form.followUpDate })

@@ -60,25 +60,41 @@ function openDb(): Promise<IDBDatabase | null> {
   })
 }
 
-export async function loadSnapshot(): Promise<GormsData | null> {
+async function readEnvelope(): Promise<Envelope | null> {
   const db = await openDb()
   if (!db) return null
   try {
-    const envelope = await new Promise<Envelope | undefined>((resolve) => {
+    return await new Promise<Envelope | null>((resolve) => {
       const req = db.transaction(STORE, 'readonly').objectStore(STORE).get(KEY)
-      req.onsuccess = () => resolve(req.result as Envelope | undefined)
-      req.onerror = () => resolve(undefined)
+      req.onsuccess = () => resolve((req.result as Envelope | undefined) ?? null)
+      req.onerror = () => resolve(null)
     })
-    if (!envelope) return null
-    // A version mismatch is now an upgrade, not a discard — see
-    // migrations.ts. `null` here means genuinely unmigratable, and the
-    // caller falls back to seed data exactly as before.
-    return migrateSnapshot(envelope.data, envelope.version)
   } catch {
     return null
   } finally {
     db.close()
   }
+}
+
+export async function loadSnapshot(): Promise<GormsData | null> {
+  const envelope = await readEnvelope()
+  if (!envelope) return null
+  // A version mismatch is now an upgrade, not a discard — see migrations.ts.
+  // `null` here means genuinely unmigratable, and the caller falls back to
+  // seed data exactly as before.
+  const migrated = migrateSnapshot(envelope.data, envelope.version)
+
+  // Persist the upgrade immediately rather than waiting for the user's next
+  // edit. Writes are otherwise mutation-triggered, so a session that only
+  // *reads* would leave the old version on disk indefinitely: it would be
+  // re-migrated on every load, ids minted during the migration would differ
+  // each time, and — the real hazard — a later build that retired this
+  // version's migration step would find no path forward, return null, and
+  // fall back to the seed. That would lose exactly the hand-entered data the
+  // migration chain exists to protect.
+  if (migrated && envelope.version !== SCHEMA_VERSION) await writeSnapshot(migrated)
+
+  return migrated
 }
 
 async function writeSnapshot(data: GormsData): Promise<void> {
