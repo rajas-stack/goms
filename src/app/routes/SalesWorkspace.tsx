@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   useAllEmployees, useCurrentPostings, useDepartments, useOpportunities, useOwnershipAssignments,
@@ -52,8 +52,8 @@ const STATUS_FILTERS = [
 
 function SummaryCard({ label, value, icon, href }: { label: string; value: number; icon: string; href: string }) {
   return (
-    <a
-      href={href}
+    <Link
+      to={href}
       className="flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-3 shadow-sm transition-colors hover:border-ink-600/30 hover:bg-panel/60 focus-visible:focus-ring"
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-panel text-ink-700">
@@ -63,7 +63,7 @@ function SummaryCard({ label, value, icon, href }: { label: string; value: numbe
         <div className="text-xl font-semibold leading-tight text-ink-900">{value}</div>
         <div className="truncate text-[12px] text-muted">{label}</div>
       </div>
-    </a>
+    </Link>
   )
 }
 
@@ -481,9 +481,9 @@ function SalesWorkspaceBody() {
       <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-3 py-2">
         <span className="mr-2 shrink-0 text-sm font-semibold text-ink-900">Sales Team</span>
         {SECTIONS.map((s) => (
-          <a
+          <Link
             key={s.key}
-            href={`/sales/${s.key}`}
+            to={`/sales/${s.key}`}
             className={cn(
               'shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors',
               s.key === active.key
@@ -492,7 +492,7 @@ function SalesWorkspaceBody() {
             )}
           >
             {s.label}
-          </a>
+          </Link>
         ))}
       </div>
 

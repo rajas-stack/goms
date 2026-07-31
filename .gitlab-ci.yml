@@ -27,6 +27,11 @@ pages:
   script:
     - npm ci --cache .npm --prefer-offline
     - npm run build
+    # GitLab Pages has no SPA rewrite rule: a hard load or refresh on a
+    # client-routed path (e.g. /sales/orgchart) is a real request for a file
+    # that doesn't exist. Serving index.html as 404.html hands the request
+    # back to the React Router app, which then resolves the route itself.
+    - cp dist/index.html dist/404.html
     - rm -rf public
     - mv dist public
 
