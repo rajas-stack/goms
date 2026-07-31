@@ -8,6 +8,7 @@ import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, childTypesOf } from '@/lib/node-types'
 import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from './pipeline-stages'
 import { coversDate } from '@/lib/intervals'
+import { tierRank } from './sales-tiers'
 import {
   buildOwnerMap, effectiveOwner, OWNABLE_ENTITY_MAP,
   type OwnerResolution, type OwnershipContext,
@@ -182,6 +183,23 @@ export interface CreateSalesPersonInput {
   managerId?: string | null
 }
 
+export interface TransferSalesPersonInput {
+  salesPersonId: string
+  designation: string
+  tierKey: string
+  managerId?: string | null
+  office?: string
+  effectiveDate: string
+  reason?: string
+}
+
+export interface TransferBookOfBusinessInput {
+  fromSalesPersonId: string
+  toSalesPersonId: string
+  effectiveDate: string
+  note?: string
+}
+
 export interface AssignOwnerInput {
   entityType: string
   entityId: string
@@ -299,6 +317,7 @@ export interface Repository {
   updateSalesPerson(id: string, patch: Partial<SalesPerson>): Promise<SalesPerson>
   setSalesPersonStatus(id: string, status: SalesPerson['status']): Promise<void>
   deleteSalesPerson(id: string): Promise<void>
+  transferSalesPerson(input: TransferSalesPersonInput): Promise<SalesPosting>
   /** Who effectively owns this entity — direct, or inherited from an ancestor. */
   resolveOwner(entityType: string, entityId: string, asOf: string): Promise<OwnerResolution | null>
   /** Batch form. Use this for lists: the per-entity call re-walks the ancestor
@@ -309,6 +328,11 @@ export interface Repository {
   assignOwner(input: AssignOwnerInput): Promise<OwnershipAssignment>
   /** Closes an open assignment as of `endDate` (exclusive). */
   endOwnership(id: string, endDate: string): Promise<void>
+  /** Reassigns every entity `fromSalesPersonId` currently owns (departments,
+   *  contacts, opportunities) to `toSalesPersonId` in one operation — the
+   *  handoff needed when someone goes on indefinite leave or resigns, so
+   *  their book of business doesn't sit orphaned. */
+  transferBookOfBusiness(input: TransferBookOfBusinessInput): Promise<OwnershipAssignment[]>
 
   /** Follow-ups against one entity, soonest due first. */
   listFollowUps(entityType: string, entityId: string): Promise<FollowUp[]>
@@ -1095,6 +1119,46 @@ class InMemoryRepository implements Repository {
     return person
   }
 
+  /** Closes the current open posting and opens a new one — a promotion,
+   *  demotion, or lateral move, per spec §6.3. `changeType` is derived from
+   *  comparing tier rank across the two postings, never typed by the caller. */
+  async transferSalesPerson(input: TransferSalesPersonInput) {
+    const person = this.data.salesPersons.find((p) => p.id === input.salesPersonId)
+    if (!person) throw new Error(`No such salesperson: ${input.salesPersonId}`)
+
+    const current = this.data.salesPostings.find(
+      (p) => p.salesPersonId === input.salesPersonId && p.endDate === null,
+    )
+    if (current) {
+      if (input.effectiveDate <= current.startDate) {
+        throw new Error(`The current posting starts on ${current.startDate}; a transfer must take effect after that.`)
+      }
+      current.endDate = input.effectiveDate
+    }
+
+    const oldRank = current ? tierRank(current.tierKey) : null
+    const newRank = tierRank(input.tierKey)
+    const changeType: SalesPosting['changeType'] =
+      oldRank === null ? 'initial' : newRank < oldRank ? 'promotion' : newRank > oldRank ? 'demotion' : 'lateralMove'
+
+    const posting: SalesPosting = {
+      id: uid('spost'),
+      salesPersonId: input.salesPersonId,
+      designation: input.designation,
+      tierKey: input.tierKey,
+      managerId: input.managerId ?? null,
+      office: input.office ?? '',
+      startDate: input.effectiveDate,
+      endDate: null,
+      changeType,
+      reason: input.reason ?? '',
+      createdAt: isoToday(),
+      createdBy: null,
+    }
+    this.data.salesPostings.push(posting)
+    return posting
+  }
+
   async updateSalesPerson(id: string, patch: Partial<SalesPerson>) {
     const person = this.data.salesPersons.find((p) => p.id === id)
     if (!person) throw new Error(`No such salesperson: ${id}`)
@@ -1180,6 +1244,50 @@ class InMemoryRepository implements Repository {
       throw new Error('An assignment cannot end on or before it starts')
     }
     a.endDate = endDate
+  }
+
+  async transferBookOfBusiness(input: TransferBookOfBusinessInput) {
+    if (!this.data.salesPersons.some((p) => p.id === input.fromSalesPersonId)) {
+      throw new Error(`No such salesperson: ${input.fromSalesPersonId}`)
+    }
+    if (!this.data.salesPersons.some((p) => p.id === input.toSalesPersonId)) {
+      throw new Error(`No such salesperson: ${input.toSalesPersonId}`)
+    }
+    if (input.toSalesPersonId === input.fromSalesPersonId) {
+      throw new Error('Cannot transfer a book of business to the same person')
+    }
+
+    // Only currently-open owner rows that actually started before the
+    // handoff — an assignment that starts on or after it can't be closed by
+    // it without violating the half-open-interval invariant, so it's left
+    // alone rather than silently failing the whole batch over one edge case.
+    const open = this.data.ownershipAssignments.filter(
+      (a) => a.salesPersonId === input.fromSalesPersonId && a.role === 'owner'
+        && a.endDate === null && a.startDate < input.effectiveDate,
+    )
+
+    const batchId = uid('batch')
+    const created: OwnershipAssignment[] = []
+    for (const a of open) {
+      a.endDate = input.effectiveDate
+      const row: OwnershipAssignment = {
+        id: uid('own'),
+        entityType: a.entityType,
+        entityId: a.entityId,
+        salesPersonId: input.toSalesPersonId,
+        role: 'owner',
+        startDate: input.effectiveDate,
+        endDate: null,
+        reason: 'transfer',
+        batchId,
+        note: input.note ?? '',
+        createdAt: isoToday(),
+        createdBy: null,
+      }
+      this.data.ownershipAssignments.push(row)
+      created.push(row)
+    }
+    return created
   }
 
   async listFollowUps(entityType: string, entityId: string) {
@@ -1524,8 +1632,8 @@ const MUTATOR_KEYS = [
   'transferEmployee', 'addCharge', 'removeCharge',
   'createOpportunity', 'updateOpportunity', 'deleteOpportunity',
   'createFollowUp', 'setFollowUpStatus', 'deleteFollowUp',
-  'assignOwner', 'endOwnership',
-  'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson',
+  'assignOwner', 'endOwnership', 'transferBookOfBusiness',
+  'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson', 'transferSalesPerson',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell

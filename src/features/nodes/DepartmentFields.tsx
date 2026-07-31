@@ -2,7 +2,8 @@ import { Field, Input } from '@/components/ui/Field'
 import { EmployeePicker } from '@/features/employees/EmployeePicker'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
 import { SALES_ROLES } from './department-meta'
-import { resolveSalesChain } from '@/data/sales-hierarchy'
+import { liveSalesRoster, resolveSalesChain } from '@/data/sales-hierarchy'
+import { useCurrentPostings, useSalesPersons } from '@/lib/api'
 import type { Employee } from '@/lib/types'
 import type { SalesTier } from '@/data/sales-team'
 
@@ -31,7 +32,9 @@ export function DepartmentFields({ meta, setMeta, onShortNameChange, employees, 
   onCreateHead?: (name: string, designation: string) => Promise<string>
 }) {
   const set = (key: string, value: string) => setMeta((m) => ({ ...m, [key]: value }))
-  const chain = resolveSalesChain(meta.salesGeo ?? '')
+  const { data: salesPersons = [] } = useSalesPersons()
+  const { data: currentPostings = {} } = useCurrentPostings()
+  const chain = resolveSalesChain(meta.salesGeo ?? '', liveSalesRoster(salesPersons, currentPostings))
 
   return (
     <>

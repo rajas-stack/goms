@@ -9,6 +9,7 @@ import {
   useStateNode,
 } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { Button } from '@/components/ui/Button'
@@ -70,6 +71,8 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
   const userInteractedRef = useRef(false)
   const activeKeyRef = useRef<string | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  const [employeeToDelete, setEmployeeToDelete] = useState<string | null>(null)
+  const { data: employeeToDeleteRecord } = useEmployee(employeeToDelete)
 
   const hasRootAccordion = domain === 'org' || domain === 'people'
   const [expandedRootId, setExpandedRootId] = useState<string | 'all' | null>(null)
@@ -477,7 +480,7 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
           if (!ws.selection) return
           e.preventDefault()
           if (ws.selection.kind === 'node' && selectedNode) ws.deleteNode(selectedNode)
-          else if (ws.selection.kind === 'employee') removeEmployee.mutate(ws.selection.id)
+          else if (ws.selection.kind === 'employee') setEmployeeToDelete(ws.selection.id)
           break
         default:
           break
@@ -654,6 +657,16 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
       </div>
 
       <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <ConfirmDeleteDialog
+        open={!!employeeToDelete}
+        onClose={() => setEmployeeToDelete(null)}
+        itemLabel={employeeToDeleteRecord?.name || 'this employee'}
+        onConfirm={async () => {
+          if (!employeeToDelete) return
+          await removeEmployee.mutateAsync(employeeToDelete)
+          ws.clearSelection()
+        }}
+      />
     </div>
   )
 }

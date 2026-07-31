@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   repository, type AddTimelineInput, type AssignOwnerInput, type CreateEmployeeInput, type CreateFollowUpInput,
   type CreateNodeInput, type CreateOpportunityInput, type CreateSalesPersonInput, type ImportChildRow,
-  type ImportEmployeeRow, type MergeEmployeesInput, type TransferInput,
+  type ImportEmployeeRow, type MergeEmployeesInput, type TransferBookOfBusinessInput, type TransferInput,
+  type TransferSalesPersonInput,
 } from '@/data/repository'
 import type {
   Charge, Employee, FollowUp, HierNode, Opportunity, SalesPerson, SearchResult, Status, TimelineEventType,
@@ -160,7 +161,11 @@ export function useSalesPersonMutations() {
     onSuccess: invalidate,
   })
   const remove = useMutation({ mutationFn: (id: string) => repository.deleteSalesPerson(id), onSuccess: invalidate })
-  return { create, update, setStatus, remove }
+  const transfer = useMutation({
+    mutationFn: (i: TransferSalesPersonInput) => repository.transferSalesPerson(i),
+    onSuccess: invalidate,
+  })
+  return { create, update, setStatus, remove, transfer }
 }
 
 export const useOwnershipAssignments = () =>
@@ -200,7 +205,11 @@ export function useOwnershipMutations() {
     mutationFn: (a: { id: string; endDate: string }) => repository.endOwnership(a.id, a.endDate),
     onSuccess: invalidate,
   })
-  return { assign, end }
+  const transferBookOfBusiness = useMutation({
+    mutationFn: (i: TransferBookOfBusinessInput) => repository.transferBookOfBusiness(i),
+    onSuccess: invalidate,
+  })
+  return { assign, end, transferBookOfBusiness }
 }
 
 export const useFollowUps = (entityType: string, entityId: string | null) =>

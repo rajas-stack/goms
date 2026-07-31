@@ -190,6 +190,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                             <span className="block break-words text-xs text-muted">{r.subtitle}</span>
                           </span>
                           {r.note && <Badge tone="neutral">{r.note}</Badge>}
+                          {g.category.key === 'salesPerson' && <Badge tone="purple">Sales Team</Badge>}
                           {r.kind === 'node' && <CodeChip code={r.code} />}
                           <button
                             type="button"

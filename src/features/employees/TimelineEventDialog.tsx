@@ -4,11 +4,10 @@ import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
-import { useAllEmployees, useEmployeeMutations } from '@/lib/api'
+import { useAllEmployees, useEmployeeMutations, useSalesPersons } from '@/lib/api'
 import { isoToday } from '@/data/repository'
 import { useFormDraft } from '@/lib/useFormDraft'
 import { MANUAL_EVENT_TYPES, TIMELINE_META } from '@/lib/timeline-meta'
-import { SALES_TEAM } from '@/data/sales-team'
 import { EmployeePicker } from './EmployeePicker'
 import { cn } from '@/lib/utils'
 import type { TimelineEventType } from '@/lib/types'
@@ -38,6 +37,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   const toast = useToast()
   const { addTimelineEvent } = useEmployeeMutations()
   const { data: allEmployees = [] } = useAllEmployees()
+  const { data: salesPersons = [] } = useSalesPersons()
   const [pickedEmployeeId, setPickedEmployeeId] = useState<string | null>(null)
   const activeEmployeeId = employeeId ?? pickedEmployeeId
   const showPicker = !activeEmployeeId
@@ -167,21 +167,21 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
         </Field>
         <Field label="Attending AMNEX Sales Team Members" hint="Select any internal attendees">
           <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto scrollbar-thin rounded-lg border border-line bg-white p-2 sm:grid-cols-2">
-            {SALES_TEAM.map((m) => (
+            {salesPersons.map((p) => (
               <label
-                key={m.email}
+                key={p.id}
                 className={cn(
                   'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm',
-                  form.attendees.includes(m.name) ? 'bg-ink-900/[0.06] text-ink-900' : 'text-ink-700 hover:bg-ink-900/[0.04]',
+                  form.attendees.includes(p.name) ? 'bg-ink-900/[0.06] text-ink-900' : 'text-ink-700 hover:bg-ink-900/[0.04]',
                 )}
               >
                 <input
                   type="checkbox"
-                  checked={form.attendees.includes(m.name)}
-                  onChange={() => toggleAttendee(m.name)}
+                  checked={form.attendees.includes(p.name)}
+                  onChange={() => toggleAttendee(p.name)}
                   className="accent-ink-900"
                 />
-                <span className="min-w-0 flex-1 truncate">{m.name}</span>
+                <span className="min-w-0 flex-1 truncate">{p.name}</span>
               </label>
             ))}
           </div>

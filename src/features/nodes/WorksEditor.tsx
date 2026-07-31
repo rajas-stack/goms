@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Icon } from '@/components/ui/Icon'
 import { WorkFormDialog } from './WorkFormDialog'
 import { formatBudgetRange, formatWorkValue, workUnitLabel } from './department-meta'
@@ -10,7 +11,6 @@ import { useWorkspace } from '@/features/workspace/context'
 import { OwnerBadge } from '@/features/sales/OwnerBadge'
 import { AssignOwnerDialog } from '@/features/sales/AssignOwnerDialog'
 import { isoToday } from '@/lib/dates'
-import { SALES_TEAM } from '@/data/sales-team'
 import type { Opportunity } from '@/lib/types'
 
 /** A department's opportunity pipeline, shown as collapsible cards plus the
@@ -32,6 +32,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Opportunity | null>(null)
   const [assignFor, setAssignFor] = useState<Opportunity | null>(null)
+  const [removing, setRemoving] = useState<Opportunity | null>(null)
 
   function openCreate() {
     setEditing(null)
@@ -44,9 +45,6 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
   function save(draft: Omit<Opportunity, 'id' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>) {
     if (editing) update.mutate({ id: editing.id, patch: draft })
     else create.mutate({ departmentId, ...draft })
-  }
-  function removeOpportunity(id: string) {
-    remove.mutate(id)
   }
 
   return (
@@ -101,7 +99,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                   <button
                     type="button"
                     aria-label="Remove opportunity"
-                    onClick={(e) => { e.stopPropagation(); removeOpportunity(w.id) }}
+                    onClick={(e) => { e.stopPropagation(); setRemoving(w) }}
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-crimson-100 hover:text-crimson"
                   >
                     <Icon name="Trash2" size={13} />
@@ -116,7 +114,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                     <Detail label="Submission" value={w.submissionDate} />
                     <Detail label="Component" value={w.component.join(', ')} />
                     <Detail label="Quantity" value={w.quantity} />
-                    <Detail label="Sales person" value={SALES_TEAM.find((m) => m.email === w.salesPersonEmail)?.name ?? ''} />
+                    <Detail label="Sales person" value={people.find((p) => p.officialEmail === w.salesPersonEmail)?.name ?? ''} />
                     <Detail label="Value" value={valueLabel} />
                     <Detail label="Budget confirmed" value={w.budgetKnown === 'yes' ? 'Yes' : w.budgetKnown === 'no' ? 'No' : ''} />
                     {w.budgetKnown === 'no' && (
@@ -159,6 +157,16 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
           onClose={() => setAssignFor(null)}
         />
       )}
+
+      <ConfirmDeleteDialog
+        open={!!removing}
+        onClose={() => setRemoving(null)}
+        itemLabel={removing?.opportunityName || 'this opportunity'}
+        onConfirm={async () => {
+          if (!removing) return
+          await remove.mutateAsync(removing.id)
+        }}
+      />
     </div>
   )
 }

@@ -1,9 +1,9 @@
 import { SALES_ROLES } from '@/features/nodes/department-meta'
 import { WorksEditor } from '@/features/nodes/WorksEditor'
-import { SALES_TEAM } from '@/data/sales-team'
-import { resolveSalesChain } from '@/data/sales-hierarchy'
+import { liveSalesRoster, resolveSalesChain } from '@/data/sales-hierarchy'
 import {
-  useNode, useOpportunitiesByDepartment, useResolvedOwners, useSalesPerson, useSalesPostings,
+  useCurrentPostings, useNode, useOpportunitiesByDepartment, useResolvedOwners, useSalesPerson, useSalesPersons,
+  useSalesPostings,
 } from '@/lib/api'
 import { OwnershipBlock } from '@/features/sales/OwnershipBlock'
 import { OwnerBadge } from '@/features/sales/OwnerBadge'
@@ -25,12 +25,17 @@ const DERIVED_SALES_ROLES: { tier: 'rm' | 'gm' | 'salesHead'; label: string }[] 
  *  Opportunity" button). Rendered inside NodeDetails when the selected node
  *  is a department. */
 export function DepartmentSection({ node, employees }: { node: HierNode; employees: Employee[] }) {
+  const ws = useWorkspace()
+  const { data: salesPersons = [] } = useSalesPersons()
+  const { data: currentPostings = {} } = useCurrentPostings()
+  const salesPersonByEmail = new Map(salesPersons.map((p) => [p.officialEmail, p]))
   const byId = new Map(employees.map((e) => [e.id, e]))
   const head = node.metadata.deptHead ? byId.get(node.metadata.deptHead) : undefined
 
+  const liveRoster = liveSalesRoster(salesPersons, currentPostings)
   const geoEmail = node.metadata.salesGeo
-  const geo = geoEmail ? SALES_TEAM.find((m) => m.email === geoEmail) : undefined
-  const chain = resolveSalesChain(geoEmail ?? '')
+  const geo = geoEmail ? liveRoster.find((m) => m.email === geoEmail) : undefined
+  const chain = resolveSalesChain(geoEmail ?? '', liveRoster)
   const geoRole = SALES_ROLES[0]
 
   const owners: { key: string; label: string; member: SalesTeamMember }[] = [
@@ -54,7 +59,14 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
           <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
             <div>
               <dt className="text-[11px] uppercase tracking-wide text-muted">Name</dt>
-              <dd className="mt-0.5 text-sm text-ink-900">{head.name}</dd>
+              <dd className="mt-0.5 text-sm text-ink-900">
+                <button
+                  onClick={() => ws.select('employee', head.id)}
+                  className="cursor-pointer text-left underline decoration-line decoration-1 underline-offset-2 hover:text-ink-700 hover:decoration-ink-600"
+                >
+                  {head.name}
+                </button>
+              </dd>
             </div>
             <div>
               <dt className="text-[11px] uppercase tracking-wide text-muted">Designation</dt>
@@ -67,12 +79,26 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
       {owners.length > 0 && (
         <Block title="AMNEX sales ownership">
           <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-            {owners.map((o) => (
-              <div key={o.key}>
-                <dt className="text-[11px] uppercase tracking-wide text-muted">{o.label}</dt>
-                <dd className="mt-0.5 text-sm text-ink-900">{o.member.name}</dd>
-              </div>
-            ))}
+            {owners.map((o) => {
+              const person = salesPersonByEmail.get(o.member.email)
+              return (
+                <div key={o.key}>
+                  <dt className="text-[11px] uppercase tracking-wide text-muted">{o.label}</dt>
+                  <dd className="mt-0.5 text-sm text-ink-900">
+                    {person ? (
+                      <button
+                        onClick={() => ws.select('salesPerson', person.id)}
+                        className="cursor-pointer text-left underline decoration-line decoration-1 underline-offset-2 hover:text-ink-700 hover:decoration-ink-600"
+                      >
+                        {o.member.name}
+                      </button>
+                    ) : (
+                      o.member.name
+                    )}
+                  </dd>
+                </div>
+              )
+            })}
           </dl>
         </Block>
       )}

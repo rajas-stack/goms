@@ -1,9 +1,34 @@
 import { SALES_TEAM, tiersOf, type SalesTeamMember } from './sales-team'
+import type { SalesPerson, SalesPosting } from '@/lib/types'
 
 export interface SalesChain {
   rm?: SalesTeamMember
   gm?: SalesTeamMember
   salesHead?: SalesTeamMember
+}
+
+/** Builds a `resolveSalesChain`-compatible roster from the LIVE sales
+ *  records (`SalesPerson` + each person's current `SalesPosting`) instead of
+ *  the static `SALES_TEAM` constant — so a rename, transfer, or promotion
+ *  made in the Sales Team tab is reflected wherever the legacy metadata-driven
+ *  ownership chain (Geo Sales → RM → GM → Sales Head) is read, not just in
+ *  the tab itself. No `tiers` override is set: `defaultTiers` derives the
+ *  role slot(s) straight from the live designation string, including
+ *  compound ones like "Regional Manager & Head". */
+export function liveSalesRoster(
+  salesPersons: SalesPerson[],
+  currentPostings: Record<string, SalesPosting>,
+): SalesTeamMember[] {
+  const emailById = new Map(salesPersons.map((p) => [p.id, p.officialEmail]))
+  return salesPersons.map((p) => {
+    const posting = currentPostings[p.id]
+    return {
+      name: p.name,
+      email: p.officialEmail,
+      designation: posting?.designation ?? '',
+      reportsTo: posting?.managerId ? emailById.get(posting.managerId) : undefined,
+    }
+  })
 }
 
 /** Walks a Geo Sales person's `reportsTo` chain upward, filling RM/GM/Sales

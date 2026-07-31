@@ -37,7 +37,7 @@ export const SALES_TEAM: SalesTeamMember[] = [
 
   // East territory — per the "Heads" sheet, Parichay Das heads it outright
   // (no separate L1 above him for these 3 states), so he's both RM and Head.
-  { name: 'Parichay Das', email: 'parichay@amnex.com', designation: 'Regional Manager & Head', reportsTo: 'jayendra@amnex.com', tiers: ['rm', 'gm'] },
+  { name: 'Parichay Das', email: 'parichay@amnex.com', designation: 'Regional Manager & Head', reportsTo: 'jayendra@amnex.com', tiers: ['gm', 'rm'] },
   { name: 'Akash Swain', email: 'akash13@amnex.com', designation: 'Account Manager', reportsTo: 'parichay@amnex.com' },
 
   // South geo (Rajesh's 8-state territory).
@@ -50,12 +50,12 @@ export const SALES_TEAM: SalesTeamMember[] = [
   // Kondala Rao and Senthilnathan R sit at L2 with no L2 peer splitting their
   // states further and no separate GM above them but Rajesh — same dual
   // RM+Head role as Parichay/Sunil, per the "Heads" sheet's territory list.
-  { name: 'Kondala Rao', email: 'kondala@amnex.com', designation: 'Regional Manager & Head', reportsTo: 'rajeshl@amnex.com', tiers: ['rm', 'gm'] },
-  { name: 'Senthilnathan R', email: 'senthilnathan@amnex.com', designation: 'Regional Manager & Head', reportsTo: 'rajeshl@amnex.com', tiers: ['rm', 'gm'] },
+  { name: 'Kondala Rao', email: 'kondala@amnex.com', designation: 'Regional Manager & Head', reportsTo: 'rajeshl@amnex.com', tiers: ['gm', 'rm'] },
+  { name: 'Senthilnathan R', email: 'senthilnathan@amnex.com', designation: 'Regional Manager & Head', reportsTo: 'rajeshl@amnex.com', tiers: ['gm', 'rm'] },
 
   // West territory — Sunil Kumar Sharma heads it outright (2 states, no
   // separate L1 above him per the "Heads" sheet), same dual-role pattern.
-  { name: 'Sunil Kumar Sharma', email: 'sunilkumar@amnex.com', designation: 'Regional Manager & Head', reportsTo: 'jayendra@amnex.com', tiers: ['rm', 'gm'] },
+  { name: 'Sunil Kumar Sharma', email: 'sunilkumar@amnex.com', designation: 'Regional Manager & Head', reportsTo: 'jayendra@amnex.com', tiers: ['gm', 'rm'] },
   { name: 'Ketan Thakkar', email: 'ketant@amnex.com', designation: 'Account Manager', reportsTo: 'sunilkumar@amnex.com' },
   { name: 'Darshan Bhatt', email: 'darshan3@amnex.com', designation: 'Account Manager', reportsTo: 'sunilkumar@amnex.com' },
   { name: 'Anuradha Chauhan', email: 'anuradha@amnex.com', designation: 'Account Manager', reportsTo: 'sunilkumar@amnex.com' },
@@ -70,13 +70,18 @@ export const SALES_TEAM: SalesTeamMember[] = [
 ]
 
 /** Designation-derived default tier(s) for a member with no explicit `tiers`
- *  override. Ambiguous titles (e.g. "Regional Manager & Head") deliberately
- *  derive to no tier until someone sets `tiers` explicitly for that person. */
+ *  override. Substring-matched (not exact-equality) so a compound title like
+ *  "Regional Manager & Head" resolves to BOTH `gm` and `rm` on its own —
+ *  this is what lets a live posting's designation (edited via the Sales
+ *  Team tab's "Change posting") drive the ownership chain correctly without
+ *  needing a hand-maintained `tiers` override for every dual-role person. */
 export function defaultTiers(designation: string): SalesTier[] {
-  if (designation === 'Sales Head') return ['salesHead']
-  if (designation === 'Regional Head') return ['gm']
-  if (designation === 'Regional Manager') return ['rm']
-  return []
+  const d = designation.toLowerCase()
+  const tiers: SalesTier[] = []
+  if (d.includes('sales head')) tiers.push('salesHead')
+  else if (d.includes('head')) tiers.push('gm')
+  if (d.includes('regional manager')) tiers.push('rm')
+  return tiers
 }
 
 export function tiersOf(member: SalesTeamMember): SalesTier[] {

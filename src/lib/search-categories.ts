@@ -1,5 +1,4 @@
 import { NODE_TYPE_MAP } from './node-types'
-import { SALES_TEAM } from '@/data/sales-team'
 import type { Employee, HierNode, Opportunity, SalesPerson, SearchResult, TimelineEvent } from './types'
 
 export interface SearchContext {
@@ -216,7 +215,7 @@ export const worksCategory: SearchCategoryDef = {
     const out: SearchResult[] = []
     for (const w of ctx.opportunities) {
       if (!ctx.inScope(w.departmentId)) continue
-      const salesName = SALES_TEAM.find((m) => m.email === w.salesPersonEmail)?.name ?? ''
+      const salesName = ctx.salesPersons.find((p) => p.officialEmail === w.salesPersonEmail)?.name ?? ''
       const hay = `${w.opportunityName} ${w.gemTenderId} ${w.vertical} ${w.component.join(' ')} ${salesName}`.toLowerCase()
       if (matches(hay, query)) out.push(toWorkResult(w, ctx.nodeById.get(w.departmentId)))
     }

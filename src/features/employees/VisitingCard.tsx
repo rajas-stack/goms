@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useEmployee, useEmployeeMutations } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Icon } from '@/components/ui/Icon'
 import { useToast } from '@/components/ui/Toast'
 import { cn, uid } from '@/lib/utils'
@@ -38,6 +39,7 @@ export function VisitingCard({ employeeId }: { employeeId: string }) {
   const [draft, setDraft] = useState<VisitingCardItem[]>([])
   const [dirty, setDirty] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [cardToRemove, setCardToRemove] = useState<VisitingCardItem | null>(null)
 
   // Reset the draft whenever a different employee's cards load, so the staged
   // list always starts from what's actually persisted.
@@ -177,7 +179,7 @@ export function VisitingCard({ employeeId }: { employeeId: string }) {
                 <Button size="sm" onClick={() => pickup(card)} disabled={!!busy}>
                   <Icon name="Sparkles" size={14} /> {busy === card.id ? 'Reading…' : 'Pick up contact'}
                 </Button>
-                <Button size="sm" variant="ghost" className="text-crimson hover:bg-crimson-100" onClick={() => removeCard(card.id)}>
+                <Button size="sm" variant="ghost" className="text-crimson hover:bg-crimson-100" onClick={() => setCardToRemove(card)}>
                   <Icon name="Trash2" size={14} /> Remove
                 </Button>
               </div>
@@ -228,6 +230,16 @@ export function VisitingCard({ employeeId }: { employeeId: string }) {
       {dirty && (
         <p className="text-[12px] text-amber-600">You have unsaved changes. Click Save to keep them.</p>
       )}
+
+      <ConfirmDeleteDialog
+        open={!!cardToRemove}
+        onClose={() => setCardToRemove(null)}
+        itemLabel="this visiting card"
+        onConfirm={async () => {
+          if (!cardToRemove) return
+          removeCard(cardToRemove.id)
+        }}
+      />
     </div>
   )
 }

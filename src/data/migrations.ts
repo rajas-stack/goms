@@ -1,6 +1,7 @@
 import { uid } from '@/lib/utils'
 import { buildOwnershipFixture } from './ownership-fixture'
-import { buildSalesRoster } from './sales-roster-seed'
+import { buildSalesRoster, mergeMissingSalesRoster } from './sales-roster-seed'
+import { SALES_TEAM } from './sales-team'
 import type { GormsData } from './seed'
 
 /** Bump when `GormsData`'s shape changes, and add a matching entry to
@@ -13,8 +14,13 @@ import type { GormsData } from './seed'
  *  v3  followUps
  *  v4  salesPersons + salesPostings, seeded from the SALES_TEAM constant
  *  v5  ownershipAssignments
+ *  v6  tops up salesPersons/salesPostings against SALES_TEAM (fixes rosters
+ *      that got stuck below full headcount by an earlier, non-topping-up v4)
+ *  v7  corrects current-posting tierKey for SALES_TEAM members with an
+ *      explicit `tiers` override (fixes territory heads seeded at the wrong
+ *      tier by an earlier, incorrectly-ordered `tiers` array)
  */
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 7
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -112,11 +118,21 @@ function toV3(data: SnapshotShape): SnapshotShape {
 
 /** v3 → v4. Seeds `salesPersons` + `salesPostings` from the `SALES_TEAM`
  *  constant, using the same builder a fresh install uses so the two paths
- *  cannot drift. See `sales-roster-seed.ts` for what the mapping does. */
+ *  cannot drift. See `sales-roster-seed.ts` for what the mapping does.
+ *
+ *  A non-empty existing roster is topped up rather than skipped: a snapshot
+ *  captured before someone was added to `SALES_TEAM` would otherwise stay
+ *  short of the full roster forever, since this step only ran once per
+ *  browser. Topping up never clobbers existing records — it only adds
+ *  members missing by email. */
 function toV4(data: SnapshotShape): SnapshotShape {
-  // Already migrated, or hand-populated — never clobber real records.
-  if (Array.isArray(data.salesPersons) && data.salesPersons.length > 0) {
-    return { ...data, salesPostings: asArray(data.salesPostings) }
+  const existingPersons = asArray(data.salesPersons)
+  if (existingPersons.length > 0) {
+    const merged = mergeMissingSalesRoster(
+      existingPersons as unknown as Parameters<typeof mergeMissingSalesRoster>[0],
+      asArray(data.salesPostings) as unknown as Parameters<typeof mergeMissingSalesRoster>[1],
+    )
+    return { ...data, ...merged }
   }
   return { ...data, ...buildSalesRoster() }
 }
@@ -137,6 +153,46 @@ function toV5(data: SnapshotShape): SnapshotShape {
   return { ...data, ownershipAssignments: buildOwnershipFixture(nodes, salesPersons) }
 }
 
+/** v5 → v6. One-time top-up for snapshots that reached v5 while `toV4` still
+ *  skipped a non-empty roster outright: any browser whose `salesPersons` was
+ *  seeded before it fully matched `SALES_TEAM` was stuck below full headcount
+ *  forever, since `toV4` never ran again after v4 was reached. Runs the same
+ *  merge `toV4` now does, so it's a no-op for anyone already in sync. */
+function toV6(data: SnapshotShape): SnapshotShape {
+  const merged = mergeMissingSalesRoster(
+    asArray(data.salesPersons) as unknown as Parameters<typeof mergeMissingSalesRoster>[0],
+    asArray(data.salesPostings) as unknown as Parameters<typeof mergeMissingSalesRoster>[1],
+  )
+  return { ...data, ...merged }
+}
+
+/** v6 → v7. Territory heads whose designation is ambiguous ("Regional
+ *  Manager & Head") carry an explicit `tiers` override in `SALES_TEAM`, most
+ *  senior tier first (spec: `sales-roster-seed.ts`'s seeding comment). That
+ *  array was originally written `['rm', 'gm']` — least-senior first — so
+ *  every browser that seeded before the fix got 'rm' baked into these
+ *  people's current posting instead of the more senior 'gm'. Corrects the
+ *  CURRENT posting's `tierKey` only; a posting that already ended is history
+ *  and stays as recorded. A no-op for anyone whose data already matches. */
+function toV7(data: SnapshotShape): SnapshotShape {
+  const salesPersons = asArray(data.salesPersons)
+  const postings = asArray(data.salesPostings)
+  const emailById = new Map(salesPersons.map((p) => [p.id as string, p.officialEmail as string]))
+  const tierOverrideByEmail = new Map(
+    SALES_TEAM.filter((m) => m.tiers && m.tiers.length > 0).map((m) => [m.email, m.tiers![0]]),
+  )
+
+  const corrected = postings.map((posting) => {
+    if (posting.endDate !== null) return posting
+    const email = emailById.get(posting.salesPersonId as string)
+    const correctTier = email ? tierOverrideByEmail.get(email) : undefined
+    if (!correctTier || posting.tierKey === correctTier) return posting
+    return { ...posting, tierKey: correctTier }
+  })
+
+  return { ...data, salesPostings: corrected }
+}
+
 /** Keyed by the version each step PRODUCES, so applying every key from
  *  `fromVersion + 1` up to `SCHEMA_VERSION` walks the chain in order. */
 export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> = {
@@ -144,6 +200,8 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   3: toV3,
   4: toV4,
   5: toV5,
+  6: toV6,
+  7: toV7,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

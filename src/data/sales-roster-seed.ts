@@ -71,3 +71,64 @@ export function buildSalesRoster(): { salesPersons: SalesPerson[]; salesPostings
 
   return { salesPersons, salesPostings }
 }
+
+/** Tops up an already-persisted roster with any `SALES_TEAM` member missing
+ *  from it (matched by `officialEmail`), leaving every existing record
+ *  untouched. Fixes a browser's roster getting stuck below full headcount
+ *  when its snapshot was captured before someone was added to `SALES_TEAM` —
+ *  `toV4` only seeds from scratch when `salesPersons` is empty, so a
+ *  non-empty-but-partial roster previously never resynced. */
+export function mergeMissingSalesRoster(
+  existingPersons: SalesPerson[],
+  existingPostings: SalesPosting[],
+): { salesPersons: SalesPerson[]; salesPostings: SalesPosting[] } {
+  const knownEmails = new Set(existingPersons.map((p) => p.officialEmail))
+  const missing = SALES_TEAM.filter((m) => !knownEmails.has(m.email))
+  if (missing.length === 0) return { salesPersons: existingPersons, salesPostings: existingPostings }
+
+  const idByEmail = new Map(existingPersons.map((p) => [p.officialEmail, p.id]))
+  const newPersons: SalesPerson[] = []
+  for (const m of missing) {
+    const id = uid('sp')
+    idByEmail.set(m.email, id)
+    newPersons.push({
+      id,
+      employeeCode: '',
+      name: m.name,
+      officialEmail: m.email,
+      personalEmail: '',
+      mobile: '',
+      altMobile: '',
+      joinedOn: null,
+      leftOn: null,
+      status: 'active',
+      notes: '',
+      metadata: {},
+      createdAt: '',
+      createdBy: null,
+    })
+  }
+
+  const newPostings: SalesPosting[] = missing.map((m) => {
+    const tierKey = m.tiers?.[0] ?? tierKeyFromDesignation(m.designation)
+    return {
+      id: uid('spost'),
+      salesPersonId: idByEmail.get(m.email)!,
+      designation: m.designation,
+      tierKey,
+      managerId: m.reportsTo ? idByEmail.get(m.reportsTo) ?? null : null,
+      office: '',
+      startDate: '',
+      endDate: null,
+      changeType: 'initial',
+      reason: 'Seeded from the SALES_TEAM roster',
+      createdAt: '',
+      createdBy: null,
+    }
+  })
+
+  return {
+    salesPersons: [...existingPersons, ...newPersons],
+    salesPostings: [...existingPostings, ...newPostings],
+  }
+}

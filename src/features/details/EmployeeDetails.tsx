@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  useAllEmployees, useBreadcrumb, useDirectReports, useEmployee, useEmployeeDepartments,
-  useEmployeeMutations, useFollowUps, useNode, useReportingChain, useTimeline, useTransfers,
+  useAllEmployees, useBreadcrumb, useCurrentPostings, useDirectReports, useEmployee, useEmployeeDepartments,
+  useEmployeeMutations, useFollowUps, useNode, useReportingChain, useSalesPersons, useTimeline, useTransfers,
 } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Dialog } from '@/components/ui/Dialog'
 import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
 import { FitText } from '@/components/ui/FitText'
@@ -28,7 +29,6 @@ import { employeeAccent } from '@/lib/node-colors'
 import { MEETING_LOG_TYPES, TIMELINE_META, timelineEventLabel } from '@/lib/timeline-meta'
 import { useDismissedDuplicatePairs } from '@/lib/dismissed-pairs'
 import { cn, initials } from '@/lib/utils'
-import { SALES_TEAM } from '@/data/sales-team'
 import { useResolvedOwners } from '@/lib/api'
 import { OwnershipBlock } from '@/features/sales/OwnershipBlock'
 import { isoToday } from '@/lib/dates'
@@ -56,6 +56,8 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
   const [reporteeMode, setReporteeMode] = useState<'junior' | 'manager' | null>(null)
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
   const [mergeCandidateId, setMergeCandidateId] = useState<string | null>(null)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [chargeToRemove, setChargeToRemove] = useState<Charge | null>(null)
   // Resolves to `undefined` when unset (query disabled) or when the flagged-to
   // employee no longer exists (deleted) — either way the banner below just
   // doesn't render, no error state.
@@ -80,12 +82,14 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
     : null
 
   const { data: contactOwners = {} } = useResolvedOwners('contact', emp ? [emp.id] : [], isoToday())
+  const { data: salesPersons = [] } = useSalesPersons()
+  const { data: currentPostings = {} } = useCurrentPostings()
 
   if (!emp) return null
   const vacant = emp.vacant
   const accent = employeeAccent(emp)
   const department = trail.find((t) => t.typeKey === 'department')
-  const relationshipOwner = SALES_TEAM.find((m) => m.email === emp.metadata.relationshipOwner)
+  const relationshipOwner = salesPersons.find((p) => p.officialEmail === emp.metadata.relationshipOwner)
 
   async function unflagDuplicate() {
     const { duplicateOf: _dropped, ...rest } = emp!.metadata
@@ -235,12 +239,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
                 <MenuItem
                   icon={<Icon name="Trash2" size={15} />}
                   danger
-                  onClick={async () => {
-                    close()
-                    await remove.mutateAsync(emp.id)
-                    toast(`Removed ${emp.name || 'vacant position'}`)
-                    ws.clearSelection()
-                  }}
+                  onClick={() => { close(); setDeleteOpen(true) }}
                 >
                   Remove
                 </MenuItem>
@@ -277,6 +276,26 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
       />
       <TransferDialog open={active === 'transfer'} employee={emp} onClose={() => setActive('none')} />
       <ChargeDialog open={active === 'charge'} employeeId={emp.id} onClose={() => setActive('none')} />
+      <ConfirmDeleteDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        itemLabel={emp.name || 'this vacant position'}
+        onConfirm={async () => {
+          await remove.mutateAsync(emp.id)
+          toast(`Removed ${emp.name || 'vacant position'}`)
+          ws.clearSelection()
+        }}
+      />
+      <ConfirmDeleteDialog
+        open={!!chargeToRemove}
+        onClose={() => setChargeToRemove(null)}
+        itemLabel={chargeToRemove?.title ?? 'this charge'}
+        onConfirm={async () => {
+          if (!chargeToRemove) return
+          await removeCharge.mutateAsync({ employeeId: emp.id, chargeId: chargeToRemove.id })
+          toast('Charge removed')
+        }}
+      />
       <EmployeeFormDialog
         open={reporteeMode !== null}
         orgNode={orgNode ?? null}
@@ -325,11 +344,14 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           {!vacant && emp.address && <DetailRow label="Address" value={emp.address} icon="MapPin" />}
           {orgNode && <DetailRow label="Posting" value={orgNode.name} icon="Landmark" />}
           {relationshipOwner && (
-            <DetailRow
-              label="Relationship Owner / AMNEX Representative"
-              value={`${relationshipOwner.name} · ${relationshipOwner.designation}`}
-              icon="UserCheck"
-            />
+            <DetailRow label="Relationship Owner / AMNEX Representative" icon="UserCheck">
+              <button
+                onClick={() => ws.select('salesPerson', relationshipOwner.id)}
+                className="cursor-pointer text-left underline decoration-line decoration-1 underline-offset-2 hover:text-ink-700 hover:decoration-ink-600"
+              >
+                {relationshipOwner.name} · {currentPostings[relationshipOwner.id]?.designation || 'No current posting'}
+              </button>
+            </DetailRow>
           )}
         </dl>
 
@@ -383,9 +405,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           <Section title={`Charges · ${emp.charges.length}`} icon="Briefcase">
             <div className="space-y-2">
               {emp.charges.map((c) => (
-                <ChargeRow key={c.id} charge={c} onRemove={async () => {
-                  await removeCharge.mutateAsync({ employeeId: emp.id, chargeId: c.id }); toast('Charge removed')
-                }} />
+                <ChargeRow key={c.id} charge={c} onRemove={() => setChargeToRemove(c)} />
               ))}
             </div>
           </Section>

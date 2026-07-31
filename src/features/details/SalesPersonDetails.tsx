@@ -6,18 +6,40 @@ import {
 } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
 import { useToast } from '@/components/ui/Toast'
+import { Badge, type BadgeTone } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Icon } from '@/components/ui/Icon'
-import { Menu, MenuItem } from '@/components/ui/Menu'
+import { Menu, MenuDivider, MenuItem } from '@/components/ui/Menu'
 import { tierLabel } from '@/data/sales-tiers'
 import { displayEndDate } from '@/lib/intervals'
 import { isoToday } from '@/lib/dates'
 import { cn, initials } from '@/lib/utils'
 import { SalesPersonFormDialog } from '@/features/sales/SalesPersonFormDialog'
+import { TransferBookOfBusinessDialog } from '@/features/sales/TransferBookOfBusinessDialog'
+import { TransferSalesPersonDialog } from '@/features/sales/TransferSalesPersonDialog'
 import type { SalesPerson } from '@/lib/types'
+
+/** Statuses where a person typically stops actively working their book of
+ *  business — marking one of these prompts the bulk hand-off dialog rather
+ *  than leaving departments/contacts/opportunities pointed at someone who
+ *  isn't around to work them. */
+const HANDOFF_STATUSES: SalesPerson['status'][] = ['onLeave', 'resigned', 'inactive']
 
 const STATUS_LABEL: Record<SalesPerson['status'], string> = {
   active: 'Active', onLeave: 'On leave', resigned: 'Resigned', inactive: 'Inactive',
+}
+
+const STATUS_TONE: Record<SalesPerson['status'], BadgeTone> = {
+  active: 'emerald', onLeave: 'amber', resigned: 'gray', inactive: 'gray',
+}
+
+/** Small uppercase label used to separate the Actions menu into groups
+ *  (Career / Ownership / Status / Danger Zone) — plain text, not an
+ *  interactive item, matching the group-label style used elsewhere
+ *  (e.g. the Book of Business subgroup headers below). */
+function MenuGroupLabel({ children }: { children: string }) {
+  return <p className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{children}</p>
 }
 
 function Row({ label, value, icon }: { label: string; value: string; icon: string }) {
@@ -47,6 +69,9 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   const { data: opportunities = [] } = useOpportunities()
   const { setStatus, remove } = useSalesPersonMutations()
   const [editOpen, setEditOpen] = useState(false)
+  const [postingTransferOpen, setPostingTransferOpen] = useState(false)
+  const [bobTransferOpen, setBobTransferOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
 
   if (!person) {
     return <p className="p-4 text-sm text-muted">This salesperson no longer exists.</p>
@@ -90,26 +115,53 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
         >
           {(close) => (
             <>
+              <MenuGroupLabel>Career</MenuGroupLabel>
+              <MenuItem
+                icon={<Icon name="ArrowLeftRight" size={15} />}
+                onClick={() => { close(); setPostingTransferOpen(true) }}
+              >
+                Change posting
+              </MenuItem>
+
+              <MenuDivider />
+              <MenuGroupLabel>Ownership</MenuGroupLabel>
+              <MenuItem
+                icon={<Icon name="Briefcase" size={15} />}
+                onClick={() => { close(); setBobTransferOpen(true) }}
+              >
+                Transfer book of business
+              </MenuItem>
+
+              <MenuDivider />
+              <MenuGroupLabel>Status</MenuGroupLabel>
               {(['active', 'onLeave', 'resigned', 'inactive'] as const)
                 .filter((s) => s !== person.status)
                 .map((s) => (
                   <MenuItem
                     key={s}
                     icon={<Icon name="CircleDot" size={15} />}
-                    onClick={async () => { close(); await setStatus.mutateAsync({ id: person.id, status: s }); toast(`Marked ${STATUS_LABEL[s]}`) }}
+                    onClick={async () => {
+                      close()
+                      await setStatus.mutateAsync({ id: person.id, status: s })
+                      toast(`Marked ${STATUS_LABEL[s]}`)
+                      // Prompt the hand-off immediately for statuses where the
+                      // person stops working their book — waiting for the user
+                      // to remember a separate step is how things get orphaned.
+                      if (HANDOFF_STATUSES.includes(s) && owned.some((a) => a.role === 'owner')) {
+                        setBobTransferOpen(true)
+                      }
+                    }}
                   >
                     Mark {STATUS_LABEL[s]}
                   </MenuItem>
                 ))}
+
+              <MenuDivider />
+              <MenuGroupLabel>Danger Zone</MenuGroupLabel>
               <MenuItem
                 icon={<Icon name="Trash2" size={15} />}
                 danger
-                onClick={async () => {
-                  close()
-                  await remove.mutateAsync(person.id)
-                  toast(`Removed ${person.name}`)
-                  ws.clearSelection()
-                }}
+                onClick={() => { close(); setDeleteOpen(true) }}
               >
                 Remove
               </MenuItem>
@@ -119,92 +171,166 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
       </div>
 
       <div className="px-4 py-3">
-        <h3 className="mb-1 text-[13px] font-semibold text-ink-900">Details</h3>
-        <dl>
-          <Row label="Official email" value={person.officialEmail} icon="Mail" />
-          {person.mobile && <Row label="Mobile" value={person.mobile} icon="Phone" />}
-          {current && <Row label="Tier" value={tierLabel(current.tierKey)} icon="Layers" />}
-          {manager && <Row label="Reports to" value={manager.name} icon="Network" />}
-          <Row label="Status" value={STATUS_LABEL[person.status]} icon="CircleDot" />
-          {person.notes && <Row label="Notes" value={person.notes} icon="StickyNote" />}
-        </dl>
+        <h3 className="mb-2 text-[13px] font-semibold text-ink-900">Details</h3>
+        <div className="space-y-3.5">
+          <div>
+            <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Contact</p>
+            <dl>
+              <Row label="Official email" value={person.officialEmail || '—'} icon="Mail" />
+              <Row label="Mobile" value={person.mobile || '—'} icon="Phone" />
+            </dl>
+          </div>
+
+          <div>
+            <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Role</p>
+            <dl>
+              <Row label="Designation" value={current?.designation || '—'} icon="IdCard" />
+              <Row label="Tier" value={current ? tierLabel(current.tierKey) : '—'} icon="Layers" />
+              <Row label="Reporting manager" value={manager?.name ?? '—'} icon="Network" />
+            </dl>
+          </div>
+
+          <div>
+            <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Status</p>
+            <div className="flex items-start gap-2.5 py-1.5">
+              <Icon name="CircleDot" size={14} className="mt-0.5 shrink-0 text-muted" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] uppercase tracking-wide text-muted">Status</div>
+                <Badge tone={STATUS_TONE[person.status]} className="mt-0.5">{STATUS_LABEL[person.status]}</Badge>
+              </div>
+            </div>
+            <dl>
+              <Row label="Join date" value={person.joinedOn || '—'} icon="Calendar" />
+              <Row label="Leave date" value={person.leftOn || '—'} icon="Calendar" />
+            </dl>
+          </div>
+
+          {person.notes && (
+            <div>
+              <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Notes</p>
+              <dl><Row label="Notes" value={person.notes} icon="StickyNote" /></dl>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Placeholder — the real attachment store (blobs.ts) exists from Phase
-          0 but no upload UI is wired to SalesPerson in this demo slice. */}
+      {/* The blob store (blobs.ts) exists, but no upload flow is wired to
+          SalesPerson yet — VisitingCard.tsx is the closest analog and is
+          built entirely against Employee fields, so there's nothing to reuse
+          without adding SalesPerson fields/repository methods, which is out
+          of scope for this pass. Buttons stay visible (not hidden) so the
+          intended shape reads as "coming soon", not broken. */}
       <div className="border-t border-line px-4 py-3">
         <h3 className="mb-1 text-[13px] font-semibold text-ink-900">Attachments</h3>
-        <p className="rounded-lg border border-dashed border-line px-3 py-2.5 text-[12px] text-muted">
-          Photo and document uploads arrive later in Phase 1.
-        </p>
+        <p className="mb-2 text-[12px] text-muted">No attachments uploaded.</p>
+        <div className="flex flex-col gap-1.5">
+          <Button size="sm" disabled className="justify-between">
+            <span className="flex items-center gap-2"><Icon name="Camera" size={14} /> Upload Profile Photo</span>
+            <Badge tone="gray">Coming Soon</Badge>
+          </Button>
+          <Button size="sm" disabled className="justify-between">
+            <span className="flex items-center gap-2"><Icon name="IdCard" size={14} /> Upload Visiting Card</span>
+            <Badge tone="gray">Coming Soon</Badge>
+          </Button>
+          <Button size="sm" disabled className="justify-between">
+            <span className="flex items-center gap-2"><Icon name="FileText" size={14} /> Upload Documents</span>
+            <Badge tone="gray">Coming Soon</Badge>
+          </Button>
+        </div>
       </div>
 
       <div className="border-t border-line px-4 py-3">
-        <h3 className="mb-1 text-[13px] font-semibold text-ink-900">
-          {postings.length > 1 ? `Postings · ${postings.length}` : 'Posting'}
-        </h3>
-        {postings.length === 0 ? (
-          <p className="text-sm text-muted">No postings recorded.</p>
+        <h3 className="mb-2 text-[13px] font-semibold text-ink-900">Posting</h3>
+        {!current ? (
+          <p className="text-sm text-muted">No current posting.</p>
         ) : (
-          <ul className="flex flex-col gap-1.5">
-            {postings.map((p) => {
-              // Storage is exclusive-end; humans read the last day actually held.
-              const end = displayEndDate(p.endDate)
-              return (
-                <li key={p.id} className="rounded-lg border border-line px-2.5 py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[13px] font-medium text-ink-900">{p.designation}</span>
-                    <span className="shrink-0 rounded-full bg-panel px-2 py-0.5 text-[11px] text-ink-700">
-                      {tierLabel(p.tierKey)}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 text-[12px] text-muted">
-                    {p.startDate || 'Start unknown'} — {end ?? 'current'}
-                    {p.changeType !== 'initial' && ` · ${p.changeType}`}
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
+          <dl className="mb-2 rounded-lg border border-line bg-panel/30 px-2.5">
+            <Row label="Designation" value={current.designation || '—'} icon="IdCard" />
+            <Row label="Tier" value={tierLabel(current.tierKey) || '—'} icon="Layers" />
+            <Row label="Reporting manager" value={manager?.name ?? '—'} icon="Network" />
+            <Row label="Office" value={current.office || '—'} icon="Building2" />
+            <Row label="Effective from" value={current.startDate || '—'} icon="CalendarClock" />
+            <Row label="Effective to" value={displayEndDate(current.endDate) ?? 'Present'} icon="CalendarClock" />
+          </dl>
+        )}
+
+        {postings.length > 1 && (
+          <div>
+            <p className="mb-1 text-[11px] uppercase tracking-wide text-muted">History · {postings.length - 1}</p>
+            <ul className="flex flex-col gap-1.5">
+              {postings.filter((p) => p.id !== current?.id).map((p) => {
+                // Storage is exclusive-end; humans read the last day actually held.
+                const end = displayEndDate(p.endDate)
+                return (
+                  <li key={p.id} className="rounded-lg border border-line px-2.5 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-[13px] font-medium text-ink-900">{p.designation || '—'}</span>
+                      <span className="shrink-0 rounded-full bg-panel px-2 py-0.5 text-[11px] text-ink-700">
+                        {tierLabel(p.tierKey)}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-[12px] text-muted">
+                      {p.startDate || '—'} — {end ?? 'Present'}
+                      {p.changeType !== 'initial' && ` · ${p.changeType}`}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
         )}
       </div>
 
       <div className="border-t border-line px-4 py-3">
         <h3 className="mb-2 text-[13px] font-semibold text-ink-900">Book of Business</h3>
-        {owned.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-line px-3 py-2.5 text-[12px] text-muted">
-            Nothing directly assigned as of today.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-3">
-            <div className="grid grid-cols-3 gap-2">
-              <BobCountCard label="Departments" count={byKind.orgNode.length} icon="Building2" />
-              <BobCountCard label="Contacts" count={byKind.contact.length} icon="User" />
-              <BobCountCard label="Opportunities" count={byKind.opportunity.length} icon="Briefcase" />
-            </div>
-            <BookGroup
-              label="Departments" rows={byKind.orgNode} emptyMessage="No departments owned"
-              nameOf={(id) => deptById.get(id)?.name ?? id}
-              onOpen={(id) => ws.select('node', id)}
-            />
-            <BookGroup
-              label="Contacts" rows={byKind.contact} emptyMessage="No contacts yet"
-              nameOf={(id) => empById.get(id)?.name ?? id}
-              onOpen={(id) => ws.select('employee', id)}
-            />
-            <BookGroup
-              label="Opportunities" rows={byKind.opportunity} emptyMessage="No opportunities assigned"
-              nameOf={(id) => oppById.get(id)?.opportunityName ?? id}
-              onOpen={(id) => {
-                const dept = oppById.get(id)?.departmentId
-                if (dept) ws.select('node', dept)
-              }}
-            />
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-3 gap-2">
+            <BobCountCard label="Departments" count={byKind.orgNode.length} icon="Building2" />
+            <BobCountCard label="Contacts" count={byKind.contact.length} icon="User" />
+            <BobCountCard label="Opportunities" count={byKind.opportunity.length} icon="Briefcase" />
           </div>
-        )}
+          {owned.length === 0 ? (
+            <p className="rounded-lg border border-dashed border-line px-3 py-2.5 text-[12px] text-muted">
+              No assignments yet.
+            </p>
+          ) : (
+            <>
+              <BookGroup
+                label="Departments" rows={byKind.orgNode} emptyMessage="No departments owned"
+                nameOf={(id) => deptById.get(id)?.name ?? id}
+                onOpen={(id) => ws.select('node', id)}
+              />
+              <BookGroup
+                label="Contacts" rows={byKind.contact} emptyMessage="No contacts yet"
+                nameOf={(id) => empById.get(id)?.name ?? id}
+                onOpen={(id) => ws.select('employee', id)}
+              />
+              <BookGroup
+                label="Opportunities" rows={byKind.opportunity} emptyMessage="No opportunities assigned"
+                nameOf={(id) => oppById.get(id)?.opportunityName ?? id}
+                onOpen={(id) => {
+                  const dept = oppById.get(id)?.departmentId
+                  if (dept) ws.select('node', dept)
+                }}
+              />
+            </>
+          )}
+        </div>
       </div>
 
       <SalesPersonFormDialog open={editOpen} personId={person.id} onClose={() => setEditOpen(false)} />
+      <TransferSalesPersonDialog open={postingTransferOpen} person={person} onClose={() => setPostingTransferOpen(false)} />
+      <TransferBookOfBusinessDialog open={bobTransferOpen} person={person} onClose={() => setBobTransferOpen(false)} />
+      <ConfirmDeleteDialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        itemLabel={person.name}
+        onConfirm={async () => {
+          await remove.mutateAsync(person.id)
+          toast(`Removed ${person.name}`)
+          ws.clearSelection()
+        }}
+      />
     </motion.div>
   )
 }

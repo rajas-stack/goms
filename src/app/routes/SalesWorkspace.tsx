@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
-  useCurrentPostings, useDepartments, useOpportunities, useOwnershipAssignments, useResolvedOwners, useSalesPersons,
+  useAllEmployees, useCurrentPostings, useDepartments, useOpportunities, useOwnershipAssignments,
+  useResolvedOwners, useSalesPersons,
 } from '@/lib/api'
 import { WorkspaceProvider, useWorkspace } from '@/features/workspace/context'
 import { DetailsPanel } from '@/features/details/DetailsPanel'
@@ -22,9 +23,8 @@ import type { SalesPerson, SalesPosting } from '@/lib/types'
  *  which is the main reason the module reads as native rather than bolted on
  *  (spec §5.3).
  *
- *  Only Roster is built. The other sections are declared here rather than
- *  hidden so the intended shape is visible and each lands in its own phase;
- *  they render an explicit "coming in phase N" panel instead of a dead tab. */
+ *  All three sections are built: Roster, Org Chart, and Ownership (which
+ *  doubles as the destination for the header's per-kind ownership counts). */
 const SECTIONS = [
   { key: 'roster', label: 'Roster', phase: 1 },
   { key: 'orgchart', label: 'Org Chart', phase: 2 },
@@ -50,9 +50,12 @@ const STATUS_FILTERS = [
   { key: 'inactive', label: 'Inactive' },
 ] as const
 
-function SummaryCard({ label, value, icon }: { label: string; value: number; icon: string }) {
+function SummaryCard({ label, value, icon, href }: { label: string; value: number; icon: string; href: string }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-3 shadow-sm">
+    <a
+      href={href}
+      className="flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-3 shadow-sm transition-colors hover:border-ink-600/30 hover:bg-panel/60 focus-visible:focus-ring"
+    >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-panel text-ink-700">
         <Icon name={icon} size={16} />
       </div>
@@ -60,15 +63,21 @@ function SummaryCard({ label, value, icon }: { label: string; value: number; ico
         <div className="text-xl font-semibold leading-tight text-ink-900">{value}</div>
         <div className="truncate text-[12px] text-muted">{label}</div>
       </div>
-    </div>
+    </a>
   )
 }
 
 /** Four at-a-glance counts, derived from data already loaded elsewhere on this
  *  page rather than a new query — they update the moment any of those queries
  *  are invalidated (a new hire, a reassignment, a new opportunity), with no
- *  separate refresh path to keep in sync. */
+ *  separate refresh path to keep in sync.
+ *
+ *  Each card is also a link into the view that explains its number: Roster
+ *  for headcount, and the Ownership tab (scoped to the selected salesperson,
+ *  if any) for the three ownership-derived counts — reusing that tab's own
+ *  Departments/Contacts/Opportunities switcher rather than building new pages. */
 function SummaryCards() {
+  const ws = useWorkspace()
   const { data: people = [] } = useSalesPersons()
   const { data: assignments = [] } = useOwnershipAssignments()
   const { data: opportunities = [] } = useOpportunities()
@@ -82,12 +91,15 @@ function SummaryCards() {
     ).size
   const openOpportunities = opportunities.filter((o) => !PIPELINE_STAGE_MAP[o.stageKey]?.isClosed).length
 
+  const selectedPersonId = ws.selection?.kind === 'salesPerson' ? ws.selection.id : null
+  const ownershipHref = (view: string) => `/sales/ownership?view=${view}${selectedPersonId ? `&owner=${selectedPersonId}` : ''}`
+
   return (
     <div className="grid grid-cols-2 gap-2.5 border-b border-line p-3 sm:grid-cols-4">
-      <SummaryCard label="Total sales people" value={people.length} icon="Users" />
-      <SummaryCard label="Departments owned" value={openOwned('orgNode')} icon="Building2" />
-      <SummaryCard label="Contacts managed" value={openOwned('contact')} icon="User" />
-      <SummaryCard label="Open opportunities" value={openOpportunities} icon="Briefcase" />
+      <SummaryCard label="Total sales people" value={people.length} icon="Users" href="/sales/roster" />
+      <SummaryCard label="Departments owned" value={openOwned('orgNode')} icon="Building2" href={ownershipHref('orgNode')} />
+      <SummaryCard label="Contacts managed" value={openOwned('contact')} icon="User" href={ownershipHref('contact')} />
+      <SummaryCard label="Open opportunities" value={openOpportunities} icon="Briefcase" href={ownershipHref('opportunity')} />
     </div>
   )
 }
@@ -152,6 +164,7 @@ function Roster() {
       ? byStatus.filter((p) =>
           p.name.toLowerCase().includes(q) ||
           p.officialEmail.toLowerCase().includes(q) ||
+          p.mobile.toLowerCase().includes(q) ||
           (postings[p.id]?.designation ?? '').toLowerCase().includes(q))
       : byStatus
     // Seniority first, then name — a flat alphabetical list of 24 people buries
@@ -173,7 +186,7 @@ function Roster() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search the sales team…"
+            placeholder="Search by name, email, designation or mobile…"
             className="pl-9"
           />
         </div>
@@ -234,30 +247,86 @@ function Roster() {
   )
 }
 
-/** Accounts (every department + its resolved owner) and Gaps (unassigned
- *  only) — the two views spec §5.3 lists for Ownership. Delegations is left
- *  for the full Phase 3 build; it needs the batch/wizard machinery this hour
- *  deliberately skips.
+const OWNERSHIP_VIEWS = [
+  { key: 'orgNode', label: 'Departments', icon: 'Building2' },
+  { key: 'contact', label: 'Contacts', icon: 'User' },
+  { key: 'opportunity', label: 'Opportunities', icon: 'Briefcase' },
+] as const
+
+/** Accounts (every record of the chosen kind + its resolved owner) and Gaps
+ *  (unassigned only) — the two views spec §5.3 lists for Ownership.
+ *  Delegations is left for the full Phase 3 build; it needs the batch/wizard
+ *  machinery this hour deliberately skips.
+ *
+ *  The Departments/Contacts/Opportunities switcher and the `?owner=` scoping
+ *  (from a SummaryCards click) both reuse `useResolvedOwners` — already
+ *  generic over entity type — so this stays one view, not three new pages.
  *
  *  Resolution is batched through `useResolvedOwners` (one call for every
- *  department), not per row — a per-row `effectiveOwner` call would re-walk
- *  the ancestor chain for each of them, which spec §13 names the design's
- *  single largest performance risk. */
+ *  record), not per row — a per-row `effectiveOwner` call would re-walk the
+ *  ancestor chain for each of them, which spec §13 names the design's single
+ *  largest performance risk. */
 function Ownership() {
   const ws = useWorkspace()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view = OWNERSHIP_VIEWS.some((v) => v.key === searchParams.get('view')) ? searchParams.get('view')! : 'orgNode'
+  const ownerFilter = searchParams.get('owner')
   const [gapsOnly, setGapsOnly] = useState(false)
   const { data: departments = [] } = useDepartments()
-  const asOf = isoToday()
-  const ids = useMemo(() => departments.map((d) => d.id), [departments])
-  const { data: owners = {} } = useResolvedOwners('orgNode', ids, asOf)
+  const { data: employees = [] } = useAllEmployees()
+  const { data: opportunities = [] } = useOpportunities()
   const { data: people = [] } = useSalesPersons()
+  const asOf = isoToday()
 
-  const rows = gapsOnly ? departments.filter((d) => !owners[d.id]) : departments
-  const gapCount = departments.filter((d) => !owners[d.id]).length
+  const entities = useMemo(() => {
+    if (view === 'contact') {
+      return employees.map((e) => ({ id: e.id, label: e.vacant ? `${e.designation || 'Vacant position'} · Vacant` : e.name }))
+    }
+    if (view === 'opportunity') {
+      return opportunities.map((o) => ({ id: o.id, label: o.opportunityName || 'Untitled opportunity' }))
+    }
+    return departments.map((d) => ({ id: d.id, label: d.name }))
+  }, [view, departments, employees, opportunities])
+
+  const ids = useMemo(() => entities.map((e) => e.id), [entities])
+  const { data: owners = {} } = useResolvedOwners(view, ids, asOf)
+  const ownerPerson = ownerFilter ? people.find((p) => p.id === ownerFilter) : undefined
+
+  let rows = gapsOnly ? entities.filter((e) => !owners[e.id]) : entities
+  if (ownerFilter) rows = rows.filter((e) => owners[e.id]?.salesPersonId === ownerFilter)
+  const gapCount = entities.filter((e) => !owners[e.id]).length
+  const viewLabel = OWNERSHIP_VIEWS.find((v) => v.key === view)!.label
+
+  function selectView(key: string) {
+    setSearchParams((p) => { p.set('view', key); return p }, { replace: true })
+  }
+  function clearOwnerFilter() {
+    setSearchParams((p) => { p.delete('owner'); return p }, { replace: true })
+  }
+  function openEntity(id: string) {
+    if (view === 'contact') { ws.select('employee', id); return }
+    if (view === 'opportunity') {
+      const dept = opportunities.find((o) => o.id === id)?.departmentId
+      if (dept) ws.select('node', dept)
+      return
+    }
+    ws.select('node', id)
+  }
 
   return (
     <div className="flex h-full flex-col gap-3 p-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-1 rounded-lg bg-panel p-0.5">
+          {OWNERSHIP_VIEWS.map((v) => (
+            <button
+              key={v.key}
+              onClick={() => selectView(v.key)}
+              className={cn('rounded-md px-2.5 py-1 text-[12px] font-medium', view === v.key ? 'bg-white shadow-sm' : 'text-muted')}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
         <div className="flex gap-1 rounded-lg bg-panel p-0.5">
           <button
             onClick={() => setGapsOnly(false)}
@@ -272,24 +341,39 @@ function Ownership() {
             Gaps{gapCount > 0 && ` · ${gapCount}`}
           </button>
         </div>
-        <span className="text-[12px] text-muted">{rows.length} of {departments.length} departments</span>
       </div>
+
+      {ownerFilter && (
+        <div className="flex items-center gap-2 rounded-lg border border-line bg-panel/50 px-3 py-1.5 text-[12px]">
+          <span className="text-muted">Owned by</span>
+          <span className="font-medium text-ink-900">{ownerPerson?.name ?? ownerFilter}</span>
+          <button onClick={clearOwnerFilter} className="ml-auto font-medium text-ink-600 hover:text-ink-900">Clear</button>
+        </div>
+      )}
+
+      <span className="text-[12px] text-muted">{rows.length} of {entities.length} {viewLabel.toLowerCase()}</span>
 
       {rows.length === 0 ? (
         <EmptyState
-          icon={gapsOnly ? 'CircleCheck' : 'Building2'}
-          message={gapsOnly ? 'No gaps — every department resolves to an owner.' : 'No departments owned yet.'}
+          icon={gapsOnly ? 'CircleCheck' : OWNERSHIP_VIEWS.find((v) => v.key === view)!.icon}
+          message={
+            ownerFilter
+              ? `No ${viewLabel.toLowerCase()} owned by this person.`
+              : gapsOnly
+                ? `No gaps — every ${viewLabel.toLowerCase().slice(0, -1)} resolves to an owner.`
+                : `No ${viewLabel.toLowerCase()} owned yet.`
+          }
         />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
-          {rows.map((d) => (
+          {rows.map((e) => (
             <button
-              key={d.id}
-              onClick={() => ws.select('node', d.id)}
+              key={e.id}
+              onClick={() => openEntity(e.id)}
               className="flex w-full items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5 text-left hover:bg-panel"
             >
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{d.name}</span>
-              <OwnerBadge owner={owners[d.id]} people={people} className="shrink-0" />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{e.label}</span>
+              <OwnerBadge owner={owners[e.id]} people={people} className="shrink-0" />
             </button>
           ))}
         </div>
@@ -330,6 +414,9 @@ function OrgChartNode({ person, childrenOf, postings, depth, ws }: {
           <div className="truncate text-[13px] font-medium text-ink-900">{person.name}</div>
           <div className="truncate text-[11px] text-muted">{posting?.designation || '—'}</div>
         </div>
+        <span className={cn('hidden shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium sm:inline', STATUS_STYLE[person.status])}>
+          {STATUS_LABEL[person.status] ?? person.status}
+        </span>
         {kids.length > 0 && (
           <span
             className="shrink-0 rounded-full bg-panel px-1.5 py-0.5 text-[10px] text-ink-600"
@@ -389,7 +476,7 @@ function SalesWorkspaceBody() {
   const active = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0]
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-full flex-col">
       <SummaryCards />
       <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-3 py-2">
         <span className="mr-2 shrink-0 text-sm font-semibold text-ink-900">Sales Team</span>
@@ -410,7 +497,7 @@ function SalesWorkspaceBody() {
       </div>
 
       <div className="flex min-h-0 flex-1">
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-w-0 flex-1 overflow-hidden">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-0 min-w-0 flex-1 overflow-hidden">
           {active.key === 'roster' ? <Roster /> : active.key === 'orgchart' ? <OrgChart /> : <Ownership />}
         </motion.div>
         <aside className="hidden w-[380px] shrink-0 border-l border-line lg:block">
