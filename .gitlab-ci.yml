@@ -1,21 +1,19 @@
 image: node:20
 
 variables:
-  # Bumped from 4096 after the district/taluka/village-shapes geometry
-  # simplification (see docs/superpowers/specs/2026-07-28-load-time-optimization-design.md):
-  # the build OOM'd at 4096 even before that change, from Rollup's module
-  # graph holding one chunk per lazy-loaded geo asset file (~5,800 files),
-  # not from JSON payload size. TODO once this branch is merged: re-test
-  # with 4096 on main — if it now builds reliably, lower this back down.
+  # The real OOM cause was Rollup's module graph holding one chunk per
+  # lazy-loaded geo asset file (village-shapes + villages globs, ~12,800
+  # files combined) — chunk-graph overhead, not JSON payload size, so this
+  # heap bump alone never fully fixed it (it recurred as more geo files were
+  # added). vite.config.ts now buckets those globs into ~40 chunks each via
+  # manualChunks, which is the actual fix. Left at 8192 as headroom.
   NODE_OPTIONS: "--max-old-space-size=8192"
 
 pages:
   stage: deploy
 
-  # This runner is slower than a local machine on this build — the same
-  # ~5,800-lazy-chunk geo bundle (see the NODE_OPTIONS comment above) that
-  # takes ~25 min locally exceeded GitLab's default 1h job timeout here.
-  # Not a code failure; the pipeline was still rendering chunks when killed.
+  # Left at 2h as headroom; the manualChunks fix (see NODE_OPTIONS comment)
+  # brought the local build back down to ~6-8 min.
   timeout: 2h
 
   cache:
