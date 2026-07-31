@@ -63,6 +63,21 @@ export const NodeCard = forwardRef<HTMLDivElement, Props>(
         initial={{ opacity: 0, scale: 0.92 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.18 }}
+        // The scale animation promotes this card to its own GPU compositing
+        // layer for the transition's duration. Chrome on Windows can leave
+        // the OS cursor invisible once that layer is torn down at the end —
+        // the same class of bug as the map/drag-cursor fixes elsewhere in
+        // this codebase (see IndiaMap.tsx, CanvasBranch.tsx). It's especially
+        // visible right after the canvas first loads, when dozens of cards
+        // animate in as data streams in across a few seconds. Forcing an
+        // explicit cursor value and releasing it a frame later makes Chrome
+        // recompute it immediately instead of waiting for the pointer to
+        // leave and re-enter the window.
+        onAnimationComplete={() => {
+          const root = document.documentElement
+          root.style.cursor = 'default'
+          requestAnimationFrame(() => { root.style.cursor = '' })
+        }}
         onClick={onSelect}
         className={cn(
           'group relative flex w-[220px] cursor-grab flex-col gap-1.5 rounded-card border bg-white px-4 py-3 shadow-panel transition-colors active:cursor-grabbing',

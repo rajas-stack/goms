@@ -32,6 +32,18 @@ export const EmployeeCard = forwardRef<HTMLDivElement, Props>(
         initial={{ opacity: 0, scale: 0.92 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.18 }}
+        // See the matching comment in NodeCard.tsx: this card's mount-in
+        // scale animation promotes it to its own GPU layer, and Chrome on
+        // Windows can leave the OS cursor invisible once that layer is torn
+        // down — most visible right after the canvas first loads, while
+        // dozens of cards animate in as data streams in. Forcing a cursor
+        // value change recomputes it immediately instead of waiting for the
+        // pointer to leave and re-enter the window.
+        onAnimationComplete={() => {
+          const root = document.documentElement
+          root.style.cursor = 'default'
+          requestAnimationFrame(() => { root.style.cursor = '' })
+        }}
         onClick={onSelect}
         className={cn(
           'group relative flex w-[220px] cursor-grab items-start gap-2.5 rounded-card border px-3.5 py-3 shadow-panel transition-colors active:cursor-grabbing',
