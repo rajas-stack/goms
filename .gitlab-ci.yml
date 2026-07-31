@@ -1,19 +1,20 @@
 image: node:20
 
 variables:
-  # The real OOM cause was Rollup's module graph holding one chunk per
-  # lazy-loaded geo asset file (village-shapes + villages globs, ~12,800
-  # files combined) — chunk-graph overhead, not JSON payload size, so this
-  # heap bump alone never fully fixed it (it recurred as more geo files were
-  # added). vite.config.ts now buckets those globs into ~40 chunks each via
-  # manualChunks, which is the actual fix. Left at 8192 as headroom.
+  # This flag alone never fixed the pages job's OOM (exit 137): reproduced
+  # locally in a memory-capped `docker run node:20` container, the kill was
+  # from the container's actual memory ceiling (~6GB here), not V8's heap —
+  # --max-old-space-size only raises what V8 is *allowed* to use. The real
+  # cause was village-shapes.ts/villages.ts glob-importing ~12,800 geo JSON
+  # files as Rollup modules; they're now served from public/ and fetched at
+  # runtime instead, so Rollup never parses them. Left at 8192 as headroom.
   NODE_OPTIONS: "--max-old-space-size=8192"
 
 pages:
   stage: deploy
 
-  # Left at 2h as headroom; the manualChunks fix (see NODE_OPTIONS comment)
-  # brought the local build back down to ~6-8 min.
+  # Left at 2h as headroom; the public/-assets fix (see NODE_OPTIONS
+  # comment) brought the local build down to under a minute.
   timeout: 2h
 
   cache:
