@@ -24,7 +24,7 @@ export function Directory() {
         </div>
 
         <aside className="hidden min-h-0 w-[400px] shrink-0 overflow-y-auto scrollbar-thin bg-paper lg:block">
-          <DetailsPanel />
+          <DetailsPanel floatingClose />
         </aside>
 
         <MobileDetailsSheet />

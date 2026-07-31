@@ -1,7 +1,7 @@
 import type {
-  Charge, Domain, Employee, FollowUp, HierNode, Opportunity, OpportunityStageChange, PreferredComm,
-  OwnershipAssignment, RelationshipQuality, RelationshipStatus, SalesPerson, SalesPosting, SearchResult, Status,
-  TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
+  Charge, Domain, Employee, FollowUp, HierNode, MergeAuditRecord, MergeFieldResolution, Opportunity,
+  OpportunityStageChange, OwnershipAssignment, PreferredComm, RelationshipQuality, RelationshipStatus,
+  SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
 import { uid } from '@/lib/utils'
 import { isoToday } from '@/lib/dates'
@@ -113,6 +113,29 @@ export interface ImportEmployeeRow {
   connected?: boolean
 }
 
+/** Scalar `Employee` fields a merge can conflict on — anything not scalar
+ *  (charges, visitingCards, preferredComm, metadata) is combined by the merge
+ *  itself rather than offered as a per-field choice. */
+export type MergeableField =
+  | 'name' | 'designation' | 'email' | 'phone' | 'company' | 'address' | 'website'
+  | 'relationshipStatus' | 'relationshipQuality' | 'relationshipType' | 'introducedBy' | 'notes'
+
+export const MERGEABLE_FIELDS: MergeableField[] = [
+  'name', 'designation', 'email', 'phone', 'company', 'address', 'website',
+  'relationshipStatus', 'relationshipQuality', 'relationshipType', 'introducedBy', 'notes',
+]
+
+export interface MergeEmployeesInput {
+  /** The record that stays. */
+  survivorId: string
+  /** The record that's absorbed and deleted. */
+  duplicateId: string
+  /** Explicit picks for fields where both records had a different, non-empty
+   *  value — anything left out here keeps the survivor's own value if it has
+   *  one, else auto-fills from the duplicate. */
+  resolutions: Partial<Pick<Employee, MergeableField>>
+}
+
 export interface TransferInput {
   employeeId: string
   toOrgNodeId: string
@@ -222,6 +245,15 @@ export interface Repository {
   updateEmployee(id: string, patch: Partial<Employee>): Promise<Employee>
   setManager(employeeId: string, managerId: string | null): Promise<void>
   deleteEmployee(id: string): Promise<void>
+  /** Merges `duplicateId` into `survivorId`: reassigns every timeline event,
+   *  transfer, direct report, and department headship pointing at the
+   *  duplicate over to the survivor, combines list fields, applies the
+   *  caller's field resolutions, deletes the duplicate, and appends one
+   *  `MergeAuditRecord`. Never automatic — always an explicit user action. */
+  mergeEmployees(input: MergeEmployeesInput): Promise<{ survivor: Employee; audit: MergeAuditRecord }>
+  /** Every past merge, newest first — the only place a merged-away record's
+   *  identity and what happened to it survive for later review. */
+  listMergeAudit(): Promise<MergeAuditRecord[]>
 
   listTimeline(employeeId: string): Promise<TimelineEvent[]>
   /** Every timeline event across every employee, newest first — powers the
@@ -331,6 +363,11 @@ class InMemoryRepository implements Repository {
       salesPostings: data.salesPostings ?? [],
       ownershipAssignments: data.ownershipAssignments ?? [],
     }
+    // `mergeAudit` postdates some locally persisted snapshots (the static
+    // type says it's always there, but a snapshot saved before this field
+    // existed won't actually have it) — default it rather than let every
+    // push/read on it throw for those users.
+    if (!Array.isArray(this.data.mergeAudit)) this.data.mergeAudit = []
     // A snapshot written by an older build can still carry duplicates that
     // today's seed no longer produces, so re-run the same cleanup the seed gets.
     this.dedupeBranches()
@@ -698,6 +735,119 @@ class InMemoryRepository implements Repository {
     for (const e of this.data.employees) {
       if (e.managerId === id) e.managerId = removed?.managerId ?? null
     }
+  }
+
+  async mergeEmployees(input: MergeEmployeesInput) {
+    const survivor = this.data.employees.find((e) => e.id === input.survivorId)
+    const duplicate = this.data.employees.find((e) => e.id === input.duplicateId)
+    if (!survivor || !duplicate) throw new Error('Both records must exist to merge')
+    if (survivor.id === duplicate.id) throw new Error('Cannot merge a record with itself')
+
+    // Scalar fields: an explicit resolution wins outright; otherwise an empty
+    // survivor field is auto-filled from the duplicate. A field is only
+    // logged below when the merge actually changed something on the
+    // survivor — an untouched field (both sides agreed, or the survivor
+    // already had the only non-empty value) isn't merge activity.
+    const fieldResolutions: MergeFieldResolution[] = []
+    const patch: Record<string, unknown> = {}
+    for (const field of MERGEABLE_FIELDS) {
+      const resolved = input.resolutions[field]
+      if (resolved !== undefined) {
+        if (resolved !== survivor[field]) {
+          patch[field] = resolved
+          fieldResolutions.push({ field, kept: resolved === duplicate[field] ? 'duplicate' : 'survivor', value: String(resolved) })
+        }
+      } else if (!survivor[field] && duplicate[field]) {
+        patch[field] = duplicate[field]
+        fieldResolutions.push({ field, kept: 'duplicate', value: String(duplicate[field]) })
+      }
+    }
+    Object.assign(survivor, patch)
+
+    // List/derived fields: combined rather than replaced — a merge should
+    // never quietly drop relationship signal either side already had.
+    survivor.preferredComm = [...new Set([...survivor.preferredComm, ...duplicate.preferredComm])] as PreferredComm[]
+    const chargesMoved = duplicate.charges.length
+    survivor.charges = [...survivor.charges, ...duplicate.charges]
+    const visitingCardsMoved = duplicate.visitingCards.length
+    survivor.visitingCards = [...survivor.visitingCards, ...duplicate.visitingCards]
+    if (duplicate.lastInteractionAt && (!survivor.lastInteractionAt || duplicate.lastInteractionAt > survivor.lastInteractionAt)) {
+      survivor.lastInteractionAt = duplicate.lastInteractionAt
+    }
+    if (duplicate.followUpDate && (!survivor.followUpDate || duplicate.followUpDate < survivor.followUpDate)) {
+      survivor.followUpDate = duplicate.followUpDate
+    }
+    survivor.importantContact = survivor.importantContact || duplicate.importantContact
+    survivor.connected = survivor.connected || duplicate.connected
+
+    // Reassign every other record that pointed at the duplicate.
+    const timelineMoved = this.data.timeline.filter((t) => t.employeeId === duplicate.id).length
+    for (const t of this.data.timeline) if (t.employeeId === duplicate.id) t.employeeId = survivor.id
+
+    const transfersMoved = this.data.transfers.filter((t) => t.employeeId === duplicate.id).length
+    for (const t of this.data.transfers) if (t.employeeId === duplicate.id) t.employeeId = survivor.id
+
+    let directReportsMoved = 0
+    for (const e of this.data.employees) {
+      if (e.id === survivor.id || e.id === duplicate.id) continue
+      if (e.managerId === duplicate.id) { e.managerId = survivor.id; directReportsMoved += 1 }
+    }
+    // Either record may have reported to the other — that line no longer
+    // makes sense once they're the same record, so it collapses/clears
+    // rather than leaving a self-report or a dangling id.
+    if (survivor.managerId === duplicate.id) survivor.managerId = duplicate.managerId
+    if (survivor.managerId === survivor.id) survivor.managerId = null
+
+    let departmentHeadshipsMoved = 0
+    for (const n of this.data.nodes) {
+      if (n.metadata.deptHead === duplicate.id) {
+        n.metadata = { ...n.metadata, deptHead: survivor.id }
+        departmentHeadshipsMoved += 1
+      }
+    }
+
+    // Anyone manually flagged (metadata.duplicateOf) as a duplicate of the
+    // record being removed now points at the survivor instead — except the
+    // survivor itself, where that flag is simply resolved (it no longer
+    // means anything once the two are the same record).
+    for (const e of this.data.employees) {
+      if (e.metadata.duplicateOf !== duplicate.id) continue
+      const { duplicateOf: _drop, ...rest } = e.metadata
+      e.metadata = e.id === survivor.id ? rest : { ...rest, duplicateOf: survivor.id }
+    }
+
+    this.data.employees = this.data.employees.filter((e) => e.id !== duplicate.id)
+
+    const audit: MergeAuditRecord = {
+      id: uid('merge'),
+      survivorId: survivor.id,
+      survivorName: survivor.name,
+      duplicateId: duplicate.id,
+      duplicateName: duplicate.name,
+      mergedAt: new Date().toISOString(),
+      fieldResolutions,
+      transferred: {
+        timelineEvents: timelineMoved,
+        transfers: transfersMoved,
+        directReports: directReportsMoved,
+        departmentHeadships: departmentHeadshipsMoved,
+        visitingCards: visitingCardsMoved,
+        charges: chargesMoved,
+      },
+    }
+    this.data.mergeAudit.push(audit)
+    this.data.timeline.push({
+      id: uid('evt'), employeeId: survivor.id, type: 'custom',
+      customLabel: 'Merged duplicate',
+      title: `Merged duplicate contact "${duplicate.name || duplicate.designation}" into this record`,
+      date: isoToday(), note: '', source: 'system',
+    })
+
+    return { survivor, audit }
+  }
+
+  async listMergeAudit() {
+    return this.data.mergeAudit.slice().sort((a, b) => b.mergedAt.localeCompare(a.mergedAt))
   }
 
   async listTimeline(employeeId: string) {
@@ -1369,7 +1519,7 @@ class InMemoryRepository implements Repository {
 const MUTATOR_KEYS = [
   'createNode', 'updateNode', 'setNodeStatus', 'deleteNode', 'moveNode', 'duplicateNode',
   'reorderNode', 'importChildren', 'importEmployees',
-  'createEmployee', 'updateEmployee', 'setManager', 'deleteEmployee',
+  'createEmployee', 'updateEmployee', 'setManager', 'deleteEmployee', 'mergeEmployees',
   'addTimelineEvent', 'setTimelineEventAttended', 'deleteTimelineEvent',
   'transferEmployee', 'addCharge', 'removeCharge',
   'createOpportunity', 'updateOpportunity', 'deleteOpportunity',
@@ -1385,7 +1535,7 @@ const READER_KEYS = [
   'breadcrumb', 'childCount', 'geoRoot', 'childCounts',
   'listEmployeesUnder', 'listEmployeesDirect', 'listEmployeesByState', 'listAllEmployees',
   'listEmployeeDepartments', 'getEmployee', 'directReports', 'reportingChain',
-  'listTimeline', 'listAllTimelineEvents', 'listTransfers',
+  'listTimeline', 'listAllTimelineEvents', 'listTransfers', 'listMergeAudit',
   'listOpportunities', 'listOpportunitiesByDepartment', 'getOpportunity', 'listOpportunityStageChanges',
   'listFollowUps', 'listOpenFollowUps',
   'listSalesPersons', 'getSalesPerson', 'listSalesPostings', 'currentPostings',

@@ -157,6 +157,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
     try {
       const urls = [cardFront.url, cardBack?.url].filter((u): u is string => !!u)
       const found = await extractContact(urls)
+      const filled = (Object.keys(found) as (keyof typeof found)[]).filter((k) => found[k])
       setForm((f) => ({
         ...f,
         name: f.name || found.name || '',
@@ -167,8 +168,14 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
         address: f.address || found.address || '',
         website: f.website || found.website || '',
       }))
-      toast('Picked up contact details from the card')
-    } catch {
+      // Previously always claimed success, so a card that yielded nothing
+      // still reported "Picked up contact details" while leaving every field
+      // untouched — indistinguishable from the feature being broken.
+      toast(filled.length > 0
+        ? `Picked up ${filled.join(', ')} from the card`
+        : 'No contact details found on the card')
+    } catch (err) {
+      console.error('[add-employee] pickup failed', err)
       toast('Could not read the card — check the image or enter details manually')
     } finally {
       setOcrBusy(false)

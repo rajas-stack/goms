@@ -373,7 +373,15 @@ async function convertOne(zipName, report) {
         // Keep it, keyed by its source LGD code. It is a real place with a real
         // boundary; the hierarchy just has no node for it yet (post-snapshot
         // creation). Reported so the nodes can be added.
-        b.talukaCode = b.subLgd
+        //
+        // subLgd is only unique enough for this when it's a real code — some
+        // rows carry no Subdis_LGD at all, and Number(undefined) coerces to
+        // "NaN" for every one of them, so multiple unrelated unmatched
+        // sub-districts in the same state would otherwise collide on the same
+        // "NaN.json" and silently overwrite each other. Fall back to a
+        // district-scoped slug of the sub-district name instead, which is
+        // unique per bucket same as the real-code case.
+        b.talukaCode = b.subLgd !== 'NaN' ? b.subLgd : `x${b.distLgd}-${norm(b.subName) || 'unnamed'}`
         b.talukaName = b.subName
         b.how = 'extra'
       }

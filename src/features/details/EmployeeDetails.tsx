@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  useBreadcrumb, useDirectReports, useEmployee, useEmployeeMutations, useFollowUps, useNode,
-  useReportingChain, useTimeline, useTransfers,
+  useAllEmployees, useBreadcrumb, useDirectReports, useEmployee, useEmployeeDepartments,
+  useEmployeeMutations, useFollowUps, useNode, useReportingChain, useTimeline, useTransfers,
 } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
 import { Button } from '@/components/ui/Button'
@@ -20,10 +20,13 @@ import { TransferDialog } from '@/features/employees/TransferDialog'
 import { ChargeDialog } from '@/features/employees/ChargeDialog'
 import { EmployeeFormDialog } from '@/features/employees/EmployeeFormDialog'
 import { MarkDuplicateDialog } from '@/features/employees/MarkDuplicateDialog'
+import { MergeEmployeesDialog } from '@/features/employees/MergeEmployeesDialog'
+import { findCandidatesFor } from '@/features/employees/duplicate-detection'
 import { AddReporteeMenu } from '@/features/employees/AddReporteeMenu'
 import { abbreviateDepartmentName } from '@/features/nodes/department-meta'
 import { employeeAccent } from '@/lib/node-colors'
 import { MEETING_LOG_TYPES, TIMELINE_META, timelineEventLabel } from '@/lib/timeline-meta'
+import { useDismissedDuplicatePairs } from '@/lib/dismissed-pairs'
 import { cn, initials } from '@/lib/utils'
 import { SALES_TEAM } from '@/data/sales-team'
 import { useResolvedOwners } from '@/lib/api'
@@ -52,10 +55,29 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
   const [active, setActive] = useState<'none' | 'event' | 'transfer' | 'charge'>('none')
   const [reporteeMode, setReporteeMode] = useState<'junior' | 'manager' | null>(null)
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
+  const [mergeCandidateId, setMergeCandidateId] = useState<string | null>(null)
   // Resolves to `undefined` when unset (query disabled) or when the flagged-to
   // employee no longer exists (deleted) — either way the banner below just
   // doesn't render, no error state.
   const { data: duplicateOfEmp } = useEmployee(emp?.metadata.duplicateOf || null)
+  const { data: allEmployees = [] } = useAllEmployees()
+  const { data: departmentOf = {} } = useEmployeeDepartments()
+  const { isDismissed, dismiss } = useDismissedDuplicatePairs()
+
+  // Auto-detected suggestion (name/email/phone/department match) — distinct
+  // from the manual `metadata.duplicateOf` flag above. Suppressed once the
+  // top match is the same person the manual flag already points at (that
+  // banner already covers it) or once the user's said "not a duplicate".
+  const topAutoMatch = useMemo(() => {
+    if (!emp) return null
+    const candidates = findCandidatesFor(emp, allEmployees, { departmentOf })
+      .filter((c) => !isDismissed(c.a.id, c.b.id) && c.b.id !== duplicateOfEmp?.id)
+    return candidates[0] ?? null
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emp, allEmployees, departmentOf, isDismissed, duplicateOfEmp?.id])
+  const mergeCandidate = mergeCandidateId
+    ? allEmployees.find((e) => e.id === mergeCandidateId) ?? null
+    : null
 
   const { data: contactOwners = {} } = useResolvedOwners('contact', emp ? [emp.id] : [], isoToday())
 
@@ -100,6 +122,25 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
             </span>
             <button onClick={unflagDuplicate} className="shrink-0 text-[12px] font-medium text-teal-600 hover:underline">
               Unflag
+            </button>
+          </div>
+        )}
+
+        {!duplicateOfEmp && topAutoMatch && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-600/40 bg-amber-100/40 px-3 py-2 text-[13px] text-ink-800">
+            <Icon name="Copy" size={14} className="shrink-0 text-amber-600" />
+            <span className="min-w-0 flex-1">
+              This might be the same person as{' '}
+              <button onClick={() => ws.select('employee', topAutoMatch.b.id)} className="font-semibold hover:underline">
+                {topAutoMatch.b.name}
+              </button>
+              {' '}({topAutoMatch.matchedOn.join(', ').toLowerCase()})
+            </span>
+            <button onClick={() => setMergeCandidateId(topAutoMatch.b.id)} className="shrink-0 text-[12px] font-medium text-teal-600 hover:underline">
+              Review merge
+            </button>
+            <button onClick={() => dismiss(topAutoMatch.a.id, topAutoMatch.b.id)} className="shrink-0 text-[12px] font-medium text-muted hover:underline">
+              Not a duplicate
             </button>
           </div>
         )}
@@ -213,6 +254,21 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
         <VisitingCard employeeId={emp.id} />
       </Dialog>
       <MarkDuplicateDialog open={duplicateDialogOpen} employee={emp} onClose={() => setDuplicateDialogOpen(false)} />
+      {mergeCandidate && (
+        <MergeEmployeesDialog
+          open={!!mergeCandidate}
+          onClose={() => setMergeCandidateId(null)}
+          employeeA={emp}
+          employeeB={mergeCandidate}
+          onMerged={(survivorId) => {
+            setMergeCandidateId(null)
+            // This record was the one absorbed into the other — follow the
+            // selection over to the survivor rather than leaving it pointed
+            // at an id that no longer resolves to anything.
+            if (survivorId !== emp.id) ws.select('employee', survivorId)
+          }}
+        />
+      )}
       <TimelineEventDialog
         open={active === 'event'}
         employeeId={emp.id}

@@ -17,9 +17,13 @@ const DERIVED_SALES_ROLES: { tier: SalesTier; label: string }[] = [
  *  Everything is stored on the node's metadata so the HierNode shape is
  *  untouched. Works/opportunities are managed separately, from the
  *  department's details view — never inside this form. */
-export function DepartmentFields({ meta, setMeta, employees, onCreateHead }: {
+export function DepartmentFields({ meta, setMeta, onShortNameChange, employees, onCreateHead }: {
   meta: Record<string, string>
   setMeta: (updater: (m: Record<string, string>) => Record<string, string>) => void
+  /** Short name has its own setter (rather than going through `set` below) so
+   *  the parent can tell live auto-fill-from-name apart from a hand-typed
+   *  value and stop overwriting once the user has typed one themselves. */
+  onShortNameChange: (value: string) => void
   employees: Employee[]
   /** Lets the department-head field create a person who isn't in the system
    *  yet. Undefined while the department itself hasn't been saved (no
@@ -31,8 +35,8 @@ export function DepartmentFields({ meta, setMeta, employees, onCreateHead }: {
 
   return (
     <>
-      <Field label="Short name" hint="Optional — auto-derived from the full name (e.g. RDD, SPI) when left blank">
-        <Input value={meta.shortName ?? ''} onChange={(e) => set('shortName', e.target.value)} placeholder="Auto-derived if left blank" />
+      <Field label="Short name">
+        <Input value={meta.shortName ?? ''} onChange={(e) => onShortNameChange(e.target.value)} placeholder="e.g. RDD, NHI, GUDI" />
       </Field>
 
       <Field

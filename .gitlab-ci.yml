@@ -12,6 +12,12 @@ variables:
 pages:
   stage: deploy
 
+  # This runner is slower than a local machine on this build — the same
+  # ~5,800-lazy-chunk geo bundle (see the NODE_OPTIONS comment above) that
+  # takes ~25 min locally exceeded GitLab's default 1h job timeout here.
+  # Not a code failure; the pipeline was still rendering chunks when killed.
+  timeout: 2h
+
   cache:
     key:
       files:

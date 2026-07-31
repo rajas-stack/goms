@@ -233,6 +233,38 @@ export interface VisitingCardItem {
   backName: string | null
 }
 
+/** One scalar field carried over from a merged-away duplicate onto the
+ *  surviving record, kept for the merge's audit trail. `kept` records which
+ *  side the final value came from — 'survivor' only appears here when the
+ *  user explicitly re-picked their own existing value during conflict
+ *  review (otherwise an unchanged field is never listed at all). */
+export interface MergeFieldResolution {
+  field: string
+  kept: 'survivor' | 'duplicate'
+  value: string
+}
+
+/** A permanent record of one duplicate-contact merge — the removed record's
+ *  id no longer resolves to anything, so this is the only place its identity
+ *  and what happened to it survive for later review. */
+export interface MergeAuditRecord {
+  id: string
+  survivorId: string
+  survivorName: string
+  duplicateId: string
+  duplicateName: string
+  mergedAt: string
+  fieldResolutions: MergeFieldResolution[]
+  transferred: {
+    timelineEvents: number
+    transfers: number
+    directReports: number
+    departmentHeadships: number
+    visitingCards: number
+    charges: number
+  }
+}
+
 export interface ExternalId {
   entityType: 'geo_node' | 'org_node' | 'employee'
   entityId: string

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   repository, type AddTimelineInput, type AssignOwnerInput, type CreateEmployeeInput, type CreateFollowUpInput,
-  type CreateNodeInput, type CreateSalesPersonInput,
-  type CreateOpportunityInput, type ImportChildRow, type ImportEmployeeRow, type TransferInput,
+  type CreateNodeInput, type CreateOpportunityInput, type CreateSalesPersonInput, type ImportChildRow,
+  type ImportEmployeeRow, type MergeEmployeesInput, type TransferInput,
 } from '@/data/repository'
 import type {
   Charge, Employee, FollowUp, HierNode, Opportunity, SalesPerson, SearchResult, Status, TimelineEventType,
@@ -96,6 +96,8 @@ export const useAllTimelineEvents = (filter?: { types?: TimelineEventType[] }) =
   })
 export const useTransfers = (id: string | null) =>
   useQuery({ queryKey: qk.transfers(id ?? ''), queryFn: () => repository.listTransfers(id!), enabled: !!id })
+export const useMergeAudit = () =>
+  useQuery({ queryKey: ['mergeAudit'], queryFn: () => repository.listMergeAudit() })
 
 export const useOpportunities = () =>
   useQuery({ queryKey: qk.opportunities, queryFn: () => repository.listOpportunities() })
@@ -339,8 +341,21 @@ export function useEmployeeMutations() {
     mutationFn: (a: { orgNodeId: string; rows: ImportEmployeeRow[] }) => repository.importEmployees(a.orgNodeId, a.rows),
     onSuccess: invalidate,
   })
+  const merge = useMutation({
+    mutationFn: (i: MergeEmployeesInput) => repository.mergeEmployees(i),
+    onSuccess: () => {
+      invalidate()
+      // A merge can also repoint a department's `deptHead` metadata at the
+      // survivor — the tree/department queries the shared `invalidate` above
+      // doesn't touch need refreshing too.
+      qc.invalidateQueries({ queryKey: ['node'] })
+      qc.invalidateQueries({ queryKey: ['children'] })
+      qc.invalidateQueries({ queryKey: ['departments'] })
+      qc.invalidateQueries({ queryKey: ['mergeAudit'] })
+    },
+  })
   return {
     create, update, remove, setManager, addTimelineEvent, deleteTimelineEvent, setTimelineEventAttended,
-    transfer, addCharge, removeCharge, importEmployees,
+    transfer, addCharge, removeCharge, importEmployees, merge,
   }
 }

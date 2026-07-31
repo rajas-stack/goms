@@ -123,12 +123,23 @@ export function VisitingCard({ employeeId }: { employeeId: string }) {
       if (found.website && !emp!.website) patch.website = found.website
       const keys = Object.keys(patch)
       if (keys.length === 0) {
-        toast('No contact details found on the card')
+        // "Nothing applied" has two very different causes, and reporting both
+        // as "nothing found" made a working scan look like a failed one: the
+        // guards above deliberately don't overwrite a field this person
+        // already has, so a card that OCR'd fine still applies nothing when
+        // every field it yielded is already filled in.
+        const foundAny = Object.values(found).some(Boolean)
+        toast(foundAny
+          ? 'Card already matches this contact — nothing new to fill in'
+          : 'No contact details found on the card')
         return
       }
       await update.mutateAsync({ id: emp!.id, patch })
       toast(`Picked up ${keys.join(', ')}`)
-    } catch {
+    } catch (err) {
+      // Surfaced, not swallowed: an OCR/engine failure and a card that simply
+      // has nothing readable on it need to be tellable apart when diagnosing.
+      console.error('[visiting-card] pickup failed', err)
       toast('Could not read the card — check the image or enter details manually')
     } finally {
       setBusy(null)

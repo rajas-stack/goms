@@ -59,10 +59,22 @@ export function useClampToAncestor(open: boolean, popupRef: RefObject<HTMLElemen
       setClampStyle(undefined)
       return
     }
-    recomputeRef.current()
+    // A single on-open measurement can catch the trigger mid-animation (e.g.
+    // a button inside a Dialog that's still spring-animating in) and lock
+    // that stale offset in permanently, since nothing used to re-measure
+    // afterwards — visibly stranding the tooltip far from its trigger.
+    // Tracking continuously via rAF for as long as the tooltip is open fixes
+    // that the same way `usePopoverPosition` does for dropdown panels.
+    let raf = requestAnimationFrame(function loop() {
+      recomputeRef.current()
+      raf = requestAnimationFrame(loop)
+    })
     const onResize = () => recomputeRef.current()
     window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
+    return () => {
+      cancelAnimationFrame(raf)
+      window.removeEventListener('resize', onResize)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 

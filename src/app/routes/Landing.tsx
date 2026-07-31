@@ -15,7 +15,15 @@ export function Landing() {
 
   return (
     <div className="grid h-full grid-cols-1 overflow-y-auto scrollbar-thin lg:grid-cols-[minmax(340px,440px)_1fr] lg:overflow-hidden">
-      <section className="flex flex-col justify-center gap-8 border-b border-line px-8 py-12 lg:border-b-0 lg:border-r lg:px-12">
+      {/* `lg:min-h-0`: without it, a grid item's default `min-height: auto`
+          floors it at its own content height, so on a shorter window this
+          column's content (heading + stats grid) forces the whole grid row
+          taller than the viewport — pushing the map section's bottom (and
+          its zoom controls) past the visible area, where the grid's own
+          `overflow-hidden` clips it off instead of showing a scrollbar.
+          `lg:overflow-y-auto` gives the excess somewhere to go: this column
+          scrolls internally rather than growing the row. */}
+      <section className="flex flex-col justify-center gap-8 border-b border-line px-8 py-12 lg:min-h-0 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-12">
         <div>
           <motion.h1
             className="font-display text-[clamp(2.2rem,4vw,3.4rem)] font-bold leading-[1.02] text-ink-900"

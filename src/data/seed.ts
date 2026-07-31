@@ -1,6 +1,6 @@
 import type {
-  Employee, ExternalId, FollowUp, HierNode, Opportunity, OpportunityStageChange, OwnershipAssignment,
-  SalesPerson, SalesPosting, TimelineEvent, Transfer,
+  Employee, ExternalId, FollowUp, HierNode, MergeAuditRecord, Opportunity, OpportunityStageChange,
+  OwnershipAssignment, SalesPerson, SalesPosting, TimelineEvent, Transfer,
 } from '@/lib/types'
 import adminRaw from './india-admin.json'
 import subdistrictsRaw from './subdistricts.json'
@@ -75,6 +75,7 @@ export interface GormsData {
   salesPersons: SalesPerson[]
   salesPostings: SalesPosting[]
   ownershipAssignments: OwnershipAssignment[]
+  mergeAudit: MergeAuditRecord[]
 }
 
 export function buildSeed(): GormsData {
@@ -90,6 +91,7 @@ export function buildSeed(): GormsData {
   // snapshot produce the same roster.
   const { salesPersons, salesPostings } = buildSalesRoster()
   const ownershipAssignments: OwnershipAssignment[] = []
+  const mergeAudit: MergeAuditRecord[] = []
 
   const india: HierNode = {
     id: 'geo_india', domain: 'geo', typeKey: 'country', parentId: null, stateCode: null,
@@ -206,6 +208,6 @@ export function buildSeed(): GormsData {
   return {
     nodes, employees, externalIds, timeline, transfers,
     opportunities, opportunityStageChanges, followUps, salesPersons, salesPostings,
-    ownershipAssignments,
+    ownershipAssignments, mergeAudit,
   }
 }

@@ -16,7 +16,7 @@ import type { ImportChildRow, ImportEmployeeRow } from '@/data/repository'
 type Mode = 'nodes' | 'employees'
 
 const MODES: { value: Mode; label: string }[] = [
-  { value: 'nodes', label: 'Org records' },
+  { value: 'nodes', label: 'Departments' },
   { value: 'employees', label: 'People' },
 ]
 
@@ -82,11 +82,26 @@ function parseRows(raw: string, mode: Mode): (ImportChildRow | ImportEmployeeRow
   })
 }
 
+/** Mirrors ExportDialog's department column set, purely for the sample file
+ *  a user fills in and re-uploads — `parseRows` below still only reads
+ *  Name/Type for this mode, so the extra columns are informational only. */
+const DEPARTMENT_SAMPLE_HEADER = [
+  'State', 'Department', 'Short name', 'Code', 'Website', 'Contact', 'Email', 'Office address', 'Description',
+]
+
 function downloadSampleCsv(mode: Mode, childLabel: string) {
+  if (mode === 'nodes') {
+    const example = (n: number) => [
+      'Rajasthan', `Department Example ${n}`, `DE${n}`, `DEPT-00${n}`,
+      'https://example.gov.in', '011-23456789', 'contact@example.gov.in', 'Sample Office Address', 'Sample department description',
+    ]
+    const rows = [DEPARTMENT_SAMPLE_HEADER, example(1), example(2), example(3)]
+    downloadCsv(`import-sample-${mode}.csv`, toCsv(rows))
+    return
+  }
   const cols = SCHEMA[mode]
   const example = (n: number) => cols.map((c) => {
-    if (c.key === 'name') return mode === 'nodes' ? `${childLabel} Example ${n}` : `Example Person ${n}`
-    if (c.key === 'type') return childLabel
+    if (c.key === 'name') return `Example Person ${n}`
     if (c.key === 'designation') return 'Deputy Director'
     if (c.key === 'email') return `person${n}@example.gov.in`
     if (c.key === 'phone') return `98765 4321${n}`

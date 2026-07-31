@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
-import { useBreadcrumb, useChildCounts, useChildren, useNode, useOrgRoots } from '@/lib/api'
+import { useChildCounts, useChildren, useOrgRoots } from '@/lib/api'
 import { NODE_TYPE_MAP, childTypesOf } from '@/lib/node-types'
 import { EntityGrid } from '@/features/geography/EntityGrid'
 import { cn } from '@/lib/utils'
@@ -32,14 +32,28 @@ export function OrgTargetPicker({ open, stateCode, title, requireChildType, pick
   onPick: (node: HierNode) => void
   onClose: () => void
 }) {
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  const atRoot = selectedId === null
+  // The drill-down path as an explicit stack, NOT derived from a
+  // `useBreadcrumb` query. Every tile click already hands us the full
+  // `HierNode`, so pushing it is both cheaper (no per-level node/breadcrumb
+  // fetch) and — crucially — synchronous: `back()` used to read query data
+  // that lagged the current selection by a render, so drilling in and
+  // immediately pressing Back stepped up from the PREVIOUS node's trail and
+  // skipped a level. A stack can't go stale.
+  const [path, setPath] = useState<HierNode[]>([])
+  const current = path.length > 0 ? path[path.length - 1] : null
+  const selectedId = current?.id ?? null
+  const atRoot = current === null
 
   const { data: orgRoots = [] } = useOrgRoots(stateCode)
-  const { data: current } = useNode(selectedId)
-  const { data: trail = [] } = useBreadcrumb(selectedId)
   const { data: children = [] } = useChildren(selectedId)
   const { data: counts = {} } = useChildCounts(selectedId)
+
+  // A reopen can bypass `close()` entirely — the FAB's back-button bridge
+  // drops its flow state directly — so the path resets on open too, rather
+  // than trusting every caller to have gone through `close()`.
+  useEffect(() => {
+    if (open) setPath([])
+  }, [open, stateCode])
 
   const items = atRoot ? orgRoots : children
   const currentType = current ? NODE_TYPE_MAP[current.typeKey] : undefined
@@ -49,12 +63,11 @@ export function OrgTargetPicker({ open, stateCode, title, requireChildType, pick
   }
 
   function back() {
-    if (trail.length >= 2) setSelectedId(trail[trail.length - 2].id)
-    else setSelectedId(null)
+    setPath((p) => p.slice(0, -1))
   }
 
   function close() {
-    setSelectedId(null)
+    setPath([])
     onClose()
   }
 
@@ -76,20 +89,20 @@ export function OrgTargetPicker({ open, stateCode, title, requireChildType, pick
           <nav className="flex min-w-0 flex-wrap items-center gap-1 text-[13px]" aria-label="Organization breadcrumb">
             <button
               type="button"
-              onClick={() => setSelectedId(null)}
+              onClick={() => setPath([])}
               disabled={atRoot}
               className={cn('break-words', atRoot ? 'font-semibold text-ink-900' : 'text-muted transition-colors hover:text-ink-900 hover:underline')}
             >
               Departments
             </button>
-            {trail.map((t, i) => {
-              const isLast = i === trail.length - 1
+            {path.map((t, i) => {
+              const isLast = i === path.length - 1
               return (
                 <span key={t.id} className="flex items-center gap-1">
                   <Icon name="ChevronRight" size={12} className="shrink-0 text-line" />
                   <button
                     type="button"
-                    onClick={() => setSelectedId(t.id)}
+                    onClick={() => setPath((p) => p.slice(0, i + 1))}
                     disabled={isLast}
                     className={cn('break-words', isLast ? 'font-semibold text-ink-900' : 'text-muted transition-colors hover:text-ink-900 hover:underline')}
                   >
@@ -114,18 +127,22 @@ export function OrgTargetPicker({ open, stateCode, title, requireChildType, pick
             icon="Building2"
             getIcon={(node) => NODE_TYPE_MAP[node.typeKey]?.icon}
             emptyMessage={atRoot ? 'No departments recorded yet for this state.' : `${current?.name ?? 'This node'} has no children yet.`}
-            onSelect={(node) => setSelectedId(node.id)}
+            onSelect={(node) => setPath((p) => [...p, node])}
             onAdd={(node) => { onPick(node); close() }}
             canAdd={canPick}
             addLabel={pickLabel}
             emptyAction={current && canPick(current) && (
-              <button
-                type="button"
-                onClick={() => { onPick(current); close() }}
-                className="mt-1 flex items-center gap-2 rounded-lg border border-dashed border-line px-4 py-2 text-[13px] font-medium text-teal-600 hover:border-teal-600 hover:bg-teal-100/40"
-              >
-                <Icon name="Plus" size={14} /> {pickLabel(current)}
-              </button>
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { onPick(current); close() }}
+                  aria-label={pickLabel(current)}
+                  className="flex h-16 w-16 items-center justify-center rounded-full bg-teal-600 text-white shadow-sm transition-colors hover:bg-teal-700"
+                >
+                  <Icon name="Plus" size={28} />
+                </button>
+                <span className="text-xs text-muted">{pickLabel(current)}</span>
+              </div>
             )}
           />
           {/* The tile grid above only offers picking a CHILD of the node

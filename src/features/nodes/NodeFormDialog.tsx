@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
@@ -10,6 +10,7 @@ import { useFormDraft } from '@/lib/useFormDraft'
 import { childTypesOf, NODE_TYPE_MAP } from '@/lib/node-types'
 import { fieldsForType } from './metadata-fields'
 import { DepartmentFields } from './DepartmentFields'
+import { abbreviateDepartmentName } from './department-meta'
 import type { Domain, HierNode } from '@/lib/types'
 
 interface Props {
@@ -38,6 +39,10 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
   const [typeKey, setTypeKey] = useState<string>('')
   const [name, setName] = useState('')
   const [meta, setMeta] = useState<Record<string, string>>({})
+  // Tracks whether Short name already holds a real value (hand-typed or
+  // loaded from an existing department) — while it doesn't, the effect below
+  // keeps it in sync with the full name as it's typed.
+  const shortNameTouched = useRef(false)
 
   // The three pieces of state above, bundled into one value so `useFormDraft`
   // can save/restore them together — a name typed with a metadata field
@@ -60,11 +65,26 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
   const isDepartment = effectiveTypeKey === 'department'
   const { data: employees = [] } = useAllEmployees()
 
+  // Live-fills Short name from the full name as it's typed, e.g. "Road
+  // Development Department" -> "RDD" — stops the moment the user edits Short
+  // name directly (see shortNameTouched above and handleShortNameChange below).
+  useEffect(() => {
+    if (!isDepartment || shortNameTouched.current) return
+    setMeta((m) => ({ ...m, shortName: name.trim() ? abbreviateDepartmentName(name) : '' }))
+  }, [name, isDepartment])
+
+  function handleShortNameChange(value: string) {
+    shortNameTouched.current = true
+    setMeta((m) => ({ ...m, shortName: value }))
+  }
+
   const draft = useFormDraft(draftKey, draftForm, open, () => {
     const preset = initialTypeKey && childOptions.some((t) => t.key === initialTypeKey) ? initialTypeKey : childOptions[0]?.key ?? ''
+    const resetMeta = mode === 'edit' ? { ...node?.metadata } : {}
     setTypeKey(preset)
     setName(mode === 'edit' ? node?.name ?? '' : '')
-    setMeta(mode === 'edit' ? { ...node?.metadata } : {})
+    setMeta(resetMeta)
+    shortNameTouched.current = !!resetMeta.shortName
   })
 
   useEffect(() => {
@@ -72,9 +92,11 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
     const preset = initialTypeKey && childOptions.some((t) => t.key === initialTypeKey) ? initialTypeKey : childOptions[0]?.key ?? ''
     const base = { typeKey: preset, name: mode === 'edit' ? node?.name ?? '' : '', meta: mode === 'edit' ? { ...node?.metadata } : {} }
     const restored = draft.take(base)
+    const effectiveMeta = restored?.meta ?? base.meta
     setTypeKey(restored?.typeKey ?? base.typeKey)
     setName(restored?.name ?? base.name)
-    setMeta(restored?.meta ?? base.meta)
+    setMeta(effectiveMeta)
+    shortNameTouched.current = !!effectiveMeta.shortName
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode, node, childOptions, initialTypeKey])
 
@@ -153,7 +175,15 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
             autoFocus
           />
         </Field>
-        {isDepartment && <DepartmentFields meta={meta} setMeta={setMeta} employees={employees} onCreateHead={handleCreateHead} />}
+        {isDepartment && (
+          <DepartmentFields
+            meta={meta}
+            setMeta={setMeta}
+            onShortNameChange={handleShortNameChange}
+            employees={employees}
+            onCreateHead={handleCreateHead}
+          />
+        )}
         {fields.map((f) => {
           const value = meta[f.key] ?? ''
           const phoneInvalid = f.type === 'phone' && !isValidPhone(value)

@@ -149,7 +149,7 @@ export function StateWorkspace() {
         </div>
 
         <aside style={{ width: detailsWidth }} className="hidden min-h-0 shrink-0 overflow-y-auto scrollbar-thin bg-paper lg:block">
-          <DetailsPanel />
+          <DetailsPanel floatingClose />
         </aside>
 
         <MobileDetailsSheet />

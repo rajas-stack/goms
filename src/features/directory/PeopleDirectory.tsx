@@ -6,6 +6,7 @@ import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
 import { Combobox } from '@/components/ui/Combobox'
 import { MobileFilterBar } from '@/components/MobileFilterBar'
+import { DuplicatesPanel } from '@/features/employees/DuplicatesPanel'
 import { cn, initials } from '@/lib/utils'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import type { Employee, RelationshipStatus } from '@/lib/types'
@@ -56,6 +57,7 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
   const [managerId, setManagerId] = useState('')
   const [departmentId, setDepartmentId] = useState('')
   const [relationshipStatus, setRelationshipStatus] = useState('')
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false)
 
   // Resolve manager names from the same in-scope list so we can both search
   // and filter by reporting manager without an extra fetch.
@@ -251,8 +253,18 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
             >
               <Icon name="X" size={14} /> Clear filters
             </Button>
+
+            <Button
+              size="sm"
+              onClick={() => setDuplicatesOpen(true)}
+              className="h-11 w-full justify-center sm:ml-auto sm:h-auto sm:w-auto sm:shrink-0"
+            >
+              <Icon name="Copy" size={14} /> Find duplicates
+            </Button>
           </div>
           </MobileFilterBar>
+
+          <DuplicatesPanel open={duplicatesOpen} onClose={() => setDuplicatesOpen(false)} />
 
           <p className="text-[12px] text-muted">
             {hasFilters ? `${filtered.length} of ${employees.length} people` : `${employees.length} people`}

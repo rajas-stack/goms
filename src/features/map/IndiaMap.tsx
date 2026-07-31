@@ -464,9 +464,9 @@ export function IndiaMap() {
       </svg>
       </div>
 
-      {/* Desktop (md+) — untouched from before: one combined legend + State/UT
-          filter + jump-to panel, always visible, bottom-left. */}
-      <div className="hidden md:block absolute bottom-3 left-3 z-20 max-w-[230px] rounded-xl border border-line bg-paper/95 p-3 shadow-panel pointer-events-auto" data-map-ui>
+      {/* Desktop (md+): one combined legend + State/UT filter + jump-to
+          panel, always visible, top-right. */}
+      <div className="hidden md:block absolute top-3 right-3 z-20 max-w-[230px] rounded-xl border border-line bg-paper/95 p-3 shadow-panel pointer-events-auto" data-map-ui>
         <div className="min-w-[140px] space-y-1.5 text-[11px]">
           <LegendRow
             swatch={<span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: NAVY }} />}

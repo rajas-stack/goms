@@ -64,6 +64,16 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
   emptyAction?: ReactNode
 }) {
   if (items.length === 0) {
+    // Where an `emptyAction` exists, the caller already knows exactly what
+    // adding here means (the breadcrumb above says so) — the icon/message/
+    // hint stack would just be clutter in front of an already-obvious button.
+    if (emptyAction) {
+      return (
+        <div className="flex h-full items-center justify-center p-10">
+          {emptyAction}
+        </div>
+      )
+    }
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 rounded-card border border-dashed border-line bg-white/60 p-10 text-center">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-panel text-muted">
@@ -71,7 +81,6 @@ export function EntityGrid({ items, counts, countNoun, icon, getIcon, emptyMessa
         </div>
         <p className="max-w-xs text-sm font-medium text-ink-900">{emptyMessage}</p>
         <p className="text-xs text-muted">Use the breadcrumb or Back button to explore elsewhere.</p>
-        {emptyAction}
       </div>
     )
   }

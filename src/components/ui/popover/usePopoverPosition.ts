@@ -54,11 +54,18 @@ export function usePopoverPosition({
       setPosition({ top, left, width: matchAnchorWidth ? a.width : undefined, maxHeight })
     }
 
-    recompute()
-    // The panel mounts with the previous frame's (often empty) content, so
-    // its `scrollHeight` on the very first measurement can read as 0 — a
-    // second pass next frame measures the real, populated content.
-    const raf = requestAnimationFrame(recompute)
+    // The anchor can still be moving when this fires — e.g. a parent Dialog's
+    // entrance spring is still animating, or the panel's own first-frame
+    // content measures as 0 before layout settles. A single extra rAF pass
+    // used to be the fix, but that only catches a one-frame delay: anything
+    // slower (a spring transition runs for several hundred ms) left the panel
+    // stuck in its wrong first position until a `scroll` event happened to
+    // force a recompute. Track continuously via rAF for as long as the panel
+    // is open instead, so it always reflects the anchor's current position.
+    let raf = requestAnimationFrame(function loop() {
+      recompute()
+      raf = requestAnimationFrame(loop)
+    })
     window.addEventListener('resize', recompute)
     window.addEventListener('scroll', recompute, true)
     return () => {
