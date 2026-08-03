@@ -98,9 +98,15 @@ export function MasterFormDialog({ masterKey, def, open, onClose, editing, onSub
 
   const set = (key: string, v: string | number | boolean) => setValues((prev) => ({ ...prev, [key]: v }))
 
+  // `editing` is truthy but has `id: ''` when HierarchyView's "Add Feature"
+  // child button pre-fills a parent id via a stub row (see HierarchyView.tsx) —
+  // that's still a CREATE, not an edit, so title/reason logic keys off a real
+  // id rather than mere truthiness.
+  const isEditingRow = !!editing?.id
+
   // Feature status changes require an audit reason (spec §15/§6.6) — the
   // only master with this requirement, so the field only appears here.
-  const statusChanging = masterKey === 'features' && !!editing && values.status !== editing.status
+  const statusChanging = masterKey === 'features' && isEditingRow && values.status !== editing.status
 
   async function submit() {
     setPending(true)
@@ -122,7 +128,7 @@ export function MasterFormDialog({ masterKey, def, open, onClose, editing, onSub
     <Dialog
       open={open}
       onClose={onClose}
-      title={editing ? `Edit ${def.singularLabel}` : `Add ${def.singularLabel}`}
+      title={isEditingRow ? `Edit ${def.singularLabel}` : `Add ${def.singularLabel}`}
       footer={
         <>
           <Button onClick={onClose} disabled={pending}>Cancel</Button>
