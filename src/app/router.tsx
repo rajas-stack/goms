@@ -9,6 +9,9 @@ const Directory = lazy(() => import('./routes/Directory').then((m) => ({ default
 const RelationshipAnalytics = lazy(() => import('./routes/RelationshipAnalytics').then((m) => ({ default: m.RelationshipAnalytics })))
 const Meetings = lazy(() => import('./routes/Meetings').then((m) => ({ default: m.Meetings })))
 const SalesWorkspace = lazy(() => import('./routes/SalesWorkspace').then((m) => ({ default: m.SalesWorkspace })))
+const CommercialCalculatorWorkspace = lazy(() =>
+  import('@/modules/commercial-calculator/CommercialCalculatorWorkspace').then((m) => ({ default: m.CommercialCalculatorWorkspace })),
+)
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
 export const router = createBrowserRouter([
@@ -23,6 +26,8 @@ export const router = createBrowserRouter([
       { path: '/meetings', element: <Meetings /> },
       { path: '/sales', element: <SalesWorkspace /> },
       { path: '/sales/:section', element: <SalesWorkspace /> },
+      { path: '/commercial-calculator', element: <CommercialCalculatorWorkspace /> },
+      { path: '/commercial-calculator/:section', element: <CommercialCalculatorWorkspace /> },
       { path: '*', element: <NotFound /> },
     ],
   },

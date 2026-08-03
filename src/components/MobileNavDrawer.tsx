@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useShell } from '@/app/AppLayout'
 import { Icon } from './ui/Icon'
@@ -19,6 +19,8 @@ interface Props {
 export function MobileNavDrawer({ open, onClose }: Props) {
   const { navExpanded } = useShell()
   const navigate = useNavigate()
+  const location = useLocation()
+  const commercialActive = location.pathname.startsWith('/commercial-calculator')
 
   useEffect(() => {
     if (!open) return
@@ -78,6 +80,21 @@ export function MobileNavDrawer({ open, onClose }: Props) {
               >
                 <Icon name="Map" size={17} />
                 Account Mapping
+              </button>
+              <button
+                onClick={() => {
+                  onClose()
+                  navigate('/commercial-calculator')
+                }}
+                className={cn(
+                  'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
+                  commercialActive
+                    ? 'bg-white text-ink-900 shadow-sm'
+                    : 'text-ink hover:bg-ink-900/[0.05]',
+                )}
+              >
+                <Icon name="Calculator" size={17} />
+                Commercial Calculator
               </button>
             </motion.div>
           </>

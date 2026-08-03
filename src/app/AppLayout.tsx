@@ -40,7 +40,7 @@ export function AppLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
-  const navExpanded = location.pathname !== '/'
+  const navExpanded = location.pathname !== '/' && !location.pathname.startsWith('/commercial-calculator')
   // `MobileDetailsSheet` only renders as an overlay below `lg` (it's
   // `lg:hidden`) — at `lg` and up the same selection drives the always-visible
   // desktop `<aside>`, which isn't an overlay to close on back, so the
@@ -177,7 +177,7 @@ export function AppLayout() {
         <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
         <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
         <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-        <GlobalFab />
+        {navExpanded && <GlobalFab />}
       </Ctx.Provider>
     </ToastProvider>
   )
