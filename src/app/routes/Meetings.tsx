@@ -93,8 +93,13 @@ export function Meetings() {
     return true
   }), [allRows, deptById, departmentId, personId, attended, type, date, timeFrom, timeTo])
 
-  function openPerson(employeeId: string) {
-    navigate(`/directory?sel=${employeeId}&kind=employee`)
+  // `highlight` here is consumed by EmployeeDetails (a different reader than
+  // this page's own `useHighlightOnArrival` below) to scroll to and briefly
+  // highlight this specific timeline entry within the employee's profile —
+  // without it, "showing meeting details" just looked like "landed on the
+  // employee's generic profile" since nothing pointed at the actual meeting.
+  function openPerson(employeeId: string, entryId: string) {
+    navigate(`/directory?sel=${employeeId}&kind=employee&highlight=${entryId}`)
   }
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -195,7 +200,7 @@ export function Meetings() {
                     employee={employeeById.get(e.employeeId)!}
                     department={deptById[e.employeeId]?.name}
                     highlighted={e.id === highlightedId}
-                    onClick={() => openPerson(e.employeeId)}
+                    onClick={() => openPerson(e.employeeId, e.id)}
                   />
                 </div>
               )

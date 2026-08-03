@@ -76,6 +76,24 @@ export function GlobalFab() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [flow, setFlow] = useState<Flow>({ step: 'closed' })
   const [timelineKind, setTimelineKind] = useState<'meeting' | 'event' | null>(null)
+  const menuContainerRef = useRef<HTMLDivElement>(null)
+
+  // Closes the menu on an outside click/tap and on route changes (switching
+  // tabs) — previously the only way out was the FAB button itself (which
+  // toggles/rotates into a close "×"), so the menu stayed open and floating
+  // over whatever screen the user navigated to next.
+  useEffect(() => {
+    if (!menuOpen) return
+    function onPointerDown(e: PointerEvent) {
+      if (menuContainerRef.current && !menuContainerRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    return () => document.removeEventListener('pointerdown', onPointerDown)
+  }, [menuOpen])
+
+  useEffect(() => {
+    setMenuOpen(false)
+  }, [location.pathname])
 
   function runAction(stateCode: number, action: WorkspaceCreateAction) {
     let ok = false
@@ -144,7 +162,7 @@ export function GlobalFab() {
 
   return (
     <>
-      <div className="fixed bottom-20 right-4 z-[42] flex flex-col items-end gap-2 lg:bottom-8 lg:right-8">
+      <div ref={menuContainerRef} className="fixed bottom-20 right-4 z-[42] flex flex-col items-end gap-2 lg:bottom-8 lg:right-8">
         <AnimatePresence>
           {menuOpen && (
             <motion.div
@@ -204,6 +222,7 @@ export function GlobalFab() {
         pickLabel={orgPickLabel}
         onPick={onOrgPick}
         onClose={() => setFlow({ step: 'closed' })}
+        onBackToState={() => { if (flow.step === 'pick-org') setFlow({ step: 'pick-state', item: flow.item }) }}
       />
 
       <TimelineEventDialog

@@ -194,15 +194,20 @@ export function ExportDialog({ open, onClose }: { open: boolean; onClose: () => 
     setSelected((s) => (s.includes(key) ? s.filter((k) => k !== key) : [...s, key]))
   }
 
-  function submit() {
+  async function submit() {
     if (selected.length === 0) return
     const scope = stateCode === null ? 'all-states' : stateName(ctx, stateCode).toLowerCase().replace(/\s+/g, '-')
-    for (const key of selected) {
-      const rows = BUILDERS[key](ctx)
-      // Header-only means nothing matched the scope — skipped so the user
-      // doesn't get a file that looks like data but has none.
-      if (rows.length <= 1) continue
-      downloadCsv(`gorms-${key}-${scope}.csv`, toCsv(rows))
+    try {
+      for (const key of selected) {
+        const rows = BUILDERS[key](ctx)
+        // Header-only means nothing matched the scope — skipped so the user
+        // doesn't get a file that looks like data but has none.
+        if (rows.length <= 1) continue
+        await downloadCsv(`gorms-${key}-${scope}.csv`, toCsv(rows))
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Export failed')
+      return
     }
     const total = selected.reduce((n, k) => n + COUNTS[k], 0)
     toast(total === 0 ? 'Nothing to export for this scope' : `Exported ${total} rows across ${selected.length} file${selected.length === 1 ? '' : 's'}`)

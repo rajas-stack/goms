@@ -89,14 +89,14 @@ const DEPARTMENT_SAMPLE_HEADER = [
   'State', 'Department', 'Short name', 'Code', 'Website', 'Contact', 'Email', 'Office address', 'Description',
 ]
 
-function downloadSampleCsv(mode: Mode, childLabel: string) {
+async function downloadSampleCsv(mode: Mode, childLabel: string) {
   if (mode === 'nodes') {
     const example = (n: number) => [
       'Rajasthan', `Department Example ${n}`, `DE${n}`, `DEPT-00${n}`,
       'https://example.gov.in', '011-23456789', 'contact@example.gov.in', 'Sample Office Address', 'Sample department description',
     ]
     const rows = [DEPARTMENT_SAMPLE_HEADER, example(1), example(2), example(3)]
-    downloadCsv(`import-sample-${mode}.csv`, toCsv(rows))
+    await downloadCsv(`import-sample-${mode}.csv`, toCsv(rows))
     return
   }
   const cols = SCHEMA[mode]
@@ -109,7 +109,7 @@ function downloadSampleCsv(mode: Mode, childLabel: string) {
     return ''
   })
   const rows = [cols.map((c) => c.label), example(1), example(2), example(3)]
-  downloadCsv(`import-sample-${mode}.csv`, toCsv(rows))
+  await downloadCsv(`import-sample-${mode}.csv`, toCsv(rows))
 }
 
 export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -237,7 +237,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
           <Tooltip label="Download a ready-to-fill CSV with sample rows in the exact format this importer expects" side="left">
             <button
               type="button"
-              onClick={() => downloadSampleCsv(mode, childLabel)}
+              onClick={() => { downloadSampleCsv(mode, childLabel).catch((err) => toast(err instanceof Error ? err.message : 'Download failed')) }}
               className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[12px] font-medium text-teal-600 transition-colors hover:bg-teal-100"
             >
               <Icon name="Download" size={13} /> Download sample file

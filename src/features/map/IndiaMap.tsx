@@ -621,31 +621,34 @@ export function IndiaMap() {
 
       {/* Bottom-LEFT on a phone: the global FAB owns the bottom-right corner
           there, and the two clusters were colliding. */}
-      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel sm:left-auto sm:right-3" data-map-ui>
+      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-0.5 rounded-xl border border-line bg-white/95 p-0.5 shadow-panel sm:gap-1 sm:p-1 sm:left-auto sm:right-3" data-map-ui>
         {/* Fit-to-screen and Reset (below) both just call `resetView`, so the
             phone keeps one of them — the full 5-slot desktop cluster overran
-            the map's own width at 390px. */}
+            the map's own width at 390px. Buttons themselves also shrink below
+            `sm` (h-7/w-7 vs h-8/w-8) — at full size this cluster covered part
+            of the map's southern states on short/narrow viewports. */}
         <Tooltip label="Fit to screen" className="hidden sm:inline-flex">
-          <button onClick={resetView} className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Fit to screen">
+          <button onClick={resetView} className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900 sm:h-8 sm:w-8" aria-label="Fit to screen">
             <Icon name="Maximize" size={14} />
           </button>
         </Tooltip>
         <span className="mx-0.5 hidden h-5 w-px bg-line sm:block" />
         <Tooltip label="Zoom out">
-          <button onClick={() => zoomBy(0.85)} className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Zoom out">
-            <span className="text-base leading-none">−</span>
+          <button onClick={() => zoomBy(0.85)} className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900 sm:h-8 sm:w-8" aria-label="Zoom out">
+            <span className="text-sm leading-none sm:text-base">−</span>
           </button>
         </Tooltip>
-        <span className="pointer-events-auto w-10 text-center font-mono text-[11px] text-muted sm:w-11">{Math.round(transform.scale * 100)}%</span>
+        <span className="pointer-events-auto w-8 text-center font-mono text-[10px] text-muted sm:w-11 sm:text-[11px]">{Math.round(transform.scale * 100)}%</span>
         <Tooltip label="Zoom in">
-          <button onClick={() => zoomBy(1 / 0.85)} className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Zoom in">
-            <span className="text-base leading-none">+</span>
+          <button onClick={() => zoomBy(1 / 0.85)} className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900 sm:h-8 sm:w-8" aria-label="Zoom in">
+            <span className="text-sm leading-none sm:text-base">+</span>
           </button>
         </Tooltip>
         <span className="mx-0.5 h-5 w-px bg-line" />
         <Tooltip label="Reset view">
-          <button onClick={resetView} className="pointer-events-auto flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Reset view">
-            <Icon name="MoveRight" size={14} className="rotate-[225deg]" />
+          <button onClick={resetView} className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900 sm:h-8 sm:w-8" aria-label="Reset view">
+            <Icon name="MoveRight" size={12} className="rotate-[225deg] sm:hidden" />
+            <Icon name="MoveRight" size={14} className="hidden rotate-[225deg] sm:block" />
           </button>
         </Tooltip>
       </div>

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
   useAllEmployees, useBreadcrumb, useCurrentPostings, useDirectReports, useEmployee, useEmployeeDepartments,
@@ -41,6 +42,11 @@ const COMM_LABEL: Record<string, string> = {
 export function EmployeeDetails({ employeeId }: { employeeId: string }) {
   const ws = useWorkspace()
   const toast = useToast()
+  // Arriving from Meetings.tsx (`?highlight=<entryId>`) — points at the exact
+  // timeline row that was clicked, so this page shows more than just "some
+  // employee's profile" for that click.
+  const [searchParams] = useSearchParams()
+  const highlightEntryId = searchParams.get('highlight')
   const { remove, removeCharge, setManager, setTimelineEventAttended, update } = useEmployeeMutations()
   const { data: emp } = useEmployee(employeeId)
   const { data: chain = [] } = useReportingChain(employeeId)
@@ -430,6 +436,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
             <TimelineList
               events={timeline}
               onSetAttended={(id, attended) => setTimelineEventAttended.mutate({ id, attended })}
+              highlightId={highlightEntryId}
             />
           </section>
         )}
@@ -551,10 +558,22 @@ function TransferRow({ transfer }: { transfer: Transfer }) {
 
 const ATTENDANCE_TYPES = new Set(['meeting', 'inPerson'])
 
-function TimelineList({ events, onSetAttended }: {
+function TimelineList({ events, onSetAttended, highlightId }: {
   events: TimelineEvent[]
   onSetAttended: (id: string, attended: boolean | undefined) => void
+  highlightId?: string | null
 }) {
+  const [pulsing, setPulsing] = useState(false)
+  const highlightedRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!highlightId) return
+    highlightedRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    setPulsing(true)
+    const timer = setTimeout(() => setPulsing(false), 2000)
+    return () => clearTimeout(timer)
+  }, [highlightId])
+
   if (events.length === 0) {
     return <p className="text-sm text-muted">Nothing logged yet. Add meetings, calls, or notes to build a history.</p>
   }
@@ -565,8 +584,13 @@ function TimelineList({ events, onSetAttended }: {
         {events.map((e) => {
           const meta = TIMELINE_META[e.type]
           const canMarkAttendance = e.source === 'manual' && ATTENDANCE_TYPES.has(e.type)
+          const isHighlighted = pulsing && e.id === highlightId
           return (
-            <div key={e.id} className="relative flex gap-3">
+            <div
+              key={e.id}
+              ref={e.id === highlightId ? highlightedRef : undefined}
+              className={cn('relative flex gap-3 rounded-lg transition-colors', isHighlighted && '-mx-2 bg-teal-100/40 px-2 py-1.5')}
+            >
               <span className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-line bg-white">
                 <Icon name={meta.icon} size={14} className="text-ink-700" />
               </span>

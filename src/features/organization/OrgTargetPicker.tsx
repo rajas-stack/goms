@@ -23,7 +23,7 @@ import type { HierNode } from '@/lib/types'
  *     that can't structurally hold the intended type. Nodes that don't
  *     qualify are still drillable, since the qualifying node might be one of
  *     their descendants. */
-export function OrgTargetPicker({ open, stateCode, title, requireChildType, pickLabel, onPick, onClose }: {
+export function OrgTargetPicker({ open, stateCode, title, requireChildType, pickLabel, onPick, onClose, onBackToState }: {
   open: boolean
   stateCode: number
   title: string
@@ -31,6 +31,13 @@ export function OrgTargetPicker({ open, stateCode, title, requireChildType, pick
   pickLabel: (node: HierNode) => string
   onPick: (node: HierNode) => void
   onClose: () => void
+  /** Steps back out to the FAB's state picker so a different state (not just
+   *  a different department under this one) can be chosen — omit to keep the
+   *  breadcrumb's root a dead end (e.g. a future non-FAB caller with no state
+   *  picker to return to). Without this, drilling all the way down and
+   *  backing all the way out had nowhere left to go once the root's own
+   *  "Back one level" went disabled — this state's Departments root, forever. */
+  onBackToState?: () => void
 }) {
   // The drill-down path as an explicit stack, NOT derived from a
   // `useBreadcrumb` query. Every tile click already hands us the full
@@ -63,6 +70,7 @@ export function OrgTargetPicker({ open, stateCode, title, requireChildType, pick
   }
 
   function back() {
+    if (atRoot) { onBackToState?.(); return }
     setPath((p) => p.slice(0, -1))
   }
 
@@ -75,11 +83,11 @@ export function OrgTargetPicker({ open, stateCode, title, requireChildType, pick
     <Dialog open={open} onClose={close} title={title} size="lg">
       <div className="flex h-[28rem] max-h-[65vh] flex-col overflow-hidden rounded-card border border-line">
         <div className="z-10 flex flex-wrap items-center gap-3 border-b border-line bg-panel/40 px-3 py-2.5">
-          <Tooltip label="Back one level" side="bottom">
+          <Tooltip label={atRoot && onBackToState ? 'Change state' : 'Back one level'} side="bottom">
             <button
               onClick={back}
-              disabled={atRoot}
-              aria-label="Back one level"
+              disabled={atRoot && !onBackToState}
+              aria-label={atRoot && onBackToState ? 'Change state' : 'Back one level'}
               className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted before:absolute before:-inset-2 before:content-[''] hover:bg-white hover:text-ink disabled:opacity-30 disabled:pointer-events-none"
             >
               <Icon name="ArrowLeft" size={15} />

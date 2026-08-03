@@ -488,6 +488,39 @@ export function reviseBoqLogic(data: CommercialCalculatorData, id: string): Comm
   return revised
 }
 
+/** Creates an independent new BOQ — fresh `boqNumber`, `status: 'draft'`,
+ *  `boqVersion: 1`, no `parentBoqId` — copying this BOQ's fields and line
+ *  items as a starting point. Distinct from `reviseBoqLogic`, which keeps the
+ *  same `boqNumber` and links back via `parentBoqId`: a duplicate is a new,
+ *  unrelated proposal that happens to start from an existing one as a
+ *  template (2026-08-03 redesign — BOQ Management's "Duplicate" action). */
+export function duplicateBoqLogic(data: CommercialCalculatorData, id: string): CommercialBoq {
+  const original = data.commercialBoqs.find((b) => b.id === id)
+  if (!original) throw new Error(`No such BOQ: ${id}`)
+  const now = new Date().toISOString()
+  const duplicate: CommercialBoq = {
+    ...original,
+    id: uid('boq'),
+    boqNumber: generateBoqNumber(data),
+    status: 'draft',
+    boqVersion: 1,
+    revisionNumber: 0,
+    parentBoqId: null,
+    createdAt: now,
+    lastModifiedAt: now,
+  }
+  data.commercialBoqs.push(duplicate)
+
+  for (const line of data.commercialBoqLineItems.filter((li) => li.boqId === original.id)) {
+    data.commercialBoqLineItems.push({ ...line, id: uid('bli'), boqId: duplicate.id })
+  }
+  writeAuditLogEntry(data, {
+    entityType: 'boq', entityId: duplicate.id, field: 'boqNumber', oldValue: '', newValue: duplicate.boqNumber,
+    reason: `Duplicated from ${original.boqNumber}.`, action: 'create', changedBy: null,
+  })
+  return duplicate
+}
+
 // --- Margin (spec §11.1) ----------------------------------------------------
 
 export function computeBoqMarginPercent(
