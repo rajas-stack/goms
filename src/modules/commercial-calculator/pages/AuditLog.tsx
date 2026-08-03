@@ -14,7 +14,7 @@ const ENTITY_TYPES = [
  *  write here today. */
 export function AuditLog() {
   const [entityType, setEntityType] = useState('')
-  const { data: rows = [] } = useAuditLogs(entityType || undefined)
+  const { data: rows = [] } = useAuditLogs({ entityType: entityType || undefined })
 
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3">

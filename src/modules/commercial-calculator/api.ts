@@ -12,10 +12,13 @@ export const qk = {
   editionFeatures: (editionId: string) => ['commercialCalculator', 'editionFeatures', editionId] as const,
   skus: ['commercialCalculator', 'skus'] as const,
   bomItems: (parentSkuId: string) => ['commercialCalculator', 'bomItems', parentSkuId] as const,
+  allBomItems: ['commercialCalculator', 'bomItems', 'all'] as const,
   boqs: ['commercialCalculator', 'boqs'] as const,
   boqLineItems: (boqId: string) => ['commercialCalculator', 'boqLineItems', boqId] as const,
+  allBoqLineItems: ['commercialCalculator', 'boqLineItems', 'all'] as const,
   dashboardMetrics: ['commercialCalculator', 'dashboardMetrics'] as const,
-  auditLogs: (entityType?: string) => ['commercialCalculator', 'auditLogs', entityType ?? 'all'] as const,
+  auditLogs: (entityType?: string, entityId?: string) =>
+    ['commercialCalculator', 'auditLogs', entityType ?? 'all', entityId ?? 'all'] as const,
 }
 
 // --- Generic Masters CRUD (Phase 0/1) --------------------------------------
@@ -105,6 +108,10 @@ export const useBomItems = (parentSkuId: string | null) =>
     enabled: !!parentSkuId,
   })
 
+/** Every BOM item across every parent SKU — powers the SKU Catalog's "Usage
+ *  Count" column (how many other SKUs reference this one as a component). */
+export const useAllBomItems = () => useQuery({ queryKey: qk.allBomItems, queryFn: () => repository.listAllBomItems() })
+
 export function useBomMutations(parentSkuId: string) {
   const qc = useQueryClient()
   const invalidate = () => qc.invalidateQueries({ queryKey: qk.bomItems(parentSkuId) })
@@ -125,6 +132,11 @@ export const useBoqs = () => useQuery({ queryKey: qk.boqs, queryFn: () => reposi
 
 export const useBoqLineItems = (boqId: string) =>
   useQuery({ queryKey: qk.boqLineItems(boqId), queryFn: () => repository.listBoqLineItems(boqId), enabled: !!boqId })
+
+/** Every BOQ line item across every BOQ — powers the SKU Catalog's "BOQ
+ *  Count" column (how many proposals reference this SKU). */
+export const useAllBoqLineItems = () =>
+  useQuery({ queryKey: qk.allBoqLineItems, queryFn: () => repository.listAllBoqLineItems() })
 
 export function useBoqMutations() {
   const qc = useQueryClient()
@@ -214,8 +226,8 @@ export const useDashboardMetrics = () =>
 
 // --- Audit Log (spec §6.6/§15) ----------------------------------------------
 
-export const useAuditLogs = (entityType?: string) =>
+export const useAuditLogs = (filter?: { entityType?: string; entityId?: string }) =>
   useQuery({
-    queryKey: qk.auditLogs(entityType),
-    queryFn: () => repository.listAuditLogs(entityType ? { entityType } : undefined),
+    queryKey: qk.auditLogs(filter?.entityType, filter?.entityId),
+    queryFn: () => repository.listAuditLogs(filter?.entityType || filter?.entityId ? filter : undefined),
   })

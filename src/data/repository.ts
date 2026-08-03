@@ -19,7 +19,8 @@ import { clearSnapshot, loadSnapshot, scheduleSave } from './persist'
 import {
   addBoqLineItemLogic, createBoqLogic, createBomItemLogic, createMasterLogic, createSkuLogic,
   deleteBomItemLogic, deleteMasterLogic, deleteSkuLogic, getBoqLogic, getMasterLogic, getSkuLogic,
-  listAuditLogsLogic, listBoqLineItemsLogic, listBoqsLogic, listBomItemsForSkuLogic, listEditionFeaturesLogic,
+  listAllBomItemsLogic, listAllBoqLineItemsLogic, listAuditLogsLogic, listBoqLineItemsLogic, listBoqsLogic,
+  listBomItemsForSkuLogic, listEditionFeaturesLogic,
   listMasterLogic, listSkusLogic, removeBoqLineItemLogic, reviseBoqLogic, setEditionFeaturesLogic,
   setMasterActiveLogic, updateBoqLineItemLogic, updateBoqStatusLogic, updateBomItemLogic, updateMasterLogic,
   updateSkuLogic,
@@ -396,6 +397,9 @@ export interface Repository {
 
   // --- Commercial Calculator: Commercial BOM (spec §6.4/§14) -----------------
   listBomItemsForSku(parentSkuId: string): Promise<CommercialBomItem[]>
+  /** Every BOM item across every parent SKU — read-only aggregate for the SKU
+   *  Catalog's "Usage Count" column. */
+  listAllBomItems(): Promise<CommercialBomItem[]>
   createBomItem(input: CreateBomItemInput): Promise<CommercialBomItem>
   updateBomItem(id: string, patch: Partial<CommercialBomItem>): Promise<CommercialBomItem>
   deleteBomItem(id: string): Promise<void>
@@ -404,6 +408,9 @@ export interface Repository {
   listBoqs(): Promise<CommercialBoq[]>
   getBoq(id: string): Promise<CommercialBoq | null>
   listBoqLineItems(boqId: string): Promise<CommercialBoqLineItem[]>
+  /** Every BOQ line item across every BOQ — read-only aggregate for the SKU
+   *  Catalog's "BOQ Count" column. */
+  listAllBoqLineItems(): Promise<CommercialBoqLineItem[]>
   createBoq(input: CreateBoqInput): Promise<CommercialBoq>
   addBoqLineItem(boqId: string, input: CreateBoqLineItemInput): Promise<CommercialBoqLineItem>
   updateBoqLineItem(
@@ -1300,6 +1307,10 @@ class InMemoryRepository implements Repository {
     return listBomItemsForSkuLogic(this.data.commercialCalculator, parentSkuId)
   }
 
+  async listAllBomItems() {
+    return listAllBomItemsLogic(this.data.commercialCalculator)
+  }
+
   async createBomItem(input: CreateBomItemInput) {
     return createBomItemLogic(this.data.commercialCalculator, input)
   }
@@ -1322,6 +1333,10 @@ class InMemoryRepository implements Repository {
 
   async listBoqLineItems(boqId: string) {
     return listBoqLineItemsLogic(this.data.commercialCalculator, boqId)
+  }
+
+  async listAllBoqLineItems() {
+    return listAllBoqLineItemsLogic(this.data.commercialCalculator)
   }
 
   async createBoq(input: CreateBoqInput) {
@@ -1781,7 +1796,7 @@ class InMemoryRepository implements Repository {
       .map((t) => ({ employeeId: t.employeeId, name: nameById.get(t.employeeId)!.name, type: t.type, title: t.title, date: t.date }))
 
     const upcomingMeetings: InteractionSummary[] = this.data.timeline
-      .filter((t) => (t.type === 'meeting' || t.type === 'inPerson') && t.date > today
+      .filter((t) => (t.type === 'meeting' || t.type === 'inPerson') && t.date >= today
         && nameById.get(t.employeeId) && !nameById.get(t.employeeId)!.vacant)
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 8)
@@ -1831,7 +1846,8 @@ const READER_KEYS = [
   'listOwnershipAssignments', 'listOwnershipFor', 'listOwnedBy', 'resolveOwner', 'resolveOwners',
   'search', 'relatedRecords', 'moveTargets', 'relationshipAnalytics',
   'listMaster', 'getMaster', 'listEditionFeatures',
-  'listSkus', 'getSku', 'listBomItemsForSku', 'listBoqs', 'getBoq', 'listBoqLineItems', 'listAuditLogs',
+  'listSkus', 'getSku', 'listBomItemsForSku', 'listAllBomItems', 'listBoqs', 'getBoq', 'listBoqLineItems',
+  'listAllBoqLineItems', 'listAuditLogs',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the

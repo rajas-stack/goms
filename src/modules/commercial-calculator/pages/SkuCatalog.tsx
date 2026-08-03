@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Field'
+import { Input, Select } from '@/components/ui/Field'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { useToast } from '@/components/ui/Toast'
-import { useMasters, useSkuMutations, useSkus } from '../api'
+import { useAllBomItems, useAllBoqLineItems, useAuditLogs, useMasters, useSkuMutations, useSkus } from '../api'
 import { SkuFormDialog } from '../components/SkuFormDialog'
-import { computeSkuMarginPercent } from '../repository-logic'
+import { SkuBomEditor } from '../components/SkuBomEditor'
+import { computeSkuMarginPercent, skuTotalUnitCost } from '../repository-logic'
 import type { CommercialSku, CreateSkuInput } from '../types'
 
 const LIFECYCLE_STYLE: Record<CommercialSku['lifecycleStatus'], string> = {
@@ -16,78 +17,143 @@ const LIFECYCLE_STYLE: Record<CommercialSku['lifecycleStatus'], string> = {
   retired: 'bg-rose-50 text-rose-700',
 }
 
+type Tab = 'overview' | 'pricing' | 'costs' | 'bom' | 'audit'
+const TABS: { key: Tab; label: string }[] = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'pricing', label: 'Pricing' },
+  { key: 'costs', label: 'Costs' },
+  { key: 'bom', label: 'BOM' },
+  { key: 'audit', label: 'Audit History' },
+]
+
+/** SKU Catalog, redesigned 2026-08-03 from a flat searchable card list into a
+ *  product-detail experience (list + master-detail, matching HierarchyView's
+ *  pattern): a compact filterable list on the left, a full product page with
+ *  Overview/Pricing/Costs/BOM/Audit tabs on the right. Commercial BOM has no
+ *  standalone module tab anymore — it's the BOM tab here, scoped to whichever
+ *  SKU is selected. */
 export function SkuCatalog() {
   const { data: skus = [] } = useSkus()
   const { data: categories = [] } = useMasters('skuCategories')
+  const { data: allBomItems = [] } = useAllBomItems()
+  const { data: allBoqLineItems = [] } = useAllBoqLineItems()
   const { create, update, remove } = useSkuMutations()
   const toast = useToast()
 
   const categoryName = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
+  const usageCountBySku = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const b of allBomItems) map.set(b.componentSkuId, (map.get(b.componentSkuId) ?? 0) + 1)
+    return map
+  }, [allBomItems])
+  const boqCountBySku = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    for (const li of allBoqLineItems) {
+      if (!map.has(li.skuId)) map.set(li.skuId, new Set())
+      map.get(li.skuId)!.add(li.boqId)
+    }
+    return map
+  }, [allBoqLineItems])
 
   const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<CommercialSku | null>(null)
   const [deleting, setDeleting] = useState<CommercialSku | null>(null)
+  const [tab, setTab] = useState<Tab>('overview')
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return skus
-    return skus.filter((s) => s.skuCode.toLowerCase().includes(q) || s.name.toLowerCase().includes(q))
-  }, [skus, query])
+    return skus.filter((s) => {
+      const matchesQuery = !q || s.skuCode.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)
+      const matchesStatus = !statusFilter || s.lifecycleStatus === statusFilter
+      return matchesQuery && matchesStatus
+    })
+  }, [skus, query, statusFilter])
+
+  const selected = skus.find((s) => s.id === selectedId) ?? null
 
   async function handleSubmit(input: CreateSkuInput | Partial<CommercialSku>, changeReason?: string) {
     if (editing) {
       await update.mutateAsync({ id: editing.id, patch: input as Partial<CommercialSku>, changeReason })
       toast('SKU updated.')
     } else {
-      await create.mutateAsync(input as CreateSkuInput)
+      const created = await create.mutateAsync(input as CreateSkuInput)
       toast('SKU created.')
+      setSelectedId(created.id)
     }
   }
 
   return (
-    <div className="flex h-full flex-col gap-3 overflow-y-auto p-3">
-      <div className="flex items-center gap-2">
-        <div className="relative flex-1">
-          <Icon name="Search" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search SKU code or name…" className="pl-9" />
+    <div className="flex h-full min-h-0">
+      <div className="flex w-[380px] shrink-0 flex-col gap-2 overflow-y-auto border-r border-line p-3">
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Icon name="Search" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="SKU code or name…" className="pl-9" />
+          </div>
+          <Button variant="primary" size="sm" onClick={() => { setEditing(null); setFormOpen(true) }} title="Add SKU">
+            <Icon name="Plus" size={15} />
+          </Button>
         </div>
-        <Button variant="primary" size="sm" onClick={() => { setEditing(null); setFormOpen(true) }}>
-          <Icon name="Plus" size={15} />
-          Add SKU
-        </Button>
+        <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="">All statuses</option>
+          <option value="draft">Draft</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="retired">Retired</option>
+        </Select>
+
+        {filtered.length === 0 && (
+          <p className="px-1 py-6 text-center text-[13px] text-muted">
+            No SKUs match. {skus.length === 0 && 'Add one, or add Features first under Masters → Hierarchy.'}
+          </p>
+        )}
+        {filtered.map((sku) => (
+          <button
+            key={sku.id}
+            onClick={() => { setSelectedId(sku.id); setTab('overview') }}
+            className={`flex flex-col gap-1.5 rounded-xl border px-3 py-2.5 text-left ${
+              sku.id === selectedId ? 'border-ink-900/20 bg-ink-900/[0.04]' : 'border-line bg-white hover:bg-panel'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="truncate font-mono text-[12px] font-medium text-ink-900">{sku.skuCode}</span>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${LIFECYCLE_STYLE[sku.lifecycleStatus]}`}>
+                {sku.lifecycleStatus}
+              </span>
+            </div>
+            <div className="truncate text-[13px] text-ink-800">{sku.name}</div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted">
+              <span>{categoryName.get(sku.categoryId) ?? '—'}</span>
+              <span>List {sku.listPrice.toLocaleString()}</span>
+              <span>Margin {computeSkuMarginPercent(sku).toFixed(1)}%</span>
+              <span>{usageCountBySku.get(sku.id) ?? 0} BOM refs</span>
+              <span>{boqCountBySku.get(sku.id)?.size ?? 0} BOQs</span>
+            </div>
+          </button>
+        ))}
       </div>
 
-      {filtered.length === 0 && (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center">
-          <Icon name="Boxes" size={20} className="text-muted" />
-          <p className="text-sm text-muted">No SKUs yet — add one, or add Features first under Masters → Hierarchy.</p>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-2">
-        {filtered.map((sku) => (
-          <div key={sku.id} className="flex items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5">
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="shrink-0 rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku.skuCode}</span>
-                <span className="truncate text-sm font-medium text-ink-900">{sku.name}</span>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${LIFECYCLE_STYLE[sku.lifecycleStatus]}`}>
-                  {sku.lifecycleStatus}
-                </span>
-              </div>
-              <div className="text-[12px] text-muted">
-                {categoryName.get(sku.categoryId) ?? '—'} · List {sku.listPrice.toLocaleString()} · Margin {computeSkuMarginPercent(sku).toFixed(1)}%
-              </div>
-            </div>
-            <Button size="icon" onClick={() => { setEditing(sku); setFormOpen(true) }} title="Edit">
-              <Icon name="Pencil" size={15} />
-            </Button>
-            <Button size="icon" onClick={() => setDeleting(sku)} title="Delete">
-              <Icon name="Trash2" size={15} />
-            </Button>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {!selected ? (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+            <Icon name="Boxes" size={20} className="text-muted" />
+            <p className="text-sm text-muted">Select a SKU to see its details.</p>
           </div>
-        ))}
+        ) : (
+          <SkuDetail
+            sku={selected}
+            tab={tab}
+            onTabChange={setTab}
+            usageCount={usageCountBySku.get(selected.id) ?? 0}
+            boqCount={boqCountBySku.get(selected.id)?.size ?? 0}
+            categoryName={categoryName.get(selected.categoryId) ?? '—'}
+            onEdit={() => { setEditing(selected); setFormOpen(true) }}
+            onDelete={() => setDeleting(selected)}
+          />
+        )}
       </div>
 
       <SkuFormDialog open={formOpen} onClose={() => setFormOpen(false)} editing={editing} onSubmit={handleSubmit} />
@@ -96,9 +162,155 @@ export function SkuCatalog() {
           open={!!deleting}
           onClose={() => setDeleting(null)}
           itemLabel={`${deleting.skuCode} — ${deleting.name}`}
-          onConfirm={() => remove.mutateAsync(deleting.id)}
+          onConfirm={async () => {
+            await remove.mutateAsync(deleting.id)
+            if (selectedId === deleting.id) setSelectedId(null)
+          }}
         />
       )}
+    </div>
+  )
+}
+
+function SkuDetail({ sku, tab, onTabChange, usageCount, boqCount, categoryName, onEdit, onDelete }: {
+  sku: CommercialSku
+  tab: Tab
+  onTabChange: (t: Tab) => void
+  usageCount: number
+  boqCount: number
+  categoryName: string
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  return (
+    <div className="flex max-w-3xl flex-col gap-4">
+      <div className="flex items-start justify-between">
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">SKU</div>
+          <h2 className="font-mono text-lg font-semibold text-ink-900">{sku.skuCode}</h2>
+          <p className="text-[13px] text-muted">{sku.name}</p>
+        </div>
+        <div className="flex gap-2">
+          <Button size="sm" onClick={onEdit}><Icon name="Pencil" size={13} />Edit</Button>
+          <Button size="sm" onClick={onDelete}><Icon name="Trash2" size={13} />Delete</Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 rounded-xl border border-line p-3 text-sm sm:grid-cols-5">
+        <DetailField label="Status" value={sku.lifecycleStatus} />
+        <DetailField label="List Price" value={sku.listPrice.toLocaleString()} />
+        <DetailField label="Margin" value={`${computeSkuMarginPercent(sku).toFixed(1)}%`} />
+        <DetailField label="Used in BOMs" value={String(usageCount)} />
+        <DetailField label="Used in BOQs" value={String(boqCount)} />
+      </div>
+
+      <div className="flex items-center gap-1 overflow-x-auto border-b border-line">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => onTabChange(t.key)}
+            className={`shrink-0 rounded-t-lg px-3 py-2 text-[13px] font-medium transition-colors ${
+              t.key === tab ? 'border-b-2 border-ink-900 text-ink-900' : 'text-ink-600/70 hover:text-ink-900'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="pt-1">
+        {tab === 'overview' && <OverviewTab sku={sku} categoryName={categoryName} />}
+        {tab === 'pricing' && <PricingTab sku={sku} />}
+        {tab === 'costs' && <CostsTab sku={sku} />}
+        {tab === 'bom' && <SkuBomEditor skuId={sku.id} />}
+        {tab === 'audit' && <AuditTab skuId={sku.id} />}
+      </div>
+    </div>
+  )
+}
+
+function DetailField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-sm text-ink-900">{value || '—'}</div>
+    </div>
+  )
+}
+
+function OverviewTab({ sku, categoryName }: { sku: CommercialSku; categoryName: string }) {
+  const { data: features = [] } = useMasters('features')
+  const { data: editions = [] } = useMasters('productEditions')
+  const { data: uoms = [] } = useMasters('unitsOfMeasure')
+  const { data: currencies = [] } = useMasters('currencies')
+  const { data: taxClasses = [] } = useMasters('taxClasses')
+  const { data: billingTypes = [] } = useMasters('billingTypes')
+
+  return (
+    <div className="grid grid-cols-2 gap-4 rounded-xl border border-line p-4 sm:grid-cols-3">
+      <DetailField label="Category" value={categoryName} />
+      <DetailField label="Feature" value={features.find((f) => f.id === sku.featureId)?.name ?? '—'} />
+      <DetailField label="Product Edition" value={editions.find((e) => e.id === sku.editionId)?.name ?? '—'} />
+      <DetailField label="Unit of Measure" value={uoms.find((u) => u.id === sku.uomId)?.name ?? '—'} />
+      <DetailField label="Currency" value={currencies.find((c) => c.id === sku.currencyId)?.code ?? '—'} />
+      <DetailField label="Tax Class" value={taxClasses.find((t) => t.id === sku.taxClassId)?.name ?? '—'} />
+      <DetailField label="Billing Type" value={billingTypes.find((b) => b.id === sku.billingTypeId)?.name ?? '—'} />
+      <DetailField label="Active From" value={sku.activeFrom} />
+      <DetailField label="Active Till" value={sku.activeTill ?? 'Open-ended'} />
+      <DetailField label="Sellable" value={sku.isSellable ? 'Yes' : 'No'} />
+    </div>
+  )
+}
+
+function PricingTab({ sku }: { sku: CommercialSku }) {
+  return (
+    <div className="grid grid-cols-2 gap-4 rounded-xl border border-line p-4 sm:grid-cols-4">
+      <DetailField label="Internal" value={sku.internalPrice.toLocaleString()} />
+      <DetailField label="Floor" value={sku.floorPrice.toLocaleString()} />
+      <DetailField label="Partner" value={sku.partnerPrice.toLocaleString()} />
+      <DetailField label="Government" value={sku.governmentPrice.toLocaleString()} />
+      <DetailField label="Enterprise" value={sku.enterprisePrice.toLocaleString()} />
+      <DetailField label="Corporate" value={sku.corporatePrice.toLocaleString()} />
+      <DetailField label="List" value={sku.listPrice.toLocaleString()} />
+      <DetailField label="Minimum Allowed" value={sku.minimumAllowedPrice.toLocaleString()} />
+      <DetailField label="Max Discount %" value={`${sku.maximumDiscountPercent}%`} />
+      <DetailField label="Margin at List Price" value={`${computeSkuMarginPercent(sku).toFixed(1)}%`} />
+    </div>
+  )
+}
+
+function CostsTab({ sku }: { sku: CommercialSku }) {
+  return (
+    <div className="grid grid-cols-2 gap-4 rounded-xl border border-line p-4 sm:grid-cols-4">
+      <DetailField label="Base Software" value={sku.baseSoftwareCost.toLocaleString()} />
+      <DetailField label="Implementation / MM" value={sku.implementationCostPerMM.toLocaleString()} />
+      <DetailField label="Integration" value={sku.integrationCost.toLocaleString()} />
+      <DetailField label="Third Party" value={sku.thirdPartyCost.toLocaleString()} />
+      <DetailField label="Hardware" value={sku.hardwareCost.toLocaleString()} />
+      <DetailField label="Cloud" value={sku.cloudCost.toLocaleString()} />
+      <DetailField label="Support" value={sku.supportCost.toLocaleString()} />
+      <DetailField label="Training" value={sku.trainingCost.toLocaleString()} />
+      <DetailField label="Total Cost" value={skuTotalUnitCost(sku).toLocaleString()} />
+    </div>
+  )
+}
+
+function AuditTab({ skuId }: { skuId: string }) {
+  const { data: rows = [] } = useAuditLogs({ entityType: 'sku', entityId: skuId })
+  if (rows.length === 0) return <p className="text-[13px] text-muted">No audit entries for this SKU yet.</p>
+  return (
+    <div className="flex flex-col gap-2">
+      {rows.map((row) => (
+        <div key={row.id} className="rounded-xl border border-line bg-white px-3 py-2.5">
+          <div className="flex items-center gap-2 text-[13px]">
+            <span className="font-medium text-ink-900">{row.action}</span>
+            <span className="text-muted">·</span>
+            <span className="text-muted">{row.field}: {row.oldValue || '—'} → {row.newValue}</span>
+          </div>
+          {row.reason && <div className="mt-1 text-[12px] text-muted">{row.reason}</div>}
+          <div className="mt-1 text-[11px] text-muted">{new Date(row.changedAt).toLocaleString()}</div>
+        </div>
+      ))}
     </div>
   )
 }

@@ -227,6 +227,13 @@ export function listBomItemsForSkuLogic(data: CommercialCalculatorData, parentSk
   return data.commercialBomItems.filter((b) => b.parentSkuId === parentSkuId)
 }
 
+/** Every BOM item across every parent SKU — read-only aggregate, used by the
+ *  SKU Catalog list to show how many other SKUs use a given SKU as a
+ *  component ("Usage Count"). */
+export function listAllBomItemsLogic(data: CommercialCalculatorData): CommercialBomItem[] {
+  return data.commercialBomItems
+}
+
 export function createBomItemLogic(data: CommercialCalculatorData, input: CreateBomItemInput): CommercialBomItem {
   if (input.parentSkuId === input.componentSkuId) throw new Error('A SKU cannot be a BOM component of itself.')
   if (!data.commercialSkus.some((s) => s.id === input.parentSkuId)) throw new Error(`No such parent SKU: ${input.parentSkuId}`)
@@ -272,6 +279,13 @@ export function getBoqLogic(data: CommercialCalculatorData, id: string): Commerc
 
 export function listBoqLineItemsLogic(data: CommercialCalculatorData, boqId: string): CommercialBoqLineItem[] {
   return data.commercialBoqLineItems.filter((li) => li.boqId === boqId)
+}
+
+/** Every BOQ line item across every BOQ — read-only aggregate, used by the
+ *  SKU Catalog list to show how many proposals reference a given SKU
+ *  ("BOQ Count"). */
+export function listAllBoqLineItemsLogic(data: CommercialCalculatorData): CommercialBoqLineItem[] {
+  return data.commercialBoqLineItems
 }
 
 export function createBoqLogic(data: CommercialCalculatorData, input: CreateBoqInput): CommercialBoq {
