@@ -3,6 +3,7 @@ import { buildOwnershipFixture } from './ownership-fixture'
 import { buildSalesRoster, mergeMissingSalesRoster } from './sales-roster-seed'
 import { SALES_TEAM } from './sales-team'
 import type { GormsData } from './seed'
+import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
 
 /** Bump when `GormsData`'s shape changes, and add a matching entry to
  *  `MIGRATIONS` keyed by the new number. Unlike the previous
@@ -19,8 +20,11 @@ import type { GormsData } from './seed'
  *  v7  corrects current-posting tierKey for SALES_TEAM members with an
  *      explicit `tiers` override (fixes territory heads seeded at the wrong
  *      tier by an earlier, incorrectly-ordered `tiers` array)
+ *  v8  Commercial Calculator data slice (GormsData.commercialCalculator) —
+ *      seeded with FRS default masters; a snapshot that already has this key
+ *      is left untouched rather than overwritten.
  */
-export const SCHEMA_VERSION = 7
+export const SCHEMA_VERSION = 8
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -193,6 +197,15 @@ function toV7(data: SnapshotShape): SnapshotShape {
   return { ...data, salesPostings: corrected }
 }
 
+/** v7 → v8. Adds the Commercial Calculator module's data slice. Idempotent:
+ *  a snapshot that somehow already has a `commercialCalculator` key
+ *  (shouldn't happen pre-v8) is left alone rather than overwritten, so
+ *  re-running this step never loses admin edits. */
+function toV8(data: SnapshotShape): SnapshotShape {
+  if (data.commercialCalculator && typeof data.commercialCalculator === 'object' && !Array.isArray(data.commercialCalculator)) return data
+  return { ...data, commercialCalculator: buildDefaultCommercialCalculatorData() }
+}
+
 /** Keyed by the version each step PRODUCES, so applying every key from
  *  `fromVersion + 1` up to `SCHEMA_VERSION` walks the chain in order. */
 export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> = {
@@ -202,6 +215,7 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   5: toV5,
   6: toV6,
   7: toV7,
+  8: toV8,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

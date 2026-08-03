@@ -61,6 +61,25 @@ describe('migrateSnapshot', () => {
       expect(MIGRATIONS[v], `missing migration to v${v}`).toBeTypeOf('function')
     }
   })
+
+  it('adds the Commercial Calculator data slice with default seed data when migrating an old snapshot', () => {
+    const out = migrateSnapshot(v1Snapshot(), 1)
+    expect(out).not.toBeNull()
+    expect(out!.commercialCalculator.masters.skuCategories).toHaveLength(12)
+    expect(out!.commercialCalculator.masters.currencies.find((c) => c.code === 'INR')?.isBaseCurrency).toBe(true)
+    expect(out!.commercialCalculator.productEditionFeatures).toEqual([])
+  })
+
+  it('does not clobber an existing commercialCalculator slice if one is already present', () => {
+    const withData = {
+      ...v1Snapshot(),
+      commercialCalculator: { masters: { verticals: [{ id: 'v1', code: 'X', name: 'X', description: '', active: true, displayOrder: 0 }] }, productEditionFeatures: [] },
+    }
+    const out = migrateSnapshot(withData, 1)
+    expect(out).not.toBeNull()
+    expect(out!.commercialCalculator.masters.verticals).toHaveLength(1)
+    expect((out!.commercialCalculator.masters.verticals[0] as { code: string }).code).toBe('X')
+  })
 })
 
 describe('v2 — opportunities extracted from department metadata', () => {
