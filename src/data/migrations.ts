@@ -23,8 +23,11 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *  v8  Commercial Calculator data slice (GormsData.commercialCalculator) —
  *      seeded with FRS default masters; a snapshot that already has this key
  *      is left untouched rather than overwritten.
+ *  v9  Backfills the Commercial Calculator SKU/BOM/BOQ/audit-log collections
+ *      (Phase 2+3) onto a v8 snapshot, which only had masters/productEditionFeatures.
+ *      Existing masters/productEditionFeatures data is preserved untouched.
  */
-export const SCHEMA_VERSION = 8
+export const SCHEMA_VERSION = 9
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -206,6 +209,29 @@ function toV8(data: SnapshotShape): SnapshotShape {
   return { ...data, commercialCalculator: buildDefaultCommercialCalculatorData() }
 }
 
+/** v8 → v9. A v8 snapshot's `commercialCalculator` only has
+ *  `masters`/`productEditionFeatures` — this backfills the SKU/BOM/BOQ/audit-log
+ *  collections added in Phase 2+3 without touching those two existing fields. */
+function toV9(data: SnapshotShape): SnapshotShape {
+  const existing = (data.commercialCalculator && typeof data.commercialCalculator === 'object' && !Array.isArray(data.commercialCalculator))
+    ? data.commercialCalculator as Record<string, unknown>
+    : {}
+  const defaults = buildDefaultCommercialCalculatorData()
+  return {
+    ...data,
+    commercialCalculator: {
+      masters: existing.masters ?? defaults.masters,
+      productEditionFeatures: existing.productEditionFeatures ?? defaults.productEditionFeatures,
+      commercialSkus: existing.commercialSkus ?? defaults.commercialSkus,
+      commercialBomItems: existing.commercialBomItems ?? defaults.commercialBomItems,
+      commercialBoqs: existing.commercialBoqs ?? defaults.commercialBoqs,
+      commercialBoqLineItems: existing.commercialBoqLineItems ?? defaults.commercialBoqLineItems,
+      commercialAuditLogs: existing.commercialAuditLogs ?? defaults.commercialAuditLogs,
+      boqSequenceByYear: existing.boqSequenceByYear ?? defaults.boqSequenceByYear,
+    },
+  }
+}
+
 /** Keyed by the version each step PRODUCES, so applying every key from
  *  `fromVersion + 1` up to `SCHEMA_VERSION` walks the chain in order. */
 export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> = {
@@ -216,6 +242,7 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   6: toV6,
   7: toV7,
   8: toV8,
+  9: toV9,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

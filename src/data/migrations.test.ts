@@ -80,6 +80,41 @@ describe('migrateSnapshot', () => {
     expect(out!.commercialCalculator.masters.verticals).toHaveLength(1)
     expect((out!.commercialCalculator.masters.verticals[0] as { code: string }).code).toBe('X')
   })
+
+  it('backfills the Phase 2+3 SKU/BOM/BOQ/audit-log collections onto a v8-shaped snapshot', () => {
+    const v8Shaped = {
+      ...v1Snapshot(),
+      commercialCalculator: {
+        masters: { verticals: [{ id: 'v1', code: 'X', name: 'X', description: '', active: true, displayOrder: 0 }] },
+        productEditionFeatures: [],
+      },
+    }
+    const out = migrateSnapshot(v8Shaped, 8)
+    expect(out).not.toBeNull()
+    // Pre-existing fields are preserved untouched.
+    expect(out!.commercialCalculator.masters.verticals).toHaveLength(1)
+    // New Phase 2+3 fields are backfilled with empty defaults.
+    expect(out!.commercialCalculator.commercialSkus).toEqual([])
+    expect(out!.commercialCalculator.commercialBomItems).toEqual([])
+    expect(out!.commercialCalculator.commercialBoqs).toEqual([])
+    expect(out!.commercialCalculator.commercialBoqLineItems).toEqual([])
+    expect(out!.commercialCalculator.commercialAuditLogs).toEqual([])
+    expect(out!.commercialCalculator.boqSequenceByYear).toEqual({})
+  })
+
+  it('does not clobber existing Phase 2+3 data if a snapshot already has it', () => {
+    const withSkus = {
+      ...v1Snapshot(),
+      commercialCalculator: {
+        ...(migrateSnapshot(v1Snapshot(), 1)!.commercialCalculator),
+        commercialSkus: [{ id: 'sku1', skuCode: 'X-Y-Z-F-NEW' }],
+        boqSequenceByYear: { '2026': 5 },
+      },
+    }
+    const out = migrateSnapshot(withSkus, 9)
+    expect(out).not.toBeNull()
+    expect(out).toBe(withSkus) // already at SCHEMA_VERSION — returned unchanged
+  })
 })
 
 describe('v2 — opportunities extracted from department metadata', () => {

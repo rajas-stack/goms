@@ -92,10 +92,16 @@ function buildDefaultMasters(): MastersState {
 }
 
 /** The module's full default data slice — what a fresh `GormsData.commercialCalculator`
- *  looks like, and what the v8 migration seeds an upgraded snapshot with. */
+ *  looks like, and what the migration seeds an upgraded snapshot with. */
 export function buildDefaultCommercialCalculatorData(): CommercialCalculatorData {
   return {
     masters: buildDefaultMasters(),
     productEditionFeatures: [],
+    commercialSkus: [],
+    commercialBomItems: [],
+    commercialBoqs: [],
+    commercialBoqLineItems: [],
+    commercialAuditLogs: [],
+    boqSequenceByYear: {},
   }
 }

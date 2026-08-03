@@ -17,9 +17,18 @@ import { SEARCH_CATEGORIES, SEARCH_CATEGORY_MAP, type SearchContext } from '@/li
 import { buildSeed, type GormsData } from './seed'
 import { clearSnapshot, loadSnapshot, scheduleSave } from './persist'
 import {
-  createMasterLogic, deleteMasterLogic, getMasterLogic, listMasterLogic, setMasterActiveLogic, updateMasterLogic,
+  addBoqLineItemLogic, createBoqLogic, createBomItemLogic, createMasterLogic, createSkuLogic,
+  deleteBomItemLogic, deleteMasterLogic, deleteSkuLogic, getBoqLogic, getMasterLogic, getSkuLogic,
+  listAuditLogsLogic, listBoqLineItemsLogic, listBoqsLogic, listBomItemsForSkuLogic, listEditionFeaturesLogic,
+  listMasterLogic, listSkusLogic, removeBoqLineItemLogic, reviseBoqLogic, setEditionFeaturesLogic,
+  setMasterActiveLogic, updateBoqLineItemLogic, updateBoqStatusLogic, updateBomItemLogic, updateMasterLogic,
+  updateSkuLogic,
 } from '@/modules/commercial-calculator/repository-logic'
-import type { CreateMasterInput, MasterEntityKey, MasterRowMap } from '@/modules/commercial-calculator/types'
+import type {
+  BoqStatus, CommercialAuditLog, CommercialBoq, CommercialBoqLineItem, CommercialBomItem, CommercialSku,
+  CreateBoqInput, CreateBoqLineItemInput, CreateBomItemInput, CreateMasterInput, CreateSkuInput, MasterEntityKey,
+  MasterRowMap, ProductEditionFeature,
+} from '@/modules/commercial-calculator/types'
 
 export interface StateSummary {
   code: number
@@ -363,11 +372,53 @@ export interface Repository {
   listMaster<K extends MasterEntityKey>(key: K): Promise<MasterRowMap[K][]>
   getMaster<K extends MasterEntityKey>(key: K, id: string): Promise<MasterRowMap[K] | null>
   createMaster<K extends MasterEntityKey>(key: K, input: CreateMasterInput<K>): Promise<MasterRowMap[K]>
-  updateMaster<K extends MasterEntityKey>(key: K, id: string, patch: Partial<MasterRowMap[K]>): Promise<MasterRowMap[K]>
+  /** `changeReason` is required when `patch` changes a `features` row's
+   *  `status` — throws otherwise (spec §15). */
+  updateMaster<K extends MasterEntityKey>(key: K, id: string, patch: Partial<MasterRowMap[K]>, changeReason?: string): Promise<MasterRowMap[K]>
   setMasterActive(key: MasterEntityKey, id: string, active: boolean): Promise<void>
   /** Throws if any other master row still references this one — e.g.
    *  deleting a Vertical that still has Products. */
   deleteMaster(key: MasterEntityKey, id: string): Promise<void>
+
+  // --- Commercial Calculator: Product Edition ↔ Feature mapping (spec §6.2) --
+  listEditionFeatures(editionId: string): Promise<ProductEditionFeature[]>
+  setEditionFeatures(editionId: string, rows: { featureId: string; mandatory: boolean }[]): Promise<void>
+
+  // --- Commercial Calculator: SKU Catalog (thin delegation, spec §6.3/§7/§14) -
+  listSkus(): Promise<CommercialSku[]>
+  getSku(id: string): Promise<CommercialSku | null>
+  createSku(input: CreateSkuInput): Promise<CommercialSku>
+  /** `changeReason` is required when `patch` touches lifecycle status, cost,
+   *  or pricing fields — throws otherwise (spec §15). */
+  updateSku(id: string, patch: Partial<CommercialSku>, changeReason?: string): Promise<CommercialSku>
+  /** Throws if any BOQ line item or BOM item still references this SKU (PCS-038). */
+  deleteSku(id: string): Promise<void>
+
+  // --- Commercial Calculator: Commercial BOM (spec §6.4/§14) -----------------
+  listBomItemsForSku(parentSkuId: string): Promise<CommercialBomItem[]>
+  createBomItem(input: CreateBomItemInput): Promise<CommercialBomItem>
+  updateBomItem(id: string, patch: Partial<CommercialBomItem>): Promise<CommercialBomItem>
+  deleteBomItem(id: string): Promise<void>
+
+  // --- Commercial Calculator: BOQ (spec §6.5/§9/§10/§12/§13) -----------------
+  listBoqs(): Promise<CommercialBoq[]>
+  getBoq(id: string): Promise<CommercialBoq | null>
+  listBoqLineItems(boqId: string): Promise<CommercialBoqLineItem[]>
+  createBoq(input: CreateBoqInput): Promise<CommercialBoq>
+  addBoqLineItem(boqId: string, input: CreateBoqLineItemInput): Promise<CommercialBoqLineItem>
+  updateBoqLineItem(
+    id: string,
+    patch: Partial<Pick<CommercialBoqLineItem, 'quantity' | 'unitPrice' | 'discountPct' | 'approverName' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'>>,
+  ): Promise<CommercialBoqLineItem>
+  removeBoqLineItem(id: string): Promise<void>
+  /** Throws on an invalid lifecycle transition (spec §10's `BOQ_TRANSITIONS`). */
+  updateBoqStatus(id: string, nextStatus: BoqStatus, changeReason: string): Promise<CommercialBoq>
+  /** Creates a new BOQ row carrying the same `boqNumber` forward, with
+   *  `boqVersion` incremented and its line items copied (spec §9/§13). */
+  reviseBoq(id: string): Promise<CommercialBoq>
+
+  // --- Commercial Calculator: Audit Log (spec §6.6/§15) ----------------------
+  listAuditLogs(filter?: { entityType?: string; entityId?: string }): Promise<CommercialAuditLog[]>
 }
 
 // Re-exported (not redefined) so existing `@/data/repository` import sites
@@ -1205,8 +1256,8 @@ class InMemoryRepository implements Repository {
     return createMasterLogic(this.data.commercialCalculator, key, input)
   }
 
-  async updateMaster<K extends MasterEntityKey>(key: K, id: string, patch: Partial<MasterRowMap[K]>) {
-    return updateMasterLogic(this.data.commercialCalculator, key, id, patch)
+  async updateMaster<K extends MasterEntityKey>(key: K, id: string, patch: Partial<MasterRowMap[K]>, changeReason?: string) {
+    return updateMasterLogic(this.data.commercialCalculator, key, id, patch, changeReason)
   }
 
   async setMasterActive(key: MasterEntityKey, id: string, active: boolean) {
@@ -1215,6 +1266,93 @@ class InMemoryRepository implements Repository {
 
   async deleteMaster(key: MasterEntityKey, id: string) {
     return deleteMasterLogic(this.data.commercialCalculator, key, id)
+  }
+
+  async listEditionFeatures(editionId: string) {
+    return listEditionFeaturesLogic(this.data.commercialCalculator, editionId)
+  }
+
+  async setEditionFeatures(editionId: string, rows: { featureId: string; mandatory: boolean }[]) {
+    return setEditionFeaturesLogic(this.data.commercialCalculator, editionId, rows)
+  }
+
+  async listSkus() {
+    return listSkusLogic(this.data.commercialCalculator)
+  }
+
+  async getSku(id: string) {
+    return getSkuLogic(this.data.commercialCalculator, id)
+  }
+
+  async createSku(input: CreateSkuInput) {
+    return createSkuLogic(this.data.commercialCalculator, input)
+  }
+
+  async updateSku(id: string, patch: Partial<CommercialSku>, changeReason?: string) {
+    return updateSkuLogic(this.data.commercialCalculator, id, patch, changeReason)
+  }
+
+  async deleteSku(id: string) {
+    return deleteSkuLogic(this.data.commercialCalculator, id)
+  }
+
+  async listBomItemsForSku(parentSkuId: string) {
+    return listBomItemsForSkuLogic(this.data.commercialCalculator, parentSkuId)
+  }
+
+  async createBomItem(input: CreateBomItemInput) {
+    return createBomItemLogic(this.data.commercialCalculator, input)
+  }
+
+  async updateBomItem(id: string, patch: Partial<CommercialBomItem>) {
+    return updateBomItemLogic(this.data.commercialCalculator, id, patch)
+  }
+
+  async deleteBomItem(id: string) {
+    return deleteBomItemLogic(this.data.commercialCalculator, id)
+  }
+
+  async listBoqs() {
+    return listBoqsLogic(this.data.commercialCalculator)
+  }
+
+  async getBoq(id: string) {
+    return getBoqLogic(this.data.commercialCalculator, id)
+  }
+
+  async listBoqLineItems(boqId: string) {
+    return listBoqLineItemsLogic(this.data.commercialCalculator, boqId)
+  }
+
+  async createBoq(input: CreateBoqInput) {
+    return createBoqLogic(this.data.commercialCalculator, input)
+  }
+
+  async addBoqLineItem(boqId: string, input: CreateBoqLineItemInput) {
+    return addBoqLineItemLogic(this.data.commercialCalculator, boqId, input)
+  }
+
+  async updateBoqLineItem(
+    id: string,
+    patch: Partial<Pick<CommercialBoqLineItem, 'quantity' | 'unitPrice' | 'discountPct' | 'approverName' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'>>,
+  ) {
+    return updateBoqLineItemLogic(this.data.commercialCalculator, id, patch)
+  }
+
+  async removeBoqLineItem(id: string) {
+    return removeBoqLineItemLogic(this.data.commercialCalculator, id)
+  }
+
+  async updateBoqStatus(id: string, nextStatus: BoqStatus, changeReason: string) {
+    return updateBoqStatusLogic(this.data.commercialCalculator, id, nextStatus, changeReason)
+  }
+
+  async reviseBoq(id: string) {
+    return reviseBoqLogic(this.data.commercialCalculator, id)
+  }
+
+  async listAuditLogs(filter?: { entityType?: string; entityId?: string }) {
+    return listAuditLogsLogic(this.data.commercialCalculator, filter)
   }
 
   async resolveOwner(entityType: string, entityId: string, asOf: string) {
@@ -1674,7 +1812,9 @@ const MUTATOR_KEYS = [
   'createFollowUp', 'setFollowUpStatus', 'deleteFollowUp',
   'assignOwner', 'endOwnership', 'transferBookOfBusiness',
   'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson', 'transferSalesPerson',
-  'createMaster', 'updateMaster', 'setMasterActive', 'deleteMaster',
+  'createMaster', 'updateMaster', 'setMasterActive', 'deleteMaster', 'setEditionFeatures',
+  'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
+  'createBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'updateBoqStatus', 'reviseBoq',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -1690,7 +1830,8 @@ const READER_KEYS = [
   'listSalesPersons', 'getSalesPerson', 'listSalesPostings', 'currentPostings',
   'listOwnershipAssignments', 'listOwnershipFor', 'listOwnedBy', 'resolveOwner', 'resolveOwners',
   'search', 'relatedRecords', 'moveTargets', 'relationshipAnalytics',
-  'listMaster', 'getMaster',
+  'listMaster', 'getMaster', 'listEditionFeatures',
+  'listSkus', 'getSku', 'listBomItemsForSku', 'listBoqs', 'getBoq', 'listBoqLineItems', 'listAuditLogs',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the

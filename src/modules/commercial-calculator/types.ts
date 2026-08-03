@@ -85,10 +85,176 @@ export type CreateMasterInput<K extends MasterEntityKey> = Omit<MasterRowMap[K],
   displayOrder?: number
 }
 
-/** The module's entire persisted slice of `GormsData`. Every future
- *  Commercial Calculator collection (SKUs, BOQs, audit log — later phases)
- *  is a field added HERE, not a new top-level `GormsData` field. */
+// --- SKU Catalog / Commercial Master (spec §6.3) --------------------------
+
+export interface CommercialSku {
+  id: string
+  skuCode: string // generated, immutable, unique — spec §7
+  name: string
+  categoryId: string // → SkuCategory
+  featureId: string // → ProductFeature
+  editionId: string // → ProductEdition, required, defaults to the 'STD' edition
+  uomId: string
+  currencyId: string
+  taxClassId: string
+  billingTypeId: string
+  activeFrom: string
+  activeTill: string | null
+  lifecycleStatus: 'draft' | 'active' | 'inactive' | 'retired'
+  isSellable: boolean
+  displayOrder: number
+
+  // Cost Management — PCS-020..025
+  baseSoftwareCost: number
+  implementationCostPerMM: number
+  integrationCost: number
+  thirdPartyCost: number
+  hardwareCost: number
+  cloudCost: number
+  supportCost: number
+  trainingCost: number
+
+  // Pricing Levels — PCS-026/027, all in this SKU's currency
+  internalPrice: number
+  floorPrice: number
+  partnerPrice: number
+  governmentPrice: number
+  enterprisePrice: number
+  corporatePrice: number
+  listPrice: number
+
+  minimumAllowedPrice: number
+  maximumDiscountPercent: number
+
+  createdAt: string
+  createdBy: string | null
+}
+
+export type CreateSkuInput = Omit<
+  CommercialSku,
+  'id' | 'skuCode' | 'createdAt' | 'createdBy' | 'displayOrder' | 'isSellable' | 'lifecycleStatus' | 'editionId'
+  | 'minimumAllowedPrice' | 'maximumDiscountPercent'
+> & {
+  editionId?: string
+  displayOrder?: number
+  isSellable?: boolean
+  lifecycleStatus?: CommercialSku['lifecycleStatus']
+  minimumAllowedPrice?: number
+  maximumDiscountPercent?: number
+}
+
+// --- Commercial BOM (spec §6.4) -------------------------------------------
+
+export interface CommercialBomItem {
+  id: string
+  parentSkuId: string
+  componentSkuId: string
+  mandatory: boolean
+  quantity: number
+  notes: string
+}
+
+export type CreateBomItemInput = Omit<CommercialBomItem, 'id'>
+
+// --- BOQ (spec §6.5) -------------------------------------------------------
+
+export type BoqStatus = 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'cancelled' | 'archived'
+
+export interface CommercialBoq {
+  id: string
+  boqNumber: string
+  opportunityName: string
+  departmentId: string
+  customerName: string
+  /** The following four fields extend the FRS §12 Customer Information
+   *  section beyond the original spec's `customerName`-only design —
+   *  free text, same treatment (spec §12.2: no customer master exists
+   *  in GOMS today). */
+  customerOrganization: string
+  customerAddress: string
+  customerGst: string
+  customerContact: string
+  verticalId: string
+
+  budgetAmount: string
+  budgetUnit: string
+  budgetKnown: string
+  emdAmount: string
+  emdUnit: string
+
+  salesPersonId: string
+  buSalesPersonId: string | null
+  preSalesId: string | null
+
+  status: BoqStatus
+  boqVersion: number
+  revisionNumber: number
+  parentBoqId: string | null
+
+  currency: string
+  grandTotal: number
+
+  createdAt: string
+  createdBy: string | null
+  lastModifiedAt: string
+  lastModifiedBy: string | null
+}
+
+export interface CommercialBoqLineItem {
+  id: string
+  boqId: string
+  skuId: string
+  quantity: number
+  unitPrice: number
+  discountPct: number
+  taxPct: number
+  approverName: string
+  approvalDate: string | null
+  approvalRemarks: string
+  approvalStatus: 'auto_approved' | 'pending' | 'approved' | 'rejected'
+  lineTotal: number
+}
+
+export type CreateBoqInput = Omit<
+  CommercialBoq,
+  'id' | 'boqNumber' | 'status' | 'boqVersion' | 'revisionNumber' | 'parentBoqId' | 'grandTotal'
+  | 'createdAt' | 'createdBy' | 'lastModifiedAt' | 'lastModifiedBy'
+>
+
+export interface CreateBoqLineItemInput {
+  skuId: string
+  quantity: number
+  unitPrice: number
+  discountPct: number
+  approverName?: string
+  approvalRemarks?: string
+}
+
+// --- Audit Log (spec §6.6) -------------------------------------------------
+
+export interface CommercialAuditLog {
+  id: string
+  entityType: string
+  entityId: string
+  field: string
+  oldValue: string
+  newValue: string
+  reason: string
+  action: string
+  changedAt: string
+  changedBy: string | null
+}
+
+/** The module's entire persisted slice of `GormsData`. */
 export interface CommercialCalculatorData {
   masters: MastersState
   productEditionFeatures: ProductEditionFeature[]
+  commercialSkus: CommercialSku[]
+  commercialBomItems: CommercialBomItem[]
+  commercialBoqs: CommercialBoq[]
+  commercialBoqLineItems: CommercialBoqLineItem[]
+  commercialAuditLogs: CommercialAuditLog[]
+  /** Year (as a string key, e.g. "2026") → last-used sequence number.
+   *  Spec §9 — BOQ numbers are year-scoped but the counter is never reset. */
+  boqSequenceByYear: Record<string, number>
 }
