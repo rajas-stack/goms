@@ -426,6 +426,13 @@ export function isBoqPendingApproval(status: BoqStatus): boolean {
   return !['draft', 'approved', 'rejected', 'cancelled', 'archived'].includes(status)
 }
 
+/** `PCS-029` ("validate discounts against approval hierarchy") was, until
+ *  this check, enforced only at the line level (`approvalStatus` gets set
+ *  by `resolveApprovalBand` when a line is added) — nothing stopped the
+ *  document itself from being approved with a line still sitting `pending`.
+ *  This is the actual gate; everything upstream of it was only ever a
+ *  label. See the business-analysis doc's Phase 4/5 and the control-
+ *  classification Phase 7 for why this was the highest-priority gap. */
 export function updateBoqStatusLogic(
   data: CommercialCalculatorData, id: string, nextStatus: BoqStatus, changeReason: string,
 ): CommercialBoq {
@@ -434,6 +441,12 @@ export function updateBoqStatusLogic(
   const allowed = BOQ_TRANSITIONS[boq.status]
   if (!allowed.includes(nextStatus)) {
     throw new Error(`Cannot transition a BOQ from "${boq.status}" to "${nextStatus}".`)
+  }
+  if (nextStatus === 'approved') {
+    const pendingCount = data.commercialBoqLineItems.filter((li) => li.boqId === id && li.approvalStatus === 'pending').length
+    if (pendingCount > 0) {
+      throw new Error(`Cannot approve this BOQ — ${pendingCount} line item(s) still have a pending discount approval.`)
+    }
   }
   const oldStatus = boq.status
   boq.status = nextStatus

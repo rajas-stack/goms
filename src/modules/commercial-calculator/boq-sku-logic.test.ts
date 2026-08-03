@@ -234,6 +234,30 @@ describe('BOQ line items — discount/approval matrix (spec §8)', () => {
     boq = data.commercialBoqs.find((b) => b.id === boqId)!
     expect(boq.grandTotal).toBeCloseTo(3 * 2000 * 1.18, 5)
   })
+
+  it('blocks approving the BOQ while any line has a pending discount approval', () => {
+    addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 20 })
+    updateBoqStatusLogic(data, boqId, 'submitted', 'x')
+    updateBoqStatusLogic(data, boqId, 'under_review', 'x')
+    expect(() => updateBoqStatusLogic(data, boqId, 'approved', 'x')).toThrow(/pending discount approval/i)
+  })
+
+  it('allows approving the BOQ once every pending line is resolved', () => {
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 20 })
+    updateBoqLineItemLogic(data, line.id, {
+      approvalStatus: 'approved', approverName: 'Sales Head', approvalRemarks: 'ok', approvalDate: '2026-08-03',
+    })
+    updateBoqStatusLogic(data, boqId, 'submitted', 'x')
+    updateBoqStatusLogic(data, boqId, 'under_review', 'x')
+    expect(updateBoqStatusLogic(data, boqId, 'approved', 'x').status).toBe('approved')
+  })
+
+  it('does not block approving when every line auto-approved', () => {
+    addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 5 })
+    updateBoqStatusLogic(data, boqId, 'submitted', 'x')
+    updateBoqStatusLogic(data, boqId, 'under_review', 'x')
+    expect(updateBoqStatusLogic(data, boqId, 'approved', 'x').status).toBe('approved')
+  })
 })
 
 describe('computeBoqMarginPercent', () => {
