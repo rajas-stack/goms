@@ -16,6 +16,10 @@ import {
 import { SEARCH_CATEGORIES, SEARCH_CATEGORY_MAP, type SearchContext } from '@/lib/search-categories'
 import { buildSeed, type GormsData } from './seed'
 import { clearSnapshot, loadSnapshot, scheduleSave } from './persist'
+import {
+  createMasterLogic, deleteMasterLogic, getMasterLogic, listMasterLogic, setMasterActiveLogic, updateMasterLogic,
+} from '@/modules/commercial-calculator/repository-logic'
+import type { CreateMasterInput, MasterEntityKey, MasterRowMap } from '@/modules/commercial-calculator/types'
 
 export interface StateSummary {
   code: number
@@ -352,6 +356,18 @@ export interface Repository {
   moveTargets(nodeId: string): Promise<HierNode[]>
   reorderNode(id: string, beforeId: string | null): Promise<void>
   relationshipAnalytics(): Promise<RelationshipAnalytics>
+
+  // --- Commercial Calculator: generic master CRUD (thin delegation) ------
+  // Real logic lives in src/modules/commercial-calculator/repository-logic.ts.
+  // Spec §4.2.
+  listMaster<K extends MasterEntityKey>(key: K): Promise<MasterRowMap[K][]>
+  getMaster<K extends MasterEntityKey>(key: K, id: string): Promise<MasterRowMap[K] | null>
+  createMaster<K extends MasterEntityKey>(key: K, input: CreateMasterInput<K>): Promise<MasterRowMap[K]>
+  updateMaster<K extends MasterEntityKey>(key: K, id: string, patch: Partial<MasterRowMap[K]>): Promise<MasterRowMap[K]>
+  setMasterActive(key: MasterEntityKey, id: string, active: boolean): Promise<void>
+  /** Throws if any other master row still references this one — e.g.
+   *  deleting a Vertical that still has Products. */
+  deleteMaster(key: MasterEntityKey, id: string): Promise<void>
 }
 
 // Re-exported (not redefined) so existing `@/data/repository` import sites
@@ -1177,6 +1193,30 @@ class InMemoryRepository implements Repository {
     this.data.ownershipAssignments = this.data.ownershipAssignments.filter((a) => a.salesPersonId !== id)
   }
 
+  async listMaster<K extends MasterEntityKey>(key: K) {
+    return listMasterLogic(this.data.commercialCalculator, key)
+  }
+
+  async getMaster<K extends MasterEntityKey>(key: K, id: string) {
+    return getMasterLogic(this.data.commercialCalculator, key, id)
+  }
+
+  async createMaster<K extends MasterEntityKey>(key: K, input: CreateMasterInput<K>) {
+    return createMasterLogic(this.data.commercialCalculator, key, input)
+  }
+
+  async updateMaster<K extends MasterEntityKey>(key: K, id: string, patch: Partial<MasterRowMap[K]>) {
+    return updateMasterLogic(this.data.commercialCalculator, key, id, patch)
+  }
+
+  async setMasterActive(key: MasterEntityKey, id: string, active: boolean) {
+    return setMasterActiveLogic(this.data.commercialCalculator, key, id, active)
+  }
+
+  async deleteMaster(key: MasterEntityKey, id: string) {
+    return deleteMasterLogic(this.data.commercialCalculator, key, id)
+  }
+
   async resolveOwner(entityType: string, entityId: string, asOf: string) {
     return effectiveOwner(this.data.ownershipAssignments, entityType, entityId, asOf, this.ownershipContext())
   }
@@ -1634,6 +1674,7 @@ const MUTATOR_KEYS = [
   'createFollowUp', 'setFollowUpStatus', 'deleteFollowUp',
   'assignOwner', 'endOwnership', 'transferBookOfBusiness',
   'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson', 'transferSalesPerson',
+  'createMaster', 'updateMaster', 'setMasterActive', 'deleteMaster',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -1649,6 +1690,7 @@ const READER_KEYS = [
   'listSalesPersons', 'getSalesPerson', 'listSalesPostings', 'currentPostings',
   'listOwnershipAssignments', 'listOwnershipFor', 'listOwnedBy', 'resolveOwner', 'resolveOwners',
   'search', 'relatedRecords', 'moveTargets', 'relationshipAnalytics',
+  'listMaster', 'getMaster',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the
