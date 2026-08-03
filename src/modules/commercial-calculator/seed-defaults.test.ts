@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { WORK_VERTICALS } from '@/features/nodes/department-meta'
 import { buildDefaultCommercialCalculatorData } from './seed-defaults'
 
 describe('buildDefaultCommercialCalculatorData', () => {
@@ -37,13 +38,26 @@ describe('buildDefaultCommercialCalculatorData', () => {
     expect(bands.filter((b) => b.minDiscountPct > 0).every((b) => !b.allowAutoApproval)).toBe(true)
   })
 
-  it('leaves the hierarchy masters and Pre-Sales empty for admin population', () => {
+  it('leaves Modules/Features and Pre-Sales empty for admin population', () => {
     const { masters } = buildDefaultCommercialCalculatorData()
-    expect(masters.verticals).toEqual([])
-    expect(masters.products).toEqual([])
     expect(masters.modules).toEqual([])
     expect(masters.features).toEqual([])
     expect(masters.preSales).toEqual([])
+  })
+
+  it('seeds Verticals from Account Mapping\'s own WORK_VERTICALS list, not left empty', () => {
+    const { masters } = buildDefaultCommercialCalculatorData()
+    expect(masters.verticals).toHaveLength(WORK_VERTICALS.length)
+    expect(masters.verticals.map((v) => v.name)).toEqual(WORK_VERTICALS)
+    expect(new Set(masters.verticals.map((v) => v.code)).size).toBe(WORK_VERTICALS.length)
+  })
+
+  it('seeds Products under a real Vertical, with unique codes and valid FKs', () => {
+    const { masters } = buildDefaultCommercialCalculatorData()
+    expect(masters.products.length).toBeGreaterThan(0)
+    const verticalIds = new Set(masters.verticals.map((v) => v.id))
+    for (const p of masters.products) expect(verticalIds.has(p.verticalId), p.name).toBe(true)
+    expect(new Set(masters.products.map((p) => p.code)).size).toBe(masters.products.length)
   })
 
   it('starts with no product-edition/feature mappings', () => {

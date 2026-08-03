@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useCurrentPostings, useDepartments, useSalesPersons } from '@/lib/api'
+import { convertWorkAmount, formatBudgetRange, WORK_VALUE_UNITS } from '@/features/nodes/department-meta'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
@@ -216,17 +217,87 @@ export function CreateBoq({ onDone }: { onDone: () => void }) {
                 {verticals.map((v) => <option key={v.id} value={v.id}>{v.code} — {v.name}</option>)}
               </Select>
             </Field>
-            <Field label="Budget Amount"><Input value={budgetAmount} onChange={(e) => setBudgetAmount(e.target.value)} /></Field>
-            <Field label="Budget Unit"><Input value={budgetUnit} onChange={(e) => setBudgetUnit(e.target.value)} /></Field>
-            <Field label="Budget Known?">
-              <Select value={budgetKnown} onChange={(e) => setBudgetKnown(e.target.value)}>
-                <option value="">Not answered</option>
-                <option value="yes">Yes</option>
-                <option value="no">No</option>
-              </Select>
-            </Field>
-            <Field label="EMD Amount"><Input value={emdAmount} onChange={(e) => setEmdAmount(e.target.value)} /></Field>
-            <Field label="EMD Unit"><Input value={emdUnit} onChange={(e) => setEmdUnit(e.target.value)} /></Field>
+            <div className="col-span-2 lg:col-span-3">
+              <Field label="Budget Confirmed?">
+                <div className="flex items-center gap-4" role="radiogroup" aria-label="Budget confirmed">
+                  {(['yes', 'no'] as const).map((v) => (
+                    <label key={v} className="flex cursor-pointer items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="budgetKnown"
+                        checked={budgetKnown === v}
+                        onChange={() => setBudgetKnown(v)}
+                        className="accent-ink-900"
+                      />
+                      <span className="text-sm text-ink-800">{v === 'yes' ? 'Yes' : 'No'}</span>
+                    </label>
+                  ))}
+                </div>
+              </Field>
+            </div>
+            <div className="col-span-2 lg:col-span-3">
+              {/* Same mutual-exclusivity as Account Mapping's Opportunity form
+                  (WorkFormDialog.tsx): either the budget is confirmed and
+                  entered directly, or — not both — it's left blank here and
+                  estimated from the EMD amount below. */}
+              <Field label="Budget Amount" hint={budgetKnown === 'no' ? "Disabled while the budget isn't confirmed — use the EMD fields below instead." : undefined}>
+                <div className="flex gap-2">
+                  <Input
+                    value={budgetAmount}
+                    onChange={(e) => setBudgetAmount(e.target.value)}
+                    inputMode="decimal"
+                    placeholder="0"
+                    disabled={budgetKnown === 'no'}
+                    className="flex-1 disabled:cursor-not-allowed disabled:bg-panel disabled:text-muted"
+                  />
+                  <Select
+                    value={budgetUnit}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      setBudgetAmount(convertWorkAmount(budgetAmount, budgetUnit, next))
+                      setBudgetUnit(next)
+                    }}
+                    disabled={budgetKnown === 'no'}
+                    className="w-28 shrink-0 disabled:cursor-not-allowed disabled:bg-panel disabled:text-muted"
+                  >
+                    {WORK_VALUE_UNITS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
+                  </Select>
+                </div>
+              </Field>
+            </div>
+            {budgetKnown === 'no' && (
+              <div className="col-span-2 grid grid-cols-1 gap-4 rounded-xl border border-line bg-panel/40 p-4 sm:grid-cols-2 lg:col-span-3">
+                <Field label="EMD Amount" hint="Used to derive an estimated budget range below">
+                  <div className="flex gap-2">
+                    <Input
+                      value={emdAmount}
+                      onChange={(e) => setEmdAmount(e.target.value)}
+                      inputMode="decimal"
+                      placeholder="0"
+                      className="flex-1"
+                    />
+                    <Select
+                      value={emdUnit}
+                      onChange={(e) => {
+                        const next = e.target.value
+                        setEmdAmount(convertWorkAmount(emdAmount, emdUnit, next))
+                        setEmdUnit(next)
+                      }}
+                      className="w-28 shrink-0"
+                    >
+                      {WORK_VALUE_UNITS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
+                    </Select>
+                  </div>
+                </Field>
+                {formatBudgetRange({ emdAmount, emdUnit }) && (
+                  <Field label="Budget (derived)">
+                    <p className="flex h-10 items-center rounded-lg border border-line bg-panel px-3 text-sm text-ink-700">
+                      {formatBudgetRange({ emdAmount, emdUnit })}
+                    </p>
+                  </Field>
+                )}
+              </div>
+            )}
             <Field label="Sales Person">
               <Select value={salesPersonId} onChange={(e) => setSalesPersonId(e.target.value)}>
                 <option value="">Select…</option>

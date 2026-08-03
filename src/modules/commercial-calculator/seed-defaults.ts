@@ -1,7 +1,69 @@
+import { WORK_VERTICALS } from '@/features/nodes/department-meta'
 import type {
-  ApprovalMatrixRule, BillingType, CommercialCalculatorData, Currency, MastersState, ProductEdition,
-  SkuCategory, TaxClass, UnitOfMeasure,
+  ApprovalMatrixRule, BillingType, CommercialCalculatorData, CommercialProduct, Currency, MastersState,
+  ProductEdition, SkuCategory, TaxClass, UnitOfMeasure, Vertical,
 } from './types'
+
+/** Seeded from Account Mapping's own `WORK_VERTICALS` (the list every
+ *  Opportunity's "Vertical" field already draws from) rather than left empty
+ *  for admin population — the two are meant to be the same set of verticals,
+ *  not independently maintained lists. Codes are short, SKU-code-safe
+ *  abbreviations; `id`s are fixed like every other seeded master row. */
+const VERTICALS: Vertical[] = [
+  { id: 'vert_traffic', code: 'TRAF', name: 'Traffic', description: '', active: true, displayOrder: 0 },
+  { id: 'vert_transit', code: 'TRANSIT', name: 'Transit (Mobility)', description: '', active: true, displayOrder: 1 },
+  { id: 'vert_data_fabric', code: 'DATA', name: 'Data Fabric & AI', description: '', active: true, displayOrder: 2 },
+  { id: 'vert_smart_city', code: 'SMARTCITY', name: 'Integrated (Smart City)', description: '', active: true, displayOrder: 3 },
+  { id: 'vert_gis', code: 'GIS', name: 'GIS', description: '', active: true, displayOrder: 4 },
+  { id: 'vert_agriculture', code: 'AGRI', name: 'Agriculture', description: '', active: true, displayOrder: 5 },
+  { id: 'vert_resource_utility', code: 'UTILITY', name: 'Resource & Utility', description: '', active: true, displayOrder: 6 },
+  { id: 'vert_cloud', code: 'CLOUD', name: 'Cloud', description: '', active: true, displayOrder: 7 },
+  { id: 'vert_other', code: 'OTHER', name: 'Other', description: '', active: true, displayOrder: 8 },
+]
+
+// Fails loudly (at import time, in dev/test) rather than silently drifting
+// if WORK_VERTICALS is ever edited without updating the seed list above.
+if (VERTICALS.length !== WORK_VERTICALS.length || VERTICALS.some((v, i) => v.name !== WORK_VERTICALS[i])) {
+  throw new Error('commercial-calculator VERTICALS has drifted out of sync with department-meta.ts WORK_VERTICALS.')
+}
+
+/** AMNEX's real product lineup (per the company's "Verticals & Products"
+ *  reference sheet), grouped under the matching `VERTICALS` row above — seeded
+ *  rather than left empty so the Create BOQ picker has real Products/SKUs to
+ *  build a proposal from immediately, not just an empty admin shell.
+ *  "Outline" is listed on the reference sheet under both Smart City and Data
+ *  Fabric & AI — modeled once, under Smart City, since a Product has exactly
+ *  one Vertical and master codes must be globally unique. */
+const PRODUCTS: CommercialProduct[] = [
+  { id: 'prod_locomate', code: 'LOCOMATE', name: 'Locomate', description: 'An intelligent mobility platform designed to elevate commuter satisfaction by providing precise ETAs, a seamless payment system, robust planning and scheduling and more.', verticalId: 'vert_transit', active: true, displayOrder: 0 },
+  { id: 'prod_rapidgo', code: 'RAPIDGO', name: 'Rapidgo', description: 'An advanced journey planning app optimizing travel by seamlessly connecting multimodal options, covering both first and last miles to trunk networks.', verticalId: 'vert_transit', active: true, displayOrder: 1 },
+  { id: 'prod_xup', code: 'XUP', name: 'XUP', description: 'A seamless payment system that automates and streamlines transactions, ensuring a speedy and user-friendly experience.', verticalId: 'vert_transit', active: true, displayOrder: 2 },
+  { id: 'prod_syncnex', code: 'SYNCNEX', name: 'Syncnex', description: 'An adaptive traffic signal system crafted to boost intersection performance by reducing congestion, improving safety, and minimizing accidents.', verticalId: 'vert_transit', active: true, displayOrder: 3 },
+  { id: 'prod_elbtros', code: 'ELBTROS', name: 'Elbtros', description: 'An advanced highway management solution that optimizes performance by improving safety, minimizing accidents, and ensuring seamless toll collection.', verticalId: 'vert_transit', active: true, displayOrder: 4 },
+
+  { id: 'prod_outline', code: 'OUTLINE', name: 'Outline', description: 'An integrated Command and Control platform that offers extensive operational insights with advanced analytics, facilitating informed decision-making across the city.', verticalId: 'vert_smart_city', active: true, displayOrder: 0 },
+  { id: 'prod_spectator', code: 'SPECTATOR', name: 'Spectator', description: "An advanced 3D GIS platform that enables informed decision-making, by seamlessly analyzing spatial and non-spatial attributes across multiple dimensions.", verticalId: 'vert_smart_city', active: true, displayOrder: 1 },
+  { id: 'prod_iion', code: 'IION', name: 'IIon', description: 'Intelligent streetlight solution that optimizes not only energy consumption but also reduce operation and maintenance costs, while enhancing safety with smart features.', verticalId: 'vert_smart_city', active: true, displayOrder: 2 },
+  { id: 'prod_ecokeeper', code: 'ECOKEEPER', name: 'Ecokeeper', description: 'A smart waste management platform designed to optimize waste collection processes and significantly increase operational efficiency.', verticalId: 'vert_smart_city', active: true, displayOrder: 3 },
+  { id: 'prod_spotlock', code: 'SPOTLOCK', name: 'Spotlock', description: "A multi-technology parking management system that streamlines payment and application for drivers' convenience.", verticalId: 'vert_smart_city', active: true, displayOrder: 4 },
+
+  { id: 'prod_dreservoir', code: 'DRESERVOIR', name: 'Dreservoir', description: 'A data lake platform that facilitates the entire data value chain, including data mining, processing, analytics, and visualization.', verticalId: 'vert_data_fabric', active: true, displayOrder: 0 },
+  { id: 'prod_blocsafe', code: 'BLOCSAFE', name: 'Blocsafe', description: 'A blockchain platform that ensures complete traceability, secure data storage, and effective information dissemination across the data value chain.', verticalId: 'vert_data_fabric', active: true, displayOrder: 1 },
+  { id: 'prod_recloud', code: 'RECLOUD', name: 'Recloud', description: 'A cloud solution designed to restructure and enhance cloud deployments, aiming for optimal performance, cost efficiency, and scalability.', verticalId: 'vert_data_fabric', active: true, displayOrder: 2 },
+
+  { id: 'prod_agrogate', code: 'AGROGATE', name: 'Agrogate', description: 'An intelligent agriculture analytics platform that generates predictive insights for informed decision-making along the entire value chain.', verticalId: 'vert_agriculture', active: true, displayOrder: 0 },
+  { id: 'prod_agrogate_finance', code: 'AGROFIN', name: 'Agrogate Finance', description: 'An intelligent agriculture analytics platform that generates predictive insights for informed decision-making tailored for banks and insurers.', verticalId: 'vert_agriculture', active: true, displayOrder: 1 },
+  { id: 'prod_croptrack', code: 'CROPTRACK', name: 'Croptrack', description: 'A multilingual agriculture mobile application that empowers farmers by providing insightful crop data and regulatory support.', verticalId: 'vert_agriculture', active: true, displayOrder: 2 },
+  { id: 'prod_farmlive', code: 'FARMLIVE', name: 'Farmlive', description: 'A precision farming solution enabled by IoT, designed to enhance operations for farmers through insightful data and analytics.', verticalId: 'vert_agriculture', active: true, displayOrder: 3 },
+
+  { id: 'prod_nirikshak', code: 'NIRIKSHAK', name: 'Nirikshak', description: 'A smart mining platform that is designed to track mineral resources and improve operation efficiency.', verticalId: 'vert_resource_utility', active: true, displayOrder: 0 },
+  { id: 'prod_eargo', code: 'EARGO', name: 'Eargo', description: 'An intelligent energy monitoring platform engineered to optimize distribution while prioritizing safety & enhancing operational efficiency.', verticalId: 'vert_resource_utility', active: true, displayOrder: 1 },
+  { id: 'prod_veintex', code: 'VEINTEX', name: 'Veintex', description: 'An automated smart utility platform that ensures safe, waste-free, and optimized distribution of resources like water, gas, and other fluids.', verticalId: 'vert_resource_utility', active: true, displayOrder: 2 },
+  { id: 'prod_trackous', code: 'TRACKOUS', name: 'Trackous', description: 'A smart logistics platform that integrates and streamlines end-to-end fleet management while precisely tracking goods.', verticalId: 'vert_resource_utility', active: true, displayOrder: 3 },
+  { id: 'prod_portvein', code: 'PORTVEIN', name: 'Portvein', description: 'A centralized digital part platform designed to streamline the smooth and efficient operation of ports of all sizes and complexities.', verticalId: 'vert_resource_utility', active: true, displayOrder: 4 },
+  { id: 'prod_samarth', code: 'SAMARTH', name: 'Samarth', description: 'An equipment monitoring system that facilitates efficient operations and regular maintenance.', verticalId: 'vert_resource_utility', active: true, displayOrder: 5 },
+  { id: 'prod_dairynex', code: 'DAIRYNEX', name: 'Dairynex', description: 'A centralized dairy management platform designed to elevate dairy operations.', verticalId: 'vert_resource_utility', active: true, displayOrder: 6 },
+]
 
 // PCS-016 defaults.
 const SKU_CATEGORIES: SkuCategory[] = [
@@ -76,8 +138,8 @@ const CURRENCIES: Currency[] = [
 
 function buildDefaultMasters(): MastersState {
   return {
-    verticals: [],
-    products: [],
+    verticals: VERTICALS.map((r) => ({ ...r })),
+    products: PRODUCTS.map((r) => ({ ...r })),
     modules: [],
     features: [],
     skuCategories: SKU_CATEGORIES.map((r) => ({ ...r })),

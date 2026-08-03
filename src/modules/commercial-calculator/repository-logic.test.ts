@@ -20,13 +20,23 @@ describe('listMasterLogic / getMasterLogic', () => {
 })
 
 describe('createMasterLogic', () => {
-  it('creates a new vertical with a generated id and appended displayOrder', () => {
+  // preSales (unlike verticals, seeded from Account Mapping's WORK_VERTICALS
+  // list) starts genuinely empty, so appended displayOrder is 0 here.
+  it('creates a new master row with a generated id and appended displayOrder', () => {
     const data = buildDefaultCommercialCalculatorData()
-    const row = createMasterLogic(data, 'verticals', { code: 'GOV', name: 'Government', description: '' })
+    const row = createMasterLogic(data, 'preSales', { code: 'JS', name: 'Jane Smith', description: '' })
     expect(row.id).toMatch(/^mst_/)
     expect(row.active).toBe(true)
     expect(row.displayOrder).toBe(0)
-    expect(data.masters.verticals).toHaveLength(1)
+    expect(data.masters.preSales).toHaveLength(1)
+  })
+
+  it('appends a new vertical after the seeded Account Mapping verticals', () => {
+    const data = buildDefaultCommercialCalculatorData()
+    const seededCount = data.masters.verticals.length
+    const row = createMasterLogic(data, 'verticals', { code: 'GOV', name: 'Government', description: '' })
+    expect(row.displayOrder).toBe(seededCount)
+    expect(data.masters.verticals).toHaveLength(seededCount + 1)
   })
 
   it('rejects a duplicate code', () => {
