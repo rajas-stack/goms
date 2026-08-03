@@ -20,7 +20,7 @@ interface LineDraft {
  *  -> Commercial Configuration (cascading Vertical -> Product -> Module ->
  *  Feature -> generated SKU, matching split-pane CPQ conventions like
  *  Salesforce/SAP/Dynamics) -> Approval Summary -> BOQ Preview -> Submit. */
-export function CreateBoq({ onDone }: { onDone: () => void }) {
+export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCreated: (boqId: string) => void }) {
   const { data: departments = [] } = useDepartments()
   const { data: salesPersons = [] } = useSalesPersons()
   const { data: postings = {} } = useCurrentPostings()
@@ -171,7 +171,7 @@ export function CreateBoq({ onDone }: { onDone: () => void }) {
         await updateStatus.mutateAsync({ id: boq.id, nextStatus: 'submitted', changeReason: 'Submitted at creation' })
       }
       toast(`BOQ ${boq.boqNumber} ${thenSubmit ? 'submitted' : 'saved as draft'}.`)
-      onDone()
+      onCreated(boq.id)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save BOQ.')
     } finally {
@@ -187,7 +187,7 @@ export function CreateBoq({ onDone }: { onDone: () => void }) {
           <p className="text-[12px] text-muted">Configure the commercial proposal, then save as draft or submit for review.</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={onDone} disabled={pending !== null}>Cancel</Button>
+          <Button onClick={onCancel} disabled={pending !== null}>Cancel</Button>
           <Button onClick={() => save(false)} disabled={pending !== null || !canSave}>
             {pending === 'draft' ? 'Saving…' : 'Save Draft'}
           </Button>

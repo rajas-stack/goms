@@ -91,7 +91,7 @@ export function Dashboard({ onCreateBoq, onNavigate }: {
   const approved = useMemo(() => boqs.filter((b) => b.status === 'approved').sort(byRecency), [boqs])
   const rejected = useMemo(() => boqs.filter((b) => b.status === 'rejected').sort(byRecency), [boqs])
 
-  const openBoq = (id: string) => onNavigate(`boq-management?boq=${id}`)
+  const openBoq = (id: string) => onNavigate(`boq/${id}`)
 
   return (
     <div className="flex h-full flex-col gap-6 overflow-y-auto p-4">
