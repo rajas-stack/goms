@@ -5,6 +5,7 @@ import { CreateBoq } from './pages/CreateBoq'
 import { HierarchyView } from './pages/HierarchyView'
 import { SkuCatalog } from './pages/SkuCatalog'
 import { BoqManagement } from './pages/BoqManagement'
+import { ProposalDetail } from './pages/ProposalDetail'
 import { AuditLog } from './pages/AuditLog'
 import { MasterCrudScreen } from './components/MasterCrudScreen'
 import { MASTER_DEFS } from './master-defs'
@@ -158,9 +159,12 @@ function GovernanceSection() {
 }
 
 function CommercialCalculatorWorkspaceBody() {
-  const { section } = useParams()
+  const { section, boqId } = useParams()
   const navigate = useNavigate()
-  const active = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0]
+  // No tab is "active" while viewing a specific BOQ — the current route
+  // genuinely isn't Dashboard/Create BOQ/BOQ Management/Governance, it's the
+  // shared proposal route those all lead into (IA redesign §6).
+  const activeKey = boqId ? null : (SECTIONS.find((s) => s.key === section) ?? SECTIONS[0]).key
   const goTo = (key: string) => navigate(`/commercial-calculator/${key}`)
 
   return (
@@ -172,7 +176,7 @@ function CommercialCalculatorWorkspaceBody() {
             onClick={() => goTo(s.key)}
             className={cn(
               'shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors',
-              s.key === active.key
+              s.key === activeKey
                 ? 'bg-ink-900/[0.06] text-ink-900'
                 : 'text-ink-600/70 hover:bg-ink-900/[0.04] hover:text-ink-900',
             )}
@@ -182,10 +186,16 @@ function CommercialCalculatorWorkspaceBody() {
         ))}
       </div>
       <div className="min-h-0 flex-1">
-        {active.key === 'dashboard' && <Dashboard onCreateBoq={() => goTo('create-boq')} onNavigate={goTo} />}
-        {active.key === 'create-boq' && <CreateBoq onDone={() => goTo('boq-management')} />}
-        {active.key === 'boq-management' && <BoqManagement />}
-        {active.key === 'governance' && <GovernanceSection />}
+        {boqId ? (
+          <ProposalDetail boqId={boqId} />
+        ) : (
+          <>
+            {activeKey === 'dashboard' && <Dashboard onCreateBoq={() => goTo('create-boq')} onNavigate={goTo} />}
+            {activeKey === 'create-boq' && <CreateBoq onCancel={() => goTo('boq-management')} onCreated={(id) => goTo('boq/' + id)} />}
+            {activeKey === 'boq-management' && <BoqManagement />}
+            {activeKey === 'governance' && <GovernanceSection />}
+          </>
+        )}
       </div>
     </div>
   )

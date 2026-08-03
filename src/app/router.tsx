@@ -28,6 +28,7 @@ export const router = createBrowserRouter([
       { path: '/sales/:section', element: <SalesWorkspace /> },
       { path: '/commercial-calculator', element: <CommercialCalculatorWorkspace /> },
       { path: '/commercial-calculator/:section', element: <CommercialCalculatorWorkspace /> },
+      { path: '/commercial-calculator/boq/:boqId', element: <CommercialCalculatorWorkspace /> },
       { path: '*', element: <NotFound /> },
     ],
   },
