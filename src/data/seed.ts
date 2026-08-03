@@ -7,6 +7,8 @@ import subdistrictsRaw from './subdistricts.json'
 import { buildGovHierarchy, CENTRAL_STATE_CODE } from './gov-hierarchy'
 import { buildOwnershipFixture } from './ownership-fixture'
 import { buildSalesRoster } from './sales-roster-seed'
+import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
+import type { CommercialCalculatorData } from '@/modules/commercial-calculator/types'
 
 interface AdminState {
   st_code: number
@@ -76,6 +78,9 @@ export interface GormsData {
   salesPostings: SalesPosting[]
   ownershipAssignments: OwnershipAssignment[]
   mergeAudit: MergeAuditRecord[]
+  /** The Commercial Calculator module's entire data slice. Added in v8 —
+   *  see migrations.ts. Shape owned by src/modules/commercial-calculator/types.ts. */
+  commercialCalculator: CommercialCalculatorData
 }
 
 export function buildSeed(): GormsData {
@@ -92,6 +97,7 @@ export function buildSeed(): GormsData {
   const { salesPersons, salesPostings } = buildSalesRoster()
   const ownershipAssignments: OwnershipAssignment[] = []
   const mergeAudit: MergeAuditRecord[] = []
+  const commercialCalculator = buildDefaultCommercialCalculatorData()
 
   const india: HierNode = {
     id: 'geo_india', domain: 'geo', typeKey: 'country', parentId: null, stateCode: null,
@@ -208,6 +214,6 @@ export function buildSeed(): GormsData {
   return {
     nodes, employees, externalIds, timeline, transfers,
     opportunities, opportunityStageChanges, followUps, salesPersons, salesPostings,
-    ownershipAssignments, mergeAudit,
+    ownershipAssignments, mergeAudit, commercialCalculator,
   }
 }
