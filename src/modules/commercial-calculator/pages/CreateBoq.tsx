@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
 import { useBoqMutations, useMasters, useSkus } from '../api'
+import { resolveApprovalBand } from '../repository-logic'
 
 interface LineDraft {
   skuId: string
@@ -12,19 +13,24 @@ interface LineDraft {
   discountPct: number
 }
 
-/** The module's primary journey (spec §12) — a single full-page, section-by-
- *  section workspace, never a modal/wizard dialog. Opportunity Information →
- *  Customer Information → Commercial Configuration → BOQ Summary, all on one
- *  scrollable page, matching split-pane ERP form conventions (SAP CPQ,
- *  Dynamics, Salesforce CPQ, Odoo). */
+/** The module's primary journey and, by stakeholder direction (2026-08-03
+ *  redesign), the largest page in the module — a guided, section-by-section
+ *  proposal workspace, never a modal/wizard dialog. Opportunity -> Customer
+ *  -> Commercial Configuration (cascading Vertical -> Product -> Module ->
+ *  Feature -> generated SKU, matching split-pane CPQ conventions like
+ *  Salesforce/SAP/Dynamics) -> Approval Summary -> BOQ Preview -> Submit. */
 export function CreateBoq({ onDone }: { onDone: () => void }) {
   const { data: departments = [] } = useDepartments()
   const { data: salesPersons = [] } = useSalesPersons()
   const { data: postings = {} } = useCurrentPostings()
   const { data: preSalesList = [] } = useMasters('preSales')
   const { data: verticals = [] } = useMasters('verticals')
+  const { data: products = [] } = useMasters('products')
+  const { data: modules = [] } = useMasters('modules')
+  const { data: features = [] } = useMasters('features')
   const { data: currencies = [] } = useMasters('currencies')
   const { data: taxClasses = [] } = useMasters('taxClasses')
+  const { data: approvalMatrix = [] } = useMasters('approvalMatrix')
   const { data: skus = [] } = useSkus()
   const { create, updateStatus } = useBoqMutations()
   const toast = useToast()
@@ -48,7 +54,13 @@ export function CreateBoq({ onDone }: { onDone: () => void }) {
   const [customerContact, setCustomerContact] = useState('')
 
   const [lines, setLines] = useState<LineDraft[]>([])
-  const [pickerSkuId, setPickerSkuId] = useState('')
+  // Cascading Commercial Configuration picker — Vertical is the BOQ's own
+  // field above; Product/Module/Feature narrow down to the single SKU that
+  // feature's code generation produces (spec: one feature -> at most one
+  // non-duplicate SKU code).
+  const [pickerProductId, setPickerProductId] = useState('')
+  const [pickerModuleId, setPickerModuleId] = useState('')
+  const [pickerFeatureId, setPickerFeatureId] = useState('')
   const [pickerQty, setPickerQty] = useState(1)
   const [pickerDiscount, setPickerDiscount] = useState(0)
 
@@ -59,11 +71,39 @@ export function CreateBoq({ onDone }: { onDone: () => void }) {
   const sellableSkus = skus.filter((s) => s.lifecycleStatus === 'active' && s.isSellable)
   const skuById = new Map(skus.map((s) => [s.id, s]))
   const taxRateById = new Map(taxClasses.map((t) => [t.id, t.ratePct]))
+  const departmentById = new Map(departments.map((d) => [d.id, d]))
+  const salesPersonById = new Map(salesPersons.map((p) => [p.id, p]))
+  const verticalById = new Map(verticals.map((v) => [v.id, v]))
+  const preSalesById = new Map(preSalesList.map((p) => [p.id, p]))
+
+  const pickerProducts = products.filter((p) => p.verticalId === verticalId)
+  const pickerModules = modules.filter((m) => m.productId === pickerProductId)
+  const pickerFeatures = features.filter((f) => f.moduleId === pickerModuleId)
+  const resolvedSku = pickerFeatureId ? sellableSkus.find((s) => s.featureId === pickerFeatureId) : undefined
+  const featureHasNoSellableSku = !!pickerFeatureId && !resolvedSku
+
+  function handleVerticalChange(v: string) {
+    setVerticalId(v)
+    setPickerProductId('')
+    setPickerModuleId('')
+    setPickerFeatureId('')
+  }
+  function handleProductChange(v: string) {
+    setPickerProductId(v)
+    setPickerModuleId('')
+    setPickerFeatureId('')
+  }
+  function handleModuleChange(v: string) {
+    setPickerModuleId(v)
+    setPickerFeatureId('')
+  }
 
   function addLine() {
-    if (!pickerSkuId) return
-    setLines((prev) => [...prev, { skuId: pickerSkuId, quantity: pickerQty, discountPct: pickerDiscount }])
-    setPickerSkuId('')
+    if (!resolvedSku) return
+    setLines((prev) => [...prev, { skuId: resolvedSku.id, quantity: pickerQty, discountPct: pickerDiscount }])
+    setPickerProductId('')
+    setPickerModuleId('')
+    setPickerFeatureId('')
     setPickerQty(1)
     setPickerDiscount(0)
   }
@@ -97,6 +137,13 @@ export function CreateBoq({ onDone }: { onDone: () => void }) {
     const taxPct = taxRateById.get(sku.taxClassId) ?? 0
     return sum + l.quantity * sku.listPrice * (1 - l.discountPct / 100) * (taxPct / 100)
   }, 0)
+
+  const approvalPreview = lines.map((l) => {
+    const band = resolveApprovalBand(approvalMatrix, l.discountPct)
+    return { line: l, sku: skuById.get(l.skuId), band }
+  })
+  const autoApprovedCount = approvalPreview.filter((p) => p.band.allowAutoApproval).length
+  const pendingApprovalLines = approvalPreview.filter((p) => !p.band.allowAutoApproval)
 
   const canSave = opportunityName.trim().length > 0 && departmentId && customerName.trim().length > 0
     && verticalId && salesPersonId && lines.length > 0
@@ -136,7 +183,7 @@ export function CreateBoq({ onDone }: { onDone: () => void }) {
       <div className="flex shrink-0 items-center justify-between border-b border-line bg-white px-4 py-3">
         <div>
           <h1 className="font-display text-lg font-semibold text-ink-900">Create BOQ</h1>
-          <p className="text-[12px] text-muted">Fill each section, then save as draft or submit for review.</p>
+          <p className="text-[12px] text-muted">Configure the commercial proposal, then save as draft or submit for review.</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={onDone} disabled={pending !== null}>Cancel</Button>
@@ -163,8 +210,8 @@ export function CreateBoq({ onDone }: { onDone: () => void }) {
                 {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </Select>
             </Field>
-            <Field label="Vertical">
-              <Select value={verticalId} onChange={(e) => setVerticalId(e.target.value)}>
+            <Field label="Vertical" hint="Drives the SKU picker below.">
+              <Select value={verticalId} onChange={(e) => handleVerticalChange(e.target.value)}>
                 <option value="">Select…</option>
                 {verticals.map((v) => <option key={v.id} value={v.id}>{v.code} — {v.name}</option>)}
               </Select>
@@ -214,30 +261,56 @@ export function CreateBoq({ onDone }: { onDone: () => void }) {
         </SectionCard>
 
         <SectionCard title="Commercial Configuration" icon="Boxes">
-          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-panel/40 p-3">
-            <Field label="Product / SKU">
-              <Select value={pickerSkuId} onChange={(e) => setPickerSkuId(e.target.value)} className="min-w-[260px]">
-                <option value="">Select an active, sellable SKU…</option>
-                {sellableSkus.map((s) => <option key={s.id} value={s.id}>{s.skuCode} — {s.name}</option>)}
-              </Select>
-            </Field>
-            <Field label="Quantity"><Input type="number" value={pickerQty} onChange={(e) => setPickerQty(Number(e.target.value))} className="w-24" /></Field>
-            <Field label="Discount %">
-              <Input
-                type="number"
-                value={pickerDiscount}
-                onChange={(e) => setPickerDiscount(Math.min(90, Math.max(0, Number(e.target.value))))}
-                className="w-24"
-              />
-            </Field>
-            <Button variant="primary" size="sm" onClick={addLine} disabled={!pickerSkuId}>
-              <Icon name="Plus" size={14} />
-              Add Line
-            </Button>
-          </div>
+          {!verticalId ? (
+            <p className="text-[13px] text-muted">Select a Vertical above to start configuring this proposal.</p>
+          ) : (
+            <div className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-panel/40 p-3">
+              <Field label="Product">
+                <Select value={pickerProductId} onChange={(e) => handleProductChange(e.target.value)} className="min-w-[180px]">
+                  <option value="">Select…</option>
+                  {pickerProducts.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Module">
+                <Select value={pickerModuleId} onChange={(e) => handleModuleChange(e.target.value)} className="min-w-[180px]" disabled={!pickerProductId}>
+                  <option value="">Select…</option>
+                  {pickerModules.map((m) => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Feature">
+                <Select value={pickerFeatureId} onChange={(e) => setPickerFeatureId(e.target.value)} className="min-w-[180px]" disabled={!pickerModuleId}>
+                  <option value="">Select…</option>
+                  {pickerFeatures.map((f) => <option key={f.id} value={f.id}>{f.code} — {f.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="Quantity"><Input type="number" value={pickerQty} onChange={(e) => setPickerQty(Number(e.target.value))} className="w-24" /></Field>
+              <Field label="Discount %">
+                <Input
+                  type="number"
+                  value={pickerDiscount}
+                  onChange={(e) => setPickerDiscount(Math.min(90, Math.max(0, Number(e.target.value))))}
+                  className="w-24"
+                />
+              </Field>
+              <Button variant="primary" size="sm" onClick={addLine} disabled={!resolvedSku}>
+                <Icon name="Plus" size={14} />
+                Add to Proposal
+              </Button>
+            </div>
+          )}
+
+          {resolvedSku && (
+            <p className="mt-2 text-[12px] text-muted">
+              Generated SKU: <span className="rounded bg-panel px-1.5 py-0.5 font-mono text-[11px] text-ink-700">{resolvedSku.skuCode}</span>
+              {' '}— {resolvedSku.name} · Tax {taxRateById.get(resolvedSku.taxClassId) ?? 0}%
+            </p>
+          )}
+          {featureHasNoSellableSku && (
+            <p className="mt-2 text-[12px] text-amber-700">No active, sellable SKU exists for this feature yet.</p>
+          )}
 
           {lines.length === 0 ? (
-            <p className="mt-3 text-[13px] text-muted">No SKUs added yet — pick one above to start building the BOQ.</p>
+            <p className="mt-3 text-[13px] text-muted">No SKUs added yet — configure one above to start building the proposal.</p>
           ) : (
             <div className="mt-3 flex flex-col gap-2">
               {lines.map((line, i) => {
@@ -257,13 +330,85 @@ export function CreateBoq({ onDone }: { onDone: () => void }) {
           )}
         </SectionCard>
 
-        <SectionCard title="BOQ Summary" icon="FileSpreadsheet">
+        <SectionCard title="Pricing Summary" icon="FileSpreadsheet">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <SummaryStat label="Taxes" value={totalTax.toLocaleString()} />
             <SummaryStat label="Margin" value={`${marginPreview.toFixed(1)}%`} />
             <SummaryStat label="Line Items" value={String(lines.length)} />
             <SummaryStat label="Grand Total" value={grandTotal.toLocaleString()} emphasis />
           </div>
+        </SectionCard>
+
+        <SectionCard title="Approval Summary" icon="Check">
+          {lines.length === 0 ? (
+            <p className="text-[13px] text-muted">Add lines above to see which will need manual approval.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap gap-4 text-[13px]">
+                <span className="text-emerald-700">{autoApprovedCount} line(s) auto-approved</span>
+                <span className="text-amber-700">{pendingApprovalLines.length} line(s) require manual approval</span>
+              </div>
+              {pendingApprovalLines.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  {pendingApprovalLines.map(({ line, sku, band }, i) => (
+                    <div key={i} className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+                      <span className="font-mono">{sku?.skuCode}</span>
+                      <span>{line.discountPct}% discount</span>
+                      <span className="ml-auto font-medium">{band.approvalLevelLabel || band.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </SectionCard>
+
+        <SectionCard title="BOQ Preview" icon="FileText">
+          {lines.length === 0 ? (
+            <p className="text-[13px] text-muted">The full proposal preview appears once at least one line is configured.</p>
+          ) : (
+            <div className="flex flex-col gap-4 text-[13px]">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                <DetailField label="Opportunity" value={opportunityName || '—'} />
+                <DetailField label="Department" value={departmentById.get(departmentId)?.name ?? '—'} />
+                <DetailField label="Vertical" value={verticalById.get(verticalId)?.name ?? '—'} />
+                <DetailField label="Customer" value={customerName || '—'} />
+                <DetailField label="Sales Person" value={salesPersonById.get(salesPersonId)?.name ?? '—'} />
+                <DetailField label="Pre-Sales" value={preSalesById.get(preSalesId)?.name ?? '—'} />
+              </div>
+              <div className="overflow-x-auto rounded-xl border border-line">
+                <table className="w-full text-left text-[12px]">
+                  <thead className="border-b border-line bg-panel/60 text-muted">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">SKU</th>
+                      <th className="px-3 py-2 font-medium">Qty</th>
+                      <th className="px-3 py-2 font-medium">Discount</th>
+                      <th className="px-3 py-2 font-medium">Tax</th>
+                      <th className="px-3 py-2 text-right font-medium">Line Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lines.map((line, i) => {
+                      const sku = skuById.get(line.skuId)
+                      return (
+                        <tr key={i} className="border-b border-line last:border-0">
+                          <td className="px-3 py-2">
+                            <span className="rounded bg-panel px-1.5 py-0.5 font-mono text-[11px] text-ink-700">{sku?.skuCode}</span>
+                            <span className="ml-2">{sku?.name}</span>
+                          </td>
+                          <td className="px-3 py-2">{line.quantity}</td>
+                          <td className="px-3 py-2">{line.discountPct}%</td>
+                          <td className="px-3 py-2">{taxRateById.get(sku?.taxClassId ?? '') ?? 0}%</td>
+                          <td className="px-3 py-2 text-right font-medium text-ink-900">{lineTotal(line).toLocaleString()}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-end text-sm font-semibold text-ink-900">Grand Total: {grandTotal.toLocaleString()}</div>
+            </div>
+          )}
         </SectionCard>
       </div>
     </div>
@@ -287,6 +432,15 @@ function SummaryStat({ label, value, emphasis }: { label: string; value: string;
     <div>
       <div className="text-[11px] uppercase tracking-wide text-muted">{label}</div>
       <div className={emphasis ? 'text-xl font-semibold text-ink-900' : 'text-base font-medium text-ink-900'}>{value}</div>
+    </div>
+  )
+}
+
+function DetailField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</div>
+      <div className="text-[13px] text-ink-900">{value}</div>
     </div>
   )
 }

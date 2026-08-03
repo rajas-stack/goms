@@ -2,9 +2,9 @@ import { uid } from '@/lib/utils'
 import { enforceSingleBaseCurrency, findMasterChildren, validateMasterCode, validateParentExists } from './master-rules'
 import { STANDARD_EDITION_ID } from './seed-defaults'
 import type {
-  BoqStatus, CommercialAuditLog, CommercialBoq, CommercialBoqLineItem, CommercialBomItem, CommercialCalculatorData,
-  CommercialSku, CreateBoqInput, CreateBoqLineItemInput, CreateBomItemInput, CreateMasterInput, CreateSkuInput,
-  Currency, MasterEntityKey, MasterRowMap,
+  ApprovalMatrixRule, BoqStatus, CommercialAuditLog, CommercialBoq, CommercialBoqLineItem, CommercialBomItem,
+  CommercialCalculatorData, CommercialSku, CreateBoqInput, CreateBoqLineItemInput, CreateBomItemInput,
+  CreateMasterInput, CreateSkuInput, Currency, MasterEntityKey, MasterRowMap,
 } from './types'
 
 // --- Generic Masters CRUD (Phase 0/1) --------------------------------------
@@ -301,9 +301,13 @@ export function createBoqLogic(data: CommercialCalculatorData, input: CreateBoqI
 /** Finds the discount band whose `minDiscountPct` is the highest one at or
  *  below `discountPct`. Bands are contiguous (0-10-25-50-90), so at an exact
  *  boundary (e.g. 10%) this resolves to the STRICTER band above it, not the
- *  auto-approving band below — a deliberate conservative tie-break. */
-function resolveApprovalBand(data: CommercialCalculatorData, discountPct: number) {
-  const bands = [...data.masters.approvalMatrix].sort((a, b) => a.minDiscountPct - b.minDiscountPct)
+ *  auto-approving band below — a deliberate conservative tie-break.
+ *
+ *  Exported (decoupled from the full `CommercialCalculatorData` blob, which
+ *  never reaches the UI layer) so Create BOQ can preview a line's approval
+ *  status before it's actually added — same matching logic, no duplication. */
+export function resolveApprovalBand(approvalMatrix: ApprovalMatrixRule[], discountPct: number): ApprovalMatrixRule {
+  const bands = [...approvalMatrix].sort((a, b) => a.minDiscountPct - b.minDiscountPct)
   let match = bands[0]
   for (const b of bands) if (discountPct >= b.minDiscountPct) match = b
   return match
@@ -335,7 +339,7 @@ export function addBoqLineItemLogic(
     throw new Error(`Discounted unit price (${postDiscountPrice.toFixed(2)}) is below this SKU's minimum allowed price (${sku.minimumAllowedPrice}).`)
   }
   const taxPct = data.masters.taxClasses.find((t) => t.id === sku.taxClassId)?.ratePct ?? 0
-  const band = resolveApprovalBand(data, discountPct)
+  const band = resolveApprovalBand(data.masters.approvalMatrix, discountPct)
 
   const row: CommercialBoqLineItem = {
     id: uid('bli'),
@@ -377,7 +381,7 @@ export function updateBoqLineItemLogic(
 
   Object.assign(row, patch, { quantity, unitPrice, discountPct })
   if (patch.discountPct !== undefined) {
-    row.approvalStatus = resolveApprovalBand(data, discountPct).allowAutoApproval ? 'auto_approved' : 'pending'
+    row.approvalStatus = resolveApprovalBand(data.masters.approvalMatrix, discountPct).allowAutoApproval ? 'auto_approved' : 'pending'
   }
   row.lineTotal = computeLineTotal(quantity, unitPrice, discountPct, row.taxPct)
   recomputeBoqGrandTotal(data, row.boqId)
