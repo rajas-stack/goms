@@ -107,7 +107,7 @@ export function SkuCatalog() {
 
         {filtered.length === 0 && (
           <p className="px-1 py-6 text-center text-[13px] text-muted">
-            No SKUs match. {skus.length === 0 && 'Add one, or add Features first under Governance → Hierarchy.'}
+            No SKUs match. {skus.length === 0 && 'Add one, or add Features first under Catalog → Hierarchy.'}
           </p>
         )}
         {filtered.map((sku) => (

@@ -136,14 +136,13 @@ export function Dashboard({ onCreateBoq, onNavigate }: {
         )}
       </div>
 
-      {/* Governance surfaces get a small text-link row, not competing
-          quick-action buttons — this module is a proposal tool first. Links
-          into the Governance tab's sidebar. */}
+      {/* Catalog/Settings surfaces get a small text-link row, not competing
+          quick-action buttons — this module is a proposal tool first. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted">
-        <span>Governance:</span>
-        <button onClick={() => onNavigate('governance?item=sku-catalog')} className="underline-offset-2 hover:text-ink-800 hover:underline">SKU Catalog</button>
-        <button onClick={() => onNavigate('governance')} className="underline-offset-2 hover:text-ink-800 hover:underline">Hierarchy</button>
-        <button onClick={() => onNavigate('governance?item=audit')} className="underline-offset-2 hover:text-ink-800 hover:underline">Audit Log</button>
+        <span>More:</span>
+        <button onClick={() => onNavigate('catalog?item=sku-catalog')} className="underline-offset-2 hover:text-ink-800 hover:underline">SKU Catalog</button>
+        <button onClick={() => onNavigate('catalog')} className="underline-offset-2 hover:text-ink-800 hover:underline">Hierarchy</button>
+        <button onClick={() => onNavigate('settings?item=audit')} className="underline-offset-2 hover:text-ink-800 hover:underline">Audit Log</button>
       </div>
     </div>
   )
