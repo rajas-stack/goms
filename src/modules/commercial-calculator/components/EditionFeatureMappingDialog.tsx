@@ -80,7 +80,7 @@ export function EditionFeatureMappingDialog({ open, onClose, edition }: {
       }
     >
       {features.length === 0 ? (
-        <p className="text-sm text-muted">No features exist yet — add some under the Features tab first.</p>
+        <p className="text-sm text-muted">No features exist yet — add some under Catalog → Hierarchy first.</p>
       ) : (
         <div className="flex flex-col gap-2">
           {features.map((f) => {
