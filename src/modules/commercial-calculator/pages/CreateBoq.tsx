@@ -5,8 +5,9 @@ import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
-import { useBoqMutations, useMasters, useSkus } from '../api'
-import { resolveApprovalBand } from '../repository-logic'
+import { useAllBomItems, useBoqMutations, useMasters, useSkus } from '../api'
+import { resolveApprovalBand, skuToBoqConversionFactor, skuTotalUnitCostWithBom } from '../repository-logic'
+import type { CommercialSku } from '../types'
 
 interface LineDraft {
   skuId: string
@@ -33,6 +34,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const { data: taxClasses = [] } = useMasters('taxClasses')
   const { data: approvalMatrix = [] } = useMasters('approvalMatrix')
   const { data: skus = [] } = useSkus()
+  const { data: bomItems = [] } = useAllBomItems()
   const { create, updateStatus } = useBoqMutations()
   const toast = useToast()
 
@@ -47,6 +49,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const [buSalesPersonId, setBuSalesPersonId] = useState('')
   const [preSalesId, setPreSalesId] = useState('')
   const [verticalId, setVerticalId] = useState('')
+  const [currencyCode, setCurrencyCode] = useState('')
 
   const [customerName, setCustomerName] = useState('')
   const [customerOrganization, setCustomerOrganization] = useState('')
@@ -83,6 +86,15 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const resolvedSku = pickerFeatureId ? sellableSkus.find((s) => s.featureId === pickerFeatureId) : undefined
   const featureHasNoSellableSku = !!pickerFeatureId && !resolvedSku
 
+  // The proposal's own currency, explicit rather than derived from whichever
+  // SKU happens to be added first (P0 fix) — defaults to the configured base
+  // currency until the user picks a different one.
+  const effectiveCurrencyCode = currencyCode || currencies.find((c) => c.isBaseCurrency)?.code || ''
+  function conversionFactorFor(sku: CommercialSku): number {
+    if (!effectiveCurrencyCode || currencies.length === 0) return 1
+    return skuToBoqConversionFactor(currencies, effectiveCurrencyCode, sku)
+  }
+
   function handleVerticalChange(v: string) {
     setVerticalId(v)
     setPickerProductId('')
@@ -116,27 +128,24 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     const sku = skuById.get(line.skuId)
     if (!sku) return 0
     const taxPct = taxRateById.get(sku.taxClassId) ?? 0
-    return line.quantity * sku.listPrice * (1 - line.discountPct / 100) * (1 + taxPct / 100)
+    return line.quantity * sku.listPrice * (1 - line.discountPct / 100) * (1 + taxPct / 100) * conversionFactorFor(sku)
   }
   const grandTotal = lines.reduce((sum, l) => sum + lineTotal(l), 0)
   const revenuePreTax = lines.reduce((sum, l) => {
     const sku = skuById.get(l.skuId)
-    return sku ? sum + l.quantity * sku.listPrice * (1 - l.discountPct / 100) : sum
+    return sku ? sum + l.quantity * sku.listPrice * (1 - l.discountPct / 100) * conversionFactorFor(sku) : sum
   }, 0)
   const totalCost = lines.reduce((sum, l) => {
     const sku = skuById.get(l.skuId)
     if (!sku) return sum
-    return sum + l.quantity * (
-      sku.baseSoftwareCost + sku.implementationCostPerMM + sku.integrationCost + sku.thirdPartyCost
-      + sku.hardwareCost + sku.cloudCost + sku.supportCost + sku.trainingCost
-    )
+    return sum + l.quantity * skuTotalUnitCostWithBom(sku, bomItems, skuById) * conversionFactorFor(sku)
   }, 0)
   const marginPreview = revenuePreTax === 0 ? 0 : ((revenuePreTax - totalCost) / revenuePreTax) * 100
   const totalTax = lines.reduce((sum, l) => {
     const sku = skuById.get(l.skuId)
     if (!sku) return sum
     const taxPct = taxRateById.get(sku.taxClassId) ?? 0
-    return sum + l.quantity * sku.listPrice * (1 - l.discountPct / 100) * (taxPct / 100)
+    return sum + l.quantity * sku.listPrice * (1 - l.discountPct / 100) * (taxPct / 100) * conversionFactorFor(sku)
   }, 0)
 
   const approvalPreview = lines.map((l) => {
@@ -153,15 +162,11 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     setPending(thenSubmit ? 'submit' : 'draft')
     setError(null)
     try {
-      const firstSku = skuById.get(lines[0]?.skuId ?? '')
-      const currency = currencies.find((c) => c.id === firstSku?.currencyId)?.code
-        ?? currencies.find((c) => c.isBaseCurrency)?.code ?? 'INR'
-
       const { boq } = await create.mutateAsync({
         input: {
           opportunityName, departmentId, customerName, customerOrganization, customerAddress, customerGst,
           customerContact, verticalId, budgetAmount, budgetUnit, budgetKnown, emdAmount, emdUnit, salesPersonId,
-          buSalesPersonId: buSalesPersonId || null, preSalesId: preSalesId || null, currency,
+          buSalesPersonId: buSalesPersonId || null, preSalesId: preSalesId || null, currency: effectiveCurrencyCode,
         },
         lines: lines.map((l) => ({
           skuId: l.skuId, quantity: l.quantity, discountPct: l.discountPct, unitPrice: skuById.get(l.skuId)!.listPrice,
@@ -215,6 +220,11 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               <Select value={verticalId} onChange={(e) => handleVerticalChange(e.target.value)}>
                 <option value="">Select…</option>
                 {verticals.map((v) => <option key={v.id} value={v.id}>{v.code} — {v.name}</option>)}
+              </Select>
+            </Field>
+            <Field label="Proposal Currency" hint="Every line is converted into this currency.">
+              <Select value={effectiveCurrencyCode} onChange={(e) => setCurrencyCode(e.target.value)}>
+                {currencies.map((c) => <option key={c.id} value={c.code}>{c.code} — {c.name}</option>)}
               </Select>
             </Field>
             <div className="col-span-2 lg:col-span-3">
@@ -406,7 +416,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
             <SummaryStat label="Taxes" value={totalTax.toLocaleString()} />
             <SummaryStat label="Margin" value={`${marginPreview.toFixed(1)}%`} />
             <SummaryStat label="Line Items" value={String(lines.length)} />
-            <SummaryStat label="Grand Total" value={grandTotal.toLocaleString()} emphasis />
+            <SummaryStat label="Grand Total" value={`${effectiveCurrencyCode} ${grandTotal.toLocaleString()}`} emphasis />
           </div>
         </SectionCard>
 
@@ -477,7 +487,9 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                   </tbody>
                 </table>
               </div>
-              <div className="flex justify-end text-sm font-semibold text-ink-900">Grand Total: {grandTotal.toLocaleString()}</div>
+              <div className="flex justify-end text-sm font-semibold text-ink-900">
+                Grand Total: {effectiveCurrencyCode} {grandTotal.toLocaleString()}
+              </div>
             </div>
           )}
         </SectionCard>

@@ -7,8 +7,8 @@ import { useToast } from '@/components/ui/Toast'
 import { useAllBomItems, useAllBoqLineItems, useAuditLogs, useMasters, useSkuMutations, useSkus } from '../api'
 import { SkuFormDialog } from '../components/SkuFormDialog'
 import { SkuBomEditor } from '../components/SkuBomEditor'
-import { computeSkuMarginPercent, skuTotalUnitCost } from '../repository-logic'
-import type { CommercialSku, CreateSkuInput } from '../types'
+import { computeSkuMarginPercent, skuTotalUnitCost, skuTotalUnitCostWithBom } from '../repository-logic'
+import type { CommercialBomItem, CommercialSku, CreateSkuInput } from '../types'
 
 const LIFECYCLE_STYLE: Record<CommercialSku['lifecycleStatus'], string> = {
   draft: 'bg-ink-900/[0.06] text-ink-600',
@@ -41,6 +41,7 @@ export function SkuCatalog() {
   const toast = useToast()
 
   const categoryName = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
+  const skusById = useMemo(() => new Map(skus.map((s) => [s.id, s])), [skus])
   const usageCountBySku = useMemo(() => {
     const map = new Map<string, number>()
     for (const b of allBomItems) map.set(b.componentSkuId, (map.get(b.componentSkuId) ?? 0) + 1)
@@ -128,7 +129,7 @@ export function SkuCatalog() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted">
               <span>{categoryName.get(sku.categoryId) ?? '—'}</span>
               <span>List {sku.listPrice.toLocaleString()}</span>
-              <span>Margin {computeSkuMarginPercent(sku).toFixed(1)}%</span>
+              <span>Margin {computeSkuMarginPercent(sku, allBomItems, skusById).toFixed(1)}%</span>
               <span>{usageCountBySku.get(sku.id) ?? 0} BOM refs</span>
               <span>{boqCountBySku.get(sku.id)?.size ?? 0} BOQs</span>
             </div>
@@ -150,6 +151,8 @@ export function SkuCatalog() {
             usageCount={usageCountBySku.get(selected.id) ?? 0}
             boqCount={boqCountBySku.get(selected.id)?.size ?? 0}
             categoryName={categoryName.get(selected.categoryId) ?? '—'}
+            bomItems={allBomItems}
+            skusById={skusById}
             onEdit={() => { setEditing(selected); setFormOpen(true) }}
             onDelete={() => setDeleting(selected)}
           />
@@ -172,13 +175,15 @@ export function SkuCatalog() {
   )
 }
 
-function SkuDetail({ sku, tab, onTabChange, usageCount, boqCount, categoryName, onEdit, onDelete }: {
+function SkuDetail({ sku, tab, onTabChange, usageCount, boqCount, categoryName, bomItems, skusById, onEdit, onDelete }: {
   sku: CommercialSku
   tab: Tab
   onTabChange: (t: Tab) => void
   usageCount: number
   boqCount: number
   categoryName: string
+  bomItems: CommercialBomItem[]
+  skusById: Map<string, CommercialSku>
   onEdit: () => void
   onDelete: () => void
 }) {
@@ -199,7 +204,7 @@ function SkuDetail({ sku, tab, onTabChange, usageCount, boqCount, categoryName, 
       <div className="grid grid-cols-2 gap-3 rounded-xl border border-line p-3 text-sm sm:grid-cols-5">
         <DetailField label="Status" value={sku.lifecycleStatus} />
         <DetailField label="List Price" value={sku.listPrice.toLocaleString()} />
-        <DetailField label="Margin" value={`${computeSkuMarginPercent(sku).toFixed(1)}%`} />
+        <DetailField label="Margin" value={`${computeSkuMarginPercent(sku, bomItems, skusById).toFixed(1)}%`} />
         <DetailField label="Used in BOMs" value={String(usageCount)} />
         <DetailField label="Used in BOQs" value={String(boqCount)} />
       </div>
@@ -220,8 +225,8 @@ function SkuDetail({ sku, tab, onTabChange, usageCount, boqCount, categoryName, 
 
       <div className="pt-1">
         {tab === 'overview' && <OverviewTab sku={sku} categoryName={categoryName} />}
-        {tab === 'pricing' && <PricingTab sku={sku} />}
-        {tab === 'costs' && <CostsTab sku={sku} />}
+        {tab === 'pricing' && <PricingTab sku={sku} bomItems={bomItems} skusById={skusById} />}
+        {tab === 'costs' && <CostsTab sku={sku} bomItems={bomItems} skusById={skusById} />}
         {tab === 'bom' && <SkuBomEditor skuId={sku.id} />}
         {tab === 'audit' && <AuditTab skuId={sku.id} />}
       </div>
@@ -262,7 +267,7 @@ function OverviewTab({ sku, categoryName }: { sku: CommercialSku; categoryName: 
   )
 }
 
-function PricingTab({ sku }: { sku: CommercialSku }) {
+function PricingTab({ sku, bomItems, skusById }: { sku: CommercialSku; bomItems: CommercialBomItem[]; skusById: Map<string, CommercialSku> }) {
   return (
     <div className="grid grid-cols-2 gap-4 rounded-xl border border-line p-4 sm:grid-cols-4">
       <DetailField label="Internal" value={sku.internalPrice.toLocaleString()} />
@@ -274,12 +279,13 @@ function PricingTab({ sku }: { sku: CommercialSku }) {
       <DetailField label="List" value={sku.listPrice.toLocaleString()} />
       <DetailField label="Minimum Allowed" value={sku.minimumAllowedPrice.toLocaleString()} />
       <DetailField label="Max Discount %" value={`${sku.maximumDiscountPercent}%`} />
-      <DetailField label="Margin at List Price" value={`${computeSkuMarginPercent(sku).toFixed(1)}%`} />
+      <DetailField label="Margin at List Price" value={`${computeSkuMarginPercent(sku, bomItems, skusById).toFixed(1)}%`} />
     </div>
   )
 }
 
-function CostsTab({ sku }: { sku: CommercialSku }) {
+function CostsTab({ sku, bomItems, skusById }: { sku: CommercialSku; bomItems: CommercialBomItem[]; skusById: Map<string, CommercialSku> }) {
+  const mandatoryBomCost = skuTotalUnitCostWithBom(sku, bomItems, skusById) - skuTotalUnitCost(sku)
   return (
     <div className="grid grid-cols-2 gap-4 rounded-xl border border-line p-4 sm:grid-cols-4">
       <DetailField label="Base Software" value={sku.baseSoftwareCost.toLocaleString()} />
@@ -290,7 +296,8 @@ function CostsTab({ sku }: { sku: CommercialSku }) {
       <DetailField label="Cloud" value={sku.cloudCost.toLocaleString()} />
       <DetailField label="Support" value={sku.supportCost.toLocaleString()} />
       <DetailField label="Training" value={sku.trainingCost.toLocaleString()} />
-      <DetailField label="Total Cost" value={skuTotalUnitCost(sku).toLocaleString()} />
+      <DetailField label="Mandatory BOM Components" value={mandatoryBomCost.toLocaleString()} />
+      <DetailField label="Total Cost (incl. mandatory BOM)" value={skuTotalUnitCostWithBom(sku, bomItems, skusById).toLocaleString()} />
     </div>
   )
 }

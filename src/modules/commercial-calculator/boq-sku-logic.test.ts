@@ -3,8 +3,8 @@ import { buildDefaultCommercialCalculatorData } from './seed-defaults'
 import { createMasterLogic } from './repository-logic'
 import {
   addBoqLineItemLogic, computeBoqMarginPercent, computeSkuMarginPercent, createBoqLogic, createSkuLogic,
-  deleteSkuLogic, generateBoqNumber, generateSkuCode, isBoqPendingApproval, reviseBoqLogic, updateBoqLineItemLogic,
-  updateBoqStatusLogic, updateSkuLogic,
+  deleteSkuLogic, duplicateBoqLogic, generateBoqNumber, generateSkuCode, isBoqPendingApproval, reviseBoqLogic,
+  skuTotalUnitCost, skuTotalUnitCostWithBom, updateBoqLineItemLogic, updateBoqStatusLogic, updateSkuLogic,
 } from './repository-logic'
 import type { CommercialCalculatorData, CommercialSku, CreateBoqInput, CreateSkuInput } from './types'
 
@@ -76,6 +76,47 @@ describe('computeSkuMarginPercent', () => {
   it('returns 0 for a zero list price rather than dividing by zero', () => {
     const sku = { ...baseSkuInput('f'), listPrice: 0 } as CommercialSku
     expect(computeSkuMarginPercent(sku)).toBe(0)
+  })
+})
+
+describe('skuTotalUnitCostWithBom / computeSkuMarginPercent — BOM cost rollup (Option B)', () => {
+  let data: CommercialCalculatorData
+  let parent: CommercialSku
+
+  beforeEach(() => {
+    data = buildDefaultCommercialCalculatorData()
+    const { feature, module_ } = seedHierarchy(data)
+    parent = createSkuLogic(data, baseSkuInput(feature.id)) // cost 1000, listPrice 2000
+    const componentFeature = createMasterLogic(data, 'features', { code: 'COMP', name: 'Component', description: '', moduleId: module_.id, status: 'new' })
+    const optionalFeature = createMasterLogic(data, 'features', { code: 'OPT', name: 'Optional', description: '', moduleId: module_.id, status: 'new' })
+    const mandatoryComponent = createSkuLogic(data, { ...baseSkuInput(componentFeature.id), name: 'Mandatory Component', baseSoftwareCost: 200 })
+    const optionalComponent = createSkuLogic(data, { ...baseSkuInput(optionalFeature.id), name: 'Optional Component', baseSoftwareCost: 300 })
+    data.commercialBomItems.push(
+      { id: 'bom_mandatory', parentSkuId: parent.id, componentSkuId: mandatoryComponent.id, mandatory: true, quantity: 2, notes: '' },
+      { id: 'bom_optional', parentSkuId: parent.id, componentSkuId: optionalComponent.id, mandatory: false, quantity: 1, notes: '' },
+    )
+  })
+
+  it('skuTotalUnitCostWithBom adds mandatory component cost x quantity, ignoring optional components', () => {
+    const skusById = new Map(data.commercialSkus.map((s) => [s.id, s]))
+    // own cost 1000 + mandatory component (cost 200 x qty 2) = 1400; optional component's 300 is excluded.
+    expect(skuTotalUnitCostWithBom(parent, data.commercialBomItems, skusById)).toBe(1400)
+  })
+
+  it('skuTotalUnitCostWithBom equals the plain cost when no BOM items reference the SKU', () => {
+    const skusById = new Map(data.commercialSkus.map((s) => [s.id, s]))
+    const standalone = { ...baseSkuInput('nope'), id: 'sku_standalone' } as CommercialSku
+    expect(skuTotalUnitCostWithBom(standalone, data.commercialBomItems, skusById)).toBe(skuTotalUnitCost(standalone))
+  })
+
+  it('computeSkuMarginPercent defaults to the plain (BOM-unaware) cost when bomItems/skusById are omitted', () => {
+    expect(computeSkuMarginPercent(parent)).toBe(50) // unchanged from the existing behavior
+  })
+
+  it('computeSkuMarginPercent reflects the fully-loaded cost when BOM data is supplied', () => {
+    const skusById = new Map(data.commercialSkus.map((s) => [s.id, s]))
+    // (2000 - 1400) / 2000 * 100 = 30%, down from the SKU's own-cost-only 50%.
+    expect(computeSkuMarginPercent(parent, data.commercialBomItems, skusById)).toBe(30)
   })
 })
 
@@ -239,13 +280,13 @@ describe('BOQ line items — discount/approval matrix (spec §8)', () => {
     addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 20 })
     updateBoqStatusLogic(data, boqId, 'submitted', 'x')
     updateBoqStatusLogic(data, boqId, 'under_review', 'x')
-    expect(() => updateBoqStatusLogic(data, boqId, 'approved', 'x')).toThrow(/pending discount approval/i)
+    expect(() => updateBoqStatusLogic(data, boqId, 'approved', 'x')).toThrow(/approved discount status/i)
   })
 
   it('allows approving the BOQ once every pending line is resolved', () => {
     const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 20 })
     updateBoqLineItemLogic(data, line.id, {
-      approvalStatus: 'approved', approverName: 'Sales Head', approvalRemarks: 'ok', approvalDate: '2026-08-03',
+      approvalStatus: 'approved', approverId: 'emp_sales_head', approvalRemarks: 'ok', approvalDate: '2026-08-03',
     })
     updateBoqStatusLogic(data, boqId, 'submitted', 'x')
     updateBoqStatusLogic(data, boqId, 'under_review', 'x')
@@ -258,6 +299,127 @@ describe('BOQ line items — discount/approval matrix (spec §8)', () => {
     updateBoqStatusLogic(data, boqId, 'under_review', 'x')
     expect(updateBoqStatusLogic(data, boqId, 'approved', 'x').status).toBe('approved')
   })
+
+  it('blocks approving a BOQ that has an explicitly rejected line (P0 fix — gate was pending-only)', () => {
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 20 })
+    updateBoqLineItemLogic(data, line.id, { approvalStatus: 'rejected', approverId: 'emp_sales_head', approvalRemarks: 'no' })
+    updateBoqStatusLogic(data, boqId, 'submitted', 'x')
+    updateBoqStatusLogic(data, boqId, 'under_review', 'x')
+    expect(() => updateBoqStatusLogic(data, boqId, 'approved', 'x')).toThrow(/approved discount status/i)
+  })
+})
+
+describe('BOQ approval status on revise/duplicate (P0 fix)', () => {
+  let data: CommercialCalculatorData
+  let sku: CommercialSku
+
+  beforeEach(() => {
+    data = buildDefaultCommercialCalculatorData()
+    const { feature } = seedHierarchy(data)
+    sku = createSkuLogic(data, baseSkuInput(feature.id))
+  })
+
+  it('reviseBoqLogic recomputes a rejected line as fresh (not carried-over) approval state', () => {
+    const original = createBoqLogic(data, baseBoqInput())
+    const line = addBoqLineItemLogic(data, original.id, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 20 })
+    updateBoqLineItemLogic(data, line.id, { approvalStatus: 'rejected', approverId: 'emp_sales_head', approvalRemarks: 'no', approvalDate: '2026-08-01' })
+    updateBoqStatusLogic(data, original.id, 'submitted', 'x')
+
+    const revised = reviseBoqLogic(data, original.id)
+    const revisedLine = data.commercialBoqLineItems.find((li) => li.boqId === revised.id)!
+    expect(revisedLine.approvalStatus).toBe('pending') // 20% is outside the auto-approve band
+    expect(revisedLine.approverId).toBeNull()
+    expect(revisedLine.approvalDate).toBeNull()
+    expect(revisedLine.approvalRemarks).toBe('')
+  })
+
+  it('reviseBoqLogic keeps an auto-approved line auto-approved rather than forcing pending', () => {
+    const original = createBoqLogic(data, baseBoqInput())
+    addBoqLineItemLogic(data, original.id, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 5 })
+    const revised = reviseBoqLogic(data, original.id)
+    const revisedLine = data.commercialBoqLineItems.find((li) => li.boqId === revised.id)!
+    expect(revisedLine.approvalStatus).toBe('auto_approved')
+  })
+
+  it('duplicateBoqLogic recomputes a rejected line as fresh approval state', () => {
+    const original = createBoqLogic(data, baseBoqInput())
+    const line = addBoqLineItemLogic(data, original.id, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 20 })
+    updateBoqLineItemLogic(data, line.id, { approvalStatus: 'rejected', approverId: 'emp_sales_head', approvalRemarks: 'no' })
+
+    const duplicate = duplicateBoqLogic(data, original.id)
+    const duplicateLine = data.commercialBoqLineItems.find((li) => li.boqId === duplicate.id)!
+    expect(duplicateLine.approvalStatus).toBe('pending')
+    expect(duplicateLine.approverId).toBeNull()
+  })
+
+  it('a revised BOQ with a resolved recomputed line can be approved end-to-end', () => {
+    const original = createBoqLogic(data, baseBoqInput())
+    const line = addBoqLineItemLogic(data, original.id, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 20 })
+    updateBoqLineItemLogic(data, line.id, { approvalStatus: 'rejected', approverId: 'emp_sales_head', approvalRemarks: 'no' })
+    updateBoqStatusLogic(data, original.id, 'submitted', 'x')
+
+    const revised = reviseBoqLogic(data, original.id)
+    const revisedLine = data.commercialBoqLineItems.find((li) => li.boqId === revised.id)!
+    updateBoqStatusLogic(data, revised.id, 'submitted', 'x')
+    updateBoqStatusLogic(data, revised.id, 'under_review', 'x')
+    expect(() => updateBoqStatusLogic(data, revised.id, 'approved', 'x')).toThrow(/approved discount status/i)
+
+    updateBoqLineItemLogic(data, revisedLine.id, { approvalStatus: 'approved', approverId: 'emp_sales_head', approvalRemarks: 'ok', approvalDate: '2026-08-03' })
+    expect(updateBoqStatusLogic(data, revised.id, 'approved', 'x').status).toBe('approved')
+  })
+})
+
+describe('BOQ line items — multi-currency conversion (P0 fix)', () => {
+  // Seeded currencies: INR (base, exchangeRate 1), USD (exchangeRate 83).
+  let data: CommercialCalculatorData
+  let boqId: string // BOQ currency: INR
+  beforeEach(() => {
+    data = buildDefaultCommercialCalculatorData()
+    boqId = createBoqLogic(data, baseBoqInput()).id
+  })
+
+  it('leaves a same-currency line unconverted (factor 1)', () => {
+    const { feature } = seedHierarchy(data)
+    const sku = createSkuLogic(data, baseSkuInput(feature.id)) // currencyId: cur_inr
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 2, unitPrice: 2000, discountPct: 10 })
+    expect(line.lineTotal).toBeCloseTo(2 * 2000 * 0.9 * 1.18, 5)
+  })
+
+  it('converts a line priced in a different currency into the BOQ currency', () => {
+    const { feature } = seedHierarchy(data)
+    const sku = createSkuLogic(data, { ...baseSkuInput(feature.id), currencyId: 'cur_usd' })
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
+    // 2000 USD * 1.18 tax = 2360 USD; converted to INR at exchangeRate 83 => 195,880.
+    expect(line.lineTotal).toBeCloseTo(2360 * 83, 5)
+  })
+
+  it('sums a multi-currency BOQ grand total in the BOQ currency, not raw addition', () => {
+    const { feature, module_ } = seedHierarchy(data)
+    const inrFeature = createMasterLogic(data, 'features', { code: 'INRF', name: 'INR Feature', description: '', moduleId: module_.id, status: 'new' })
+    const inrSku = createSkuLogic(data, baseSkuInput(inrFeature.id)) // cur_inr
+    const usdSku = createSkuLogic(data, { ...baseSkuInput(feature.id), currencyId: 'cur_usd' })
+    addBoqLineItemLogic(data, boqId, { skuId: inrSku.id, quantity: 1, unitPrice: 2000, discountPct: 0 }) // 2360 INR
+    addBoqLineItemLogic(data, boqId, { skuId: usdSku.id, quantity: 1, unitPrice: 2000, discountPct: 0 }) // 2360 USD -> 195,880 INR
+    const boq = data.commercialBoqs.find((b) => b.id === boqId)!
+    expect(boq.grandTotal).toBeCloseTo(2360 + 2360 * 83, 5)
+  })
+
+  it('does not let a currency-conversion factor affect the minimum-allowed-price floor check', () => {
+    const { feature } = seedHierarchy(data)
+    // floorPrice 1400 USD; a 90% discount off a 100 USD unitPrice is well under
+    // the floor regardless of currency, and must still be rejected in USD terms.
+    const sku = createSkuLogic(data, { ...baseSkuInput(feature.id), currencyId: 'cur_usd' })
+    expect(() => addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 90 }))
+      .toThrow(/below this SKU's minimum allowed price/i)
+  })
+
+  it('re-converts on update when quantity/discount change', () => {
+    const { feature } = seedHierarchy(data)
+    const sku = createSkuLogic(data, { ...baseSkuInput(feature.id), currencyId: 'cur_usd' })
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
+    const updated = updateBoqLineItemLogic(data, line.id, { quantity: 3 })
+    expect(updated.lineTotal).toBeCloseTo(3 * 2360 * 83, 5)
+  })
 })
 
 describe('computeBoqMarginPercent', () => {
@@ -267,13 +429,50 @@ describe('computeBoqMarginPercent', () => {
     const sku = createSkuLogic(data, baseSkuInput(feature.id)) // cost 1000, listPrice 2000
     const boq = createBoqLogic(data, baseBoqInput())
     const line = addBoqLineItemLogic(data, boq.id, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
-    const margin = computeBoqMarginPercent(boq, [line], new Map([[sku.id, sku]]))
+    const margin = computeBoqMarginPercent(boq, [line], new Map([[sku.id, sku]]), data.masters.currencies)
     expect(margin).toBeCloseTo(50, 5)
   })
 
   it('returns 0 for zero revenue rather than dividing by zero', () => {
     const data = buildDefaultCommercialCalculatorData()
     const boq = createBoqLogic(data, baseBoqInput())
-    expect(computeBoqMarginPercent(boq, [], new Map())).toBe(0)
+    expect(computeBoqMarginPercent(boq, [], new Map(), data.masters.currencies)).toBe(0)
+  })
+
+  it('folds a line SKU\'s mandatory BOM component cost into the blended margin when bomItems is supplied', () => {
+    const data = buildDefaultCommercialCalculatorData()
+    const { feature, module_ } = seedHierarchy(data)
+    const parent = createSkuLogic(data, baseSkuInput(feature.id)) // cost 1000, listPrice 2000
+    const componentFeature = createMasterLogic(data, 'features', { code: 'COMP', name: 'Component', description: '', moduleId: module_.id, status: 'new' })
+    const component = createSkuLogic(data, { ...baseSkuInput(componentFeature.id), name: 'Component', baseSoftwareCost: 200 })
+    data.commercialBomItems.push({ id: 'bom1', parentSkuId: parent.id, componentSkuId: component.id, mandatory: true, quantity: 2, notes: '' })
+    const boq = createBoqLogic(data, baseBoqInput())
+    const line = addBoqLineItemLogic(data, boq.id, { skuId: parent.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
+    const skusById = new Map([[parent.id, parent], [component.id, component]])
+
+    const marginWithoutBom = computeBoqMarginPercent(boq, [line], skusById, data.masters.currencies)
+    const marginWithBom = computeBoqMarginPercent(boq, [line], skusById, data.masters.currencies, data.commercialBomItems)
+    expect(marginWithoutBom).toBeCloseTo(50, 5) // unchanged default behavior
+    expect(marginWithBom).toBeCloseTo(30, 5) // (2000 - 1400) / 2000 * 100
+  })
+
+  it('converts each line into the BOQ currency before blending margin across lines', () => {
+    // Deliberately asymmetric margins/currencies: an unconverted (buggy) sum
+    // would blend revenue/cost 1:1 across INR and raw USD numbers and land on
+    // 63.33%; converting each line into INR first (USD's 83x weight
+    // dominating the blend) must land on 89.06% instead.
+    const data = buildDefaultCommercialCalculatorData()
+    const { feature, module_ } = seedHierarchy(data)
+    const inrFeature = createMasterLogic(data, 'features', { code: 'INRF', name: 'INR Feature', description: '', moduleId: module_.id, status: 'new' })
+    const inrSku = createSkuLogic(data, baseSkuInput(inrFeature.id)) // cost 1000, listPrice 2000, INR -> 50% margin
+    const usdSku = createSkuLogic(data, {
+      ...baseSkuInput(feature.id), currencyId: 'cur_usd', baseSoftwareCost: 100, listPrice: 1000, floorPrice: 500,
+    }) // cost 100, listPrice 1000, USD -> 90% margin
+    const boq = createBoqLogic(data, baseBoqInput()) // BOQ currency INR
+    const inrLine = addBoqLineItemLogic(data, boq.id, { skuId: inrSku.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
+    const usdLine = addBoqLineItemLogic(data, boq.id, { skuId: usdSku.id, quantity: 1, unitPrice: 1000, discountPct: 0 })
+    const skusById = new Map([[inrSku.id, inrSku], [usdSku.id, usdSku]])
+    const margin = computeBoqMarginPercent(boq, [inrLine, usdLine], skusById, data.masters.currencies)
+    expect(margin).toBeCloseTo(89.058823529, 5)
   })
 })

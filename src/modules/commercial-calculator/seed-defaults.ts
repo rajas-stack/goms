@@ -18,7 +18,6 @@ const VERTICALS: Vertical[] = [
   { id: 'vert_agriculture', code: 'AGRI', name: 'Agriculture', description: '', active: true, displayOrder: 5 },
   { id: 'vert_resource_utility', code: 'UTILITY', name: 'Resource & Utility', description: '', active: true, displayOrder: 6 },
   { id: 'vert_cloud', code: 'CLOUD', name: 'Cloud', description: '', active: true, displayOrder: 7 },
-  { id: 'vert_other', code: 'OTHER', name: 'Other', description: '', active: true, displayOrder: 8 },
 ]
 
 // Fails loudly (at import time, in dev/test) rather than silently drifting

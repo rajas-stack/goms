@@ -208,7 +208,13 @@ export interface CommercialBoqLineItem {
   unitPrice: number
   discountPct: number
   taxPct: number
-  approverName: string
+  /** → `Employee.id` (outside this module's own slice of `GormsData`, same
+   *  as `CommercialBoq.salesPersonId`/`departmentId` — a plain FK resolved
+   *  to a display name in the UI layer, not inside this module's own
+   *  logic). `null` until a decision is made on this line. A stable
+   *  reference rather than a free-text name, so approval history/reporting
+   *  by person stays reliable even if that person's name changes. */
+  approverId: string | null
   approvalDate: string | null
   approvalRemarks: string
   approvalStatus: 'auto_approved' | 'pending' | 'approved' | 'rejected'
@@ -226,7 +232,7 @@ export interface CreateBoqLineItemInput {
   quantity: number
   unitPrice: number
   discountPct: number
-  approverName?: string
+  approverId?: string | null
   approvalRemarks?: string
 }
 

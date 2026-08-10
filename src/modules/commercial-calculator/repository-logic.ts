@@ -1,4 +1,5 @@
 import { uid } from '@/lib/utils'
+import { conversionFactor, currencyByCode, currencyById } from './currency'
 import { enforceSingleBaseCurrency, findMasterChildren, validateMasterCode, validateParentExists } from './master-rules'
 import { STANDARD_EDITION_ID } from './seed-defaults'
 import type {
@@ -135,8 +136,32 @@ export function skuTotalUnitCost(sku: CommercialSku): number {
     + sku.hardwareCost + sku.cloudCost + sku.supportCost + sku.trainingCost
 }
 
-export function computeSkuMarginPercent(sku: CommercialSku): number {
-  const totalCost = skuTotalUnitCost(sku)
+/** BOM Option B (cost rollup): a SKU's fully-loaded unit cost is its own
+ *  cost fields plus every MANDATORY BOM component's own cost x quantity.
+ *  Optional components are excluded — they're a possible add-on, not
+ *  unconditionally part of every unit sold, so their cost shouldn't be
+ *  baked into a margin figure the customer may never actually incur. One
+ *  level deep: a component's own BOM (if it has one) isn't recursed into,
+ *  since nested kits aren't a case the catalog has today. */
+export function skuTotalUnitCostWithBom(
+  sku: CommercialSku, bomItems: CommercialBomItem[], skusById: Map<string, CommercialSku>,
+): number {
+  const componentCost = bomItems
+    .filter((b) => b.parentSkuId === sku.id && b.mandatory)
+    .reduce((sum, b) => {
+      const component = skusById.get(b.componentSkuId)
+      return component ? sum + b.quantity * skuTotalUnitCost(component) : sum
+    }, 0)
+  return skuTotalUnitCost(sku) + componentCost
+}
+
+/** `bomItems`/`skusById` are optional so existing call sites that don't have
+ *  BOM data on hand keep their prior (BOM-unaware) behavior unchanged; pass
+ *  them to fold in mandatory component costs (`skuTotalUnitCostWithBom`). */
+export function computeSkuMarginPercent(
+  sku: CommercialSku, bomItems: CommercialBomItem[] = [], skusById: Map<string, CommercialSku> = new Map(),
+): number {
+  const totalCost = skuTotalUnitCostWithBom(sku, bomItems, skusById)
   return sku.listPrice === 0 ? 0 : ((sku.listPrice - totalCost) / sku.listPrice) * 100
 }
 
@@ -327,8 +352,24 @@ export function resolveApprovalBand(approvalMatrix: ApprovalMatrixRule[], discou
   return match
 }
 
-function computeLineTotal(quantity: number, unitPrice: number, discountPct: number, taxPct: number): number {
-  return quantity * unitPrice * (1 - discountPct / 100) * (1 + taxPct / 100)
+/** `unitPrice`/cost fields on a SKU are always in that SKU's own currency
+ *  (`sku.currencyId`); `CommercialBoq.currency` is a single code the whole
+ *  document is denominated in. This is the one factor that converts a SKU's
+ *  native amount into the BOQ's currency — multiply by it before summing
+ *  anything (line totals, revenue, cost) across lines or into the grand
+ *  total, so a proposal mixing SKUs priced in different currencies doesn't
+ *  silently add unlike units together.
+ *
+ *  Exported (decoupled from the full `CommercialCalculatorData` blob, which
+ *  never reaches the UI layer) so Create BOQ can preview currency-converted
+ *  totals before the BOQ or its lines exist yet — same conversion, no
+ *  duplication. */
+export function skuToBoqConversionFactor(currencies: Currency[], boqCurrencyCode: string, sku: CommercialSku): number {
+  return conversionFactor(currencyById(currencies, sku.currencyId), currencyByCode(currencies, boqCurrencyCode))
+}
+
+function computeLineTotal(quantity: number, unitPrice: number, discountPct: number, taxPct: number, factorToBoqCurrency: number): number {
+  return quantity * unitPrice * (1 - discountPct / 100) * (1 + taxPct / 100) * factorToBoqCurrency
 }
 
 export function recomputeBoqGrandTotal(data: CommercialCalculatorData, boqId: string): void {
@@ -348,12 +389,17 @@ export function addBoqLineItemLogic(
   if (!sku) throw new Error(`No such SKU: ${input.skuId}`)
 
   const discountPct = Math.max(0, Math.min(input.discountPct, Math.min(90, sku.maximumDiscountPercent)))
+  // The floor check stays in the SKU's own currency — minimumAllowedPrice is
+  // a pricing-policy floor set alongside the SKU's other price fields, and
+  // must not loosen or tighten depending on which currency a given proposal
+  // happens to be denominated in.
   const postDiscountPrice = input.unitPrice * (1 - discountPct / 100)
   if (postDiscountPrice < sku.minimumAllowedPrice) {
     throw new Error(`Discounted unit price (${postDiscountPrice.toFixed(2)}) is below this SKU's minimum allowed price (${sku.minimumAllowedPrice}).`)
   }
   const taxPct = data.masters.taxClasses.find((t) => t.id === sku.taxClassId)?.ratePct ?? 0
   const band = resolveApprovalBand(data.masters.approvalMatrix, discountPct)
+  const factor = skuToBoqConversionFactor(data.masters.currencies, boq.currency, sku)
 
   const row: CommercialBoqLineItem = {
     id: uid('bli'),
@@ -363,11 +409,11 @@ export function addBoqLineItemLogic(
     unitPrice: input.unitPrice,
     discountPct,
     taxPct,
-    approverName: input.approverName ?? '',
+    approverId: input.approverId ?? null,
     approvalDate: null,
     approvalRemarks: input.approvalRemarks ?? '',
     approvalStatus: band.allowAutoApproval ? 'auto_approved' : 'pending',
-    lineTotal: computeLineTotal(input.quantity, input.unitPrice, discountPct, taxPct),
+    lineTotal: computeLineTotal(input.quantity, input.unitPrice, discountPct, taxPct, factor),
   }
   data.commercialBoqLineItems.push(row)
   recomputeBoqGrandTotal(data, boqId)
@@ -375,12 +421,14 @@ export function addBoqLineItemLogic(
 }
 
 export function updateBoqLineItemLogic(
-  data: CommercialCalculatorData, id: string, patch: Partial<Pick<CommercialBoqLineItem, 'quantity' | 'unitPrice' | 'discountPct' | 'approverName' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'>>,
+  data: CommercialCalculatorData, id: string, patch: Partial<Pick<CommercialBoqLineItem, 'quantity' | 'unitPrice' | 'discountPct' | 'approverId' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'>>,
 ): CommercialBoqLineItem {
   const row = data.commercialBoqLineItems.find((li) => li.id === id)
   if (!row) throw new Error(`No such BOQ line item: ${id}`)
   const sku = data.commercialSkus.find((s) => s.id === row.skuId)
   if (!sku) throw new Error(`No such SKU: ${row.skuId}`)
+  const boq = data.commercialBoqs.find((b) => b.id === row.boqId)
+  if (!boq) throw new Error(`No such BOQ: ${row.boqId}`)
 
   const quantity = patch.quantity ?? row.quantity
   const unitPrice = patch.unitPrice ?? row.unitPrice
@@ -397,7 +445,8 @@ export function updateBoqLineItemLogic(
   if (patch.discountPct !== undefined) {
     row.approvalStatus = resolveApprovalBand(data.masters.approvalMatrix, discountPct).allowAutoApproval ? 'auto_approved' : 'pending'
   }
-  row.lineTotal = computeLineTotal(quantity, unitPrice, discountPct, row.taxPct)
+  const factor = skuToBoqConversionFactor(data.masters.currencies, boq.currency, sku)
+  row.lineTotal = computeLineTotal(quantity, unitPrice, discountPct, row.taxPct, factor)
   recomputeBoqGrandTotal(data, row.boqId)
   return row
 }
@@ -426,6 +475,16 @@ export function isBoqPendingApproval(status: BoqStatus): boolean {
   return !['draft', 'approved', 'rejected', 'cancelled', 'archived'].includes(status)
 }
 
+/** The only two line-level states that mean "this discount is actually
+ *  cleared for a customer-facing approval" — everything else (`pending`,
+ *  `rejected`, and any future addition to the union) must block the BOQ
+ *  itself from reaching `approved`. Written as an explicit whitelist rather
+ *  than excluding `pending` alone: excluding just one bad state silently
+ *  passes every other one, including `rejected` — a line an approver
+ *  explicitly turned down must not be able to ride along to document
+ *  approval just because nothing re-checked it. */
+const LINE_STATES_CLEARED_FOR_APPROVAL: CommercialBoqLineItem['approvalStatus'][] = ['auto_approved', 'approved']
+
 /** `PCS-029` ("validate discounts against approval hierarchy") was, until
  *  this check, enforced only at the line level (`approvalStatus` gets set
  *  by `resolveApprovalBand` when a line is added) — nothing stopped the
@@ -443,9 +502,10 @@ export function updateBoqStatusLogic(
     throw new Error(`Cannot transition a BOQ from "${boq.status}" to "${nextStatus}".`)
   }
   if (nextStatus === 'approved') {
-    const pendingCount = data.commercialBoqLineItems.filter((li) => li.boqId === id && li.approvalStatus === 'pending').length
-    if (pendingCount > 0) {
-      throw new Error(`Cannot approve this BOQ — ${pendingCount} line item(s) still have a pending discount approval.`)
+    const unresolvedCount = data.commercialBoqLineItems
+      .filter((li) => li.boqId === id && !LINE_STATES_CLEARED_FOR_APPROVAL.includes(li.approvalStatus)).length
+    if (unresolvedCount > 0) {
+      throw new Error(`Cannot approve this BOQ — ${unresolvedCount} line item(s) do not have an approved discount status.`)
     }
   }
   const oldStatus = boq.status
@@ -456,6 +516,23 @@ export function updateBoqStatusLogic(
     reason: changeReason, action: 'status_change', changedBy: null,
   })
   return boq
+}
+
+/** A copied line (revise or duplicate) starts a new approval lifecycle
+ *  rather than carrying over whatever decision (`approved`/`rejected`) was
+ *  made on the line it was copied from — that decision was made against the
+ *  old document, not this one. Recomputed from the current discount via the
+ *  same approval matrix a freshly-added line would use (not a blanket
+ *  `pending`), so a line that was auto-approved because its discount sits in
+ *  the auto-approve band stays auto-approved on the copy, and the approver
+ *  fields reset so no stale approverId/date/remarks implies a decision was
+ *  already made on the new copy. */
+function freshLineApprovalState(approvalMatrix: ApprovalMatrixRule[], discountPct: number) {
+  const band = resolveApprovalBand(approvalMatrix, discountPct)
+  return {
+    approvalStatus: band.allowAutoApproval ? 'auto_approved' as const : 'pending' as const,
+    approverId: null, approvalDate: null, approvalRemarks: '',
+  }
 }
 
 /** Revising a finalized BOQ creates a new row: `boqVersion` incremented,
@@ -479,7 +556,9 @@ export function reviseBoqLogic(data: CommercialCalculatorData, id: string): Comm
   data.commercialBoqs.push(revised)
 
   for (const line of data.commercialBoqLineItems.filter((li) => li.boqId === original.id)) {
-    data.commercialBoqLineItems.push({ ...line, id: uid('bli'), boqId: revised.id })
+    data.commercialBoqLineItems.push({
+      ...line, ...freshLineApprovalState(data.masters.approvalMatrix, line.discountPct), id: uid('bli'), boqId: revised.id,
+    })
   }
   writeAuditLogEntry(data, {
     entityType: 'boq', entityId: revised.id, field: 'boqVersion', oldValue: String(original.boqVersion), newValue: String(revised.boqVersion),
@@ -493,7 +572,8 @@ export function reviseBoqLogic(data: CommercialCalculatorData, id: string): Comm
  *  items as a starting point. Distinct from `reviseBoqLogic`, which keeps the
  *  same `boqNumber` and links back via `parentBoqId`: a duplicate is a new,
  *  unrelated proposal that happens to start from an existing one as a
- *  template (2026-08-03 redesign — BOQ Management's "Duplicate" action). */
+ *  template. Not currently wired to any UI action — no BOQ Management
+ *  "Duplicate" button exists yet. */
 export function duplicateBoqLogic(data: CommercialCalculatorData, id: string): CommercialBoq {
   const original = data.commercialBoqs.find((b) => b.id === id)
   if (!original) throw new Error(`No such BOQ: ${id}`)
@@ -512,7 +592,9 @@ export function duplicateBoqLogic(data: CommercialCalculatorData, id: string): C
   data.commercialBoqs.push(duplicate)
 
   for (const line of data.commercialBoqLineItems.filter((li) => li.boqId === original.id)) {
-    data.commercialBoqLineItems.push({ ...line, id: uid('bli'), boqId: duplicate.id })
+    data.commercialBoqLineItems.push({
+      ...line, ...freshLineApprovalState(data.masters.approvalMatrix, line.discountPct), id: uid('bli'), boqId: duplicate.id,
+    })
   }
   writeAuditLogEntry(data, {
     entityType: 'boq', entityId: duplicate.id, field: 'boqNumber', oldValue: '', newValue: duplicate.boqNumber,
@@ -523,16 +605,27 @@ export function duplicateBoqLogic(data: CommercialCalculatorData, id: string): C
 
 // --- Margin (spec §11.1) ----------------------------------------------------
 
+/** `line.unitPrice` and the SKU's cost fields are both in that SKU's own
+ *  currency, so each line's revenue/cost must be converted into the BOQ's
+ *  currency (the same factor for both, since it's a straight unit
+ *  conversion) before being summed across lines — otherwise mixing SKUs
+ *  priced in different currencies distorts the blended margin.
+ *
+ *  `bomItems` is optional (defaults to `[]`, same BOM-unaware behavior as
+ *  before) — pass it to fold each line's SKU's mandatory BOM component
+ *  costs into its cost via `skuTotalUnitCostWithBom` (BOM Option B). */
 export function computeBoqMarginPercent(
-  boq: CommercialBoq, lines: CommercialBoqLineItem[], skusById: Map<string, CommercialSku>,
+  boq: CommercialBoq, lines: CommercialBoqLineItem[], skusById: Map<string, CommercialSku>, currencies: Currency[],
+  bomItems: CommercialBomItem[] = [],
 ): number {
   let revenue = 0
   let cost = 0
   for (const line of lines) {
     const sku = skusById.get(line.skuId)
     if (!sku) continue
-    revenue += line.quantity * line.unitPrice * (1 - line.discountPct / 100)
-    cost += line.quantity * skuTotalUnitCost(sku)
+    const factor = skuToBoqConversionFactor(currencies, boq.currency, sku)
+    revenue += line.quantity * line.unitPrice * (1 - line.discountPct / 100) * factor
+    cost += line.quantity * skuTotalUnitCostWithBom(sku, bomItems, skusById) * factor
   }
   return revenue === 0 ? 0 : ((revenue - cost) / revenue) * 100
 }

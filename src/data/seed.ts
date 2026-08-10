@@ -211,6 +211,70 @@ export function buildSeed(): GormsData {
   // ownership-fixture.ts for exactly which states it demonstrates.
   ownershipAssignments.push(...buildOwnershipFixture(nodes, salesPersons))
 
+  // --- Commercial Calculator QA test fixture ----------------------------
+  // `buildDefaultCommercialCalculatorData()` above seeds Verticals/Products
+  // and the other reference masters, but leaves Modules, Features, Pre-Sales,
+  // and the SKU catalog itself empty — by design, since those are meant to be
+  // populated per-deployment, not hardcoded. That leaves Create BOQ's
+  // cascading Vertical -> Product -> Module -> Feature picker with nothing to
+  // resolve to, so hands-on testing means hand-building the whole hierarchy
+  // plus real pricing before a single BOQ line can be added. These three
+  // Module/Feature/SKU chains — one per Vertical, with realistic costs and
+  // list prices — give that picker something real to walk end-to-end.
+  // Ordinary rows: editable/deletable via the SKU Catalog UI like any other.
+  commercialCalculator.masters.modules.push(
+    { id: 'mod_qa_spotlock_core', code: 'CORE', name: 'Core Parking Management', description: 'QA fixture module.', active: true, displayOrder: 0, productId: 'prod_spotlock' },
+    { id: 'mod_qa_locomate_eta', code: 'ETA', name: 'ETA Engine', description: 'QA fixture module.', active: true, displayOrder: 1, productId: 'prod_locomate' },
+    { id: 'mod_qa_iion_hw', code: 'DEVICE', name: 'Smart Pole Hardware', description: 'QA fixture module.', active: true, displayOrder: 2, productId: 'prod_iion' },
+  )
+  commercialCalculator.masters.features.push(
+    { id: 'feat_qa_slot_booking', code: 'SLOT', name: 'Slot Booking & Payment', description: 'QA fixture feature.', active: true, displayOrder: 0, moduleId: 'mod_qa_spotlock_core', status: 'new' },
+    { id: 'feat_qa_vehicle_tracking', code: 'TRACK', name: 'Real-Time Vehicle Tracking', description: 'QA fixture feature.', active: true, displayOrder: 1, moduleId: 'mod_qa_locomate_eta', status: 'existing' },
+    { id: 'feat_qa_pole_unit', code: 'POLE', name: 'Smart Pole Unit', description: 'QA fixture feature.', active: true, displayOrder: 2, moduleId: 'mod_qa_iion_hw', status: 'new' },
+  )
+  commercialCalculator.masters.preSales.push(
+    { id: 'psl_qa_ananya', code: 'PS01', name: 'Ananya Verma', description: 'QA fixture pre-sales executive.', active: true, displayOrder: 0 },
+    { id: 'psl_qa_karan', code: 'PS02', name: 'Karan Shah', description: 'QA fixture pre-sales executive.', active: true, displayOrder: 1 },
+  )
+  commercialCalculator.commercialSkus.push(
+    {
+      id: 'sku_qa_spotlock_slot', skuCode: 'SMARTCITY-SPOTLOCK-CORE-SLOT-NEW', name: 'Spotlock Slot Booking & Payment',
+      categoryId: 'skc_software', featureId: 'feat_qa_slot_booking', editionId: 'ped_standard', uomId: 'uom_license',
+      currencyId: 'cur_inr', taxClassId: 'tax_gst18', billingTypeId: 'bil_one_time',
+      activeFrom: '2026-01-01', activeTill: null, lifecycleStatus: 'active', isSellable: true, displayOrder: 0,
+      baseSoftwareCost: 40000, implementationCostPerMM: 15000, integrationCost: 5000, thirdPartyCost: 0,
+      hardwareCost: 0, cloudCost: 3000, supportCost: 4000, trainingCost: 2000,
+      internalPrice: 90000, floorPrice: 75000, partnerPrice: 95000, governmentPrice: 100000,
+      enterprisePrice: 115000, corporatePrice: 110000, listPrice: 120000,
+      minimumAllowedPrice: 75000, maximumDiscountPercent: 40,
+      createdAt: '2026-01-01T00:00:00.000Z', createdBy: null,
+    },
+    {
+      id: 'sku_qa_locomate_track', skuCode: 'TRANSIT-LOCOMATE-ETA-TRACK-EXG', name: 'Locomate Real-Time Vehicle Tracking',
+      categoryId: 'skc_module', featureId: 'feat_qa_vehicle_tracking', editionId: 'ped_standard', uomId: 'uom_instance',
+      currencyId: 'cur_inr', taxClassId: 'tax_gst18', billingTypeId: 'bil_subscription',
+      activeFrom: '2026-01-01', activeTill: null, lifecycleStatus: 'active', isSellable: true, displayOrder: 1,
+      baseSoftwareCost: 25000, implementationCostPerMM: 8000, integrationCost: 3000, thirdPartyCost: 0,
+      hardwareCost: 0, cloudCost: 6000, supportCost: 3000, trainingCost: 1000,
+      internalPrice: 55000, floorPrice: 48000, partnerPrice: 58000, governmentPrice: 62000,
+      enterprisePrice: 70000, corporatePrice: 65000, listPrice: 75000,
+      minimumAllowedPrice: 48000, maximumDiscountPercent: 35,
+      createdAt: '2026-01-01T00:00:00.000Z', createdBy: null,
+    },
+    {
+      id: 'sku_qa_iion_pole', skuCode: 'SMARTCITY-IION-DEVICE-POLE-NEW', name: 'IIon Smart Pole Unit',
+      categoryId: 'skc_hardware', featureId: 'feat_qa_pole_unit', editionId: 'ped_standard', uomId: 'uom_device',
+      currencyId: 'cur_inr', taxClassId: 'tax_gst12', billingTypeId: 'bil_one_time',
+      activeFrom: '2026-01-01', activeTill: null, lifecycleStatus: 'active', isSellable: true, displayOrder: 2,
+      baseSoftwareCost: 0, implementationCostPerMM: 2000, integrationCost: 1500, thirdPartyCost: 12000,
+      hardwareCost: 35000, cloudCost: 0, supportCost: 2500, trainingCost: 500,
+      internalPrice: 65000, floorPrice: 58000, partnerPrice: 68000, governmentPrice: 72000,
+      enterprisePrice: 80000, corporatePrice: 75000, listPrice: 85000,
+      minimumAllowedPrice: 58000, maximumDiscountPercent: 30,
+      createdAt: '2026-01-01T00:00:00.000Z', createdBy: null,
+    },
+  )
+
   return {
     nodes, employees, externalIds, timeline, transfers,
     opportunities, opportunityStageChanges, followUps, salesPersons, salesPostings,

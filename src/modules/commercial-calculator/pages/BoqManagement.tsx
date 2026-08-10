@@ -64,6 +64,9 @@ export function BoqManagement() {
             className="flex items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5 text-left hover:bg-panel"
           >
             <span className="shrink-0 rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{b.boqNumber}</span>
+            {b.boqVersion > 1 && (
+              <span className="shrink-0 rounded-full bg-ink-900/[0.06] px-1.5 py-0.5 text-[11px] font-medium text-ink-600">v{b.boqVersion}</span>
+            )}
             <span className="min-w-0 flex-1 truncate text-[13px] text-ink-900">{b.opportunityName} · {b.customerName}</span>
             <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLE[b.status]}`}>{STATUS_LABEL[b.status]}</span>
             <span className="shrink-0 text-[12px] font-medium text-ink-700">{b.currency} {b.grandTotal.toLocaleString()}</span>

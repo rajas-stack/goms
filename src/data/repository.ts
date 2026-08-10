@@ -415,7 +415,7 @@ export interface Repository {
   addBoqLineItem(boqId: string, input: CreateBoqLineItemInput): Promise<CommercialBoqLineItem>
   updateBoqLineItem(
     id: string,
-    patch: Partial<Pick<CommercialBoqLineItem, 'quantity' | 'unitPrice' | 'discountPct' | 'approverName' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'>>,
+    patch: Partial<Pick<CommercialBoqLineItem, 'quantity' | 'unitPrice' | 'discountPct' | 'approverId' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'>>,
   ): Promise<CommercialBoqLineItem>
   removeBoqLineItem(id: string): Promise<void>
   /** Throws on an invalid lifecycle transition (spec §10's `BOQ_TRANSITIONS`). */
@@ -1349,7 +1349,7 @@ class InMemoryRepository implements Repository {
 
   async updateBoqLineItem(
     id: string,
-    patch: Partial<Pick<CommercialBoqLineItem, 'quantity' | 'unitPrice' | 'discountPct' | 'approverName' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'>>,
+    patch: Partial<Pick<CommercialBoqLineItem, 'quantity' | 'unitPrice' | 'discountPct' | 'approverId' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'>>,
   ) {
     return updateBoqLineItemLogic(this.data.commercialCalculator, id, patch)
   }

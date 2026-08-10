@@ -111,7 +111,11 @@ export function Dashboard({ onCreateBoq, onNavigate }: {
         <KpiCard label="Pending Approval" value={String(metrics?.pendingApproval ?? 0)} icon="Clock" tone="bg-amber-50 text-amber-700" />
         <KpiCard label="Approved" value={String(metrics?.approved ?? 0)} icon="Check" tone="bg-emerald-50 text-emerald-700" />
         <KpiCard label="Rejected" value={String(metrics?.rejected ?? 0)} icon="UserX" tone="bg-rose-50 text-rose-700" />
-        <KpiCard label="Commercial Value" value={(metrics?.totalCommercialValue ?? 0).toLocaleString()} icon="TrendingUp" />
+        <KpiCard
+          label={`Commercial Value (${metrics?.totalCommercialValueCurrencyCode ?? ''})`}
+          value={(metrics?.totalCommercialValue ?? 0).toLocaleString()}
+          icon="TrendingUp"
+        />
         <KpiCard label="Average Margin" value={`${(metrics?.averageMargin ?? 0).toFixed(1)}%`} icon="PieChart" />
       </div>
 

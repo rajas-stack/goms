@@ -95,11 +95,15 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
   const original = editing ? defaults(editing) : null
   const touchedSensitiveField = !!original && SENSITIVE_FIELDS.some((f) => values[f] !== original[f])
 
-  const totalCost = values.baseSoftwareCost + values.implementationCostPerMM + values.integrationCost
-    + values.thirdPartyCost + values.hardwareCost + values.cloudCost + values.supportCost + values.trainingCost
-  const previewMargin = editing
-    ? computeSkuMarginPercent({ ...editing, ...values, activeTill: values.activeTill || null } as CommercialSku)
-    : values.listPrice === 0 ? 0 : ((values.listPrice - totalCost) / values.listPrice) * 100
+  // A placeholder base when creating (no `editing` row to spread fields
+  // like `id`/`skuCode`/`createdAt` from yet) — irrelevant to the margin
+  // math itself, just enough to satisfy computeSkuMarginPercent's shape so
+  // this preview isn't a second, hand-rolled copy of that formula.
+  const previewMargin = computeSkuMarginPercent({
+    ...(editing ?? { id: '', skuCode: '', createdAt: '', createdBy: null }),
+    ...values,
+    activeTill: values.activeTill || null,
+  } as CommercialSku)
 
   async function submit() {
     setPending(true)

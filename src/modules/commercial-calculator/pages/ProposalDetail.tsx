@@ -1,33 +1,16 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useDepartments, useSalesPersons } from '@/lib/api'
+import { useAllEmployees, useDepartments, useSalesPersons } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
-import { Field, Input } from '@/components/ui/Field'
+import { Field, Input, Select } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
 import { isoToday } from '@/lib/dates'
-import { useBoqLineItemMutations, useBoqLineItems, useBoqMutations, useBoqs, useMasters, useSkus } from '../api'
-import { resolveApprovalBand } from '../repository-logic'
+import { useAllBomItems, useBoqLineItemMutations, useBoqLineItems, useBoqMutations, useBoqs, useMasters, useSkus } from '../api'
+import { buildProposalPrintHtml } from '../proposal-print'
+import { computeBoqMarginPercent, resolveApprovalBand } from '../repository-logic'
 import { STATUS_LABEL } from './BoqManagement'
 import type { ApprovalMatrixRule, BoqStatus, CommercialBoq, CommercialBoqLineItem, CommercialSku } from '../types'
-
-/** Mirrors repository-logic.ts's computeBoqMarginPercent, but over data
- *  already loaded by this component's own hooks rather than the server-side
- *  `CommercialCalculatorData` object, which isn't exposed to the UI layer. */
-function computeMarginFromLines(lines: CommercialBoqLineItem[], skuById: Map<string, CommercialSku>): number {
-  let revenue = 0
-  let cost = 0
-  for (const line of lines) {
-    const sku = skuById.get(line.skuId)
-    if (!sku) continue
-    revenue += line.quantity * line.unitPrice * (1 - line.discountPct / 100)
-    cost += line.quantity * (
-      sku.baseSoftwareCost + sku.implementationCostPerMM + sku.integrationCost + sku.thirdPartyCost
-      + sku.hardwareCost + sku.cloudCost + sku.supportCost + sku.trainingCost
-    )
-  }
-  return revenue === 0 ? 0 : ((revenue - cost) / revenue) * 100
-}
 
 /** Mirrors repository-logic.ts's BOQ_TRANSITIONS for button enabling — the
  *  repository is still the enforcement point (including the new pending-
@@ -72,6 +55,8 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   const { data: salesPersons = [] } = useSalesPersons()
   const { data: verticals = [] } = useMasters('verticals')
   const { data: approvalMatrix = [] } = useMasters('approvalMatrix')
+  const { data: currencies = [] } = useMasters('currencies')
+  const { data: bomItems = [] } = useAllBomItems()
   const { updateStatus, revise } = useBoqMutations()
   const lineMutations = useBoqLineItemMutations(boqId)
   const toast = useToast()
@@ -80,7 +65,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
 
   const boq = boqs.find((b) => b.id === boqId) ?? null
   const skuById = new Map(skus.map((s) => [s.id, s]))
-  const margin = boq ? computeMarginFromLines(lines, skuById) : 0
+  const margin = boq ? computeBoqMarginPercent(boq, lines, skuById, currencies, bomItems) : 0
   const pendingCount = lines.filter((l) => l.approvalStatus === 'pending').length
 
   async function transition(next: BoqStatus) {
@@ -102,11 +87,11 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
     navigate(`/commercial-calculator/boq/${revised.id}`)
   }
 
-  async function decideLine(lineId: string, decision: 'approved' | 'rejected', approverName: string, remarks: string) {
+  async function decideLine(lineId: string, decision: 'approved' | 'rejected', approverId: string, remarks: string) {
     try {
       await lineMutations.update.mutateAsync({
         id: lineId,
-        patch: { approvalStatus: decision, approverName, approvalDate: isoToday(), approvalRemarks: remarks },
+        patch: { approvalStatus: decision, approverId, approvalDate: isoToday(), approvalRemarks: remarks },
       })
       toast(`Line ${decision}.`)
     } catch (e) {
@@ -215,9 +200,10 @@ function ApprovalsTab({ lines, skuById, approvalMatrix, onDecide }: {
   lines: CommercialBoqLineItem[]
   skuById: Map<string, CommercialSku>
   approvalMatrix: ApprovalMatrixRule[]
-  onDecide: (lineId: string, decision: 'approved' | 'rejected', approverName: string, remarks: string) => void
+  onDecide: (lineId: string, decision: 'approved' | 'rejected', approverId: string, remarks: string) => void
 }) {
-  const [drafts, setDrafts] = useState<Record<string, { approverName: string; remarks: string }>>({})
+  const { data: employees = [] } = useAllEmployees()
+  const [drafts, setDrafts] = useState<Record<string, { approverId: string; remarks: string }>>({})
   const pending = lines.filter((l) => l.approvalStatus === 'pending')
 
   if (pending.length === 0) {
@@ -229,8 +215,8 @@ function ApprovalsTab({ lines, skuById, approvalMatrix, onDecide }: {
       {pending.map((line) => {
         const sku = skuById.get(line.skuId)
         const band = resolveApprovalBand(approvalMatrix, line.discountPct)
-        const draft = drafts[line.id] ?? { approverName: '', remarks: '' }
-        const canDecide = draft.approverName.trim().length > 0
+        const draft = drafts[line.id] ?? { approverId: '', remarks: '' }
+        const canDecide = draft.approverId.length > 0
         return (
           <div key={line.id} className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
             <div className="flex items-center gap-3 text-[13px]">
@@ -239,11 +225,14 @@ function ApprovalsTab({ lines, skuById, approvalMatrix, onDecide }: {
               <span className="font-medium text-amber-800">{line.discountPct}% discount — needs {band.approvalLevelLabel || band.name}</span>
             </div>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Field label="Approver Name">
-                <Input
-                  value={draft.approverName}
-                  onChange={(e) => setDrafts((prev) => ({ ...prev, [line.id]: { ...draft, approverName: e.target.value } }))}
-                />
+              <Field label="Approver">
+                <Select
+                  value={draft.approverId}
+                  onChange={(e) => setDrafts((prev) => ({ ...prev, [line.id]: { ...draft, approverId: e.target.value } }))}
+                >
+                  <option value="">Select…</option>
+                  {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name} — {emp.designation}</option>)}
+                </Select>
               </Field>
               <Field label="Remarks">
                 <Input
@@ -252,10 +241,10 @@ function ApprovalsTab({ lines, skuById, approvalMatrix, onDecide }: {
                 />
               </Field>
               <div className="flex items-end gap-2">
-                <Button size="sm" variant="primary" disabled={!canDecide} onClick={() => onDecide(line.id, 'approved', draft.approverName, draft.remarks)}>
+                <Button size="sm" variant="primary" disabled={!canDecide} onClick={() => onDecide(line.id, 'approved', draft.approverId, draft.remarks)}>
                   Approve
                 </Button>
-                <Button size="sm" disabled={!canDecide} onClick={() => onDecide(line.id, 'rejected', draft.approverName, draft.remarks)}>
+                <Button size="sm" disabled={!canDecide} onClick={() => onDecide(line.id, 'rejected', draft.approverId, draft.remarks)}>
                   Reject
                 </Button>
               </div>
@@ -275,11 +264,31 @@ function PreviewTab({ boq, lines, skuById, departmentName, verticalName, salesPe
   verticalName: string
   salesPersonName: string
 }) {
+  function handlePrint() {
+    const html = buildProposalPrintHtml({ boq, lines, skuById, departmentName, verticalName, salesPersonName })
+    // A dedicated window rather than printing the live app: the app shell is
+    // a fixed-viewport layout (scrolling panels inside `h-screen
+    // overflow-hidden`), so printing it directly would clip to whatever's
+    // currently visible on screen instead of the full document.
+    const win = window.open('', '_blank')
+    if (!win) return
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    win.print()
+  }
+
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-line bg-white p-5">
-      <div className="border-b border-line pb-4">
-        <h2 className="font-display text-lg font-semibold text-ink-900">Commercial Proposal — {boq.boqNumber}</h2>
-        <p className="text-[13px] text-muted">{boq.opportunityName}</p>
+      <div className="flex items-start justify-between gap-4 border-b border-line pb-4">
+        <div>
+          <h2 className="font-display text-lg font-semibold text-ink-900">Commercial Proposal — {boq.boqNumber}</h2>
+          <p className="text-[13px] text-muted">{boq.opportunityName}</p>
+        </div>
+        <Button size="sm" onClick={handlePrint}>
+          <Icon name="Printer" size={13} />
+          Print / Save as PDF
+        </Button>
       </div>
       <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
         <DetailField label="Customer" value={boq.customerName} />

@@ -39,7 +39,7 @@ export const WORK_COMPONENTS = WORK_COMPONENT_GROUPS.flatMap((g) => g.options)
 
 export const WORK_VERTICALS = [
   'Traffic', 'Transit (Mobility)', 'Data Fabric & AI', 'Integrated (Smart City)',
-  'GIS', 'Agriculture', 'Resource & Utility', 'Cloud', 'Other',
+  'GIS', 'Agriculture', 'Resource & Utility', 'Cloud',
 ]
 
 /** Currencies a work's value/EMD can be denominated in. */
