@@ -7,8 +7,12 @@ import {
 } from '@/lib/api'
 import { WorkspaceProvider, useWorkspace } from '@/features/workspace/context'
 import { DetailsPanel } from '@/features/details/DetailsPanel'
+import { MobileDetailsSheet } from './StateWorkspace'
 import { Icon } from '@/components/ui/Icon'
 import { Input } from '@/components/ui/Field'
+import { Tooltip } from '@/components/ui/Tooltip'
+import { useSalesEditLock } from '@/features/sales/salesEditLock'
+import { SalesEditLockToggle } from '@/features/sales/SalesEditLockToggle'
 import { OwnerBadge } from '@/features/sales/OwnerBadge'
 import { SalesPersonFormDialog } from '@/features/sales/SalesPersonFormDialog'
 import { Button } from '@/components/ui/Button'
@@ -156,6 +160,7 @@ function Roster() {
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]['key']>('all')
   const { data: people = [], isLoading } = useSalesPersons()
   const { data: postings = {} } = useCurrentPostings()
+  const { unlocked } = useSalesEditLock()
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -193,9 +198,11 @@ function Roster() {
         <span className="shrink-0 text-[12px] text-muted">
           {rows.length}{rows.length !== people.length && ` of ${people.length}`} people
         </span>
-        <Button size="sm" variant="primary" onClick={() => setFormOpen(true)}>
-          + Add
-        </Button>
+        <Tooltip label={unlocked ? 'Add a sales person' : 'Unlock editing to add a sales person'}>
+          <Button size="sm" variant="primary" disabled={!unlocked} onClick={() => setFormOpen(true)}>
+            + Add
+          </Button>
+        </Tooltip>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
@@ -478,22 +485,27 @@ function SalesWorkspaceBody() {
   return (
     <div className="flex h-full flex-col">
       <SummaryCards />
-      <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-3 py-2">
-        <span className="mr-2 shrink-0 text-sm font-semibold text-ink-900">Sales Team</span>
-        {SECTIONS.map((s) => (
-          <Link
-            key={s.key}
-            to={`/sales/${s.key}`}
-            className={cn(
-              'shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors',
-              s.key === active.key
-                ? 'bg-ink-900/[0.06] text-ink-900'
-                : 'text-ink-600/70 hover:bg-ink-900/[0.04] hover:text-ink-900',
-            )}
-          >
-            {s.label}
-          </Link>
-        ))}
+      <div className="flex shrink-0 flex-col gap-2 border-b border-line px-3 py-2">
+        <div className="flex items-center gap-2">
+          <span className="shrink-0 text-sm font-semibold text-ink-900">Sales Team</span>
+          <SalesEditLockToggle className="ml-auto" />
+        </div>
+        <div className="flex items-center gap-1 overflow-x-auto">
+          {SECTIONS.map((s) => (
+            <Link
+              key={s.key}
+              to={`/sales/${s.key}`}
+              className={cn(
+                'shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors',
+                s.key === active.key
+                  ? 'bg-ink-900/[0.06] text-ink-900'
+                  : 'text-ink-600/70 hover:bg-ink-900/[0.04] hover:text-ink-900',
+              )}
+            >
+              {s.label}
+            </Link>
+          ))}
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -504,6 +516,8 @@ function SalesWorkspaceBody() {
           <DetailsPanel />
         </aside>
       </div>
+
+      <MobileDetailsSheet />
     </div>
   )
 }

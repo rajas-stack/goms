@@ -12,6 +12,7 @@ import { RouteFallback } from '@/components/RouteFallback'
 import { ImportDialog } from '@/features/import/ImportDialog'
 import { ExportDialog } from '@/features/import/ExportDialog'
 import { ToastProvider } from '@/components/ui/Toast'
+import { SalesEditLockProvider } from '@/features/sales/salesEditLock'
 import { cn, isTypingTarget } from '@/lib/utils'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import {
@@ -155,30 +156,32 @@ export function AppLayout() {
   }, [navigate])
 
   return (
-    <ToastProvider>
-      <Ctx.Provider value={{
-        openSearch: () => setSearchOpen(true), openImport: () => setImportOpen(true),
-        openExport: () => setExportOpen(true), navExpanded,
-      }}>
-        <div className="flex h-screen overflow-hidden bg-paper">
-          <AccountMappingRail />
-          <div className="flex min-w-0 flex-1 flex-col">
-            <TopBar onOpenDrawer={() => setDrawerOpen(true)} />
-            {navExpanded && <SecondaryNav />}
-            {/* `pb-14` matches SecondaryNav's fixed mobile bar height. */}
-            <main className={cn('min-h-0 flex-1 overflow-hidden', navExpanded && 'pb-14 lg:pb-0')}>
-              <Suspense fallback={<RouteFallback />}>
-                <Outlet />
-              </Suspense>
-            </main>
+    <SalesEditLockProvider>
+      <ToastProvider>
+        <Ctx.Provider value={{
+          openSearch: () => setSearchOpen(true), openImport: () => setImportOpen(true),
+          openExport: () => setExportOpen(true), navExpanded,
+        }}>
+          <div className="flex h-screen overflow-hidden bg-paper">
+            <AccountMappingRail />
+            <div className="flex min-w-0 flex-1 flex-col">
+              <TopBar onOpenDrawer={() => setDrawerOpen(true)} />
+              {navExpanded && <SecondaryNav />}
+              {/* `pb-14` matches SecondaryNav's fixed mobile bar height. */}
+              <main className={cn('min-h-0 flex-1 overflow-hidden', navExpanded && 'pb-14 lg:pb-0')}>
+                <Suspense fallback={<RouteFallback />}>
+                  <Outlet />
+                </Suspense>
+              </main>
+            </div>
           </div>
-        </div>
-        <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
-        <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
-        <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
-        <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-        {navExpanded && <GlobalFab />}
-      </Ctx.Provider>
-    </ToastProvider>
+          <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
+          <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
+          <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
+          <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
+          {navExpanded && <GlobalFab />}
+        </Ctx.Provider>
+      </ToastProvider>
+    </SalesEditLockProvider>
   )
 }

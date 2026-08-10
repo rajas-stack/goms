@@ -173,18 +173,26 @@ export function MobileDetailsSheet() {
           // Insights/Meetings bar stays visible and tappable the whole time a
           // record's details are open. z-[45] keeps it above the nav's own
           // z-40 stacking context but below real dialogs (z-50).
-          className="fixed inset-x-0 bottom-14 z-[45] max-h-[70vh] overflow-hidden rounded-t-2xl border-t border-line bg-paper shadow-pop lg:hidden"
+          className="fixed inset-x-0 bottom-14 z-[45] flex max-h-[70vh] flex-col overflow-hidden rounded-t-2xl border-t border-line bg-paper shadow-pop lg:hidden"
         >
-          <Tooltip label="Close details" side="left" className="absolute right-3 top-3 z-10">
-            <button
-              onClick={ws.clearSelection}
-              className="relative flex h-7 w-7 items-center justify-center rounded-md text-muted before:absolute before:-inset-2 before:content-[''] hover:bg-ink-900/[0.06] hover:text-ink"
-              aria-label="Close details"
-            >
-              <Icon name="X" size={15} />
-            </button>
-          </Tooltip>
-          <div className="max-h-[75vh] overflow-y-auto scrollbar-thin">
+          {/* A dedicated strip for the drag handle + close button, separate
+              from whatever the Details view below renders as its own header
+              (avatar/name/Edit/⋯ for a person, etc.) — floating the ✕ over
+              that content instead (as this used to) put it visually close to
+              but misaligned with those buttons. */}
+          <div className="relative flex shrink-0 items-center justify-center border-b border-line py-2.5">
+            <span className="h-1 w-9 rounded-full bg-line" />
+            <Tooltip label="Close details" side="left" className="absolute right-2 top-1/2 -translate-y-1/2">
+              <button
+                onClick={ws.clearSelection}
+                className="relative flex h-7 w-7 items-center justify-center rounded-md text-muted before:absolute before:-inset-2 before:content-[''] hover:bg-ink-900/[0.06] hover:text-ink"
+                aria-label="Close details"
+              >
+                <Icon name="X" size={15} />
+              </button>
+            </Tooltip>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
             <DetailsPanel />
           </div>
         </motion.div>

@@ -5,12 +5,14 @@ import {
   useSalesPersons, useSalesPostings,
 } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
+import { useSalesEditLock } from '@/features/sales/salesEditLock'
 import { useToast } from '@/components/ui/Toast'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Icon } from '@/components/ui/Icon'
 import { Menu, MenuDivider, MenuItem } from '@/components/ui/Menu'
+import { Tooltip } from '@/components/ui/Tooltip'
 import { tierLabel } from '@/data/sales-tiers'
 import { displayEndDate } from '@/lib/intervals'
 import { isoToday } from '@/lib/dates'
@@ -72,6 +74,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   const [postingTransferOpen, setPostingTransferOpen] = useState(false)
   const [bobTransferOpen, setBobTransferOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const { unlocked } = useSalesEditLock()
 
   if (!person) {
     return <p className="p-4 text-sm text-muted">This salesperson no longer exists.</p>
@@ -101,16 +104,21 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
           <h2 className="truncate text-base font-semibold text-ink-900">{person.name}</h2>
           <p className="truncate text-[13px] text-muted">{current?.designation || 'No current posting'}</p>
         </div>
-        <Button size="sm" onClick={() => setEditOpen(true)}><Icon name="Pencil" size={14} /> Edit</Button>
+        <Tooltip label={unlocked ? 'Edit' : 'Unlock editing to make changes'}>
+          <Button size="sm" disabled={!unlocked} onClick={() => setEditOpen(true)}><Icon name="Pencil" size={14} /> Edit</Button>
+        </Tooltip>
         <Menu
           align="end"
           trigger={({ open, toggle }) => (
-            <Button
-              size="icon" variant="ghost" aria-label="More actions" aria-haspopup="menu" aria-expanded={open}
-              onClick={toggle} className={cn(open && 'bg-ink-900/[0.05] text-ink')}
-            >
-              <Icon name="MoreHorizontal" size={16} />
-            </Button>
+            <Tooltip label={unlocked ? 'More actions' : 'Unlock editing to use these actions'}>
+              <Button
+                size="icon" variant="ghost" aria-label="More actions" aria-haspopup="menu" aria-expanded={open}
+                disabled={!unlocked}
+                onClick={toggle} className={cn(open && 'bg-ink-900/[0.05] text-ink')}
+              >
+                <Icon name="MoreHorizontal" size={16} />
+              </Button>
+            </Tooltip>
           )}
         >
           {(close) => (
