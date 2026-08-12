@@ -639,13 +639,16 @@ export function IndiaMap() {
           </button>
         </Tooltip>
         <span className="pointer-events-auto w-8 text-center font-mono text-[10px] text-muted sm:w-11 sm:text-[11px]">{Math.round(transform.scale * 100)}%</span>
-        <Tooltip label="Zoom in">
+        {/* These two sit closest to the global FAB's bottom-right corner —
+            a "top" tooltip here pops up right underneath/behind it. "left"
+            keeps the label inside the cluster instead of colliding. */}
+        <Tooltip label="Zoom in" side="left">
           <button onClick={() => zoomBy(1 / 0.85)} className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900 sm:h-8 sm:w-8" aria-label="Zoom in">
             <span className="text-sm leading-none sm:text-base">+</span>
           </button>
         </Tooltip>
         <span className="mx-0.5 h-5 w-px bg-line" />
-        <Tooltip label="Reset view">
+        <Tooltip label="Reset view" side="left">
           <button onClick={resetView} className="pointer-events-auto flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900 sm:h-8 sm:w-8" aria-label="Reset view">
             <Icon name="MoveRight" size={12} className="rotate-[225deg] sm:hidden" />
             <Icon name="MoveRight" size={14} className="hidden rotate-[225deg] sm:block" />

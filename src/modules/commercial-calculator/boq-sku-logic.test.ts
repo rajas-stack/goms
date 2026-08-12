@@ -3,8 +3,9 @@ import { buildDefaultCommercialCalculatorData } from './seed-defaults'
 import { createMasterLogic } from './repository-logic'
 import {
   addBoqLineItemLogic, computeBoqMarginPercent, computeSkuMarginPercent, createBoqLogic, createSkuLogic,
-  deleteSkuLogic, duplicateBoqLogic, generateBoqNumber, generateSkuCode, isBoqPendingApproval, reviseBoqLogic,
-  skuTotalUnitCost, skuTotalUnitCostWithBom, updateBoqLineItemLogic, updateBoqStatusLogic, updateSkuLogic,
+  deleteSkuLogic, duplicateBoqLogic, generateBoqNumber, generateSkuCode, getBoqLogic, isBoqPendingApproval,
+  listBoqLineItemsLogic, listBoqsLogic, reviseBoqLogic, skuTotalUnitCost, skuTotalUnitCostWithBom,
+  updateBoqLineItemLogic, updateBoqStatusLogic, updateSkuLogic,
 } from './repository-logic'
 import type { CommercialCalculatorData, CommercialSku, CreateBoqInput, CreateSkuInput } from './types'
 
@@ -474,5 +475,65 @@ describe('computeBoqMarginPercent', () => {
     const skusById = new Map([[inrSku.id, inrSku], [usdSku.id, usdSku]])
     const margin = computeBoqMarginPercent(boq, [inrLine, usdLine], skusById, data.masters.currencies)
     expect(margin).toBeCloseTo(89.058823529, 5)
+  })
+})
+
+describe('listBoqLineItemsLogic / listBoqsLogic / getBoqLogic — live pricing while a BOQ is draft', () => {
+  it('recomputes a draft line\'s unitPrice/taxPct/lineTotal from the SKU\'s current price, not the stored snapshot', () => {
+    const data = buildDefaultCommercialCalculatorData()
+    const { feature } = seedHierarchy(data)
+    const sku = createSkuLogic(data, baseSkuInput(feature.id)) // listPrice 2000, tax_gst18
+    const boq = createBoqLogic(data, baseBoqInput())
+    addBoqLineItemLogic(data, boq.id, { skuId: sku.id, quantity: 2, unitPrice: 2000, discountPct: 0 })
+
+    updateSkuLogic(data, sku.id, { listPrice: 3000, taxClassId: 'tax_gst5' }, 'price change')
+
+    const [line] = listBoqLineItemsLogic(data, boq.id)
+    expect(line.unitPrice).toBe(3000)
+    expect(line.taxPct).toBe(5)
+    expect(line.lineTotal).toBeCloseTo(2 * 3000 * 1.05, 5)
+  })
+
+  it('leaves a submitted BOQ\'s line at its frozen snapshot even after the SKU price changes', () => {
+    const data = buildDefaultCommercialCalculatorData()
+    const { feature } = seedHierarchy(data)
+    const sku = createSkuLogic(data, baseSkuInput(feature.id)) // listPrice 2000, tax_gst18
+    const boq = createBoqLogic(data, baseBoqInput())
+    addBoqLineItemLogic(data, boq.id, { skuId: sku.id, quantity: 2, unitPrice: 2000, discountPct: 0 })
+    updateBoqStatusLogic(data, boq.id, 'submitted', 'send to customer')
+
+    updateSkuLogic(data, sku.id, { listPrice: 3000, taxClassId: 'tax_gst5' }, 'price change')
+
+    const [line] = listBoqLineItemsLogic(data, boq.id)
+    expect(line.unitPrice).toBe(2000)
+    expect(line.taxPct).toBe(18)
+    expect(line.lineTotal).toBeCloseTo(2 * 2000 * 1.18, 5)
+  })
+
+  it('recomputes grandTotal for a draft BOQ via listBoqsLogic and getBoqLogic', () => {
+    const data = buildDefaultCommercialCalculatorData()
+    const { feature } = seedHierarchy(data)
+    const sku = createSkuLogic(data, baseSkuInput(feature.id)) // listPrice 2000
+    const boq = createBoqLogic(data, baseBoqInput())
+    addBoqLineItemLogic(data, boq.id, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
+
+    updateSkuLogic(data, sku.id, { listPrice: 5000 }, 'price change')
+
+    expect(getBoqLogic(data, boq.id)?.grandTotal).toBeCloseTo(5000 * 1.18, 5)
+    expect(listBoqsLogic(data).find((b) => b.id === boq.id)?.grandTotal).toBeCloseTo(5000 * 1.18, 5)
+  })
+
+  it('does not recompute grandTotal for a non-draft BOQ', () => {
+    const data = buildDefaultCommercialCalculatorData()
+    const { feature } = seedHierarchy(data)
+    const sku = createSkuLogic(data, baseSkuInput(feature.id)) // listPrice 2000
+    const boq = createBoqLogic(data, baseBoqInput())
+    addBoqLineItemLogic(data, boq.id, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
+    updateBoqStatusLogic(data, boq.id, 'submitted', 'send to customer')
+    const beforeTotal = getBoqLogic(data, boq.id)?.grandTotal
+
+    updateSkuLogic(data, sku.id, { listPrice: 5000 }, 'price change')
+
+    expect(getBoqLogic(data, boq.id)?.grandTotal).toBe(beforeTotal)
   })
 })

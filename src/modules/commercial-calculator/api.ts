@@ -80,9 +80,15 @@ export const useSkus = () => useQuery({ queryKey: qk.skus, queryFn: () => reposi
 
 export function useSkuMutations() {
   const qc = useQueryClient()
+  // A SKU's price/cost fields feed every BOQ that references it (draft BOQs
+  // recompute live off the SKU; margin always does) — so a SKU edit must
+  // invalidate BOQ-shaped queries too, not just the SKU list itself.
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: qk.skus })
     qc.invalidateQueries({ queryKey: qk.auditLogs() })
+    qc.invalidateQueries({ queryKey: qk.boqs })
+    qc.invalidateQueries({ queryKey: ['commercialCalculator', 'boqLineItems'] })
+    qc.invalidateQueries({ queryKey: qk.dashboardMetrics })
   }
   const create = useMutation({
     mutationFn: (input: CreateSkuInput) => repository.createSku(input),
@@ -115,7 +121,15 @@ export const useAllBomItems = () => useQuery({ queryKey: qk.allBomItems, queryFn
 
 export function useBomMutations(parentSkuId: string) {
   const qc = useQueryClient()
-  const invalidate = () => qc.invalidateQueries({ queryKey: qk.bomItems(parentSkuId) })
+  // A mandatory BOM link changes the parent SKU's fully-loaded cost, which
+  // feeds every BOQ margin figure — same reasoning as useSkuMutations above.
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: qk.bomItems(parentSkuId) })
+    qc.invalidateQueries({ queryKey: qk.allBomItems })
+    qc.invalidateQueries({ queryKey: qk.boqs })
+    qc.invalidateQueries({ queryKey: ['commercialCalculator', 'boqLineItems'] })
+    qc.invalidateQueries({ queryKey: qk.dashboardMetrics })
+  }
   const add = useMutation({
     mutationFn: (input: CreateBomItemInput) => repository.createBomItem(input),
     onSuccess: invalidate,

@@ -295,15 +295,47 @@ export function generateBoqNumber(data: CommercialCalculatorData): string {
 // --- CommercialBoq CRUD & lifecycle (spec §6.5, §10, §12, §13) -------------
 
 export function listBoqsLogic(data: CommercialCalculatorData): CommercialBoq[] {
-  return [...data.commercialBoqs].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+  return [...data.commercialBoqs].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).map((b) => withLiveDraftGrandTotal(data, b))
 }
 
 export function getBoqLogic(data: CommercialCalculatorData, id: string): CommercialBoq | null {
-  return data.commercialBoqs.find((b) => b.id === id) ?? null
+  const boq = data.commercialBoqs.find((b) => b.id === id) ?? null
+  return boq ? withLiveDraftGrandTotal(data, boq) : null
 }
 
 export function listBoqLineItemsLogic(data: CommercialCalculatorData, boqId: string): CommercialBoqLineItem[] {
-  return data.commercialBoqLineItems.filter((li) => li.boqId === boqId)
+  const boq = data.commercialBoqs.find((b) => b.id === boqId)
+  const lines = data.commercialBoqLineItems.filter((li) => li.boqId === boqId)
+  return boq ? withLiveDraftPricing(data, boq, lines) : lines
+}
+
+/** A BOQ's line `unitPrice`/`taxPct`/`lineTotal` are snapshots taken from the
+ *  SKU at the moment the line was added — once submitted, that snapshot IS
+ *  the quoted price and must never move again (an approved customer quote
+ *  can't silently change under them). But nothing has been quoted yet while
+ *  the BOQ is still a draft, so every read recomputes from the SKU's current
+ *  price/tax rate instead of returning a stale snapshot — the same live SKU
+ *  data Create BOQ's own preview reads before a line even exists. */
+function withLiveDraftPricing(
+  data: CommercialCalculatorData, boq: CommercialBoq, lines: CommercialBoqLineItem[],
+): CommercialBoqLineItem[] {
+  if (boq.status !== 'draft') return lines
+  const skusById = new Map(data.commercialSkus.map((s) => [s.id, s]))
+  return lines.map((line) => {
+    const sku = skusById.get(line.skuId)
+    if (!sku) return line
+    const taxPct = data.masters.taxClasses.find((t) => t.id === sku.taxClassId)?.ratePct ?? 0
+    const factor = skuToBoqConversionFactor(data.masters.currencies, boq.currency, sku)
+    return { ...line, unitPrice: sku.listPrice, taxPct, lineTotal: computeLineTotal(line.quantity, sku.listPrice, line.discountPct, taxPct, factor) }
+  })
+}
+
+function withLiveDraftGrandTotal(data: CommercialCalculatorData, boq: CommercialBoq): CommercialBoq {
+  if (boq.status !== 'draft') return boq
+  const lines = data.commercialBoqLineItems.filter((li) => li.boqId === boq.id)
+  const liveLines = withLiveDraftPricing(data, boq, lines)
+  const grandTotal = liveLines.reduce((sum, li) => sum + li.lineTotal, 0)
+  return grandTotal === boq.grandTotal ? boq : { ...boq, grandTotal }
 }
 
 /** Every BOQ line item across every BOQ — read-only aggregate, used by the

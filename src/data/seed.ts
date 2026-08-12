@@ -274,6 +274,16 @@ export function buildSeed(): GormsData {
       createdAt: '2026-01-01T00:00:00.000Z', createdBy: null,
     },
   )
+  // One mandatory BOM link so the SKU BOM editor has a row to show/remove,
+  // and so Create BOQ's margin preview (skuTotalUnitCostWithBom) has a
+  // mandatory-component cost to actually roll up instead of always
+  // matching the BOM-unaware total.
+  commercialCalculator.commercialBomItems.push(
+    {
+      id: 'bom_qa_spotlock_needs_pole', parentSkuId: 'sku_qa_spotlock_slot', componentSkuId: 'sku_qa_iion_pole',
+      mandatory: true, quantity: 1, notes: 'QA fixture: sensor hardware bundled with slot booking.',
+    },
+  )
 
   return {
     nodes, employees, externalIds, timeline, transfers,
