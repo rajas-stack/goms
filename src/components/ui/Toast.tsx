@@ -1,6 +1,7 @@
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Icon } from './Icon'
+import { PERSIST_FAILED_EVENT } from '@/data/persist'
 
 interface Toast {
   id: number
@@ -19,6 +20,20 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setToasts((t) => [...t, { id, message }])
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2600)
   }, [])
+
+  // Repeated failed writes (e.g. storage blocked for this browser/profile)
+  // would otherwise retry silently forever — one warning per page load is
+  // enough to tell the user their edits aren't being saved to this device.
+  const warnedThisLoad = useRef(false)
+  useEffect(() => {
+    function onPersistFailed() {
+      if (warnedThisLoad.current) return
+      warnedThisLoad.current = true
+      push("Changes aren't saving to this device — check your browser's site storage settings.")
+    }
+    window.addEventListener(PERSIST_FAILED_EVENT, onPersistFailed)
+    return () => window.removeEventListener(PERSIST_FAILED_EVENT, onPersistFailed)
+  }, [push])
 
   return (
     <ToastCtx.Provider value={push}>

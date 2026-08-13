@@ -1,3 +1,4 @@
+<meta charset="UTF-8">
 <title>Commercial Calculator Blueprint</title>
 <style>
   :root {
@@ -278,13 +279,29 @@
     margin: 0 0 8px;
   }
 
-  pre.mermaid {
+  .mermaid-wrap {
     background: var(--surface);
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 18px;
     box-shadow: var(--shadow);
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+  pre.mermaid {
+    margin: 0;
+  }
+  .mermaid-wrap svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+  @media (max-width: 720px) {
+    .mermaid-wrap svg {
+      max-width: none;
+      min-width: 640px;
+    }
   }
 
   .wireframe-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 18px; margin: 16px 0 8px; }
@@ -485,6 +502,7 @@
 
       <section class="block" id="flow">
         <div class="block-head"><span class="block-num">03</span><h2>Feature connection / flow diagram</h2></div>
+        <div class="mermaid-wrap">
         <pre class="mermaid">
 flowchart TD
     Home --> CC[Commercial Calculator]
@@ -525,6 +543,7 @@ Hierarchy, SKU Catalog, Product Editions"]
     ApproveDoc -. writes .-> Audit
     Submit -. writes .-> Audit
         </pre>
+        </div>
       </section>
 
       <section class="block" id="wireframes">
@@ -846,3 +865,12 @@ Hierarchy, SKU Catalog, Product Editions"]
     </div>
   </main>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    securityLevel: "loose",
+    flowchart: { useMaxWidth: false, htmlLabels: true }
+  });
+</script>

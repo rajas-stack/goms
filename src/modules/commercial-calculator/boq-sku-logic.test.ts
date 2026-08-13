@@ -3,7 +3,7 @@ import { buildDefaultCommercialCalculatorData } from './seed-defaults'
 import { createMasterLogic } from './repository-logic'
 import {
   addBoqLineItemLogic, computeBoqMarginPercent, computeSkuMarginPercent, createBoqLogic, createSkuLogic,
-  deleteSkuLogic, duplicateBoqLogic, generateBoqNumber, generateSkuCode, getBoqLogic, isBoqPendingApproval,
+  deleteBoqLogic, deleteSkuLogic, duplicateBoqLogic, generateBoqNumber, generateSkuCode, getBoqLogic, isBoqPendingApproval,
   listBoqLineItemsLogic, listBoqsLogic, reviseBoqLogic, skuTotalUnitCost, skuTotalUnitCostWithBom,
   updateBoqLineItemLogic, updateBoqStatusLogic, updateSkuLogic,
 } from './repository-logic'
@@ -227,6 +227,54 @@ describe('BOQ lifecycle', () => {
     expect(revised.revisionNumber).toBe(0)
     expect(revised.parentBoqId).toBe(original.id)
     expect(revised.status).toBe('draft')
+  })
+})
+
+describe('deleteBoqLogic', () => {
+  let data: CommercialCalculatorData
+  beforeEach(() => { data = buildDefaultCommercialCalculatorData() })
+
+  it('deletes a draft BOQ and its line items', () => {
+    const { feature } = seedHierarchy(data)
+    const sku = createSkuLogic(data, baseSkuInput(feature.id))
+    const boq = createBoqLogic(data, baseBoqInput())
+    addBoqLineItemLogic(data, boq.id, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
+
+    deleteBoqLogic(data, boq.id)
+
+    expect(data.commercialBoqs.some((b) => b.id === boq.id)).toBe(false)
+    expect(data.commercialBoqLineItems.some((li) => li.boqId === boq.id)).toBe(false)
+  })
+
+  it('deletes a cancelled, rejected, or archived BOQ', () => {
+    const cancelled = createBoqLogic(data, baseBoqInput())
+    updateBoqStatusLogic(data, cancelled.id, 'cancelled', 'x')
+    expect(() => deleteBoqLogic(data, cancelled.id)).not.toThrow()
+
+    const rejected = createBoqLogic(data, baseBoqInput())
+    updateBoqStatusLogic(data, rejected.id, 'submitted', 'x')
+    updateBoqStatusLogic(data, rejected.id, 'under_review', 'x')
+    updateBoqStatusLogic(data, rejected.id, 'rejected', 'x')
+    expect(() => deleteBoqLogic(data, rejected.id)).not.toThrow()
+  })
+
+  it('rejects deleting a BOQ that is still active in the pipeline', () => {
+    const boq = createBoqLogic(data, baseBoqInput())
+    updateBoqStatusLogic(data, boq.id, 'submitted', 'x')
+    expect(() => deleteBoqLogic(data, boq.id)).toThrow(/cancel it first/i)
+    expect(data.commercialBoqs.some((b) => b.id === boq.id)).toBe(true)
+  })
+
+  it('rejects deleting an approved BOQ directly', () => {
+    const boq = createBoqLogic(data, baseBoqInput())
+    updateBoqStatusLogic(data, boq.id, 'submitted', 'x')
+    updateBoqStatusLogic(data, boq.id, 'under_review', 'x')
+    updateBoqStatusLogic(data, boq.id, 'approved', 'x')
+    expect(() => deleteBoqLogic(data, boq.id)).toThrow(/cancel it first/i)
+  })
+
+  it('throws for an unknown BOQ id', () => {
+    expect(() => deleteBoqLogic(data, 'nope')).toThrow(/no such boq/i)
   })
 })
 

@@ -567,6 +567,26 @@ function freshLineApprovalState(approvalMatrix: ApprovalMatrixRule[], discountPc
   }
 }
 
+/** A BOQ still in an active pipeline state (`submitted`/`under_review`/
+ *  `approved`) must be cancelled first (an existing `BOQ_TRANSITIONS` move)
+ *  before it can be deleted — deletion itself is unrestricted once a BOQ
+ *  has reached one of these terminal-or-never-left-draft states. */
+const DELETABLE_BOQ_STATUSES: BoqStatus[] = ['draft', 'cancelled', 'rejected', 'archived']
+
+/** Hard-deletes a BOQ and its line items. Line items have no independent
+ *  lifecycle of their own (spec §6.5) — they always cascade with their
+ *  parent BOQ, the same as `deleteMasterLogic`'s children check exists to
+ *  *prevent* for masters that other rows still reference. */
+export function deleteBoqLogic(data: CommercialCalculatorData, id: string): void {
+  const boq = data.commercialBoqs.find((b) => b.id === id)
+  if (!boq) throw new Error(`No such BOQ: ${id}`)
+  if (!DELETABLE_BOQ_STATUSES.includes(boq.status)) {
+    throw new Error(`Cannot delete a BOQ in "${boq.status}" status — cancel it first.`)
+  }
+  data.commercialBoqs = data.commercialBoqs.filter((b) => b.id !== id)
+  data.commercialBoqLineItems = data.commercialBoqLineItems.filter((li) => li.boqId !== id)
+}
+
 /** Revising a finalized BOQ creates a new row: `boqVersion` incremented,
  *  `revisionNumber` reset, `parentBoqId` set, the immutable `boqNumber`
  *  carried forward (spec §9/§13). Line items are copied so the revision is

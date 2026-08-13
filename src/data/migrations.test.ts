@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MIGRATIONS, SCHEMA_VERSION, migrateSnapshot } from './migrations'
+import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
 
 /** A minimal v1 snapshot — the shape shipped before Phase 0. */
 function v1Snapshot() {
@@ -93,8 +94,10 @@ describe('migrateSnapshot', () => {
     expect(out).not.toBeNull()
     // Pre-existing fields are preserved untouched.
     expect(out!.commercialCalculator.masters.verticals).toHaveLength(1)
-    // New Phase 2+3 fields are backfilled with empty defaults.
-    expect(out!.commercialCalculator.commercialSkus).toEqual([])
+    // New Phase 2+3 fields are backfilled with the same defaults a fresh
+    // build gets — commercialSkus isn't `[]` here since seed-defaults.ts
+    // ships sample SKUs so Create BOQ works end-to-end out of the box.
+    expect(out!.commercialCalculator.commercialSkus).toEqual(buildDefaultCommercialCalculatorData().commercialSkus)
     expect(out!.commercialCalculator.commercialBomItems).toEqual([])
     expect(out!.commercialCalculator.commercialBoqs).toEqual([])
     expect(out!.commercialCalculator.commercialBoqLineItems).toEqual([])

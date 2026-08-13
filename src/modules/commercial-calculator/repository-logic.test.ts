@@ -24,11 +24,12 @@ describe('createMasterLogic', () => {
   // list) starts genuinely empty, so appended displayOrder is 0 here.
   it('creates a new master row with a generated id and appended displayOrder', () => {
     const data = buildDefaultCommercialCalculatorData()
+    const seededCount = data.masters.preSales.length
     const row = createMasterLogic(data, 'preSales', { code: 'JS', name: 'Jane Smith', description: '' })
     expect(row.id).toMatch(/^mst_/)
     expect(row.active).toBe(true)
-    expect(row.displayOrder).toBe(0)
-    expect(data.masters.preSales).toHaveLength(1)
+    expect(row.displayOrder).toBe(seededCount)
+    expect(data.masters.preSales).toHaveLength(seededCount + 1)
   })
 
   it('appends a new vertical after the seeded Account Mapping verticals', () => {

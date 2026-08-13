@@ -38,11 +38,15 @@ describe('buildDefaultCommercialCalculatorData', () => {
     expect(bands.filter((b) => b.minDiscountPct > 0).every((b) => !b.allowAutoApproval)).toBe(true)
   })
 
-  it('leaves Modules/Features and Pre-Sales empty for admin population', () => {
+  it('seeds sample Modules/Features under valid Products, and some Pre-Sales — placeholder data so Create BOQ has something to exercise end-to-end, not an AMNEX reference list like Products', () => {
     const { masters } = buildDefaultCommercialCalculatorData()
-    expect(masters.modules).toEqual([])
-    expect(masters.features).toEqual([])
-    expect(masters.preSales).toEqual([])
+    expect(masters.modules.length).toBeGreaterThan(0)
+    expect(masters.features.length).toBeGreaterThan(0)
+    expect(masters.preSales.length).toBeGreaterThan(0)
+    const productIds = new Set(masters.products.map((p) => p.id))
+    for (const m of masters.modules) expect(productIds.has(m.productId), m.name).toBe(true)
+    const moduleIds = new Set(masters.modules.map((m) => m.id))
+    for (const f of masters.features) expect(moduleIds.has(f.moduleId), f.name).toBe(true)
   })
 
   it('seeds Verticals from Account Mapping\'s own WORK_VERTICALS list, not left empty', () => {

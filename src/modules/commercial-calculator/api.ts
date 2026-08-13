@@ -178,7 +178,11 @@ export function useBoqMutations() {
     mutationFn: (id: string) => repository.reviseBoq(id),
     onSuccess: invalidate,
   })
-  return { create, updateStatus, revise }
+  const remove = useMutation({
+    mutationFn: (id: string) => repository.deleteBoq(id),
+    onSuccess: invalidate,
+  })
+  return { create, updateStatus, revise, remove }
 }
 
 export function useBoqLineItemMutations(boqId: string) {

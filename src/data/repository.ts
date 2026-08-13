@@ -18,7 +18,7 @@ import { buildSeed, type GormsData } from './seed'
 import { clearSnapshot, loadSnapshot, scheduleSave } from './persist'
 import {
   addBoqLineItemLogic, createBoqLogic, createBomItemLogic, createMasterLogic, createSkuLogic,
-  deleteBomItemLogic, deleteMasterLogic, deleteSkuLogic, getBoqLogic, getMasterLogic, getSkuLogic,
+  deleteBomItemLogic, deleteBoqLogic, deleteMasterLogic, deleteSkuLogic, getBoqLogic, getMasterLogic, getSkuLogic,
   listAllBomItemsLogic, listAllBoqLineItemsLogic, listAuditLogsLogic, listBoqLineItemsLogic, listBoqsLogic,
   listBomItemsForSkuLogic, listEditionFeaturesLogic,
   listMasterLogic, listSkusLogic, removeBoqLineItemLogic, reviseBoqLogic, setEditionFeaturesLogic,
@@ -423,6 +423,10 @@ export interface Repository {
   /** Creates a new BOQ row carrying the same `boqNumber` forward, with
    *  `boqVersion` incremented and its line items copied (spec §9/§13). */
   reviseBoq(id: string): Promise<CommercialBoq>
+  /** Hard-deletes a BOQ and its line items. Throws unless the BOQ is
+   *  `draft`/`cancelled`/`rejected`/`archived` — anything still active in
+   *  the pipeline must be cancelled first via `updateBoqStatus`. */
+  deleteBoq(id: string): Promise<void>
 
   // --- Commercial Calculator: Audit Log (spec §6.6/§15) ----------------------
   listAuditLogs(filter?: { entityType?: string; entityId?: string }): Promise<CommercialAuditLog[]>
@@ -1366,6 +1370,10 @@ class InMemoryRepository implements Repository {
     return reviseBoqLogic(this.data.commercialCalculator, id)
   }
 
+  async deleteBoq(id: string) {
+    return deleteBoqLogic(this.data.commercialCalculator, id)
+  }
+
   async listAuditLogs(filter?: { entityType?: string; entityId?: string }) {
     return listAuditLogsLogic(this.data.commercialCalculator, filter)
   }
@@ -1829,7 +1837,7 @@ const MUTATOR_KEYS = [
   'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson', 'transferSalesPerson',
   'createMaster', 'updateMaster', 'setMasterActive', 'deleteMaster', 'setEditionFeatures',
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
-  'createBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'updateBoqStatus', 'reviseBoq',
+  'createBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'updateBoqStatus', 'reviseBoq', 'deleteBoq',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell

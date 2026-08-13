@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useCurrentPostings, useDepartments, useEmployeesUnder, useSalesPersons } from '@/lib/api'
+import { useRef, useState } from 'react'
+import { useCurrentPostings, useDepartments, useEmployeeMutations, useEmployeesUnder, useSalesPersons } from '@/lib/api'
 import { convertWorkAmount, formatBudgetRange, WORK_VALUE_UNITS } from '@/features/nodes/department-meta'
 import { EmployeePicker } from '@/features/employees/EmployeePicker'
 import { Icon } from '@/components/ui/Icon'
@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useAllBomItems, useBoqMutations, useMasters, useSkus } from '../api'
 import { resolveApprovalBand, skuToBoqConversionFactor, skuTotalUnitCostWithBom } from '../repository-logic'
 import type { CommercialSku } from '../types'
+import type { Employee } from '@/lib/types'
 
 interface LineDraft {
   skuId: string
@@ -38,6 +39,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const { data: skus = [] } = useSkus()
   const { data: bomItems = [] } = useAllBomItems()
   const { create, updateStatus } = useBoqMutations()
+  const { create: createEmployee } = useEmployeeMutations()
   const toast = useToast()
 
   const [opportunityName, setOpportunityName] = useState('')
@@ -63,7 +65,20 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   // scratch — customerName/Contact/Address are still plain strings on
   // CommercialBoq, just populated from that selection instead of free text.
   const [customerEmployeeId, setCustomerEmployeeId] = useState('')
+  // Holds a stakeholder just added inline via the picker's "create new
+  // person" flow until `useEmployeesUnder`'s query catches up with it. Kept
+  // in both a ref and state: `EmployeePicker`'s `onChange(id)` fires
+  // synchronously right after `onCreate` resolves, in the same tick — a
+  // `setState` call wouldn't be visible to `handleCustomerEmployeeChange`'s
+  // lookup that soon (React hasn't re-rendered yet), so the ref gives that
+  // handler a synchronously up-to-date value; the state is what the picker's
+  // own `candidates` prop re-renders from on the next render.
+  const justCreatedStakeholderRef = useRef<Employee | null>(null)
+  const [justCreatedStakeholder, setJustCreatedStakeholder] = useState<Employee | null>(null)
   const { data: employeesUnderDept = [] } = useEmployeesUnder(departmentId || null)
+  const stakeholderCandidates = justCreatedStakeholder && !employeesUnderDept.some((e) => e.id === justCreatedStakeholder.id)
+    ? [...employeesUnderDept, justCreatedStakeholder]
+    : employeesUnderDept
 
   const [lines, setLines] = useState<LineDraft[]>([])
   // Cascading Commercial Configuration picker — Vertical is the BOQ's own
@@ -113,10 +128,13 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     setCustomerName('')
     setCustomerContact('')
     setCustomerAddress('')
+    justCreatedStakeholderRef.current = null
+    setJustCreatedStakeholder(null)
   }
   function handleCustomerEmployeeChange(id: string) {
     setCustomerEmployeeId(id)
-    const emp = employeesUnderDept.find((e) => e.id === id)
+    const emp = stakeholderCandidates.find((e) => e.id === id)
+      ?? (justCreatedStakeholderRef.current?.id === id ? justCreatedStakeholderRef.current : undefined)
     // A vacant seat (the common case for a government stakeholder AMNEX
     // hasn't yet linked to a named person) has no `name` — its designation
     // ("Director General", "Joint Secretary", ...) is the real, non-invented
@@ -125,6 +143,24 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     setCustomerContact(emp ? [emp.phone, emp.email].filter(Boolean).join(' · ') : '')
     setCustomerAddress(emp?.address ?? '')
   }
+  /** Lets a user record a government stakeholder who isn't yet an `Employee`
+   *  (a new contact met for the first time on this tender) without leaving
+   *  Create BOQ — same `orgNodeId`/`managerId: null` pattern
+   *  `NodeFormDialog.tsx`'s `handleCreateHead` already uses for "create new
+   *  department head", scoped to the selected Department. Tracked in
+   *  `justCreatedStakeholder` (and merged into the picker's candidates)
+   *  because `useEmployeesUnder`'s query invalidation hasn't refetched yet
+   *  by the time `EmployeePicker` immediately calls back with the new id —
+   *  without this, the customer fields below would momentarily blank out. */
+  async function handleCreateStakeholder(name: string, designation: string) {
+    const created = await createEmployee.mutateAsync({
+      name, designation, email: '', phone: '', orgNodeId: departmentId, managerId: null,
+    })
+    justCreatedStakeholderRef.current = created
+    setJustCreatedStakeholder(created)
+    return created.id
+  }
+
   function handleVerticalChange(v: string) {
     setVerticalId(v)
     setPickerProductId('')
@@ -371,18 +407,20 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               hint={
                 !departmentId
                   ? 'Select a Department above first.'
-                  : employeesUnderDept.length === 0
-                    ? 'No stakeholders found under this department yet — add one in Account Mapping first.'
-                    : 'Reuses AMNEX’s existing stakeholder contacts (including unfilled positions) for this department.'
+                  : stakeholderCandidates.length === 0
+                    ? 'No stakeholders found under this department yet — type a name below to add one.'
+                    : 'Reuses AMNEX’s existing stakeholder contacts (including unfilled positions) for this department — type a name to add someone new.'
               }
             >
               <EmployeePicker
-                candidates={employeesUnderDept}
+                candidates={stakeholderCandidates}
                 value={customerEmployeeId}
                 onChange={handleCustomerEmployeeChange}
                 placeholder="Search a stakeholder…"
                 emptyLabel="— None selected —"
                 includeVacant
+                onCreate={departmentId ? handleCreateStakeholder : undefined}
+                createLabel={(name) => `Add new stakeholder “${name}”`}
               />
             </Field>
             <Field label="Organization"><Input value={customerOrganization} onChange={(e) => setCustomerOrganization(e.target.value)} /></Field>

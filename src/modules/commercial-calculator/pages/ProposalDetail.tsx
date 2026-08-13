@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAllEmployees, useDepartments, useSalesPersons } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
+import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
 import { isoToday } from '@/lib/dates'
@@ -21,6 +22,12 @@ const NEXT_STATUSES: Record<BoqStatus, BoqStatus[]> = {
   under_review: ['approved', 'rejected', 'cancelled'], approved: ['archived'], rejected: ['archived'],
   cancelled: [], archived: [],
 }
+
+/** Mirrors repository-logic.ts's `DELETABLE_BOQ_STATUSES` for button
+ *  visibility — the repository is still the enforcement point. Anything
+ *  still active in the pipeline (submitted/under_review/approved) must be
+ *  cancelled first, via the transition buttons above, before it can show. */
+const DELETABLE_STATUSES: BoqStatus[] = ['draft', 'cancelled', 'rejected', 'archived']
 
 function DetailField({ label, value }: { label: string; value: string }) {
   return (
@@ -57,11 +64,12 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   const { data: approvalMatrix = [] } = useMasters('approvalMatrix')
   const { data: currencies = [] } = useMasters('currencies')
   const { data: bomItems = [] } = useAllBomItems()
-  const { updateStatus, revise } = useBoqMutations()
+  const { updateStatus, revise, remove } = useBoqMutations()
   const lineMutations = useBoqLineItemMutations(boqId)
   const toast = useToast()
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('overview')
+  const [deleting, setDeleting] = useState(false)
 
   const boq = boqs.find((b) => b.id === boqId) ?? null
   const skuById = new Map(skus.map((s) => [s.id, s]))
@@ -85,6 +93,13 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
     const revised = await revise.mutateAsync(boq.id)
     toast(`Created revision v${revised.boqVersion} of ${revised.boqNumber}.`)
     navigate(`/commercial-calculator/boq/${revised.id}`)
+  }
+
+  async function handleDelete() {
+    if (!boq) return
+    await remove.mutateAsync(boq.id)
+    toast(`${boq.boqNumber} deleted.`)
+    navigate('/commercial-calculator/boq-management')
   }
 
   async function decideLine(lineId: string, decision: 'approved' | 'rejected', approverId: string, remarks: string) {
@@ -131,6 +146,9 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             ))}
             {(boq.status === 'approved' || boq.status === 'rejected' || boq.status === 'archived') && (
               <Button size="sm" onClick={handleRevise}><Icon name="Copy" size={13} />Revise</Button>
+            )}
+            {DELETABLE_STATUSES.includes(boq.status) && (
+              <Button size="sm" variant="danger" onClick={() => setDeleting(true)}><Icon name="Trash2" size={13} />Delete</Button>
             )}
           </div>
         </div>
@@ -192,6 +210,13 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
           />
         )}
       </div>
+
+      <ConfirmDeleteDialog
+        open={deleting}
+        onClose={() => setDeleting(false)}
+        itemLabel={`BOQ ${boq.boqNumber}`}
+        onConfirm={handleDelete}
+      />
     </div>
   )
 }

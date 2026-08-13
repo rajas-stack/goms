@@ -97,22 +97,38 @@ export async function loadSnapshot(): Promise<GormsData | null> {
   return migrated
 }
 
+/** Fired whenever a write to IndexedDB doesn't actually land — e.g. the
+ *  browser is blocking storage for this origin. The edit stays safe in
+ *  memory for the current tab, but nothing is on disk, so a reload would
+ *  lose it silently unless something surfaces this. `ToastProvider` listens
+ *  for it; this module stays decoupled from React. */
+export const PERSIST_FAILED_EVENT = 'gorms:persist-failed'
+
+function reportPersistFailure(reason: string): void {
+  console.error(`[gorms] local save failed: ${reason}`)
+  window.dispatchEvent(new CustomEvent(PERSIST_FAILED_EVENT, { detail: { reason } }))
+}
+
 async function writeSnapshot(data: GormsData): Promise<void> {
   const db = await openDb()
-  if (!db) return
+  if (!db) {
+    reportPersistFailure('IndexedDB unavailable')
+    return
+  }
   try {
     const envelope: Envelope = { version: SCHEMA_VERSION, savedAt: new Date().toISOString(), data }
     await new Promise<void>((resolve) => {
       const tx = db.transaction(STORE, 'readwrite')
       tx.objectStore(STORE).put(envelope, KEY)
       tx.oncomplete = () => resolve()
-      // A failed save is not worth surfacing to the user mid-edit — the edit
-      // itself succeeded in memory either way, and the next one retries.
-      tx.onerror = () => resolve()
-      tx.onabort = () => resolve()
+      // The edit itself already succeeded in memory either way — this only
+      // means it isn't on disk yet — but that has to be visible somewhere,
+      // or it silently keeps not-saving until data is lost on reload.
+      tx.onerror = () => { reportPersistFailure(tx.error?.message ?? 'transaction error'); resolve() }
+      tx.onabort = () => { reportPersistFailure(tx.error?.message ?? 'transaction aborted'); resolve() }
     })
-  } catch {
-    // Quota exceeded or the store vanished — same reasoning as above.
+  } catch (e) {
+    reportPersistFailure(e instanceof Error ? e.message : String(e))
   } finally {
     db.close()
   }
