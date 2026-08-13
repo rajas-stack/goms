@@ -15,17 +15,16 @@ import type { MasterEntityKey } from './types'
  *  (header tab strip + content area) minus the shared DetailsPanel, which is
  *  an Account Mapping concept this module doesn't use.
  *
- *  Five peer tabs, not a Work-zone-plus-one-umbrella-tab (IA review round 2,
- *  docs/superpowers/analysis/2026-08-03-commercial-calculator-ia-review-round2.md):
- *  Dashboard/Create BOQ/BOQ Management are daily-use for Sales/Pre-Sales/
- *  Managers. Catalog (Hierarchy/SKU Catalog/Product Editions) is
- *  Commercial/Product Ops's own regular workspace — grouping it with rare
- *  admin config under one "Governance" label miscast their primary job as
- *  an occasional chore, which is why that round dropped the umbrella
- *  entirely rather than renaming it again. Settings (Approval Matrix/
- *  Reference Data/Audit) is the genuinely rare, genuinely admin surface.
- *  Commercial BOM has no tab of its own: it's a per-SKU concern, edited
- *  from inside a SKU's detail page (SkuCatalog.tsx). */
+ *  Five peer tabs. Dashboard/Create BOQ/BOQ Management are daily-use for
+ *  Sales/Pre-Sales/Managers. Catalog now holds only Hierarchy — SKU Catalog
+ *  and Product Editions moved into Settings (2026-08-13 stakeholder
+ *  direction), reopening IA review round 2's split
+ *  (docs/superpowers/analysis/2026-08-03-commercial-calculator-ia-review-round2.md)
+ *  on the reasoning that those two are now grouped with Settings for this
+ *  round; Hierarchy/Approval Matrix/Reference Data stay exactly where they
+ *  were unless a future round asks otherwise. Commercial BOM has no tab of
+ *  its own: it's a per-SKU concern, edited from inside a SKU's detail page
+ *  (SkuCatalog.tsx). */
 const SECTIONS = [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'create-boq', label: 'Create BOQ' },
@@ -86,41 +85,26 @@ const ITEM_CONTENT: Record<CommercialItemKey, () => JSX.Element> = {
   audit: AuditLog,
 }
 
-/** Commercial/Product Ops's own regular workspace — "what AMNEX sells,"
- *  not occasional configuration (IA review round 2, §2/§3). One flat group:
- *  Hierarchy, SKU Catalog, and Product Editions are all curated by the same
- *  person at the same rough cadence, so there's nothing to sub-divide yet.
- *
- *  Permission seam (stakeholder request, not built — GOMS has no role
- *  concept anywhere to hook into, and an unused `readOnly` prop that
- *  nothing sets would be dead code, the same anti-pattern as the "Pricing"
- *  stub this module has already deliberately avoided elsewhere). This is
- *  additive whenever a role system exists, not a redesign, because none of
- *  the three screens below entangle browsing and editing: `HierarchyView`,
- *  `SkuCatalog`, and `MasterCrudScreen` each gate every mutation behind a
- *  specific button's `onClick` (Add/Edit/Delete/Activate, the "Features"
- *  mapping trigger) rather than inline-editable state. A future read-only
- *  mode for Sales/Pre-Sales is one `readOnly?: boolean` prop threaded into
- *  each of those three components, conditionally hiding/disabling exactly
- *  those buttons — not a rewrite of data-fetching or of this sidebar. */
+/** Just Hierarchy now (2026-08-13: SKU Catalog and Product Editions moved
+ *  into Settings, below) — kept as its own tab rather than folded away too,
+ *  since nothing about the sidebar/content-map architecture requires moving
+ *  it, and no such move was requested. */
 const CATALOG_NAV: SidebarNavGroup[] = [
-  {
-    items: [
-      { key: 'hierarchy', label: 'Hierarchy' },
-      { key: 'sku-catalog', label: 'SKU Catalog' },
-      { key: 'productEditions', label: MASTER_DEFS.productEditions.label },
-    ],
-  },
+  { items: [{ key: 'hierarchy', label: 'Hierarchy' }] },
 ]
 
-/** Genuinely rare, genuinely admin — Finance/Sales-leadership set the
- *  Approval Matrix maybe quarterly; true admins touch Reference Data and
- *  Audit almost never. Three groups because each is a different kind of
- *  rare: a high-stakes policy, a set of low-stakes lookups, and an
- *  oversight log — blending them into one undifferentiated list would
- *  recreate the "over-grouping" problem this round's review flagged,
- *  just one level down instead of at the top level. */
+/** Settings — Approval Matrix/Reference Data/Audit stay exactly as IA
+ *  review round 2 placed them. SKU Catalog and Product Editions join here
+ *  as their own leading group (2026-08-13 stakeholder direction) rather
+ *  than being folded into Reference Data or Approval Matrix — they're
+ *  neither a flat lookup nor a discount rule, so they keep the same
+ *  "distinct kind of screen gets its own group" principle the other three
+ *  groups already follow. */
 const SETTINGS_NAV: SidebarNavGroup[] = [
+  { label: 'Catalog', items: [
+    { key: 'sku-catalog', label: 'SKU Catalog' },
+    { key: 'productEditions', label: MASTER_DEFS.productEditions.label },
+  ] },
   { label: 'Approval Matrix', items: [{ key: 'approvalMatrix', label: MASTER_DEFS.approvalMatrix.label }] },
   { label: 'Reference Data', items: REFERENCE_MASTERS.map((key) => ({ key, label: MASTER_DEFS[key].label })) },
   { label: 'Audit', items: [{ key: 'audit', label: 'Audit Log' }] },

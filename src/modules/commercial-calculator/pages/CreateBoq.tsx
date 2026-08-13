@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { useCurrentPostings, useDepartments, useSalesPersons } from '@/lib/api'
+import { useCurrentPostings, useDepartments, useEmployeesUnder, useSalesPersons } from '@/lib/api'
 import { convertWorkAmount, formatBudgetRange, WORK_VALUE_UNITS } from '@/features/nodes/department-meta'
+import { EmployeePicker } from '@/features/employees/EmployeePicker'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
+import { Combobox } from '@/components/ui/Combobox'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
 import { useAllBomItems, useBoqMutations, useMasters, useSkus } from '../api'
@@ -56,6 +58,12 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const [customerAddress, setCustomerAddress] = useState('')
   const [customerGst, setCustomerGst] = useState('')
   const [customerContact, setCustomerContact] = useState('')
+  // The stakeholder contact is picked from the Department's own real
+  // Employee roster (Account Mapping's existing data), not typed from
+  // scratch — customerName/Contact/Address are still plain strings on
+  // CommercialBoq, just populated from that selection instead of free text.
+  const [customerEmployeeId, setCustomerEmployeeId] = useState('')
+  const { data: employeesUnderDept = [] } = useEmployeesUnder(departmentId || null)
 
   const [lines, setLines] = useState<LineDraft[]>([])
   // Cascading Commercial Configuration picker — Vertical is the BOQ's own
@@ -95,6 +103,28 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     return skuToBoqConversionFactor(currencies, effectiveCurrencyCode, sku)
   }
 
+  // Department is already the AMNEX record for the government office being
+  // sold to — changing it invalidates whatever stakeholder was picked below,
+  // the same way changing Vertical resets the Product/Module/Feature picker.
+  function handleDepartmentChange(id: string) {
+    setDepartmentId(id)
+    setCustomerOrganization(departments.find((d) => d.id === id)?.name ?? '')
+    setCustomerEmployeeId('')
+    setCustomerName('')
+    setCustomerContact('')
+    setCustomerAddress('')
+  }
+  function handleCustomerEmployeeChange(id: string) {
+    setCustomerEmployeeId(id)
+    const emp = employeesUnderDept.find((e) => e.id === id)
+    // A vacant seat (the common case for a government stakeholder AMNEX
+    // hasn't yet linked to a named person) has no `name` — its designation
+    // ("Director General", "Joint Secretary", ...) is the real, non-invented
+    // stakeholder identity, so it becomes the customer name instead.
+    setCustomerName(emp ? (emp.vacant ? (emp.designation || 'Vacant position') : emp.name) : '')
+    setCustomerContact(emp ? [emp.phone, emp.email].filter(Boolean).join(' · ') : '')
+    setCustomerAddress(emp?.address ?? '')
+  }
   function handleVerticalChange(v: string) {
     setVerticalId(v)
     setPickerProductId('')
@@ -155,8 +185,18 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const autoApprovedCount = approvalPreview.filter((p) => p.band.allowAutoApproval).length
   const pendingApprovalLines = approvalPreview.filter((p) => !p.band.allowAutoApproval)
 
-  const canSave = opportunityName.trim().length > 0 && departmentId && customerName.trim().length > 0
-    && verticalId && salesPersonId && lines.length > 0
+  // Save/Submit stay disabled until every one of these is met, but a
+  // disabled button alone tells the user nothing — surfaced as a checklist
+  // next to the buttons so "why can't I submit" always has a visible answer.
+  const missingRequirements = [
+    !opportunityName.trim() && 'Opportunity Name',
+    !departmentId && 'Department',
+    !customerName.trim() && 'Stakeholder Contact',
+    !verticalId && 'Vertical',
+    !salesPersonId && 'Sales Person',
+    lines.length === 0 && 'at least one SKU line',
+  ].filter((v): v is string => typeof v === 'string')
+  const canSave = missingRequirements.length === 0
 
   async function save(thenSubmit: boolean) {
     setPending(thenSubmit ? 'submit' : 'draft')
@@ -186,20 +226,9 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
-      <div className="flex shrink-0 items-center justify-between border-b border-line bg-white px-4 py-3">
-        <div>
-          <h1 className="font-display text-lg font-semibold text-ink-900">Create BOQ</h1>
-          <p className="text-[12px] text-muted">Configure the commercial proposal, then save as draft or submit for review.</p>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={onCancel} disabled={pending !== null}>Cancel</Button>
-          <Button onClick={() => save(false)} disabled={pending !== null || !canSave}>
-            {pending === 'draft' ? 'Saving…' : 'Save Draft'}
-          </Button>
-          <Button variant="primary" onClick={() => save(true)} disabled={pending !== null || !canSave}>
-            {pending === 'submit' ? 'Submitting…' : 'Save & Submit'}
-          </Button>
-        </div>
+      <div className="shrink-0 border-b border-line bg-white px-4 py-3">
+        <h1 className="font-display text-lg font-semibold text-ink-900">Create BOQ</h1>
+        <p className="text-[12px] text-muted">Configure the commercial proposal, then save as draft or submit for review.</p>
       </div>
 
       <div className="flex flex-col gap-6 p-4">
@@ -211,16 +240,20 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               <Input value={opportunityName} onChange={(e) => setOpportunityName(e.target.value)} />
             </Field>
             <Field label="Department">
-              <Select value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
-                <option value="">Select…</option>
-                {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </Select>
+              <Combobox
+                value={departmentId}
+                onChange={handleDepartmentChange}
+                options={departments.map((d) => ({ value: d.id, label: d.name }))}
+                aria-label="Department"
+              />
             </Field>
             <Field label="Vertical" hint="Drives the SKU picker below.">
-              <Select value={verticalId} onChange={(e) => handleVerticalChange(e.target.value)}>
-                <option value="">Select…</option>
-                {verticals.map((v) => <option key={v.id} value={v.id}>{v.code} — {v.name}</option>)}
-              </Select>
+              <Combobox
+                value={verticalId}
+                onChange={handleVerticalChange}
+                options={verticals.map((v) => ({ value: v.id, label: `${v.code} — ${v.name}` }))}
+                aria-label="Vertical"
+              />
             </Field>
             <Field label="Proposal Currency" hint="Every line is converted into this currency.">
               <Select value={effectiveCurrencyCode} onChange={(e) => setCurrencyCode(e.target.value)}>
@@ -309,10 +342,12 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               </div>
             )}
             <Field label="Sales Person">
-              <Select value={salesPersonId} onChange={(e) => setSalesPersonId(e.target.value)}>
-                <option value="">Select…</option>
-                {salesPersons.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
+              <Combobox
+                value={salesPersonId}
+                onChange={setSalesPersonId}
+                options={salesPersons.map((p) => ({ value: p.id, label: p.name }))}
+                aria-label="Sales Person"
+              />
             </Field>
             <Field label="Pre-Sales">
               <Select value={preSalesId} onChange={(e) => setPreSalesId(e.target.value)}>
@@ -331,7 +366,25 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
 
         <SectionCard title="Customer Information" icon="Building2">
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-            <Field label="Customer"><Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} /></Field>
+            <Field
+              label="Stakeholder Contact"
+              hint={
+                !departmentId
+                  ? 'Select a Department above first.'
+                  : employeesUnderDept.length === 0
+                    ? 'No stakeholders found under this department yet — add one in Account Mapping first.'
+                    : 'Reuses AMNEX’s existing stakeholder contacts (including unfilled positions) for this department.'
+              }
+            >
+              <EmployeePicker
+                candidates={employeesUnderDept}
+                value={customerEmployeeId}
+                onChange={handleCustomerEmployeeChange}
+                placeholder="Search a stakeholder…"
+                emptyLabel="— None selected —"
+                includeVacant
+              />
+            </Field>
             <Field label="Organization"><Input value={customerOrganization} onChange={(e) => setCustomerOrganization(e.target.value)} /></Field>
             <Field label="GST"><Input value={customerGst} onChange={(e) => setCustomerGst(e.target.value)} /></Field>
             <Field label="Contact"><Input value={customerContact} onChange={(e) => setCustomerContact(e.target.value)} /></Field>
@@ -347,22 +400,33 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
           ) : (
             <div className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-panel/40 p-3">
               <Field label="Product">
-                <Select value={pickerProductId} onChange={(e) => handleProductChange(e.target.value)} className="min-w-[180px]">
-                  <option value="">Select…</option>
-                  {pickerProducts.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
-                </Select>
+                <Combobox
+                  value={pickerProductId}
+                  onChange={handleProductChange}
+                  options={pickerProducts.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
+                  className="min-w-[180px]"
+                  aria-label="Product"
+                />
               </Field>
               <Field label="Module">
-                <Select value={pickerModuleId} onChange={(e) => handleModuleChange(e.target.value)} className="min-w-[180px]" disabled={!pickerProductId}>
-                  <option value="">Select…</option>
-                  {pickerModules.map((m) => <option key={m.id} value={m.id}>{m.code} — {m.name}</option>)}
-                </Select>
+                <Combobox
+                  value={pickerModuleId}
+                  onChange={handleModuleChange}
+                  options={pickerModules.map((m) => ({ value: m.id, label: `${m.code} — ${m.name}` }))}
+                  className="min-w-[180px]"
+                  disabled={!pickerProductId}
+                  aria-label="Module"
+                />
               </Field>
               <Field label="Feature">
-                <Select value={pickerFeatureId} onChange={(e) => setPickerFeatureId(e.target.value)} className="min-w-[180px]" disabled={!pickerModuleId}>
-                  <option value="">Select…</option>
-                  {pickerFeatures.map((f) => <option key={f.id} value={f.id}>{f.code} — {f.name}</option>)}
-                </Select>
+                <Combobox
+                  value={pickerFeatureId}
+                  onChange={setPickerFeatureId}
+                  options={pickerFeatures.map((f) => ({ value: f.id, label: `${f.code} — ${f.name}` }))}
+                  className="min-w-[180px]"
+                  disabled={!pickerModuleId}
+                  aria-label="Feature"
+                />
               </Field>
               <Field label="Quantity"><Input type="number" value={pickerQty} onChange={(e) => setPickerQty(Number(e.target.value))} className="w-24" /></Field>
               <Field label="Discount %">
@@ -381,10 +445,26 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
           )}
 
           {resolvedSku && (
-            <p className="mt-2 text-[12px] text-muted">
-              Generated SKU: <span className="rounded bg-panel px-1.5 py-0.5 font-mono text-[11px] text-ink-700">{resolvedSku.skuCode}</span>
-              {' '}— {resolvedSku.name} · Tax {taxRateById.get(resolvedSku.taxClassId) ?? 0}%
-            </p>
+            <>
+              <p className="mt-2 text-[12px] text-muted">
+                Generated SKU: <span className="rounded bg-panel px-1.5 py-0.5 font-mono text-[11px] text-ink-700">{resolvedSku.skuCode}</span>
+                {' '}— {resolvedSku.name}
+              </p>
+              {/* Pricing preview — shows what "Add to Proposal" would commit,
+                  computed with the same lineTotal() the added line row uses,
+                  so there's never a discrepancy between preview and line. */}
+              <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-line bg-panel/40 px-3 py-2 text-[12px]">
+                <span className="text-muted">List Price <span className="font-medium text-ink-900">{resolvedSku.listPrice.toLocaleString()}</span></span>
+                <span className="text-muted">Post-discount Unit <span className="font-medium text-ink-900">{(resolvedSku.listPrice * (1 - pickerDiscount / 100)).toLocaleString()}</span></span>
+                <span className="text-muted">Tax <span className="font-medium text-ink-900">{taxRateById.get(resolvedSku.taxClassId) ?? 0}%</span></span>
+                <span className="text-muted">
+                  Line Total (Qty {pickerQty}){' '}
+                  <span className="font-semibold text-ink-900">
+                    {lineTotal({ skuId: resolvedSku.id, quantity: pickerQty, discountPct: pickerDiscount }).toLocaleString()}
+                  </span>
+                </span>
+              </div>
+            </>
           )}
           {featureHasNoSellableSku && (
             <p className="mt-2 text-[12px] text-amber-700">No active, sellable SKU exists for this feature yet.</p>
@@ -493,6 +573,21 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
             </div>
           )}
         </SectionCard>
+
+        <div className="flex flex-col items-end gap-1.5 border-t border-line pt-4">
+          <div className="flex gap-2">
+            <Button onClick={onCancel} disabled={pending !== null}>Cancel</Button>
+            <Button onClick={() => save(false)} disabled={pending !== null || !canSave}>
+              {pending === 'draft' ? 'Saving…' : 'Save Draft'}
+            </Button>
+            <Button variant="primary" onClick={() => save(true)} disabled={pending !== null || !canSave}>
+              {pending === 'submit' ? 'Submitting…' : 'Save & Submit'}
+            </Button>
+          </div>
+          {missingRequirements.length > 0 && (
+            <p className="text-[11px] text-muted">Missing: {missingRequirements.join(', ')}</p>
+          )}
+        </div>
       </div>
     </div>
   )

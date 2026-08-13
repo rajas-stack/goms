@@ -16,6 +16,19 @@ interface Props {
    *  person" form (name + designation) instead of staying select-only. */
   onCreate?: (name: string, designation: string) => Promise<string>
   createLabel?: (name: string) => string
+  /** Include vacant seats (title, no incumbent) as selectable rows. Off by
+   *  default — most callers (sales ownership, transfer targets) need a real
+   *  person, not an empty seat. Turn on for pickers where the seat's
+   *  designation itself is the thing being selected, e.g. a government
+   *  stakeholder contact that's still unfilled. */
+  includeVacant?: boolean
+}
+
+/** Displayed name for a candidate row — a vacant seat has no `name`, so it
+ *  falls back to its designation, matching the convention used elsewhere
+ *  (`repository.ts`, `search-categories.ts`, `EmployeeDetails.tsx`). */
+function personLabel(c: Employee): string {
+  return c.vacant ? (c.designation || 'Vacant position') : c.name
 }
 
 /** Searchable person picker. Select-only by default (candidates already in the
@@ -24,7 +37,7 @@ interface Props {
  *  designation inline. Mirrors ManagerPicker's look. */
 export function EmployeePicker({
   candidates, value, onChange, placeholder = 'Search a person…', emptyLabel = '— None —',
-  onCreate, createLabel,
+  onCreate, createLabel, includeVacant = false,
 }: Props) {
   const toast = useToast()
   const [query, setQuery] = useState('')
@@ -39,12 +52,12 @@ export function EmployeePicker({
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const pool = candidates.filter((c) => !c.vacant)
+    const pool = includeVacant ? candidates : candidates.filter((c) => !c.vacant)
     if (!q) return pool.slice(0, 8)
     return pool
-      .filter((c) => c.name.toLowerCase().includes(q) || c.designation.toLowerCase().includes(q))
+      .filter((c) => personLabel(c).toLowerCase().includes(q) || c.designation.toLowerCase().includes(q))
       .slice(0, 8)
-  }, [candidates, query])
+  }, [candidates, query, includeVacant])
 
   const exactMatch = candidates.some((c) => c.name.trim().toLowerCase() === query.trim().toLowerCase())
   const showCreateRow = !!onCreate && query.trim() !== '' && !exactMatch
@@ -101,10 +114,17 @@ export function EmployeePicker({
   if (selected) {
     return (
       <div className="flex h-10 items-center gap-2 rounded-lg border border-line bg-white px-3">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-teal-100 text-[10px] font-semibold text-teal-600">
-          {initials(selected.name)}
+        <span
+          className={cn(
+            'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold',
+            selected.vacant ? 'bg-amber-100 text-amber-600' : 'bg-teal-100 text-teal-600',
+          )}
+        >
+          {selected.vacant ? <Icon name="UserX" size={13} /> : initials(selected.name)}
         </span>
-        <span className="min-w-0 flex-1 break-words text-sm text-ink-900">{selected.name} · {selected.designation}</span>
+        <span className="min-w-0 flex-1 break-words text-sm text-ink-900">
+          {selected.vacant ? <>{personLabel(selected)} <span className="text-muted">· Vacant</span></> : <>{selected.name} · {selected.designation}</>}
+        </span>
         <button type="button" onClick={() => onChange('')} className="text-muted hover:text-ink-900" aria-label="Clear selection">
           <Icon name="X" size={14} />
         </button>
@@ -149,8 +169,8 @@ export function EmployeePicker({
                     roving.active === i + 1 && 'bg-ink-900/[0.04]',
                   )}
                 >
-                  <span className="min-w-0 flex-1 break-words text-sm text-ink-900">{c.name}</span>
-                  <span className="shrink-0 break-words text-xs text-muted">{c.designation}</span>
+                  <span className="min-w-0 flex-1 break-words text-sm text-ink-900">{personLabel(c)}</span>
+                  <span className="shrink-0 break-words text-xs text-muted">{c.vacant ? 'Vacant' : c.designation}</span>
                 </button>
               ))}
             </div>

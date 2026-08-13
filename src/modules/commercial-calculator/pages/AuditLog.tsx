@@ -7,6 +7,7 @@ const ENTITY_TYPES = [
   { value: '', label: 'All entity types' },
   { value: 'boq', label: 'BOQ' },
   { value: 'sku', label: 'SKU' },
+  { value: 'feature', label: 'Feature' },
 ]
 
 /** Read-only, filterable view over the append-only Commercial Calculator

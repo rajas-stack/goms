@@ -620,8 +620,11 @@ export function IndiaMap() {
       </PopoverPanel>
 
       {/* Bottom-LEFT on a phone: the global FAB owns the bottom-right corner
-          there, and the two clusters were colliding. */}
-      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-0.5 rounded-xl border border-line bg-white/95 p-0.5 shadow-panel sm:gap-1 sm:p-1 sm:left-auto sm:right-3" data-map-ui>
+          there, and the two clusters were colliding. From `sm` up the FAB
+          moves into the same corner as this cluster (`lg:right-8`), so this
+          sits further out than its own edge padding would suggest — enough
+          to clear the FAB with room to spare instead of butting up against it. */}
+      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-0.5 rounded-xl border border-line bg-white/95 p-0.5 shadow-panel sm:gap-1 sm:p-1 sm:left-auto sm:right-28" data-map-ui>
         {/* Fit-to-screen and Reset (below) both just call `resetView`, so the
             phone keeps one of them — the full 5-slot desktop cluster overran
             the map's own width at 390px. Buttons themselves also shrink below

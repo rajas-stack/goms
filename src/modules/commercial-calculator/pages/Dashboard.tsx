@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
-import { useAuditLogs, useBoqs, useDashboardMetrics } from '../api'
+import { useBoqs, useDashboardMetrics } from '../api'
 import { isBoqPendingApproval } from '../repository-logic'
-import type { CommercialAuditLog, CommercialBoq } from '../types'
+import type { CommercialBoq } from '../types'
 
 function KpiCard({ label, value, icon, tone }: { label: string; value: string; icon: string; tone?: string }) {
   return (
@@ -59,18 +59,6 @@ function BoqGroup({ title, icon, boqs, emptyLabel, onOpen }: {
   )
 }
 
-function ActivityRow({ entry }: { entry: CommercialAuditLog }) {
-  return (
-    <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px]">
-      <span className="shrink-0 rounded bg-panel px-1.5 py-0.5 text-[10px] font-mono uppercase text-ink-700">{entry.entityType}</span>
-      <span className="min-w-0 flex-1 truncate text-ink-800">
-        {entry.action}{entry.field ? ` · ${entry.field}` : ''}{entry.newValue ? `: ${entry.newValue}` : ''}
-      </span>
-      <span className="shrink-0 text-[11px] text-muted">{new Date(entry.changedAt).toLocaleString()}</span>
-    </div>
-  )
-}
-
 /** Commercial Calculator's landing page — a WORK dashboard, not an admin one
  *  (stakeholder direction, 2026-08-03 redesign): the header CTA and the BOQ
  *  work-queues (draft/pending/approved/rejected) are the point; there is
@@ -83,7 +71,6 @@ export function Dashboard({ onCreateBoq, onNavigate }: {
 }) {
   const { data: metrics } = useDashboardMetrics()
   const { data: boqs = [] } = useBoqs()
-  const { data: activity = [] } = useAuditLogs()
 
   const byRecency = (a: CommercialBoq, b: CommercialBoq) => (a.lastModifiedAt < b.lastModifiedAt ? 1 : -1)
   const drafts = useMemo(() => boqs.filter((b) => b.status === 'draft').sort(byRecency), [boqs])
@@ -126,25 +113,11 @@ export function Dashboard({ onCreateBoq, onNavigate }: {
         <BoqGroup title="Recently Rejected" icon="UserX" boqs={rejected} emptyLabel="No rejections." onOpen={openBoq} />
       </div>
 
-      <div className="flex flex-col gap-2">
-        <h2 className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-muted">
-          <Icon name="Clock" size={13} />
-          Recent Activity
-        </h2>
-        {activity.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-line px-3 py-3 text-[13px] text-muted">Nothing recorded yet.</p>
-        ) : (
-          <div className="flex flex-col rounded-xl border border-line bg-white px-2 py-1">
-            {activity.slice(0, 8).map((entry) => <ActivityRow key={entry.id} entry={entry} />)}
-          </div>
-        )}
-      </div>
-
       {/* Catalog/Settings surfaces get a small text-link row, not competing
           quick-action buttons — this module is a proposal tool first. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted">
         <span>More:</span>
-        <button onClick={() => onNavigate('catalog?item=sku-catalog')} className="underline-offset-2 hover:text-ink-800 hover:underline">SKU Catalog</button>
+        <button onClick={() => onNavigate('settings?item=sku-catalog')} className="underline-offset-2 hover:text-ink-800 hover:underline">SKU Catalog</button>
         <button onClick={() => onNavigate('catalog')} className="underline-offset-2 hover:text-ink-800 hover:underline">Hierarchy</button>
         <button onClick={() => onNavigate('settings?item=audit')} className="underline-offset-2 hover:text-ink-800 hover:underline">Audit Log</button>
       </div>

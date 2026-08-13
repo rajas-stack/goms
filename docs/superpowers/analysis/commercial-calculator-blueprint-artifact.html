@@ -1,0 +1,848 @@
+<title>Commercial Calculator Blueprint</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --surface-2: #eef0f3;
+    --ink: #161a23;
+    --ink-2: #363c48;
+    --muted: #656d7a;
+    --line: #dde1e6;
+    --accent: #2a5d63;
+    --accent-ink: #ffffff;
+    --accent-soft: #e4eeed;
+    --warn: #92400e;
+    --warn-soft: #fdf1de;
+    --good: #146c43;
+    --good-soft: #e5f3ec;
+    --info: #1d4ed8;
+    --info-soft: #e8eefd;
+    --code-bg: #11151c;
+    --code-ink: #d9e0ea;
+    --shadow: 0 1px 2px rgba(22,26,35,0.04), 0 8px 24px rgba(22,26,35,0.05);
+    --serif: ui-serif, Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --sans: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171d;
+      --surface: #1b1f27;
+      --surface-2: #20242d;
+      --ink: #eef0f3;
+      --ink-2: #cfd4dc;
+      --muted: #9099a6;
+      --line: #2c313b;
+      --accent: #6fb9ae;
+      --accent-ink: #0d1512;
+      --accent-soft: #1d2b29;
+      --warn: #f0b866;
+      --warn-soft: #2c2313;
+      --good: #7bd3a6;
+      --good-soft: #16281f;
+      --info: #8fb3ff;
+      --info-soft: #182238;
+      --code-bg: #0c0f14;
+      --code-ink: #d9e0ea;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 28px rgba(0,0,0,0.35);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171d;
+    --surface: #1b1f27;
+    --surface-2: #20242d;
+    --ink: #eef0f3;
+    --ink-2: #cfd4dc;
+    --muted: #9099a6;
+    --line: #2c313b;
+    --accent: #6fb9ae;
+    --accent-ink: #0d1512;
+    --accent-soft: #1d2b29;
+    --warn: #f0b866;
+    --warn-soft: #2c2313;
+    --good: #7bd3a6;
+    --good-soft: #16281f;
+    --info: #8fb3ff;
+    --info-soft: #182238;
+    --code-bg: #0c0f14;
+    --code-ink: #d9e0ea;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 28px rgba(0,0,0,0.35);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink-2);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  ::selection { background: var(--accent-soft); }
+  a { color: var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .shell {
+    display: grid;
+    grid-template-columns: 250px minmax(0,1fr);
+    min-height: 100vh;
+  }
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    .toc { display: none; }
+  }
+
+  .toc {
+    position: sticky;
+    top: 0;
+    align-self: start;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 28px 18px;
+    border-right: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .toc-brand {
+    font-family: var(--serif);
+    font-size: 15px;
+    color: var(--ink);
+    margin: 0 0 2px;
+  }
+  .toc-sub { font-size: 11px; color: var(--muted); margin: 0 0 20px; }
+  .toc nav { display: flex; flex-direction: column; gap: 1px; }
+  .toc a {
+    display: block;
+    font-size: 12.5px;
+    color: var(--ink-2);
+    text-decoration: none;
+    padding: 6px 9px;
+    border-radius: 6px;
+  }
+  .toc a:hover { background: var(--surface-2); color: var(--ink); }
+  .toc a span { color: var(--muted); font-family: var(--mono); font-size: 11px; margin-right: 6px; }
+
+  main { min-width: 0; }
+
+  .hero {
+    padding: 40px clamp(20px, 5vw, 56px) 26px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+  }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  h1.title {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(26px, 3.4vw, 34px);
+    color: var(--ink);
+    margin: 0 0 10px;
+    text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  .dek {
+    max-width: 68ch;
+    color: var(--muted);
+    font-size: 14.5px;
+    margin: 0 0 20px;
+  }
+  .status-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11.5px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface-2);
+    color: var(--ink-2);
+    text-decoration: none;
+  }
+  .pill b { font-weight: 600; color: var(--ink); }
+  .pill.conflict { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+  .pill.gap { background: var(--info-soft); border-color: transparent; color: var(--info); }
+  .pill.done { background: var(--good-soft); border-color: transparent; color: var(--good); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+
+  .content {
+    padding: 8px clamp(20px, 5vw, 56px) 100px;
+    max-width: 1000px;
+  }
+  section.block {
+    padding: 40px 0 8px;
+    border-top: 1px solid var(--line);
+    scroll-margin-top: 16px;
+  }
+  section.block:first-of-type { border-top: none; }
+  .block-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+  .block-num {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+  }
+  h2 {
+    font-family: var(--serif);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--serif);
+    font-size: 16.5px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 26px 0 10px;
+  }
+  .block-note { max-width: 74ch; color: var(--muted); font-size: 13.5px; margin: 10px 0 20px; }
+  p { max-width: 74ch; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .table-wrap { overflow-x: auto; margin: 14px 0 26px; border-radius: 10px; border: 1px solid var(--line); }
+  .table-wrap table { border: none; border-radius: 0; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  thead th {
+    background: var(--surface-2);
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td:first-child, th:first-child { white-space: nowrap; }
+  .tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-weight: 600;
+  }
+  .tag.conflict { background: var(--warn-soft); color: var(--warn); }
+  .tag.gap { background: var(--info-soft); color: var(--info); }
+  .tag.done { background: var(--good-soft); color: var(--good); }
+
+  .sitemap {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.75;
+    overflow-x: auto;
+    white-space: pre;
+    color: var(--ink-2);
+    box-shadow: var(--shadow);
+  }
+  .sitemap .muted { color: var(--muted); }
+  .sitemap .hl { color: var(--accent); font-weight: 600; }
+  .sitemap .new { color: var(--good); font-weight: 600; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } }
+  .col-label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 8px;
+  }
+
+  pre.mermaid {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+    box-shadow: var(--shadow);
+    overflow-x: auto;
+  }
+
+  .wireframe-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(310px, 1fr)); gap: 18px; margin: 16px 0 8px; }
+  .wireframe {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+  }
+  .wireframe header {
+    padding: 9px 13px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .wireframe header .req { font-family: var(--mono); font-size: 10px; color: var(--accent); font-weight: 600; }
+  .wireframe pre {
+    margin: 0;
+    padding: 13px;
+    font-family: var(--mono);
+    font-size: 10.8px;
+    line-height: 1.55;
+    color: var(--ink-2);
+    white-space: pre;
+    overflow-x: auto;
+    flex: 1;
+  }
+  .wireframe pre .new { color: var(--good); }
+  .wireframe pre .flag { color: var(--warn); }
+
+  .uc-list { display: flex; flex-direction: column; gap: 10px; margin: 16px 0 26px; }
+  .uc {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .uc summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+    color: var(--ink);
+    font-size: 13.5px;
+  }
+  .uc summary::-webkit-details-marker { display: none; }
+  .uc summary::before {
+    content: "›";
+    font-family: var(--serif);
+    font-size: 16px;
+    color: var(--accent);
+    transition: transform 0.15s ease;
+    flex: none;
+  }
+  .uc[open] summary::before { transform: rotate(90deg); }
+  .uc-id { font-family: var(--mono); font-size: 11px; color: var(--muted); flex: none; }
+  .uc-body { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+  .uc-row { display: grid; grid-template-columns: 90px 1fr; gap: 10px; }
+  .uc-row .k { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); padding-top: 2px; }
+  .uc-row .v { color: var(--ink-2); }
+  .uc-row .v.expect { color: var(--ink); }
+
+  .oq-list { display: flex; flex-direction: column; gap: 14px; margin: 16px 0 8px; }
+  .oq {
+    background: var(--warn-soft);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: grid;
+    grid-template-columns: 30px 1fr;
+    gap: 12px;
+  }
+  .oq .n { font-family: var(--serif); font-weight: 600; font-size: 18px; color: var(--warn); }
+  .oq p { margin: 0; font-size: 13px; color: var(--ink-2); max-width: none; }
+  .oq p b { color: var(--ink); }
+
+  .order-list { display: flex; flex-direction: column; gap: 0; margin: 16px 0 8px; }
+  .order-item { display: grid; grid-template-columns: 36px 1fr; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .order-item:last-child { border-bottom: none; }
+  .order-n {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent-ink);
+    background: var(--accent);
+    width: 26px; height: 26px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    font-weight: 700;
+  }
+  .order-item h4 { margin: 2px 0 4px; font-size: 14px; color: var(--ink); font-family: var(--sans); font-weight: 700; }
+  .order-item p { margin: 0; font-size: 13px; color: var(--muted); }
+
+  footer.doc-footer {
+    padding: 26px 0 10px;
+    color: var(--muted);
+    font-size: 12px;
+    font-family: var(--mono);
+  }
+</style>
+
+<div class="shell">
+  <aside class="toc">
+    <p class="toc-brand">Commercial Calculator</p>
+    <p class="toc-sub">Navigation &amp; BOQ blueprint</p>
+    <nav>
+      <a href="#findings"><span>0</span>Key findings</a>
+      <a href="#current"><span>1</span>Current sitemap</a>
+      <a href="#proposed"><span>2</span>Proposed sitemap</a>
+      <a href="#flow"><span>3</span>Flow diagram</a>
+      <a href="#wireframes"><span>4</span>Wireframes</a>
+      <a href="#usecases"><span>5</span>Use cases</a>
+      <a href="#mapping"><span>6</span>Requirement mapping</a>
+      <a href="#order"><span>7</span>Implementation order</a>
+      <a href="#questions"><span>8</span>Open questions</a>
+    </nav>
+  </aside>
+
+  <main>
+    <div class="hero">
+      <p class="eyebrow">Pre-implementation blueprint · no code changed</p>
+      <h1 class="title">Navigation, Pricing, Audit &amp; Approval Blueprint</h1>
+      <p class="dek">Six requested changes to the Commercial Calculator, traced against the live code in <code>src/modules/commercial-calculator/</code> as of commit <code>73ebe732</code> — not assumed from the FRS or prior design docs. Nothing here has been implemented or committed.</p>
+      <div class="status-row">
+        <a href="#findings" class="pill conflict"><span class="dot"></span>#1 Nav reorg — <b>conflicts with a confirmed decision</b></a>
+        <a href="#findings" class="pill gap"><span class="dot"></span>#2 Pricing preview — <b>confirmed gap</b></a>
+        <a href="#findings" class="pill done"><span class="dot"></span>#3 Recent Activity — <b>trivial removal</b></a>
+        <a href="#findings" class="pill gap"><span class="dot"></span>#4 Customer data — <b>reuse exists, unwired</b></a>
+        <a href="#findings" class="pill done"><span class="dot"></span>#5 Pending-approval bug — <b>no code defect found</b></a>
+        <a href="#findings" class="pill done"><span class="dot"></span>#6 Draft vs frozen pricing — <b>already correct</b></a>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <section class="block" id="findings">
+        <div class="block-head"><span class="block-num">00</span><h2>Key findings up front</h2></div>
+        <p class="block-note">This module already went through a full business-logic reverse-engineering pass and two rounds of IA redesign on 2026-08-03 — the current live nav (Dashboard / Create BOQ / BOQ Management / <b>Catalog</b> / <b>Settings</b>) is the direct, stakeholder-confirmed output of that work. Requirement #1 reopens a decision that round explicitly made.</p>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Requirement</th><th>Finding</th></tr></thead>
+            <tbody>
+              <tr><td><span class="tag conflict">01</span></td><td>Move SKU Catalog / Product Editions under Settings</td><td>Directly reverses IA review round&nbsp;2's confirmed reasoning: Commercial/Product Ops treats these as daily work, not admin config, and a permission boundary was the whole point of splitting them from Settings. See Open Question&nbsp;1 before implementing as literally stated.</td></tr>
+              <tr><td><span class="tag gap">02</span></td><td>Show SKU pricing before adding to a proposal</td><td><code>CreateBoq.tsx</code>'s picker resolves a SKU and shows code/name/tax% — but never list price, discounted unit price, or line total until <em>after</em> "Add to Proposal" is clicked.</td></tr>
+              <tr><td><span class="tag done">03</span></td><td>Remove Recent Activity; verify Audit Log</td><td><code>AuditLog.tsx</code> already exists under Settings, reading the same data Dashboard's block duplicates. All three audit entity types (<code>boq</code>/<code>sku</code>/<code>feature</code>) are captured — but the filter dropdown only offers All/BOQ/SKU, missing an explicit "Feature" option.</td></tr>
+              <tr><td><span class="tag gap">04</span></td><td>Customer selected from AMNEX stakeholder data</td><td>A real source already exists: "Department" is a government-org <code>HierNode</code>, and <code>Employee</code> records under it (<code>useEmployeesUnder</code>) are real stakeholder contacts, already surfaced elsewhere via <code>EmployeePicker.tsx</code>. Create BOQ's Customer section is still 100% disconnected free text.</td></tr>
+              <tr><td><span class="tag done">05</span></td><td>Fix "approved BOQs still show under Pending Approval"</td><td>Traced <code>isBoqPendingApproval</code>, <code>BOQ_TRANSITIONS</code>, the document-level approval gate, and every query invalidation — all correct as of <code>73ebe732</code>. Strongest lead: the Android bundle is 8+ days stale relative to source (see §8).</td></tr>
+              <tr><td><span class="tag done">06</span></td><td>Draft-live / frozen-on-submit / dashboard refresh</td><td>Already implemented — <code>withLiveDraftPricing</code>/<code>withLiveDraftGrandTotal</code> landed in yesterday's commit. This item only needs regression protection while the other five are touched.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="block" id="current">
+        <div class="block-head"><span class="block-num">01</span><h2>Current-state sitemap</h2></div>
+        <div class="sitemap">Home
+└── Commercial Calculator
+    ├── Dashboard          <span class="muted">KPIs · Draft/Pending/Approved/Rejected queues · Recent Activity · "More:" links</span>
+    ├── Create BOQ         <span class="muted">Opportunity → Customer (free text) → Config → Pricing → Approval → Preview → Save</span>
+    ├── BOQ Management     <span class="muted">search/filter list → opens shared BOQ detail route</span>
+    ├── <span class="hl">Catalog</span>             <span class="muted">(peer tab, one flat sidebar group)</span>
+    │   ├── Hierarchy          Vertical → Product → Module → Feature tree
+    │   ├── SKU Catalog        list/detail — Costs / Pricing / BOM tabs
+    │   └── Product Editions   Edition list + Edition↔Feature mapping dialog
+    ├── <span class="hl">Settings</span>            <span class="muted">(peer tab, three labeled sidebar groups)</span>
+    │   ├── Approval Matrix    discount-band rules
+    │   ├── Reference Data     Currencies · UOM · Billing Types · Tax Classes · SKU Categories · Pre-Sales
+    │   └── Audit Log          global, filterable (All / BOQ / SKU)
+    └── /boq/:boqId        <span class="muted">shared route — reached from Dashboard, BOQ Mgmt, Create BOQ hand-off, Revise</span>
+        └── Overview | Approvals | Preview (print)</div>
+      </section>
+
+      <section class="block" id="proposed">
+        <div class="block-head"><span class="block-num">02</span><h2>Proposed sitemap</h2></div>
+        <p class="block-note">Shown as requested — pending confirmation of Open Question&nbsp;1 on whether Hierarchy also folds in, or only SKU Catalog + Product Editions.</p>
+        <div class="sitemap">Home
+└── Commercial Calculator
+    ├── Dashboard          <span class="muted">Recent Activity </span><span class="flag" style="color:var(--warn)">REMOVED</span><span class="muted"> (#3)</span>
+    ├── Create BOQ         Opportunity → <span class="new">Customer (stakeholder picker, #4)</span> → Config
+    │                      → <span class="new">live Pricing Preview (#2)</span> → Approval → Preview → Save
+    ├── BOQ Management     <span class="muted">unchanged</span>
+    ├── Settings
+    │   ├── <span class="new">Catalog</span>       <span class="new">← moved: Hierarchy · SKU Catalog · Product Editions (#1)</span>
+    │   ├── Approval Matrix
+    │   ├── Reference Data
+    │   └── Audit Log      <span class="muted">sole home for activity history (#3)</span>
+    └── /boq/:boqId
+        └── Overview <span class="new">(Customer shown prominently, #4)</span> | Approvals | Preview</div>
+      </section>
+
+      <section class="block" id="flow">
+        <div class="block-head"><span class="block-num">03</span><h2>Feature connection / flow diagram</h2></div>
+        <pre class="mermaid">
+flowchart TD
+    Home --> CC[Commercial Calculator]
+    CC --> Dash[Dashboard]
+    CC --> Create[Create BOQ]
+    CC --> Mgmt[BOQ Management]
+    CC --> Settings
+
+    Dash -- "+ Create New BOQ" --> Create
+    Dash -- "open a queue row" --> Detail
+    Mgmt -- "open a row" --> Detail
+
+    Create --> Cust[Select Customer]
+    Cust -- "Department: existing HierNode" --> Stakeholder["Pick Stakeholder Contact
+from Employees under that Department"]
+    Create --> SkuPick["Vertical to Product to Module to Feature"]
+    SkuPick --> ResolvedSku[Resolved SKU]
+    ResolvedSku --> Pricing["Pricing Preview:
+list price, discount, tax, line total"]
+    Pricing -- "Add to Proposal" --> Lines[Proposal Lines]
+    Lines --> Submit["Save Draft / Save and Submit"]
+    Submit --> Detail["/boq/:boqId shared route"]
+
+    Detail --> Overview["Overview tab: Customer + totals"]
+    Detail --> Approvals["Approvals tab: per-line approve/reject"]
+    Detail --> Preview[Preview tab: print/PDF]
+    Approvals -- "all lines cleared" --> ApproveDoc[Document to approved]
+    ApproveDoc -- "isBoqPendingApproval = false" --> Dash
+
+    Settings --> Catalog2["Catalog group:
+Hierarchy, SKU Catalog, Product Editions"]
+    Settings --> ApprovalMatrix[Approval Matrix]
+    Settings --> RefData[Reference Data]
+    Settings --> Audit[Audit Log]
+
+    Catalog2 -. "SKU edit invalidates" .-> Lines
+    Catalog2 -. "SKU edit invalidates" .-> Dash
+    ApproveDoc -. writes .-> Audit
+    Submit -. writes .-> Audit
+        </pre>
+      </section>
+
+      <section class="block" id="wireframes">
+        <div class="block-head"><span class="block-num">04</span><h2>Screen-level low-fidelity wireframes</h2></div>
+        <p class="block-note">Structure and navigation only — no visual styling implied beyond what's already shipped.</p>
+        <div class="wireframe-grid">
+
+          <div class="wireframe">
+            <header>Dashboard <span class="req">req #3</span></header>
+            <pre>┌───────────────────────────────────┐
+│ Commercial Calculator  [+ Create]  │
+├───────────────────────────────────┤
+│ [Draft][Pending][Approved][Reject] │
+│ [Value][Margin]                    │
+├───────────────────────────────────┤
+│ Continue Draft   │ Pending Approv.│
+│ Recently Approved│ Recently Reject│
+├───────────────────────────────────┤
+│ <span class="flag">[Recent Activity — REMOVED]</span>   │
+├───────────────────────────────────┤
+│ More: SKU Catalog · Hierarchy ·    │
+│       Audit Log  (→ Settings)      │
+└───────────────────────────────────┘</pre>
+          </div>
+
+          <div class="wireframe">
+            <header>Create BOQ <span class="req">req #2, #4</span></header>
+            <pre>┌───────────────────────────────────┐
+│ Create BOQ    [Cancel][Draft][Sub] │
+├───────────────────────────────────┤
+│ Opportunity Info                   │
+│  Name │ Department ▾ │ Vertical    │
+│  Currency │ Budget/EMD │ Sales …   │
+├───────────────────────────────────┤
+│ Customer Information               │
+│  Dept: &lt;echo of selection&gt;   │
+│  <span class="new">Stakeholder ▾ (search Employees</span>
+│  <span class="new">  under Department)</span>
+│  <span class="new">→ auto-fills org/contact/phone</span>
+│  Address (prefilled, editable)     │
+│  GST (free text)                   │
+├───────────────────────────────────┤
+│ Product ▾ Module ▾ Feature ▾       │
+│ Qty [ ] Discount% [ ]              │
+│ Generated SKU: VER-PRD-MOD-FEA     │
+│ <span class="new">┌ Pricing Preview ─────────┐</span>
+│ <span class="new">│ List 25,000 → 22,500      │</span>
+│ <span class="new">│ Tax 18% · Line Tot 26,550 │</span>
+│ <span class="new">└──────────────────────────┘</span>
+│                    [+ Add to Prop.]│
+└───────────────────────────────────┘</pre>
+          </div>
+
+          <div class="wireframe">
+            <header>BOQ Management</header>
+            <pre>┌───────────────────────────────────┐
+│ [Search…]           [Status ▾]     │
+├───────────────────────────────────┤
+│ BOQ-001 v1 Opp X·Cust Y [Submitted]│
+│ BOQ-002 v2 Opp Z·Cust W [Approved] │
+└───────────────────────────────────┘
+
+  <span class="muted" style="color:var(--muted)">unchanged — row click → /boq/:boqId</span></pre>
+          </div>
+
+          <div class="wireframe">
+            <header>BOQ Approval / Detail <span class="req">req #4, #5</span></header>
+            <pre>┌───────────────────────────────────┐
+│ ← Back to BOQ Management           │
+│ BOQ-004 — Opportunity   [Approve]  │
+│ <span class="new">Customer: &lt;Stakeholder&gt; ·</span>
+│ <span class="new">  &lt;Department/Organization&gt;</span>
+├───────────────────────────────────┤
+│ [Overview][Approvals(2)][Preview]  │
+├───────────────────────────────────┤
+│ Overview: Version│Total│Margin│Lns │
+│ Approvals: Approver▾/Remarks/      │
+│   [Approve][Reject] — blocks doc-  │
+│   level Approve while any pending  │
+│ Preview: full document + Print/PDF │
+└───────────────────────────────────┘</pre>
+          </div>
+
+          <div class="wireframe">
+            <header>Settings <span class="req">req #1 (proposed)</span></header>
+            <pre>┌───────────┬───────────────────────┐
+│ <span class="new">CATALOG</span>   │                       │
+│ <span class="new"> Hierarchy</span>│                       │
+│ <span class="new"> SKU Catalog</span>│  &lt;selected screen&gt;  │
+│ <span class="new"> Product Ed.</span>│      renders here    │
+│ APPROVAL  │                       │
+│ REFERENCE │                       │
+│ AUDIT     │                       │
+│  Audit Log│                       │
+└───────────┴───────────────────────┘</pre>
+          </div>
+
+          <div class="wireframe">
+            <header>SKU Catalog <span class="req">unchanged internals</span></header>
+            <pre>┌───────────────────────────────────┐
+│ [+ New SKU]      [Search][Category]│
+├───────────────────────────────────┤
+│ Code│Name│Category│List Price│Stat │
+│ Code│Name│Category│List Price│Stat │
+│  → click row: Overview/Costs/      │
+│    Pricing/BOM tabs                │
+└───────────────────────────────────┘</pre>
+          </div>
+
+          <div class="wireframe">
+            <header>Product Editions <span class="req">unchanged internals</span></header>
+            <pre>┌───────────────────────────────────┐
+│ [+ New Edition]                    │
+├───────────────────────────────────┤
+│ Edition Name │ [Features →]        │
+│   opens EditionFeatureMapping      │
+│   Dialog (mandatory/optional)      │
+└───────────────────────────────────┘</pre>
+          </div>
+
+          <div class="wireframe">
+            <header>Audit Log <span class="req">req #3</span></header>
+            <pre>┌───────────────────────────────────┐
+│ Entity: [All│BOQ│SKU│<span class="new">Feature*</span>]▾ │
+├───────────────────────────────────┤
+│ [BOQ] status_change: submitted →   │
+│   under_review · reason  ⋯date     │
+│ [SKU] update: listPrice 25k→27.5k  │
+│ [FEATURE] status_change: existing  │
+│   → modified                       │
+├───────────────────────────────────┤
+│ <span class="flag">*"Feature" filter option missing</span>
+│ <span class="flag"> today — data exists, only via "All"</span>
+└───────────────────────────────────┘</pre>
+          </div>
+
+        </div>
+      </section>
+
+      <section class="block" id="usecases">
+        <div class="block-head"><span class="block-num">05</span><h2>Step-by-step use cases</h2></div>
+        <p class="block-note">Each: starting point → actions → expected result. Written to be run as manual test cases once implemented — click a row to expand.</p>
+        <div class="uc-list">
+
+          <details class="uc" open>
+            <summary><span class="uc-id">UC1</span> Create a BOQ</summary>
+            <div class="uc-body">
+              <div class="uc-row"><div class="k">Start</div><div class="v">Dashboard → "+ Create New BOQ"</div></div>
+              <div class="uc-row"><div class="k">Actions</div><div class="v">Fill Opportunity/Department/Vertical/Currency/Sales Person → fill Customer (UC2) → add a line (UC3) → Save Draft.</div></div>
+              <div class="uc-row"><div class="k">Expect</div><div class="v expect">Toast confirms save; redirected to <code>/boq/:boqId</code>; appears in Dashboard's "Continue Draft" and BOQ Management as <code>Draft</code>.</div></div>
+            </div>
+          </details>
+
+          <details class="uc">
+            <summary><span class="uc-id">UC2</span> Select customer from AMNEX stakeholder data <span class="tag gap" style="margin-left:auto">req #4</span></summary>
+            <div class="uc-body">
+              <div class="uc-row"><div class="k">Start</div><div class="v">Create BOQ, Department already selected.</div></div>
+              <div class="uc-row"><div class="k">Actions</div><div class="v">Open the Stakeholder Contact picker → search a name → select a real Employee under that Department.</div></div>
+              <div class="uc-row"><div class="k">Expect</div><div class="v expect">Organization fills from the Department name; Contact name/phone/email fill from the Employee; Address prefills (editable); nothing is typed from scratch. Changing Department refilters candidates.</div></div>
+            </div>
+          </details>
+
+          <details class="uc">
+            <summary><span class="uc-id">UC3</span> Select SKU and review pricing before adding <span class="tag gap" style="margin-left:auto">req #2</span></summary>
+            <div class="uc-body">
+              <div class="uc-row"><div class="k">Start</div><div class="v">Create BOQ, Vertical selected.</div></div>
+              <div class="uc-row"><div class="k">Actions</div><div class="v">Pick Product → Module → Feature until a SKU resolves → set Qty/Discount → read the Pricing Preview → Add to Proposal.</div></div>
+              <div class="uc-row"><div class="k">Expect</div><div class="v expect">Preview shows List Price, discounted unit price, tax%, and line total <em>before</em> Add — matching the committed line exactly.</div></div>
+            </div>
+          </details>
+
+          <details class="uc">
+            <summary><span class="uc-id">UC4</span> Submit a BOQ</summary>
+            <div class="uc-body">
+              <div class="uc-row"><div class="k">Start</div><div class="v">An open draft with ≥1 line, required fields filled.</div></div>
+              <div class="uc-row"><div class="k">Actions</div><div class="v">Save &amp; Submit, or open the draft and click "Submitted".</div></div>
+              <div class="uc-row"><div class="k">Expect</div><div class="v expect">Status → <code>submitted</code>; audit entry written; leaves "Continue Draft"; appears in "Pending Approvals" + KPI.</div></div>
+            </div>
+          </details>
+
+          <details class="uc">
+            <summary><span class="uc-id">UC5</span> Approve a BOQ</summary>
+            <div class="uc-body">
+              <div class="uc-row"><div class="k">Start</div><div class="v">A BOQ in <code>under_review</code>, all lines auto-approved or resolved.</div></div>
+              <div class="uc-row"><div class="k">Actions</div><div class="v">Open detail → click "Approved" → enter reason.</div></div>
+              <div class="uc-row"><div class="k">Expect</div><div class="v expect">Status → <code>approved</code>; audit entry written; disappears from "Pending Approvals", appears in "Recently Approved" on the very next render — no manual refresh.</div></div>
+            </div>
+          </details>
+
+          <details class="uc">
+            <summary><span class="uc-id">UC6</span> Reject a BOQ</summary>
+            <div class="uc-body">
+              <div class="uc-row"><div class="k">Start</div><div class="v">A BOQ in <code>under_review</code>.</div></div>
+              <div class="uc-row"><div class="k">Actions</div><div class="v">Click "Rejected" → enter reason.</div></div>
+              <div class="uc-row"><div class="k">Expect</div><div class="v expect">Status → <code>rejected</code>; appears in "Recently Rejected"; a "Revise" button now appears.</div></div>
+            </div>
+          </details>
+
+          <details class="uc">
+            <summary><span class="uc-id">UC7</span> Approve gate blocks an unresolved line, then clears it</summary>
+            <div class="uc-body">
+              <div class="uc-row"><div class="k">Start</div><div class="v">A BOQ in <code>under_review</code> with ≥1 line requiring manual approval.</div></div>
+              <div class="uc-row"><div class="k">Actions</div><div class="v">Click document-level "Approved" first (expect block) → go to Approvals tab, set Approver, click Approve on the line → retry document-level Approved.</div></div>
+              <div class="uc-row"><div class="k">Expect</div><div class="v expect">First attempt fails with a count of pending lines; second attempt succeeds once every line is <code>auto_approved</code> or <code>approved</code>.</div></div>
+            </div>
+          </details>
+
+          <details class="uc">
+            <summary><span class="uc-id">UC8</span> Verify an approved BOQ leaves Pending Approval <span class="tag done" style="margin-left:auto">req #5</span></summary>
+            <div class="uc-body">
+              <div class="uc-row"><div class="k">Start</div><div class="v">Complete UC5 on <code>npm run dev</code> — not the Android build.</div></div>
+              <div class="uc-row"><div class="k">Actions</div><div class="v">Return to Dashboard without refreshing the tab.</div></div>
+              <div class="uc-row"><div class="k">Expect</div><div class="v expect">Not present in "Pending Approvals"; KPI decremented. If it fails only on-device, the cause is the stale mobile bundle, not the web code.</div></div>
+            </div>
+          </details>
+
+          <details class="uc">
+            <summary><span class="uc-id">UC9</span> Manage SKU through Settings</summary>
+            <div class="uc-body">
+              <div class="uc-row"><div class="k">Start</div><div class="v">Settings → Catalog group → SKU Catalog.</div></div>
+              <div class="uc-row"><div class="k">Actions</div><div class="v">"+ New SKU" → fill required fields → save.</div></div>
+              <div class="uc-row"><div class="k">Expect</div><div class="v expect">Appears in the list; audit entry written; immediately selectable in Create BOQ's picker once active + sellable.</div></div>
+            </div>
+          </details>
+
+          <details class="uc">
+            <summary><span class="uc-id">UC10</span> Manage Product Editions through Settings</summary>
+            <div class="uc-body">
+              <div class="uc-row"><div class="k">Start</div><div class="v">Settings → Catalog group → Product Editions.</div></div>
+              <div class="uc-row"><div class="k">Actions</div><div class="v">Open an Edition → Features → toggle mandatory/optional → save.</div></div>
+              <div class="uc-row"><div class="k">Expect</div><div class="v expect">Mapping persists on reopen. Still reference-only downstream today — see Open Question&nbsp;4.</div></div>
+            </div>
+          </details>
+
+          <details class="uc">
+            <summary><span class="uc-id">UC11</span> Review Audit Log <span class="tag done" style="margin-left:auto">req #3</span></summary>
+            <div class="uc-body">
+              <div class="uc-row"><div class="k">Start</div><div class="v">Settings → Audit Log.</div></div>
+              <div class="uc-row"><div class="k">Actions</div><div class="v">Perform one SKU edit, one Feature status change, one BOQ transition → filter by each entity type, then "All".</div></div>
+              <div class="uc-row"><div class="k">Expect</div><div class="v expect">All three appear with correct field/old/new/reason/timestamp. Filtering specifically for the Feature change needs "All" today unless the dropdown gains that option.</div></div>
+            </div>
+          </details>
+
+          <details class="uc">
+            <summary><span class="uc-id">UC12</span> Change SKU price — draft vs. submitted behavior <span class="tag done" style="margin-left:auto">req #6</span></summary>
+            <div class="uc-body">
+              <div class="uc-row"><div class="k">Start</div><div class="v">One <code>draft</code> BOQ and one <code>submitted</code>+ BOQ, both referencing the same SKU.</div></div>
+              <div class="uc-row"><div class="k">Actions</div><div class="v">Settings → SKU Catalog → edit that SKU's List Price → save.</div></div>
+              <div class="uc-row"><div class="k">Expect</div><div class="v expect">Draft BOQ's line reflects the new price. Submitted BOQ's line is unchanged — still the value captured at add-time. Dashboard's Value/Margin KPIs update without a manual refresh.</div></div>
+            </div>
+          </details>
+
+        </div>
+      </section>
+
+      <section class="block" id="mapping">
+        <div class="block-head"><span class="block-num">06</span><h2>Requirement → screen → code/data → test case</h2></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Req</th><th>Screen(s)</th><th>Code / data area</th><th>Test cases</th></tr></thead>
+            <tbody>
+              <tr><td><span class="tag conflict">#1</span></td><td>Settings (new Catalog group)</td><td><code>CommercialCalculatorWorkspace.tsx</code>: <code>SECTIONS</code>, merge <code>CATALOG_NAV</code>→<code>SETTINGS_NAV</code>; <code>Dashboard.tsx</code> "More:" links</td><td>UC9, UC10</td></tr>
+              <tr><td><span class="tag gap">#2</span></td><td>Create BOQ</td><td><code>CreateBoq.tsx</code> — new preview block reusing existing <code>lineTotal</code>/<code>conversionFactorFor</code>/tax lookup</td><td>UC3</td></tr>
+              <tr><td><span class="tag done">#3</span></td><td>Dashboard, Settings → Audit Log</td><td><code>Dashboard.tsx</code> (delete activity block); <code>AuditLog.tsx</code> (<code>ENTITY_TYPES</code>, add <code>'feature'</code>)</td><td>UC11</td></tr>
+              <tr><td><span class="tag gap">#4</span></td><td>Create BOQ, BOQ Detail (Overview + Preview)</td><td><code>CreateBoq.tsx</code> Customer section; <code>useEmployeesUnder</code>; reused <code>EmployeePicker.tsx</code>; <code>CommercialBoq</code> customer fields</td><td>UC2, UC5</td></tr>
+              <tr><td><span class="tag done">#5</span></td><td>Dashboard, BOQ Management, BOQ Detail</td><td><code>repository-logic.ts</code> (<code>isBoqPendingApproval</code>, <code>BOQ_TRANSITIONS</code>, <code>updateBoqStatusLogic</code>); <code>api.ts</code> invalidation; <b>deployment</b>: Android bundle staleness</td><td>UC5, UC7, UC8</td></tr>
+              <tr><td><span class="tag done">#6</span></td><td>Create BOQ, BOQ Detail Overview, Dashboard</td><td><code>repository-logic.ts</code> (<code>withLiveDraftPricing</code>, <code>withLiveDraftGrandTotal</code>); <code>api.ts</code> SKU/BOM invalidation</td><td>UC12</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="block" id="order">
+        <div class="block-head"><span class="block-num">07</span><h2>Implementation order</h2></div>
+        <div class="order-list">
+          <div class="order-item">
+            <div class="order-n">1</div>
+            <div><h4>Confirm Open Question 1</h4><p>Does Catalog actually dissolve into Settings, and does Hierarchy move too? Gates all of req #1's code; can be confirmed in parallel with starting #2–#4.</p></div>
+          </div>
+          <div class="order-item">
+            <div class="order-n">2</div>
+            <div><h4>Req #3 — remove Recent Activity, add the missing Feature audit filter</h4><p>Smallest, most isolated change — no data-model change, no new master. Good first commit.</p></div>
+          </div>
+          <div class="order-item">
+            <div class="order-n">3</div>
+            <div><h4>Req #2 — Pricing Preview in Create BOQ</h4><p>Pure presentation, reuses values already computed in the same file — no new hook, no new query.</p></div>
+          </div>
+          <div class="order-item">
+            <div class="order-n">4</div>
+            <div><h4>Req #4 — customer from AMNEX stakeholder data</h4><p>Independent of the above. Touches <code>CreateBoq.tsx</code>, <code>ProposalDetail.tsx</code>'s Overview tab, possibly a new FK on <code>CommercialBoq</code> — see Open Question 3.</p></div>
+          </div>
+          <div class="order-item">
+            <div class="order-n">5</div>
+            <div><h4>Req #1 — Settings/Catalog nav merge</h4><p>Once Open Question 1 is answered — mechanical, same shape as the Aug 7 split, lowest risk once scope is confirmed.</p></div>
+          </div>
+          <div class="order-item">
+            <div class="order-n">6</div>
+            <div><h4>Req #5 — root-cause verification, not a code change</h4><p>Run UC8 against the actual environment(s) where the bug was seen — browser vs. Android/dist build older than <code>73ebe732</code>. If it reproduces live in-browser too, that's new information warranting a fresh debugging pass.</p></div>
+          </div>
+          <div class="order-item">
+            <div class="order-n">7</div>
+            <div><h4>Req #6 — regression guard only</h4><p>No new work; fold UC12 into whatever test suite covers #1–#5 so <code>withLiveDraftPricing</code> doesn't regress while nearby files are touched.</p></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="questions">
+        <div class="block-head"><span class="block-num">08</span><h2>Open questions</h2></div>
+        <div class="oq-list">
+          <div class="oq"><div class="n">1</div><p><b>Does req #1 mean fully dissolving the Catalog tab</b>, reversing IA review round 2 — or something narrower? The user's example sitemap lists only SKU Catalog, Product Editions and Audit Log under Settings, omitting Hierarchy, Approval Matrix, Reference Data entirely. Three readings are possible, from "fold everything in, Catalog disappears" to "only relocate two screens, everything else stays put." Needs an explicit decision before writing the implementation plan.</p></div>
+          <div class="oq"><div class="n">2</div><p><b>Where was the pending-approval bug actually observed</b> — browser or Android app? The Android bundle is 8+ days stale relative to source and current code shows no defect; this changes whether any code change is needed at all.</p></div>
+          <div class="oq"><div class="n">3</div><p><b>Does GST make sense for a government-department customer?</b> <code>CommercialBoq.customerGst</code> is a private-company concept with no equivalent on the HierNode/Employee records req #4 points at. Decide whether it stays free text, gets dropped, or needs a new optional field — without inventing a new master.</p></div>
+          <div class="oq"><div class="n">4</div><p><b>Should Product Editions' Feature mapping become enforced</b> as part of this round, since its screen is the one being relocated — or stay reference-only, as today? Worth an explicit "not in scope" confirmation.</p></div>
+          <div class="oq"><div class="n">5</div><p><b>Should the req #4 customer picker allow creating a new stakeholder inline</b> (a first-time government contact)? <code>EmployeePicker.tsx</code> already supports this via its optional <code>onCreate</code> prop — confirm whether to wire it in now or defer, since it's the one place req #4 could quietly grow scope.</p></div>
+        </div>
+      </section>
+
+      <footer class="doc-footer">Traced against src/modules/commercial-calculator/ @ 73ebe732 · 2026-08-13 · no code modified, no data fabricated, nothing committed</footer>
+    </div>
+  </main>
+</div>
