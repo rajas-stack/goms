@@ -4,7 +4,7 @@ import { createMasterLogic } from './repository-logic'
 import {
   addBoqLineItemLogic, computeBoqMarginPercent, computeSkuMarginPercent, createBoqLogic, createSkuLogic,
   deleteBoqLogic, deleteSkuLogic, duplicateBoqLogic, generateBoqNumber, generateSkuCode, getBoqLogic, isBoqPendingApproval,
-  listBoqLineItemsLogic, listBoqsLogic, reviseBoqLogic, skuTotalUnitCost, skuTotalUnitCostWithBom,
+  listBoqLineItemsLogic, listBoqsLogic, removeBoqLineItemLogic, reviseBoqLogic, skuTotalUnitCost, skuTotalUnitCostWithBom,
   updateBoqLineItemLogic, updateBoqStatusLogic, updateSkuLogic,
 } from './repository-logic'
 import type { CommercialCalculatorData, CommercialSku, CreateBoqInput, CreateSkuInput } from './types'
@@ -355,6 +355,78 @@ describe('BOQ line items — discount/approval matrix (spec §8)', () => {
     updateBoqStatusLogic(data, boqId, 'submitted', 'x')
     updateBoqStatusLogic(data, boqId, 'under_review', 'x')
     expect(() => updateBoqStatusLogic(data, boqId, 'approved', 'x')).toThrow(/approved discount status/i)
+  })
+
+  it('rejects a non-positive quantity when adding a line', () => {
+    expect(() => addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 0, unitPrice: 2000, discountPct: 0 }))
+      .toThrow(/quantity must be greater than 0/i)
+    expect(() => addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: -1, unitPrice: 2000, discountPct: 0 }))
+      .toThrow(/quantity must be greater than 0/i)
+  })
+
+  it('rejects a non-positive quantity when updating a line', () => {
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
+    expect(() => updateBoqLineItemLogic(data, line.id, { quantity: 0 })).toThrow(/quantity must be greater than 0/i)
+  })
+
+  it('editing discountPct on an approved line resets status, approver, date, and remarks together', () => {
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 20 })
+    updateBoqLineItemLogic(data, line.id, {
+      approvalStatus: 'approved', approverId: 'emp_sales_head', approvalRemarks: 'ok', approvalDate: '2026-08-03',
+    })
+    const edited = updateBoqLineItemLogic(data, line.id, { discountPct: 5 })
+    expect(edited.approvalStatus).toBe('auto_approved') // 5% is inside the auto-approve band
+    expect(edited.approverId).toBeNull()
+    expect(edited.approvalDate).toBeNull()
+    expect(edited.approvalRemarks).toBe('')
+  })
+
+  it('editing quantity alone does not touch approval state', () => {
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 20 })
+    updateBoqLineItemLogic(data, line.id, {
+      approvalStatus: 'approved', approverId: 'emp_sales_head', approvalRemarks: 'ok', approvalDate: '2026-08-03',
+    })
+    const edited = updateBoqLineItemLogic(data, line.id, { quantity: 3 })
+    expect(edited.approvalStatus).toBe('approved')
+    expect(edited.approverId).toBe('emp_sales_head')
+  })
+
+  it('writes one audit entry for a quantity edit, with old/new values and no required reason', () => {
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
+    updateBoqLineItemLogic(data, line.id, { quantity: 4 })
+    const entries = data.commercialAuditLogs.filter((a) => a.entityId === line.id)
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({
+      entityType: 'boqLineItem', field: 'quantity', oldValue: '1', newValue: '4', action: 'update', reason: '', changedBy: null,
+    })
+  })
+
+  it('writes one audit entry for a discountPct edit', () => {
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 5 })
+    updateBoqLineItemLogic(data, line.id, { discountPct: 15 })
+    const entries = data.commercialAuditLogs.filter((a) => a.entityId === line.id)
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ entityType: 'boqLineItem', field: 'discountPct', oldValue: '5', newValue: '15' })
+  })
+
+  it('writes two audit entries when quantity and discountPct change in the same call', () => {
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 5 })
+    updateBoqLineItemLogic(data, line.id, { quantity: 2, discountPct: 15 })
+    const entries = data.commercialAuditLogs.filter((a) => a.entityId === line.id)
+    expect(entries.map((e) => e.field).sort()).toEqual(['discountPct', 'quantity'])
+  })
+
+  it('writes no audit entry when a patch does not actually change the value', () => {
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 5 })
+    updateBoqLineItemLogic(data, line.id, { quantity: 1 })
+    expect(data.commercialAuditLogs.filter((a) => a.entityId === line.id)).toHaveLength(0)
+  })
+
+  it('does not audit adding or removing a line', () => {
+    const before = data.commercialAuditLogs.length
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 5 })
+    removeBoqLineItemLogic(data, line.id)
+    expect(data.commercialAuditLogs).toHaveLength(before)
   })
 })
 

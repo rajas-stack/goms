@@ -404,7 +404,7 @@ function computeLineTotal(quantity: number, unitPrice: number, discountPct: numb
   return quantity * unitPrice * (1 - discountPct / 100) * (1 + taxPct / 100) * factorToBoqCurrency
 }
 
-export function recomputeBoqGrandTotal(data: CommercialCalculatorData, boqId: string): void {
+function recomputeBoqGrandTotal(data: CommercialCalculatorData, boqId: string): void {
   const boq = data.commercialBoqs.find((b) => b.id === boqId)
   if (!boq) return
   const lines = data.commercialBoqLineItems.filter((li) => li.boqId === boqId)
@@ -419,6 +419,9 @@ export function addBoqLineItemLogic(
   if (!boq) throw new Error(`No such BOQ: ${boqId}`)
   const sku = data.commercialSkus.find((s) => s.id === input.skuId)
   if (!sku) throw new Error(`No such SKU: ${input.skuId}`)
+  if (input.quantity <= 0) {
+    throw new Error('Quantity must be greater than 0.')
+  }
 
   const discountPct = Math.max(0, Math.min(input.discountPct, Math.min(90, sku.maximumDiscountPercent)))
   // The floor check stays in the SKU's own currency — minimumAllowedPrice is
@@ -463,6 +466,9 @@ export function updateBoqLineItemLogic(
   if (!boq) throw new Error(`No such BOQ: ${row.boqId}`)
 
   const quantity = patch.quantity ?? row.quantity
+  if (quantity <= 0) {
+    throw new Error('Quantity must be greater than 0.')
+  }
   const unitPrice = patch.unitPrice ?? row.unitPrice
   const discountPct = patch.discountPct !== undefined
     ? Math.max(0, Math.min(patch.discountPct, Math.min(90, sku.maximumDiscountPercent)))
@@ -473,13 +479,36 @@ export function updateBoqLineItemLogic(
     throw new Error(`Discounted unit price (${postDiscountPrice.toFixed(2)}) is below this SKU's minimum allowed price (${sku.minimumAllowedPrice}).`)
   }
 
+  // Captured before mutating `row` — these become the audit trail's "old" values.
+  const oldQuantity = row.quantity
+  const oldDiscountPct = row.discountPct
+
   Object.assign(row, patch, { quantity, unitPrice, discountPct })
   if (patch.discountPct !== undefined) {
-    row.approvalStatus = resolveApprovalBand(data.masters.approvalMatrix, discountPct).allowAutoApproval ? 'auto_approved' : 'pending'
+    // A changed discount invalidates whatever approval decision (or lack of
+    // one) the line had — reusing the same reset a revised/duplicated line
+    // gets (`freshLineApprovalState`) so a stale approver/date/remarks never
+    // sits next to a discount that's since moved.
+    Object.assign(row, freshLineApprovalState(data.masters.approvalMatrix, discountPct))
   }
   const factor = skuToBoqConversionFactor(data.masters.currencies, boq.currency, sku)
   row.lineTotal = computeLineTotal(quantity, unitPrice, discountPct, row.taxPct, factor)
   recomputeBoqGrandTotal(data, row.boqId)
+
+  if (patch.quantity !== undefined && quantity !== oldQuantity) {
+    writeAuditLogEntry(data, {
+      entityType: 'boqLineItem', entityId: id, field: 'quantity',
+      oldValue: String(oldQuantity), newValue: String(quantity),
+      reason: '', action: 'update', changedBy: null,
+    })
+  }
+  if (patch.discountPct !== undefined && discountPct !== oldDiscountPct) {
+    writeAuditLogEntry(data, {
+      entityType: 'boqLineItem', entityId: id, field: 'discountPct',
+      oldValue: String(oldDiscountPct), newValue: String(discountPct),
+      reason: '', action: 'update', changedBy: null,
+    })
+  }
   return row
 }
 
@@ -492,7 +521,7 @@ export function removeBoqLineItemLogic(data: CommercialCalculatorData, id: strin
 
 /** Spec §10 — `cancelled`/`archived` are terminal, and a decision already
  *  reached (approved/rejected) can only move to `archived`, never `cancelled`. */
-export const BOQ_TRANSITIONS: Record<BoqStatus, BoqStatus[]> = {
+const BOQ_TRANSITIONS: Record<BoqStatus, BoqStatus[]> = {
   draft: ['submitted', 'cancelled'],
   submitted: ['under_review', 'cancelled'],
   under_review: ['approved', 'rejected', 'cancelled'],
@@ -684,7 +713,7 @@ export function computeBoqMarginPercent(
 
 // --- Audit log (spec §6.6, §15) --------------------------------------------
 
-export function writeAuditLogEntry(data: CommercialCalculatorData, entry: Omit<CommercialAuditLog, 'id' | 'changedAt'>): CommercialAuditLog {
+function writeAuditLogEntry(data: CommercialCalculatorData, entry: Omit<CommercialAuditLog, 'id' | 'changedAt'>): CommercialAuditLog {
   const row: CommercialAuditLog = { ...entry, id: uid('aud'), changedAt: new Date().toISOString() }
   data.commercialAuditLogs.push(row)
   return row
