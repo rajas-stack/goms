@@ -75,7 +75,7 @@ export const SALES_TEAM: SalesTeamMember[] = [
  *  this is what lets a live posting's designation (edited via the Sales
  *  Team tab's "Change posting") drive the ownership chain correctly without
  *  needing a hand-maintained `tiers` override for every dual-role person. */
-export function defaultTiers(designation: string): SalesTier[] {
+function defaultTiers(designation: string): SalesTier[] {
   const d = designation.toLowerCase()
   const tiers: SalesTier[] = []
   if (d.includes('sales head')) tiers.push('salesHead')

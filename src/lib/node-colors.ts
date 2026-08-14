@@ -22,8 +22,8 @@ const ACCENTS: Record<string, Accent> = {
 const GEO_ACCENT: Accent = { chip: 'bg-teal-100 text-teal-600', dot: 'bg-teal', border: 'border-teal-600', ring: 'ring-teal/20' }
 const DEFAULT_ACCENT: Accent = { chip: 'bg-ink-900 text-paper', dot: 'bg-ink-900', border: 'border-ink-600', ring: 'ring-ink-900/15' }
 
-export const EMPLOYEE_ACCENT: Accent = { chip: 'bg-emerald-100 text-emerald-600', dot: 'bg-emerald', border: 'border-emerald-600', ring: 'ring-emerald/20' }
-export const VACANT_ACCENT: Accent = { chip: 'bg-amber-100 text-amber-600', dot: 'bg-amber', border: 'border-amber', ring: 'ring-amber/20' }
+const EMPLOYEE_ACCENT: Accent = { chip: 'bg-emerald-100 text-emerald-600', dot: 'bg-emerald', border: 'border-emerald-600', ring: 'ring-emerald/20' }
+const VACANT_ACCENT: Accent = { chip: 'bg-amber-100 text-amber-600', dot: 'bg-amber', border: 'border-amber', ring: 'ring-amber/20' }
 
 export function nodeAccent(node: HierNode): Accent {
   if (node.domain === 'geo') return node.typeKey === 'state' ? ACCENTS.state : GEO_ACCENT

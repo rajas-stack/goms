@@ -10,7 +10,7 @@ const onlyDigits = (s: string) => s.replace(/\D/g, '')
  *  first, not by digit-counting on the fully-digit-stripped string (a
  *  length-based guard can't tell the literal "+91" prefix's digits apart
  *  from real number digits once digits and prefix are already mixed). */
-export function parsePhone(value: string): string {
+function parsePhone(value: string): string {
   const rest = value.trim().replace(/^\+?91[\s-]?/, '')
   return onlyDigits(rest).slice(0, NUMBER_LEN)
 }

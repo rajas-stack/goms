@@ -34,9 +34,6 @@ export const WORK_COMPONENT_GROUPS: MultiSelectGroup[] = [
   },
 ]
 
-/** Flattened, for anything that reads it as a plain list. */
-export const WORK_COMPONENTS = WORK_COMPONENT_GROUPS.flatMap((g) => g.options)
-
 export const WORK_VERTICALS = [
   'Traffic', 'Transit (Mobility)', 'Data Fabric & AI', 'Integrated (Smart City)',
   'GIS', 'Agriculture', 'Resource & Utility', 'Cloud',
@@ -68,7 +65,7 @@ const EMD_PERCENT_RANGE = { low: 2, high: 5 }
 /** Read-only derived budget range from an EMD amount, in the same unit the
  *  EMD was entered in. `null` until the amount parses as a positive number,
  *  so the caller can hide the estimate rather than show a bogus range. */
-export function estimateBudgetRangeFromEmd(emdAmount: string): { low: number; high: number } | null {
+function estimateBudgetRangeFromEmd(emdAmount: string): { low: number; high: number } | null {
   const amount = Number(emdAmount)
   if (!(amount > 0)) return null
   return {

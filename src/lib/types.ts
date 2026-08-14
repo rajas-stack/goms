@@ -302,7 +302,7 @@ export interface FieldDef {
   type: 'string' | 'text' | 'url' | 'email' | 'phone'
 }
 
-export type SalesPersonStatus = 'active' | 'onLeave' | 'resigned' | 'inactive'
+type SalesPersonStatus = 'active' | 'onLeave' | 'resigned' | 'inactive'
 
 /** An AMNEX salesperson. Deliberately holds no designation, tier, or manager:
  *  those are time-bounded and live on `SalesPosting`, so a promotion or reorg

@@ -23,12 +23,12 @@ export const SALES_TIERS: SalesTierDef[] = [
   { key: 'accountManager', label: 'Account Manager', rank: 4, active: true },
 ]
 
-export const SALES_TIER_MAP: Record<string, SalesTierDef> = Object.fromEntries(
+const SALES_TIER_MAP: Record<string, SalesTierDef> = Object.fromEntries(
   SALES_TIERS.map((t) => [t.key, t]),
 )
 
 /** The tier a person with no explicit mapping lands in — the widest rung. */
-export const DEFAULT_TIER_KEY = 'accountManager'
+const DEFAULT_TIER_KEY = 'accountManager'
 
 /** Falls back to the raw key so a retired or user-added tier still renders as
  *  something meaningful instead of blank. */

@@ -38,7 +38,7 @@ function orgAncestors(id: string, ctx: OwnershipContext): string[] {
 
 /** Code-level registry — entries are additive, and adding one must not require
  *  touching the resolution engine. Spec §6.1 / §7. */
-export const OWNABLE_ENTITIES: OwnableEntityDef[] = [
+const OWNABLE_ENTITIES: OwnableEntityDef[] = [
   {
     key: 'orgNode',
     label: 'Organization node',

@@ -17,7 +17,7 @@ export type CanvasItem =
   | { kind: 'node'; node: HierNode }
   | { kind: 'employee'; employee: Employee }
 
-export function itemKey(item: CanvasItem): string {
+function itemKey(item: CanvasItem): string {
   return item.kind === 'node' ? `node:${item.node.id}` : `emp:${item.employee.id}`
 }
 

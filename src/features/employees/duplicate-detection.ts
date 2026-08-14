@@ -17,7 +17,7 @@ export interface DuplicateContext {
  *  phone/department) alone doesn't clear it, but any two independent signals
  *  together (e.g. same email + similar name, or same phone + same
  *  department) do. */
-export const DUPLICATE_THRESHOLD = 0.55
+const DUPLICATE_THRESHOLD = 0.55
 
 function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ')
@@ -65,7 +65,7 @@ function nameSimilarity(nameA: string, nameB: string): number {
 /** Scores how likely two employee records are the same real person, from
  *  name/email/phone/department similarity. Purely a suggestion signal — it
  *  never flags, links, or changes anything by itself. */
-export function scorePair(a: Employee, b: Employee, ctx: DuplicateContext): { score: number; matchedOn: string[] } {
+function scorePair(a: Employee, b: Employee, ctx: DuplicateContext): { score: number; matchedOn: string[] } {
   const matchedOn: string[] = []
   let score = 0
 

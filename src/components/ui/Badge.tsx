@@ -56,15 +56,6 @@ export function StatusBadge({ status }: { status: RelationshipStatus }) {
   return <Badge tone={STATUS_TONE[status]} className="capitalize">{status}</Badge>
 }
 
-export function RelationshipBadges({ status, quality }: { status: RelationshipStatus; quality: RelationshipQuality }) {
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      <StatusBadge status={status} />
-      <QualityBadge quality={quality} />
-    </div>
-  )
-}
-
 export function ConnectionBadge({ connected }: { connected: boolean }) {
   return connected
     ? <Badge tone="emerald">Connected: Yes</Badge>

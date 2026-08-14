@@ -9,7 +9,7 @@ import type {
   Charge, Employee, FollowUp, HierNode, Opportunity, SalesPerson, SearchResult, Status, TimelineEventType,
 } from './types'
 
-export const qk = {
+const qk = {
   states: ['states'] as const,
   state: (code: number) => ['state', code] as const,
   node: (id: string) => ['node', id] as const,
@@ -60,8 +60,6 @@ export const useOrgRoots = (code: number) =>
   useQuery({ queryKey: qk.orgRoots(code), queryFn: () => repository.listOrgRoots(code) })
 export const useDepartments = () =>
   useQuery({ queryKey: ['departments'], queryFn: () => repository.listDepartments() })
-export const useGeoRoot = () =>
-  useQuery({ queryKey: ['geoRoot'], queryFn: async () => (await repository.geoRoot()) ?? null })
 export const useChildCounts = (parentId: string | null) =>
   useQuery({ queryKey: ['childCounts', parentId ?? ''], queryFn: () => repository.childCounts(parentId!), enabled: !!parentId })
 export const usePostingNodes = (code: number | null) =>
@@ -97,9 +95,6 @@ export const useAllTimelineEvents = (filter?: { types?: TimelineEventType[] }) =
   })
 export const useTransfers = (id: string | null) =>
   useQuery({ queryKey: qk.transfers(id ?? ''), queryFn: () => repository.listTransfers(id!), enabled: !!id })
-export const useMergeAudit = () =>
-  useQuery({ queryKey: ['mergeAudit'], queryFn: () => repository.listMergeAudit() })
-
 export const useOpportunities = () =>
   useQuery({ queryKey: qk.opportunities, queryFn: () => repository.listOpportunities() })
 export const useOpportunitiesByDepartment = (departmentId: string | null) =>
@@ -107,14 +102,6 @@ export const useOpportunitiesByDepartment = (departmentId: string | null) =>
     queryKey: qk.opportunitiesByDepartment(departmentId ?? ''),
     queryFn: () => repository.listOpportunitiesByDepartment(departmentId!),
     enabled: !!departmentId,
-  })
-export const useOpportunity = (id: string | null) =>
-  useQuery({ queryKey: qk.opportunity(id ?? ''), queryFn: () => repository.getOpportunity(id!), enabled: !!id })
-export const useOpportunityStageChanges = (id: string | null) =>
-  useQuery({
-    queryKey: qk.opportunityStageChanges(id ?? ''),
-    queryFn: () => repository.listOpportunityStageChanges(id!),
-    enabled: !!id,
   })
 
 export function useOpportunityMutations() {
@@ -218,9 +205,6 @@ export const useFollowUps = (entityType: string, entityId: string | null) =>
     queryFn: () => repository.listFollowUps(entityType, entityId!),
     enabled: !!entityId,
   })
-export const useOpenFollowUps = () =>
-  useQuery({ queryKey: qk.openFollowUps, queryFn: () => repository.listOpenFollowUps() })
-
 export function useFollowUpMutations() {
   const qc = useQueryClient()
   const invalidate = () => {

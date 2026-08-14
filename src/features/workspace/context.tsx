@@ -14,7 +14,7 @@ import { consumePendingWorkspaceAction, registerWorkspaceDialogHandle } from './
  *  gains its rendering branch with the Roster phase. */
 export type Selection = { kind: 'node' | 'employee' | 'salesPerson'; id: string } | null
 
-export type SelectionKind = NonNullable<Selection>['kind']
+type SelectionKind = NonNullable<Selection>['kind']
 
 type Dialog =
   | { type: 'none' }

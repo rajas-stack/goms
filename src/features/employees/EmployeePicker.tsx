@@ -113,7 +113,7 @@ export function EmployeePicker({
 
   if (selected) {
     return (
-      <div className="flex h-10 items-center gap-2 rounded-lg border border-line bg-white px-3">
+      <div className="flex min-h-10 items-center gap-2 rounded-lg border border-line bg-white px-3 py-1.5">
         <span
           className={cn(
             'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold',

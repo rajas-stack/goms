@@ -88,7 +88,7 @@ function recentMeetingsFor(employeeIds: Set<string>, ctx: SearchContext, cap: nu
     .map((t) => toMeetingResult(t, ctx.activeEmployees.find((e) => e.id === t.employeeId), ctx))
 }
 
-export const departmentCategory: SearchCategoryDef = {
+const departmentCategory: SearchCategoryDef = {
   key: 'department', label: 'Departments', icon: 'Building2', color: 'teal', order: 0, cap: 5,
   match(query, ctx) {
     return ctx.activeNodes
@@ -110,7 +110,7 @@ export const departmentCategory: SearchCategoryDef = {
   },
 }
 
-export const employeeCategory: SearchCategoryDef = {
+const employeeCategory: SearchCategoryDef = {
   key: 'employee', label: 'Employees', icon: 'User', color: 'indigo', order: 1, cap: 5,
   match(query, ctx) {
     return ctx.activeEmployees
@@ -137,7 +137,7 @@ export const employeeCategory: SearchCategoryDef = {
   },
 }
 
-export const officeCategory: SearchCategoryDef = {
+const officeCategory: SearchCategoryDef = {
   key: 'office', label: 'Offices', icon: 'DoorOpen', color: 'blue', order: 2, cap: 5,
   match(query, ctx) {
     return ctx.activeNodes
@@ -159,7 +159,7 @@ export const officeCategory: SearchCategoryDef = {
   },
 }
 
-export const meetingCategory: SearchCategoryDef = {
+const meetingCategory: SearchCategoryDef = {
   key: 'meeting', label: 'Meetings', icon: 'MessageCircle', color: 'amber', order: 3, cap: 5,
   match(query, ctx) {
     const out: SearchResult[] = []
@@ -180,7 +180,7 @@ export const meetingCategory: SearchCategoryDef = {
   path: (result) => `/meetings?highlight=${result.id}`,
 }
 
-export const geographyCategory: SearchCategoryDef = {
+const geographyCategory: SearchCategoryDef = {
   key: 'geography', label: 'Geography', icon: 'MapPin', color: 'purple', order: 4, cap: 5,
   match(query, ctx) {
     return ctx.activeNodes
@@ -209,7 +209,7 @@ function toWorkResult(work: Opportunity, node: HierNode | undefined): SearchResu
   }
 }
 
-export const worksCategory: SearchCategoryDef = {
+const worksCategory: SearchCategoryDef = {
   key: 'work', label: 'Works', icon: 'Briefcase', color: 'blue', order: 5, cap: 5,
   match(query, ctx) {
     const out: SearchResult[] = []
@@ -243,7 +243,7 @@ function toSalesPersonResult(p: SalesPerson, ctx: SearchContext): SearchResult {
   }
 }
 
-export const salesPersonCategory: SearchCategoryDef = {
+const salesPersonCategory: SearchCategoryDef = {
   key: 'salesPerson', label: 'Sales Team', icon: 'Briefcase', color: 'purple', order: 6, cap: 5,
   match(query, ctx) {
     return ctx.salesPersons

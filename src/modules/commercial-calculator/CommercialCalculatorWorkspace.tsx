@@ -121,8 +121,8 @@ function SidebarTabPage({ groups, defaultKey }: { groups: SidebarNavGroup[]; def
   const Content = ITEM_CONTENT[activeItem] ?? ITEM_CONTENT[defaultKey]
 
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex w-[220px] shrink-0 flex-col gap-4 overflow-y-auto border-r border-line p-3">
+    <div className="flex h-full min-h-0 flex-col lg:flex-row">
+      <div className="flex max-h-48 w-full shrink-0 flex-col gap-4 overflow-y-auto border-b border-line p-3 lg:h-auto lg:max-h-none lg:w-[220px] lg:border-b-0 lg:border-r">
         {groups.map((group, i) => (
           <div key={group.label ?? i} className="flex flex-col gap-1">
             {group.label && <h2 className="px-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{group.label}</h2>}
