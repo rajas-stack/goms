@@ -18,7 +18,7 @@ import { buildSeed, type GormsData } from './seed'
 import { clearSnapshot, loadSnapshot, scheduleSave } from './persist'
 import {
   addBoqLineItemLogic, createBoqLogic, createBomItemLogic, createMasterLogic, createSkuLogic,
-  deleteBomItemLogic, deleteBoqLogic, deleteMasterLogic, deleteSkuLogic, getBoqLogic, getMasterLogic, getSkuLogic,
+  deleteBomItemLogic, deleteBoqLogic, deleteMasterLogic, deleteSkuLogic, duplicateBoqLogic, getBoqLogic, getMasterLogic, getSkuLogic,
   listAllBomItemsLogic, listAllBoqLineItemsLogic, listAuditLogsLogic, listBoqLineItemsLogic, listBoqsLogic,
   listBomItemsForSkuLogic, listEditionFeaturesLogic,
   listMasterLogic, listSkusLogic, removeBoqLineItemLogic, reviseBoqLogic, setEditionFeaturesLogic,
@@ -423,6 +423,12 @@ export interface Repository {
   /** Creates a new BOQ row carrying the same `boqNumber` forward, with
    *  `boqVersion` incremented and its line items copied (spec §9/§13). */
   reviseBoq(id: string): Promise<CommercialBoq>
+  /** Creates an independent new BOQ — fresh `boqNumber`, `status: 'draft'`,
+   *  `boqVersion: 1`, no `parentBoqId` — copying this BOQ's fields and line
+   *  items as a starting point. Distinct from `reviseBoq`, which keeps the
+   *  same `boqNumber` and links back via `parentBoqId`: a duplicate is a new,
+   *  unrelated proposal. */
+  duplicateBoq(id: string): Promise<CommercialBoq>
   /** Hard-deletes a BOQ and its line items. Throws unless the BOQ is
    *  `draft`/`cancelled`/`rejected`/`archived` — anything still active in
    *  the pipeline must be cancelled first via `updateBoqStatus`. */
@@ -1370,6 +1376,10 @@ class InMemoryRepository implements Repository {
     return reviseBoqLogic(this.data.commercialCalculator, id)
   }
 
+  async duplicateBoq(id: string) {
+    return duplicateBoqLogic(this.data.commercialCalculator, id)
+  }
+
   async deleteBoq(id: string) {
     return deleteBoqLogic(this.data.commercialCalculator, id)
   }
@@ -1837,7 +1847,7 @@ const MUTATOR_KEYS = [
   'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson', 'transferSalesPerson',
   'createMaster', 'updateMaster', 'setMasterActive', 'deleteMaster', 'setEditionFeatures',
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
-  'createBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'updateBoqStatus', 'reviseBoq', 'deleteBoq',
+  'createBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell

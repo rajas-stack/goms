@@ -7,7 +7,7 @@ import type {
   CreateMasterInput, CreateSkuInput, Currency, MasterEntityKey, MasterRowMap,
 } from './types'
 
-export const qk = {
+const qk = {
   masters: (key: MasterEntityKey) => ['commercialCalculator', 'masters', key] as const,
   master: (key: MasterEntityKey, id: string) => ['commercialCalculator', 'master', key, id] as const,
   editionFeatures: (editionId: string) => ['commercialCalculator', 'editionFeatures', editionId] as const,
@@ -26,13 +26,6 @@ export const qk = {
 
 export const useMasters = <K extends MasterEntityKey>(key: K) =>
   useQuery({ queryKey: qk.masters(key), queryFn: () => repository.listMaster(key) })
-
-export const useMaster = <K extends MasterEntityKey>(key: K, id: string | null) =>
-  useQuery({
-    queryKey: qk.master(key, id ?? ''),
-    queryFn: () => repository.getMaster(key, id!),
-    enabled: !!id,
-  })
 
 export function useMasterMutations<K extends MasterEntityKey>(key: K) {
   const qc = useQueryClient()
@@ -178,11 +171,15 @@ export function useBoqMutations() {
     mutationFn: (id: string) => repository.reviseBoq(id),
     onSuccess: invalidate,
   })
+  const duplicate = useMutation({
+    mutationFn: (id: string) => repository.duplicateBoq(id),
+    onSuccess: invalidate,
+  })
   const remove = useMutation({
     mutationFn: (id: string) => repository.deleteBoq(id),
     onSuccess: invalidate,
   })
-  return { create, updateStatus, revise, remove }
+  return { create, updateStatus, revise, duplicate, remove }
 }
 
 export function useBoqLineItemMutations(boqId: string) {

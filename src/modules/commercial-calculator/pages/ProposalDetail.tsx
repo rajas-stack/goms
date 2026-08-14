@@ -64,7 +64,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   const { data: approvalMatrix = [] } = useMasters('approvalMatrix')
   const { data: currencies = [] } = useMasters('currencies')
   const { data: bomItems = [] } = useAllBomItems()
-  const { updateStatus, revise, remove } = useBoqMutations()
+  const { updateStatus, revise, duplicate, remove } = useBoqMutations()
   const lineMutations = useBoqLineItemMutations(boqId)
   const toast = useToast()
   const navigate = useNavigate()
@@ -93,6 +93,13 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
     const revised = await revise.mutateAsync(boq.id)
     toast(`Created revision v${revised.boqVersion} of ${revised.boqNumber}.`)
     navigate(`/commercial-calculator/boq/${revised.id}`)
+  }
+
+  async function handleDuplicate() {
+    if (!boq) return
+    const copy = await duplicate.mutateAsync(boq.id)
+    toast(`Created ${copy.boqNumber} as a draft copy of ${boq.boqNumber}.`)
+    navigate(`/commercial-calculator/boq/${copy.id}`)
   }
 
   async function handleDelete() {
@@ -144,6 +151,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             {NEXT_STATUSES[boq.status].map((next) => (
               <Button key={next} size="sm" onClick={() => transition(next)}>{STATUS_LABEL[next]}</Button>
             ))}
+            <Button size="sm" onClick={handleDuplicate}><Icon name="Copy" size={13} />Duplicate</Button>
             {(boq.status === 'approved' || boq.status === 'rejected' || boq.status === 'archived') && (
               <Button size="sm" onClick={handleRevise}><Icon name="Copy" size={13} />Revise</Button>
             )}
