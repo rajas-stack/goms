@@ -1893,6 +1893,23 @@ export async function resetLocalData(): Promise<void> {
   impl.hydrate(buildSeed())
 }
 
+/** The full store, serializable as-is for a JSON backup — see
+ *  src/data/backup.ts. Not part of `Repository`: read-only introspection of
+ *  the whole store, not a per-entity domain operation. */
+export function getFullSnapshot(): GormsData {
+  return impl.snapshot()
+}
+
+/** Replaces the whole store with a restored backup and persists it, the
+ *  same way any other mutation would — but bypassing the `Repository` proxy
+ *  since this isn't a per-entity domain operation either. Callers must
+ *  invalidate their own query cache afterward; this module has no
+ *  dependency on React Query. */
+export function restoreFromBackup(data: GormsData): void {
+  impl.hydrate(data)
+  scheduleSave(() => impl.snapshot())
+}
+
 /** The store, wrapped so that every mutation schedules a save. A proxy rather
  *  than a `persist()` call at the end of ~18 methods: one place to get right,
  *  and impossible to forget in a method body. Methods are bound to the concrete
