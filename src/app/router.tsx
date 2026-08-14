@@ -1,6 +1,7 @@
 import { lazy } from 'react'
 import { createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './AppLayout'
+import { GlobalErrorScreen } from './routes/GlobalErrorScreen'
 
 const Home = lazy(() => import('./routes/Home').then((m) => ({ default: m.Home })))
 const Landing = lazy(() => import('./routes/Landing').then((m) => ({ default: m.Landing })))
@@ -17,6 +18,7 @@ const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: 
 export const router = createBrowserRouter([
   {
     element: <AppLayout />,
+    errorElement: <GlobalErrorScreen />,
     children: [
       { path: '/', element: <Home /> },
       { path: '/map', element: <Landing /> },
