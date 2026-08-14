@@ -3,6 +3,7 @@ import { useShell } from '@/app/AppLayout'
 import { Icon } from './ui/Icon'
 import { Button } from './ui/Button'
 import { Tooltip } from './ui/Tooltip'
+import { cn } from '@/lib/utils'
 import logo from '@/assets/amnex-logo.svg'
 
 interface Props {
@@ -11,7 +12,7 @@ interface Props {
 }
 
 export function TopBar({ onOpenDrawer }: Props) {
-  const { openSearch, openImport, openExport } = useShell()
+  const { openSearch, openImport, openExport, openSettings } = useShell()
   const location = useLocation()
   const isHome = location.pathname === '/'
   const isCommercialCalculator = location.pathname.startsWith('/commercial-calculator')
@@ -70,6 +71,17 @@ export function TopBar({ onOpenDrawer }: Props) {
           </Tooltip>
         </>
       )}
+
+      <Tooltip label="Back up or restore data" side="bottom" className="shrink-0">
+        <Button
+          size="icon"
+          onClick={openSettings}
+          aria-label="Settings"
+          className={cn('h-11 w-11 lg:h-8 lg:w-8', isCommercialCalculator && 'ml-auto')}
+        >
+          <Icon name="Settings" size={16} />
+        </Button>
+      </Tooltip>
     </header>
   )
 }
