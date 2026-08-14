@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAllEmployees, useDepartments, useSalesPersons } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
@@ -10,6 +10,7 @@ import { isoToday } from '@/lib/dates'
 import { useAllBomItems, useBoqLineItemMutations, useBoqLineItems, useBoqMutations, useBoqs, useMasters, useSkus } from '../api'
 import { buildProposalPrintHtml } from '../proposal-print'
 import { computeBoqMarginPercent, resolveApprovalBand } from '../repository-logic'
+import { SkuLinePicker } from '../components/SkuLinePicker'
 import { STATUS_LABEL } from './BoqManagement'
 import type { ApprovalMatrixRule, BoqStatus, CommercialBoq, CommercialBoqLineItem, CommercialSku } from '../types'
 
@@ -183,23 +184,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
               <div><div className="text-[11px] uppercase text-muted">Margin</div>{margin.toFixed(1)}%</div>
             </div>
 
-            <div>
-              <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-muted">Line Items</h3>
-              <div className="flex flex-col gap-2">
-                {lines.map((line) => {
-                  const sku = skuById.get(line.skuId)
-                  return (
-                    <div key={line.id} className="flex items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5 text-[13px]">
-                      <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode ?? '—'}</span>
-                      <span className="min-w-0 flex-1 truncate">{sku?.name ?? 'Unknown SKU'}</span>
-                      <span className="text-muted">Qty {line.quantity}</span>
-                      <span className="text-muted">{line.discountPct}% off</span>
-                      <span className="font-medium text-ink-900">{line.lineTotal.toLocaleString()}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
+            <LineItemsSection boq={boq} lines={lines} skuById={skuById} lineMutations={lineMutations} />
           </>
         )}
 
@@ -225,6 +210,143 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
         itemLabel={`BOQ ${boq.boqNumber}`}
         onConfirm={handleDelete}
       />
+    </div>
+  )
+}
+
+function LineItemsSection({ boq, lines, skuById, lineMutations }: {
+  boq: CommercialBoq
+  lines: CommercialBoqLineItem[]
+  skuById: Map<string, CommercialSku>
+  lineMutations: ReturnType<typeof useBoqLineItemMutations>
+}) {
+  const toast = useToast()
+  const isDraft = boq.status === 'draft'
+
+  async function handleAdd(line: { skuId: string; quantity: number; discountPct: number }) {
+    const sku = skuById.get(line.skuId)
+    if (!sku) return
+    try {
+      await lineMutations.add.mutateAsync({
+        skuId: line.skuId, quantity: line.quantity, discountPct: line.discountPct, unitPrice: sku.listPrice,
+      })
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not add line item.')
+    }
+  }
+
+  return (
+    <div>
+      <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-muted">Line Items</h3>
+      <div className="flex flex-col gap-2">
+        {lines.map((line) => {
+          const sku = skuById.get(line.skuId)
+          return isDraft ? (
+            <DraftLineRow key={line.id} line={line} sku={sku} lineMutations={lineMutations} />
+          ) : (
+            <div key={line.id} className="flex items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5 text-[13px]">
+              <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode ?? '—'}</span>
+              <span className="min-w-0 flex-1 truncate">{sku?.name ?? 'Unknown SKU'}</span>
+              <span className="text-muted">Qty {line.quantity}</span>
+              <span className="text-muted">{line.discountPct}% off</span>
+              <span className="font-medium text-ink-900">{line.lineTotal.toLocaleString()}</span>
+            </div>
+          )
+        })}
+      </div>
+      {isDraft && (
+        <div className="mt-2">
+          <SkuLinePicker verticalId={boq.verticalId} currencyCode={boq.currency} onAdd={handleAdd} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** One editable line row, shown only while `boq.status === 'draft'`
+ *  (`LineItemsSection` picks this branch). Quantity/discount are local,
+ *  uncontrolled-by-the-server-value-on-every-keystroke drafts — they commit
+ *  once on blur/Enter, not per keystroke, and roll back to the last known
+ *  server value on a failed commit (e.g. the SKU floor-price check). */
+function DraftLineRow({ line, sku, lineMutations }: {
+  line: CommercialBoqLineItem
+  sku: CommercialSku | undefined
+  lineMutations: ReturnType<typeof useBoqLineItemMutations>
+}) {
+  const toast = useToast()
+  const [qty, setQty] = useState(String(line.quantity))
+  const [discount, setDiscount] = useState(String(line.discountPct))
+
+  useEffect(() => setQty(String(line.quantity)), [line.quantity])
+  useEffect(() => setDiscount(String(line.discountPct)), [line.discountPct])
+
+  async function commitQuantity() {
+    const next = Number(qty)
+    if (!Number.isFinite(next) || next <= 0 || next === line.quantity) {
+      setQty(String(line.quantity))
+      return
+    }
+    try {
+      await lineMutations.update.mutateAsync({ id: line.id, patch: { quantity: next } })
+    } catch (e) {
+      setQty(String(line.quantity))
+      toast(e instanceof Error ? e.message : 'Could not update line item.')
+    }
+  }
+
+  async function commitDiscount() {
+    const next = Number(discount)
+    if (!Number.isFinite(next) || next < 0 || next === line.discountPct) {
+      setDiscount(String(line.discountPct))
+      return
+    }
+    try {
+      await lineMutations.update.mutateAsync({ id: line.id, patch: { discountPct: next } })
+    } catch (e) {
+      setDiscount(String(line.discountPct))
+      toast(e instanceof Error ? e.message : 'Could not update line item.')
+    }
+  }
+
+  async function handleRemove() {
+    try {
+      await lineMutations.remove.mutateAsync(line.id)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not remove line item.')
+    }
+  }
+
+  function commitOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') e.currentTarget.blur()
+  }
+
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5 text-[13px]">
+      <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode ?? '—'}</span>
+      <span className="min-w-0 flex-1 truncate">{sku?.name ?? 'Unknown SKU'}</span>
+      <Input
+        type="number"
+        value={qty}
+        onChange={(e) => setQty(e.target.value)}
+        onBlur={commitQuantity}
+        onKeyDown={commitOnEnter}
+        className="w-20"
+        aria-label="Quantity"
+      />
+      <div className="flex items-center gap-1">
+        <Input
+          type="number"
+          value={discount}
+          onChange={(e) => setDiscount(e.target.value)}
+          onBlur={commitDiscount}
+          onKeyDown={commitOnEnter}
+          className="w-20"
+          aria-label="Discount percent"
+        />
+        <span className="text-muted">% off</span>
+      </div>
+      <span className="font-medium text-ink-900">{line.lineTotal.toLocaleString()}</span>
+      <Button size="icon" onClick={handleRemove} title="Remove"><Icon name="Trash2" size={14} /></Button>
     </div>
   )
 }

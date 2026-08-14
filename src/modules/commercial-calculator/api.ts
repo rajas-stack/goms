@@ -189,6 +189,10 @@ export function useBoqLineItemMutations(boqId: string) {
     qc.invalidateQueries({ queryKey: qk.boqs })
     qc.invalidateQueries({ queryKey: qk.dashboardMetrics })
   }
+  const add = useMutation({
+    mutationFn: (input: CreateBoqLineItemInput) => repository.addBoqLineItem(boqId, input),
+    onSuccess: invalidate,
+  })
   const update = useMutation({
     mutationFn: (a: { id: string; patch: Partial<Pick<CommercialBoqLineItem, 'quantity' | 'unitPrice' | 'discountPct' | 'approverId' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'>> }) =>
       repository.updateBoqLineItem(a.id, a.patch),
@@ -198,7 +202,7 @@ export function useBoqLineItemMutations(boqId: string) {
     mutationFn: (id: string) => repository.removeBoqLineItem(id),
     onSuccess: invalidate,
   })
-  return { update, remove }
+  return { add, update, remove }
 }
 
 // --- Dashboard (spec §11) ----------------------------------------------------
