@@ -86,49 +86,57 @@ export async function loadSnapshot(): Promise<GormsData | null> {
 
   // Persist the upgrade immediately rather than waiting for the user's next
   // edit. Writes are otherwise mutation-triggered, so a session that only
-  // *reads* would leave the old version on disk indefinitely: it would be
-  // re-migrated on every load, ids minted during the migration would differ
-  // each time, and — the real hazard — a later build that retired this
-  // version's migration step would find no path forward, return null, and
-  // fall back to the seed. That would lose exactly the hand-entered data the
-  // migration chain exists to protect.
+  // *reads* would leave the old version on disk indefinitely.
   if (migrated && envelope.version !== SCHEMA_VERSION) await writeSnapshot(migrated)
 
   return migrated
 }
 
-/** Fired whenever a write to IndexedDB doesn't actually land — e.g. the
- *  browser is blocking storage for this origin. The edit stays safe in
- *  memory for the current tab, but nothing is on disk, so a reload would
- *  lose it silently unless something surfaces this. `ToastProvider` listens
- *  for it; this module stays decoupled from React. */
+/** Fired on every failed write attempt — e.g. the browser is blocking
+ *  storage for this origin. The edit stays safe in memory for the current
+ *  tab, but nothing is on disk, so a reload would lose it silently unless
+ *  something surfaces this. `ToastProvider` listens for it (one warning per
+ *  page load); this module stays decoupled from React. */
 export const PERSIST_FAILED_EVENT = 'gorms:persist-failed'
+
+/** Fired once the bounded automatic retries below give up. `detail.retry`
+ *  re-runs the same save immediately, wired up by `ToastProvider` as a
+ *  manual "Retry" action. */
+export const PERSIST_RETRY_EXHAUSTED_EVENT = 'gorms:persist-retry-exhausted'
+
+/** Fired when a save succeeds after a previous failure — lets the UI
+ *  confirm recovery instead of leaving the last warning as a dangling,
+ *  unresolved message. */
+export const PERSIST_RECOVERED_EVENT = 'gorms:persist-recovered'
 
 function reportPersistFailure(reason: string): void {
   console.error(`[gorms] local save failed: ${reason}`)
   window.dispatchEvent(new CustomEvent(PERSIST_FAILED_EVENT, { detail: { reason } }))
 }
 
-async function writeSnapshot(data: GormsData): Promise<void> {
+/** Resolves `true` on a successful write, `false` on any failure — never
+ *  rejects, matching every other function in this module. */
+async function writeSnapshot(data: GormsData): Promise<boolean> {
   const db = await openDb()
   if (!db) {
     reportPersistFailure('IndexedDB unavailable')
-    return
+    return false
   }
   try {
     const envelope: Envelope = { version: SCHEMA_VERSION, savedAt: new Date().toISOString(), data }
-    await new Promise<void>((resolve) => {
+    return await new Promise<boolean>((resolve) => {
       const tx = db.transaction(STORE, 'readwrite')
       tx.objectStore(STORE).put(envelope, KEY)
-      tx.oncomplete = () => resolve()
+      tx.oncomplete = () => resolve(true)
       // The edit itself already succeeded in memory either way — this only
       // means it isn't on disk yet — but that has to be visible somewhere,
       // or it silently keeps not-saving until data is lost on reload.
-      tx.onerror = () => { reportPersistFailure(tx.error?.message ?? 'transaction error'); resolve() }
-      tx.onabort = () => { reportPersistFailure(tx.error?.message ?? 'transaction aborted'); resolve() }
+      tx.onerror = () => { reportPersistFailure(tx.error?.message ?? 'transaction error'); resolve(false) }
+      tx.onabort = () => { reportPersistFailure(tx.error?.message ?? 'transaction aborted'); resolve(false) }
     })
   } catch (e) {
     reportPersistFailure(e instanceof Error ? e.message : String(e))
+    return false
   } finally {
     db.close()
   }
@@ -139,6 +147,71 @@ let timer: ReturnType<typeof setTimeout> | undefined
 let pending: (() => GormsData) | undefined
 let flushHooked = false
 
+/** Backoff schedule for automatic retries after a failed save, in
+ *  milliseconds. `nextRetryDelay` is the only thing that reads this. */
+const RETRY_DELAYS_MS = [1000, 3000, 8000]
+const MAX_AUTO_RETRIES = RETRY_DELAYS_MS.length
+
+/** Pure lookup, no IndexedDB/DOM involved — the one part of the retry
+ *  machinery that's actually unit-testable in this project's vitest setup
+ *  (node environment, no IDB/DOM). Returns the delay before the next
+ *  automatic attempt, or `null` once `attempt` has reached the bound and
+ *  automatic retries must stop. */
+export function nextRetryDelay(attempt: number): number | null {
+  if (attempt >= MAX_AUTO_RETRIES) return null
+  return RETRY_DELAYS_MS[attempt]
+}
+
+let retryTimer: ReturnType<typeof setTimeout> | undefined
+let retryAttempt = 0
+let hasEverFailed = false
+let inFlightWrite: Promise<boolean> | null = null
+
+function clearRetryTimer() {
+  if (retryTimer !== undefined) {
+    clearTimeout(retryTimer)
+    retryTimer = undefined
+  }
+}
+
+/** Runs at most one IndexedDB write transaction at a time — a manual
+ *  "Retry" click landing while an automatic retry is already in flight
+ *  reuses that same attempt instead of racing a second transaction against
+ *  it (the "no duplicate writes" requirement). */
+function writeOnce(data: GormsData): Promise<boolean> {
+  if (inFlightWrite) return inFlightWrite
+  inFlightWrite = writeSnapshot(data).finally(() => { inFlightWrite = null })
+  return inFlightWrite
+}
+
+/** One save attempt for `getData`, with bounded backoff retry on failure.
+ *  `getData` is re-invoked on every retry (not just once up front), so a
+ *  retry after the user kept editing saves their latest state rather than
+ *  replaying the stale payload that first failed. Stops automatically after
+ *  `MAX_AUTO_RETRIES` attempts and fires `PERSIST_RETRY_EXHAUSTED_EVENT`
+ *  with a `retry` callback instead of retrying forever. */
+async function attempt(getData: () => GormsData): Promise<void> {
+  const ok = await writeOnce(getData())
+  if (ok) {
+    clearRetryTimer()
+    if (hasEverFailed) window.dispatchEvent(new CustomEvent(PERSIST_RECOVERED_EVENT))
+    hasEverFailed = false
+    retryAttempt = 0
+    return
+  }
+  hasEverFailed = true
+  const delay = nextRetryDelay(retryAttempt)
+  if (delay === null) {
+    window.dispatchEvent(new CustomEvent(PERSIST_RETRY_EXHAUSTED_EVENT, {
+      detail: { retry: () => { retryAttempt = 0; void attempt(getData) } },
+    }))
+    return
+  }
+  retryAttempt += 1
+  clearRetryTimer()
+  retryTimer = setTimeout(() => void attempt(getData), delay)
+}
+
 function flush() {
   if (timer !== undefined) {
     clearTimeout(timer)
@@ -146,7 +219,13 @@ function flush() {
   }
   const getData = pending
   pending = undefined
-  if (getData) void writeSnapshot(getData())
+  // A fresh debounced save supersedes any pending backoff retry of a
+  // previous failure — there's new data to save, and it deserves its own
+  // full retry budget rather than inheriting an unrelated failure streak's
+  // exhausted count.
+  clearRetryTimer()
+  retryAttempt = 0
+  if (getData) void attempt(getData)
 }
 
 /** Queues a debounced save. `getData` is called at write time (not now), so a
@@ -185,6 +264,3 @@ export async function clearSnapshot(): Promise<void> {
     db.close()
   }
 }
-
-export { BLOB_STORE, DB_NAME, DB_VERSION }
-export { openDb as openGormsDb }
