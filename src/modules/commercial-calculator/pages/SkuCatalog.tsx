@@ -3,7 +3,9 @@ import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
 import { Input, Select } from '@/components/ui/Field'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
+import { Menu, MenuItem } from '@/components/ui/Menu'
 import { useToast } from '@/components/ui/Toast'
+import { cn } from '@/lib/utils'
 import { useAllBomItems, useAllBoqLineItems, useAuditLogs, useMasters, useSkuMutations, useSkus } from '../api'
 import { SkuFormDialog } from '../components/SkuFormDialog'
 import { SkuBomEditor } from '../components/SkuBomEditor'
@@ -87,8 +89,8 @@ export function SkuCatalog() {
   }
 
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex w-[380px] shrink-0 flex-col gap-2 overflow-y-auto border-r border-line p-3">
+    <div className="flex h-full min-h-0 flex-col lg:flex-row">
+      <div className="flex max-h-64 w-full shrink-0 flex-col gap-2 overflow-y-auto border-b border-line p-3 lg:h-auto lg:max-h-none lg:w-[380px] lg:border-b-0 lg:border-r">
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
             <Icon name="Search" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
@@ -197,7 +199,28 @@ function SkuDetail({ sku, tab, onTabChange, usageCount, boqCount, categoryName, 
         </div>
         <div className="flex gap-2">
           <Button size="sm" onClick={onEdit}><Icon name="Pencil" size={13} />Edit</Button>
-          <Button size="sm" onClick={onDelete}><Icon name="Trash2" size={13} />Delete</Button>
+          <Menu
+            align="end"
+            trigger={({ open, toggle }) => (
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="More actions"
+                aria-haspopup="menu"
+                aria-expanded={open}
+                onClick={toggle}
+                className={cn(open && 'bg-ink-900/[0.05] text-ink')}
+              >
+                <Icon name="MoreHorizontal" size={16} />
+              </Button>
+            )}
+          >
+            {(close) => (
+              <MenuItem icon={<Icon name="Trash2" size={15} />} danger onClick={() => { close(); onDelete() }}>
+                Delete
+              </MenuItem>
+            )}
+          </Menu>
         </div>
       </div>
 

@@ -5,8 +5,10 @@ import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Field, Input, Select } from '@/components/ui/Field'
+import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
 import { useToast } from '@/components/ui/Toast'
 import { isoToday } from '@/lib/dates'
+import { cn } from '@/lib/utils'
 import { useAllBomItems, useBoqLineItemMutations, useBoqLineItems, useBoqMutations, useBoqs, useMasters, useSkus } from '../api'
 import { buildProposalPrintHtml } from '../proposal-print'
 import { computeBoqMarginPercent, resolveApprovalBand } from '../repository-logic'
@@ -149,15 +151,46 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             <p className="text-[13px] text-muted">{boq.customerName}</p>
           </div>
           <div className="flex gap-2">
-            {NEXT_STATUSES[boq.status].map((next) => (
+            {NEXT_STATUSES[boq.status].filter((next) => next !== 'archived').map((next) => (
               <Button key={next} size="sm" onClick={() => transition(next)}>{STATUS_LABEL[next]}</Button>
             ))}
             <Button size="sm" onClick={handleDuplicate}><Icon name="Copy" size={13} />Duplicate</Button>
             {(boq.status === 'approved' || boq.status === 'rejected' || boq.status === 'archived') && (
               <Button size="sm" onClick={handleRevise}><Icon name="Copy" size={13} />Revise</Button>
             )}
-            {DELETABLE_STATUSES.includes(boq.status) && (
-              <Button size="sm" variant="danger" onClick={() => setDeleting(true)}><Icon name="Trash2" size={13} />Delete</Button>
+            {(NEXT_STATUSES[boq.status].includes('archived') || DELETABLE_STATUSES.includes(boq.status)) && (
+              <Menu
+                align="end"
+                trigger={({ open, toggle }) => (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label="More actions"
+                    aria-haspopup="menu"
+                    aria-expanded={open}
+                    onClick={toggle}
+                    className={cn(open && 'bg-ink-900/[0.05] text-ink')}
+                  >
+                    <Icon name="MoreHorizontal" size={16} />
+                  </Button>
+                )}
+              >
+                {(close) => (
+                  <>
+                    {NEXT_STATUSES[boq.status].includes('archived') && (
+                      <MenuItem icon={<Icon name="Archive" size={15} />} onClick={() => { close(); transition('archived') }}>
+                        Archive
+                      </MenuItem>
+                    )}
+                    {NEXT_STATUSES[boq.status].includes('archived') && DELETABLE_STATUSES.includes(boq.status) && <MenuDivider />}
+                    {DELETABLE_STATUSES.includes(boq.status) && (
+                      <MenuItem icon={<Icon name="Trash2" size={15} />} danger onClick={() => { close(); setDeleting(true) }}>
+                        Delete
+                      </MenuItem>
+                    )}
+                  </>
+                )}
+              </Menu>
             )}
           </div>
         </div>

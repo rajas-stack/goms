@@ -3,7 +3,9 @@ import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Field'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
+import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
 import { useToast } from '@/components/ui/Toast'
+import { cn } from '@/lib/utils'
 import { useMasters, useMasterMutations } from '../api'
 import { MASTER_DEFS } from '../master-defs'
 import { MasterFormDialog } from './MasterFormDialog'
@@ -98,19 +100,40 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
             {masterKey === 'productEditions' && (
               <Button size="sm" onClick={() => setManagingFeaturesFor(row as unknown as MasterRow)}>Features</Button>
             )}
-            <Button
-              size="icon"
-              onClick={() => setActive.mutate({ id: row.id, active: !row.active })}
-              title={row.active ? 'Deactivate' : 'Activate'}
-            >
-              <Icon name={row.active ? 'ArchiveRestore' : 'Archive'} size={15} />
-            </Button>
             <Button size="icon" onClick={() => openEdit(row as unknown as MasterRow)} title="Edit">
               <Icon name="Pencil" size={15} />
             </Button>
-            <Button size="icon" onClick={() => setDeleting(row as unknown as MasterRow)} title="Delete">
-              <Icon name="Trash2" size={15} />
-            </Button>
+            <Menu
+              align="end"
+              trigger={({ open, toggle }) => (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  aria-label="More actions"
+                  aria-haspopup="menu"
+                  aria-expanded={open}
+                  onClick={toggle}
+                  className={cn(open && 'bg-ink-900/[0.05] text-ink')}
+                >
+                  <Icon name="MoreHorizontal" size={16} />
+                </Button>
+              )}
+            >
+              {(close) => (
+                <>
+                  <MenuItem
+                    icon={<Icon name={row.active ? 'ArchiveRestore' : 'Archive'} size={15} />}
+                    onClick={() => { close(); setActive.mutate({ id: row.id, active: !row.active }) }}
+                  >
+                    {row.active ? 'Deactivate' : 'Activate'}
+                  </MenuItem>
+                  <MenuDivider />
+                  <MenuItem icon={<Icon name="Trash2" size={15} />} danger onClick={() => { close(); setDeleting(row as unknown as MasterRow) }}>
+                    Delete
+                  </MenuItem>
+                </>
+              )}
+            </Menu>
           </div>
         ))}
       </div>

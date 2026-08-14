@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
+import { Menu, MenuItem } from '@/components/ui/Menu'
 import { useToast } from '@/components/ui/Toast'
 import { useMasterMutations, useMasters, useSkus } from '../api'
 import { MASTER_DEFS } from '../master-defs'
@@ -127,8 +128,8 @@ export function HierarchyView() {
   }
 
   return (
-    <div className="flex h-full min-h-0">
-      <div className="flex w-[360px] shrink-0 flex-col overflow-y-auto border-r border-line p-2">
+    <div className="flex h-full min-h-0 flex-col lg:flex-row">
+      <div className="flex max-h-64 w-full shrink-0 flex-col overflow-y-auto border-b border-line p-2 lg:h-auto lg:max-h-none lg:w-[360px] lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between px-2 py-1.5">
           <span className="text-[12px] font-semibold uppercase tracking-wide text-muted">Vertical → Product → Module → Feature</span>
           <Button size="icon" title="Add Vertical" onClick={() => setFormState({ masterKey: 'verticals', editing: null })}>
@@ -272,7 +273,28 @@ function DetailsPane({
         </div>
         <div className="flex gap-2">
           <Button size="sm" onClick={() => onEdit(selection.type, row)}><Icon name="Pencil" size={13} />Edit</Button>
-          <Button size="sm" onClick={() => onDelete(selection.type, row)}><Icon name="Trash2" size={13} />Delete</Button>
+          <Menu
+            align="end"
+            trigger={({ open, toggle }) => (
+              <Button
+                size="icon"
+                variant="ghost"
+                aria-label="More actions"
+                aria-haspopup="menu"
+                aria-expanded={open}
+                onClick={toggle}
+                className={cn(open && 'bg-ink-900/[0.05] text-ink')}
+              >
+                <Icon name="MoreHorizontal" size={16} />
+              </Button>
+            )}
+          >
+            {(close) => (
+              <MenuItem icon={<Icon name="Trash2" size={15} />} danger onClick={() => { close(); onDelete(selection.type, row) }}>
+                Delete
+              </MenuItem>
+            )}
+          </Menu>
         </div>
       </div>
 
