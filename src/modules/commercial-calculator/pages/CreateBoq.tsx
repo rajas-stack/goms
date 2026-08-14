@@ -9,6 +9,7 @@ import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
 import { useAllBomItems, useBoqMutations, useMasters, useSkus } from '../api'
 import { resolveApprovalBand, skuToBoqConversionFactor, skuTotalUnitCostWithBom } from '../repository-logic'
+import { SkuLinePicker } from '../components/SkuLinePicker'
 import type { CommercialSku } from '../types'
 import type { Employee } from '@/lib/types'
 
@@ -30,9 +31,6 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const { data: postings = {} } = useCurrentPostings()
   const { data: preSalesList = [] } = useMasters('preSales')
   const { data: verticals = [] } = useMasters('verticals')
-  const { data: products = [] } = useMasters('products')
-  const { data: modules = [] } = useMasters('modules')
-  const { data: features = [] } = useMasters('features')
   const { data: currencies = [] } = useMasters('currencies')
   const { data: taxClasses = [] } = useMasters('taxClasses')
   const { data: approvalMatrix = [] } = useMasters('approvalMatrix')
@@ -81,33 +79,17 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     : employeesUnderDept
 
   const [lines, setLines] = useState<LineDraft[]>([])
-  // Cascading Commercial Configuration picker — Vertical is the BOQ's own
-  // field above; Product/Module/Feature narrow down to the single SKU that
-  // feature's code generation produces (spec: one feature -> at most one
-  // non-duplicate SKU code).
-  const [pickerProductId, setPickerProductId] = useState('')
-  const [pickerModuleId, setPickerModuleId] = useState('')
-  const [pickerFeatureId, setPickerFeatureId] = useState('')
-  const [pickerQty, setPickerQty] = useState(1)
-  const [pickerDiscount, setPickerDiscount] = useState(0)
 
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<'draft' | 'submit' | null>(null)
 
   const buSalesPersons = salesPersons.filter((p) => (postings[p.id]?.designation ?? '').toLowerCase().includes('bu sales'))
-  const sellableSkus = skus.filter((s) => s.lifecycleStatus === 'active' && s.isSellable)
   const skuById = new Map(skus.map((s) => [s.id, s]))
   const taxRateById = new Map(taxClasses.map((t) => [t.id, t.ratePct]))
   const departmentById = new Map(departments.map((d) => [d.id, d]))
   const salesPersonById = new Map(salesPersons.map((p) => [p.id, p]))
   const verticalById = new Map(verticals.map((v) => [v.id, v]))
   const preSalesById = new Map(preSalesList.map((p) => [p.id, p]))
-
-  const pickerProducts = products.filter((p) => p.verticalId === verticalId)
-  const pickerModules = modules.filter((m) => m.productId === pickerProductId)
-  const pickerFeatures = features.filter((f) => f.moduleId === pickerModuleId)
-  const resolvedSku = pickerFeatureId ? sellableSkus.find((s) => s.featureId === pickerFeatureId) : undefined
-  const featureHasNoSellableSku = !!pickerFeatureId && !resolvedSku
 
   // The proposal's own currency, explicit rather than derived from whichever
   // SKU happens to be added first (P0 fix) — defaults to the configured base
@@ -163,29 +145,8 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
 
   function handleVerticalChange(v: string) {
     setVerticalId(v)
-    setPickerProductId('')
-    setPickerModuleId('')
-    setPickerFeatureId('')
-  }
-  function handleProductChange(v: string) {
-    setPickerProductId(v)
-    setPickerModuleId('')
-    setPickerFeatureId('')
-  }
-  function handleModuleChange(v: string) {
-    setPickerModuleId(v)
-    setPickerFeatureId('')
   }
 
-  function addLine() {
-    if (!resolvedSku) return
-    setLines((prev) => [...prev, { skuId: resolvedSku.id, quantity: pickerQty, discountPct: pickerDiscount }])
-    setPickerProductId('')
-    setPickerModuleId('')
-    setPickerFeatureId('')
-    setPickerQty(1)
-    setPickerDiscount(0)
-  }
   function removeLine(index: number) {
     setLines((prev) => prev.filter((_, i) => i !== index))
   }
@@ -436,76 +397,12 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
           {!verticalId ? (
             <p className="text-[13px] text-muted">Select a Vertical above to start configuring this proposal.</p>
           ) : (
-            <div className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-panel/40 p-3">
-              <Field label="Product">
-                <Combobox
-                  value={pickerProductId}
-                  onChange={handleProductChange}
-                  options={pickerProducts.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
-                  className="min-w-[180px]"
-                  aria-label="Product"
-                />
-              </Field>
-              <Field label="Module">
-                <Combobox
-                  value={pickerModuleId}
-                  onChange={handleModuleChange}
-                  options={pickerModules.map((m) => ({ value: m.id, label: `${m.code} — ${m.name}` }))}
-                  className="min-w-[180px]"
-                  disabled={!pickerProductId}
-                  aria-label="Module"
-                />
-              </Field>
-              <Field label="Feature">
-                <Combobox
-                  value={pickerFeatureId}
-                  onChange={setPickerFeatureId}
-                  options={pickerFeatures.map((f) => ({ value: f.id, label: `${f.code} — ${f.name}` }))}
-                  className="min-w-[180px]"
-                  disabled={!pickerModuleId}
-                  aria-label="Feature"
-                />
-              </Field>
-              <Field label="Quantity"><Input type="number" value={pickerQty} onChange={(e) => setPickerQty(Number(e.target.value))} className="w-24" /></Field>
-              <Field label="Discount %">
-                <Input
-                  type="number"
-                  value={pickerDiscount}
-                  onChange={(e) => setPickerDiscount(Math.min(90, Math.max(0, Number(e.target.value))))}
-                  className="w-24"
-                />
-              </Field>
-              <Button variant="primary" size="sm" onClick={addLine} disabled={!resolvedSku}>
-                <Icon name="Plus" size={14} />
-                Add to Proposal
-              </Button>
-            </div>
-          )}
-
-          {resolvedSku && (
-            <>
-              <p className="mt-2 text-[12px] text-muted">
-                Generated SKU: <span className="rounded bg-panel px-1.5 py-0.5 font-mono text-[11px] text-ink-700">{resolvedSku.skuCode}</span>
-                {' '}— {resolvedSku.name}
-              </p>
-              {/* Pricing preview — shows what "Add to Proposal" would commit,
-                  computed with the same lineTotal() the added line row uses,
-                  so there's never a discrepancy between preview and line. */}
-              <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-line bg-panel/40 px-3 py-2 text-[12px]">
-                <span className="text-muted">List Price <span className="font-medium text-ink-900">{resolvedSku.listPrice.toLocaleString()}</span></span>
-                <span className="text-muted">Post-discount Unit <span className="font-medium text-ink-900">{(resolvedSku.listPrice * (1 - pickerDiscount / 100)).toLocaleString()}</span></span>
-                <span className="text-muted">Tax <span className="font-medium text-ink-900">{taxRateById.get(resolvedSku.taxClassId) ?? 0}%</span></span>
-                <span className="text-muted">
-                  Line Total (Qty {pickerQty}){' '}
-                  <span className="font-semibold text-ink-900">
-                    {lineTotal({ skuId: resolvedSku.id, quantity: pickerQty, discountPct: pickerDiscount }).toLocaleString()}
-                  </span>
-                </span>
-              </div>
-            </>
-          )}
-          {featureHasNoSellableSku && (
-            <p className="mt-2 text-[12px] text-amber-700">No active, sellable SKU exists for this feature yet.</p>
+            <SkuLinePicker
+              key={verticalId}
+              verticalId={verticalId}
+              currencyCode={effectiveCurrencyCode}
+              onAdd={(line) => setLines((prev) => [...prev, line])}
+            />
           )}
 
           {lines.length === 0 ? (
