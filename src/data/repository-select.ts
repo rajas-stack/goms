@@ -97,16 +97,23 @@ export const MIGRATED = new Set<DomainKey>([])
  *  a domain's in-progress migration never accidentally activates early. */
 const SUPABASE_IMPL: Partial<Repository> = {}
 
+/** A Proxy, not `{ ...inMemoryRepository }`: `InMemoryRepository`'s methods
+ *  are regular class methods living on its prototype, not own instance
+ *  properties, so an object spread silently drops every single one of them
+ *  (confirmed — spreading produced an object with zero callable methods).
+ *  Delegating through `Reflect.get` walks the prototype chain correctly,
+ *  exactly like `in-memory/repository.ts`'s own mutator-wrapping Proxy does. */
 function buildRepository(): Repository {
-  const composed = { ...inMemoryRepository } as Repository
-  for (const key of Object.keys(DOMAIN_OF) as (keyof Repository)[]) {
-    const domain = DOMAIN_OF[key]
-    if (MIGRATED.has(domain) && key in SUPABASE_IMPL) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (composed as any)[key] = SUPABASE_IMPL[key]
-    }
-  }
-  return composed
+  return new Proxy(inMemoryRepository, {
+    get(target, prop, receiver) {
+      const key = prop as keyof Repository
+      const domain = DOMAIN_OF[key]
+      if (domain !== undefined && MIGRATED.has(domain) && key in SUPABASE_IMPL) {
+        return (SUPABASE_IMPL as Record<string, unknown>)[key as string]
+      }
+      return Reflect.get(target, prop, receiver)
+    },
+  }) as Repository
 }
 
 export const repository: Repository = buildRepository()
