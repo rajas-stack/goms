@@ -1,6 +1,5 @@
 import type { HierNode, Status } from '@/lib/types'
 import type { StateSummary } from '../in-memory/repository'
-import { repository as inMemoryRepository } from '../in-memory/repository'
 import { supabase } from './client'
 import type { Database } from './database.types'
 
@@ -70,11 +69,9 @@ export async function listStates(): Promise<StateSummary[]> {
   const { data: orgRows, error: orgError } = await supabase.from('departments').select('id, type_key, state_code')
   if (orgError) throw orgError
 
-  // TEMPORARY cross-domain bridge: employees hasn't migrated yet (Task 5).
-  // Once it has, replace this with a Postgres join on employees.department_id
-  // instead of reading the in-memory store. See Global Constraints.
-  const employees = await inMemoryRepository.listAllEmployees()
-  const activeNonVacant = employees.filter((e) => !e.vacant)
+  const { data: employeeRows, error: empError } = await supabase
+    .from('employees').select('department_id').eq('status', 'active').eq('vacant', false)
+  if (empError) throw empError
 
   return states
     .map((s) => {
@@ -86,7 +83,7 @@ export async function listStates(): Promise<StateSummary[]> {
         name: s.name,
         departments: orgUnder.filter((r) => r.type_key === 'department').length,
         offices: orgUnder.filter((r) => r.type_key === 'office').length,
-        employees: activeNonVacant.filter((e) => orgIds.has(e.orgNodeId)).length,
+        employees: employeeRows.filter((e) => e.department_id && orgIds.has(e.department_id)).length,
       }
     })
     .sort((a, b) => a.name.localeCompare(b.name))

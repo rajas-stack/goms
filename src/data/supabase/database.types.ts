@@ -1286,6 +1286,47 @@ export type Database = {
           },
         ]
       }
+      merge_audit_records: {
+        Row: {
+          duplicate_id: string
+          duplicate_name: string
+          field_resolutions: Json
+          id: string
+          merged_at: string
+          survivor_id: string
+          survivor_name: string
+          transferred: Json
+        }
+        Insert: {
+          duplicate_id: string
+          duplicate_name: string
+          field_resolutions?: Json
+          id?: string
+          merged_at?: string
+          survivor_id: string
+          survivor_name: string
+          transferred?: Json
+        }
+        Update: {
+          duplicate_id?: string
+          duplicate_name?: string
+          field_resolutions?: Json
+          id?: string
+          merged_at?: string
+          survivor_id?: string
+          survivor_name?: string
+          transferred?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merge_audit_records_survivor_id_fkey"
+            columns: ["survivor_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       node_types: {
         Row: {
           child_keys: string[]
@@ -1847,6 +1888,14 @@ export type Database = {
       allocate_boq_number: { Args: { p_year: number }; Returns: string }
       department_subtree_ids: { Args: { p_id: string }; Returns: string[] }
       geo_node_subtree_ids: { Args: { p_id: string }; Returns: string[] }
+      merge_employees: {
+        Args: {
+          p_duplicate_id: string
+          p_resolutions: Json
+          p_survivor_id: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

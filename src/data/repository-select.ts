@@ -6,6 +6,12 @@ import {
   getNode, listChildren, breadcrumb, childCount, createNode, updateNode,
   setNodeStatus, deleteNode, moveNode, duplicateNode, reorderNode, importChildren, moveTargets,
 } from './supabase/hierarchy'
+import {
+  listEmployeesUnder, listEmployeesDirect, listEmployeesByState, listAllEmployees, listEmployeeDepartments,
+  getEmployee, directReports, reportingChain, listTimeline, listAllTimelineEvents, listTransfers, listMergeAudit,
+  createEmployee, updateEmployee, setManager, deleteEmployee, mergeEmployees, addTimelineEvent,
+  setTimelineEventAttended, deleteTimelineEvent, transferEmployee, addCharge, removeCharge, importEmployees,
+} from './supabase/employees'
 
 /** One bucket per independently-migratable slice of the Repository interface.
  *  `hierarchy` is not `departments` or `geography`: it holds the handful of
@@ -94,7 +100,7 @@ export const DOMAIN_OF: Record<keyof Repository, DomainKey> = {
  *  SUPABASE_IMPL below. Empty throughout Phase 1 — every method resolves to
  *  `inMemoryRepository`, so the app's behavior is unchanged. Phase 2+ adds one
  *  entry at a time, in the sequential order defined in the architecture spec §8. */
-export const MIGRATED = new Set<DomainKey>(['departments', 'geography', 'hierarchy'])
+export const MIGRATED = new Set<DomainKey>(['departments', 'geography', 'hierarchy', 'employees'])
 
 /** Populated by each domain's Phase 2+ Supabase implementation — e.g.
  *  `SUPABASE_IMPL.listOrgRoots = departmentsSupabaseImpl.listOrgRoots`. Only
@@ -106,6 +112,10 @@ const SUPABASE_IMPL: Partial<Repository> = {
   listStates, getState, geoRoot, childCounts,
   getNode, listChildren, breadcrumb, childCount, createNode, updateNode,
   setNodeStatus, deleteNode, moveNode, duplicateNode, reorderNode, importChildren, moveTargets,
+  listEmployeesUnder, listEmployeesDirect, listEmployeesByState, listAllEmployees, listEmployeeDepartments,
+  getEmployee, directReports, reportingChain, listTimeline, listAllTimelineEvents, listTransfers, listMergeAudit,
+  createEmployee, updateEmployee, setManager, deleteEmployee, mergeEmployees, addTimelineEvent,
+  setTimelineEventAttended, deleteTimelineEvent, transferEmployee, addCharge, removeCharge, importEmployees,
 }
 
 /** A Proxy, not `{ ...inMemoryRepository }`: `InMemoryRepository`'s methods
