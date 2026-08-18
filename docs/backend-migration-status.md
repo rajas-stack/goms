@@ -14,7 +14,7 @@ for how the schema/tooling below were built.
 | Domain | Status | Migrated on | Notes |
 |---|---|---|---|
 | hierarchy | Not started | — | Depends on both `departments` and `geography` migrating their own-methods first (see spec §6). |
-| departments | Not started | — | |
+| departments | Migrated | 2026-08-18 | `listOrgRoots`/`listDepartments`/`listPostingNodes` now Supabase-backed. `hierarchy` bucket still in-memory — depends on `geography` migrating too (Phase 2 Task 4). Uncovered and fixed two real bugs: (1) Postgres's `anon`/`authenticated` roles had no baseline table GRANTs at all — RLS's permissive policies never mattered because Postgres denies before RLS is evaluated; invisible in Phase 1 since every verification ran as the `postgres` superuser, which bypasses grants — fixed via a new migration granting `SELECT/INSERT/UPDATE/DELETE` + default privileges for future tables. (2) `listDepartments()` was missing a `type_key = 'department'` filter, initially returning every active org node (branches/offices/units too) — caught by its own integration test. |
 | geography | Not started | — | |
 | employees | Not started | — | |
 | ownership | Not started | — | Opportunities, ownership assignments, follow-ups. |

@@ -1,5 +1,6 @@
 import type { Repository } from './in-memory/repository'
 import { repository as inMemoryRepository } from './in-memory/repository'
+import { listOrgRoots, listDepartments, listPostingNodes } from './supabase/departments'
 
 /** One bucket per independently-migratable slice of the Repository interface.
  *  `hierarchy` is not `departments` or `geography`: it holds the handful of
@@ -88,14 +89,16 @@ export const DOMAIN_OF: Record<keyof Repository, DomainKey> = {
  *  SUPABASE_IMPL below. Empty throughout Phase 1 — every method resolves to
  *  `inMemoryRepository`, so the app's behavior is unchanged. Phase 2+ adds one
  *  entry at a time, in the sequential order defined in the architecture spec §8. */
-export const MIGRATED = new Set<DomainKey>([])
+export const MIGRATED = new Set<DomainKey>(['departments'])
 
 /** Populated by each domain's Phase 2+ Supabase implementation — e.g.
  *  `SUPABASE_IMPL.listOrgRoots = departmentsSupabaseImpl.listOrgRoots`. Only
  *  methods whose domain is in `MIGRATED` are actually selected (see
  *  `buildRepository` below), so a partially-populated `SUPABASE_IMPL` during
  *  a domain's in-progress migration never accidentally activates early. */
-const SUPABASE_IMPL: Partial<Repository> = {}
+const SUPABASE_IMPL: Partial<Repository> = {
+  listOrgRoots, listDepartments, listPostingNodes,
+}
 
 /** A Proxy, not `{ ...inMemoryRepository }`: `InMemoryRepository`'s methods
  *  are regular class methods living on its prototype, not own instance
