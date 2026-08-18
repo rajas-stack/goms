@@ -1845,6 +1845,8 @@ export type Database = {
     }
     Functions: {
       allocate_boq_number: { Args: { p_year: number }; Returns: string }
+      department_subtree_ids: { Args: { p_id: string }; Returns: string[] }
+      geo_node_subtree_ids: { Args: { p_id: string }; Returns: string[] }
     }
     Enums: {
       [_ in never]: never
