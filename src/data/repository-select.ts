@@ -23,6 +23,12 @@ import {
   getOpportunity, listOpportunityStageChanges, listFollowUps, listOpenFollowUps, listOwnershipAssignments,
   listOwnershipFor, listOwnedBy, resolveOwner, resolveOwners,
 } from './supabase/ownership'
+import {
+  listMaster, getMaster, createMaster, updateMaster, setMasterActive, deleteMaster,
+  listEditionFeatures, setEditionFeatures,
+} from './supabase/commercial-masters'
+import { listSkus, getSku, createSku, updateSku, deleteSku } from './supabase/commercial-skus'
+import { listBomItemsForSku, listAllBomItems, createBomItem, updateBomItem, deleteBomItem } from './supabase/commercial-bom'
 
 /** One bucket per independently-migratable slice of the Repository interface.
  *  `hierarchy` is not `departments` or `geography`: it holds the handful of
@@ -84,6 +90,10 @@ export const DOMAIN_OF: Record<keyof Repository, DomainKey> = {
   createMaster: 'commercialMasters', updateMaster: 'commercialMasters', setMasterActive: 'commercialMasters',
   deleteMaster: 'commercialMasters', setEditionFeatures: 'commercialMasters', listMaster: 'commercialMasters',
   getMaster: 'commercialMasters', listEditionFeatures: 'commercialMasters',
+  // Classified here (not a real "master entity" mutation) so the DOMAIN_OF
+  // exhaustiveness check passes. Deliberately NEVER added to SUPABASE_IMPL —
+  // see Task 1 of the Phase 3 plan and the interface doc comment.
+  recordCommercialAuditLogEntry: 'commercialMasters',
 
   // commercialSkus
   createSku: 'commercialSkus', updateSku: 'commercialSkus', deleteSku: 'commercialSkus',
@@ -116,6 +126,7 @@ export const DOMAIN_OF: Record<keyof Repository, DomainKey> = {
  *  entry at a time, in the sequential order defined in the architecture spec §8. */
 export const MIGRATED = new Set<DomainKey>([
   'departments', 'geography', 'hierarchy', 'employees', 'customers', 'salesPeople', 'ownership',
+  'commercialMasters', 'commercialSkus', 'commercialBom',
 ])
 
 /** Populated by each domain's Phase 2+ Supabase implementation — e.g.
@@ -139,6 +150,10 @@ const SUPABASE_IMPL: Partial<Repository> = {
   assignOwner, endOwnership, transferBookOfBusiness, listOpportunities, listOpportunitiesByDepartment,
   getOpportunity, listOpportunityStageChanges, listFollowUps, listOpenFollowUps, listOwnershipAssignments,
   listOwnershipFor, listOwnedBy, resolveOwner, resolveOwners,
+  listMaster, getMaster, createMaster, updateMaster, setMasterActive, deleteMaster,
+  listEditionFeatures, setEditionFeatures,
+  listSkus, getSku, createSku, updateSku, deleteSku,
+  listBomItemsForSku, listAllBomItems, createBomItem, updateBomItem, deleteBomItem,
 }
 
 /** A Proxy, not `{ ...inMemoryRepository }`: `InMemoryRepository`'s methods
