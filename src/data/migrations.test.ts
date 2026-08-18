@@ -114,9 +114,22 @@ describe('migrateSnapshot', () => {
         boqSequenceByYear: { '2026': 5 },
       },
     }
-    const out = migrateSnapshot(withSkus, 9)
+    const out = migrateSnapshot(withSkus, SCHEMA_VERSION)
     expect(out).not.toBeNull()
     expect(out).toBe(withSkus) // already at SCHEMA_VERSION — returned unchanged
+  })
+
+  it('adds an empty customers array when migrating an old snapshot', () => {
+    const out = migrateSnapshot(v1Snapshot(), 1)
+    expect(out).not.toBeNull()
+    expect(out!.customers).toEqual([])
+  })
+
+  it('does not clobber an existing customers array if one is already present', () => {
+    const withCustomers = { ...v1Snapshot(), customers: [{ id: 'cust_1', name: 'Acme' }] }
+    const out = migrateSnapshot(withCustomers, 9)
+    expect(out).not.toBeNull()
+    expect(out!.customers).toEqual([{ id: 'cust_1', name: 'Acme' }])
   })
 })
 

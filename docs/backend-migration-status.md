@@ -25,7 +25,7 @@ for how the schema/tooling below were built.
 | commercialBoqs | Not started | — | |
 | auditLogs | Not started | — | |
 | crossCutting | Not started | — | search/relatedRecords/relationshipAnalytics — likely migrates last, after the domains it reads span are done. |
-| customers | Not applicable yet | — | New entity, no `Repository` methods exist for it yet — added together with its first consumer in Phase 2. |
+| customers | Migrated | 2026-08-18 | New domain, not a migration — no prior in-memory behavior existed. `Repository` interface gained 5 new methods. No UI consumes this yet (out of scope for this task) — verified via a direct repository round-trip in the browser console instead. Deviation from the plan text: the plan didn't account for `migrations.ts`'s versioned snapshot-upgrade system — added `SCHEMA_VERSION` 9→10 and a `toV10` migration so existing users' persisted IndexedDB snapshots backfill `customers: []` instead of leaving the field undefined at runtime. |
 
 ## Schema status
 

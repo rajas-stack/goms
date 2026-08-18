@@ -11,7 +11,7 @@ export type {
   CreateNodeInput, CreateEmployeeInput, AddTimelineInput, ImportChildRow, ImportEmployeeRow,
   MergeableField, MergeEmployeesInput, TransferInput, CreateOpportunityInput,
   CreateSalesPersonInput, TransferSalesPersonInput, TransferBookOfBusinessInput,
-  AssignOwnerInput, CreateFollowUpInput,
+  AssignOwnerInput, CreateFollowUpInput, CreateCustomerInput,
 } from './in-memory/repository'
 
 export {

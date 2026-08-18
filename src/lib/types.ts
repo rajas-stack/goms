@@ -351,6 +351,22 @@ export interface SalesPosting {
   createdBy: string | null
 }
 
+/** A commercial customer/account. New in Phase 2 — no prior in-memory
+ *  behavior existed for this entity. */
+export interface Customer {
+  id: string
+  name: string
+  organization: string
+  address: string
+  gst: string
+  contactName: string
+  contactEmail: string
+  contactPhone: string
+  notes: string
+  createdAt: string
+  updatedAt: string
+}
+
 /** Ownership and delegation as a half-open interval — spec §6.4.
  *
  *  Delegation is a different ROLE, not a transfer: during one, the owner's row

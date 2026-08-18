@@ -12,6 +12,7 @@ import {
   createEmployee, updateEmployee, setManager, deleteEmployee, mergeEmployees, addTimelineEvent,
   setTimelineEventAttended, deleteTimelineEvent, transferEmployee, addCharge, removeCharge, importEmployees,
 } from './supabase/employees'
+import { listCustomers, getCustomer, createCustomer, updateCustomer, deleteCustomer } from './supabase/customers'
 
 /** One bucket per independently-migratable slice of the Repository interface.
  *  `hierarchy` is not `departments` or `geography`: it holds the handful of
@@ -19,13 +20,12 @@ import {
  *  just an id, dispatched by the org_/geo_ prefix from uid() — see architecture
  *  spec §6). `crossCutting` holds methods that read across multiple domains
  *  (search, relationshipAnalytics) and so can't be owned by one domain either.
- *  `customers` is intentionally absent: it owns zero existing Repository
- *  methods today (Customer is a new entity with no interface methods yet) —
- *  Phase 2 adds customer methods to Repository and to this map together. */
+ *  `customers` is a new domain (Phase 2 Task 6) with no in-memory precedent —
+ *  it goes straight into MIGRATED below since it's Supabase-backed from creation. */
 export type DomainKey =
   | 'hierarchy' | 'departments' | 'geography' | 'employees' | 'ownership'
   | 'salesPeople' | 'commercialMasters' | 'commercialSkus' | 'commercialBom'
-  | 'commercialBoqs' | 'auditLogs' | 'crossCutting'
+  | 'commercialBoqs' | 'auditLogs' | 'crossCutting' | 'customers'
 
 /** Every `Repository` method, classified into exactly one domain. TypeScript
  *  rejects this file if any method from `Repository` is missing or duplicated
@@ -94,13 +94,17 @@ export const DOMAIN_OF: Record<keyof Repository, DomainKey> = {
 
   // crossCutting — reads that span more than one domain
   search: 'crossCutting', relatedRecords: 'crossCutting', relationshipAnalytics: 'crossCutting',
+
+  // customers — new in Phase 2, no in-memory precedent
+  listCustomers: 'customers', getCustomer: 'customers', createCustomer: 'customers',
+  updateCustomer: 'customers', deleteCustomer: 'customers',
 }
 
 /** Domains with a working Supabase-backed implementation, selected in
  *  SUPABASE_IMPL below. Empty throughout Phase 1 — every method resolves to
  *  `inMemoryRepository`, so the app's behavior is unchanged. Phase 2+ adds one
  *  entry at a time, in the sequential order defined in the architecture spec §8. */
-export const MIGRATED = new Set<DomainKey>(['departments', 'geography', 'hierarchy', 'employees'])
+export const MIGRATED = new Set<DomainKey>(['departments', 'geography', 'hierarchy', 'employees', 'customers'])
 
 /** Populated by each domain's Phase 2+ Supabase implementation — e.g.
  *  `SUPABASE_IMPL.listOrgRoots = departmentsSupabaseImpl.listOrgRoots`. Only
@@ -116,6 +120,7 @@ const SUPABASE_IMPL: Partial<Repository> = {
   getEmployee, directReports, reportingChain, listTimeline, listAllTimelineEvents, listTransfers, listMergeAudit,
   createEmployee, updateEmployee, setManager, deleteEmployee, mergeEmployees, addTimelineEvent,
   setTimelineEventAttended, deleteTimelineEvent, transferEmployee, addCharge, removeCharge, importEmployees,
+  listCustomers, getCustomer, createCustomer, updateCustomer, deleteCustomer,
 }
 
 /** A Proxy, not `{ ...inMemoryRepository }`: `InMemoryRepository`'s methods

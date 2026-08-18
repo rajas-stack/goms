@@ -1,5 +1,5 @@
 import type {
-  Employee, ExternalId, FollowUp, HierNode, MergeAuditRecord, Opportunity, OpportunityStageChange,
+  Customer, Employee, ExternalId, FollowUp, HierNode, MergeAuditRecord, Opportunity, OpportunityStageChange,
   OwnershipAssignment, SalesPerson, SalesPosting, TimelineEvent, Transfer,
 } from '@/lib/types'
 import adminRaw from './india-admin.json'
@@ -81,6 +81,9 @@ export interface GormsData {
   /** The Commercial Calculator module's entire data slice. Added in v8 —
    *  see migrations.ts. Shape owned by src/modules/commercial-calculator/types.ts. */
   commercialCalculator: CommercialCalculatorData
+  /** New in Phase 2 — 'customers' goes straight into MIGRATED, so this stays
+   *  empty; it exists only to satisfy GormsData's shape. */
+  customers: Customer[]
 }
 
 export function buildSeed(): GormsData {
@@ -289,5 +292,6 @@ export function buildSeed(): GormsData {
     nodes, employees, externalIds, timeline, transfers,
     opportunities, opportunityStageChanges, followUps, salesPersons, salesPostings,
     ownershipAssignments, mergeAudit, commercialCalculator,
+    customers: [],
   }
 }

@@ -26,8 +26,11 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *  v9  Backfills the Commercial Calculator SKU/BOM/BOQ/audit-log collections
  *      (Phase 2+3) onto a v8 snapshot, which only had masters/productEditionFeatures.
  *      Existing masters/productEditionFeatures data is preserved untouched.
+ *  v10 customers (Phase 2 Task 6). Starts empty — a new entity with no prior
+ *      in-memory data to backfill, and 'customers' is Supabase-backed from
+ *      creation, so this only exists to keep GormsData's shape complete.
  */
-export const SCHEMA_VERSION = 9
+export const SCHEMA_VERSION = 10
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -232,6 +235,15 @@ function toV9(data: SnapshotShape): SnapshotShape {
   }
 }
 
+/** v9 → v10. Adds the `customers` collection. Always starts empty — no
+ *  legacy field maps to it and 'customers' is Supabase-backed from creation
+ *  (see repository-select.ts's MIGRATED set), so this in-memory array is
+ *  never actually read; it exists only so GormsData's shape stays complete. */
+function toV10(data: SnapshotShape): SnapshotShape {
+  if (Array.isArray(data.customers)) return data
+  return { ...data, customers: [] }
+}
+
 /** Keyed by the version each step PRODUCES, so applying every key from
  *  `fromVersion + 1` up to `SCHEMA_VERSION` walks the chain in order. */
 export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> = {
@@ -243,6 +255,7 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   7: toV7,
   8: toV8,
   9: toV9,
+  10: toV10,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

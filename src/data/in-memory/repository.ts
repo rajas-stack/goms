@@ -1,5 +1,5 @@
 import type {
-  Charge, Domain, Employee, FollowUp, HierNode, MergeAuditRecord, MergeFieldResolution, Opportunity,
+  Charge, Customer, Domain, Employee, FollowUp, HierNode, MergeAuditRecord, MergeFieldResolution, Opportunity,
   OpportunityStageChange, OwnershipAssignment, PreferredComm, RelationshipQuality, RelationshipStatus,
   SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
@@ -98,6 +98,17 @@ export interface CreateEmployeeInput {
    *  than requiring a separate post-create upload step. */
   visitingCards?: VisitingCardItem[]
   metadata?: Record<string, string>
+}
+
+export interface CreateCustomerInput {
+  name: string
+  organization?: string
+  address?: string
+  gst?: string
+  contactName?: string
+  contactEmail?: string
+  contactPhone?: string
+  notes?: string
 }
 
 export interface AddTimelineInput {
@@ -366,6 +377,13 @@ export interface Repository {
   moveTargets(nodeId: string): Promise<HierNode[]>
   reorderNode(id: string, beforeId: string | null): Promise<void>
   relationshipAnalytics(): Promise<RelationshipAnalytics>
+
+  // --- Customers (new in Phase 2, spec §6) -----------------------------------
+  listCustomers(): Promise<Customer[]>
+  getCustomer(id: string): Promise<Customer | null>
+  createCustomer(input: CreateCustomerInput): Promise<Customer>
+  updateCustomer(id: string, patch: Partial<Customer>): Promise<Customer>
+  deleteCustomer(id: string): Promise<void>
 
   // --- Commercial Calculator: generic master CRUD (thin delegation) ------
   // Real logic lives in src/modules/commercial-calculator/repository-logic.ts.
@@ -1830,6 +1848,34 @@ class InMemoryRepository implements Repository {
       qualityDist, statusDist, recentInteractions, upcomingMeetings,
     }
   }
+
+  // --- Customers: dormant in-memory stub -------------------------------------
+  // 'customers' goes straight into MIGRATED (repository-select.ts) — this
+  // path is never exercised by the composed `repository`. It exists only
+  // because `implements Repository` requires every method to have a body.
+  async listCustomers(): Promise<Customer[]> {
+    return [...this.data.customers].sort((a, b) => a.name.localeCompare(b.name))
+  }
+  async getCustomer(id: string): Promise<Customer | null> {
+    return this.data.customers.find((c) => c.id === id) ?? null
+  }
+  async createCustomer(input: CreateCustomerInput): Promise<Customer> {
+    const customer: Customer = {
+      id: uid('cust'), name: input.name, organization: input.organization ?? '', address: input.address ?? '',
+      gst: input.gst ?? '', contactName: input.contactName ?? '', contactEmail: input.contactEmail ?? '',
+      contactPhone: input.contactPhone ?? '', notes: input.notes ?? '', createdAt: isoToday(), updatedAt: isoToday(),
+    }
+    this.data.customers.push(customer)
+    return customer
+  }
+  async updateCustomer(id: string, patch: Partial<Customer>): Promise<Customer> {
+    const customer = this.data.customers.find((c) => c.id === id)!
+    Object.assign(customer, patch, { updatedAt: isoToday() })
+    return customer
+  }
+  async deleteCustomer(id: string): Promise<void> {
+    this.data.customers = this.data.customers.filter((c) => c.id !== id)
+  }
 }
 
 /** Every `Repository` method that changes stored data. The proxy below saves a
@@ -1848,6 +1894,7 @@ const MUTATOR_KEYS = [
   'createMaster', 'updateMaster', 'setMasterActive', 'deleteMaster', 'setEditionFeatures',
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
   'createBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',
+  'createCustomer', 'updateCustomer', 'deleteCustomer',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -1866,6 +1913,7 @@ const READER_KEYS = [
   'listMaster', 'getMaster', 'listEditionFeatures',
   'listSkus', 'getSku', 'listBomItemsForSku', 'listAllBomItems', 'listBoqs', 'getBoq', 'listBoqLineItems',
   'listAllBoqLineItems', 'listAuditLogs',
+  'listCustomers', 'getCustomer',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the

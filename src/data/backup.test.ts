@@ -7,7 +7,7 @@ function minimalGormsData(): GormsData {
   return {
     nodes: [], employees: [], externalIds: [], timeline: [], transfers: [], opportunities: [],
     opportunityStageChanges: [], followUps: [], salesPersons: [], salesPostings: [],
-    ownershipAssignments: [], mergeAudit: [],
+    ownershipAssignments: [], mergeAudit: [], customers: [],
     commercialCalculator: {} as GormsData['commercialCalculator'],
   }
 }
