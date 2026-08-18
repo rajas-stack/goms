@@ -14,6 +14,7 @@ export default defineConfig({
     // is verified manually; see the plan's Task 4 and Task 5.
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    exclude: ['**/*.integration.test.ts', '**/node_modules/**'],
   },
   // Without this, Vite's dep-scanner auto-discovers every index.html under
   // the project root as a separate entry — including the ones Capacitor/
