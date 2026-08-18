@@ -4,8 +4,12 @@
 // run when `supabase start` is up, and are never part of the default
 // `npm test` gate.
 import { defineConfig } from 'vitest/config'
+import path from 'node:path'
 
 export default defineConfig({
+  resolve: {
+    alias: { '@': path.resolve(__dirname, 'src') },
+  },
   test: {
     environment: 'node',
     include: ['src/data/supabase/**/*.integration.test.ts'],
