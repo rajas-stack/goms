@@ -12,7 +12,8 @@
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
     "supabase:reset": "supabase db reset",
-    "supabase:types": "supabase gen types typescript --local > src/data/supabase/database.types.ts"
+    "supabase:types": "supabase gen types typescript --local > src/data/supabase/database.types.ts",
+    "seed:generate": "tsx scripts/seed/build-seed-sql.ts > supabase/seed.sql"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
@@ -47,6 +48,7 @@
     "shapefile": "^0.6.6",
     "supabase": "^2.114.0",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.12",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
     "vite-plugin-compression2": "^2.5.3",
