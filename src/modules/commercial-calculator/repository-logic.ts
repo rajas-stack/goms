@@ -713,7 +713,11 @@ export function computeBoqMarginPercent(
 
 // --- Audit log (spec §6.6, §15) --------------------------------------------
 
-function writeAuditLogEntry(data: CommercialCalculatorData, entry: Omit<CommercialAuditLog, 'id' | 'changedAt'>): CommercialAuditLog {
+/** Exported (beyond this file's internal callers) so the Supabase-backed
+ *  `commercialMasters`/`commercialSkus` implementations (Phase 3) can write
+ *  into this same in-memory audit log list via the `recordCommercialAuditLogEntry`
+ *  Repository bridge method — see `in-memory/repository.ts`. */
+export function writeAuditLogEntry(data: CommercialCalculatorData, entry: Omit<CommercialAuditLog, 'id' | 'changedAt'>): CommercialAuditLog {
   const row: CommercialAuditLog = { ...entry, id: uid('aud'), changedAt: new Date().toISOString() }
   data.commercialAuditLogs.push(row)
   return row

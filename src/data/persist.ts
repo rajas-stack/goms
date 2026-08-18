@@ -109,9 +109,19 @@ export const PERSIST_RETRY_EXHAUSTED_EVENT = 'gorms:persist-retry-exhausted'
  *  unresolved message. */
 export const PERSIST_RECOVERED_EVENT = 'gorms:persist-recovered'
 
+/** No-ops outside a browser (Node test environments, e.g. the Supabase
+ *  integration suite exercising the recordCommercialAuditLogEntry bridge
+ *  through this same persistence path) rather than crashing on a missing
+ *  global. Real browsers always have `window`, so production behavior is
+ *  unchanged. */
+function dispatchWindowEvent(event: Event): void {
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(event)
+}
+
 function reportPersistFailure(reason: string): void {
   console.error(`[gorms] local save failed: ${reason}`)
-  window.dispatchEvent(new CustomEvent(PERSIST_FAILED_EVENT, { detail: { reason } }))
+  dispatchWindowEvent(new CustomEvent(PERSIST_FAILED_EVENT, { detail: { reason } }))
 }
 
 /** Resolves `true` on a successful write, `false` on any failure — never
@@ -194,7 +204,7 @@ async function attempt(getData: () => GormsData): Promise<void> {
   const ok = await writeOnce(getData())
   if (ok) {
     clearRetryTimer()
-    if (hasEverFailed) window.dispatchEvent(new CustomEvent(PERSIST_RECOVERED_EVENT))
+    if (hasEverFailed) dispatchWindowEvent(new CustomEvent(PERSIST_RECOVERED_EVENT))
     hasEverFailed = false
     retryAttempt = 0
     return
@@ -202,7 +212,7 @@ async function attempt(getData: () => GormsData): Promise<void> {
   hasEverFailed = true
   const delay = nextRetryDelay(retryAttempt)
   if (delay === null) {
-    window.dispatchEvent(new CustomEvent(PERSIST_RETRY_EXHAUSTED_EVENT, {
+    dispatchWindowEvent(new CustomEvent(PERSIST_RETRY_EXHAUSTED_EVENT, {
       detail: { retry: () => { retryAttempt = 0; void attempt(getData) } },
     }))
     return
@@ -237,6 +247,13 @@ export function scheduleSave(getData: () => GormsData): void {
 
   if (flushHooked) return
   flushHooked = true
+  // Guards a non-browser caller (Node test environments — e.g. the
+  // Supabase-backed commercialMasters/commercialSkus integration tests, which
+  // call the still-in-memory recordCommercialAuditLogEntry bridge through
+  // this same mutator-wrapping proxy) rather than crashing on a missing
+  // global. Real browsers always have `document`/`window`, so production
+  // behavior is unchanged.
+  if (typeof document === 'undefined' || typeof window === 'undefined') return
   // Android can freeze or kill the WebView as soon as the app is backgrounded,
   // and a browser tab can close, either of which would drop a debounced write
   // still sitting in its timeout. `visibilitychange` (not `beforeunload`, which

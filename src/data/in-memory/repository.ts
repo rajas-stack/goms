@@ -23,7 +23,7 @@ import {
   listBomItemsForSkuLogic, listEditionFeaturesLogic,
   listMasterLogic, listSkusLogic, removeBoqLineItemLogic, reviseBoqLogic, setEditionFeaturesLogic,
   setMasterActiveLogic, updateBoqLineItemLogic, updateBoqStatusLogic, updateBomItemLogic, updateMasterLogic,
-  updateSkuLogic,
+  updateSkuLogic, writeAuditLogEntry,
 } from '@/modules/commercial-calculator/repository-logic'
 import type {
   BoqStatus, CommercialAuditLog, CommercialBoq, CommercialBoqLineItem, CommercialBomItem, CommercialSku,
@@ -454,6 +454,14 @@ export interface Repository {
 
   // --- Commercial Calculator: Audit Log (spec §6.6/§15) ----------------------
   listAuditLogs(filter?: { entityType?: string; entityId?: string }): Promise<CommercialAuditLog[]>
+
+  /** Bridge for the Supabase-backed `commercialMasters`/`commercialSkus`
+   *  implementations (Phase 3) to keep writing into the same in-memory audit
+   *  log list `listAuditLogs` reads — the shared `auditLogs` domain itself
+   *  doesn't migrate to Supabase until Phase 5. Never given a Supabase
+   *  implementation before then: adding it to `SUPABASE_IMPL` early would
+   *  split the audit trail across two stores. See architecture spec §8 Phase 5. */
+  recordCommercialAuditLogEntry(entry: Omit<CommercialAuditLog, 'id' | 'changedAt'>): Promise<void>
 }
 
 // Re-exported (not redefined) so existing `@/data/repository` import sites
@@ -1406,6 +1414,10 @@ class InMemoryRepository implements Repository {
     return listAuditLogsLogic(this.data.commercialCalculator, filter)
   }
 
+  async recordCommercialAuditLogEntry(entry: Omit<CommercialAuditLog, 'id' | 'changedAt'>) {
+    writeAuditLogEntry(this.data.commercialCalculator, entry)
+  }
+
   async resolveOwner(entityType: string, entityId: string, asOf: string) {
     return effectiveOwner(this.data.ownershipAssignments, entityType, entityId, asOf, this.ownershipContext())
   }
@@ -1895,6 +1907,7 @@ const MUTATOR_KEYS = [
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
   'createBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',
   'createCustomer', 'updateCustomer', 'deleteCustomer',
+  'recordCommercialAuditLogEntry',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
