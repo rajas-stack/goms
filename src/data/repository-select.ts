@@ -17,6 +17,12 @@ import {
   createSalesPerson, updateSalesPerson, setSalesPersonStatus, deleteSalesPerson, transferSalesPerson,
   listSalesPersons, getSalesPerson, listSalesPostings, currentPostings,
 } from './supabase/sales-people'
+import {
+  createOpportunity, updateOpportunity, deleteOpportunity, createFollowUp, setFollowUpStatus, deleteFollowUp,
+  assignOwner, endOwnership, transferBookOfBusiness, listOpportunities, listOpportunitiesByDepartment,
+  getOpportunity, listOpportunityStageChanges, listFollowUps, listOpenFollowUps, listOwnershipAssignments,
+  listOwnershipFor, listOwnedBy, resolveOwner, resolveOwners,
+} from './supabase/ownership'
 
 /** One bucket per independently-migratable slice of the Repository interface.
  *  `hierarchy` is not `departments` or `geography`: it holds the handful of
@@ -108,7 +114,9 @@ export const DOMAIN_OF: Record<keyof Repository, DomainKey> = {
  *  SUPABASE_IMPL below. Empty throughout Phase 1 — every method resolves to
  *  `inMemoryRepository`, so the app's behavior is unchanged. Phase 2+ adds one
  *  entry at a time, in the sequential order defined in the architecture spec §8. */
-export const MIGRATED = new Set<DomainKey>(['departments', 'geography', 'hierarchy', 'employees', 'customers', 'salesPeople'])
+export const MIGRATED = new Set<DomainKey>([
+  'departments', 'geography', 'hierarchy', 'employees', 'customers', 'salesPeople', 'ownership',
+])
 
 /** Populated by each domain's Phase 2+ Supabase implementation — e.g.
  *  `SUPABASE_IMPL.listOrgRoots = departmentsSupabaseImpl.listOrgRoots`. Only
@@ -127,6 +135,10 @@ const SUPABASE_IMPL: Partial<Repository> = {
   listCustomers, getCustomer, createCustomer, updateCustomer, deleteCustomer,
   createSalesPerson, updateSalesPerson, setSalesPersonStatus, deleteSalesPerson, transferSalesPerson,
   listSalesPersons, getSalesPerson, listSalesPostings, currentPostings,
+  createOpportunity, updateOpportunity, deleteOpportunity, createFollowUp, setFollowUpStatus, deleteFollowUp,
+  assignOwner, endOwnership, transferBookOfBusiness, listOpportunities, listOpportunitiesByDepartment,
+  getOpportunity, listOpportunityStageChanges, listFollowUps, listOpenFollowUps, listOwnershipAssignments,
+  listOwnershipFor, listOwnedBy, resolveOwner, resolveOwners,
 }
 
 /** A Proxy, not `{ ...inMemoryRepository }`: `InMemoryRepository`'s methods

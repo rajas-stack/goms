@@ -56,7 +56,7 @@ async function chargesByEmployeeId(employeeIds: string[]): Promise<Map<string, C
   return map
 }
 
-async function toEmployees(rows: EmployeeRow[]): Promise<Employee[]> {
+export async function toEmployees(rows: EmployeeRow[]): Promise<Employee[]> {
   const chargesMap = await chargesByEmployeeId(rows.map((r) => r.id))
   return rows.map((row) => ({
     id: row.id, code: row.code, name: row.name, designation: row.designation, email: row.email, phone: row.phone,

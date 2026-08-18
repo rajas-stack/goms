@@ -32,7 +32,7 @@ function fromTable(table: NodeTable): any {
   return supabase.from(table)
 }
 
-function rowToHierNode(table: NodeTable, row: AnyRow): HierNode {
+export function rowToHierNode(table: NodeTable, row: AnyRow): HierNode {
   return {
     id: row.id,
     domain: table === 'departments' ? 'org' : 'geo',

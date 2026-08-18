@@ -1886,6 +1886,38 @@ export type Database = {
     }
     Functions: {
       allocate_boq_number: { Args: { p_year: number }; Returns: string }
+      assign_owner: {
+        Args: {
+          p_end_date: string
+          p_entity_id: string
+          p_entity_type: string
+          p_note: string
+          p_reason: string
+          p_role: string
+          p_sales_person_id: string
+          p_start_date: string
+        }
+        Returns: {
+          batch_id: string | null
+          created_at: string
+          created_by: string | null
+          end_date: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          note: string
+          reason: string
+          role: string
+          sales_person_id: string
+          start_date: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "ownership_assignments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       department_subtree_ids: { Args: { p_id: string }; Returns: string[] }
       geo_node_subtree_ids: { Args: { p_id: string }; Returns: string[] }
       merge_employees: {
@@ -1895,6 +1927,34 @@ export type Database = {
           p_survivor_id: string
         }
         Returns: Json
+      }
+      transfer_book_of_business: {
+        Args: {
+          p_effective_date: string
+          p_from: string
+          p_note: string
+          p_to: string
+        }
+        Returns: {
+          batch_id: string | null
+          created_at: string
+          created_by: string | null
+          end_date: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          note: string
+          reason: string
+          role: string
+          sales_person_id: string
+          start_date: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "ownership_assignments"
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
     }
     Enums: {

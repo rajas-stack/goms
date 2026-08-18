@@ -6552,6 +6552,17 @@ update public.employees set manager_id = (select id from public.employees where 
 update public.employees set manager_id = (select id from public.employees where code = 'POS-org_central_0_pos0') where code = 'POS-org_central_0_c3_c0_pos0';
 update public.employees set manager_id = (select id from public.employees where code = 'POS-org_central_0_pos0') where code = 'POS-org_central_0_c3_c1_pos0';
 
+-- pipeline_stages (src/data/pipeline-stages.ts's PIPELINE_STAGES constant —
+-- Phase 1 created this table but never seeded it, leaving opportunities.stage_key's
+-- FK with nothing to reference; caught while migrating the ownership domain, Phase 2 Task 8)
+insert into public.pipeline_stages (key, label, "order", probability, is_closed, is_won) values
+  ('pipeline', 'Pipeline', 0, 0.1, false, false),
+  ('qualified', 'Qualified', 1, 0.3, false, false),
+  ('submitted', 'Submitted', 2, 0.5, false, false),
+  ('won', 'Won', 3, 1, true, true),
+  ('lost', 'Lost', 4, 0, true, false),
+  ('dropped', 'Dropped', 5, 0, true, false);
+
 -- sales_tiers
 insert into public.sales_tiers (key, label, rank, active) values
   ('salesHead', 'Sales Head', 0, true),
