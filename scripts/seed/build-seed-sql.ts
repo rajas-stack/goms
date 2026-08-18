@@ -5,6 +5,10 @@ import { buildGovHierarchy } from '../../src/data/gov-hierarchy'
 import type { HierNode, Employee } from '../../src/lib/types'
 import { SALES_TIERS } from '../../src/data/sales-tiers'
 import { buildSalesRoster } from '../../src/data/sales-roster-seed'
+import {
+  VERTICALS, PRODUCTS, MODULES, FEATURES, PRE_SALES, SKU_CATEGORIES, UNITS_OF_MEASURE,
+  PRODUCT_EDITIONS, BILLING_TYPES, TAX_CLASSES, APPROVAL_MATRIX, CURRENCIES, SAMPLE_SKUS,
+} from '../../src/modules/commercial-calculator/seed-defaults'
 import indiaAdmin from '../../src/data/india-admin.json'
 import subdistricts from '../../src/data/subdistricts.json'
 
@@ -140,6 +144,93 @@ function buildSalesPeopleSection(): string {
   return sql
 }
 
+function masterBaseCols() { return ['code', 'name', 'description', 'active', 'display_order'] as const }
+function masterBaseVals(r: { code: string; name: string; description: string; active: boolean; displayOrder: number }) {
+  return [r.code, r.name, r.description, r.active, r.displayOrder]
+}
+
+function buildCommercialMastersSection(): string {
+  let sql = '-- commercial_verticals\n'
+  sql += insertStatement('commercial_verticals', [...masterBaseCols()], VERTICALS.map(masterBaseVals))
+
+  sql += '\n-- commercial_products (vertical_id resolved by vertical code)\n'
+  for (const p of PRODUCTS) {
+    const vertical = VERTICALS.find((v) => v.id === p.verticalId)!
+    sql += `insert into public.commercial_products (code, name, description, active, display_order, vertical_id) select ${sqlVal(p.code)}, ${sqlVal(p.name)}, ${sqlVal(p.description)}, ${sqlVal(p.active)}, ${sqlVal(p.displayOrder)}, id from public.commercial_verticals where code = ${sqlVal(vertical.code)};\n`
+  }
+
+  sql += '\n-- commercial_modules (product_id resolved by product code)\n'
+  for (const m of MODULES) {
+    const product = PRODUCTS.find((p) => p.id === m.productId)!
+    sql += `insert into public.commercial_modules (code, name, description, active, display_order, product_id) select ${sqlVal(m.code)}, ${sqlVal(m.name)}, ${sqlVal(m.description)}, ${sqlVal(m.active)}, ${sqlVal(m.displayOrder)}, id from public.commercial_products where code = ${sqlVal(product.code)};\n`
+  }
+
+  sql += '\n-- commercial_features (module_id resolved by module code)\n'
+  for (const f of FEATURES) {
+    const mod = MODULES.find((m) => m.id === f.moduleId)!
+    sql += `insert into public.commercial_features (code, name, description, active, display_order, module_id, status) select ${sqlVal(f.code)}, ${sqlVal(f.name)}, ${sqlVal(f.description)}, ${sqlVal(f.active)}, ${sqlVal(f.displayOrder)}, id, ${sqlVal(f.status)} from public.commercial_modules where code = ${sqlVal(mod.code)};\n`
+  }
+
+  sql += '\n-- flat masters (no parent FK)\n'
+  sql += insertStatement('commercial_sku_categories', [...masterBaseCols()], SKU_CATEGORIES.map(masterBaseVals))
+  sql += insertStatement('commercial_units_of_measure', [...masterBaseCols()], UNITS_OF_MEASURE.map(masterBaseVals))
+  sql += insertStatement('commercial_product_editions', [...masterBaseCols()], PRODUCT_EDITIONS.map(masterBaseVals))
+  sql += insertStatement('commercial_billing_types', [...masterBaseCols()], BILLING_TYPES.map(masterBaseVals))
+  sql += insertStatement('commercial_pre_sales', [...masterBaseCols()], PRE_SALES.map(masterBaseVals))
+
+  sql += '\n-- commercial_tax_classes\n'
+  sql += insertStatement('commercial_tax_classes', [...masterBaseCols(), 'rate_pct'], TAX_CLASSES.map((r) => [...masterBaseVals(r), r.ratePct]))
+
+  sql += '\n-- commercial_approval_matrix\n'
+  sql += insertStatement(
+    'commercial_approval_matrix',
+    [...masterBaseCols(), 'min_discount_pct', 'max_discount_pct', 'approval_level_label', 'allow_auto_approval'],
+    APPROVAL_MATRIX.map((r) => [...masterBaseVals(r), r.minDiscountPct, r.maxDiscountPct, r.approvalLevelLabel, r.allowAutoApproval]),
+  )
+
+  sql += '\n-- commercial_currencies\n'
+  sql += insertStatement(
+    'commercial_currencies',
+    [...masterBaseCols(), 'symbol', 'decimal_places', 'exchange_rate', 'is_base_currency'],
+    CURRENCIES.map((r) => [...masterBaseVals(r), r.symbol, r.decimalPlaces, r.exchangeRate, r.isBaseCurrency]),
+  )
+
+  return sql
+}
+
+function buildSampleSkusSection(): string {
+  let sql = "\n-- commercial_skus (sample, resolved by each FK master's code)\n"
+  for (const s of SAMPLE_SKUS) {
+    const category = SKU_CATEGORIES.find((c) => c.id === s.categoryId)!
+    const feature = FEATURES.find((f) => f.id === s.featureId)!
+    const edition = PRODUCT_EDITIONS.find((e) => e.id === s.editionId)!
+    const uom = UNITS_OF_MEASURE.find((u) => u.id === s.uomId)!
+    const currency = CURRENCIES.find((c) => c.id === s.currencyId)!
+    const taxClass = TAX_CLASSES.find((t) => t.id === s.taxClassId)!
+    const billingType = BILLING_TYPES.find((b) => b.id === s.billingTypeId)!
+    sql += `insert into public.commercial_skus (
+      sku_code, name, category_id, feature_id, edition_id, uom_id, currency_id, tax_class_id, billing_type_id,
+      active_from, active_till, lifecycle_status, is_sellable, display_order,
+      base_software_cost, implementation_cost_per_mm, integration_cost, third_party_cost, hardware_cost, cloud_cost, support_cost, training_cost,
+      internal_price, floor_price, partner_price, government_price, enterprise_price, corporate_price, list_price,
+      minimum_allowed_price, maximum_discount_percent
+    ) select
+      ${sqlVal(s.skuCode)}, ${sqlVal(s.name)},
+      (select id from public.commercial_sku_categories where code = ${sqlVal(category.code)}),
+      (select id from public.commercial_features where code = ${sqlVal(feature.code)}),
+      (select id from public.commercial_product_editions where code = ${sqlVal(edition.code)}),
+      (select id from public.commercial_units_of_measure where code = ${sqlVal(uom.code)}),
+      (select id from public.commercial_currencies where code = ${sqlVal(currency.code)}),
+      (select id from public.commercial_tax_classes where code = ${sqlVal(taxClass.code)}),
+      (select id from public.commercial_billing_types where code = ${sqlVal(billingType.code)}),
+      ${sqlVal(s.activeFrom)}, ${sqlVal(s.activeTill)}, ${sqlVal(s.lifecycleStatus)}, ${sqlVal(s.isSellable)}, ${sqlVal(s.displayOrder)},
+      ${sqlVal(s.baseSoftwareCost)}, ${sqlVal(s.implementationCostPerMM)}, ${sqlVal(s.integrationCost)}, ${sqlVal(s.thirdPartyCost)}, ${sqlVal(s.hardwareCost)}, ${sqlVal(s.cloudCost)}, ${sqlVal(s.supportCost)}, ${sqlVal(s.trainingCost)},
+      ${sqlVal(s.internalPrice)}, ${sqlVal(s.floorPrice)}, ${sqlVal(s.partnerPrice)}, ${sqlVal(s.governmentPrice)}, ${sqlVal(s.enterprisePrice)}, ${sqlVal(s.corporatePrice)}, ${sqlVal(s.listPrice)},
+      ${sqlVal(s.minimumAllowedPrice)}, ${sqlVal(s.maximumDiscountPercent)};\n`
+  }
+  return sql
+}
+
 async function main() {
   let out = '-- Generated by scripts/seed/build-seed-sql.ts — do not hand-edit. Re-run `npm run seed:generate`.\n\n'
   out += buildNodeTypesSection()
@@ -159,6 +250,10 @@ async function main() {
   out += buildSalesTiersSection()
   out += '\n'
   out += buildSalesPeopleSection()
+  out += '\n'
+
+  out += buildCommercialMastersSection()
+  out += buildSampleSkusSection()
 
   process.stdout.write(out)
 }

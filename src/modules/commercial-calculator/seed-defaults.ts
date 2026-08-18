@@ -10,7 +10,7 @@ import type {
  *  for admin population — the two are meant to be the same set of verticals,
  *  not independently maintained lists. Codes are short, SKU-code-safe
  *  abbreviations; `id`s are fixed like every other seeded master row. */
-const VERTICALS: Vertical[] = [
+export const VERTICALS: Vertical[] = [
   { id: 'vert_traffic', code: 'TRAF', name: 'Traffic', description: '', active: true, displayOrder: 0 },
   { id: 'vert_transit', code: 'TRANSIT', name: 'Transit (Mobility)', description: '', active: true, displayOrder: 1 },
   { id: 'vert_data_fabric', code: 'DATA', name: 'Data Fabric & AI', description: '', active: true, displayOrder: 2 },
@@ -34,7 +34,7 @@ if (VERTICALS.length !== WORK_VERTICALS.length || VERTICALS.some((v, i) => v.nam
  *  "Outline" is listed on the reference sheet under both Smart City and Data
  *  Fabric & AI — modeled once, under Smart City, since a Product has exactly
  *  one Vertical and master codes must be globally unique. */
-const PRODUCTS: CommercialProduct[] = [
+export const PRODUCTS: CommercialProduct[] = [
   { id: 'prod_locomate', code: 'LOCOMATE', name: 'Locomate', description: 'An intelligent mobility platform designed to elevate commuter satisfaction by providing precise ETAs, a seamless payment system, robust planning and scheduling and more.', verticalId: 'vert_transit', active: true, displayOrder: 0 },
   { id: 'prod_rapidgo', code: 'RAPIDGO', name: 'Rapidgo', description: 'An advanced journey planning app optimizing travel by seamlessly connecting multimodal options, covering both first and last miles to trunk networks.', verticalId: 'vert_transit', active: true, displayOrder: 1 },
   { id: 'prod_xup', code: 'XUP', name: 'XUP', description: 'A seamless payment system that automates and streamlines transactions, ensuring a speedy and user-friendly experience.', verticalId: 'vert_transit', active: true, displayOrder: 2 },
@@ -70,14 +70,14 @@ const PRODUCTS: CommercialProduct[] = [
  *  through Settings → Catalog → Hierarchy (spec §6.1). Seeded here anyway so
  *  Create BOQ has something to exercise end-to-end out of the box, without
  *  depending on an admin having entered data first. */
-const MODULES: ProductModule[] = [
+export const MODULES: ProductModule[] = [
   { id: 'mod_tracking', code: 'TRACK', name: 'Real-Time Tracking', description: 'Live vehicle position and ETA services.', productId: 'prod_locomate', active: true, displayOrder: 0 },
   { id: 'mod_payments', code: 'PAY', name: 'Payments', description: 'In-app fare payment and ticketing.', productId: 'prod_locomate', active: true, displayOrder: 1 },
   { id: 'mod_signal_control', code: 'SIGCTL', name: 'Signal Control', description: 'Adaptive intersection signal timing.', productId: 'prod_syncnex', active: true, displayOrder: 0 },
   { id: 'mod_analytics', code: 'ANALYTICS', name: 'Analytics Dashboard', description: 'Operational analytics and reporting.', productId: 'prod_outline', active: true, displayOrder: 0 },
 ]
 
-const FEATURES: ProductFeature[] = [
+export const FEATURES: ProductFeature[] = [
   { id: 'feat_live_eta', code: 'ETA', name: 'Live Vehicle ETA', description: 'Real-time estimated time of arrival for tracked vehicles.', moduleId: 'mod_tracking', status: 'existing', active: true, displayOrder: 0 },
   { id: 'feat_route_opt', code: 'ROUTE', name: 'Route Optimization', description: 'Dynamic route recalculation based on live conditions.', moduleId: 'mod_tracking', status: 'existing', active: true, displayOrder: 1 },
   { id: 'feat_in_app_ticket', code: 'TICKET', name: 'In-App Ticketing', description: 'Fare purchase and validation within the rider app.', moduleId: 'mod_payments', status: 'existing', active: true, displayOrder: 0 },
@@ -86,13 +86,13 @@ const FEATURES: ProductFeature[] = [
   { id: 'feat_incident_detect', code: 'INCIDENT', name: 'Incident Detection', description: 'Automated flagging of anomalies from live camera/sensor feeds.', moduleId: 'mod_analytics', status: 'existing', active: true, displayOrder: 0 },
 ]
 
-const PRE_SALES: PreSales[] = [
+export const PRE_SALES: PreSales[] = [
   { id: 'presales_arjun', code: 'PS-ARJUN', name: 'Arjun Mehta', description: 'Pre-sales — Transit & Mobility.', active: true, displayOrder: 0 },
   { id: 'presales_kavya', code: 'PS-KAVYA', name: 'Kavya Nair', description: 'Pre-sales — Smart City & Data Fabric.', active: true, displayOrder: 1 },
 ]
 
 // PCS-016 defaults.
-const SKU_CATEGORIES: SkuCategory[] = [
+export const SKU_CATEGORIES: SkuCategory[] = [
   { id: 'skc_software', code: 'SW', name: 'Software', description: 'Core software licenses', active: true, displayOrder: 0 },
   { id: 'skc_module', code: 'MOD', name: 'Module', description: 'Add-on functional modules', active: true, displayOrder: 1 },
   { id: 'skc_feature', code: 'FEA', name: 'Feature', description: 'Individual sellable features', active: true, displayOrder: 2 },
@@ -107,7 +107,7 @@ const SKU_CATEGORIES: SkuCategory[] = [
   { id: 'skc_professional_services', code: 'PROF', name: 'Professional Services', description: 'Consulting/advisory services', active: true, displayOrder: 11 },
 ]
 
-const UNITS_OF_MEASURE: UnitOfMeasure[] = [
+export const UNITS_OF_MEASURE: UnitOfMeasure[] = [
   { id: 'uom_license', code: 'LIC', name: 'License', description: '', active: true, displayOrder: 0 },
   { id: 'uom_user', code: 'USER', name: 'User', description: '', active: true, displayOrder: 1 },
   { id: 'uom_month', code: 'MONTH', name: 'Month', description: '', active: true, displayOrder: 2 },
@@ -120,7 +120,7 @@ const UNITS_OF_MEASURE: UnitOfMeasure[] = [
  *  falls back to this id when a SKU is created without one (Phase 2). Its id
  *  is fixed rather than looked up by code so that fallback is a constant, not
  *  a runtime search. */
-const PRODUCT_EDITIONS: ProductEdition[] = [
+export const PRODUCT_EDITIONS: ProductEdition[] = [
   { id: 'ped_standard', code: 'STD', name: 'Standard', description: 'System default edition', active: true, displayOrder: 0 },
   { id: 'ped_professional', code: 'PRO', name: 'Professional', description: '', active: true, displayOrder: 1 },
   { id: 'ped_enterprise', code: 'ENT', name: 'Enterprise', description: '', active: true, displayOrder: 2 },
@@ -131,7 +131,7 @@ const PRODUCT_EDITIONS: ProductEdition[] = [
 
 export const STANDARD_EDITION_ID = 'ped_standard'
 
-const BILLING_TYPES: BillingType[] = [
+export const BILLING_TYPES: BillingType[] = [
   { id: 'bil_one_time', code: 'OT', name: 'One-Time', description: '', active: true, displayOrder: 0 },
   { id: 'bil_subscription', code: 'SUB', name: 'Subscription', description: '', active: true, displayOrder: 1 },
   { id: 'bil_usage_based', code: 'UB', name: 'Usage-Based', description: '', active: true, displayOrder: 2 },
@@ -139,7 +139,7 @@ const BILLING_TYPES: BillingType[] = [
   { id: 'bil_perpetual_license', code: 'PERP', name: 'Perpetual License', description: '', active: true, displayOrder: 4 },
 ]
 
-const TAX_CLASSES: TaxClass[] = [
+export const TAX_CLASSES: TaxClass[] = [
   { id: 'tax_gst18', code: 'GST18', name: 'GST 18%', description: 'Standard GST rate', ratePct: 18, active: true, displayOrder: 0 },
   { id: 'tax_gst12', code: 'GST12', name: 'GST 12%', description: '', ratePct: 12, active: true, displayOrder: 1 },
   { id: 'tax_gst5', code: 'GST5', name: 'GST 5%', description: '', ratePct: 5, active: true, displayOrder: 2 },
@@ -148,14 +148,14 @@ const TAX_CLASSES: TaxClass[] = [
 ]
 
 // PCS-028/029/030 — bands are contiguous and gap-free from 0% to the 90% ceiling.
-const APPROVAL_MATRIX: ApprovalMatrixRule[] = [
+export const APPROVAL_MATRIX: ApprovalMatrixRule[] = [
   { id: 'apr_0_10', code: 'AM1', name: '0-10%', description: '', minDiscountPct: 0, maxDiscountPct: 10, approvalLevelLabel: '', allowAutoApproval: true, active: true, displayOrder: 0 },
   { id: 'apr_10_25', code: 'AM2', name: '10-25%', description: '', minDiscountPct: 10, maxDiscountPct: 25, approvalLevelLabel: 'Sales Head', allowAutoApproval: false, active: true, displayOrder: 1 },
   { id: 'apr_25_50', code: 'AM3', name: '25-50%', description: '', minDiscountPct: 25, maxDiscountPct: 50, approvalLevelLabel: 'Regional Head', allowAutoApproval: false, active: true, displayOrder: 2 },
   { id: 'apr_50_90', code: 'AM4', name: '50-90%', description: '', minDiscountPct: 50, maxDiscountPct: 90, approvalLevelLabel: 'CEO', allowAutoApproval: false, active: true, displayOrder: 3 },
 ]
 
-const CURRENCIES: Currency[] = [
+export const CURRENCIES: Currency[] = [
   { id: 'cur_inr', code: 'INR', name: 'Indian Rupee', description: '', symbol: '₹', decimalPlaces: 2, exchangeRate: 1, isBaseCurrency: true, active: true, displayOrder: 0 },
   { id: 'cur_usd', code: 'USD', name: 'US Dollar', description: '', symbol: '$', decimalPlaces: 2, exchangeRate: 83, isBaseCurrency: false, active: true, displayOrder: 1 },
   { id: 'cur_eur', code: 'EUR', name: 'Euro', description: '', symbol: '€', decimalPlaces: 2, exchangeRate: 90, isBaseCurrency: false, active: true, displayOrder: 2 },
@@ -184,7 +184,7 @@ function buildDefaultMasters(): MastersState {
  *  so Create BOQ's picker resolves a real SKU end-to-end without an admin
  *  having to create SKU Catalog rows first. Costs/pricing are illustrative
  *  test figures, not AMNEX price-list values. */
-const SAMPLE_SKUS: CommercialSku[] = [
+export const SAMPLE_SKUS: CommercialSku[] = [
   { id: 'sku_live_eta', skuCode: 'TRANSIT-LOCOMATE-TRACK-ETA-EXG', name: 'Live Vehicle ETA', categoryId: 'skc_feature', featureId: 'feat_live_eta', editionId: 'ped_standard', uomId: 'uom_license', currencyId: 'cur_inr', taxClassId: 'tax_gst18', billingTypeId: 'bil_subscription', activeFrom: '2026-01-01', activeTill: null, lifecycleStatus: 'active', isSellable: true, displayOrder: 0, baseSoftwareCost: 8000, implementationCostPerMM: 2000, integrationCost: 0, thirdPartyCost: 0, hardwareCost: 0, cloudCost: 500, supportCost: 500, trainingCost: 0, internalPrice: 11000, floorPrice: 13000, partnerPrice: 15000, governmentPrice: 16000, enterprisePrice: 18000, corporatePrice: 18000, listPrice: 18000, minimumAllowedPrice: 13000, maximumDiscountPercent: 30, createdAt: '2026-01-01T00:00:00.000Z', createdBy: null },
   { id: 'sku_route_opt', skuCode: 'TRANSIT-LOCOMATE-TRACK-ROUTE-EXG', name: 'Route Optimization', categoryId: 'skc_feature', featureId: 'feat_route_opt', editionId: 'ped_standard', uomId: 'uom_license', currencyId: 'cur_inr', taxClassId: 'tax_gst18', billingTypeId: 'bil_subscription', activeFrom: '2026-01-01', activeTill: null, lifecycleStatus: 'active', isSellable: true, displayOrder: 1, baseSoftwareCost: 10000, implementationCostPerMM: 2500, integrationCost: 0, thirdPartyCost: 0, hardwareCost: 0, cloudCost: 800, supportCost: 700, trainingCost: 0, internalPrice: 14000, floorPrice: 16500, partnerPrice: 19000, governmentPrice: 20000, enterprisePrice: 22000, corporatePrice: 22000, listPrice: 22000, minimumAllowedPrice: 16500, maximumDiscountPercent: 30, createdAt: '2026-01-01T00:00:00.000Z', createdBy: null },
   { id: 'sku_ticketing', skuCode: 'TRANSIT-LOCOMATE-PAY-TICKET-EXG', name: 'In-App Ticketing', categoryId: 'skc_feature', featureId: 'feat_in_app_ticket', editionId: 'ped_standard', uomId: 'uom_license', currencyId: 'cur_inr', taxClassId: 'tax_gst18', billingTypeId: 'bil_subscription', activeFrom: '2026-01-01', activeTill: null, lifecycleStatus: 'active', isSellable: true, displayOrder: 2, baseSoftwareCost: 9000, implementationCostPerMM: 3000, integrationCost: 1000, thirdPartyCost: 0, hardwareCost: 0, cloudCost: 600, supportCost: 600, trainingCost: 0, internalPrice: 14200, floorPrice: 16800, partnerPrice: 19500, governmentPrice: 20500, enterprisePrice: 23000, corporatePrice: 23000, listPrice: 23000, minimumAllowedPrice: 16800, maximumDiscountPercent: 30, createdAt: '2026-01-01T00:00:00.000Z', createdBy: null },

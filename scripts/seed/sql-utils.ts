@@ -4,8 +4,13 @@ export function sqlStr(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
 }
 
+/** NULL means "no value" and '' means "empty text" — they are not
+ *  interchangeable. Every seeded NOT NULL text column here defaults to ''
+ *  (e.g. employees.email), so collapsing '' to NULL would violate that
+ *  constraint on every vacant/blank field. Only actual null/undefined
+ *  becomes SQL NULL. */
 export function sqlVal(value: string | number | boolean | null | undefined): string {
-  if (value === null || value === undefined || value === '') return 'NULL'
+  if (value === null || value === undefined) return 'NULL'
   if (typeof value === 'number') return String(value)
   if (typeof value === 'boolean') return String(value)
   return sqlStr(value)
