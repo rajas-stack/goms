@@ -1,4 +1,5 @@
 import { supabase } from './client'
+import type { Json } from './database.types'
 import { recordAuditLogEntry } from './audit-logs'
 import { getMaster, listMaster } from './commercial-masters'
 import { getSku, listSkus } from './commercial-skus'
@@ -219,7 +220,7 @@ export async function addBoqLineItem(boqId: string, input: CreateBoqLineItemInpu
     discount_pct: discountPct, tax_pct: taxPct, approver_id: input.approverId ?? null, approval_date: null,
     approval_remarks: input.approvalRemarks ?? '', approval_status: band.allowAutoApproval ? 'auto_approved' : 'pending',
     line_total: computeLineTotal(input.quantity, input.unitPrice, discountPct, taxPct, factor),
-    pricing_levels: input.pricingLevels ?? [], active_pricing_level: input.activePricingLevel ?? null,
+    pricing_levels: (input.pricingLevels ?? []) as unknown as Json, active_pricing_level: input.activePricingLevel ?? null,
   }
   const { data, error } = await supabase.from('commercial_boq_line_items').insert(row).select('*').single()
   if (error) throw error
@@ -272,7 +273,7 @@ export async function updateBoqLineItem(
     quantity: merged.quantity, unit_price: merged.unitPrice, discount_pct: merged.discountPct,
     approver_id: merged.approverId, approval_date: merged.approvalDate, approval_remarks: merged.approvalRemarks,
     approval_status: merged.approvalStatus, line_total: merged.lineTotal,
-    pricing_levels: merged.pricingLevels, active_pricing_level: merged.activePricingLevel,
+    pricing_levels: merged.pricingLevels as unknown as Json, active_pricing_level: merged.activePricingLevel,
   }
   const { data, error } = await supabase.from('commercial_boq_line_items').update(row).eq('id', id).select('*').single()
   if (error) throw error
@@ -366,7 +367,7 @@ async function copyBoqWithLines(
         discount_pct: line.discountPct, tax_pct: line.taxPct, line_total: line.lineTotal,
         approval_status: fresh.approvalStatus, approver_id: fresh.approverId,
         approval_date: fresh.approvalDate, approval_remarks: fresh.approvalRemarks,
-        pricing_levels: line.pricingLevels, active_pricing_level: line.activePricingLevel,
+        pricing_levels: line.pricingLevels as unknown as Json, active_pricing_level: line.activePricingLevel,
       }
     })
     const { error: linesError } = await supabase.from('commercial_boq_line_items').insert(copiedLineRows)

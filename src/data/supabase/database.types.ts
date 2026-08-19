@@ -231,6 +231,7 @@ export type Database = {
       }
       commercial_boq_line_items: {
         Row: {
+          active_pricing_level: string | null
           approval_date: string | null
           approval_remarks: string
           approval_status: string
@@ -239,12 +240,14 @@ export type Database = {
           discount_pct: number
           id: string
           line_total: number
+          pricing_levels: Json
           quantity: number
           sku_id: string
           tax_pct: number
           unit_price: number
         }
         Insert: {
+          active_pricing_level?: string | null
           approval_date?: string | null
           approval_remarks?: string
           approval_status?: string
@@ -253,12 +256,14 @@ export type Database = {
           discount_pct?: number
           id?: string
           line_total?: number
+          pricing_levels?: Json
           quantity?: number
           sku_id: string
           tax_pct?: number
           unit_price?: number
         }
         Update: {
+          active_pricing_level?: string | null
           approval_date?: string | null
           approval_remarks?: string
           approval_status?: string
@@ -267,6 +272,7 @@ export type Database = {
           discount_pct?: number
           id?: string
           line_total?: number
+          pricing_levels?: Json
           quantity?: number
           sku_id?: string
           tax_pct?: number

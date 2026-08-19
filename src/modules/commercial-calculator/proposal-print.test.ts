@@ -18,6 +18,7 @@ function baseLine(overrides: Partial<CommercialBoqLineItem> = {}): CommercialBoq
   return {
     id: 'line1', boqId: 'boq1', skuId: 'sku1', quantity: 1, unitPrice: 2000, discountPct: 0, taxPct: 18,
     approverId: null, approvalDate: null, approvalRemarks: '', approvalStatus: 'auto_approved', lineTotal: 2360,
+    pricingLevels: [], activePricingLevel: null,
     ...overrides,
   }
 }

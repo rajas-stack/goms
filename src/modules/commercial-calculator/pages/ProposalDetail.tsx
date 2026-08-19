@@ -12,9 +12,12 @@ import { cn } from '@/lib/utils'
 import { useAllBomItems, useBoqLineItemMutations, useBoqLineItems, useBoqMutations, useBoqs, useMasters, useSkus } from '../api'
 import { buildProposalPrintHtml } from '../proposal-print'
 import { computeBoqMarginPercent, resolveApprovalBand } from '../repository-logic'
+import { resolveLineUnitPrice } from '../pricing-levels-logic'
 import { SkuLinePicker } from '../components/SkuLinePicker'
+import { SellingPriceSection } from '../components/SellingPriceSection'
+import { LineApprovalSummary } from '../components/LineApprovalSummary'
 import { STATUS_LABEL } from './BoqManagement'
-import type { ApprovalMatrixRule, BoqStatus, CommercialBoq, CommercialBoqLineItem, CommercialSku } from '../types'
+import type { ApprovalMatrixRule, BoqStatus, CommercialBoq, CommercialBoqLineItem, CommercialBomItem, CommercialSku } from '../types'
 
 /** Mirrors repository-logic.ts's BOQ_TRANSITIONS for button enabling — the
  *  repository is still the enforcement point (including the new pending-
@@ -217,7 +220,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
               <div><div className="text-[11px] uppercase text-muted">Margin</div>{margin.toFixed(1)}%</div>
             </div>
 
-            <LineItemsSection boq={boq} lines={lines} skuById={skuById} lineMutations={lineMutations} />
+            <LineItemsSection boq={boq} lines={lines} skuById={skuById} bomItems={bomItems} approvalMatrix={approvalMatrix} lineMutations={lineMutations} />
           </>
         )}
 
@@ -247,10 +250,12 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   )
 }
 
-function LineItemsSection({ boq, lines, skuById, lineMutations }: {
+function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, lineMutations }: {
   boq: CommercialBoq
   lines: CommercialBoqLineItem[]
   skuById: Map<string, CommercialSku>
+  bomItems: CommercialBomItem[]
+  approvalMatrix: ApprovalMatrixRule[]
   lineMutations: ReturnType<typeof useBoqLineItemMutations>
 }) {
   const toast = useToast()
@@ -275,15 +280,9 @@ function LineItemsSection({ boq, lines, skuById, lineMutations }: {
         {lines.map((line) => {
           const sku = skuById.get(line.skuId)
           return isDraft ? (
-            <DraftLineRow key={line.id} line={line} sku={sku} lineMutations={lineMutations} />
+            <DraftLineRow key={line.id} line={line} sku={sku} bomItems={bomItems} skuById={skuById} approvalMatrix={approvalMatrix} lineMutations={lineMutations} />
           ) : (
-            <div key={line.id} className="flex items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5 text-[13px]">
-              <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode ?? '—'}</span>
-              <span className="min-w-0 flex-1 truncate">{sku?.name ?? 'Unknown SKU'}</span>
-              <span className="text-muted">Qty {line.quantity}</span>
-              <span className="text-muted">{line.discountPct}% off</span>
-              <span className="font-medium text-ink-900">{line.lineTotal.toLocaleString()}</span>
-            </div>
+            <NonDraftLineRow key={line.id} line={line} sku={sku} approvalMatrix={approvalMatrix} />
           )
         })}
       </div>
@@ -301,17 +300,19 @@ function LineItemsSection({ boq, lines, skuById, lineMutations }: {
  *  uncontrolled-by-the-server-value-on-every-keystroke drafts — they commit
  *  once on blur/Enter, not per keystroke, and roll back to the last known
  *  server value on a failed commit (e.g. the SKU floor-price check). */
-function DraftLineRow({ line, sku, lineMutations }: {
+function DraftLineRow({ line, sku, bomItems, skuById, approvalMatrix, lineMutations }: {
   line: CommercialBoqLineItem
   sku: CommercialSku | undefined
+  bomItems: CommercialBomItem[]
+  skuById: Map<string, CommercialSku>
+  approvalMatrix: ApprovalMatrixRule[]
   lineMutations: ReturnType<typeof useBoqLineItemMutations>
 }) {
   const toast = useToast()
   const [qty, setQty] = useState(String(line.quantity))
-  const [discount, setDiscount] = useState(String(line.discountPct))
+  const [expanded, setExpanded] = useState(false)
 
   useEffect(() => setQty(String(line.quantity)), [line.quantity])
-  useEffect(() => setDiscount(String(line.discountPct)), [line.discountPct])
 
   async function commitQuantity() {
     const next = Number(qty)
@@ -327,16 +328,15 @@ function DraftLineRow({ line, sku, lineMutations }: {
     }
   }
 
-  async function commitDiscount() {
-    const next = Number(discount)
-    if (!Number.isFinite(next) || next < 0 || next === line.discountPct) {
-      setDiscount(String(line.discountPct))
-      return
-    }
+  async function handlePricingChange(next: { pricingLevels: CommercialBoqLineItem['pricingLevels']; activePricingLevel: CommercialBoqLineItem['activePricingLevel'] }) {
+    if (!sku) return
+    const { unitPrice, discountPct } = resolveLineUnitPrice(sku, line.discountPct, next.pricingLevels, next.activePricingLevel)
     try {
-      await lineMutations.update.mutateAsync({ id: line.id, patch: { discountPct: next } })
+      await lineMutations.update.mutateAsync({
+        id: line.id,
+        patch: { unitPrice, discountPct, pricingLevels: next.pricingLevels, activePricingLevel: next.activePricingLevel },
+      })
     } catch (e) {
-      setDiscount(String(line.discountPct))
       toast(e instanceof Error ? e.message : 'Could not update line item.')
     }
   }
@@ -354,32 +354,62 @@ function DraftLineRow({ line, sku, lineMutations }: {
   }
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5 text-[13px]">
-      <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode ?? '—'}</span>
-      <span className="min-w-0 flex-1 truncate">{sku?.name ?? 'Unknown SKU'}</span>
-      <Input
-        type="number"
-        value={qty}
-        onChange={(e) => setQty(e.target.value)}
-        onBlur={commitQuantity}
-        onKeyDown={commitOnEnter}
-        className="w-20"
-        aria-label="Quantity"
-      />
-      <div className="flex items-center gap-1">
+    <div className="rounded-xl border border-line bg-white px-3 py-2.5 text-[13px]">
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={() => setExpanded((v) => !v)} aria-label="Toggle approval summary" className="text-muted">
+          <Icon name={expanded ? 'ChevronDown' : 'ChevronRight'} size={14} />
+        </button>
+        <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode ?? '—'}</span>
+        <span className="min-w-0 flex-1 truncate">{sku?.name ?? 'Unknown SKU'}</span>
         <Input
           type="number"
-          value={discount}
-          onChange={(e) => setDiscount(e.target.value)}
-          onBlur={commitDiscount}
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          onBlur={commitQuantity}
           onKeyDown={commitOnEnter}
           className="w-20"
-          aria-label="Discount percent"
+          aria-label="Quantity"
         />
-        <span className="text-muted">% off</span>
+        <span className="text-muted">List {sku?.listPrice.toLocaleString() ?? '—'}</span>
+        <span className="font-medium text-ink-900">{line.lineTotal.toLocaleString()}</span>
+        <Button size="icon" onClick={handleRemove} title="Remove"><Icon name="Trash2" size={14} /></Button>
       </div>
-      <span className="font-medium text-ink-900">{line.lineTotal.toLocaleString()}</span>
-      <Button size="icon" onClick={handleRemove} title="Remove"><Icon name="Trash2" size={14} /></Button>
+      {sku && (
+        <div className="mt-2 border-t border-line pt-2">
+          <SellingPriceSection
+            sku={sku}
+            bomItems={bomItems}
+            skusById={skuById}
+            pricingLevels={line.pricingLevels}
+            activePricingLevel={line.activePricingLevel}
+            onChange={handlePricingChange}
+          />
+        </div>
+      )}
+      {expanded && <LineApprovalSummary line={line} approvalMatrix={approvalMatrix} />}
+    </div>
+  )
+}
+
+function NonDraftLineRow({ line, sku, approvalMatrix }: {
+  line: CommercialBoqLineItem
+  sku: CommercialSku | undefined
+  approvalMatrix: ApprovalMatrixRule[]
+}) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div className="rounded-xl border border-line bg-white px-3 py-2.5 text-[13px]">
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={() => setExpanded((v) => !v)} aria-label="Toggle approval summary" className="text-muted">
+          <Icon name={expanded ? 'ChevronDown' : 'ChevronRight'} size={14} />
+        </button>
+        <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode ?? '—'}</span>
+        <span className="min-w-0 flex-1 truncate">{sku?.name ?? 'Unknown SKU'}</span>
+        <span className="text-muted">Qty {line.quantity}</span>
+        <span className="text-muted">{line.discountPct}% off</span>
+        <span className="font-medium text-ink-900">{line.lineTotal.toLocaleString()}</span>
+      </div>
+      {expanded && <LineApprovalSummary line={line} approvalMatrix={approvalMatrix} />}
     </div>
   )
 }
