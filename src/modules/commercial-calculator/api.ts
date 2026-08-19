@@ -194,8 +194,10 @@ export function useBoqLineItemMutations(boqId: string) {
     onSuccess: invalidate,
   })
   const update = useMutation({
-    mutationFn: (a: { id: string; patch: Partial<Pick<CommercialBoqLineItem, 'quantity' | 'unitPrice' | 'discountPct' | 'approverId' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'>> }) =>
-      repository.updateBoqLineItem(a.id, a.patch),
+    mutationFn: (a: { id: string; patch: Partial<Pick<CommercialBoqLineItem,
+      'quantity' | 'unitPrice' | 'discountPct' | 'approverId' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'
+      | 'pricingLevels' | 'activePricingLevel'
+    >> }) => repository.updateBoqLineItem(a.id, a.patch),
     onSuccess: invalidate,
   })
   const remove = useMutation({
