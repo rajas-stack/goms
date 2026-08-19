@@ -311,6 +311,43 @@ describe('BOQ line items — discount/approval matrix (spec §8)', () => {
     expect(line.discountPct).toBe(30)
   })
 
+  it('persists pricingLevels/activePricingLevel on add, defaulting to empty/null', () => {
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
+    expect(line.pricingLevels).toEqual([])
+    expect(line.activePricingLevel).toBeNull()
+  })
+
+  it('persists an explicitly supplied pricingLevels/activePricingLevel on add', () => {
+    const line = addBoqLineItemLogic(data, boqId, {
+      skuId: sku.id, quantity: 1, unitPrice: 1700, discountPct: 15,
+      pricingLevels: [{ level: 'government', sellingPrice: 1700 }], activePricingLevel: 'government',
+    })
+    expect(line.pricingLevels).toEqual([{ level: 'government', sellingPrice: 1700 }])
+    expect(line.activePricingLevel).toBe('government')
+  })
+
+  it('persists pricingLevels/activePricingLevel changes on update', () => {
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
+    const updated = updateBoqLineItemLogic(data, line.id, {
+      unitPrice: 1700, discountPct: 15,
+      pricingLevels: [{ level: 'government', sellingPrice: 1700 }], activePricingLevel: 'government',
+    })
+    expect(updated.pricingLevels).toEqual([{ level: 'government', sellingPrice: 1700 }])
+    expect(updated.activePricingLevel).toBe('government')
+  })
+
+  it('while draft, live-recomputes discount against a changed list price but keeps an active level\'s absolute selling price fixed', () => {
+    const line = addBoqLineItemLogic(data, boqId, {
+      skuId: sku.id, quantity: 1, unitPrice: 1700, discountPct: 15,
+      pricingLevels: [{ level: 'government', sellingPrice: 1700 }], activePricingLevel: 'government',
+    })
+    updateSkuLogic(data, sku.id, { listPrice: 2000 }, 'reprice')
+    const [live] = listBoqLineItemsLogic(data, boqId)
+    expect(live.id).toBe(line.id)
+    expect(live.unitPrice).toBe(1700) // absolute selling price stays fixed
+    expect(live.discountPct).toBeCloseTo(15, 5) // (2000-1700)/2000 = 15%, recomputed against the new list price
+  })
+
   it('rejects a discount that would push unit price below minimumAllowedPrice', () => {
     expect(() => addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 90 }))
       .toThrow(/below this SKU's minimum allowed price/i)

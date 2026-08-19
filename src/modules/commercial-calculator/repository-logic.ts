@@ -1,6 +1,7 @@
 import { uid } from '@/lib/utils'
 import { conversionFactor, currencyByCode, currencyById } from './currency'
 import { enforceSingleBaseCurrency, findMasterChildren, validateMasterCode, validateParentExists } from './master-rules'
+import { resolveLineUnitPrice } from './pricing-levels-logic'
 import { STANDARD_EDITION_ID } from './seed-defaults'
 import type {
   ApprovalMatrixRule, BoqStatus, CommercialAuditLog, CommercialBoq, CommercialBoqLineItem, CommercialBomItem,
@@ -326,7 +327,8 @@ function withLiveDraftPricing(
     if (!sku) return line
     const taxPct = data.masters.taxClasses.find((t) => t.id === sku.taxClassId)?.ratePct ?? 0
     const factor = skuToBoqConversionFactor(data.masters.currencies, boq.currency, sku)
-    return { ...line, unitPrice: sku.listPrice, taxPct, lineTotal: computeLineTotal(line.quantity, sku.listPrice, line.discountPct, taxPct, factor) }
+    const { unitPrice, discountPct } = resolveLineUnitPrice(sku, line.discountPct, line.pricingLevels, line.activePricingLevel)
+    return { ...line, unitPrice, discountPct, taxPct, lineTotal: computeLineTotal(line.quantity, unitPrice, discountPct, taxPct, factor) }
   })
 }
 
@@ -449,6 +451,8 @@ export function addBoqLineItemLogic(
     approvalRemarks: input.approvalRemarks ?? '',
     approvalStatus: band.allowAutoApproval ? 'auto_approved' : 'pending',
     lineTotal: computeLineTotal(input.quantity, input.unitPrice, discountPct, taxPct, factor),
+    pricingLevels: input.pricingLevels ?? [],
+    activePricingLevel: input.activePricingLevel ?? null,
   }
   data.commercialBoqLineItems.push(row)
   recomputeBoqGrandTotal(data, boqId)
@@ -456,7 +460,11 @@ export function addBoqLineItemLogic(
 }
 
 export function updateBoqLineItemLogic(
-  data: CommercialCalculatorData, id: string, patch: Partial<Pick<CommercialBoqLineItem, 'quantity' | 'unitPrice' | 'discountPct' | 'approverId' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'>>,
+  data: CommercialCalculatorData, id: string,
+  patch: Partial<Pick<CommercialBoqLineItem,
+    'quantity' | 'unitPrice' | 'discountPct' | 'approverId' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'
+    | 'pricingLevels' | 'activePricingLevel'
+  >>,
 ): CommercialBoqLineItem {
   const row = data.commercialBoqLineItems.find((li) => li.id === id)
   if (!row) throw new Error(`No such BOQ line item: ${id}`)
