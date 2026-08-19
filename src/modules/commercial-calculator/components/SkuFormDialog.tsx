@@ -204,20 +204,6 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
         </section>
 
         <section className="flex flex-col gap-3">
-          <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Cost Management</h3>
-          <div className="grid grid-cols-4 gap-4">
-            <NumberField label="Base Software" value={values.baseSoftwareCost} onChange={(v) => set('baseSoftwareCost', v)} />
-            <NumberField label="Implementation / MM" value={values.implementationCostPerMM} onChange={(v) => set('implementationCostPerMM', v)} />
-            <NumberField label="Integration" value={values.integrationCost} onChange={(v) => set('integrationCost', v)} />
-            <NumberField label="Third Party" value={values.thirdPartyCost} onChange={(v) => set('thirdPartyCost', v)} />
-            <NumberField label="Hardware" value={values.hardwareCost} onChange={(v) => set('hardwareCost', v)} />
-            <NumberField label="Cloud" value={values.cloudCost} onChange={(v) => set('cloudCost', v)} />
-            <NumberField label="Support" value={values.supportCost} onChange={(v) => set('supportCost', v)} />
-            <NumberField label="Training" value={values.trainingCost} onChange={(v) => set('trainingCost', v)} />
-          </div>
-        </section>
-
-        <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Pricing Levels</h3>
             <span className="text-[12px] font-medium text-ink-700">Margin at List Price: {previewMargin.toFixed(1)}%</span>
