@@ -130,6 +130,18 @@ export interface CommercialSku {
   createdBy: string | null
 }
 
+// --- BOQ line-item pricing levels — 2026-08-19 pricing overhaul spec §2 ---
+
+export type PricingLevelKey = 'internal' | 'floor' | 'partner' | 'government' | 'enterprise' | 'corporate'
+
+/** `sellingPrice: null` means the user has added this level but not yet
+ *  typed a price — never coerced to/displayed as 0 (spec §3). Discount % is
+ *  deliberately NOT stored here; it's always derived against `listPrice`. */
+export interface LinePricingLevel {
+  level: PricingLevelKey
+  sellingPrice: number | null
+}
+
 export type CreateSkuInput = Omit<
   CommercialSku,
   'id' | 'skuCode' | 'createdAt' | 'createdBy' | 'displayOrder' | 'isSellable' | 'lifecycleStatus' | 'editionId'
@@ -219,6 +231,13 @@ export interface CommercialBoqLineItem {
   approvalRemarks: string
   approvalStatus: 'auto_approved' | 'pending' | 'approved' | 'rejected'
   lineTotal: number
+  /** Levels the user has explicitly added via "+ Add Pricing Level" —
+   *  empty by default. Never has two entries with the same `level`. */
+  pricingLevels: LinePricingLevel[]
+  /** Which `pricingLevels` entry currently drives `unitPrice`/`discountPct`.
+   *  `null` = no active level; the line falls back to its own stored
+   *  `unitPrice`/`discountPct` exactly as it did before this field existed. */
+  activePricingLevel: PricingLevelKey | null
 }
 
 export type CreateBoqInput = Omit<
@@ -234,6 +253,8 @@ export interface CreateBoqLineItemInput {
   discountPct: number
   approverId?: string | null
   approvalRemarks?: string
+  pricingLevels?: LinePricingLevel[]
+  activePricingLevel?: PricingLevelKey | null
 }
 
 // --- Audit Log (spec §6.6) -------------------------------------------------
