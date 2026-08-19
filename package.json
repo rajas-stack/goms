@@ -14,7 +14,8 @@
     "supabase:reset": "supabase db reset",
     "supabase:types": "supabase gen types typescript --local > src/data/supabase/database.types.ts",
     "seed:generate": "tsx scripts/seed/build-seed-sql.ts > supabase/seed.sql",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:component": "vitest run --config vitest.component.config.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
@@ -37,6 +38,9 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.5",
     "@turf/simplify": "^7.3.5",
     "@types/d3-geo": "^3.1.0",
     "@types/react": "^18.3.17",
@@ -44,6 +48,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "7zip-min": "^3.0.1",
     "autoprefixer": "^10.4.20",
+    "jsdom": "^25.0.1",
     "polygon-clipping": "^0.15.7",
     "postcss": "^8.4.49",
     "proj4": "^2.20.9",
