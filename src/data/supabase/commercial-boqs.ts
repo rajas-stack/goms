@@ -6,6 +6,7 @@ import {
   BOQ_TRANSITIONS, LINE_STATES_CLEARED_FOR_APPROVAL, DELETABLE_BOQ_STATUSES,
   computeLineTotal, freshLineApprovalState, resolveApprovalBand, skuToBoqConversionFactor,
 } from '@/modules/commercial-calculator/repository-logic'
+import { resolveLineUnitPrice } from '@/modules/commercial-calculator/pricing-levels-logic'
 import type {
   BoqStatus, CommercialBoq, CommercialBoqLineItem, CommercialSku, CreateBoqInput, CreateBoqLineItemInput,
 } from '@/modules/commercial-calculator/types'
@@ -32,6 +33,7 @@ function toLineItem(row: AnyRow): CommercialBoqLineItem {
     id: row.id, boqId: row.boq_id, skuId: row.sku_id, quantity: row.quantity, unitPrice: row.unit_price,
     discountPct: row.discount_pct, taxPct: row.tax_pct, approverId: row.approver_id, approvalDate: row.approval_date,
     approvalRemarks: row.approval_remarks, approvalStatus: row.approval_status, lineTotal: row.line_total,
+    pricingLevels: row.pricing_levels ?? [], activePricingLevel: row.active_pricing_level ?? null,
   }
 }
 
@@ -73,7 +75,8 @@ function withLiveDraftPricing(boq: CommercialBoq, lines: CommercialBoqLineItem[]
     if (!sku) return line
     const taxPct = ctx.taxClasses.find((t) => t.id === sku.taxClassId)?.ratePct ?? 0
     const factor = skuToBoqConversionFactor(ctx.currencies, boq.currency, sku)
-    return { ...line, unitPrice: sku.listPrice, taxPct, lineTotal: computeLineTotal(line.quantity, sku.listPrice, line.discountPct, taxPct, factor) }
+    const { unitPrice, discountPct } = resolveLineUnitPrice(sku, line.discountPct, line.pricingLevels, line.activePricingLevel)
+    return { ...line, unitPrice, discountPct, taxPct, lineTotal: computeLineTotal(line.quantity, unitPrice, discountPct, taxPct, factor) }
   })
 }
 
@@ -216,6 +219,7 @@ export async function addBoqLineItem(boqId: string, input: CreateBoqLineItemInpu
     discount_pct: discountPct, tax_pct: taxPct, approver_id: input.approverId ?? null, approval_date: null,
     approval_remarks: input.approvalRemarks ?? '', approval_status: band.allowAutoApproval ? 'auto_approved' : 'pending',
     line_total: computeLineTotal(input.quantity, input.unitPrice, discountPct, taxPct, factor),
+    pricing_levels: input.pricingLevels ?? [], active_pricing_level: input.activePricingLevel ?? null,
   }
   const { data, error } = await supabase.from('commercial_boq_line_items').insert(row).select('*').single()
   if (error) throw error
@@ -226,7 +230,10 @@ export async function addBoqLineItem(boqId: string, input: CreateBoqLineItemInpu
 
 export async function updateBoqLineItem(
   id: string,
-  patch: Partial<Pick<CommercialBoqLineItem, 'quantity' | 'unitPrice' | 'discountPct' | 'approverId' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'>>,
+  patch: Partial<Pick<CommercialBoqLineItem,
+    'quantity' | 'unitPrice' | 'discountPct' | 'approverId' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'
+    | 'pricingLevels' | 'activePricingLevel'
+  >>,
 ): Promise<CommercialBoqLineItem> {
   const { data: existingRows, error: existingError } = await supabase.from('commercial_boq_line_items').select('*').eq('id', id)
   if (existingError) throw existingError
@@ -265,6 +272,7 @@ export async function updateBoqLineItem(
     quantity: merged.quantity, unit_price: merged.unitPrice, discount_pct: merged.discountPct,
     approver_id: merged.approverId, approval_date: merged.approvalDate, approval_remarks: merged.approvalRemarks,
     approval_status: merged.approvalStatus, line_total: merged.lineTotal,
+    pricing_levels: merged.pricingLevels, active_pricing_level: merged.activePricingLevel,
   }
   const { data, error } = await supabase.from('commercial_boq_line_items').update(row).eq('id', id).select('*').single()
   if (error) throw error
@@ -358,6 +366,7 @@ async function copyBoqWithLines(
         discount_pct: line.discountPct, tax_pct: line.taxPct, line_total: line.lineTotal,
         approval_status: fresh.approvalStatus, approver_id: fresh.approverId,
         approval_date: fresh.approvalDate, approval_remarks: fresh.approvalRemarks,
+        pricing_levels: line.pricingLevels, active_pricing_level: line.activePricingLevel,
       }
     })
     const { error: linesError } = await supabase.from('commercial_boq_line_items').insert(copiedLineRows)

@@ -109,6 +109,40 @@ describe('commercial BOQs (Supabase integration)', () => {
     await fixture.cleanup()
   })
 
+  it('persists and round-trips pricingLevels/activePricingLevel', async () => {
+    const fixture = await buildFixture()
+    const boq = await createBoq(boqInput(fixture))
+    const line = await addBoqLineItem(boq.id, {
+      skuId: fixture.sku.id, quantity: 1, unitPrice: 1700, discountPct: 15,
+      pricingLevels: [{ level: 'government', sellingPrice: 1700 }], activePricingLevel: 'government',
+    })
+    expect(line.pricingLevels).toEqual([{ level: 'government', sellingPrice: 1700 }])
+    expect(line.activePricingLevel).toBe('government')
+
+    const updated = await updateBoqLineItem(line.id, {
+      pricingLevels: [{ level: 'government', sellingPrice: 1700 }, { level: 'enterprise', sellingPrice: 1900 }],
+      activePricingLevel: 'enterprise', unitPrice: 1900, discountPct: 5,
+    })
+    expect(updated.pricingLevels).toHaveLength(2)
+    expect(updated.activePricingLevel).toBe('enterprise')
+
+    const [refetched] = await listBoqLineItems(boq.id)
+    expect(refetched.pricingLevels).toHaveLength(2)
+    expect(refetched.activePricingLevel).toBe('enterprise')
+    await deleteBoq(boq.id)
+    await fixture.cleanup()
+  })
+
+  it('defaults pricingLevels to [] and activePricingLevel to null when omitted', async () => {
+    const fixture = await buildFixture()
+    const boq = await createBoq(boqInput(fixture))
+    const line = await addBoqLineItem(boq.id, { skuId: fixture.sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
+    expect(line.pricingLevels).toEqual([])
+    expect(line.activePricingLevel).toBeNull()
+    await deleteBoq(boq.id)
+    await fixture.cleanup()
+  })
+
   it('converts a line priced in a different currency into the BOQ currency before summing the grand total', async () => {
     const fixture = await buildFixture()
     const usdCurrency = fixture.currencies.find((c) => c.code === 'USD')
