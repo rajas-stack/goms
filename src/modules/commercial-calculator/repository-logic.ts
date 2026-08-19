@@ -400,7 +400,7 @@ export function skuToBoqConversionFactor(currencies: Currency[], boqCurrencyCode
   return conversionFactor(currencyById(currencies, sku.currencyId), currencyByCode(currencies, boqCurrencyCode))
 }
 
-function computeLineTotal(quantity: number, unitPrice: number, discountPct: number, taxPct: number, factorToBoqCurrency: number): number {
+export function computeLineTotal(quantity: number, unitPrice: number, discountPct: number, taxPct: number, factorToBoqCurrency: number): number {
   return quantity * unitPrice * (1 - discountPct / 100) * (1 + taxPct / 100) * factorToBoqCurrency
 }
 
@@ -521,7 +521,7 @@ export function removeBoqLineItemLogic(data: CommercialCalculatorData, id: strin
 
 /** Spec §10 — `cancelled`/`archived` are terminal, and a decision already
  *  reached (approved/rejected) can only move to `archived`, never `cancelled`. */
-const BOQ_TRANSITIONS: Record<BoqStatus, BoqStatus[]> = {
+export const BOQ_TRANSITIONS: Record<BoqStatus, BoqStatus[]> = {
   draft: ['submitted', 'cancelled'],
   submitted: ['under_review', 'cancelled'],
   under_review: ['approved', 'rejected', 'cancelled'],
@@ -544,7 +544,7 @@ export function isBoqPendingApproval(status: BoqStatus): boolean {
  *  passes every other one, including `rejected` — a line an approver
  *  explicitly turned down must not be able to ride along to document
  *  approval just because nothing re-checked it. */
-const LINE_STATES_CLEARED_FOR_APPROVAL: CommercialBoqLineItem['approvalStatus'][] = ['auto_approved', 'approved']
+export const LINE_STATES_CLEARED_FOR_APPROVAL: CommercialBoqLineItem['approvalStatus'][] = ['auto_approved', 'approved']
 
 /** `PCS-029` ("validate discounts against approval hierarchy") was, until
  *  this check, enforced only at the line level (`approvalStatus` gets set
@@ -588,7 +588,7 @@ export function updateBoqStatusLogic(
  *  the auto-approve band stays auto-approved on the copy, and the approver
  *  fields reset so no stale approverId/date/remarks implies a decision was
  *  already made on the new copy. */
-function freshLineApprovalState(approvalMatrix: ApprovalMatrixRule[], discountPct: number) {
+export function freshLineApprovalState(approvalMatrix: ApprovalMatrixRule[], discountPct: number) {
   const band = resolveApprovalBand(approvalMatrix, discountPct)
   return {
     approvalStatus: band.allowAutoApproval ? 'auto_approved' as const : 'pending' as const,
@@ -600,7 +600,7 @@ function freshLineApprovalState(approvalMatrix: ApprovalMatrixRule[], discountPc
  *  `approved`) must be cancelled first (an existing `BOQ_TRANSITIONS` move)
  *  before it can be deleted — deletion itself is unrestricted once a BOQ
  *  has reached one of these terminal-or-never-left-draft states. */
-const DELETABLE_BOQ_STATUSES: BoqStatus[] = ['draft', 'cancelled', 'rejected', 'archived']
+export const DELETABLE_BOQ_STATUSES: BoqStatus[] = ['draft', 'cancelled', 'rejected', 'archived']
 
 /** Hard-deletes a BOQ and its line items. Line items have no independent
  *  lifecycle of their own (spec §6.5) — they always cascade with their
