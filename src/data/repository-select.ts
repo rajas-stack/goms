@@ -29,6 +29,10 @@ import {
 } from './supabase/commercial-masters'
 import { listSkus, getSku, createSku, updateSku, deleteSku } from './supabase/commercial-skus'
 import { listBomItemsForSku, listAllBomItems, createBomItem, updateBomItem, deleteBomItem } from './supabase/commercial-bom'
+import {
+  listBoqs, getBoq, listBoqLineItems, listAllBoqLineItems, createBoq, addBoqLineItem,
+  updateBoqLineItem, removeBoqLineItem, updateBoqStatus, reviseBoq, duplicateBoq, deleteBoq,
+} from './supabase/commercial-boqs'
 
 /** One bucket per independently-migratable slice of the Repository interface.
  *  `hierarchy` is not `departments` or `geography`: it holds the handful of
@@ -126,7 +130,7 @@ export const DOMAIN_OF: Record<keyof Repository, DomainKey> = {
  *  entry at a time, in the sequential order defined in the architecture spec §8. */
 export const MIGRATED = new Set<DomainKey>([
   'departments', 'geography', 'hierarchy', 'employees', 'customers', 'salesPeople', 'ownership',
-  'commercialMasters', 'commercialSkus', 'commercialBom',
+  'commercialMasters', 'commercialSkus', 'commercialBom', 'commercialBoqs',
 ])
 
 /** Populated by each domain's Phase 2+ Supabase implementation — e.g.
@@ -154,6 +158,8 @@ const SUPABASE_IMPL: Partial<Repository> = {
   listEditionFeatures, setEditionFeatures,
   listSkus, getSku, createSku, updateSku, deleteSku,
   listBomItemsForSku, listAllBomItems, createBomItem, updateBomItem, deleteBomItem,
+  listBoqs, getBoq, listBoqLineItems, listAllBoqLineItems, createBoq, addBoqLineItem,
+  updateBoqLineItem, removeBoqLineItem, updateBoqStatus, reviseBoq, duplicateBoq, deleteBoq,
 }
 
 /** A Proxy, not `{ ...inMemoryRepository }`: `InMemoryRepository`'s methods

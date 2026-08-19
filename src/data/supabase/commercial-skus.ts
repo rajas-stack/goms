@@ -167,21 +167,20 @@ export async function updateSku(id: string, patch: Partial<CommercialSku>, chang
   return toSku(data)
 }
 
-/** PCS-038: throws if any BOQ line item or BOM item still references this SKU.
- *
- *  BOM usage is checked directly against Postgres — commercialBom migrated
- *  in this same plan's Task 4. BOQ-line-item usage remains a bridge into the
- *  still-in-memory blob: commercialBoqs doesn't migrate until Phase 4. See
- *  the Phase 3 plan's Global Constraints. */
+/** PCS-038: throws if any BOQ line item or BOM item still references this
+ *  SKU. Both checks are now real Postgres queries — the BOM-usage bridge
+ *  closed in Phase 3 Task 4, the BOQ-line-item bridge closes here in
+ *  Phase 4 now that `commercialBoqs` is Supabase-backed too. */
 export async function deleteSku(id: string): Promise<void> {
   const { data: bomRows, error: bomError } = await supabase
     .from('commercial_bom_items').select('id').or(`parent_sku_id.eq.${id},component_sku_id.eq.${id}`).limit(1)
   if (bomError) throw bomError
 
-  const boqLineItems = await inMemoryRepository.listAllBoqLineItems()
-  const boqInUse = boqLineItems.some((li) => li.skuId === id)
+  const { data: boqLineRows, error: boqError } = await supabase
+    .from('commercial_boq_line_items').select('id').eq('sku_id', id).limit(1)
+  if (boqError) throw boqError
 
-  if (bomRows.length > 0 || boqInUse) {
+  if (bomRows.length > 0 || boqLineRows.length > 0) {
     throw new Error('Cannot delete this SKU — it is still referenced by a BOQ line item or BOM entry.')
   }
   const { error } = await supabase.from('commercial_skus').delete().eq('id', id)
