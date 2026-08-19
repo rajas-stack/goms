@@ -261,12 +261,13 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, lineM
   const toast = useToast()
   const isDraft = boq.status === 'draft'
 
-  async function handleAdd(line: { skuId: string; quantity: number; discountPct: number }) {
+  async function handleAdd(line: { skuId: string; quantity: number; discountPct: number; pricingLevels: CommercialBoqLineItem['pricingLevels']; activePricingLevel: CommercialBoqLineItem['activePricingLevel'] }) {
     const sku = skuById.get(line.skuId)
     if (!sku) return
     try {
       await lineMutations.add.mutateAsync({
         skuId: line.skuId, quantity: line.quantity, discountPct: line.discountPct, unitPrice: sku.listPrice,
+        pricingLevels: line.pricingLevels, activePricingLevel: line.activePricingLevel,
       })
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Could not add line item.')
@@ -288,7 +289,7 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, lineM
       </div>
       {isDraft && (
         <div className="mt-2">
-          <SkuLinePicker verticalId={boq.verticalId} currencyCode={boq.currency} onAdd={handleAdd} />
+          <SkuLinePicker verticalId={boq.verticalId} currencyCode={boq.currency} bomItems={bomItems} onAdd={handleAdd} />
         </div>
       )}
     </div>

@@ -9,14 +9,17 @@ import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
 import { useAllBomItems, useBoqMutations, useMasters, useSkus } from '../api'
 import { resolveApprovalBand, skuToBoqConversionFactor, skuTotalUnitCostWithBom } from '../repository-logic'
+import { resolveLineUnitPrice } from '../pricing-levels-logic'
 import { SkuLinePicker } from '../components/SkuLinePicker'
-import type { CommercialSku } from '../types'
+import type { CommercialSku, LinePricingLevel, PricingLevelKey } from '../types'
 import type { Employee } from '@/lib/types'
 
 interface LineDraft {
   skuId: string
   quantity: number
   discountPct: number
+  pricingLevels: LinePricingLevel[]
+  activePricingLevel: PricingLevelKey | null
 }
 
 /** The module's primary journey and, by stakeholder direction (2026-08-03
@@ -151,16 +154,22 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     setLines((prev) => prev.filter((_, i) => i !== index))
   }
 
+  function effectivePrice(line: LineDraft, sku: CommercialSku) {
+    return resolveLineUnitPrice(sku, line.discountPct, line.pricingLevels, line.activePricingLevel)
+  }
   function lineTotal(line: LineDraft): number {
     const sku = skuById.get(line.skuId)
     if (!sku) return 0
     const taxPct = taxRateById.get(sku.taxClassId) ?? 0
-    return line.quantity * sku.listPrice * (1 - line.discountPct / 100) * (1 + taxPct / 100) * conversionFactorFor(sku)
+    const { unitPrice, discountPct } = effectivePrice(line, sku)
+    return line.quantity * unitPrice * (1 - discountPct / 100) * (1 + taxPct / 100) * conversionFactorFor(sku)
   }
   const grandTotal = lines.reduce((sum, l) => sum + lineTotal(l), 0)
   const revenuePreTax = lines.reduce((sum, l) => {
     const sku = skuById.get(l.skuId)
-    return sku ? sum + l.quantity * sku.listPrice * (1 - l.discountPct / 100) * conversionFactorFor(sku) : sum
+    if (!sku) return sum
+    const { unitPrice, discountPct } = effectivePrice(l, sku)
+    return sum + l.quantity * unitPrice * (1 - discountPct / 100) * conversionFactorFor(sku)
   }, 0)
   const totalCost = lines.reduce((sum, l) => {
     const sku = skuById.get(l.skuId)
@@ -172,12 +181,15 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     const sku = skuById.get(l.skuId)
     if (!sku) return sum
     const taxPct = taxRateById.get(sku.taxClassId) ?? 0
-    return sum + l.quantity * sku.listPrice * (1 - l.discountPct / 100) * (taxPct / 100) * conversionFactorFor(sku)
+    const { unitPrice, discountPct } = effectivePrice(l, sku)
+    return sum + l.quantity * unitPrice * (1 - discountPct / 100) * (taxPct / 100) * conversionFactorFor(sku)
   }, 0)
 
   const approvalPreview = lines.map((l) => {
-    const band = resolveApprovalBand(approvalMatrix, l.discountPct)
-    return { line: l, sku: skuById.get(l.skuId), band }
+    const sku = skuById.get(l.skuId)
+    const { discountPct } = sku ? effectivePrice(l, sku) : { discountPct: l.discountPct }
+    const band = resolveApprovalBand(approvalMatrix, discountPct)
+    return { line: l, sku, band, discountPct }
   })
   const autoApprovedCount = approvalPreview.filter((p) => p.band.allowAutoApproval).length
   const pendingApprovalLines = approvalPreview.filter((p) => !p.band.allowAutoApproval)
@@ -205,9 +217,11 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
           customerContact, verticalId, budgetAmount, budgetUnit, budgetKnown, emdAmount, emdUnit, salesPersonId,
           buSalesPersonId: buSalesPersonId || null, preSalesId: preSalesId || null, currency: effectiveCurrencyCode,
         },
-        lines: lines.map((l) => ({
-          skuId: l.skuId, quantity: l.quantity, discountPct: l.discountPct, unitPrice: skuById.get(l.skuId)!.listPrice,
-        })),
+        lines: lines.map((l) => {
+          const sku = skuById.get(l.skuId)!
+          const { unitPrice, discountPct } = resolveLineUnitPrice(sku, l.discountPct, l.pricingLevels, l.activePricingLevel)
+          return { skuId: l.skuId, quantity: l.quantity, discountPct, unitPrice, pricingLevels: l.pricingLevels, activePricingLevel: l.activePricingLevel }
+        }),
       })
       if (thenSubmit) {
         await updateStatus.mutateAsync({ id: boq.id, nextStatus: 'submitted', changeReason: 'Submitted at creation' })
@@ -401,6 +415,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               key={verticalId}
               verticalId={verticalId}
               currencyCode={effectiveCurrencyCode}
+              bomItems={bomItems}
               onAdd={(line) => setLines((prev) => [...prev, line])}
             />
           )}
@@ -416,7 +431,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                     <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode}</span>
                     <span className="min-w-0 flex-1 truncate">{sku?.name}</span>
                     <span className="text-muted">Qty {line.quantity}</span>
-                    <span className="text-muted">{line.discountPct}% off</span>
+                    <span className="text-muted">{sku ? effectivePrice(line, sku).discountPct.toFixed(1) : line.discountPct}% off</span>
                     <span className="font-medium text-ink-900">{lineTotal(line).toLocaleString()}</span>
                     <Button size="icon" onClick={() => removeLine(i)} title="Remove"><Icon name="Trash2" size={14} /></Button>
                   </div>
@@ -446,10 +461,10 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               </div>
               {pendingApprovalLines.length > 0 && (
                 <div className="flex flex-col gap-1.5">
-                  {pendingApprovalLines.map(({ line, sku, band }, i) => (
+                  {pendingApprovalLines.map(({ sku, band, discountPct }, i) => (
                     <div key={i} className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
                       <span className="font-mono">{sku?.skuCode}</span>
-                      <span>{line.discountPct}% discount</span>
+                      <span>{discountPct.toFixed(1)}% discount</span>
                       <span className="ml-auto font-medium">{band.approvalLevelLabel || band.name}</span>
                     </div>
                   ))}
@@ -493,7 +508,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                             <span className="ml-2">{sku?.name}</span>
                           </td>
                           <td className="px-3 py-2">{line.quantity}</td>
-                          <td className="px-3 py-2">{line.discountPct}%</td>
+                          <td className="px-3 py-2">{sku ? effectivePrice(line, sku).discountPct.toFixed(1) : line.discountPct}%</td>
                           <td className="px-3 py-2">{taxRateById.get(sku?.taxClassId ?? '') ?? 0}%</td>
                           <td className="px-3 py-2 text-right font-medium text-ink-900">{lineTotal(line).toLocaleString()}</td>
                         </tr>

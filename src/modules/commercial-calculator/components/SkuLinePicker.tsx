@@ -5,12 +5,16 @@ import { Combobox } from '@/components/ui/Combobox'
 import { Field, Input } from '@/components/ui/Field'
 import { useMasters, useSkus } from '../api'
 import { skuToBoqConversionFactor } from '../repository-logic'
-import type { CommercialSku } from '../types'
+import { resolveLineUnitPrice } from '../pricing-levels-logic'
+import { SellingPriceSection } from './SellingPriceSection'
+import type { CommercialBomItem, CommercialSku, LinePricingLevel, PricingLevelKey } from '../types'
 
 interface LineDraft {
   skuId: string
   quantity: number
   discountPct: number
+  pricingLevels: LinePricingLevel[]
+  activePricingLevel: PricingLevelKey | null
 }
 
 /** The cascading Product→Module→Feature→SKU picker, extracted from
@@ -22,9 +26,10 @@ interface LineDraft {
  *  never owns Vertical selection itself; the caller decides what to render
  *  when there's no Vertical yet (`CreateBoq.tsx` still shows its own "select
  *  a Vertical" message before ever rendering this). */
-export function SkuLinePicker({ verticalId, currencyCode, onAdd }: {
+export function SkuLinePicker({ verticalId, currencyCode, bomItems, onAdd }: {
   verticalId: string
   currencyCode: string
+  bomItems: CommercialBomItem[]
   onAdd: (line: LineDraft) => void
 }) {
   const { data: products = [] } = useMasters('products')
@@ -38,7 +43,8 @@ export function SkuLinePicker({ verticalId, currencyCode, onAdd }: {
   const [moduleId, setModuleId] = useState('')
   const [featureId, setFeatureId] = useState('')
   const [qty, setQty] = useState(1)
-  const [discount, setDiscount] = useState(0)
+  const [pricingLevels, setPricingLevels] = useState<LinePricingLevel[]>([])
+  const [activePricingLevel, setActivePricingLevel] = useState<PricingLevelKey | null>(null)
 
   const sellableSkus = skus.filter((s) => s.lifecycleStatus === 'active' && s.isSellable)
   const taxRateById = new Map(taxClasses.map((t) => [t.id, t.ratePct]))
@@ -47,6 +53,7 @@ export function SkuLinePicker({ verticalId, currencyCode, onAdd }: {
   const pickerFeatures = features.filter((f) => f.moduleId === moduleId)
   const resolvedSku = featureId ? sellableSkus.find((s) => s.featureId === featureId) : undefined
   const featureHasNoSellableSku = !!featureId && !resolvedSku
+  const skusById = new Map(skus.map((s) => [s.id, s]))
 
   function conversionFactorFor(sku: CommercialSku): number {
     if (!currencyCode || currencies.length === 0) return 1
@@ -55,7 +62,8 @@ export function SkuLinePicker({ verticalId, currencyCode, onAdd }: {
   function previewTotal(): number {
     if (!resolvedSku) return 0
     const taxPct = taxRateById.get(resolvedSku.taxClassId) ?? 0
-    return qty * resolvedSku.listPrice * (1 - discount / 100) * (1 + taxPct / 100) * conversionFactorFor(resolvedSku)
+    const { unitPrice, discountPct } = resolveLineUnitPrice(resolvedSku, 0, pricingLevels, activePricingLevel)
+    return qty * unitPrice * (1 - discountPct / 100) * (1 + taxPct / 100) * conversionFactorFor(resolvedSku)
   }
 
   function handleProductChange(v: string) {
@@ -70,13 +78,18 @@ export function SkuLinePicker({ verticalId, currencyCode, onAdd }: {
 
   function handleAdd() {
     if (!resolvedSku) return
-    onAdd({ skuId: resolvedSku.id, quantity: qty, discountPct: discount })
+    onAdd({ skuId: resolvedSku.id, quantity: qty, discountPct: 0, pricingLevels, activePricingLevel })
     setProductId('')
     setModuleId('')
     setFeatureId('')
     setQty(1)
-    setDiscount(0)
+    setPricingLevels([])
+    setActivePricingLevel(null)
   }
+
+  const { unitPrice: previewUnitPrice, discountPct: previewDiscountPct } = resolvedSku
+    ? resolveLineUnitPrice(resolvedSku, 0, pricingLevels, activePricingLevel)
+    : { unitPrice: 0, discountPct: 0 }
 
   return (
     <div className="rounded-xl border border-line bg-panel/40 p-3">
@@ -111,14 +124,6 @@ export function SkuLinePicker({ verticalId, currencyCode, onAdd }: {
           />
         </Field>
         <Field label="Quantity"><Input type="number" value={qty} onChange={(e) => setQty(Number(e.target.value))} className="w-24" /></Field>
-        <Field label="Discount %">
-          <Input
-            type="number"
-            value={discount}
-            onChange={(e) => setDiscount(Math.min(90, Math.max(0, Number(e.target.value))))}
-            className="w-24"
-          />
-        </Field>
         <Button variant="primary" size="sm" onClick={handleAdd} disabled={!resolvedSku}>
           <Icon name="Plus" size={14} />
           Add to Proposal
@@ -133,12 +138,23 @@ export function SkuLinePicker({ verticalId, currencyCode, onAdd }: {
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-line bg-white px-3 py-2 text-[12px]">
             <span className="text-muted">List Price <span className="font-medium text-ink-900">{resolvedSku.listPrice.toLocaleString()}</span></span>
-            <span className="text-muted">Post-discount Unit <span className="font-medium text-ink-900">{(resolvedSku.listPrice * (1 - discount / 100)).toLocaleString()}</span></span>
+            <span className="text-muted">Post-discount Unit <span className="font-medium text-ink-900">{previewUnitPrice.toLocaleString()}</span></span>
+            <span className="text-muted">Discount <span className="font-medium text-ink-900">{previewDiscountPct.toFixed(1)}%</span></span>
             <span className="text-muted">Tax <span className="font-medium text-ink-900">{taxRateById.get(resolvedSku.taxClassId) ?? 0}%</span></span>
             <span className="text-muted">
               Line Total (Qty {qty}){' '}
               <span className="font-semibold text-ink-900">{previewTotal().toLocaleString()}</span>
             </span>
+          </div>
+          <div className="mt-3">
+            <SellingPriceSection
+              sku={resolvedSku}
+              bomItems={bomItems}
+              skusById={skusById}
+              pricingLevels={pricingLevels}
+              activePricingLevel={activePricingLevel}
+              onChange={(next) => { setPricingLevels(next.pricingLevels); setActivePricingLevel(next.activePricingLevel) }}
+            />
           </div>
         </>
       )}
