@@ -1,5 +1,5 @@
 import { supabase } from './client'
-import { repository as inMemoryRepository } from '../in-memory/repository'
+import { recordAuditLogEntry } from './audit-logs'
 import type { CreateMasterInput, MasterEntityKey, MasterRowMap, ProductEditionFeature } from '@/modules/commercial-calculator/types'
 
 // A dozen master tables share the same 6-column shape (id/code/name/
@@ -206,7 +206,7 @@ export async function updateMaster<K extends MasterEntityKey>(
   const patchedStatus = rawPatch.status
   if (key === 'features' && patchedStatus !== undefined && patchedStatus !== (existing as AnyRow).status) {
     if (!changeReason?.trim()) throw new Error("changeReason is required when changing a feature's status.")
-    await inMemoryRepository.recordCommercialAuditLogEntry({
+    await recordAuditLogEntry({
       entityType: 'feature', entityId: id, field: 'status',
       oldValue: String((existing as AnyRow).status), newValue: String(patchedStatus),
       reason: changeReason, action: 'status_change', changedBy: null,

@@ -7,6 +7,7 @@ import type {
   AddTimelineInput, CreateEmployeeInput, ImportEmployeeRow, MergeEmployeesInput, TransferInput,
 } from '../in-memory/repository'
 import { supabase } from './client'
+import { recordAuditLogEntry } from './audit-logs'
 import type { Database } from './database.types'
 
 type EmployeeRow = Database['public']['Tables']['employees']['Row']
@@ -183,6 +184,15 @@ export async function listTransfers(employeeId: string): Promise<Transfer[]> {
   return data.map(toTransfer)
 }
 
+/** Every transfer across every employee — powers `crossCutting`'s
+ *  `relationshipAnalytics` total and its `search`'s "transferred" intent
+ *  filter, mirroring the in-memory `this.data.transfers` array. */
+export async function listAllTransfers(): Promise<Transfer[]> {
+  const { data, error } = await supabase.from('transfers').select('*')
+  if (error) throw error
+  return data.map(toTransfer)
+}
+
 export async function listMergeAudit(): Promise<MergeAuditRecord[]> {
   const { data, error } = await supabase.from('merge_audit_records').select('*').order('merged_at', { ascending: false })
   if (error) throw error
@@ -230,7 +240,18 @@ const PATCHABLE_FIELDS: [keyof Employee, string][] = [
   ['notes', 'notes'], ['metadata', 'metadata'], ['status', 'status'],
 ]
 
+/** Fields with real business/compliance meaning worth a shared audit trail
+ *  entry (spec §4/§8 Phase 5) — new instrumentation, not a preserved
+ *  behavior: no prior audit trail existed for employees before this. Mirrors
+ *  `commercial-skus.ts`'s `SKU_SENSITIVE_FIELDS` pattern. `transferEmployee`'s
+ *  own `transfers` table write is a separate, pre-existing audit trail and is
+ *  not folded into this list. */
+const EMPLOYEE_AUDITED_FIELDS: (keyof Employee)[] = [
+  'designation', 'relationshipStatus', 'relationshipQuality', 'importantContact', 'connected',
+]
+
 export async function updateEmployee(id: string, patch: Partial<Employee>): Promise<Employee> {
+  const existing = await getEmployee(id)
   const update: Record<string, unknown> = {}
   for (const [tsField, dbColumn] of PATCHABLE_FIELDS) {
     if (patch[tsField] !== undefined) update[dbColumn] = patch[tsField]
@@ -241,6 +262,18 @@ export async function updateEmployee(id: string, patch: Partial<Employee>): Prom
   const { data, error } = await supabase.from('employees').update(update as never).eq('id', id).select('*').single()
   if (error) throw error // .single() errors if id doesn't exist — matches the in-memory non-null-assertion's throw.
   const [employee] = await toEmployees([data])
+
+  if (existing) {
+    for (const field of EMPLOYEE_AUDITED_FIELDS) {
+      if (patch[field] !== undefined && patch[field] !== existing[field]) {
+        await recordAuditLogEntry({
+          entityType: 'employee', entityId: id, field,
+          oldValue: String(existing[field]), newValue: String(patch[field]),
+          reason: '', action: 'update', changedBy: null,
+        })
+      }
+    }
+  }
   return employee
 }
 

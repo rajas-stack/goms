@@ -54,6 +54,23 @@ async function subtreeIds(table: NodeTable, id: string): Promise<string[]> {
   return data as unknown as string[]
 }
 
+/** Every node across both self-referencing tables, any status — mirrors the
+ *  in-memory `this.data.nodes` array the `crossCutting` domain's `search`/
+ *  `relatedRecords`/`relationshipAnalytics` build their `nodeById` map from
+ *  (unfiltered, since a name lookup for an inactive node is still valid). */
+export async function listAllNodes(): Promise<HierNode[]> {
+  const [depts, geo] = await Promise.all([
+    supabase.from('departments').select('*'),
+    supabase.from('geo_nodes').select('*'),
+  ])
+  if (depts.error) throw depts.error
+  if (geo.error) throw geo.error
+  return [
+    ...depts.data.map((r: AnyRow) => rowToHierNode('departments', r)),
+    ...geo.data.map((r: AnyRow) => rowToHierNode('geo_nodes', r)),
+  ]
+}
+
 export async function getNode(id: string): Promise<HierNode | undefined> {
   const table = tableForId(id)
   const { data, error } = await fromTable(table).select('*').eq('id', id).limit(1)

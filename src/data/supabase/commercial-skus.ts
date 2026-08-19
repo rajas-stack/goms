@@ -1,5 +1,5 @@
 import { supabase } from './client'
-import { repository as inMemoryRepository } from '../in-memory/repository'
+import { recordAuditLogEntry } from './audit-logs'
 import type { CommercialSku, CreateSkuInput } from '@/modules/commercial-calculator/types'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -126,7 +126,7 @@ export async function createSku(input: CreateSkuInput): Promise<CommercialSku> {
   if (error) throw error
   const created = toSku(data)
 
-  await inMemoryRepository.recordCommercialAuditLogEntry({
+  await recordAuditLogEntry({
     entityType: 'sku', entityId: created.id, field: 'skuCode', oldValue: '', newValue: created.skuCode,
     reason: '', action: 'create', changedBy: null,
   })
@@ -154,7 +154,7 @@ export async function updateSku(id: string, patch: Partial<CommercialSku>, chang
     throw new Error('changeReason is required when changing lifecycle status, cost, or pricing fields.')
   }
   for (const field of touchedFields) {
-    await inMemoryRepository.recordCommercialAuditLogEntry({
+    await recordAuditLogEntry({
       entityType: 'sku', entityId: id, field,
       oldValue: String(existing[field]), newValue: String(patch[field]),
       reason: changeReason ?? '', action: field === 'lifecycleStatus' ? 'status_change' : 'update', changedBy: null,

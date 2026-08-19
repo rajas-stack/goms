@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createEmployee, getEmployee, deleteEmployee, addCharge, removeCharge, setManager, mergeEmployees,
+  createEmployee, getEmployee, updateEmployee, deleteEmployee, addCharge, removeCharge, setManager, mergeEmployees,
 } from './employees'
 import { createNode, deleteNode } from './hierarchy'
+import { listAuditLogs } from './audit-logs'
 
 describe('employees (Supabase integration)', () => {
   it('createEmployee + getEmployee round-trips, vacant employees get no timeline event', async () => {
@@ -47,6 +48,23 @@ describe('employees (Supabase integration)', () => {
     expect(audit.duplicateId).toBe(duplicate.id)
     expect(await getEmployee(duplicate.id)).toBeNull()
     await deleteEmployee(survivor.id)
+    await deleteNode(dept.id)
+  })
+
+  it('updateEmployee writes an audit_logs entry for a sensitive field change, but not for an unaudited one', async () => {
+    const dept = await createNode({ domain: 'org', typeKey: 'unit', parentId: null, stateCode: 0, name: 'Audit Test Unit' })
+    const emp = await createEmployee({ name: 'Audited Person', designation: 'Officer', email: '', phone: '', orgNodeId: dept.id, managerId: null })
+
+    await updateEmployee(emp.id, { designation: 'Senior Officer' })
+    const designationLogs = await listAuditLogs({ entityType: 'employee', entityId: emp.id })
+    expect(designationLogs).toHaveLength(1)
+    expect(designationLogs[0]).toMatchObject({ field: 'designation', oldValue: 'Officer', newValue: 'Senior Officer', action: 'update' })
+
+    // `notes` is not in EMPLOYEE_AUDITED_FIELDS — no new entry should appear.
+    await updateEmployee(emp.id, { notes: 'Some private note' })
+    expect(await listAuditLogs({ entityType: 'employee', entityId: emp.id })).toHaveLength(1)
+
+    await deleteEmployee(emp.id)
     await deleteNode(dept.id)
   })
 })

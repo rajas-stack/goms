@@ -8,11 +8,12 @@ const ENTITY_TYPES = [
   { value: 'boq', label: 'BOQ' },
   { value: 'sku', label: 'SKU' },
   { value: 'feature', label: 'Feature' },
+  { value: 'employee', label: 'Employee' },
 ]
 
-/** Read-only, filterable view over the append-only Commercial Calculator
- *  audit trail (spec §6.6/§15) — BOQ creation and lifecycle transitions
- *  write here today. */
+/** Read-only, filterable view over the shared, cross-module append-only
+ *  audit trail (spec §4/§6.6/§15/§8 Phase 5) — Commercial Calculator BOQ/SKU/
+ *  feature mutations and employee field changes all write here today. */
 export function AuditLog() {
   const [entityType, setEntityType] = useState('')
   const { data: rows = [] } = useAuditLogs({ entityType: entityType || undefined })

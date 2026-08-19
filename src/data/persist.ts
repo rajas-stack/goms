@@ -109,11 +109,9 @@ export const PERSIST_RETRY_EXHAUSTED_EVENT = 'gorms:persist-retry-exhausted'
  *  unresolved message. */
 export const PERSIST_RECOVERED_EVENT = 'gorms:persist-recovered'
 
-/** No-ops outside a browser (Node test environments, e.g. the Supabase
- *  integration suite exercising the recordCommercialAuditLogEntry bridge
- *  through this same persistence path) rather than crashing on a missing
- *  global. Real browsers always have `window`, so production behavior is
- *  unchanged. */
+/** No-ops outside a browser (Node test environments) rather than crashing on
+ *  a missing global. Real browsers always have `window`, so production
+ *  behavior is unchanged. */
 function dispatchWindowEvent(event: Event): void {
   if (typeof window === 'undefined') return
   window.dispatchEvent(event)
@@ -247,12 +245,10 @@ export function scheduleSave(getData: () => GormsData): void {
 
   if (flushHooked) return
   flushHooked = true
-  // Guards a non-browser caller (Node test environments — e.g. the
-  // Supabase-backed commercialMasters/commercialSkus integration tests, which
-  // call the still-in-memory recordCommercialAuditLogEntry bridge through
-  // this same mutator-wrapping proxy) rather than crashing on a missing
-  // global. Real browsers always have `document`/`window`, so production
-  // behavior is unchanged.
+  // Guards a non-browser caller (Node test environments calling a
+  // not-yet-migrated in-memory mutator through this same persistence-wrapping
+  // proxy) rather than crashing on a missing global. Real browsers always
+  // have `document`/`window`, so production behavior is unchanged.
   if (typeof document === 'undefined' || typeof window === 'undefined') return
   // Android can freeze or kill the WebView as soon as the app is backgrounded,
   // and a browser tab can close, either of which would drop a debounced write

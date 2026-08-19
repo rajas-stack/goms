@@ -1,5 +1,5 @@
 import { supabase } from './client'
-import { repository as inMemoryRepository } from '../in-memory/repository'
+import { recordAuditLogEntry } from './audit-logs'
 import { getMaster, listMaster } from './commercial-masters'
 import { getSku, listSkus } from './commercial-skus'
 import {
@@ -176,7 +176,7 @@ export async function createBoq(input: CreateBoqInput): Promise<CommercialBoq> {
   if (error) throw error
   const created = toBoq(data)
 
-  await inMemoryRepository.recordCommercialAuditLogEntry({
+  await recordAuditLogEntry({
     entityType: 'boq', entityId: created.id, field: 'boqNumber', oldValue: '', newValue: created.boqNumber,
     reason: '', action: 'create', changedBy: null,
   })
@@ -271,13 +271,13 @@ export async function updateBoqLineItem(
   await recomputeBoqGrandTotal(existing.boqId)
 
   if (patch.quantity !== undefined && quantity !== existing.quantity) {
-    await inMemoryRepository.recordCommercialAuditLogEntry({
+    await recordAuditLogEntry({
       entityType: 'boqLineItem', entityId: id, field: 'quantity',
       oldValue: String(existing.quantity), newValue: String(quantity), reason: '', action: 'update', changedBy: null,
     })
   }
   if (patch.discountPct !== undefined && discountPct !== existing.discountPct) {
-    await inMemoryRepository.recordCommercialAuditLogEntry({
+    await recordAuditLogEntry({
       entityType: 'boqLineItem', entityId: id, field: 'discountPct',
       oldValue: String(existing.discountPct), newValue: String(discountPct), reason: '', action: 'update', changedBy: null,
     })
@@ -323,7 +323,7 @@ export async function updateBoqStatus(id: string, nextStatus: BoqStatus, changeR
     .update({ status: nextStatus, last_modified_at: new Date().toISOString() }).eq('id', id).select('*').single()
   if (error) throw error
 
-  await inMemoryRepository.recordCommercialAuditLogEntry({
+  await recordAuditLogEntry({
     entityType: 'boq', entityId: id, field: 'status', oldValue: boq.status, newValue: nextStatus,
     reason: changeReason, action: 'status_change', changedBy: null,
   })
@@ -374,7 +374,7 @@ export async function reviseBoq(id: string): Promise<CommercialBoq> {
   const revised = await copyBoqWithLines(original, {
     boqNumber: original.boqNumber, boqVersion: original.boqVersion + 1, parentBoqId: original.id,
   })
-  await inMemoryRepository.recordCommercialAuditLogEntry({
+  await recordAuditLogEntry({
     entityType: 'boq', entityId: revised.id, field: 'boqVersion',
     oldValue: String(original.boqVersion), newValue: String(revised.boqVersion),
     reason: 'Revision of an existing BOQ.', action: 'create', changedBy: null,
@@ -390,7 +390,7 @@ export async function duplicateBoq(id: string): Promise<CommercialBoq> {
   if (!original) throw new Error(`No such BOQ: ${id}`)
   const boqNumber = await generateBoqNumber()
   const duplicate = await copyBoqWithLines(original, { boqNumber, boqVersion: 1, parentBoqId: null })
-  await inMemoryRepository.recordCommercialAuditLogEntry({
+  await recordAuditLogEntry({
     entityType: 'boq', entityId: duplicate.id, field: 'boqNumber', oldValue: '', newValue: duplicate.boqNumber,
     reason: `Duplicated from ${original.boqNumber}.`, action: 'create', changedBy: null,
   })

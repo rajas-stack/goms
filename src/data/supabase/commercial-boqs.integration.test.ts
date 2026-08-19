@@ -8,7 +8,7 @@ import {
   addBoqLineItem, createBoq, deleteBoq, duplicateBoq, getBoq, listAllBoqLineItems, listBoqLineItems, listBoqs,
   removeBoqLineItem, reviseBoq, updateBoqLineItem, updateBoqStatus,
 } from './commercial-boqs'
-import { repository as inMemoryRepository } from '../in-memory/repository'
+import { listAuditLogs } from './audit-logs'
 
 // `approverId` is an FK to `employees`, NOT `sales_people` — a different
 // table with different uuids (confirmed against the schema comment on
@@ -191,14 +191,13 @@ describe('commercial BOQs (Supabase integration)', () => {
   it('writes audit entries for quantity/discountPct edits but not for add/remove', async () => {
     const fixture = await buildFixture()
     const boq = await createBoq(boqInput(fixture))
-    const before = (await inMemoryRepository.listAuditLogs({ entityType: 'boqLineItem' })).length
     const line = await addBoqLineItem(boq.id, { skuId: fixture.sku.id, quantity: 1, unitPrice: 2000, discountPct: 5 })
     await updateBoqLineItem(line.id, { quantity: 4, discountPct: 15 })
-    const entries = (await inMemoryRepository.listAuditLogs({ entityType: 'boqLineItem', entityId: line.id }))
+    const entries = await listAuditLogs({ entityType: 'boqLineItem', entityId: line.id })
     expect(entries.map((e) => e.field).sort()).toEqual(['discountPct', 'quantity'])
     await removeBoqLineItem(line.id)
-    const afterRemove = (await inMemoryRepository.listAuditLogs({ entityType: 'boqLineItem' })).length
-    expect(afterRemove).toBe(before + 2)
+    const afterRemove = await listAuditLogs({ entityType: 'boqLineItem', entityId: line.id })
+    expect(afterRemove).toHaveLength(2) // add/remove write no new entries — still just the earlier quantity/discountPct pair
     await deleteBoq(boq.id)
     await fixture.cleanup()
   })

@@ -33,6 +33,8 @@ import {
   listBoqs, getBoq, listBoqLineItems, listAllBoqLineItems, createBoq, addBoqLineItem,
   updateBoqLineItem, removeBoqLineItem, updateBoqStatus, reviseBoq, duplicateBoq, deleteBoq,
 } from './supabase/commercial-boqs'
+import { listAuditLogs } from './supabase/audit-logs'
+import { search, relatedRecords, relationshipAnalytics } from './supabase/cross-cutting'
 
 /** One bucket per independently-migratable slice of the Repository interface.
  *  `hierarchy` is not `departments` or `geography`: it holds the handful of
@@ -94,10 +96,6 @@ export const DOMAIN_OF: Record<keyof Repository, DomainKey> = {
   createMaster: 'commercialMasters', updateMaster: 'commercialMasters', setMasterActive: 'commercialMasters',
   deleteMaster: 'commercialMasters', setEditionFeatures: 'commercialMasters', listMaster: 'commercialMasters',
   getMaster: 'commercialMasters', listEditionFeatures: 'commercialMasters',
-  // Classified here (not a real "master entity" mutation) so the DOMAIN_OF
-  // exhaustiveness check passes. Deliberately NEVER added to SUPABASE_IMPL —
-  // see Task 1 of the Phase 3 plan and the interface doc comment.
-  recordCommercialAuditLogEntry: 'commercialMasters',
 
   // commercialSkus
   createSku: 'commercialSkus', updateSku: 'commercialSkus', deleteSku: 'commercialSkus',
@@ -130,7 +128,7 @@ export const DOMAIN_OF: Record<keyof Repository, DomainKey> = {
  *  entry at a time, in the sequential order defined in the architecture spec §8. */
 export const MIGRATED = new Set<DomainKey>([
   'departments', 'geography', 'hierarchy', 'employees', 'customers', 'salesPeople', 'ownership',
-  'commercialMasters', 'commercialSkus', 'commercialBom', 'commercialBoqs',
+  'commercialMasters', 'commercialSkus', 'commercialBom', 'commercialBoqs', 'auditLogs', 'crossCutting',
 ])
 
 /** Populated by each domain's Phase 2+ Supabase implementation — e.g.
@@ -160,6 +158,8 @@ const SUPABASE_IMPL: Partial<Repository> = {
   listBomItemsForSku, listAllBomItems, createBomItem, updateBomItem, deleteBomItem,
   listBoqs, getBoq, listBoqLineItems, listAllBoqLineItems, createBoq, addBoqLineItem,
   updateBoqLineItem, removeBoqLineItem, updateBoqStatus, reviseBoq, duplicateBoq, deleteBoq,
+  listAuditLogs,
+  search, relatedRecords, relationshipAnalytics,
 }
 
 /** A Proxy, not `{ ...inMemoryRepository }`: `InMemoryRepository`'s methods
