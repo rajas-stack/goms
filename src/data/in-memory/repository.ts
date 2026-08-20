@@ -1989,3 +1989,24 @@ export const repository: Repository = new Proxy(impl, {
     }
   },
 }) as Repository
+
+// `impl` is a module-level singleton hydrated exactly once, at startup,
+// before `main.tsx`'s first render (see bootstrapRepository above). Without
+// this, Vite can re-execute this module in place when it (or something it
+// imports) changes during a dev session — re-running
+// `const impl = new InMemoryRepository()` with fresh, unhydrated seed data,
+// while the mounted React tree survives via Fast Refresh and keeps rendering
+// through it. The user sees their data "disappear," and the very next
+// mutation schedules a save of that empty seed state, overwriting the real
+// IndexedDB snapshot for good. Accepting the update and immediately
+// `invalidate()`-ing it is Vite's documented way to say "this module can
+// never be hot-swapped in place" — it forces the update to propagate into a
+// full page reload instead, which correctly re-runs `bootstrapRepository()`
+// before anything renders. This only affects local dev (`import.meta.hot` is
+// undefined in production builds and in the Vitest environment, so it's a
+// no-op there).
+if (import.meta.hot) {
+  import.meta.hot.accept(() => {
+    import.meta.hot!.invalidate('src/data/in-memory/repository.ts holds a hydrated singleton and cannot be hot-swapped safely')
+  })
+}
