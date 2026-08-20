@@ -207,7 +207,11 @@ export function useBoqLineItemMutations(boqId: string) {
     mutationFn: (id: string) => repository.removeBoqLineItem(id),
     onSuccess: invalidate,
   })
-  return { add, update, remove }
+  const reorder = useMutation({
+    mutationFn: (orderedIds: string[]) => repository.reorderBoqLineItems(boqId, orderedIds),
+    onSuccess: invalidate,
+  })
+  return { add, update, remove, reorder }
 }
 
 // --- Dashboard (spec §11) ----------------------------------------------------
