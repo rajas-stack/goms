@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  PricingValidationError, computeBulkClearDiscount, computeBulkSetDiscount, computeBulkSetSellingPrice,
-  discountPctForSellingPrice, marginPctForSellingPrice, maxDiscountPercentForLevel, removePricingLevel,
+  PricingValidationError, computeBulkClearDiscount, computeBulkSetDiscount, computeBulkSetQuantity,
+  computeBulkSetSellingPrice, computeBulkSwitchActivePricingLevel,
+  discountPctForSellingPrice, effectiveUnitPrice, isAbsoluteLinePrice, marginPctForSellingPrice,
+  maxDiscountPercentForLevel, removePricingLevel,
   resolveLineUnitPrice, sellingPriceForDiscountPct, sellingPriceForMargin, skuPriceForLevel, upsertPricingLevel,
   validateSellingPrice,
 } from './pricing-levels-logic'
@@ -120,15 +122,34 @@ describe('upsertPricingLevel / removePricingLevel', () => {
 
 describe('resolveLineUnitPrice', () => {
   it('falls back to the line\'s own current discount when no level is active (legacy/plain lines)', () => {
-    expect(resolveLineUnitPrice(sku(), 15, [], null)).toEqual({ unitPrice: 1000, discountPct: 15 })
+    expect(resolveLineUnitPrice(sku(), 15, [], null)).toEqual({ unitPrice: 1000, discountPct: 15, isAbsolutePrice: false })
   })
   it('uses the active level\'s selling price and derives discount against list price', () => {
     const levels = [{ level: 'government' as const, sellingPrice: 850 }]
-    expect(resolveLineUnitPrice(sku(), 0, levels, 'government')).toEqual({ unitPrice: 850, discountPct: 15 })
+    expect(resolveLineUnitPrice(sku(), 0, levels, 'government')).toEqual({ unitPrice: 850, discountPct: 15, isAbsolutePrice: true })
   })
   it('falls back to the current discount if the active level has no price yet', () => {
     const levels = [{ level: 'government' as const, sellingPrice: null }]
-    expect(resolveLineUnitPrice(sku(), 5, levels, 'government')).toEqual({ unitPrice: 1000, discountPct: 5 })
+    expect(resolveLineUnitPrice(sku(), 5, levels, 'government')).toEqual({ unitPrice: 1000, discountPct: 5, isAbsolutePrice: false })
+  })
+})
+
+describe('isAbsoluteLinePrice / effectiveUnitPrice', () => {
+  it('is false with no active level, true with a resolved one', () => {
+    const levels = [{ level: 'government' as const, sellingPrice: 850 }]
+    expect(isAbsoluteLinePrice([], null)).toBe(false)
+    expect(isAbsoluteLinePrice(levels, null)).toBe(false)
+    expect(isAbsoluteLinePrice(levels, 'government')).toBe(true)
+    expect(isAbsoluteLinePrice([{ level: 'government', sellingPrice: null }], 'government')).toBe(false)
+  })
+
+  it('does not re-apply discountPct on top of an already-absolute price (regression: was double-discounting)', () => {
+    // A pricing-level line's unitPrice (850) IS the final per-unit charge —
+    // discountPct (15%, derived only for display/banding) must not be
+    // subtracted again, or the effective price would wrongly become 722.5.
+    expect(effectiveUnitPrice(850, 15, true)).toBe(850)
+    // The classic (no active level) path still applies discountPct as before.
+    expect(effectiveUnitPrice(1000, 15, false)).toBeCloseTo(850, 5)
   })
 })
 
@@ -187,5 +208,37 @@ describe('bulk pricing actions', () => {
     const [result] = computeBulkSetDiscount([line({ skuId: 'missing' })], new Map(), 'internal', 10)
     expect(result.ok).toBe(false)
     expect(result.error).toMatch(/sku/i)
+  })
+})
+
+describe('computeBulkSetQuantity', () => {
+  it('sets the same quantity on every line', () => {
+    const results = computeBulkSetQuantity([line({ id: 'l1' }), line({ id: 'l2' })], 5)
+    expect(results).toEqual([
+      { lineId: 'l1', ok: true, quantity: 5 },
+      { lineId: 'l2', ok: true, quantity: 5 },
+    ])
+  })
+
+  it('reports every line as failed for a non-positive quantity, without throwing', () => {
+    const results = computeBulkSetQuantity([line({ id: 'l1' })], 0)
+    expect(results).toEqual([{ lineId: 'l1', ok: false, error: expect.stringMatching(/greater than 0/i) }])
+  })
+})
+
+describe('computeBulkSwitchActivePricingLevel', () => {
+  it('switches the active level and resolves unit price/discount from it, for lines that already have that level', () => {
+    const skusById = new Map([['s1', sku()]])
+    const withLevel = line({ id: 'l1', pricingLevels: [{ level: 'government', sellingPrice: 850 }] })
+    const [result] = computeBulkSwitchActivePricingLevel([withLevel], skusById, 'government')
+    expect(result).toEqual({ lineId: 'l1', ok: true, activePricingLevel: 'government', unitPrice: 850, discountPct: expect.closeTo(15, 5) })
+  })
+
+  it('reports, rather than silently skipping, a line that does not have the chosen level', () => {
+    const skusById = new Map([['s1', sku()]])
+    const withoutLevel = line({ id: 'l1', pricingLevels: [] })
+    const [result] = computeBulkSwitchActivePricingLevel([withoutLevel], skusById, 'government')
+    expect(result.ok).toBe(false)
+    expect(result.error).toMatch(/government.*not present/i)
   })
 })

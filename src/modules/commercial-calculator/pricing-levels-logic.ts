@@ -96,6 +96,25 @@ export function removePricingLevel(levels: LinePricingLevel[], level: PricingLev
   return levels.filter((l) => l.level !== level)
 }
 
+/** True when a line's `unitPrice` is already the final absolute per-unit
+ *  charge — an active pricing level with a resolved selling price — rather
+ *  than a pre-discount reference price `discountPct` still needs to be
+ *  applied to. `discountPct` stays meaningful either way (approval banding,
+ *  the "X% off" display), but total/floor-check math must apply it only in
+ *  the second case, or an absolute price gets discounted a second time on
+ *  top of a value that's already net. */
+export function isAbsoluteLinePrice(pricingLevels: LinePricingLevel[], activePricingLevel: PricingLevelKey | null): boolean {
+  if (!activePricingLevel) return false
+  return pricingLevels.some((l) => l.level === activePricingLevel && l.sellingPrice !== null)
+}
+
+/** The unit price actually charged per unit before tax: `unitPrice` itself
+ *  when it's already absolute (see `isAbsoluteLinePrice`), otherwise
+ *  `unitPrice` discounted by `discountPct`. */
+export function effectiveUnitPrice(unitPrice: number, discountPct: number, isAbsolutePrice: boolean): number {
+  return isAbsolutePrice ? unitPrice : unitPrice * (1 - discountPct / 100)
+}
+
 /** Given a line's pricingLevels + activePricingLevel, resolves the effective
  *  unitPrice/discountPct that feed the existing calculation pipeline
  *  (computeLineTotal, resolveApprovalBand, ...). `currentDiscountPct` is the
@@ -104,17 +123,22 @@ export function removePricingLevel(levels: LinePricingLevel[], level: PricingLev
  *  touch the Selling Price section) behave exactly as before. */
 export function resolveLineUnitPrice(
   sku: CommercialSku, currentDiscountPct: number, pricingLevels: LinePricingLevel[], activePricingLevel: PricingLevelKey | null,
-): { unitPrice: number; discountPct: number } {
+): { unitPrice: number; discountPct: number; isAbsolutePrice: boolean } {
   const active = activePricingLevel ? pricingLevels.find((l) => l.level === activePricingLevel) : undefined
   if (!active || active.sellingPrice === null) {
-    return { unitPrice: sku.listPrice, discountPct: currentDiscountPct }
+    return { unitPrice: sku.listPrice, discountPct: currentDiscountPct, isAbsolutePrice: false }
   }
-  return { unitPrice: active.sellingPrice, discountPct: discountPctForSellingPrice(sku.listPrice, active.sellingPrice) }
+  return {
+    unitPrice: active.sellingPrice,
+    discountPct: discountPctForSellingPrice(sku.listPrice, active.sellingPrice),
+    isAbsolutePrice: true,
+  }
 }
 
 export interface BulkPricingResult {
   lineId: string
   ok: boolean
+  quantity?: number
   unitPrice?: number
   discountPct?: number
   pricingLevels?: LinePricingLevel[]
@@ -166,4 +190,29 @@ export function computeBulkClearDiscount(
   lines: CommercialBoqLineItem[], skusById: Map<string, CommercialSku>,
 ): BulkPricingResult[] {
   return bulkApply(lines, skusById, (sku) => ({ unitPrice: sku.listPrice, discountPct: 0, activePricingLevel: null }))
+}
+
+export function computeBulkSetQuantity(lines: CommercialBoqLineItem[], quantity: number): BulkPricingResult[] {
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return lines.map((line) => ({ lineId: line.id, ok: false, error: 'Quantity must be greater than 0.' }))
+  }
+  return lines.map((line) => ({ lineId: line.id, ok: true, quantity }))
+}
+
+/** Switch-only — never adds `level` to a line that doesn't already have it
+ *  (BOQ workbench spec §8's approved bulk-edit decision). Lines missing the
+ *  level are reported as failures so the caller can list them by SKU,
+ *  never silently skipped. */
+export function computeBulkSwitchActivePricingLevel(
+  lines: CommercialBoqLineItem[], skusById: Map<string, CommercialSku>, level: PricingLevelKey,
+): BulkPricingResult[] {
+  return lines.map((line) => {
+    const sku = skusById.get(line.skuId)
+    if (!sku) return { lineId: line.id, ok: false, error: 'No SKU found for this line.' }
+    if (!line.pricingLevels.some((l) => l.level === level)) {
+      return { lineId: line.id, ok: false, error: `${PRICING_LEVEL_LABEL[level]} is not present on this line.` }
+    }
+    const { unitPrice, discountPct } = resolveLineUnitPrice(sku, line.discountPct, line.pricingLevels, level)
+    return { lineId: line.id, ok: true, unitPrice, discountPct, activePricingLevel: level }
+  })
 }
