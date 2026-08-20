@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAllEmployees, useDepartments, useSalesPersons } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
+import { Checkbox } from '@/components/ui/Checkbox'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
@@ -13,9 +14,11 @@ import { useAllBomItems, useBoqLineItemMutations, useBoqLineItems, useBoqMutatio
 import { buildProposalPrintHtml } from '../proposal-print'
 import { computeBoqMarginPercent, resolveApprovalBand } from '../repository-logic'
 import { resolveLineUnitPrice } from '../pricing-levels-logic'
+import type { BulkPricingResult } from '../pricing-levels-logic'
 import { SkuLinePicker } from '../components/SkuLinePicker'
 import { SellingPriceSection } from '../components/SellingPriceSection'
 import { LineApprovalSummary } from '../components/LineApprovalSummary'
+import { BulkEditBar } from '../components/BulkEditBar'
 import { STATUS_LABEL } from './BoqManagement'
 import type { ApprovalMatrixRule, BoqStatus, CommercialBoq, CommercialBoqLineItem, CommercialBomItem, CommercialSku } from '../types'
 
@@ -260,6 +263,35 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, lineM
 }) {
   const toast = useToast()
   const isDraft = boq.status === 'draft'
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const selectedLines = lines.filter((l) => selectedIds.includes(l.id))
+
+  function toggleOne(id: string) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
+  }
+  function toggleAll() {
+    setSelectedIds((prev) => (prev.length === lines.length ? [] : lines.map((l) => l.id)))
+  }
+
+  async function applyBulkResults(results: BulkPricingResult[]) {
+    const failed = results.filter((r) => !r.ok)
+    for (const r of results.filter((r) => r.ok)) {
+      try {
+        await lineMutations.update.mutateAsync({
+          id: r.lineId,
+          patch: { unitPrice: r.unitPrice, discountPct: r.discountPct, pricingLevels: r.pricingLevels, activePricingLevel: r.activePricingLevel },
+        })
+      } catch (e) {
+        failed.push({ lineId: r.lineId, ok: false, error: e instanceof Error ? e.message : 'Could not save.' })
+      }
+    }
+    if (failed.length > 0) {
+      toast(`${failed.length} line(s) could not be updated: ${failed.map((f) => f.error).join('; ')}`)
+    } else {
+      toast('Bulk update applied.')
+    }
+    setSelectedIds([])
+  }
 
   async function handleAdd(line: { skuId: string; quantity: number; discountPct: number; pricingLevels: CommercialBoqLineItem['pricingLevels']; activePricingLevel: CommercialBoqLineItem['activePricingLevel'] }) {
     const sku = skuById.get(line.skuId)
@@ -277,11 +309,27 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, lineM
   return (
     <div>
       <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-muted">Line Items</h3>
+      {isDraft && lines.length > 0 && (
+        <div className="mb-2 flex items-center gap-2">
+          <Checkbox checked={selectedIds.length === lines.length} indeterminate={selectedIds.length > 0 && selectedIds.length < lines.length} onChange={toggleAll} aria-label="Select all lines" />
+          <span className="text-[12px] text-muted">Select all</span>
+        </div>
+      )}
+      {isDraft && selectedLines.length > 0 && (
+        <div className="mb-2">
+          <BulkEditBar selectedLines={selectedLines} skusById={skuById} onApply={applyBulkResults} />
+        </div>
+      )}
       <div className="flex flex-col gap-2">
         {lines.map((line) => {
           const sku = skuById.get(line.skuId)
           return isDraft ? (
-            <DraftLineRow key={line.id} line={line} sku={sku} bomItems={bomItems} skuById={skuById} approvalMatrix={approvalMatrix} lineMutations={lineMutations} />
+            <div key={line.id} className="flex items-start gap-2">
+              <Checkbox checked={selectedIds.includes(line.id)} onChange={() => toggleOne(line.id)} aria-label={`Select ${sku?.skuCode ?? 'line'}`} />
+              <div className="flex-1">
+                <DraftLineRow line={line} sku={sku} bomItems={bomItems} skuById={skuById} approvalMatrix={approvalMatrix} lineMutations={lineMutations} />
+              </div>
+            </div>
           ) : (
             <NonDraftLineRow key={line.id} line={line} sku={sku} approvalMatrix={approvalMatrix} />
           )
