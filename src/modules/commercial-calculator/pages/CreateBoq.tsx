@@ -4,6 +4,7 @@ import { convertWorkAmount, formatBudgetRange, WORK_VALUE_UNITS } from '@/featur
 import { EmployeePicker } from '@/features/employees/EmployeePicker'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
+import { Collapsible } from '@/components/ui/Collapsible'
 import { Combobox } from '@/components/ui/Combobox'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
@@ -242,10 +243,30 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         <p className="text-[12px] text-muted">Configure the commercial proposal, then save as draft or submit for review.</p>
       </div>
 
+      <div className="sticky top-0 z-10 flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-white/95 px-4 py-1.5 backdrop-blur">
+        {[
+          { id: 'section-opportunity', label: 'Opportunity' },
+          { id: 'section-customer', label: 'Customer' },
+          { id: 'section-lines', label: 'Line Items' },
+          { id: 'section-pricing', label: 'Pricing' },
+          { id: 'section-approval', label: 'Approval' },
+          { id: 'section-preview', label: 'Preview' },
+        ].map((s) => (
+          <button
+            key={s.id}
+            onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className="shrink-0 rounded-full px-2.5 py-1 text-[12px] font-medium text-muted transition-colors hover:bg-ink-900/[0.05] hover:text-ink-900"
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
       <div className="flex flex-col gap-6 p-4">
         {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</p>}
 
-        <SectionCard title="Opportunity Information" icon="Briefcase">
+        <div id="section-opportunity">
+        <Collapsible title="Opportunity Information" icon="Briefcase">
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
             <Field label="Opportunity Name" hint="Must be unique across all BOQs.">
               <Input value={opportunityName} onChange={(e) => setOpportunityName(e.target.value)} />
@@ -373,9 +394,11 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               </Select>
             </Field>
           </div>
-        </SectionCard>
+        </Collapsible>
+        </div>
 
-        <SectionCard title="Customer Information" icon="Building2">
+        <div id="section-customer">
+        <Collapsible title="Customer Information" icon="Building2">
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
             <Field
               label="Stakeholder Contact"
@@ -405,9 +428,11 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               <Field label="Address"><Textarea value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} /></Field>
             </div>
           </div>
-        </SectionCard>
+        </Collapsible>
+        </div>
 
-        <SectionCard title="Commercial Configuration" icon="Boxes">
+        <div id="section-lines">
+        <Collapsible title="Commercial Configuration" icon="Boxes">
           {!verticalId ? (
             <p className="text-[13px] text-muted">Select a Vertical above to start configuring this proposal.</p>
           ) : (
@@ -439,18 +464,22 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               })}
             </div>
           )}
-        </SectionCard>
+        </Collapsible>
+        </div>
 
-        <SectionCard title="Pricing Summary" icon="FileSpreadsheet">
+        <div id="section-pricing">
+        <Collapsible title="Pricing Summary" icon="FileSpreadsheet">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <SummaryStat label="Taxes" value={totalTax.toLocaleString()} />
             <SummaryStat label="Margin" value={`${marginPreview.toFixed(1)}%`} />
             <SummaryStat label="Line Items" value={String(lines.length)} />
             <SummaryStat label="Grand Total" value={`${effectiveCurrencyCode} ${grandTotal.toLocaleString()}`} emphasis />
           </div>
-        </SectionCard>
+        </Collapsible>
+        </div>
 
-        <SectionCard title="Approval Summary" icon="Check">
+        <div id="section-approval">
+        <Collapsible title="Approval Summary" icon="Check">
           {lines.length === 0 ? (
             <p className="text-[13px] text-muted">Add lines above to see which will need manual approval.</p>
           ) : (
@@ -472,9 +501,11 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               )}
             </div>
           )}
-        </SectionCard>
+        </Collapsible>
+        </div>
 
-        <SectionCard title="BOQ Preview" icon="FileText">
+        <div id="section-preview">
+        <Collapsible title="BOQ Preview" icon="FileText" defaultOpen={false}>
           {lines.length === 0 ? (
             <p className="text-[13px] text-muted">The full proposal preview appears once at least one line is configured.</p>
           ) : (
@@ -522,7 +553,8 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               </div>
             </div>
           )}
-        </SectionCard>
+        </Collapsible>
+        </div>
 
         <div className="flex flex-col items-end gap-1.5 border-t border-line pt-4">
           <div className="flex gap-2">
@@ -540,18 +572,6 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         </div>
       </div>
     </div>
-  )
-}
-
-function SectionCard({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl border border-line bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center gap-2">
-        <Icon name={icon} size={16} className="text-ink-700" />
-        <h2 className="text-[13px] font-semibold uppercase tracking-wide text-ink-800">{title}</h2>
-      </div>
-      {children}
-    </section>
   )
 }
 
