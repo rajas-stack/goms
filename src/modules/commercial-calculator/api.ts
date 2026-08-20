@@ -1,10 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { repository } from '@/data/repository'
-import { conversionFactor, currencyByCode } from './currency'
-import { computeBoqMarginPercent, isBoqPendingApproval } from './repository-logic'
+import { isBoqPendingApproval } from './repository-logic'
 import type {
   BoqStatus, CommercialBoqLineItem, CommercialSku, CreateBoqInput, CreateBoqLineItemInput, CreateBomItemInput,
-  CreateMasterInput, CreateSkuInput, Currency, MasterEntityKey, MasterRowMap,
+  CreateMasterInput, CreateSkuInput, MasterEntityKey, MasterRowMap,
 } from './types'
 
 const qk = {
@@ -214,55 +213,18 @@ export interface DashboardMetrics {
   pendingApproval: number
   approved: number
   rejected: number
-  totalCommercialValue: number
-  /** The currency `totalCommercialValue` is expressed in — always the
-   *  configured base currency, since BOQs in the active pipeline can each be
-   *  denominated in a different currency and get converted to a common one
-   *  before being summed. */
-  totalCommercialValueCurrencyCode: string
-  averageMargin: number
-}
-
-/** Spec §11: "active pipeline" for Total Commercial Value / Average Margin
- *  is every BOQ NOT in one of these four terminal-or-not-yet-real statuses. */
-const EXCLUDED_FROM_ACTIVE_PIPELINE: BoqStatus[] = ['draft', 'cancelled', 'rejected', 'archived']
-
-function resolveBaseCurrency(currencies: Currency[]): Currency {
-  const base = currencies.find((c) => c.isBaseCurrency)
-  if (!base) throw new Error('No base currency configured.')
-  return base
 }
 
 export const useDashboardMetrics = () =>
   useQuery({
     queryKey: qk.dashboardMetrics,
     queryFn: async (): Promise<DashboardMetrics> => {
-      const [boqs, skus, currencies, bomItems] = await Promise.all([
-        repository.listBoqs(), repository.listSkus(), repository.listMaster('currencies'), repository.listAllBomItems(),
-      ])
-      const skusById = new Map(skus.map((s) => [s.id, s]))
-      const baseCurrency = resolveBaseCurrency(currencies)
-      const activePipeline = boqs.filter((b) => !EXCLUDED_FROM_ACTIVE_PIPELINE.includes(b.status))
-      // Each BOQ's grandTotal is in its own `currency` — convert to the base
-      // currency before summing across BOQs, the same way a single BOQ's
-      // lines are converted before summing into its own grandTotal.
-      const totalCommercialValue = activePipeline.reduce(
-        (sum, b) => sum + b.grandTotal * conversionFactor(currencyByCode(currencies, b.currency), baseCurrency),
-        0,
-      )
-      const margins = await Promise.all(activePipeline.map(async (b) => {
-        const lines = await repository.listBoqLineItems(b.id)
-        return computeBoqMarginPercent(b, lines, skusById, currencies, bomItems)
-      }))
-      const averageMargin = margins.length === 0 ? 0 : margins.reduce((a, c) => a + c, 0) / margins.length
+      const boqs = await repository.listBoqs()
       return {
         draft: boqs.filter((b) => b.status === 'draft').length,
         pendingApproval: boqs.filter((b) => isBoqPendingApproval(b.status)).length,
         approved: boqs.filter((b) => b.status === 'approved').length,
         rejected: boqs.filter((b) => b.status === 'rejected').length,
-        totalCommercialValue,
-        totalCommercialValueCurrencyCode: baseCurrency.code,
-        averageMargin,
       }
     },
   })

@@ -1,13 +1,25 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
+import { cn } from '@/lib/utils'
 import { useBoqs, useDashboardMetrics } from '../api'
 import { isBoqPendingApproval } from '../repository-logic'
 import type { CommercialBoq } from '../types'
 
-function KpiCard({ label, value, icon, tone }: { label: string; value: string; icon: string; tone?: string }) {
+type Category = 'draft' | 'pendingApproval' | 'approved' | 'rejected'
+
+function KpiCard({ label, value, icon, tone, active, onClick }: {
+  label: string; value: string; icon: string; tone?: string; active: boolean; onClick: () => void
+}) {
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-3.5 shadow-sm">
+    <button
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'flex items-center gap-3 rounded-xl border px-4 py-3.5 text-left shadow-sm transition-colors',
+        active ? 'border-ink-900 bg-ink-900/[0.04]' : 'border-line bg-white hover:bg-panel/60',
+      )}
+    >
       <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${tone ?? 'bg-panel text-ink-700'}`}>
         <Icon name={icon} size={18} />
       </div>
@@ -15,7 +27,7 @@ function KpiCard({ label, value, icon, tone }: { label: string; value: string; i
         <div className="truncate text-xl font-semibold leading-tight text-ink-900">{value}</div>
         <div className="truncate text-[12px] text-muted">{label}</div>
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -34,29 +46,15 @@ function BoqRow({ boq, onOpen }: { boq: CommercialBoq; onOpen: () => void }) {
       <span className="shrink-0 rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{boq.boqNumber}</span>
       <span className="min-w-0 flex-1 truncate text-sm text-ink-900">{boq.opportunityName}</span>
       <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLE[boq.status]}`}>{boq.status}</span>
-      <span className="shrink-0 text-[12px] font-medium text-ink-700">{boq.currency} {boq.grandTotal.toLocaleString()}</span>
     </button>
   )
 }
 
-function BoqGroup({ title, icon, boqs, emptyLabel, onOpen }: {
-  title: string; icon: string; boqs: CommercialBoq[]; emptyLabel: string; onOpen: (id: string) => void
-}) {
-  return (
-    <div className="flex flex-col gap-2">
-      <h2 className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-muted">
-        <Icon name={icon} size={13} />
-        {title} {boqs.length > 0 && <span className="text-ink-400">({boqs.length})</span>}
-      </h2>
-      {boqs.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-line px-3 py-3 text-[13px] text-muted">{emptyLabel}</p>
-      ) : (
-        <div className="flex flex-col gap-1.5">
-          {boqs.slice(0, 5).map((b) => <BoqRow key={b.id} boq={b} onOpen={() => onOpen(b.id)} />)}
-        </div>
-      )}
-    </div>
-  )
+const CATEGORY_META: Record<Category, { title: string; icon: string; emptyLabel: string }> = {
+  draft: { title: 'Draft', icon: 'FileText', emptyLabel: 'No drafts in progress.' },
+  pendingApproval: { title: 'Pending Approval', icon: 'Clock', emptyLabel: 'Nothing waiting on approval.' },
+  approved: { title: 'Approved', icon: 'Check', emptyLabel: 'No approved BOQs.' },
+  rejected: { title: 'Rejected', icon: 'UserX', emptyLabel: 'No rejected BOQs.' },
 }
 
 /** Commercial Calculator's landing page — a WORK dashboard, not an admin one
@@ -64,19 +62,25 @@ function BoqGroup({ title, icon, boqs, emptyLabel, onOpen }: {
  *  work-queues (draft/pending/approved/rejected) are the point; there is
  *  deliberately no "Manage Masters/BOM/SKU" quick-actions block here — those
  *  are administration functions and shouldn't compete for attention with the
- *  commercial workflow. */
+ *  commercial workflow. The KPI cards are count-only click-to-filter
+ *  controls (2026-08-19 pricing overhaul spec §9) — Commercial Value/Average
+ *  Margin cards are gone since margin now lives at the pricing-level/line
+ *  level, not as a document-wide average. */
 export function Dashboard({ onCreateBoq, onNavigate }: {
   onCreateBoq: () => void
   onNavigate: (section: string) => void
 }) {
   const { data: metrics } = useDashboardMetrics()
   const { data: boqs = [] } = useBoqs()
+  const [selected, setSelected] = useState<Category | null>(null)
 
   const byRecency = (a: CommercialBoq, b: CommercialBoq) => (a.lastModifiedAt < b.lastModifiedAt ? 1 : -1)
-  const drafts = useMemo(() => boqs.filter((b) => b.status === 'draft').sort(byRecency), [boqs])
-  const pending = useMemo(() => boqs.filter((b) => isBoqPendingApproval(b.status)).sort(byRecency), [boqs])
-  const approved = useMemo(() => boqs.filter((b) => b.status === 'approved').sort(byRecency), [boqs])
-  const rejected = useMemo(() => boqs.filter((b) => b.status === 'rejected').sort(byRecency), [boqs])
+  const boqsByCategory: Record<Category, CommercialBoq[]> = useMemo(() => ({
+    draft: boqs.filter((b) => b.status === 'draft').sort(byRecency),
+    pendingApproval: boqs.filter((b) => isBoqPendingApproval(b.status)).sort(byRecency),
+    approved: boqs.filter((b) => b.status === 'approved').sort(byRecency),
+    rejected: boqs.filter((b) => b.status === 'rejected').sort(byRecency),
+  }), [boqs])
 
   const openBoq = (id: string) => onNavigate(`boq/${id}`)
 
@@ -93,28 +97,29 @@ export function Dashboard({ onCreateBoq, onNavigate }: {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <KpiCard label="Draft" value={String(metrics?.draft ?? 0)} icon="FileText" />
-        <KpiCard label="Pending Approval" value={String(metrics?.pendingApproval ?? 0)} icon="Clock" tone="bg-amber-50 text-amber-700" />
-        <KpiCard label="Approved" value={String(metrics?.approved ?? 0)} icon="Check" tone="bg-emerald-50 text-emerald-700" />
-        <KpiCard label="Rejected" value={String(metrics?.rejected ?? 0)} icon="UserX" tone="bg-rose-50 text-rose-700" />
-        <KpiCard
-          label={`Commercial Value (${metrics?.totalCommercialValueCurrencyCode ?? ''})`}
-          value={(metrics?.totalCommercialValue ?? 0).toLocaleString()}
-          icon="TrendingUp"
-        />
-        <KpiCard label="Average Margin" value={`${(metrics?.averageMargin ?? 0).toFixed(1)}%`} icon="PieChart" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiCard label="Draft" value={String(metrics?.draft ?? 0)} icon="FileText" active={selected === 'draft'} onClick={() => setSelected('draft')} />
+        <KpiCard label="Pending Approval" value={String(metrics?.pendingApproval ?? 0)} icon="Clock" tone="bg-amber-50 text-amber-700" active={selected === 'pendingApproval'} onClick={() => setSelected('pendingApproval')} />
+        <KpiCard label="Approved" value={String(metrics?.approved ?? 0)} icon="Check" tone="bg-emerald-50 text-emerald-700" active={selected === 'approved'} onClick={() => setSelected('approved')} />
+        <KpiCard label="Rejected" value={String(metrics?.rejected ?? 0)} icon="UserX" tone="bg-rose-50 text-rose-700" active={selected === 'rejected'} onClick={() => setSelected('rejected')} />
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <BoqGroup title="Continue Draft" icon="FileText" boqs={drafts} emptyLabel="No drafts in progress." onOpen={openBoq} />
-        <BoqGroup title="Pending Approvals" icon="Clock" boqs={pending} emptyLabel="Nothing waiting on approval." onOpen={openBoq} />
-        <BoqGroup title="Recently Approved" icon="Check" boqs={approved} emptyLabel="No approvals yet." onOpen={openBoq} />
-        <BoqGroup title="Recently Rejected" icon="UserX" boqs={rejected} emptyLabel="No rejections." onOpen={openBoq} />
-      </div>
+      {selected && (
+        <div className="flex flex-col gap-2">
+          <h2 className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-wide text-muted">
+            <Icon name={CATEGORY_META[selected].icon} size={13} />
+            {CATEGORY_META[selected].title} ({boqsByCategory[selected].length})
+          </h2>
+          {boqsByCategory[selected].length === 0 ? (
+            <p className="rounded-xl border border-dashed border-line px-3 py-3 text-[13px] text-muted">{CATEGORY_META[selected].emptyLabel}</p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {boqsByCategory[selected].map((b) => <BoqRow key={b.id} boq={b} onOpen={() => openBoq(b.id)} />)}
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* Catalog/Settings surfaces get a small text-link row, not competing
-          quick-action buttons — this module is a proposal tool first. */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted">
         <span>More:</span>
         <button onClick={() => onNavigate('settings?item=sku-catalog')} className="underline-offset-2 hover:text-ink-800 hover:underline">SKU Catalog</button>
