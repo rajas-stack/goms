@@ -13,7 +13,7 @@ function sku(overrides: Partial<CommercialSku> = {}): CommercialSku {
     hardwareCost: 0, cloudCost: 0, supportCost: 0, trainingCost: 0,
     internalPrice: 900, floorPrice: 800, partnerPrice: 950, governmentPrice: 850,
     enterprisePrice: 1100, corporatePrice: 1050, listPrice: 1000,
-    minimumAllowedPrice: 500, maximumDiscountPercent: 30,
+    minimumAllowedPrice: 500, maximumDiscountPercent: 30, selectedPricingLevels: [],
     createdAt: '', createdBy: null,
     ...overrides,
   }
@@ -37,13 +37,27 @@ describe('SellingPriceSection', () => {
     expect(screen.queryByText(/internal/i)).not.toBeInTheDocument()
   })
 
-  it('adds a level and makes it active when it is the first one added', async () => {
+  it('adds a single selected level and makes it active when it is the first one added', async () => {
     const user = userEvent.setup()
     const { onChange } = setup()
     await user.click(screen.getByRole('button', { name: /add pricing level/i }))
-    await user.click(await screen.findByRole('menuitem', { name: /internal/i }))
+    await user.click(await screen.findByRole('checkbox', { name: /^internal$/i }))
+    await user.click(screen.getByRole('button', { name: /add selected/i }))
     expect(onChange).toHaveBeenCalledWith({
       pricingLevels: [{ level: 'internal', sellingPrice: null }], activePricingLevel: 'internal',
+    })
+  })
+
+  it('adds multiple selected levels in one confirming action', async () => {
+    const user = userEvent.setup()
+    const { onChange } = setup()
+    await user.click(screen.getByRole('button', { name: /add pricing level/i }))
+    await user.click(await screen.findByRole('checkbox', { name: /^internal$/i }))
+    await user.click(screen.getByRole('checkbox', { name: /^government$/i }))
+    await user.click(screen.getByRole('button', { name: /add selected/i }))
+    expect(onChange).toHaveBeenCalledWith({
+      pricingLevels: [{ level: 'internal', sellingPrice: null }, { level: 'government', sellingPrice: null }],
+      activePricingLevel: 'internal',
     })
   })
 
@@ -51,8 +65,8 @@ describe('SellingPriceSection', () => {
     const user = userEvent.setup()
     setup({ pricingLevels: [{ level: 'internal', sellingPrice: 900 }], activePricingLevel: 'internal' })
     await user.click(screen.getByRole('button', { name: /add pricing level/i }))
-    expect(screen.queryByRole('menuitem', { name: /internal/i })).not.toBeInTheDocument()
-    expect(screen.getByRole('menuitem', { name: /government/i })).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: /^internal$/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: /^government$/i })).toBeInTheDocument()
   })
 
   it('shows placeholder text, not 0, for an unset selling price', () => {
@@ -92,6 +106,43 @@ describe('SellingPriceSection', () => {
     await user.tab()
     expect(onChange).toHaveBeenLastCalledWith({
       pricingLevels: [{ level: 'internal', sellingPrice: 800 }], activePricingLevel: 'internal',
+    })
+  })
+
+  it('back-solves selling price from an edited discount % (spec §4.2)', async () => {
+    const user = userEvent.setup()
+    const { onChange } = setup({ pricingLevels: [{ level: 'internal', sellingPrice: 900 }], activePricingLevel: 'internal' })
+    const discountInput = screen.getByLabelText(/internal discount/i)
+    await user.clear(discountInput)
+    await user.type(discountInput, '20') // list 1000, 20% off -> 800
+    await user.tab()
+    expect(onChange).toHaveBeenLastCalledWith({
+      pricingLevels: [{ level: 'internal', sellingPrice: 800 }], activePricingLevel: 'internal',
+    })
+  })
+
+  it('rejects a discount % edit that exceeds maximumDiscountPercent, without calling onChange', async () => {
+    const user = userEvent.setup()
+    const { onChange } = setup({ pricingLevels: [{ level: 'internal', sellingPrice: 900 }], activePricingLevel: 'internal' })
+    const discountInput = screen.getByLabelText(/internal discount/i)
+    await user.clear(discountInput)
+    await user.type(discountInput, '40') // max is 30%
+    await user.tab()
+    expect(onChange).not.toHaveBeenCalled()
+    expect(await screen.findByText(/exceeds this sku's maximum allowed discount/i)).toBeInTheDocument()
+  })
+
+  it('keeps two cards\' state fully independent — editing one never touches the other\'s entry', async () => {
+    const user = userEvent.setup()
+    const levels = [{ level: 'internal' as const, sellingPrice: 900 }, { level: 'government' as const, sellingPrice: 850 }]
+    const { onChange } = setup({ pricingLevels: levels, activePricingLevel: 'internal' })
+    const discountInput = screen.getByLabelText(/internal discount/i)
+    await user.clear(discountInput)
+    await user.type(discountInput, '10') // list 1000, 10% off -> 900 (unchanged, valid)
+    await user.tab()
+    expect(onChange).toHaveBeenLastCalledWith({
+      pricingLevels: [{ level: 'internal', sellingPrice: 900 }, { level: 'government', sellingPrice: 850 }],
+      activePricingLevel: 'internal',
     })
   })
 

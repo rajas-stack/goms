@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
+import { Checkbox } from '@/components/ui/Checkbox'
+import { Collapsible } from '@/components/ui/Collapsible'
 import { Field, Input } from '@/components/ui/Field'
-import { Menu, MenuItem } from '@/components/ui/Menu'
+import { Menu } from '@/components/ui/Menu'
 import {
   PRICING_LEVEL_KEYS, PRICING_LEVEL_LABEL, PricingValidationError, discountPctForSellingPrice,
-  marginPctForSellingPrice, removePricingLevel, sellingPriceForMargin, skuPriceForLevel, upsertPricingLevel,
-  validateSellingPrice,
+  marginPctForSellingPrice, maxDiscountPercentForLevel, removePricingLevel, sellingPriceForDiscountPct,
+  sellingPriceForMargin, skuPriceForLevel, upsertPricingLevel, validateSellingPrice,
 } from '../pricing-levels-logic'
 import type { CommercialBomItem, CommercialSku, LinePricingLevel, PricingLevelKey } from '../types'
 
@@ -26,10 +28,19 @@ interface Props {
 export function SellingPriceSection({ sku, bomItems, skusById, pricingLevels, activePricingLevel, onChange }: Props) {
   const availableLevels = PRICING_LEVEL_KEYS.filter((k) => !pricingLevels.some((l) => l.level === k))
   const showReselectPrompt = pricingLevels.length > 0 && activePricingLevel === null
+  const [pendingAdd, setPendingAdd] = useState<PricingLevelKey[]>([])
 
-  function addLevel(level: PricingLevelKey) {
-    const next = upsertPricingLevel(pricingLevels, level, null)
-    onChange({ pricingLevels: next, activePricingLevel: activePricingLevel ?? level })
+  function toggleQueued(level: PricingLevelKey) {
+    setPendingAdd((prev) => (prev.includes(level) ? prev.filter((l) => l !== level) : [...prev, level]))
+  }
+
+  function confirmAdd(close: () => void) {
+    if (pendingAdd.length === 0) return
+    let nextLevels = pricingLevels
+    for (const level of pendingAdd) nextLevels = upsertPricingLevel(nextLevels, level, null)
+    onChange({ pricingLevels: nextLevels, activePricingLevel: activePricingLevel ?? pendingAdd[0] })
+    setPendingAdd([])
+    close()
   }
 
   function removeLevel(level: PricingLevelKey) {
@@ -42,66 +53,73 @@ export function SellingPriceSection({ sku, bomItems, skusById, pricingLevels, ac
   }
 
   function setSellingPrice(level: PricingLevelKey, sellingPrice: number) {
-    validateSellingPrice(sku, sellingPrice) // throws PricingValidationError — caller (the card) catches it
+    validateSellingPrice(sku, sellingPrice, level) // throws PricingValidationError — caller (the card) catches it
     onChange({ pricingLevels: upsertPricingLevel(pricingLevels, level, sellingPrice), activePricingLevel })
   }
 
   function setMargin(level: PricingLevelKey, marginPct: number) {
-    const sellingPrice = sellingPriceForMargin(sku, bomItems, skusById, marginPct) // throws PricingValidationError
+    const sellingPrice = sellingPriceForMargin(sku, bomItems, skusById, marginPct, level) // throws PricingValidationError
     onChange({ pricingLevels: upsertPricingLevel(pricingLevels, level, sellingPrice), activePricingLevel })
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between">
-        <h4 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Selling Price</h4>
-        <Menu
-          trigger={({ toggle }) => (
-            <Button size="sm" onClick={toggle} disabled={availableLevels.length === 0}>
-              <Icon name="Plus" size={13} />
-              Add Pricing Level
-            </Button>
-          )}
-        >
-          {(close) => (
-            <>
-              {availableLevels.map((level) => (
-                <MenuItem key={level} onClick={() => { addLevel(level); close() }}>
-                  {PRICING_LEVEL_LABEL[level]}
-                </MenuItem>
-              ))}
-            </>
-          )}
-        </Menu>
-      </div>
-
-      {showReselectPrompt && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
-          Select a pricing level to use for calculation, or this line uses List Price with no discount.
-        </p>
-      )}
-
-      {pricingLevels.length === 0 ? (
-        <p className="text-[12px] text-muted">No pricing levels added — this line uses List Price with no discount.</p>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {pricingLevels.map((entry) => (
-            <PricingLevelCard
-              key={entry.level}
-              sku={sku}
-              bomItems={bomItems}
-              skusById={skusById}
-              entry={entry}
-              active={entry.level === activePricingLevel}
-              onSetActive={() => setActive(entry.level)}
-              onRemove={() => removeLevel(entry.level)}
-              onSetSellingPrice={(v) => setSellingPrice(entry.level, v)}
-              onSetMargin={(v) => setMargin(entry.level, v)}
-            />
-          ))}
+    <Collapsible title="Set Selling Price" icon="Tag">
+      <div className="flex flex-col gap-2">
+        <div className="flex justify-end">
+          <Menu
+            trigger={({ toggle }) => (
+              <Button size="sm" onClick={() => { setPendingAdd([]); toggle() }} disabled={availableLevels.length === 0}>
+                <Icon name="Plus" size={13} />
+                Add Pricing Level
+              </Button>
+            )}
+          >
+            {(close) => (
+              <div className="flex min-w-[12rem] flex-col gap-1 p-1">
+                {availableLevels.map((level) => (
+                  <label key={level} className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-ink hover:bg-ink-900/[0.05]">
+                    <Checkbox checked={pendingAdd.includes(level)} onChange={() => toggleQueued(level)} aria-label={PRICING_LEVEL_LABEL[level]} />
+                    {PRICING_LEVEL_LABEL[level]}
+                  </label>
+                ))}
+                <div className="mt-1 border-t border-line pt-1">
+                  <Button size="sm" variant="primary" onClick={() => confirmAdd(close)} disabled={pendingAdd.length === 0} className="w-full justify-center">
+                    Add Selected
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Menu>
         </div>
-      )}
-    </div>
+
+        {showReselectPrompt && (
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
+            Select a pricing level to use for calculation, or this line uses List Price with no discount.
+          </p>
+        )}
+
+        {pricingLevels.length === 0 ? (
+          <p className="text-[12px] text-muted">No pricing levels added — this line uses List Price with no discount.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {pricingLevels.map((entry) => (
+              <PricingLevelCard
+                key={entry.level}
+                sku={sku}
+                bomItems={bomItems}
+                skusById={skusById}
+                entry={entry}
+                active={entry.level === activePricingLevel}
+                onSetActive={() => setActive(entry.level)}
+                onRemove={() => removeLevel(entry.level)}
+                onSetSellingPrice={(v) => setSellingPrice(entry.level, v)}
+                onSetMargin={(v) => setMargin(entry.level, v)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </Collapsible>
   )
 }
 
@@ -121,6 +139,8 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, onSetActive,
   const [priceDraft, setPriceDraft] = useState(entry.sellingPrice === null ? '' : String(entry.sellingPrice))
   const currentMargin = entry.sellingPrice === null ? null : marginPctForSellingPrice(sku, bomItems, skusById, entry.sellingPrice)
   const [marginDraft, setMarginDraft] = useState(currentMargin === null ? '' : currentMargin.toFixed(1))
+  const discountPct = entry.sellingPrice === null ? null : discountPctForSellingPrice(sku.listPrice, entry.sellingPrice)
+  const [discountDraft, setDiscountDraft] = useState(discountPct === null ? '' : discountPct.toFixed(1))
   const label = PRICING_LEVEL_LABEL[entry.level]
 
   function commitPrice() {
@@ -147,7 +167,19 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, onSetActive,
     }
   }
 
-  const discountPct = entry.sellingPrice === null ? null : discountPctForSellingPrice(sku.listPrice, entry.sellingPrice)
+  function commitDiscount() {
+    const next = Number(discountDraft)
+    setError(null)
+    if (discountDraft.trim() === '' || !Number.isFinite(next)) return
+    try {
+      onSetSellingPrice(sellingPriceForDiscountPct(sku.listPrice, next))
+    } catch (e) {
+      setError(e instanceof PricingValidationError ? e.message : 'Could not save this discount.')
+      setDiscountDraft(discountPct === null ? '' : discountPct.toFixed(1))
+    }
+  }
+
+  const maxDiscountPct = maxDiscountPercentForLevel(sku, entry.level)
 
   return (
     <div className="rounded-xl border border-line bg-panel/30 p-3">
@@ -165,7 +197,7 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, onSetActive,
         </Button>
       </div>
       {open && (
-        <div className="mt-2 grid grid-cols-3 gap-3">
+        <div className="mt-2 grid grid-cols-4 gap-3">
           <Field label={`${label} Selling Price`}>
             <Input
               type="number"
@@ -177,8 +209,18 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, onSetActive,
             />
           </Field>
           <Field label={`${label} Discount %`}>
+            <Input
+              type="number"
+              value={discountDraft}
+              onChange={(e) => setDiscountDraft(e.target.value)}
+              onBlur={commitDiscount}
+              placeholder="Enter target discount"
+              aria-label={`${label} Discount %`}
+            />
+          </Field>
+          <Field label={`${label} Maximum Discount %`}>
             <p className="flex h-10 items-center rounded-lg border border-line bg-panel px-3 text-sm text-ink-700">
-              {discountPct === null ? '—' : `${discountPct.toFixed(1)}%`}
+              {maxDiscountPct}%
             </p>
           </Field>
           <Field label={`${label} Margin %`}>
