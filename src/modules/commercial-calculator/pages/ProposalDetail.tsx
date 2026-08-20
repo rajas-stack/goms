@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAllEmployees, useDepartments, useSalesPersons } from '@/lib/api'
+import { useAllEmployees, useCurrentPostings, useDepartments, useSalesPersons } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
 import { Checkbox } from '@/components/ui/Checkbox'
+import { Collapsible } from '@/components/ui/Collapsible'
+import { Combobox } from '@/components/ui/Combobox'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
-import { Field, Input, Select } from '@/components/ui/Field'
+import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
 import { useToast } from '@/components/ui/Toast'
+import { convertWorkAmount, WORK_VALUE_UNITS } from '@/features/nodes/department-meta'
 import { isoToday } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 import { useAllBomItems, useBoqLineItemMutations, useBoqLineItems, useBoqMutations, useBoqs, useMasters, useSkus } from '../api'
 import { buildProposalPrintHtml } from '../proposal-print'
-import { computeBoqMarginPercent, resolveApprovalBand } from '../repository-logic'
+import { computeBoqMarginPercent } from '../repository-logic'
 import { resolveLineUnitPrice } from '../pricing-levels-logic'
 import type { BulkPricingResult } from '../pricing-levels-logic'
 import { SkuLinePicker } from '../components/SkuLinePicker'
@@ -20,11 +23,13 @@ import { SellingPriceSection } from '../components/SellingPriceSection'
 import { LineApprovalSummary } from '../components/LineApprovalSummary'
 import { BulkEditBar } from '../components/BulkEditBar'
 import { STATUS_LABEL } from './BoqManagement'
-import type { ApprovalMatrixRule, BoqStatus, CommercialBoq, CommercialBoqLineItem, CommercialBomItem, CommercialSku } from '../types'
+import type {
+  ApprovalMatrixRule, BoqStatus, CommercialBoq, CommercialBoqLineItem, CommercialBomItem, CommercialSku, UpdateBoqInput,
+} from '../types'
+import type { Employee } from '@/lib/types'
 
 /** Mirrors repository-logic.ts's BOQ_TRANSITIONS for button enabling — the
- *  repository is still the enforcement point (including the new pending-
- *  approval gate from this plan's Task 1); this only avoids offering a
+ *  repository is still the enforcement point; this only avoids offering a
  *  button that would just throw. */
 const NEXT_STATUSES: Record<BoqStatus, BoqStatus[]> = {
   draft: ['submitted', 'cancelled'], submitted: ['under_review', 'cancelled'],
@@ -33,9 +38,7 @@ const NEXT_STATUSES: Record<BoqStatus, BoqStatus[]> = {
 }
 
 /** Mirrors repository-logic.ts's `DELETABLE_BOQ_STATUSES` for button
- *  visibility — the repository is still the enforcement point. Anything
- *  still active in the pipeline (submitted/under_review/approved) must be
- *  cancelled first, via the transition buttons above, before it can show. */
+ *  visibility — the repository is still the enforcement point. */
 const DELETABLE_STATUSES: BoqStatus[] = ['draft', 'cancelled', 'rejected', 'archived']
 
 function DetailField({ label, value }: { label: string; value: string }) {
@@ -47,43 +50,39 @@ function DetailField({ label, value }: { label: string; value: string }) {
   )
 }
 
-type Tab = 'overview' | 'approvals' | 'preview'
+const SECTIONS = [
+  { id: 'section-details', label: 'BOQ Details' },
+  { id: 'section-lines', label: 'Line Items' },
+  { id: 'section-preview', label: 'Preview' },
+]
 
-/** The shared journey's "already in flight" surface (IA redesign §6) —
- *  reached either from BOQ Management's list or as Create BOQ's hand-off
- *  once a draft exists. Three tabs, matching SkuCatalog.tsx's detail-tab
- *  convention:
- *    - Overview: status/totals/line items — unchanged from the original
- *      inline `BoqDetail` this route replaced.
- *    - Approvals: the per-line approve/reject action `PCS-031` asks for.
- *      The schema and `useBoqLineItemMutations` hook existed since Phase
- *      0/1; no screen ever called it until this tab.
- *    - Preview: the customer-facing document view, sequenced before
- *      Approval (it's a tab here, not a hard wizard step, but it's listed
- *      before Approvals in this file and in the tab strip) so sign-off is
- *      always given against real totals, not just a list of edit-state rows.
- *  Generate/Send still don't exist — separate future work. */
+/** BOQ editable-workspace overhaul: a single continuous, section-based
+ *  document rather than a tabbed report. Approvals no longer have their own
+ *  tab — the same decisions now happen inline, per line, via
+ *  `LineApprovalSummary`'s decision controls. */
 export function ProposalDetail({ boqId }: { boqId: string }) {
   const { data: boqs = [] } = useBoqs()
   const { data: lines = [] } = useBoqLineItems(boqId)
   const { data: skus = [] } = useSkus()
   const { data: departments = [] } = useDepartments()
   const { data: salesPersons = [] } = useSalesPersons()
+  const { data: postings = {} } = useCurrentPostings()
+  const { data: preSalesList = [] } = useMasters('preSales')
   const { data: verticals = [] } = useMasters('verticals')
   const { data: approvalMatrix = [] } = useMasters('approvalMatrix')
   const { data: currencies = [] } = useMasters('currencies')
+  const { data: employees = [] } = useAllEmployees()
   const { data: bomItems = [] } = useAllBomItems()
-  const { updateStatus, revise, duplicate, remove } = useBoqMutations()
+  const { update, updateStatus, revise, duplicate, remove } = useBoqMutations()
   const lineMutations = useBoqLineItemMutations(boqId)
   const toast = useToast()
   const navigate = useNavigate()
-  const [tab, setTab] = useState<Tab>('overview')
   const [deleting, setDeleting] = useState(false)
 
   const boq = boqs.find((b) => b.id === boqId) ?? null
   const skuById = new Map(skus.map((s) => [s.id, s]))
   const margin = boq ? computeBoqMarginPercent(boq, lines, skuById, currencies, bomItems) : 0
-  const pendingCount = lines.filter((l) => l.approvalStatus === 'pending').length
+  const buSalesPersons = salesPersons.filter((p) => (postings[p.id]?.designation ?? '').toLowerCase().includes('bu sales'))
 
   async function transition(next: BoqStatus) {
     if (!boq) return
@@ -141,15 +140,15 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto p-4">
-      <button
-        onClick={() => navigate('/commercial-calculator/boq-management')}
-        className="mb-3 flex w-fit items-center gap-1.5 text-[12px] text-muted hover:text-ink-800"
-      >
-        <Icon name="ArrowLeft" size={13} />
-        Back to BOQ Management
-      </button>
-      <div className="flex max-w-3xl flex-col gap-4">
+    <div className="flex h-full flex-col overflow-y-auto">
+      <div className="shrink-0 p-4 pb-0">
+        <button
+          onClick={() => navigate('/commercial-calculator/boq-management')}
+          className="mb-3 flex w-fit items-center gap-1.5 text-[12px] text-muted hover:text-ink-800"
+        >
+          <Icon name="ArrowLeft" size={13} />
+          Back to BOQ Management
+        </button>
         <div className="flex items-start justify-between">
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">BOQ {boq.boqVersion > 1 ? `v${boq.boqVersion}` : ''}</div>
@@ -200,38 +199,53 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             )}
           </div>
         </div>
+        <div className="mt-3 grid grid-cols-3 gap-3 rounded-xl border border-line p-3 text-sm">
+          <div><div className="text-[11px] uppercase text-muted">Version</div>{boq.boqVersion} (rev {boq.revisionNumber})</div>
+          <div><div className="text-[11px] uppercase text-muted">Grand Total</div>{boq.currency} {boq.grandTotal.toLocaleString()}</div>
+          <div><div className="text-[11px] uppercase text-muted">Margin</div>{margin.toFixed(1)}%</div>
+        </div>
+      </div>
 
-        <div className="flex items-center gap-1 border-b border-line">
-          {(['overview', 'approvals', 'preview'] as Tab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`shrink-0 rounded-t-lg px-3 py-2 text-[13px] font-medium transition-colors ${
-                t === tab ? 'border-b-2 border-ink-900 text-ink-900' : 'text-ink-600/70 hover:text-ink-900'
-              }`}
-            >
-              {t === 'overview' ? 'Overview' : t === 'approvals' ? `Approvals${pendingCount > 0 ? ` (${pendingCount})` : ''}` : 'Preview'}
-            </button>
-          ))}
+      <div className="sticky top-0 z-10 mt-3 flex shrink-0 gap-1 overflow-x-auto border-y border-line bg-white/95 px-4 py-1.5 backdrop-blur">
+        {SECTIONS.map((s) => (
+          <button
+            key={s.id}
+            onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            className="shrink-0 rounded-full px-2.5 py-1 text-[12px] font-medium text-muted transition-colors hover:bg-ink-900/[0.05] hover:text-ink-900"
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-6 p-4">
+        <div id="section-details">
+          <BoqDetailsSection
+            boq={boq}
+            departments={departments}
+            salesPersons={salesPersons}
+            buSalesPersons={buSalesPersons}
+            verticals={verticals}
+            currencies={currencies}
+            preSalesList={preSalesList}
+            update={update}
+          />
         </div>
 
-        {tab === 'overview' && (
-          <>
-            <div className="grid grid-cols-3 gap-3 rounded-xl border border-line p-3 text-sm">
-              <div><div className="text-[11px] uppercase text-muted">Version</div>{boq.boqVersion} (rev {boq.revisionNumber})</div>
-              <div><div className="text-[11px] uppercase text-muted">Grand Total</div>{boq.currency} {boq.grandTotal.toLocaleString()}</div>
-              <div><div className="text-[11px] uppercase text-muted">Margin</div>{margin.toFixed(1)}%</div>
-            </div>
+        <div id="section-lines">
+          <LineItemsSection
+            boq={boq}
+            lines={lines}
+            skuById={skuById}
+            bomItems={bomItems}
+            approvalMatrix={approvalMatrix}
+            employees={employees}
+            lineMutations={lineMutations}
+            onDecide={decideLine}
+          />
+        </div>
 
-            <LineItemsSection boq={boq} lines={lines} skuById={skuById} bomItems={bomItems} approvalMatrix={approvalMatrix} lineMutations={lineMutations} />
-          </>
-        )}
-
-        {tab === 'approvals' && (
-          <ApprovalsTab lines={lines} skuById={skuById} approvalMatrix={approvalMatrix} onDecide={decideLine} />
-        )}
-
-        {tab === 'preview' && (
+        <div id="section-preview">
           <PreviewTab
             boq={boq}
             lines={lines}
@@ -240,7 +254,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             verticalName={verticals.find((v) => v.id === boq.verticalId)?.name ?? '—'}
             salesPersonName={salesPersons.find((p) => p.id === boq.salesPersonId)?.name ?? '—'}
           />
-        )}
+        </div>
       </div>
 
       <ConfirmDeleteDialog
@@ -253,18 +267,261 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   )
 }
 
-function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, lineMutations }: {
+type BoqDetailsDraft = Pick<CommercialBoq,
+  'opportunityName' | 'departmentId' | 'customerName' | 'customerOrganization' | 'customerAddress' | 'customerContact'
+  | 'verticalId' | 'budgetAmount' | 'budgetUnit' | 'budgetKnown' | 'emdAmount' | 'emdUnit'
+  | 'salesPersonId' | 'currency'
+> & { buSalesPersonId: string; preSalesId: string }
+
+function fieldsFromBoq(boq: CommercialBoq): BoqDetailsDraft {
+  return {
+    opportunityName: boq.opportunityName, departmentId: boq.departmentId, customerName: boq.customerName,
+    customerOrganization: boq.customerOrganization, customerAddress: boq.customerAddress, customerContact: boq.customerContact,
+    verticalId: boq.verticalId, budgetAmount: boq.budgetAmount, budgetUnit: boq.budgetUnit, budgetKnown: boq.budgetKnown,
+    emdAmount: boq.emdAmount, emdUnit: boq.emdUnit, salesPersonId: boq.salesPersonId,
+    buSalesPersonId: boq.buSalesPersonId ?? '', preSalesId: boq.preSalesId ?? '', currency: boq.currency,
+  }
+}
+
+/** New BOQ-level metadata editing — read-only text by default, switching to
+ *  inputs behind an "Edit Details" button that's only ever shown while
+ *  `boq.status === 'draft'`, matching the same frozen rule line items
+ *  already follow. Covers every field `CreateBoq.tsx` sets at creation time
+ *  (customerName/Contact/Address/Organization are plain text here rather
+ *  than replicating Create's department-scoped stakeholder picker — a
+ *  deliberate scope simplification, not a spec requirement). */
+function BoqDetailsSection({ boq, departments, salesPersons, buSalesPersons, verticals, currencies, preSalesList, update }: {
+  boq: CommercialBoq
+  departments: { id: string; name: string }[]
+  salesPersons: { id: string; name: string }[]
+  buSalesPersons: { id: string; name: string }[]
+  verticals: { id: string; code: string; name: string }[]
+  currencies: { id: string; code: string; name: string }[]
+  preSalesList: { id: string; name: string }[]
+  update: ReturnType<typeof useBoqMutations>['update']
+}) {
+  const toast = useToast()
+  const isDraft = boq.status === 'draft'
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<BoqDetailsDraft>(() => fieldsFromBoq(boq))
+  const [saving, setSaving] = useState(false)
+
+  function startEditing() {
+    setDraft(fieldsFromBoq(boq))
+    setEditing(true)
+  }
+  function cancelEditing() {
+    setDraft(fieldsFromBoq(boq))
+    setEditing(false)
+  }
+
+  const original = fieldsFromBoq(boq)
+  const dirty = (Object.keys(draft) as (keyof BoqDetailsDraft)[]).some((k) => draft[k] !== original[k])
+
+  async function save() {
+    setSaving(true)
+    try {
+      const patch: UpdateBoqInput = {}
+      ;(Object.keys(draft) as (keyof BoqDetailsDraft)[]).forEach((k) => {
+        if (draft[k] === original[k]) return
+        if (k === 'buSalesPersonId' || k === 'preSalesId') {
+          patch[k] = (draft[k] || null) as never
+        } else {
+          patch[k] = draft[k] as never
+        }
+      })
+      if (Object.keys(patch).length > 0) {
+        await update.mutateAsync({ id: boq.id, patch })
+        toast('BOQ details saved.')
+      }
+      setEditing(false)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save BOQ details.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Collapsible
+      title="BOQ Details"
+      icon="Briefcase"
+      badge={dirty && editing ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">Unsaved changes</span> : undefined}
+    >
+      <div className="mb-3 flex justify-end gap-2">
+        {!editing ? (
+          isDraft && <Button size="sm" onClick={startEditing}><Icon name="Pencil" size={13} />Edit Details</Button>
+        ) : (
+          <>
+            <Button size="sm" onClick={cancelEditing} disabled={saving}>Cancel</Button>
+            <Button size="sm" variant="primary" onClick={save} disabled={saving || !dirty}>{saving ? 'Saving…' : 'Save'}</Button>
+          </>
+        )}
+      </div>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+        {editing ? (
+          <Field label="Opportunity Name">
+            <Input value={draft.opportunityName} onChange={(e) => setDraft((d) => ({ ...d, opportunityName: e.target.value }))} />
+          </Field>
+        ) : <DetailField label="Opportunity Name" value={boq.opportunityName} />}
+
+        {editing ? (
+          <Field label="Department">
+            <Combobox value={draft.departmentId} onChange={(v) => setDraft((d) => ({ ...d, departmentId: v }))} options={departments.map((d) => ({ value: d.id, label: d.name }))} aria-label="Department" />
+          </Field>
+        ) : <DetailField label="Department" value={departments.find((d) => d.id === boq.departmentId)?.name ?? '—'} />}
+
+        {editing ? (
+          <Field label="Vertical">
+            <Combobox value={draft.verticalId} onChange={(v) => setDraft((d) => ({ ...d, verticalId: v }))} options={verticals.map((v) => ({ value: v.id, label: `${v.code} — ${v.name}` }))} aria-label="Vertical" />
+          </Field>
+        ) : <DetailField label="Vertical" value={verticals.find((v) => v.id === boq.verticalId)?.name ?? '—'} />}
+
+        {editing ? (
+          <Field label="Currency">
+            <Select value={draft.currency} onChange={(e) => setDraft((d) => ({ ...d, currency: e.target.value }))}>
+              {currencies.map((c) => <option key={c.id} value={c.code}>{c.code} — {c.name}</option>)}
+            </Select>
+          </Field>
+        ) : <DetailField label="Currency" value={boq.currency} />}
+
+        {editing ? (
+          <Field label="Customer Name">
+            <Input value={draft.customerName} onChange={(e) => setDraft((d) => ({ ...d, customerName: e.target.value }))} />
+          </Field>
+        ) : <DetailField label="Customer Name" value={boq.customerName} />}
+
+        {editing ? (
+          <Field label="Organization">
+            <Input value={draft.customerOrganization} onChange={(e) => setDraft((d) => ({ ...d, customerOrganization: e.target.value }))} />
+          </Field>
+        ) : <DetailField label="Organization" value={boq.customerOrganization} />}
+
+        {editing ? (
+          <Field label="Contact">
+            <Input value={draft.customerContact} onChange={(e) => setDraft((d) => ({ ...d, customerContact: e.target.value }))} />
+          </Field>
+        ) : <DetailField label="Contact" value={boq.customerContact} />}
+
+        {editing ? (
+          <Field label="Sales Person">
+            <Combobox value={draft.salesPersonId} onChange={(v) => setDraft((d) => ({ ...d, salesPersonId: v }))} options={salesPersons.map((p) => ({ value: p.id, label: p.name }))} aria-label="Sales Person" />
+          </Field>
+        ) : <DetailField label="Sales Person" value={salesPersons.find((p) => p.id === boq.salesPersonId)?.name ?? '—'} />}
+
+        {editing ? (
+          <Field label="BU Sales" hint="Filtered to Sales Persons with a &quot;BU Sales&quot; posting.">
+            <Select value={draft.buSalesPersonId} onChange={(e) => setDraft((d) => ({ ...d, buSalesPersonId: e.target.value }))}>
+              <option value="">None</option>
+              {buSalesPersons.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </Select>
+          </Field>
+        ) : <DetailField label="BU Sales" value={salesPersons.find((p) => p.id === boq.buSalesPersonId)?.name ?? '—'} />}
+
+        {editing ? (
+          <Field label="Pre-Sales">
+            <Select value={draft.preSalesId} onChange={(e) => setDraft((d) => ({ ...d, preSalesId: e.target.value }))}>
+              <option value="">None</option>
+              {preSalesList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </Select>
+          </Field>
+        ) : <DetailField label="Pre-Sales" value={preSalesList.find((p) => p.id === boq.preSalesId)?.name ?? '—'} />}
+
+        <div className="col-span-2 lg:col-span-3">
+          {editing ? (
+            <Field label="Address">
+              <Textarea value={draft.customerAddress} onChange={(e) => setDraft((d) => ({ ...d, customerAddress: e.target.value }))} />
+            </Field>
+          ) : <DetailField label="Address" value={boq.customerAddress} />}
+        </div>
+
+        <div className="col-span-2 lg:col-span-3">
+          {editing ? (
+            <Field label="Budget Confirmed?">
+              <div className="flex items-center gap-4" role="radiogroup" aria-label="Budget confirmed">
+                {(['yes', 'no'] as const).map((v) => (
+                  <label key={v} className="flex cursor-pointer items-center gap-1.5">
+                    <input type="radio" name="editBudgetKnown" checked={draft.budgetKnown === v} onChange={() => setDraft((d) => ({ ...d, budgetKnown: v }))} className="accent-ink-900" />
+                    <span className="text-sm text-ink-800">{v === 'yes' ? 'Yes' : 'No'}</span>
+                  </label>
+                ))}
+              </div>
+            </Field>
+          ) : <DetailField label="Budget Confirmed?" value={boq.budgetKnown === 'yes' ? 'Yes' : boq.budgetKnown === 'no' ? 'No' : '—'} />}
+        </div>
+
+        {editing ? (
+          <Field label="Budget Amount" hint={draft.budgetKnown === 'no' ? "Disabled while the budget isn't confirmed." : undefined}>
+            <div className="flex gap-2">
+              <Input
+                value={draft.budgetAmount}
+                onChange={(e) => setDraft((d) => ({ ...d, budgetAmount: e.target.value }))}
+                inputMode="decimal"
+                placeholder="0"
+                disabled={draft.budgetKnown === 'no'}
+                className="flex-1 disabled:cursor-not-allowed disabled:bg-panel disabled:text-muted"
+              />
+              <Select
+                value={draft.budgetUnit}
+                onChange={(e) => {
+                  const next = e.target.value
+                  setDraft((d) => ({ ...d, budgetAmount: convertWorkAmount(d.budgetAmount, d.budgetUnit, next), budgetUnit: next }))
+                }}
+                disabled={draft.budgetKnown === 'no'}
+                className="w-28 shrink-0 disabled:cursor-not-allowed disabled:bg-panel disabled:text-muted"
+              >
+                {WORK_VALUE_UNITS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
+              </Select>
+            </div>
+          </Field>
+        ) : <DetailField label="Budget Amount" value={boq.budgetAmount ? `${boq.budgetAmount} ${boq.budgetUnit}` : '—'} />}
+
+        {editing && draft.budgetKnown === 'no' && (
+          <Field label="EMD Amount">
+            <div className="flex gap-2">
+              <Input
+                value={draft.emdAmount}
+                onChange={(e) => setDraft((d) => ({ ...d, emdAmount: e.target.value }))}
+                inputMode="decimal"
+                placeholder="0"
+                className="flex-1"
+              />
+              <Select
+                value={draft.emdUnit}
+                onChange={(e) => {
+                  const next = e.target.value
+                  setDraft((d) => ({ ...d, emdAmount: convertWorkAmount(d.emdAmount, d.emdUnit, next), emdUnit: next }))
+                }}
+                className="w-28 shrink-0"
+              >
+                {WORK_VALUE_UNITS.map((u) => <option key={u.key} value={u.key}>{u.label}</option>)}
+              </Select>
+            </div>
+          </Field>
+        )}
+        {!editing && boq.budgetKnown === 'no' && (
+          <DetailField label="EMD Amount" value={boq.emdAmount ? `${boq.emdAmount} ${boq.emdUnit}` : '—'} />
+        )}
+      </div>
+    </Collapsible>
+  )
+}
+
+function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, employees, lineMutations, onDecide }: {
   boq: CommercialBoq
   lines: CommercialBoqLineItem[]
   skuById: Map<string, CommercialSku>
   bomItems: CommercialBomItem[]
   approvalMatrix: ApprovalMatrixRule[]
+  employees: Employee[]
   lineMutations: ReturnType<typeof useBoqLineItemMutations>
+  onDecide: (lineId: string, decision: 'approved' | 'rejected', approverId: string, remarks: string) => void
 }) {
   const toast = useToast()
   const isDraft = boq.status === 'draft'
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const selectedLines = lines.filter((l) => selectedIds.includes(l.id))
+  const pendingCount = lines.filter((l) => l.approvalStatus === 'pending').length
 
   function toggleOne(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
@@ -307,8 +564,11 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, lineM
   }
 
   return (
-    <div>
-      <h3 className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-muted">Line Items</h3>
+    <Collapsible
+      title="Line Items"
+      icon="FileSpreadsheet"
+      badge={pendingCount > 0 ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">{pendingCount} pending</span> : undefined}
+    >
       {isDraft && lines.length > 0 && (
         <div className="mb-2 flex items-center gap-2">
           <Checkbox checked={selectedIds.length === lines.length} indeterminate={selectedIds.length > 0 && selectedIds.length < lines.length} onChange={toggleAll} aria-label="Select all lines" />
@@ -327,11 +587,11 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, lineM
             <div key={line.id} className="flex items-start gap-2">
               <Checkbox checked={selectedIds.includes(line.id)} onChange={() => toggleOne(line.id)} aria-label={`Select ${sku?.skuCode ?? 'line'}`} />
               <div className="flex-1">
-                <DraftLineRow line={line} sku={sku} bomItems={bomItems} skuById={skuById} approvalMatrix={approvalMatrix} lineMutations={lineMutations} />
+                <DraftLineRow line={line} sku={sku} bomItems={bomItems} skuById={skuById} approvalMatrix={approvalMatrix} employees={employees} lineMutations={lineMutations} onDecide={onDecide} />
               </div>
             </div>
           ) : (
-            <NonDraftLineRow key={line.id} line={line} sku={sku} approvalMatrix={approvalMatrix} />
+            <NonDraftLineRow key={line.id} line={line} sku={sku} approvalMatrix={approvalMatrix} employees={employees} onDecide={onDecide} />
           )
         })}
       </div>
@@ -340,22 +600,24 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, lineM
           <SkuLinePicker verticalId={boq.verticalId} currencyCode={boq.currency} bomItems={bomItems} onAdd={handleAdd} />
         </div>
       )}
-    </div>
+    </Collapsible>
   )
 }
 
 /** One editable line row, shown only while `boq.status === 'draft'`
- *  (`LineItemsSection` picks this branch). Quantity/discount are local,
- *  uncontrolled-by-the-server-value-on-every-keystroke drafts — they commit
- *  once on blur/Enter, not per keystroke, and roll back to the last known
+ *  (`LineItemsSection` picks this branch). Quantity is a local,
+ *  uncontrolled-by-the-server-value-on-every-keystroke draft — it commits
+ *  once on blur/Enter, not per keystroke, and rolls back to the last known
  *  server value on a failed commit (e.g. the SKU floor-price check). */
-function DraftLineRow({ line, sku, bomItems, skuById, approvalMatrix, lineMutations }: {
+function DraftLineRow({ line, sku, bomItems, skuById, approvalMatrix, employees, lineMutations, onDecide }: {
   line: CommercialBoqLineItem
   sku: CommercialSku | undefined
   bomItems: CommercialBomItem[]
   skuById: Map<string, CommercialSku>
   approvalMatrix: ApprovalMatrixRule[]
+  employees: Employee[]
   lineMutations: ReturnType<typeof useBoqLineItemMutations>
+  onDecide: (lineId: string, decision: 'approved' | 'rejected', approverId: string, remarks: string) => void
 }) {
   const toast = useToast()
   const [qty, setQty] = useState(String(line.quantity))
@@ -435,15 +697,17 @@ function DraftLineRow({ line, sku, bomItems, skuById, approvalMatrix, lineMutati
           />
         </div>
       )}
-      {expanded && <LineApprovalSummary line={line} approvalMatrix={approvalMatrix} />}
+      {expanded && <LineApprovalSummary line={line} approvalMatrix={approvalMatrix} employees={employees} onDecide={onDecide} />}
     </div>
   )
 }
 
-function NonDraftLineRow({ line, sku, approvalMatrix }: {
+function NonDraftLineRow({ line, sku, approvalMatrix, employees, onDecide }: {
   line: CommercialBoqLineItem
   sku: CommercialSku | undefined
   approvalMatrix: ApprovalMatrixRule[]
+  employees: Employee[]
+  onDecide: (lineId: string, decision: 'approved' | 'rejected', approverId: string, remarks: string) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   return (
@@ -458,67 +722,7 @@ function NonDraftLineRow({ line, sku, approvalMatrix }: {
         <span className="text-muted">{line.discountPct}% off</span>
         <span className="font-medium text-ink-900">{line.lineTotal.toLocaleString()}</span>
       </div>
-      {expanded && <LineApprovalSummary line={line} approvalMatrix={approvalMatrix} />}
-    </div>
-  )
-}
-
-function ApprovalsTab({ lines, skuById, approvalMatrix, onDecide }: {
-  lines: CommercialBoqLineItem[]
-  skuById: Map<string, CommercialSku>
-  approvalMatrix: ApprovalMatrixRule[]
-  onDecide: (lineId: string, decision: 'approved' | 'rejected', approverId: string, remarks: string) => void
-}) {
-  const { data: employees = [] } = useAllEmployees()
-  const [drafts, setDrafts] = useState<Record<string, { approverId: string; remarks: string }>>({})
-  const pending = lines.filter((l) => l.approvalStatus === 'pending')
-
-  if (pending.length === 0) {
-    return <p className="text-[13px] text-muted">No lines currently need approval.</p>
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      {pending.map((line) => {
-        const sku = skuById.get(line.skuId)
-        const band = resolveApprovalBand(approvalMatrix, line.discountPct)
-        const draft = drafts[line.id] ?? { approverId: '', remarks: '' }
-        const canDecide = draft.approverId.length > 0
-        return (
-          <div key={line.id} className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
-            <div className="flex items-center gap-3 text-[13px]">
-              <span className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-ink-700">{sku?.skuCode}</span>
-              <span className="min-w-0 flex-1 truncate">{sku?.name}</span>
-              <span className="font-medium text-amber-800">{line.discountPct}% discount — needs {band.approvalLevelLabel || band.name}</span>
-            </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Field label="Approver">
-                <Select
-                  value={draft.approverId}
-                  onChange={(e) => setDrafts((prev) => ({ ...prev, [line.id]: { ...draft, approverId: e.target.value } }))}
-                >
-                  <option value="">Select…</option>
-                  {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name} — {emp.designation}</option>)}
-                </Select>
-              </Field>
-              <Field label="Remarks">
-                <Input
-                  value={draft.remarks}
-                  onChange={(e) => setDrafts((prev) => ({ ...prev, [line.id]: { ...draft, remarks: e.target.value } }))}
-                />
-              </Field>
-              <div className="flex items-end gap-2">
-                <Button size="sm" variant="primary" disabled={!canDecide} onClick={() => onDecide(line.id, 'approved', draft.approverId, draft.remarks)}>
-                  Approve
-                </Button>
-                <Button size="sm" disabled={!canDecide} onClick={() => onDecide(line.id, 'rejected', draft.approverId, draft.remarks)}>
-                  Reject
-                </Button>
-              </div>
-            </div>
-          </div>
-        )
-      })}
+      {expanded && <LineApprovalSummary line={line} approvalMatrix={approvalMatrix} employees={employees} onDecide={onDecide} />}
     </div>
   )
 }
@@ -534,9 +738,8 @@ function PreviewTab({ boq, lines, skuById, departmentName, verticalName, salesPe
   function handlePrint() {
     const html = buildProposalPrintHtml({ boq, lines, skuById, departmentName, verticalName, salesPersonName })
     // A dedicated window rather than printing the live app: the app shell is
-    // a fixed-viewport layout (scrolling panels inside `h-screen
-    // overflow-hidden`), so printing it directly would clip to whatever's
-    // currently visible on screen instead of the full document.
+    // a fixed-viewport layout, so printing it directly would clip to
+    // whatever's currently visible on screen instead of the full document.
     const win = window.open('', '_blank')
     if (!win) return
     win.document.write(html)
@@ -546,59 +749,61 @@ function PreviewTab({ boq, lines, skuById, departmentName, verticalName, salesPe
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-line bg-white p-5">
-      <div className="flex items-start justify-between gap-4 border-b border-line pb-4">
-        <div>
-          <h2 className="font-display text-lg font-semibold text-ink-900">Commercial Proposal — {boq.boqNumber}</h2>
-          <p className="text-[13px] text-muted">{boq.opportunityName}</p>
+    <Collapsible title="Preview" icon="FileText" defaultOpen={false}>
+      <div className="flex flex-col gap-4 rounded-xl border border-line bg-white p-5">
+        <div className="flex items-start justify-between gap-4 border-b border-line pb-4">
+          <div>
+            <h2 className="font-display text-lg font-semibold text-ink-900">Commercial Proposal — {boq.boqNumber}</h2>
+            <p className="text-[13px] text-muted">{boq.opportunityName}</p>
+          </div>
+          <Button size="sm" onClick={handlePrint}>
+            <Icon name="Printer" size={13} />
+            Print / Save as PDF
+          </Button>
         </div>
-        <Button size="sm" onClick={handlePrint}>
-          <Icon name="Printer" size={13} />
-          Print / Save as PDF
-        </Button>
+        <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+          <DetailField label="Customer" value={boq.customerName} />
+          <DetailField label="Organization" value={boq.customerOrganization} />
+          <DetailField label="Department" value={departmentName} />
+          <DetailField label="Vertical" value={verticalName} />
+          <DetailField label="Sales Person" value={salesPersonName} />
+        </div>
+        <div className="overflow-x-auto rounded-xl border border-line">
+          <table className="w-full text-left text-[12px]">
+            <thead className="border-b border-line bg-panel/60 text-muted">
+              <tr>
+                <th className="px-3 py-2 font-medium">SKU</th>
+                <th className="px-3 py-2 font-medium">Qty</th>
+                <th className="px-3 py-2 font-medium">Unit Price</th>
+                <th className="px-3 py-2 font-medium">Discount</th>
+                <th className="px-3 py-2 font-medium">Tax</th>
+                <th className="px-3 py-2 text-right font-medium">Line Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((line) => {
+                const sku = skuById.get(line.skuId)
+                return (
+                  <tr key={line.id} className="border-b border-line last:border-0">
+                    <td className="px-3 py-2">
+                      <span className="rounded bg-panel px-1.5 py-0.5 font-mono text-[11px] text-ink-700">{sku?.skuCode}</span>
+                      <span className="ml-2">{sku?.name}</span>
+                    </td>
+                    <td className="px-3 py-2">{line.quantity}</td>
+                    <td className="px-3 py-2">{line.unitPrice.toLocaleString()}</td>
+                    <td className="px-3 py-2">{line.discountPct}%</td>
+                    <td className="px-3 py-2">{line.taxPct}%</td>
+                    <td className="px-3 py-2 text-right font-medium text-ink-900">{line.lineTotal.toLocaleString()}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex justify-end text-sm font-semibold text-ink-900">
+          Grand Total: {boq.currency} {boq.grandTotal.toLocaleString()}
+        </div>
       </div>
-      <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
-        <DetailField label="Customer" value={boq.customerName} />
-        <DetailField label="Organization" value={boq.customerOrganization} />
-        <DetailField label="Department" value={departmentName} />
-        <DetailField label="Vertical" value={verticalName} />
-        <DetailField label="Sales Person" value={salesPersonName} />
-      </div>
-      <div className="overflow-x-auto rounded-xl border border-line">
-        <table className="w-full text-left text-[12px]">
-          <thead className="border-b border-line bg-panel/60 text-muted">
-            <tr>
-              <th className="px-3 py-2 font-medium">SKU</th>
-              <th className="px-3 py-2 font-medium">Qty</th>
-              <th className="px-3 py-2 font-medium">Unit Price</th>
-              <th className="px-3 py-2 font-medium">Discount</th>
-              <th className="px-3 py-2 font-medium">Tax</th>
-              <th className="px-3 py-2 text-right font-medium">Line Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((line) => {
-              const sku = skuById.get(line.skuId)
-              return (
-                <tr key={line.id} className="border-b border-line last:border-0">
-                  <td className="px-3 py-2">
-                    <span className="rounded bg-panel px-1.5 py-0.5 font-mono text-[11px] text-ink-700">{sku?.skuCode}</span>
-                    <span className="ml-2">{sku?.name}</span>
-                  </td>
-                  <td className="px-3 py-2">{line.quantity}</td>
-                  <td className="px-3 py-2">{line.unitPrice.toLocaleString()}</td>
-                  <td className="px-3 py-2">{line.discountPct}%</td>
-                  <td className="px-3 py-2">{line.taxPct}%</td>
-                  <td className="px-3 py-2 text-right font-medium text-ink-900">{line.lineTotal.toLocaleString()}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex justify-end text-sm font-semibold text-ink-900">
-        Grand Total: {boq.currency} {boq.grandTotal.toLocaleString()}
-      </div>
-    </div>
+    </Collapsible>
   )
 }
