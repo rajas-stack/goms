@@ -9,7 +9,7 @@ import type { CommercialBoq } from '../types'
 function boq(overrides: Partial<CommercialBoq> = {}): CommercialBoq {
   return {
     id: 'b1', boqNumber: 'BOQ-2026-000001', opportunityName: 'Test Opp', departmentId: '', customerName: '',
-    customerOrganization: '', customerAddress: '', customerGst: '', customerContact: '', verticalId: '',
+    customerOrganization: '', customerAddress: '', customerContact: '', verticalId: '',
     budgetAmount: '', budgetUnit: '', budgetKnown: '', emdAmount: '', emdUnit: '',
     salesPersonId: '', buSalesPersonId: null, preSalesId: null,
     status: 'draft', boqVersion: 1, revisionNumber: 0, parentBoqId: null,

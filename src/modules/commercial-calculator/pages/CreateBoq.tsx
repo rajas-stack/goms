@@ -60,7 +60,6 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const [customerName, setCustomerName] = useState('')
   const [customerOrganization, setCustomerOrganization] = useState('')
   const [customerAddress, setCustomerAddress] = useState('')
-  const [customerGst, setCustomerGst] = useState('')
   const [customerContact, setCustomerContact] = useState('')
   // The stakeholder contact is picked from the Department's own real
   // Employee roster (Account Mapping's existing data), not typed from
@@ -214,7 +213,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     try {
       const { boq } = await create.mutateAsync({
         input: {
-          opportunityName, departmentId, customerName, customerOrganization, customerAddress, customerGst,
+          opportunityName, departmentId, customerName, customerOrganization, customerAddress,
           customerContact, verticalId, budgetAmount, budgetUnit, budgetKnown, emdAmount, emdUnit, salesPersonId,
           buSalesPersonId: buSalesPersonId || null, preSalesId: preSalesId || null, currency: effectiveCurrencyCode,
         },
@@ -422,7 +421,6 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               />
             </Field>
             <Field label="Organization"><Input value={customerOrganization} onChange={(e) => setCustomerOrganization(e.target.value)} /></Field>
-            <Field label="GST"><Input value={customerGst} onChange={(e) => setCustomerGst(e.target.value)} /></Field>
             <Field label="Contact"><Input value={customerContact} onChange={(e) => setCustomerContact(e.target.value)} /></Field>
             <div className="col-span-2 lg:col-span-3">
               <Field label="Address"><Textarea value={customerAddress} onChange={(e) => setCustomerAddress(e.target.value)} /></Field>

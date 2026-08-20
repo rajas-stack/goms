@@ -75,7 +75,6 @@ export function buildProposalPrintHtml(input: ProposalPrintInput): string {
   <div class="fields">
     ${row('Customer', boq.customerName)}
     ${row('Organization', boq.customerOrganization)}
-    ${row('GST', boq.customerGst)}
     ${row('Department', departmentName)}
     ${row('Vertical', verticalName)}
     ${row('Sales Person', salesPersonName)}

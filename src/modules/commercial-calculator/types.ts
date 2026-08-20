@@ -124,7 +124,17 @@ export interface CommercialSku {
   listPrice: number
 
   minimumAllowedPrice: number
+  /** Fallback ceiling used only when a line has no active pricing level
+   *  (or a level with no per-level override — see `SkuPricingLevelSetting`
+   *  below) — never a shared/global cap once a level defines its own. */
   maximumDiscountPercent: number
+
+  /** Levels an admin has explicitly enabled for this SKU via "Set Pricing
+   *  Levels" — empty by default; never all six shown unconditionally. Each
+   *  entry's `maximumDiscountPercent` is independent of every other
+   *  entry's — there is no field shared between, say, Internal and
+   *  Government (2026-08-20 pricing-overhaul UI correction). */
+  selectedPricingLevels: SkuPricingLevelSetting[]
 
   createdAt: string
   createdBy: string | null
@@ -142,10 +152,21 @@ export interface LinePricingLevel {
   sellingPrice: number | null
 }
 
+/** A pricing level an admin has enabled for a given SKU (2026-08-20
+ *  pricing-overhaul UI correction). `maximumDiscountPercent` belongs to
+ *  this level alone — no field is shared across Internal/Floor/Partner/
+ *  Government/Enterprise/Corporate. The level's Selling Price itself stays
+ *  in that SKU's existing flat tier-price field (`internalPrice` etc.) —
+ *  this record only tracks "is this level enabled" + its own discount cap. */
+export interface SkuPricingLevelSetting {
+  level: PricingLevelKey
+  maximumDiscountPercent: number
+}
+
 export type CreateSkuInput = Omit<
   CommercialSku,
   'id' | 'skuCode' | 'createdAt' | 'createdBy' | 'displayOrder' | 'isSellable' | 'lifecycleStatus' | 'editionId'
-  | 'minimumAllowedPrice' | 'maximumDiscountPercent'
+  | 'minimumAllowedPrice' | 'maximumDiscountPercent' | 'selectedPricingLevels'
 > & {
   editionId?: string
   displayOrder?: number
@@ -153,6 +174,7 @@ export type CreateSkuInput = Omit<
   lifecycleStatus?: CommercialSku['lifecycleStatus']
   minimumAllowedPrice?: number
   maximumDiscountPercent?: number
+  selectedPricingLevels?: SkuPricingLevelSetting[]
 }
 
 // --- Commercial BOM (spec §6.4) -------------------------------------------
@@ -178,13 +200,14 @@ export interface CommercialBoq {
   opportunityName: string
   departmentId: string
   customerName: string
-  /** The following four fields extend the FRS §12 Customer Information
+  /** The following three fields extend the FRS §12 Customer Information
    *  section beyond the original spec's `customerName`-only design —
    *  free text, same treatment (spec §12.2: no customer master exists
-   *  in GOMS today). */
+   *  in GOMS today). GST was removed from this section entirely (BOQ
+   *  editable-workspace overhaul spec §8) — tax stays governed solely by
+   *  `taxClassId` → `masters.taxClasses.ratePct` → line `taxPct`. */
   customerOrganization: string
   customerAddress: string
-  customerGst: string
   customerContact: string
   verticalId: string
 
@@ -245,6 +268,16 @@ export type CreateBoqInput = Omit<
   'id' | 'boqNumber' | 'status' | 'boqVersion' | 'revisionNumber' | 'parentBoqId' | 'grandTotal'
   | 'createdAt' | 'createdBy' | 'lastModifiedAt' | 'lastModifiedBy'
 >
+
+/** BOQ-level metadata patch (BOQ editable-workspace overhaul spec §3) —
+ *  every field `CreateBoq.tsx` sets at creation time, all still editable
+ *  while the BOQ stays in Draft. `customerGst` is not here — it no longer
+ *  exists on `CommercialBoq` at all (spec §8). */
+export type UpdateBoqInput = Partial<Pick<CommercialBoq,
+  'opportunityName' | 'departmentId' | 'customerName' | 'customerOrganization' | 'customerAddress' | 'customerContact'
+  | 'verticalId' | 'budgetAmount' | 'budgetUnit' | 'budgetKnown' | 'emdAmount' | 'emdUnit'
+  | 'salesPersonId' | 'buSalesPersonId' | 'preSalesId' | 'currency'
+>>
 
 export interface CreateBoqLineItemInput {
   skuId: string

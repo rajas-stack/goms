@@ -560,7 +560,6 @@ function PreviewTab({ boq, lines, skuById, departmentName, verticalName, salesPe
       <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
         <DetailField label="Customer" value={boq.customerName} />
         <DetailField label="Organization" value={boq.customerOrganization} />
-        <DetailField label="GST" value={boq.customerGst} />
         <DetailField label="Department" value={departmentName} />
         <DetailField label="Vertical" value={verticalName} />
         <DetailField label="Sales Person" value={salesPersonName} />

@@ -6,7 +6,7 @@ import { STANDARD_EDITION_ID } from './seed-defaults'
 import type {
   ApprovalMatrixRule, BoqStatus, CommercialAuditLog, CommercialBoq, CommercialBoqLineItem, CommercialBomItem,
   CommercialCalculatorData, CommercialSku, CreateBoqInput, CreateBoqLineItemInput, CreateBomItemInput,
-  CreateMasterInput, CreateSkuInput, Currency, MasterEntityKey, MasterRowMap,
+  CreateMasterInput, CreateSkuInput, Currency, MasterEntityKey, MasterRowMap, UpdateBoqInput,
 } from './types'
 
 // --- Generic Masters CRUD (Phase 0/1) --------------------------------------
@@ -195,6 +195,7 @@ export function createSkuLogic(data: CommercialCalculatorData, input: CreateSkuI
     lifecycleStatus: input.lifecycleStatus ?? 'draft',
     minimumAllowedPrice,
     maximumDiscountPercent,
+    selectedPricingLevels: input.selectedPricingLevels ?? [],
     createdAt: new Date().toISOString(),
     createdBy: null,
   }
@@ -369,6 +370,35 @@ export function createBoqLogic(data: CommercialCalculatorData, input: CreateBoqI
     reason: '', action: 'create', changedBy: null,
   })
   return row
+}
+
+/** BOQ-level metadata patch (BOQ editable-workspace overhaul spec §3) — the
+ *  only mutation path for these fields once a BOQ exists; `createBoqLogic`
+ *  is otherwise the sole place they're ever set. Rejects outright on a
+ *  non-draft BOQ, mirroring the same frozen-snapshot boundary
+ *  `withLiveDraftPricing` already applies to line items — metadata edits
+ *  never reach an already-submitted/approved/etc. document. */
+export function updateBoqLogic(data: CommercialCalculatorData, id: string, patch: UpdateBoqInput): CommercialBoq {
+  const boq = data.commercialBoqs.find((b) => b.id === id)
+  if (!boq) throw new Error(`No such BOQ: ${id}`)
+  if (boq.status !== 'draft') {
+    throw new Error('Only a Draft BOQ can have its details edited.')
+  }
+  const fields = Object.keys(patch) as (keyof UpdateBoqInput)[]
+  for (const field of fields) {
+    const oldValue = boq[field]
+    const newValue = patch[field]
+    if (newValue !== undefined && newValue !== oldValue) {
+      writeAuditLogEntry(data, {
+        entityType: 'boq', entityId: id, field,
+        oldValue: oldValue === null ? '' : String(oldValue), newValue: newValue === null ? '' : String(newValue),
+        reason: '', action: 'update', changedBy: null,
+      })
+    }
+  }
+  Object.assign(boq, patch)
+  boq.lastModifiedAt = new Date().toISOString()
+  return boq
 }
 
 /** Finds the discount band whose `minDiscountPct` is the highest one at or

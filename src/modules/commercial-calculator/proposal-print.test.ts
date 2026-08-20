@@ -5,7 +5,7 @@ import type { CommercialBoq, CommercialBoqLineItem, CommercialSku } from './type
 function baseBoq(overrides: Partial<CommercialBoq> = {}): CommercialBoq {
   return {
     id: 'boq1', boqNumber: 'BOQ-2026-000001', opportunityName: 'State Portal Rollout', departmentId: 'dept1',
-    customerName: 'ACME Corp', customerOrganization: 'ACME Org', customerAddress: '1 Main St', customerGst: 'GST123',
+    customerName: 'ACME Corp', customerOrganization: 'ACME Org', customerAddress: '1 Main St',
     customerContact: '9999999999', verticalId: 'v1', budgetAmount: '', budgetUnit: '', budgetKnown: '',
     emdAmount: '', emdUnit: '', salesPersonId: 'sp1', buSalesPersonId: null, preSalesId: null,
     status: 'draft', boqVersion: 1, revisionNumber: 0, parentBoqId: null, currency: 'INR', grandTotal: 2360,
@@ -31,7 +31,7 @@ function baseSku(overrides: Partial<CommercialSku> = {}): CommercialSku {
     baseSoftwareCost: 1000, implementationCostPerMM: 0, integrationCost: 0, thirdPartyCost: 0, hardwareCost: 0,
     cloudCost: 0, supportCost: 0, trainingCost: 0, internalPrice: 1500, floorPrice: 1400, partnerPrice: 1600,
     governmentPrice: 1700, enterprisePrice: 1800, corporatePrice: 1900, listPrice: 2000, minimumAllowedPrice: 1400,
-    maximumDiscountPercent: 90, createdAt: '2026-01-01T00:00:00.000Z', createdBy: null,
+    maximumDiscountPercent: 90, selectedPricingLevels: [], createdAt: '2026-01-01T00:00:00.000Z', createdBy: null,
     ...overrides,
   }
 }

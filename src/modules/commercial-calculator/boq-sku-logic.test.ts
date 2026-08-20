@@ -5,7 +5,7 @@ import {
   addBoqLineItemLogic, computeBoqMarginPercent, computeSkuMarginPercent, createBoqLogic, createSkuLogic,
   deleteBoqLogic, deleteSkuLogic, duplicateBoqLogic, generateBoqNumber, generateSkuCode, getBoqLogic, isBoqPendingApproval,
   listBoqLineItemsLogic, listBoqsLogic, removeBoqLineItemLogic, reviseBoqLogic, skuTotalUnitCost, skuTotalUnitCostWithBom,
-  updateBoqLineItemLogic, updateBoqStatusLogic, updateSkuLogic,
+  updateBoqLineItemLogic, updateBoqLogic, updateBoqStatusLogic, updateSkuLogic,
 } from './repository-logic'
 import type { CommercialCalculatorData, CommercialSku, CreateBoqInput, CreateSkuInput } from './types'
 
@@ -171,7 +171,7 @@ describe('generateBoqNumber', () => {
 function baseBoqInput(): CreateBoqInput {
   return {
     opportunityName: 'Test Opportunity', departmentId: 'dept1', customerName: 'ACME',
-    customerOrganization: '', customerAddress: '', customerGst: '', customerContact: '',
+    customerOrganization: '', customerAddress: '', customerContact: '',
     verticalId: 'v1', budgetAmount: '', budgetUnit: '', budgetKnown: '', emdAmount: '', emdUnit: '',
     salesPersonId: 'sp1', buSalesPersonId: null, preSalesId: null, currency: 'INR',
   }
@@ -227,6 +227,65 @@ describe('BOQ lifecycle', () => {
     expect(revised.revisionNumber).toBe(0)
     expect(revised.parentBoqId).toBe(original.id)
     expect(revised.status).toBe('draft')
+  })
+})
+
+describe('updateBoqLogic', () => {
+  let data: CommercialCalculatorData
+  beforeEach(() => { data = buildDefaultCommercialCalculatorData() })
+
+  it('updates every editable metadata field at once', () => {
+    const boq = createBoqLogic(data, baseBoqInput())
+    const updated = updateBoqLogic(data, boq.id, {
+      opportunityName: 'Renamed Opp', departmentId: 'dept2', customerName: 'New Customer',
+      customerOrganization: 'New Org', customerAddress: '123 New St', customerContact: 'new@x.com',
+      verticalId: 'v2', budgetAmount: '50', budgetUnit: 'lakh', budgetKnown: 'yes',
+      emdAmount: '5', emdUnit: 'lakh', salesPersonId: 'sp2', buSalesPersonId: 'bu1', preSalesId: 'ps1',
+      currency: 'USD',
+    })
+    expect(updated.opportunityName).toBe('Renamed Opp')
+    expect(updated.departmentId).toBe('dept2')
+    expect(updated.customerName).toBe('New Customer')
+    expect(updated.customerOrganization).toBe('New Org')
+    expect(updated.customerAddress).toBe('123 New St')
+    expect(updated.customerContact).toBe('new@x.com')
+    expect(updated.verticalId).toBe('v2')
+    expect(updated.budgetAmount).toBe('50')
+    expect(updated.budgetUnit).toBe('lakh')
+    expect(updated.budgetKnown).toBe('yes')
+    expect(updated.emdAmount).toBe('5')
+    expect(updated.emdUnit).toBe('lakh')
+    expect(updated.salesPersonId).toBe('sp2')
+    expect(updated.buSalesPersonId).toBe('bu1')
+    expect(updated.preSalesId).toBe('ps1')
+    expect(updated.currency).toBe('USD')
+  })
+
+  it('rejects updating a non-draft BOQ', () => {
+    const boq = createBoqLogic(data, baseBoqInput())
+    updateBoqStatusLogic(data, boq.id, 'submitted', 'x')
+    expect(() => updateBoqLogic(data, boq.id, { opportunityName: 'x' })).toThrow(/only a draft boq/i)
+  })
+
+  it('throws for an unknown BOQ id', () => {
+    expect(() => updateBoqLogic(data, 'nope', { opportunityName: 'x' })).toThrow(/no such boq/i)
+  })
+
+  it('writes an audit log entry per changed field', () => {
+    const boq = createBoqLogic(data, baseBoqInput())
+    updateBoqLogic(data, boq.id, { opportunityName: 'Renamed Opp', customerName: 'ACME' })
+    const entry = data.commercialAuditLogs.find((a) => a.entityId === boq.id && a.field === 'opportunityName')
+    expect(entry?.oldValue).toBe('Test Opportunity')
+    expect(entry?.newValue).toBe('Renamed Opp')
+    // customerName patched to its own current value — no spurious audit entry.
+    expect(data.commercialAuditLogs.some((a) => a.entityId === boq.id && a.field === 'customerName')).toBe(false)
+  })
+
+  it('leaves fields not present in the patch untouched', () => {
+    const boq = createBoqLogic(data, baseBoqInput())
+    const updated = updateBoqLogic(data, boq.id, { opportunityName: 'Renamed Opp' })
+    expect(updated.customerName).toBe(boq.customerName)
+    expect(updated.verticalId).toBe(boq.verticalId)
   })
 })
 
