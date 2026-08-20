@@ -13,7 +13,7 @@ function sku(overrides: Partial<CommercialSku> = {}): CommercialSku {
     hardwareCost: 0, cloudCost: 0, supportCost: 0, trainingCost: 0,
     internalPrice: 900, floorPrice: 800, partnerPrice: 950, governmentPrice: 850,
     enterprisePrice: 1100, corporatePrice: 1050, listPrice: 1000,
-    minimumAllowedPrice: 500, maximumDiscountPercent: 30,
+    minimumAllowedPrice: 500, maximumDiscountPercent: 30, selectedPricingLevels: [],
     createdAt: '', createdBy: null,
     ...overrides,
   }

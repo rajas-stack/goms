@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Field'
+import { Icon } from '@/components/ui/Icon'
 import { useMasters } from '../api'
 import { computeSkuMarginPercent } from '../repository-logic'
+import { PRICING_LEVEL_KEYS, PRICING_LEVEL_LABEL } from '../pricing-levels-logic'
 import { isoToday } from '@/lib/dates'
-import type { CommercialSku, CreateSkuInput } from '../types'
+import type { CommercialSku, CreateSkuInput, PricingLevelKey, SkuPricingLevelSetting } from '../types'
 
 type Values = {
   name: string; categoryId: string; featureId: string; editionId: string; uomId: string; currencyId: string
@@ -16,6 +18,17 @@ type Values = {
   internalPrice: number; floorPrice: number; partnerPrice: number; governmentPrice: number
   enterprisePrice: number; corporatePrice: number; listPrice: number
   minimumAllowedPrice: number; maximumDiscountPercent: number
+  selectedPricingLevels: SkuPricingLevelSetting[]
+}
+
+type LevelPriceField = 'internalPrice' | 'floorPrice' | 'partnerPrice' | 'governmentPrice' | 'enterprisePrice' | 'corporatePrice'
+
+/** Maps each pricing level to the SKU's existing flat tier-price field — the
+ *  Selling Price a level's card edits is that field, unchanged in storage;
+ *  only whether the level is enabled, and its own max discount, are new. */
+const LEVEL_PRICE_FIELD: Record<PricingLevelKey, LevelPriceField> = {
+  internal: 'internalPrice', floor: 'floorPrice', partner: 'partnerPrice',
+  government: 'governmentPrice', enterprise: 'enterprisePrice', corporate: 'corporatePrice',
 }
 
 function defaults(existing: CommercialSku | null): Values {
@@ -32,6 +45,7 @@ function defaults(existing: CommercialSku | null): Values {
       partnerPrice: existing.partnerPrice, governmentPrice: existing.governmentPrice,
       enterprisePrice: existing.enterprisePrice, corporatePrice: existing.corporatePrice, listPrice: existing.listPrice,
       minimumAllowedPrice: existing.minimumAllowedPrice, maximumDiscountPercent: existing.maximumDiscountPercent,
+      selectedPricingLevels: existing.selectedPricingLevels,
     }
   }
   return {
@@ -40,7 +54,7 @@ function defaults(existing: CommercialSku | null): Values {
     baseSoftwareCost: 0, implementationCostPerMM: 0, integrationCost: 0, thirdPartyCost: 0,
     hardwareCost: 0, cloudCost: 0, supportCost: 0, trainingCost: 0,
     internalPrice: 0, floorPrice: 0, partnerPrice: 0, governmentPrice: 0, enterprisePrice: 0, corporatePrice: 0, listPrice: 0,
-    minimumAllowedPrice: 0, maximumDiscountPercent: 90,
+    minimumAllowedPrice: 0, maximumDiscountPercent: 90, selectedPricingLevels: [],
   }
 }
 
@@ -205,20 +219,19 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
 
         <section className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Pricing Levels</h3>
+            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Pricing</h3>
             <span className="text-[12px] font-medium text-ink-700">Margin at List Price: {previewMargin.toFixed(1)}%</span>
           </div>
-          <div className="grid grid-cols-4 gap-4">
-            <NumberField label="Internal" value={values.internalPrice} onChange={(v) => set('internalPrice', v)} />
-            <NumberField label="Floor" value={values.floorPrice} onChange={(v) => set('floorPrice', v)} />
-            <NumberField label="Partner" value={values.partnerPrice} onChange={(v) => set('partnerPrice', v)} />
-            <NumberField label="Government" value={values.governmentPrice} onChange={(v) => set('governmentPrice', v)} />
-            <NumberField label="Enterprise" value={values.enterprisePrice} onChange={(v) => set('enterprisePrice', v)} />
-            <NumberField label="Corporate" value={values.corporatePrice} onChange={(v) => set('corporatePrice', v)} />
-            <NumberField label="List" value={values.listPrice} onChange={(v) => set('listPrice', v)} />
+          <div className="grid grid-cols-3 gap-4">
+            <NumberField label="List Price" value={values.listPrice} onChange={(v) => set('listPrice', v)} />
             <NumberField label="Minimum Allowed" value={values.minimumAllowedPrice} onChange={(v) => set('minimumAllowedPrice', v)} />
-            <NumberField label="Max Discount %" value={values.maximumDiscountPercent} onChange={(v) => set('maximumDiscountPercent', Math.min(90, v))} />
+            <NumberField label="Default Max Discount %" value={values.maximumDiscountPercent} onChange={(v) => set('maximumDiscountPercent', Math.min(90, v))} />
           </div>
+          <PricingLevelsSection
+            values={values}
+            onChangeSelectedLevels={(next) => set('selectedPricingLevels', next)}
+            onChangeLevelField={(field, v) => set(field, v)}
+          />
         </section>
 
         {touchedSensitiveField && (
@@ -230,5 +243,138 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
         {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</p>}
       </div>
     </Dialog>
+  )
+}
+
+function PricingLevelsSection({ values, onChangeSelectedLevels, onChangeLevelField }: {
+  values: Values
+  onChangeSelectedLevels: (next: SkuPricingLevelSetting[]) => void
+  onChangeLevelField: (field: LevelPriceField, v: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [checked, setChecked] = useState<Set<PricingLevelKey>>(new Set())
+  const selected = values.selectedPricingLevels
+  const availableLevels = PRICING_LEVEL_KEYS.filter((k) => !selected.some((s) => s.level === k))
+
+  function toggleChecked(level: PricingLevelKey) {
+    setChecked((prev) => {
+      const next = new Set(prev)
+      if (next.has(level)) next.delete(level)
+      else next.add(level)
+      return next
+    })
+  }
+
+  function addSelected() {
+    const additions = availableLevels
+      .filter((k) => checked.has(k))
+      .map((level) => ({ level, maximumDiscountPercent: values.maximumDiscountPercent }))
+    if (additions.length === 0) return
+    onChangeSelectedLevels([...selected, ...additions])
+    setChecked(new Set())
+  }
+
+  function removeLevel(level: PricingLevelKey) {
+    onChangeSelectedLevels(selected.filter((s) => s.level !== level))
+  }
+
+  function setLevelMaxDiscount(level: PricingLevelKey, v: number) {
+    onChangeSelectedLevels(selected.map((s) => (s.level === level ? { ...s, maximumDiscountPercent: v } : s)))
+  }
+
+  return (
+    <div className="rounded-xl border border-line">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-1.5 px-3 py-2.5 text-left text-[12px] font-semibold uppercase tracking-wide text-muted"
+      >
+        <Icon name={open ? 'ChevronDown' : 'ChevronRight'} size={14} />
+        Set Pricing Levels
+        {selected.length > 0 && <span className="normal-case text-ink-600">({selected.length} selected)</span>}
+      </button>
+      {open && (
+        <div className="flex flex-col gap-3 border-t border-line p-3">
+          {availableLevels.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className="text-[12px] font-medium text-ink-700">Select pricing levels:</span>
+              <div className="flex flex-wrap gap-3">
+                {availableLevels.map((level) => (
+                  <label key={level} className="flex items-center gap-1.5 text-[13px] text-ink-800">
+                    <input type="checkbox" checked={checked.has(level)} onChange={() => toggleChecked(level)} />
+                    {PRICING_LEVEL_LABEL[level]}
+                  </label>
+                ))}
+              </div>
+              <Button size="sm" onClick={addSelected} disabled={checked.size === 0} className="self-start">
+                <Icon name="Plus" size={13} />
+                Add Selected
+              </Button>
+            </div>
+          )}
+
+          {selected.length === 0 ? (
+            <p className="text-[12px] text-muted">No pricing levels selected yet — this SKU has no enabled tiers.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {selected.map((entry) => (
+                <PricingLevelCard
+                  key={entry.level}
+                  entry={entry}
+                  sellingPrice={values[LEVEL_PRICE_FIELD[entry.level]]}
+                  onSellingPriceChange={(v) => onChangeLevelField(LEVEL_PRICE_FIELD[entry.level], v)}
+                  onMaxDiscountChange={(v) => setLevelMaxDiscount(entry.level, v)}
+                  onRemove={() => removeLevel(entry.level)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PricingLevelCard({ entry, sellingPrice, onSellingPriceChange, onMaxDiscountChange, onRemove }: {
+  entry: SkuPricingLevelSetting
+  sellingPrice: number
+  onSellingPriceChange: (v: number) => void
+  onMaxDiscountChange: (v: number) => void
+  onRemove: () => void
+}) {
+  const [open, setOpen] = useState(true)
+  const label = PRICING_LEVEL_LABEL[entry.level]
+  return (
+    <div className="rounded-xl border border-line bg-panel/30 p-3">
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={() => setOpen((v) => !v)} className="flex items-center gap-1.5 text-[13px] font-medium text-ink-800">
+          <Icon name={open ? 'ChevronDown' : 'ChevronRight'} size={14} />
+          {label}
+        </button>
+        <Button size="icon" className="ml-auto" onClick={onRemove} title={`Remove ${label}`} aria-label={`Remove ${label}`}>
+          <Icon name="X" size={13} />
+        </Button>
+      </div>
+      {open && (
+        <div className="mt-2 grid grid-cols-2 gap-3">
+          <Field label={`${label} Selling Price`}>
+            <Input
+              type="number"
+              value={sellingPrice}
+              onChange={(e) => onSellingPriceChange(Number(e.target.value))}
+              aria-label={`${label} Selling Price`}
+            />
+          </Field>
+          <Field label={`${label} Maximum Discount %`}>
+            <Input
+              type="number"
+              value={entry.maximumDiscountPercent}
+              onChange={(e) => onMaxDiscountChange(Math.min(90, Number(e.target.value)))}
+              aria-label={`${label} Maximum Discount %`}
+            />
+          </Field>
+        </div>
+      )}
+    </div>
   )
 }

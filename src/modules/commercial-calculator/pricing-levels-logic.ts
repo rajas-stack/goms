@@ -37,14 +37,24 @@ export function sellingPriceForDiscountPct(listPrice: number, discountPct: numbe
   return listPrice * (1 - discountPct / 100)
 }
 
-/** Validates a candidate selling price against the SKU's own
- *  `maximumDiscountPercent`, measured against List Price. Throws rather
- *  than clamping. */
-export function validateSellingPrice(sku: CommercialSku, sellingPrice: number): void {
+/** A `level`'s own `maximumDiscountPercent` (set via the SKU form's "Set
+ *  Pricing Levels" section) if the SKU has enabled that level — otherwise
+ *  the SKU-wide fallback used by lines with no active level at all. Never a
+ *  field shared between two different levels (2026-08-20 UI correction). */
+export function maxDiscountPercentForLevel(sku: CommercialSku, level: PricingLevelKey): number {
+  return sku.selectedPricingLevels.find((s) => s.level === level)?.maximumDiscountPercent ?? sku.maximumDiscountPercent
+}
+
+/** Validates a candidate selling price against the applicable maximum
+ *  discount — `level`'s own override when the SKU has one, else the SKU's
+ *  overall `maximumDiscountPercent` — measured against List Price. Throws
+ *  rather than clamping. */
+export function validateSellingPrice(sku: CommercialSku, sellingPrice: number, level?: PricingLevelKey): void {
   const discountPct = discountPctForSellingPrice(sku.listPrice, sellingPrice)
-  if (discountPct > sku.maximumDiscountPercent) {
+  const maxDiscountPct = level ? maxDiscountPercentForLevel(sku, level) : sku.maximumDiscountPercent
+  if (discountPct > maxDiscountPct) {
     throw new PricingValidationError(
-      `A selling price of ${sellingPrice} implies a ${discountPct.toFixed(1)}% discount, which exceeds this SKU's maximum allowed discount of ${sku.maximumDiscountPercent}%.`,
+      `A selling price of ${sellingPrice} implies a ${discountPct.toFixed(1)}% discount, which exceeds this SKU's maximum allowed discount of ${maxDiscountPct}%.`,
     )
   }
 }
@@ -59,16 +69,18 @@ export function marginPctForSellingPrice(
 
 /** Margin -> Selling Price (spec §4): `sellingPrice = cost / (1 - margin/100)`.
  *  Validates the back-solved price exactly as a direct Selling Price entry
- *  would be — never silently changes the requested margin. */
+ *  would be (against `level`'s own maximum discount, when given) — never
+ *  silently changes the requested margin. */
 export function sellingPriceForMargin(
   sku: CommercialSku, bomItems: CommercialBomItem[], skusById: Map<string, CommercialSku>, marginPct: number,
+  level?: PricingLevelKey,
 ): number {
   if (marginPct >= 100) {
     throw new PricingValidationError('Margin must be below 100%.')
   }
   const cost = skuTotalUnitCostWithBom(sku, bomItems, skusById)
   const sellingPrice = cost / (1 - marginPct / 100)
-  validateSellingPrice(sku, sellingPrice)
+  validateSellingPrice(sku, sellingPrice, level)
   return sellingPrice
 }
 
@@ -130,7 +142,7 @@ export function computeBulkSetDiscount(
 ): BulkPricingResult[] {
   return bulkApply(lines, skusById, (sku, line) => {
     const sellingPrice = sellingPriceForDiscountPct(sku.listPrice, discountPct)
-    validateSellingPrice(sku, sellingPrice)
+    validateSellingPrice(sku, sellingPrice, level)
     return {
       unitPrice: sellingPrice, discountPct: discountPctForSellingPrice(sku.listPrice, sellingPrice),
       pricingLevels: upsertPricingLevel(line.pricingLevels, level, sellingPrice), activePricingLevel: level,
@@ -142,7 +154,7 @@ export function computeBulkSetSellingPrice(
   lines: CommercialBoqLineItem[], skusById: Map<string, CommercialSku>, level: PricingLevelKey, sellingPrice: number,
 ): BulkPricingResult[] {
   return bulkApply(lines, skusById, (sku, line) => {
-    validateSellingPrice(sku, sellingPrice)
+    validateSellingPrice(sku, sellingPrice, level)
     return {
       unitPrice: sellingPrice, discountPct: discountPctForSellingPrice(sku.listPrice, sellingPrice),
       pricingLevels: upsertPricingLevel(line.pricingLevels, level, sellingPrice), activePricingLevel: level,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   PricingValidationError, computeBulkClearDiscount, computeBulkSetDiscount, computeBulkSetSellingPrice,
-  discountPctForSellingPrice, marginPctForSellingPrice, removePricingLevel,
+  discountPctForSellingPrice, marginPctForSellingPrice, maxDiscountPercentForLevel, removePricingLevel,
   resolveLineUnitPrice, sellingPriceForDiscountPct, sellingPriceForMargin, skuPriceForLevel, upsertPricingLevel,
   validateSellingPrice,
 } from './pricing-levels-logic'
@@ -16,7 +16,7 @@ function sku(overrides: Partial<CommercialSku> = {}): CommercialSku {
     hardwareCost: 0, cloudCost: 0, supportCost: 0, trainingCost: 0,
     internalPrice: 900, floorPrice: 800, partnerPrice: 950, governmentPrice: 850,
     enterprisePrice: 1100, corporatePrice: 1050, listPrice: 1000,
-    minimumAllowedPrice: 500, maximumDiscountPercent: 30,
+    minimumAllowedPrice: 500, maximumDiscountPercent: 30, selectedPricingLevels: [],
     createdAt: '', createdBy: null,
     ...overrides,
   }
@@ -40,6 +40,39 @@ describe('validateSellingPrice', () => {
   })
   it('rejects (never clamps) a selling price beyond maximumDiscountPercent', () => {
     expect(() => validateSellingPrice(sku(), 600)).toThrow(PricingValidationError) // 40% off
+  })
+})
+
+describe('maxDiscountPercentForLevel / per-level maximum discount', () => {
+  it('falls back to the SKU-wide maximumDiscountPercent when the level has no override', () => {
+    expect(maxDiscountPercentForLevel(sku(), 'internal')).toBe(30)
+  })
+
+  it('uses a level-specific override independently of the SKU-wide value and of other levels', () => {
+    const withLevels = sku({
+      selectedPricingLevels: [
+        { level: 'internal', maximumDiscountPercent: 10 },
+        { level: 'government', maximumDiscountPercent: 45 },
+      ],
+    })
+    expect(maxDiscountPercentForLevel(withLevels, 'internal')).toBe(10)
+    expect(maxDiscountPercentForLevel(withLevels, 'government')).toBe(45)
+    // A level with no override still falls back to the SKU-wide value.
+    expect(maxDiscountPercentForLevel(withLevels, 'floor')).toBe(30)
+  })
+
+  it('validateSellingPrice enforces the level-specific override, not the SKU-wide value', () => {
+    const withLevels = sku({ selectedPricingLevels: [{ level: 'internal', maximumDiscountPercent: 10 }] })
+    // 25% off list — within the SKU-wide 30% but beyond Internal's own 10%.
+    expect(() => validateSellingPrice(withLevels, 750)).not.toThrow()
+    expect(() => validateSellingPrice(withLevels, 750, 'internal')).toThrow(PricingValidationError)
+  })
+
+  it('sellingPriceForMargin enforces the level-specific override', () => {
+    const withLevels = sku({ selectedPricingLevels: [{ level: 'internal', maximumDiscountPercent: 10 }] })
+    // cost 400, margin 50% -> price 800 (20% off list) — within SKU-wide 30% but beyond Internal's 10%.
+    expect(() => sellingPriceForMargin(withLevels, [], new Map(), 50)).not.toThrow()
+    expect(() => sellingPriceForMargin(withLevels, [], new Map(), 50, 'internal')).toThrow(PricingValidationError)
   })
 })
 

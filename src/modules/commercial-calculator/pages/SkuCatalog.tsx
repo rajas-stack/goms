@@ -10,7 +10,8 @@ import { useAllBomItems, useAllBoqLineItems, useAuditLogs, useMasters, useSkuMut
 import { SkuFormDialog } from '../components/SkuFormDialog'
 import { SkuBomEditor } from '../components/SkuBomEditor'
 import { computeSkuMarginPercent, skuTotalUnitCost, skuTotalUnitCostWithBom } from '../repository-logic'
-import type { CommercialBomItem, CommercialSku, CreateSkuInput } from '../types'
+import { PRICING_LEVEL_LABEL } from '../pricing-levels-logic'
+import type { CommercialBomItem, CommercialSku, CreateSkuInput, PricingLevelKey } from '../types'
 
 const LIFECYCLE_STYLE: Record<CommercialSku['lifecycleStatus'], string> = {
   draft: 'bg-ink-900/[0.06] text-ink-600',
@@ -290,19 +291,35 @@ function OverviewTab({ sku, categoryName }: { sku: CommercialSku; categoryName: 
   )
 }
 
+const LEVEL_PRICE: Record<PricingLevelKey, keyof CommercialSku> = {
+  internal: 'internalPrice', floor: 'floorPrice', partner: 'partnerPrice',
+  government: 'governmentPrice', enterprise: 'enterprisePrice', corporate: 'corporatePrice',
+}
+
 function PricingTab({ sku, bomItems, skusById }: { sku: CommercialSku; bomItems: CommercialBomItem[]; skusById: Map<string, CommercialSku> }) {
   return (
-    <div className="grid grid-cols-2 gap-4 rounded-xl border border-line p-4 sm:grid-cols-4">
-      <DetailField label="Internal" value={sku.internalPrice.toLocaleString()} />
-      <DetailField label="Floor" value={sku.floorPrice.toLocaleString()} />
-      <DetailField label="Partner" value={sku.partnerPrice.toLocaleString()} />
-      <DetailField label="Government" value={sku.governmentPrice.toLocaleString()} />
-      <DetailField label="Enterprise" value={sku.enterprisePrice.toLocaleString()} />
-      <DetailField label="Corporate" value={sku.corporatePrice.toLocaleString()} />
-      <DetailField label="List" value={sku.listPrice.toLocaleString()} />
-      <DetailField label="Minimum Allowed" value={sku.minimumAllowedPrice.toLocaleString()} />
-      <DetailField label="Max Discount %" value={`${sku.maximumDiscountPercent}%`} />
-      <DetailField label="Margin at List Price" value={`${computeSkuMarginPercent(sku, bomItems, skusById).toFixed(1)}%`} />
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-4 rounded-xl border border-line p-4 sm:grid-cols-4">
+        <DetailField label="List Price" value={sku.listPrice.toLocaleString()} />
+        <DetailField label="Minimum Allowed" value={sku.minimumAllowedPrice.toLocaleString()} />
+        <DetailField label="Default Max Discount %" value={`${sku.maximumDiscountPercent}%`} />
+        <DetailField label="Margin at List Price" value={`${computeSkuMarginPercent(sku, bomItems, skusById).toFixed(1)}%`} />
+      </div>
+      <div>
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">Pricing Levels</div>
+        {sku.selectedPricingLevels.length === 0 ? (
+          <p className="text-[13px] text-muted">No pricing levels configured for this SKU yet.</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-4 rounded-xl border border-line p-4 sm:grid-cols-4">
+            {sku.selectedPricingLevels.map((entry) => (
+              <div key={entry.level} className="flex flex-col gap-2">
+                <DetailField label={`${PRICING_LEVEL_LABEL[entry.level]} Selling Price`} value={(sku[LEVEL_PRICE[entry.level]] as number).toLocaleString()} />
+                <DetailField label={`${PRICING_LEVEL_LABEL[entry.level]} Max Discount %`} value={`${entry.maximumDiscountPercent}%`} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
