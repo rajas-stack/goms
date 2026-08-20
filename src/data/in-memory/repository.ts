@@ -21,7 +21,7 @@ import {
   deleteBomItemLogic, deleteBoqLogic, deleteMasterLogic, deleteSkuLogic, duplicateBoqLogic, getBoqLogic, getMasterLogic, getSkuLogic,
   listAllBomItemsLogic, listAllBoqLineItemsLogic, listAuditLogsLogic, listBoqLineItemsLogic, listBoqsLogic,
   listBomItemsForSkuLogic, listEditionFeaturesLogic,
-  listMasterLogic, listSkusLogic, removeBoqLineItemLogic, reviseBoqLogic, setEditionFeaturesLogic,
+  listMasterLogic, listSkusLogic, removeBoqLineItemLogic, reorderBoqLineItemsLogic, reviseBoqLogic, setEditionFeaturesLogic,
   setMasterActiveLogic, updateBoqLineItemLogic, updateBoqLogic, updateBoqStatusLogic, updateBomItemLogic, updateMasterLogic,
   updateSkuLogic,
 } from '@/modules/commercial-calculator/repository-logic'
@@ -442,6 +442,10 @@ export interface Repository {
     >>,
   ): Promise<CommercialBoqLineItem>
   removeBoqLineItem(id: string): Promise<void>
+  /** Reorders a draft BOQ's line items — `orderedIds` must be exactly this
+   *  BOQ's current line item ids, each exactly once, in the desired order.
+   *  Throws unless `status === 'draft'` (BOQ workbench spec §6). */
+  reorderBoqLineItems(boqId: string, orderedIds: string[]): Promise<void>
   /** Throws on an invalid lifecycle transition (spec §10's `BOQ_TRANSITIONS`). */
   updateBoqStatus(id: string, nextStatus: BoqStatus, changeReason: string): Promise<CommercialBoq>
   /** Creates a new BOQ row carrying the same `boqNumber` forward, with
@@ -1399,6 +1403,10 @@ class InMemoryRepository implements Repository {
     return removeBoqLineItemLogic(this.data.commercialCalculator, id)
   }
 
+  async reorderBoqLineItems(boqId: string, orderedIds: string[]) {
+    return reorderBoqLineItemsLogic(this.data.commercialCalculator, boqId, orderedIds)
+  }
+
   async updateBoqStatus(id: string, nextStatus: BoqStatus, changeReason: string) {
     return updateBoqStatusLogic(this.data.commercialCalculator, id, nextStatus, changeReason)
   }
@@ -1903,7 +1911,7 @@ const MUTATOR_KEYS = [
   'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson', 'transferSalesPerson',
   'createMaster', 'updateMaster', 'setMasterActive', 'deleteMaster', 'setEditionFeatures',
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
-  'createBoq', 'updateBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',
+  'createBoq', 'updateBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'reorderBoqLineItems', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',
   'createCustomer', 'updateCustomer', 'deleteCustomer',
 ] as const
 

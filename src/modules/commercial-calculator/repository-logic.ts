@@ -1,7 +1,7 @@
 import { uid } from '@/lib/utils'
 import { conversionFactor, currencyByCode, currencyById } from './currency'
 import { enforceSingleBaseCurrency, findMasterChildren, validateMasterCode, validateParentExists } from './master-rules'
-import { resolveLineUnitPrice } from './pricing-levels-logic'
+import { effectiveUnitPrice, isAbsoluteLinePrice, resolveLineUnitPrice } from './pricing-levels-logic'
 import { STANDARD_EDITION_ID } from './seed-defaults'
 import type {
   ApprovalMatrixRule, BoqStatus, CommercialAuditLog, CommercialBoq, CommercialBoqLineItem, CommercialBomItem,
@@ -328,8 +328,8 @@ function withLiveDraftPricing(
     if (!sku) return line
     const taxPct = data.masters.taxClasses.find((t) => t.id === sku.taxClassId)?.ratePct ?? 0
     const factor = skuToBoqConversionFactor(data.masters.currencies, boq.currency, sku)
-    const { unitPrice, discountPct } = resolveLineUnitPrice(sku, line.discountPct, line.pricingLevels, line.activePricingLevel)
-    return { ...line, unitPrice, discountPct, taxPct, lineTotal: computeLineTotal(line.quantity, unitPrice, discountPct, taxPct, factor) }
+    const { unitPrice, discountPct, isAbsolutePrice } = resolveLineUnitPrice(sku, line.discountPct, line.pricingLevels, line.activePricingLevel)
+    return { ...line, unitPrice, discountPct, taxPct, lineTotal: computeLineTotal(line.quantity, unitPrice, discountPct, taxPct, factor, isAbsolutePrice) }
   })
 }
 
@@ -432,8 +432,11 @@ export function skuToBoqConversionFactor(currencies: Currency[], boqCurrencyCode
   return conversionFactor(currencyById(currencies, sku.currencyId), currencyByCode(currencies, boqCurrencyCode))
 }
 
-export function computeLineTotal(quantity: number, unitPrice: number, discountPct: number, taxPct: number, factorToBoqCurrency: number): number {
-  return quantity * unitPrice * (1 - discountPct / 100) * (1 + taxPct / 100) * factorToBoqCurrency
+export function computeLineTotal(
+  quantity: number, unitPrice: number, discountPct: number, taxPct: number, factorToBoqCurrency: number,
+  isAbsolutePrice = false,
+): number {
+  return quantity * effectiveUnitPrice(unitPrice, discountPct, isAbsolutePrice) * (1 + taxPct / 100) * factorToBoqCurrency
 }
 
 function recomputeBoqGrandTotal(data: CommercialCalculatorData, boqId: string): void {
@@ -456,11 +459,16 @@ export function addBoqLineItemLogic(
   }
 
   const discountPct = Math.max(0, Math.min(input.discountPct, Math.min(90, sku.maximumDiscountPercent)))
+  const pricingLevels = input.pricingLevels ?? []
+  const activePricingLevel = input.activePricingLevel ?? null
+  const isAbsolutePrice = isAbsoluteLinePrice(pricingLevels, activePricingLevel)
   // The floor check stays in the SKU's own currency — minimumAllowedPrice is
   // a pricing-policy floor set alongside the SKU's other price fields, and
   // must not loosen or tighten depending on which currency a given proposal
-  // happens to be denominated in.
-  const postDiscountPrice = input.unitPrice * (1 - discountPct / 100)
+  // happens to be denominated in. `input.unitPrice` is already the final
+  // absolute charge for a resolved pricing level (§4.2) — applying
+  // `discountPct` on top of that would discount it a second time.
+  const postDiscountPrice = effectiveUnitPrice(input.unitPrice, discountPct, isAbsolutePrice)
   if (postDiscountPrice < sku.minimumAllowedPrice) {
     throw new Error(`Discounted unit price (${postDiscountPrice.toFixed(2)}) is below this SKU's minimum allowed price (${sku.minimumAllowedPrice}).`)
   }
@@ -480,9 +488,9 @@ export function addBoqLineItemLogic(
     approvalDate: null,
     approvalRemarks: input.approvalRemarks ?? '',
     approvalStatus: band.allowAutoApproval ? 'auto_approved' : 'pending',
-    lineTotal: computeLineTotal(input.quantity, input.unitPrice, discountPct, taxPct, factor),
-    pricingLevels: input.pricingLevels ?? [],
-    activePricingLevel: input.activePricingLevel ?? null,
+    lineTotal: computeLineTotal(input.quantity, input.unitPrice, discountPct, taxPct, factor, isAbsolutePrice),
+    pricingLevels,
+    activePricingLevel,
   }
   data.commercialBoqLineItems.push(row)
   recomputeBoqGrandTotal(data, boqId)
@@ -511,8 +519,14 @@ export function updateBoqLineItemLogic(
   const discountPct = patch.discountPct !== undefined
     ? Math.max(0, Math.min(patch.discountPct, Math.min(90, sku.maximumDiscountPercent)))
     : row.discountPct
+  const pricingLevels = patch.pricingLevels ?? row.pricingLevels
+  const activePricingLevel = patch.activePricingLevel !== undefined ? patch.activePricingLevel : row.activePricingLevel
+  const isAbsolutePrice = isAbsoluteLinePrice(pricingLevels, activePricingLevel)
 
-  const postDiscountPrice = unitPrice * (1 - discountPct / 100)
+  // `unitPrice` is already the final absolute charge for a resolved pricing
+  // level (§4.2) — applying `discountPct` on top of that would discount it a
+  // second time, same as `addBoqLineItemLogic`'s floor check.
+  const postDiscountPrice = effectiveUnitPrice(unitPrice, discountPct, isAbsolutePrice)
   if (postDiscountPrice < sku.minimumAllowedPrice) {
     throw new Error(`Discounted unit price (${postDiscountPrice.toFixed(2)}) is below this SKU's minimum allowed price (${sku.minimumAllowedPrice}).`)
   }
@@ -530,7 +544,7 @@ export function updateBoqLineItemLogic(
     Object.assign(row, freshLineApprovalState(data.masters.approvalMatrix, discountPct))
   }
   const factor = skuToBoqConversionFactor(data.masters.currencies, boq.currency, sku)
-  row.lineTotal = computeLineTotal(quantity, unitPrice, discountPct, row.taxPct, factor)
+  row.lineTotal = computeLineTotal(quantity, unitPrice, discountPct, row.taxPct, factor, isAbsolutePrice)
   recomputeBoqGrandTotal(data, row.boqId)
 
   if (patch.quantity !== undefined && quantity !== oldQuantity) {
@@ -555,6 +569,32 @@ export function removeBoqLineItemLogic(data: CommercialCalculatorData, id: strin
   if (!row) return
   data.commercialBoqLineItems = data.commercialBoqLineItems.filter((li) => li.id !== id)
   recomputeBoqGrandTotal(data, row.boqId)
+}
+
+/** Reorders a draft BOQ's line items to match `orderedIds` — BOQ workbench
+ *  spec §6. Line order has no dedicated field; it's the flat
+ *  `commercialBoqLineItems` array's own relative order, which
+ *  `listBoqLineItemsLogic`'s `filter` preserves. This replaces each of this
+ *  BOQ's occupied slots, in ascending original-index order, with
+ *  `orderedIds` in sequence — so the array's absolute positions are
+ *  untouched for every other BOQ's lines, and this BOQ's own relative order
+ *  becomes exactly `orderedIds`. Gated the same as `updateBoqLineItemLogic`:
+ *  rejects outright on a non-draft BOQ. */
+export function reorderBoqLineItemsLogic(data: CommercialCalculatorData, boqId: string, orderedIds: string[]): void {
+  const boq = data.commercialBoqs.find((b) => b.id === boqId)
+  if (!boq) throw new Error(`No such BOQ: ${boqId}`)
+  if (boq.status !== 'draft') {
+    throw new Error('Only a Draft BOQ can have its line items reordered.')
+  }
+  const ownLines = data.commercialBoqLineItems.filter((li) => li.boqId === boqId)
+  const ownIds = new Set(ownLines.map((li) => li.id))
+  if (orderedIds.length !== ownLines.length || !orderedIds.every((id) => ownIds.has(id))) {
+    throw new Error('orderedIds must contain exactly this BOQ\'s current line item ids, each exactly once.')
+  }
+  const byId = new Map(ownLines.map((li) => [li.id, li]))
+  const reordered = orderedIds.map((id) => byId.get(id)!)
+  let cursor = 0
+  data.commercialBoqLineItems = data.commercialBoqLineItems.map((li) => (li.boqId === boqId ? reordered[cursor++] : li))
 }
 
 /** Spec §10 — `cancelled`/`archived` are terminal, and a decision already
@@ -743,7 +783,8 @@ export function computeBoqMarginPercent(
     const sku = skusById.get(line.skuId)
     if (!sku) continue
     const factor = skuToBoqConversionFactor(currencies, boq.currency, sku)
-    revenue += line.quantity * line.unitPrice * (1 - line.discountPct / 100) * factor
+    const isAbsolutePrice = isAbsoluteLinePrice(line.pricingLevels, line.activePricingLevel)
+    revenue += line.quantity * effectiveUnitPrice(line.unitPrice, line.discountPct, isAbsolutePrice) * factor
     cost += line.quantity * skuTotalUnitCostWithBom(sku, bomItems, skusById) * factor
   }
   return revenue === 0 ? 0 : ((revenue - cost) / revenue) * 100

@@ -4,8 +4,8 @@ import { createMasterLogic } from './repository-logic'
 import {
   addBoqLineItemLogic, computeBoqMarginPercent, computeSkuMarginPercent, createBoqLogic, createSkuLogic,
   deleteBoqLogic, deleteSkuLogic, duplicateBoqLogic, generateBoqNumber, generateSkuCode, getBoqLogic, isBoqPendingApproval,
-  listBoqLineItemsLogic, listBoqsLogic, removeBoqLineItemLogic, reviseBoqLogic, skuTotalUnitCost, skuTotalUnitCostWithBom,
-  updateBoqLineItemLogic, updateBoqLogic, updateBoqStatusLogic, updateSkuLogic,
+  listBoqLineItemsLogic, listBoqsLogic, removeBoqLineItemLogic, reorderBoqLineItemsLogic, reviseBoqLogic, skuTotalUnitCost,
+  skuTotalUnitCostWithBom, updateBoqLineItemLogic, updateBoqLogic, updateBoqStatusLogic, updateSkuLogic,
 } from './repository-logic'
 import type { CommercialCalculatorData, CommercialSku, CreateBoqInput, CreateSkuInput } from './types'
 
@@ -395,6 +395,23 @@ describe('BOQ line items — discount/approval matrix (spec §8)', () => {
     expect(updated.activePricingLevel).toBe('government')
   })
 
+  it('does not re-apply discountPct on top of an active pricing level\'s absolute selling price (regression: was double-discounting lineTotal)', () => {
+    // sellingPrice 1600 is a real 20% discount off the 2000 list price — the
+    // caller (CreateBoq.tsx/ProposalDetail.tsx) resolves and passes both
+    // unitPrice=1600 (the absolute charge) and discountPct=20 (display/
+    // banding only) via resolveLineUnitPrice. Double-discounting would
+    // compute 1600*0.8=1280, which sits (wrongly) below this SKU's 1400
+    // minimumAllowedPrice and would incorrectly throw here.
+    const line = addBoqLineItemLogic(data, boqId, {
+      skuId: sku.id, quantity: 2, unitPrice: 1600, discountPct: 20,
+      pricingLevels: [{ level: 'government', sellingPrice: 1600 }], activePricingLevel: 'government',
+    })
+    expect(line.lineTotal).toBeCloseTo(2 * 1600 * 1.18, 5)
+
+    const updated = updateBoqLineItemLogic(data, line.id, { quantity: 3 })
+    expect(updated.lineTotal).toBeCloseTo(3 * 1600 * 1.18, 5)
+  })
+
   it('while draft, live-recomputes discount against a changed list price but keeps an active level\'s absolute selling price fixed', () => {
     const line = addBoqLineItemLogic(data, boqId, {
       skuId: sku.id, quantity: 1, unitPrice: 1700, discountPct: 15,
@@ -523,6 +540,55 @@ describe('BOQ line items — discount/approval matrix (spec §8)', () => {
     const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 5 })
     removeBoqLineItemLogic(data, line.id)
     expect(data.commercialAuditLogs).toHaveLength(before)
+  })
+})
+
+describe('reorderBoqLineItemsLogic', () => {
+  let data: CommercialCalculatorData
+  let sku: CommercialSku
+  let boqId: string
+  let lineIds: string[]
+  beforeEach(() => {
+    data = buildDefaultCommercialCalculatorData()
+    const { feature } = seedHierarchy(data)
+    sku = createSkuLogic(data, baseSkuInput(feature.id))
+    boqId = createBoqLogic(data, baseBoqInput()).id
+    lineIds = [
+      addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 }).id,
+      addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 2, unitPrice: 2000, discountPct: 0 }).id,
+      addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 3, unitPrice: 2000, discountPct: 0 }).id,
+    ]
+  })
+
+  it('reorders this BOQ\'s lines to match orderedIds', () => {
+    const [a, b, c] = lineIds
+    reorderBoqLineItemsLogic(data, boqId, [c, a, b])
+    expect(listBoqLineItemsLogic(data, boqId).map((l) => l.id)).toEqual([c, a, b])
+  })
+
+  it('does not disturb another BOQ\'s line items or their relative order', () => {
+    const otherBoqId = createBoqLogic(data, baseBoqInput()).id
+    const otherLineIds = [
+      addBoqLineItemLogic(data, otherBoqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 }).id,
+      addBoqLineItemLogic(data, otherBoqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 }).id,
+    ]
+    const [a, b, c] = lineIds
+    reorderBoqLineItemsLogic(data, boqId, [c, b, a])
+    expect(listBoqLineItemsLogic(data, otherBoqId).map((l) => l.id)).toEqual(otherLineIds)
+  })
+
+  it('rejects reordering a non-draft BOQ', () => {
+    updateBoqStatusLogic(data, boqId, 'submitted', 'x')
+    expect(() => reorderBoqLineItemsLogic(data, boqId, lineIds)).toThrow(/only a draft boq/i)
+  })
+
+  it('rejects an orderedIds list that omits or adds a line', () => {
+    const [a, b] = lineIds
+    expect(() => reorderBoqLineItemsLogic(data, boqId, [a, b])).toThrow(/orderedIds/i)
+  })
+
+  it('throws for an unknown BOQ id', () => {
+    expect(() => reorderBoqLineItemsLogic(data, 'nope', [])).toThrow(/no such boq/i)
   })
 })
 
