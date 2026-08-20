@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Collapsible } from './Collapsible'
@@ -21,5 +21,20 @@ describe('Collapsible', () => {
     await waitFor(() => expect(screen.getByText('Body content')).toBeVisible())
     await user.click(screen.getByRole('button', { name: /section/i }))
     await waitFor(() => expect(screen.queryByText('Body content')).not.toBeInTheDocument())
+  })
+
+  it('is controlled when open/onOpenChange are supplied — clicking calls onOpenChange instead of toggling itself', async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    const { rerender } = render(
+      <Collapsible title="Section" open={false} onOpenChange={onOpenChange}><p>Body content</p></Collapsible>,
+    )
+    expect(screen.queryByText('Body content')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /section/i }))
+    expect(onOpenChange).toHaveBeenCalledWith(true)
+    // The click alone must not have opened it — only the controlling parent re-rendering with open=true does.
+    expect(screen.queryByText('Body content')).not.toBeInTheDocument()
+    rerender(<Collapsible title="Section" open={true} onOpenChange={onOpenChange}><p>Body content</p></Collapsible>)
+    await waitFor(() => expect(screen.getByText('Body content')).toBeVisible())
   })
 })
