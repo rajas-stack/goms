@@ -3,7 +3,7 @@ import { repository } from '@/data/repository'
 import { isBoqPendingApproval } from './repository-logic'
 import type {
   BoqStatus, CommercialBoqLineItem, CommercialSku, CreateBoqInput, CreateBoqLineItemInput, CreateBomItemInput,
-  CreateMasterInput, CreateSkuInput, MasterEntityKey, MasterRowMap,
+  CreateMasterInput, CreateSkuInput, MasterEntityKey, MasterRowMap, UpdateBoqInput,
 } from './types'
 
 const qk = {
@@ -161,6 +161,10 @@ export function useBoqMutations() {
     },
     onSuccess: invalidate,
   })
+  const update = useMutation({
+    mutationFn: (a: { id: string; patch: UpdateBoqInput }) => repository.updateBoq(a.id, a.patch),
+    onSuccess: invalidate,
+  })
   const updateStatus = useMutation({
     mutationFn: (a: { id: string; nextStatus: BoqStatus; changeReason: string }) =>
       repository.updateBoqStatus(a.id, a.nextStatus, a.changeReason),
@@ -178,7 +182,7 @@ export function useBoqMutations() {
     mutationFn: (id: string) => repository.deleteBoq(id),
     onSuccess: invalidate,
   })
-  return { create, updateStatus, revise, duplicate, remove }
+  return { create, update, updateStatus, revise, duplicate, remove }
 }
 
 export function useBoqLineItemMutations(boqId: string) {

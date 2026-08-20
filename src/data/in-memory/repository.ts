@@ -22,13 +22,13 @@ import {
   listAllBomItemsLogic, listAllBoqLineItemsLogic, listAuditLogsLogic, listBoqLineItemsLogic, listBoqsLogic,
   listBomItemsForSkuLogic, listEditionFeaturesLogic,
   listMasterLogic, listSkusLogic, removeBoqLineItemLogic, reviseBoqLogic, setEditionFeaturesLogic,
-  setMasterActiveLogic, updateBoqLineItemLogic, updateBoqStatusLogic, updateBomItemLogic, updateMasterLogic,
+  setMasterActiveLogic, updateBoqLineItemLogic, updateBoqLogic, updateBoqStatusLogic, updateBomItemLogic, updateMasterLogic,
   updateSkuLogic,
 } from '@/modules/commercial-calculator/repository-logic'
 import type {
   BoqStatus, CommercialAuditLog, CommercialBoq, CommercialBoqLineItem, CommercialBomItem, CommercialSku,
   CreateBoqInput, CreateBoqLineItemInput, CreateBomItemInput, CreateMasterInput, CreateSkuInput, MasterEntityKey,
-  MasterRowMap, ProductEditionFeature,
+  MasterRowMap, ProductEditionFeature, UpdateBoqInput,
 } from '@/modules/commercial-calculator/types'
 
 export interface StateSummary {
@@ -430,6 +430,9 @@ export interface Repository {
    *  Catalog's "BOQ Count" column. */
   listAllBoqLineItems(): Promise<CommercialBoqLineItem[]>
   createBoq(input: CreateBoqInput): Promise<CommercialBoq>
+  /** BOQ-level metadata patch — throws unless `status === 'draft'` (BOQ
+   *  editable-workspace overhaul spec §3). */
+  updateBoq(id: string, patch: UpdateBoqInput): Promise<CommercialBoq>
   addBoqLineItem(boqId: string, input: CreateBoqLineItemInput): Promise<CommercialBoqLineItem>
   updateBoqLineItem(
     id: string,
@@ -1374,6 +1377,10 @@ class InMemoryRepository implements Repository {
     return createBoqLogic(this.data.commercialCalculator, input)
   }
 
+  async updateBoq(id: string, patch: UpdateBoqInput) {
+    return updateBoqLogic(this.data.commercialCalculator, id, patch)
+  }
+
   async addBoqLineItem(boqId: string, input: CreateBoqLineItemInput) {
     return addBoqLineItemLogic(this.data.commercialCalculator, boqId, input)
   }
@@ -1855,10 +1862,7 @@ class InMemoryRepository implements Repository {
     }
   }
 
-  // --- Customers: dormant in-memory stub -------------------------------------
-  // 'customers' goes straight into MIGRATED (repository-select.ts) — this
-  // path is never exercised by the composed `repository`. It exists only
-  // because `implements Repository` requires every method to have a body.
+  // --- Customers ---------------------------------------------------------
   async listCustomers(): Promise<Customer[]> {
     return [...this.data.customers].sort((a, b) => a.name.localeCompare(b.name))
   }
@@ -1899,7 +1903,7 @@ const MUTATOR_KEYS = [
   'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson', 'transferSalesPerson',
   'createMaster', 'updateMaster', 'setMasterActive', 'deleteMaster', 'setEditionFeatures',
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
-  'createBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',
+  'createBoq', 'updateBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',
   'createCustomer', 'updateCustomer', 'deleteCustomer',
 ] as const
 
