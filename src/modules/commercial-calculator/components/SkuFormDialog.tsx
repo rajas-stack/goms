@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
+import { Checkbox } from '@/components/ui/Checkbox'
+import { Collapsible } from '@/components/ui/Collapsible'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
+import { Menu } from '@/components/ui/Menu'
 import { useMasters } from '../api'
 import { computeSkuMarginPercent } from '../repository-logic'
-import { PRICING_LEVEL_KEYS, PRICING_LEVEL_LABEL } from '../pricing-levels-logic'
+import { formatPercent, roundMoney } from '../format'
+import {
+  discountPctForSellingPrice, marginPctForSellingPrice, PricingValidationError,
+  PRICING_LEVEL_KEYS, PRICING_LEVEL_LABEL, sellingPriceForDiscountPct, sellingPriceForMargin, validateSellingPrice,
+} from '../pricing-levels-logic'
 import { isoToday } from '@/lib/dates'
 import type { CommercialSku, CreateSkuInput, PricingLevelKey, SkuPricingLevelSetting } from '../types'
 
@@ -58,14 +65,6 @@ function defaults(existing: CommercialSku | null): Values {
   }
 }
 
-function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
-  return (
-    <Field label={label}>
-      <Input type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} />
-    </Field>
-  )
-}
-
 /** SKU is richer than a master row (30+ fields across identity/cost/pricing),
  *  so unlike the 12 masters it gets its own dedicated form rather than the
  *  generic MasterFormDialog engine. */
@@ -110,14 +109,16 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
   const touchedSensitiveField = !!original && SENSITIVE_FIELDS.some((f) => values[f] !== original[f])
 
   // A placeholder base when creating (no `editing` row to spread fields
-  // like `id`/`skuCode`/`createdAt` from yet) — irrelevant to the margin
-  // math itself, just enough to satisfy computeSkuMarginPercent's shape so
-  // this preview isn't a second, hand-rolled copy of that formula.
-  const previewMargin = computeSkuMarginPercent({
+  // like `id`/`skuCode`/`createdAt` from yet) — irrelevant to the pricing
+  // math itself, just enough to satisfy computeSkuMarginPercent/the pricing-
+  // level helpers' shape so every preview here shares the same live values
+  // rather than a hand-rolled second copy of each formula.
+  const previewSku = {
     ...(editing ?? { id: '', skuCode: '', createdAt: '', createdBy: null }),
     ...values,
     activeTill: values.activeTill || null,
-  } as CommercialSku)
+  } as CommercialSku
+  const previewMargin = computeSkuMarginPercent(previewSku)
 
   async function submit() {
     setPending(true)
@@ -158,6 +159,15 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
           <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Identity</h3>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Name"><Input value={values.name} onChange={(e) => set('name', e.target.value)} /></Field>
+            <Field label="List Price" hint={`Margin at List Price: ${formatPercent(previewMargin)}`}>
+              <Input type="number" value={values.listPrice} onChange={(e) => set('listPrice', Number(e.target.value))} />
+            </Field>
+            <Field label="Minimum Allowed">
+              <Input type="number" value={values.minimumAllowedPrice} onChange={(e) => set('minimumAllowedPrice', Number(e.target.value))} />
+            </Field>
+            <Field label="Default Max Discount %" hint="Fallback ceiling for lines with no pricing level selected.">
+              <Input type="number" value={values.maximumDiscountPercent} onChange={(e) => set('maximumDiscountPercent', Math.min(90, Number(e.target.value)))} />
+            </Field>
             <Field label="SKU Category">
               <Select value={values.categoryId} onChange={(e) => set('categoryId', e.target.value)}>
                 <option value="">Select…</option>
@@ -217,22 +227,12 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
           </div>
         </section>
 
-        <section className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Pricing</h3>
-            <span className="text-[12px] font-medium text-ink-700">Margin at List Price: {previewMargin.toFixed(1)}%</span>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <NumberField label="List Price" value={values.listPrice} onChange={(v) => set('listPrice', v)} />
-            <NumberField label="Minimum Allowed" value={values.minimumAllowedPrice} onChange={(v) => set('minimumAllowedPrice', v)} />
-            <NumberField label="Default Max Discount %" value={values.maximumDiscountPercent} onChange={(v) => set('maximumDiscountPercent', Math.min(90, v))} />
-          </div>
-          <PricingLevelsSection
-            values={values}
-            onChangeSelectedLevels={(next) => set('selectedPricingLevels', next)}
-            onChangeLevelField={(field, v) => set(field, v)}
-          />
-        </section>
+        <SkuPricingLevelsSection
+          sku={previewSku}
+          values={values}
+          onChangeSelectedLevels={(next) => set('selectedPricingLevels', next)}
+          onChangeLevelField={(field, v) => set(field, v)}
+        />
 
         {touchedSensitiveField && (
           <Field label="Reason for change" hint="Required for cost, pricing, or lifecycle status edits — recorded in the Audit Log.">
@@ -246,32 +246,33 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
   )
 }
 
-function PricingLevelsSection({ values, onChangeSelectedLevels, onChangeLevelField }: {
+/** The SKU-catalog counterpart to `SellingPriceSection` (the BOQ line-item
+ *  version) — same interaction (persistent "Add Pricing Level" -> multi-
+ *  select popover -> one independent collapsible card per added level) and
+ *  the same pure pricing-logic helpers, just editing a SKU's own tier prices
+ *  (`values[LEVEL_PRICE_FIELD[level]]`) instead of a line's override. Keeping
+ *  both call sites on one shared model per spec: no separate SKU-only
+ *  pricing-level UI. */
+function SkuPricingLevelsSection({ sku, values, onChangeSelectedLevels, onChangeLevelField }: {
+  sku: CommercialSku
   values: Values
   onChangeSelectedLevels: (next: SkuPricingLevelSetting[]) => void
   onChangeLevelField: (field: LevelPriceField, v: number) => void
 }) {
-  const [open, setOpen] = useState(false)
-  const [checked, setChecked] = useState<Set<PricingLevelKey>>(new Set())
   const selected = values.selectedPricingLevels
   const availableLevels = PRICING_LEVEL_KEYS.filter((k) => !selected.some((s) => s.level === k))
+  const [pendingAdd, setPendingAdd] = useState<PricingLevelKey[]>([])
 
-  function toggleChecked(level: PricingLevelKey) {
-    setChecked((prev) => {
-      const next = new Set(prev)
-      if (next.has(level)) next.delete(level)
-      else next.add(level)
-      return next
-    })
+  function toggleQueued(level: PricingLevelKey) {
+    setPendingAdd((prev) => (prev.includes(level) ? prev.filter((l) => l !== level) : [...prev, level]))
   }
 
-  function addSelected() {
-    const additions = availableLevels
-      .filter((k) => checked.has(k))
-      .map((level) => ({ level, maximumDiscountPercent: values.maximumDiscountPercent }))
-    if (additions.length === 0) return
+  function confirmAdd(close: () => void) {
+    if (pendingAdd.length === 0) return
+    const additions = pendingAdd.map((level) => ({ level, maximumDiscountPercent: values.maximumDiscountPercent }))
     onChangeSelectedLevels([...selected, ...additions])
-    setChecked(new Set())
+    setPendingAdd([])
+    close()
   }
 
   function removeLevel(level: PricingLevelKey) {
@@ -283,59 +284,59 @@ function PricingLevelsSection({ values, onChangeSelectedLevels, onChangeLevelFie
   }
 
   return (
-    <div className="rounded-xl border border-line">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 px-3 py-2.5 text-left text-[12px] font-semibold uppercase tracking-wide text-muted"
-      >
-        <Icon name={open ? 'ChevronDown' : 'ChevronRight'} size={14} />
-        Set Pricing Levels
-        {selected.length > 0 && <span className="normal-case text-ink-600">({selected.length} selected)</span>}
-      </button>
-      {open && (
-        <div className="flex flex-col gap-3 border-t border-line p-3">
-          {availableLevels.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <span className="text-[12px] font-medium text-ink-700">Select pricing levels:</span>
-              <div className="flex flex-wrap gap-3">
+    <Collapsible title="Set Selling Price" icon="Tag">
+      <div className="flex flex-col gap-2">
+        <div className="flex justify-end">
+          <Menu
+            trigger={({ toggle }) => (
+              <Button size="sm" onClick={() => { setPendingAdd([]); toggle() }} disabled={availableLevels.length === 0}>
+                <Icon name="Plus" size={13} />
+                Add Pricing Level
+              </Button>
+            )}
+          >
+            {(close) => (
+              <div className="flex min-w-[12rem] flex-col gap-1 p-1">
                 {availableLevels.map((level) => (
-                  <label key={level} className="flex items-center gap-1.5 text-[13px] text-ink-800">
-                    <input type="checkbox" checked={checked.has(level)} onChange={() => toggleChecked(level)} />
+                  <label key={level} className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-[13px] text-ink hover:bg-ink-900/[0.05]">
+                    <Checkbox checked={pendingAdd.includes(level)} onChange={() => toggleQueued(level)} aria-label={PRICING_LEVEL_LABEL[level]} />
                     {PRICING_LEVEL_LABEL[level]}
                   </label>
                 ))}
+                <div className="mt-1 border-t border-line pt-1">
+                  <Button size="sm" variant="primary" onClick={() => confirmAdd(close)} disabled={pendingAdd.length === 0} className="w-full justify-center">
+                    Add Selected
+                  </Button>
+                </div>
               </div>
-              <Button size="sm" onClick={addSelected} disabled={checked.size === 0} className="self-start">
-                <Icon name="Plus" size={13} />
-                Add Selected
-              </Button>
-            </div>
-          )}
-
-          {selected.length === 0 ? (
-            <p className="text-[12px] text-muted">No pricing levels selected yet — this SKU has no enabled tiers.</p>
-          ) : (
-            <div className="flex flex-col gap-2">
-              {selected.map((entry) => (
-                <PricingLevelCard
-                  key={entry.level}
-                  entry={entry}
-                  sellingPrice={values[LEVEL_PRICE_FIELD[entry.level]]}
-                  onSellingPriceChange={(v) => onChangeLevelField(LEVEL_PRICE_FIELD[entry.level], v)}
-                  onMaxDiscountChange={(v) => setLevelMaxDiscount(entry.level, v)}
-                  onRemove={() => removeLevel(entry.level)}
-                />
-              ))}
-            </div>
-          )}
+            )}
+          </Menu>
         </div>
-      )}
-    </div>
+
+        {selected.length === 0 ? (
+          <p className="text-[12px] text-muted">No pricing levels added yet — this SKU has no enabled tiers.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {selected.map((entry) => (
+              <SkuPricingLevelCard
+                key={entry.level}
+                sku={sku}
+                entry={entry}
+                sellingPrice={values[LEVEL_PRICE_FIELD[entry.level]]}
+                onSellingPriceChange={(v) => onChangeLevelField(LEVEL_PRICE_FIELD[entry.level], v)}
+                onMaxDiscountChange={(v) => setLevelMaxDiscount(entry.level, v)}
+                onRemove={() => removeLevel(entry.level)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </Collapsible>
   )
 }
 
-function PricingLevelCard({ entry, sellingPrice, onSellingPriceChange, onMaxDiscountChange, onRemove }: {
+function SkuPricingLevelCard({ sku, entry, sellingPrice, onSellingPriceChange, onMaxDiscountChange, onRemove }: {
+  sku: CommercialSku
   entry: SkuPricingLevelSetting
   sellingPrice: number
   onSellingPriceChange: (v: number) => void
@@ -343,7 +344,54 @@ function PricingLevelCard({ entry, sellingPrice, onSellingPriceChange, onMaxDisc
   onRemove: () => void
 }) {
   const [open, setOpen] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [priceDraft, setPriceDraft] = useState(String(roundMoney(sellingPrice)))
+  const currentMargin = marginPctForSellingPrice(sku, [], new Map(), sellingPrice)
+  const [marginDraft, setMarginDraft] = useState(currentMargin.toFixed(1))
+  const discountPct = discountPctForSellingPrice(sku.listPrice, sellingPrice)
+  const [discountDraft, setDiscountDraft] = useState(discountPct.toFixed(1))
   const label = PRICING_LEVEL_LABEL[entry.level]
+
+  function commitPrice() {
+    const next = Number(priceDraft)
+    setError(null)
+    if (priceDraft.trim() === '' || !Number.isFinite(next)) return
+    try {
+      validateSellingPrice(sku, next, entry.level)
+      onSellingPriceChange(next)
+    } catch (e) {
+      setError(e instanceof PricingValidationError ? e.message : 'Could not save this price.')
+      setPriceDraft(String(roundMoney(sellingPrice)))
+    }
+  }
+
+  function commitDiscount() {
+    const next = Number(discountDraft)
+    setError(null)
+    if (discountDraft.trim() === '' || !Number.isFinite(next)) return
+    try {
+      const candidatePrice = sellingPriceForDiscountPct(sku.listPrice, next)
+      validateSellingPrice(sku, candidatePrice, entry.level)
+      onSellingPriceChange(candidatePrice)
+    } catch (e) {
+      setError(e instanceof PricingValidationError ? e.message : 'Could not save this discount.')
+      setDiscountDraft(discountPct.toFixed(1))
+    }
+  }
+
+  function commitMargin() {
+    const next = Number(marginDraft)
+    setError(null)
+    if (marginDraft.trim() === '' || !Number.isFinite(next)) return
+    try {
+      const candidatePrice = sellingPriceForMargin(sku, [], new Map(), next, entry.level)
+      onSellingPriceChange(candidatePrice)
+    } catch (e) {
+      setError(e instanceof PricingValidationError ? e.message : 'Could not save this margin.')
+      setMarginDraft(currentMargin.toFixed(1))
+    }
+  }
+
   return (
     <div className="rounded-xl border border-line bg-panel/30 p-3">
       <div className="flex items-center gap-2">
@@ -356,13 +404,23 @@ function PricingLevelCard({ entry, sellingPrice, onSellingPriceChange, onMaxDisc
         </Button>
       </div>
       {open && (
-        <div className="mt-2 grid grid-cols-2 gap-3">
+        <div className="mt-2 grid grid-cols-4 gap-3">
           <Field label={`${label} Selling Price`}>
             <Input
               type="number"
-              value={sellingPrice}
-              onChange={(e) => onSellingPriceChange(Number(e.target.value))}
+              value={priceDraft}
+              onChange={(e) => setPriceDraft(e.target.value)}
+              onBlur={commitPrice}
               aria-label={`${label} Selling Price`}
+            />
+          </Field>
+          <Field label={`${label} Discount %`}>
+            <Input
+              type="number"
+              value={discountDraft}
+              onChange={(e) => setDiscountDraft(e.target.value)}
+              onBlur={commitDiscount}
+              aria-label={`${label} Discount %`}
             />
           </Field>
           <Field label={`${label} Maximum Discount %`}>
@@ -373,8 +431,18 @@ function PricingLevelCard({ entry, sellingPrice, onSellingPriceChange, onMaxDisc
               aria-label={`${label} Maximum Discount %`}
             />
           </Field>
+          <Field label={`${label} Margin %`}>
+            <Input
+              type="number"
+              value={marginDraft}
+              onChange={(e) => setMarginDraft(e.target.value)}
+              onBlur={commitMargin}
+              aria-label={`${label} Margin`}
+            />
+          </Field>
         </div>
       )}
+      {error && <p className="mt-2 text-[12px] text-rose-700">{error}</p>}
     </div>
   )
 }

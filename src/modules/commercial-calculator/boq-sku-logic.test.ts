@@ -494,6 +494,41 @@ describe('BOQ line items — discount/approval matrix (spec §8)', () => {
     expect(edited.approvalRemarks).toBe('')
   })
 
+  it('switching the active pricing level re-evaluates approval instead of leaving a stale decision attached (spec: approval must follow the active pricing level)', () => {
+    // Government at 1600 is a 20% discount off the 2000 list price — outside
+    // the auto-approve band, so it needs (and gets) manual approval.
+    const line = addBoqLineItemLogic(data, boqId, {
+      skuId: sku.id, quantity: 1, unitPrice: 1600, discountPct: 20,
+      pricingLevels: [{ level: 'government', sellingPrice: 1600 }, { level: 'enterprise', sellingPrice: 1820 }],
+      activePricingLevel: 'government',
+    })
+    updateBoqLineItemLogic(data, line.id, {
+      approvalStatus: 'approved', approverId: 'emp_sales_head', approvalRemarks: 'ok', approvalDate: '2026-08-03',
+    })
+    // Enterprise at 1820 is a 9% discount — inside the auto-approve band.
+    // This mirrors exactly the patch `handlePricingChange` (ProposalDetail.tsx/
+    // CreateBoq.tsx) sends when the user switches the "Use for calculation"
+    // radio to Enterprise: unitPrice/discountPct resolved from the newly
+    // active level, alongside the unchanged pricingLevels array.
+    const switched = updateBoqLineItemLogic(data, line.id, {
+      unitPrice: 1820, discountPct: 9,
+      pricingLevels: line.pricingLevels, activePricingLevel: 'enterprise',
+    })
+    expect(switched.approvalStatus).toBe('auto_approved')
+    expect(switched.approverId).toBeNull()
+    expect(switched.approvalDate).toBeNull()
+    expect(switched.approvalRemarks).toBe('')
+
+    // Switching back to Government must re-evaluate again, not resurrect
+    // the old "approved" decision.
+    const switchedBack = updateBoqLineItemLogic(data, line.id, {
+      unitPrice: 1600, discountPct: 20,
+      pricingLevels: line.pricingLevels, activePricingLevel: 'government',
+    })
+    expect(switchedBack.approvalStatus).toBe('pending')
+    expect(switchedBack.approverId).toBeNull()
+  })
+
   it('editing quantity alone does not touch approval state', () => {
     const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 20 })
     updateBoqLineItemLogic(data, line.id, {

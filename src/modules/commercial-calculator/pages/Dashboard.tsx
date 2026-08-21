@@ -16,16 +16,16 @@ function KpiCard({ label, value, icon, tone, active, onClick }: {
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'flex items-center gap-3 rounded-xl border px-4 py-3.5 text-left shadow-sm transition-colors',
+        'flex items-center gap-4 rounded-2xl border px-6 py-6 text-left shadow-sm transition-colors',
         active ? 'border-ink-900 bg-ink-900/[0.04]' : 'border-line bg-white hover:bg-panel/60',
       )}
     >
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${tone ?? 'bg-panel text-ink-700'}`}>
-        <Icon name={icon} size={18} />
+      <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl ${tone ?? 'bg-panel text-ink-700'}`}>
+        <Icon name={icon} size={24} />
       </div>
       <div className="min-w-0">
-        <div className="truncate text-xl font-semibold leading-tight text-ink-900">{value}</div>
-        <div className="truncate text-[12px] text-muted">{label}</div>
+        <div className="truncate text-3xl font-semibold leading-tight text-ink-900">{value}</div>
+        <div className="truncate text-sm text-muted">{label}</div>
       </div>
     </button>
   )
@@ -97,7 +97,7 @@ export function Dashboard({ onCreateBoq, onNavigate }: {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <KpiCard label="Draft" value={String(metrics?.draft ?? 0)} icon="FileText" active={selected === 'draft'} onClick={() => setSelected('draft')} />
         <KpiCard label="Pending Approval" value={String(metrics?.pendingApproval ?? 0)} icon="Clock" tone="bg-amber-50 text-amber-700" active={selected === 'pendingApproval'} onClick={() => setSelected('pendingApproval')} />
         <KpiCard label="Approved" value={String(metrics?.approved ?? 0)} icon="Check" tone="bg-emerald-50 text-emerald-700" active={selected === 'approved'} onClick={() => setSelected('approved')} />
@@ -119,13 +119,6 @@ export function Dashboard({ onCreateBoq, onNavigate }: {
           )}
         </div>
       )}
-
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted">
-        <span>More:</span>
-        <button onClick={() => onNavigate('settings?item=sku-catalog')} className="underline-offset-2 hover:text-ink-800 hover:underline">SKU Catalog</button>
-        <button onClick={() => onNavigate('catalog')} className="underline-offset-2 hover:text-ink-800 hover:underline">Hierarchy</button>
-        <button onClick={() => onNavigate('settings?item=audit')} className="underline-offset-2 hover:text-ink-800 hover:underline">Audit Log</button>
-      </div>
     </div>
   )
 }

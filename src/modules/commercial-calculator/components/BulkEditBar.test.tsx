@@ -29,14 +29,14 @@ function line(id: string): CommercialBoqLineItem {
 
 describe('BulkEditBar', () => {
   it('lists which lines will be affected before applying', () => {
-    render(<BulkEditBar selectedLines={[line('l1'), line('l2')]} skusById={new Map([['s1', sku()]])} onApply={() => {}} onDelete={() => {}} />)
+    render(<BulkEditBar selectedLines={[line('l1'), line('l2')]} skusById={new Map([['s1', sku()]])} onApply={() => {}} />)
     expect(screen.getByText(/2 line/i)).toBeInTheDocument()
   })
 
   it('applies Set Discount % with a chosen pricing level and reports the computed results', async () => {
     const user = userEvent.setup()
     const onApply = vi.fn()
-    render(<BulkEditBar selectedLines={[line('l1')]} skusById={new Map([['s1', sku()]])} onApply={onApply} onDelete={() => {}} />)
+    render(<BulkEditBar selectedLines={[line('l1')]} skusById={new Map([['s1', sku()]])} onApply={onApply} />)
     await user.selectOptions(screen.getByLabelText(/action/i), 'setDiscount')
     await user.selectOptions(screen.getByLabelText(/pricing level/i), 'internal')
     await user.type(screen.getByLabelText(/discount %/i), '20')
@@ -53,7 +53,7 @@ describe('BulkEditBar', () => {
   it('reports a line that would exceed the maximum discount as not applied, without throwing', async () => {
     const user = userEvent.setup()
     const onApply = vi.fn()
-    render(<BulkEditBar selectedLines={[line('l1')]} skusById={new Map([['s1', sku()]])} onApply={onApply} onDelete={() => {}} />)
+    render(<BulkEditBar selectedLines={[line('l1')]} skusById={new Map([['s1', sku()]])} onApply={onApply} />)
     await user.selectOptions(screen.getByLabelText(/action/i), 'setDiscount')
     await user.selectOptions(screen.getByLabelText(/pricing level/i), 'internal')
     await user.type(screen.getByLabelText(/discount %/i), '50')
@@ -64,7 +64,7 @@ describe('BulkEditBar', () => {
   it('applies Clear Discount without requiring a pricing-level selection', async () => {
     const user = userEvent.setup()
     const onApply = vi.fn()
-    render(<BulkEditBar selectedLines={[line('l1')]} skusById={new Map([['s1', sku()]])} onApply={onApply} onDelete={() => {}} />)
+    render(<BulkEditBar selectedLines={[line('l1')]} skusById={new Map([['s1', sku()]])} onApply={onApply} />)
     await user.selectOptions(screen.getByLabelText(/action/i), 'clearDiscount')
     await user.click(screen.getByRole('button', { name: /apply/i }))
     expect(onApply).toHaveBeenCalledWith([expect.objectContaining({ lineId: 'l1', ok: true, activePricingLevel: null, discountPct: 0 })])
@@ -73,7 +73,7 @@ describe('BulkEditBar', () => {
   it('applies Change Quantity to every selected line', async () => {
     const user = userEvent.setup()
     const onApply = vi.fn()
-    render(<BulkEditBar selectedLines={[line('l1'), line('l2')]} skusById={new Map([['s1', sku()]])} onApply={onApply} onDelete={() => {}} />)
+    render(<BulkEditBar selectedLines={[line('l1'), line('l2')]} skusById={new Map([['s1', sku()]])} onApply={onApply} />)
     await user.selectOptions(screen.getByLabelText(/action/i), 'setQuantity')
     await user.type(screen.getByLabelText(/quantity/i), '7')
     await user.click(screen.getByRole('button', { name: /apply/i }))
@@ -88,7 +88,7 @@ describe('BulkEditBar', () => {
     const onApply = vi.fn()
     const withLevel = { ...line('l1'), pricingLevels: [{ level: 'government' as const, sellingPrice: 850 }] }
     const withoutLevel = line('l2')
-    render(<BulkEditBar selectedLines={[withLevel, withoutLevel]} skusById={new Map([['s1', sku()]])} onApply={onApply} onDelete={() => {}} />)
+    render(<BulkEditBar selectedLines={[withLevel, withoutLevel]} skusById={new Map([['s1', sku()]])} onApply={onApply} />)
     await user.selectOptions(screen.getByLabelText(/action/i), 'switchPricingLevel')
     await user.selectOptions(screen.getByLabelText(/pricing level/i), 'government')
     await user.click(screen.getByRole('button', { name: /apply/i }))
@@ -97,22 +97,8 @@ describe('BulkEditBar', () => {
     expect(results.find((r: { lineId: string }) => r.lineId === 'l2')).toMatchObject({ ok: false })
   })
 
-  it('calls onDelete with the selected line ids for the Delete action, without calling onApply', async () => {
-    const user = userEvent.setup()
-    const onApply = vi.fn()
-    const onDelete = vi.fn()
-    render(<BulkEditBar selectedLines={[line('l1'), line('l2')]} skusById={new Map([['s1', sku()]])} onApply={onApply} onDelete={onDelete} />)
-    await user.selectOptions(screen.getByLabelText(/action/i), 'delete')
-    await user.click(screen.getByRole('button', { name: /delete/i }))
-    expect(onDelete).toHaveBeenCalledWith(['l1', 'l2'])
-    expect(onApply).not.toHaveBeenCalled()
-  })
-
-  it('does not require a value or pricing level for Delete', async () => {
-    const user = userEvent.setup()
-    render(<BulkEditBar selectedLines={[line('l1')]} skusById={new Map([['s1', sku()]])} onApply={() => {}} onDelete={() => {}} />)
-    await user.selectOptions(screen.getByLabelText(/action/i), 'delete')
-    expect(screen.queryByLabelText(/pricing level/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /delete/i })).toBeEnabled()
+  it('no longer offers a bulk Delete action', () => {
+    render(<BulkEditBar selectedLines={[line('l1')]} skusById={new Map([['s1', sku()]])} onApply={() => {}} />)
+    expect(screen.queryByRole('option', { name: /^delete$/i })).not.toBeInTheDocument()
   })
 })

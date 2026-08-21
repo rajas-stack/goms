@@ -23,7 +23,12 @@ describe('LineApprovalSummary', () => {
   it('explains that no approval is required when auto-approved', () => {
     render(<LineApprovalSummary line={line({ discountPct: 5, approvalStatus: 'auto_approved' })} approvalMatrix={approvalMatrix} />)
     expect(screen.getByText(/no approval required/i)).toBeInTheDocument()
-    expect(screen.getByText(/5\.0%/)).toBeInTheDocument()
+    expect(screen.getByText(/5%/)).toBeInTheDocument()
+  })
+
+  it('formats a floating-point-noisy discount cleanly (spec: no "7.000000000000001%" leakage)', () => {
+    render(<LineApprovalSummary line={line({ discountPct: (1000 - 930) / 1000 * 100, approvalStatus: 'pending' })} approvalMatrix={approvalMatrix} />)
+    expect(screen.getByText(/discount of 7%/)).toBeInTheDocument()
   })
 
   it('explains that approval is required, naming the band, when pending', () => {
@@ -71,6 +76,19 @@ describe('LineApprovalSummary', () => {
       />,
     )
     expect(screen.getByRole('button', { name: /^approve$/i })).toBeDisabled()
+  })
+
+  it('shows only "Approved" for an approved line — never "Approval required" or "No approval required"', () => {
+    render(<LineApprovalSummary line={line({ discountPct: 20, approvalStatus: 'approved', approvalDate: '2026-08-21' })} approvalMatrix={approvalMatrix} />)
+    expect(screen.getByText(/^approved on 2026-08-21$/i)).toBeInTheDocument()
+    expect(screen.queryByText(/approval required/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no approval required/i)).not.toBeInTheDocument()
+  })
+
+  it('shows only "Rejected" for a rejected line — never "Approval required"', () => {
+    render(<LineApprovalSummary line={line({ discountPct: 20, approvalStatus: 'rejected', approvalDate: '2026-08-21' })} approvalMatrix={approvalMatrix} />)
+    expect(screen.getByText(/^rejected on 2026-08-21$/i)).toBeInTheDocument()
+    expect(screen.queryByText(/approval required/i)).not.toBeInTheDocument()
   })
 
   it('does not render decision controls for an already-decided line even when employees/onDecide are provided', () => {

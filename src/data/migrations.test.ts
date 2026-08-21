@@ -131,6 +131,34 @@ describe('migrateSnapshot', () => {
     expect(out).not.toBeNull()
     expect(out!.customers).toEqual([{ id: 'cust_1', name: 'Acme' }])
   })
+
+  it('backfills selectedPricingLevels onto a legacy SKU row that predates the field', () => {
+    const legacy = {
+      ...v1Snapshot(),
+      commercialCalculator: {
+        ...(migrateSnapshot(v1Snapshot(), 1)!.commercialCalculator),
+        commercialSkus: [{ id: 'sku1', skuCode: 'X-Y-Z-F-NEW' }],
+      },
+    }
+    const out = migrateSnapshot(legacy, 10)
+    expect(out).not.toBeNull()
+    expect(out!.commercialCalculator.commercialSkus).toEqual([{ id: 'sku1', skuCode: 'X-Y-Z-F-NEW', selectedPricingLevels: [] }])
+  })
+
+  it('does not clobber a SKU that already has selectedPricingLevels', () => {
+    const withLevels = {
+      ...v1Snapshot(),
+      commercialCalculator: {
+        ...(migrateSnapshot(v1Snapshot(), 1)!.commercialCalculator),
+        commercialSkus: [{ id: 'sku1', skuCode: 'X-Y-Z-F-NEW', selectedPricingLevels: [{ level: 'internal', maximumDiscountPercent: 10 }] }],
+      },
+    }
+    const out = migrateSnapshot(withLevels, 10)
+    expect(out).not.toBeNull()
+    expect(out!.commercialCalculator.commercialSkus).toEqual([
+      { id: 'sku1', skuCode: 'X-Y-Z-F-NEW', selectedPricingLevels: [{ level: 'internal', maximumDiscountPercent: 10 }] },
+    ])
+  })
 })
 
 describe('v2 — opportunities extracted from department metadata', () => {

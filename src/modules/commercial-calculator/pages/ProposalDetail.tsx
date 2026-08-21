@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAllEmployees, useCurrentPostings, useDepartments, useSalesPersons } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
@@ -17,7 +17,9 @@ import { useAllBomItems, useBoqLineItemMutations, useBoqLineItems, useBoqMutatio
 import { buildProposalPrintHtml } from '../proposal-print'
 import { computeBoqMarginPercent } from '../repository-logic'
 import { PRICING_LEVEL_LABEL, resolveLineUnitPrice } from '../pricing-levels-logic'
+import { formatPercent, isNegativeMargin } from '../format'
 import { useBoqWorkspaceShortcuts } from '../use-boq-workspace-shortcuts'
+import { useStickyScrollOffset } from '../use-sticky-scroll-offset'
 import type { BulkPricingResult } from '../pricing-levels-logic'
 import { BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
 import { SkuLinePicker } from '../components/SkuLinePicker'
@@ -98,6 +100,10 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
     onEscape: () => { if (expandedLineId) setExpandedLineId(null) },
   })
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const stickyBarRef = useRef<HTMLDivElement>(null)
+  useStickyScrollOffset(scrollContainerRef, stickyBarRef)
+
   async function transition(next: BoqStatus) {
     if (!boq) return
     const reason = window.prompt(`Reason for moving ${boq.boqNumber} to ${STATUS_LABEL[next]}?`, '')
@@ -154,7 +160,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
+    <div ref={scrollContainerRef} className="flex h-full flex-col overflow-y-auto">
       <div className="shrink-0 p-4 pb-0">
         <button
           onClick={() => navigate('/commercial-calculator/boq-management')}
@@ -218,10 +224,20 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
         <div className="mt-3 grid grid-cols-3 gap-3 rounded-xl border border-line p-3 text-sm">
           <div><div className="text-[11px] uppercase text-muted">Version</div>{boq.boqVersion} (rev {boq.revisionNumber})</div>
           <div><div className="text-[11px] uppercase text-muted">Grand Total</div>{boq.currency} {boq.grandTotal.toLocaleString()}</div>
-          <div><div className="text-[11px] uppercase text-muted">Margin</div>{margin.toFixed(1)}%</div>
+          <div>
+            <div className="text-[11px] uppercase text-muted">Margin</div>
+            <span className={isNegativeMargin(margin) ? 'text-rose-700' : undefined}>
+              {formatPercent(margin)}{isNegativeMargin(margin) ? ' — Below Cost' : ''}
+            </span>
+          </div>
         </div>
       </div>
 
+      {/* Both bars pin together as one unit — stacking two independent
+         `sticky top-0` elements would land them on the same coordinate once
+         both are stuck, hiding whichever has the lower z-index behind the
+         other and silently swallowing clicks meant for it. */}
+      <div ref={stickyBarRef} className="sticky top-0 z-20 flex flex-col">
       <BoqWorkspaceHeader
         boqNumber={boq.boqNumber}
         statusLabel={STATUS_LABEL[boq.status]}
@@ -245,7 +261,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
         } : undefined}
       />
 
-      <div className="sticky top-0 z-10 mt-3 flex shrink-0 gap-1 overflow-x-auto border-y border-line bg-white/95 px-4 py-1.5 backdrop-blur">
+      <div className="mt-3 flex shrink-0 gap-1 overflow-x-auto border-y border-line bg-white/95 px-4 py-1.5 backdrop-blur">
         {SECTIONS.map((s) => (
           <button
             key={s.id}
@@ -255,6 +271,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             {s.label}
           </button>
         ))}
+      </div>
       </div>
 
       <div className="flex flex-col gap-6 p-4">
@@ -598,18 +615,6 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, emplo
     setSelectedIds([])
   }
 
-  async function applyBulkDelete(lineIds: string[]) {
-    let failedCount = 0
-    for (const id of lineIds) {
-      try {
-        await lineMutations.remove.mutateAsync(id)
-      } catch {
-        failedCount += 1
-      }
-    }
-    toast(failedCount > 0 ? `${failedCount} of ${lineIds.length} line(s) could not be deleted.` : `${lineIds.length} line(s) deleted.`)
-    setSelectedIds([])
-  }
 
   async function moveLine(lineId: string, direction: 'up' | 'down') {
     const ids = lines.map((l) => l.id)
@@ -655,6 +660,14 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, emplo
       icon="FileSpreadsheet"
       badge={pendingCount > 0 ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">{pendingCount} pending</span> : undefined}
     >
+      {isDraft && (
+        <div className="mb-3 flex flex-col gap-2">
+          <SkuSearchBar verticalId={boq.verticalId} currencyCode={boq.currency} bomItems={bomItems} onAdd={handleAdd} />
+          <Collapsible title="Browse Catalog" icon="Boxes" defaultOpen={false}>
+            <SkuLinePicker verticalId={boq.verticalId} currencyCode={boq.currency} bomItems={bomItems} onAdd={handleAdd} />
+          </Collapsible>
+        </div>
+      )}
       {isDraft && lines.length > 0 && (
         <div className="mb-2 flex items-center gap-2">
           <Checkbox checked={selectedIds.length === lines.length} indeterminate={selectedIds.length > 0 && selectedIds.length < lines.length} onChange={toggleAll} aria-label="Select all lines" />
@@ -663,37 +676,33 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, emplo
       )}
       {isDraft && selectedLines.length > 0 && (
         <div className="mb-2">
-          <BulkEditBar selectedLines={selectedLines} skusById={skuById} onApply={applyBulkResults} onDelete={applyBulkDelete} />
+          <BulkEditBar selectedLines={selectedLines} skusById={skuById} onApply={applyBulkResults} />
         </div>
       )}
-      <div className="flex flex-col gap-2">
-        {lines.map((line, i) => {
-          const sku = skuById.get(line.skuId)
-          const rowProps = { expanded: expandedLineId === line.id, onToggleExpand: () => onToggleExpand(line.id) }
-          return isDraft ? (
-            <div key={line.id} className="flex items-start gap-2">
-              <Checkbox checked={selectedIds.includes(line.id)} onChange={() => toggleOne(line.id)} aria-label={`Select ${sku?.skuCode ?? 'line'}`} />
-              <div className="flex-1">
-                <DraftLineRow
-                  line={line} sku={sku} bomItems={bomItems} skuById={skuById} approvalMatrix={approvalMatrix} employees={employees}
-                  lineMutations={lineMutations} onDecide={onDecide} {...rowProps}
-                  isFirst={i === 0} isLast={i === lines.length - 1}
-                  onMoveUp={() => moveLine(line.id, 'up')} onMoveDown={() => moveLine(line.id, 'down')}
-                  onDuplicate={() => duplicateLine(line)}
-                />
+      {lines.length === 0 ? (
+        <p className="text-[13px] text-muted">No SKUs added yet — configure one above to start building the proposal.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {lines.map((line, i) => {
+            const sku = skuById.get(line.skuId)
+            const rowProps = { expanded: expandedLineId === line.id, onToggleExpand: () => onToggleExpand(line.id) }
+            return isDraft ? (
+              <div key={line.id} className="flex items-start gap-2">
+                <Checkbox checked={selectedIds.includes(line.id)} onChange={() => toggleOne(line.id)} aria-label={`Select ${sku?.skuCode ?? 'line'}`} />
+                <div className="flex-1">
+                  <DraftLineRow
+                    line={line} sku={sku} bomItems={bomItems} skuById={skuById} approvalMatrix={approvalMatrix} employees={employees}
+                    lineMutations={lineMutations} onDecide={onDecide} {...rowProps}
+                    isFirst={i === 0} isLast={i === lines.length - 1}
+                    onMoveUp={() => moveLine(line.id, 'up')} onMoveDown={() => moveLine(line.id, 'down')}
+                    onDuplicate={() => duplicateLine(line)}
+                  />
+                </div>
               </div>
-            </div>
-          ) : (
-            <NonDraftLineRow key={line.id} line={line} sku={sku} approvalMatrix={approvalMatrix} employees={employees} onDecide={onDecide} {...rowProps} />
-          )
-        })}
-      </div>
-      {isDraft && (
-        <div className="mt-2 flex flex-col gap-2">
-          <SkuSearchBar verticalId={boq.verticalId} currencyCode={boq.currency} bomItems={bomItems} onAdd={handleAdd} />
-          <Collapsible title="Browse Catalog" icon="Boxes" defaultOpen={false}>
-            <SkuLinePicker verticalId={boq.verticalId} currencyCode={boq.currency} bomItems={bomItems} onAdd={handleAdd} />
-          </Collapsible>
+            ) : (
+              <NonDraftLineRow key={line.id} line={line} sku={sku} approvalMatrix={approvalMatrix} employees={employees} onDecide={onDecide} {...rowProps} />
+            )
+          })}
         </div>
       )}
     </Collapsible>
@@ -746,7 +755,14 @@ function DraftLineRow({
 
   async function handlePricingChange(next: { pricingLevels: CommercialBoqLineItem['pricingLevels']; activePricingLevel: CommercialBoqLineItem['activePricingLevel'] }) {
     if (!sku) return
-    const { unitPrice, discountPct } = resolveLineUnitPrice(sku, line.discountPct, next.pricingLevels, next.activePricingLevel)
+    // `line.discountPct` here is only ever a mirror of whichever pricing level was
+    // last active (see `resolveLineUnitPrice`'s fallback) — never an independently
+    // set flat discount, since every path that fires this handler goes through the
+    // Selling Price section. Passing it through as the "current discount" fallback
+    // left a stale nonzero discount (and line total) in place after deactivating or
+    // removing the level that had produced it; 0 is the correct fallback whenever
+    // the new state has no resolved absolute price to derive a discount from.
+    const { unitPrice, discountPct } = resolveLineUnitPrice(sku, 0, next.pricingLevels, next.activePricingLevel)
     try {
       await lineMutations.update.mutateAsync({
         id: line.id,
@@ -790,7 +806,7 @@ function DraftLineRow({
           {line.activePricingLevel ? PRICING_LEVEL_LABEL[line.activePricingLevel] : 'List Price'}
         </span>
         <span className="text-muted">Sell {line.unitPrice.toLocaleString()}</span>
-        <span className="text-muted">{line.discountPct.toFixed(1)}% off</span>
+        <span className="text-muted">{formatPercent(line.discountPct)} off</span>
         <span className="text-muted">{line.taxPct}% tax</span>
         <span className="font-medium text-ink-900">{line.lineTotal.toLocaleString()}</span>
         <Button size="icon" onClick={onMoveUp} disabled={isFirst} title="Move up" aria-label="Move up"><Icon name="ArrowUp" size={14} /></Button>
@@ -836,7 +852,7 @@ function NonDraftLineRow({ line, sku, approvalMatrix, employees, onDecide, expan
         <span className="rounded-full bg-panel px-2 py-0.5 text-[11px] font-medium text-ink-700">
           {line.activePricingLevel ? PRICING_LEVEL_LABEL[line.activePricingLevel] : 'List Price'}
         </span>
-        <span className="text-muted">{line.discountPct}% off</span>
+        <span className="text-muted">{formatPercent(line.discountPct)} off</span>
         <span className="text-muted">{line.taxPct}% tax</span>
         <span className="font-medium text-ink-900">{line.lineTotal.toLocaleString()}</span>
       </div>
@@ -911,7 +927,7 @@ function PreviewTab({ boq, lines, skuById, departmentName, verticalName, salesPe
                     </td>
                     <td className="px-3 py-2">{line.quantity}</td>
                     <td className="px-3 py-2">{line.unitPrice.toLocaleString()}</td>
-                    <td className="px-3 py-2">{line.discountPct}%</td>
+                    <td className="px-3 py-2">{formatPercent(line.discountPct)}</td>
                     <td className="px-3 py-2">{line.taxPct}%</td>
                     <td className="px-3 py-2 text-right font-medium text-ink-900">{line.lineTotal.toLocaleString()}</td>
                   </tr>

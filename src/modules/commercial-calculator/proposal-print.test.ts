@@ -78,6 +78,17 @@ describe('buildProposalPrintHtml', () => {
     expect(html).toContain('Unknown SKU')
   })
 
+  it('formats a floating-point-noisy discount cleanly, not as raw 7.000000000000001%', () => {
+    const sku = baseSku()
+    const line = baseLine({ discountPct: (1000 - 930) / 1000 * 100 })
+    const html = buildProposalPrintHtml({
+      boq: baseBoq(), lines: [line], skuById: new Map([[sku.id, sku]]),
+      departmentName: 'IT Dept', verticalName: 'Government', salesPersonName: 'Jane Doe',
+    })
+    expect(html).toContain('<td>7%</td>')
+    expect(html).not.toContain('7.000000000000001')
+  })
+
   it('escapes HTML in free-text fields rather than injecting it raw', () => {
     const html = buildProposalPrintHtml({
       boq: baseBoq({ customerName: '<script>alert(1)</script>' }), lines: [], skuById: new Map(),

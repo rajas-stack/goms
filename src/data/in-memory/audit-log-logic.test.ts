@@ -2,14 +2,12 @@ import { describe, expect, it } from 'vitest'
 import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
 import { listAuditLogsLogic, writeAuditLogEntry } from '@/modules/commercial-calculator/repository-logic'
 
-// `writeAuditLogEntry`/`listAuditLogsLogic` back the in-memory fallback's own
-// `listAuditLogs` implementation (see in-memory/repository.ts) — tested here
-// directly against the pure logic function/fixture data, matching this
+// `writeAuditLogEntry`/`listAuditLogsLogic` back the in-memory repository's
+// own `listAuditLogs` implementation (see in-memory/repository.ts) — tested
+// here directly against the pure logic function/fixture data, matching this
 // file's sibling repository-logic.test.ts convention, rather than through
 // the persistence-wrapped `repository` singleton (which pulls in DOM APIs
-// unavailable in this suite's Node test environment). The Supabase-backed
-// `auditLogs` domain (Phase 5) has its own integration test coverage in
-// `src/data/supabase/audit-logs.integration.test.ts`.
+// unavailable in this suite's Node test environment).
 describe('writeAuditLogEntry (backs the in-memory listAuditLogs fallback)', () => {
   it('appends an entry visible through listAuditLogsLogic', () => {
     const data = buildDefaultCommercialCalculatorData()

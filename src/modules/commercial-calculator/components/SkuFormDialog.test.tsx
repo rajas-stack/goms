@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SkuFormDialog } from './SkuFormDialog'
@@ -42,44 +42,64 @@ function renderDialog(editing: CommercialSku | null, onSubmit = vi.fn()) {
   return { onSubmit }
 }
 
-describe('SkuFormDialog — Set Pricing Levels', () => {
-  it('is collapsed by default and shows no per-level fields', () => {
+describe('SkuFormDialog — Base Pricing fields live in Identity', () => {
+  it('shows List Price / Minimum Allowed / Default Max Discount % once, outside Set Selling Price', () => {
     renderDialog(sku())
-    expect(screen.getByRole('button', { name: /set pricing levels/i })).toBeInTheDocument()
+    const identitySection = screen.getByText('Identity').closest('section')!
+    expect(within(identitySection).getByLabelText(/^list price/i)).toBeInTheDocument()
+    expect(within(identitySection).getByLabelText('Minimum Allowed')).toBeInTheDocument()
+    expect(within(identitySection).getByLabelText(/^default max discount %/i)).toBeInTheDocument()
+    // Not duplicated as a standalone "Pricing" block anywhere else.
+    expect(screen.queryByText(/^pricing$/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('SkuFormDialog — Set Selling Price', () => {
+  it('shows the section with an Add Pricing Level action and no per-level fields yet', () => {
+    renderDialog(sku())
+    expect(screen.getByText('Set Selling Price')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /add pricing level/i })).toBeInTheDocument()
     expect(screen.queryByLabelText(/internal selling price/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: /internal/i })).not.toBeInTheDocument()
   })
 
-  it('expanding shows a checkbox per available level and no input fields yet', async () => {
+  it('opening Add Pricing Level shows a checkbox per available level and no input fields yet', async () => {
     const user = userEvent.setup()
     renderDialog(sku())
-    await user.click(screen.getByRole('button', { name: /set pricing levels/i }))
-    expect(screen.getByRole('checkbox', { name: 'Internal' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /add pricing level/i }))
+    expect(await screen.findByRole('checkbox', { name: 'Internal' })).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Government' })).toBeInTheDocument()
     expect(screen.queryByLabelText(/internal selling price/i)).not.toBeInTheDocument()
   })
 
-  it('checking levels and clicking Add Selected creates one independent card per level', async () => {
+  it('checking levels and clicking Add Selected creates one independent card per level, each with its own fields', async () => {
     const user = userEvent.setup()
     renderDialog(sku())
-    await user.click(screen.getByRole('button', { name: /set pricing levels/i }))
-    await user.click(screen.getByRole('checkbox', { name: 'Internal' }))
+    await user.click(screen.getByRole('button', { name: /add pricing level/i }))
+    await user.click(await screen.findByRole('checkbox', { name: 'Internal' }))
     await user.click(screen.getByRole('checkbox', { name: 'Government' }))
     await user.click(screen.getByRole('button', { name: /add selected/i }))
 
     expect(screen.getByLabelText(/internal selling price/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/internal discount %/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/internal maximum discount %/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/internal margin/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/government selling price/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/government discount %/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/government maximum discount %/i)).toBeInTheDocument()
-    // Neither level is offered again in the checkbox list.
+    expect(screen.getByLabelText(/government margin/i)).toBeInTheDocument()
+
+    // Neither level is offered again in the popover.
+    await user.click(screen.getByRole('button', { name: /add pricing level/i }))
     expect(screen.queryByRole('checkbox', { name: 'Internal' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Government' })).not.toBeInTheDocument()
   })
 
   it("each added level's maximum discount is independent of the others", async () => {
     const user = userEvent.setup()
     renderDialog(sku())
-    await user.click(screen.getByRole('button', { name: /set pricing levels/i }))
-    await user.click(screen.getByRole('checkbox', { name: 'Internal' }))
+    await user.click(screen.getByRole('button', { name: /add pricing level/i }))
+    await user.click(await screen.findByRole('checkbox', { name: 'Internal' }))
     await user.click(screen.getByRole('checkbox', { name: 'Government' }))
     await user.click(screen.getByRole('button', { name: /add selected/i }))
 
@@ -95,8 +115,8 @@ describe('SkuFormDialog — Set Pricing Levels', () => {
   it('removing a level card removes just that level, leaving the other untouched', async () => {
     const user = userEvent.setup()
     renderDialog(sku())
-    await user.click(screen.getByRole('button', { name: /set pricing levels/i }))
-    await user.click(screen.getByRole('checkbox', { name: 'Internal' }))
+    await user.click(screen.getByRole('button', { name: /add pricing level/i }))
+    await user.click(await screen.findByRole('checkbox', { name: 'Internal' }))
     await user.click(screen.getByRole('checkbox', { name: 'Government' }))
     await user.click(screen.getByRole('button', { name: /add selected/i }))
 
@@ -104,7 +124,8 @@ describe('SkuFormDialog — Set Pricing Levels', () => {
 
     expect(screen.queryByLabelText(/internal selling price/i)).not.toBeInTheDocument()
     expect(screen.getByLabelText(/government selling price/i)).toBeInTheDocument()
-    // Internal is offered again in the checkbox list since it's no longer added.
-    expect(screen.getByRole('checkbox', { name: 'Internal' })).toBeInTheDocument()
+    // Internal is offered again in the popover since it's no longer added.
+    await user.click(screen.getByRole('button', { name: /add pricing level/i }))
+    expect(await screen.findByRole('checkbox', { name: 'Internal' })).toBeInTheDocument()
   })
 })

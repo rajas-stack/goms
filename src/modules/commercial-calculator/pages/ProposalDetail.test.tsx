@@ -130,6 +130,28 @@ describe('ProposalDetail — no tab navigation', () => {
   })
 })
 
+describe('ProposalDetail — margin warning and percent formatting', () => {
+  it('marks a negative overall margin with a clear warning in the BOQ Details panel (selling price below cost)', () => {
+    renderProposalDetail({
+      lines: [line({ id: 'l1', unitPrice: 300, discountPct: 0 })],
+    })
+    expect(screen.getAllByText(/below cost/i).length).toBeGreaterThan(0)
+  })
+
+  it('does not show a margin warning for a normal positive-margin BOQ', () => {
+    renderProposalDetail({ lines: [line({ id: 'l1' })] })
+    expect(screen.queryByText(/below cost/i)).not.toBeInTheDocument()
+  })
+
+  it('formats a floating-point-noisy discount cleanly in the Preview table (spec: no "7.000000000000001%" leakage)', async () => {
+    const user = userEvent.setup()
+    renderProposalDetail({ lines: [line({ id: 'l1', discountPct: (1000 - 930) / 1000 * 100 })] })
+    await user.click(screen.getByRole('button', { name: /^preview$/i, expanded: false }))
+    await screen.findByText(/commercial proposal/i)
+    expect(screen.getByText('7%')).toBeInTheDocument()
+  })
+})
+
 describe('ProposalDetail — BOQ Details editing', () => {
   it('shows fields as read-only text with no Edit control for a non-draft BOQ', () => {
     renderProposalDetail({ boq: boq({ status: 'approved' }) })
@@ -294,8 +316,26 @@ describe('ProposalDetail — Line Items compact rows and bulk editing', () => {
     // button — this only asserts the compact row's badge is one of the places it shows.
     expect(screen.getAllByText('Government').length).toBeGreaterThan(0)
     expect(screen.getByText(/850/)).toBeInTheDocument()
-    expect(screen.getByText(/15\.0% off/)).toBeInTheDocument()
+    expect(screen.getByText(/15% off/)).toBeInTheDocument()
     expect(screen.getByText(/18% tax/)).toBeInTheDocument()
+  })
+
+  it('renders the SKU search bar and Browse Catalog above the existing line list', () => {
+    renderProposalDetail({ lines: [line({ id: 'l1' })] })
+    const search = screen.getByLabelText(/search by sku code or name/i)
+    const firstLineText = screen.getByText('Widget')
+    // DOCUMENT_POSITION_FOLLOWING (4) on firstLineText means search comes before it.
+    expect(search.compareDocumentPosition(firstLineText) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('shows the empty-state message when there are no lines', () => {
+    renderProposalDetail({ lines: [] })
+    expect(screen.getByText(/no skus added yet/i)).toBeInTheDocument()
+  })
+
+  it('does not show the empty-state message when the BOQ already has line items', () => {
+    renderProposalDetail({ lines: [line({ id: 'l1' })] })
+    expect(screen.queryByText(/no skus added yet/i)).not.toBeInTheDocument()
   })
 
   it('only one line row is expanded at a time', async () => {
@@ -308,6 +348,24 @@ describe('ProposalDetail — Line Items compact rows and bulk editing', () => {
     // checking the approval-band explanation text appears exactly once even after expanding both.
     await user.click(toggles[1])
     expect(screen.getAllByText(/no approval required/i)).toHaveLength(1)
+  })
+
+  it('switching the active pricing level sends the newly-resolved discount to the update mutation, so the repository re-evaluates approval instead of a stale decision surviving under a different price (spec: approval must follow the active pricing level)', async () => {
+    const user = userEvent.setup()
+    const { lineUpdateMutateAsync } = renderProposalDetail({
+      lines: [line({
+        id: 'l1', unitPrice: 800, discountPct: 20, approvalStatus: 'approved', approverId: 'e1', approvalDate: '2026-08-20',
+        pricingLevels: [{ level: 'government', sellingPrice: 800 }, { level: 'enterprise', sellingPrice: 910 }],
+        activePricingLevel: 'government',
+      })],
+    })
+    await user.click(screen.getByRole('radio', { name: /use enterprise for calculation/i }))
+    expect(lineUpdateMutateAsync).toHaveBeenCalledTimes(1)
+    const [{ id, patch }] = lineUpdateMutateAsync.mock.calls[0]
+    expect(id).toBe('l1')
+    expect(patch.unitPrice).toBe(910)
+    expect(patch.discountPct).toBeCloseTo(9, 5)
+    expect(patch.activePricingLevel).toBe('enterprise')
   })
 
   it('reorders lines via Move Up / Move Down and calls reorder.mutateAsync with the full new order', async () => {
@@ -342,17 +400,5 @@ describe('ProposalDetail — Line Items compact rows and bulk editing', () => {
     await user.click(screen.getByRole('button', { name: /apply/i }))
     const patchArg = lineUpdateMutateAsync.mock.calls[0][0].patch
     expect(Object.keys(patchArg)).not.toContain('pricingLevels')
-  })
-
-  it('bulk Delete removes every selected line via lineMutations.remove', async () => {
-    const user = userEvent.setup()
-    const { removeMutateAsync } = renderProposalDetail({
-      lines: [line({ id: 'l1' }), line({ id: 'l2' })],
-    })
-    await user.click(screen.getByLabelText(/select all lines/i))
-    await user.selectOptions(screen.getByLabelText(/^action$/i), 'delete')
-    await user.click(screen.getByRole('button', { name: /delete 2 lines/i }))
-    expect(removeMutateAsync).toHaveBeenCalledWith('l1')
-    expect(removeMutateAsync).toHaveBeenCalledWith('l2')
   })
 })

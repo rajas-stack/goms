@@ -81,8 +81,7 @@ export interface GormsData {
   /** The Commercial Calculator module's entire data slice. Added in v8 —
    *  see migrations.ts. Shape owned by src/modules/commercial-calculator/types.ts. */
   commercialCalculator: CommercialCalculatorData
-  /** New in Phase 2 — 'customers' goes straight into MIGRATED, so this stays
-   *  empty; it exists only to satisfy GormsData's shape. */
+  /** No seed fixture defined yet — starts empty. */
   customers: Customer[]
 }
 
@@ -250,7 +249,7 @@ export function buildSeed(): GormsData {
       internalPrice: 90000, floorPrice: 75000, partnerPrice: 95000, governmentPrice: 100000,
       enterprisePrice: 115000, corporatePrice: 110000, listPrice: 120000,
       minimumAllowedPrice: 75000, maximumDiscountPercent: 40,
-      createdAt: '2026-01-01T00:00:00.000Z', createdBy: null,
+      createdAt: '2026-01-01T00:00:00.000Z', createdBy: null, selectedPricingLevels: [],
     },
     {
       id: 'sku_qa_locomate_track', skuCode: 'TRANSIT-LOCOMATE-ETA-TRACK-EXG', name: 'Locomate Real-Time Vehicle Tracking',
@@ -262,7 +261,7 @@ export function buildSeed(): GormsData {
       internalPrice: 55000, floorPrice: 48000, partnerPrice: 58000, governmentPrice: 62000,
       enterprisePrice: 70000, corporatePrice: 65000, listPrice: 75000,
       minimumAllowedPrice: 48000, maximumDiscountPercent: 35,
-      createdAt: '2026-01-01T00:00:00.000Z', createdBy: null,
+      createdAt: '2026-01-01T00:00:00.000Z', createdBy: null, selectedPricingLevels: [],
     },
     {
       id: 'sku_qa_iion_pole', skuCode: 'SMARTCITY-IION-DEVICE-POLE-NEW', name: 'IIon Smart Pole Unit',
@@ -274,7 +273,7 @@ export function buildSeed(): GormsData {
       internalPrice: 65000, floorPrice: 58000, partnerPrice: 68000, governmentPrice: 72000,
       enterprisePrice: 80000, corporatePrice: 75000, listPrice: 85000,
       minimumAllowedPrice: 58000, maximumDiscountPercent: 30,
-      createdAt: '2026-01-01T00:00:00.000Z', createdBy: null,
+      createdAt: '2026-01-01T00:00:00.000Z', createdBy: null, selectedPricingLevels: [],
     },
   )
   // One mandatory BOM link so the SKU BOM editor has a row to show/remove,

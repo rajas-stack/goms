@@ -43,6 +43,13 @@ describe('validateSellingPrice', () => {
   it('rejects (never clamps) a selling price beyond maximumDiscountPercent', () => {
     expect(() => validateSellingPrice(sku(), 600)).toThrow(PricingValidationError) // 40% off
   })
+  it('accepts a discount typed as exactly the maximum, despite float noise in the round trip through sellingPriceForDiscountPct', () => {
+    // 85000 * 0.7 = 59499.999999999993 in IEEE754, which recomputes to a
+    // discount fractionally over 30% — this used to be spuriously rejected.
+    const bigSku = sku({ listPrice: 85000, maximumDiscountPercent: 30 })
+    const sellingPrice = sellingPriceForDiscountPct(bigSku.listPrice, 30)
+    expect(() => validateSellingPrice(bigSku, sellingPrice)).not.toThrow()
+  })
 })
 
 describe('maxDiscountPercentForLevel / per-level maximum discount', () => {

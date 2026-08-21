@@ -1,10 +1,9 @@
 // src/data/repository.ts
 //
 // Public entry point — unchanged import path (`@/data/repository`) for every
-// existing call site. The interface and in-memory implementation now live in
-// `./in-memory/repository`; `repository-select.ts` composes the exported
-// `repository` singleton from it plus any migrated domain's Supabase
-// implementation. See architecture spec §6.
+// existing call site. The interface and implementation both live in
+// `./in-memory/repository` (in-memory/IndexedDB-backed; the Supabase-backed
+// data layer was reverted).
 
 export type {
   Repository, StateSummary, InteractionSummary, RelationshipAnalytics,
@@ -18,4 +17,4 @@ export {
   MERGEABLE_FIELDS, bootstrapRepository, resetLocalData, getFullSnapshot, restoreFromBackup, isoToday,
 } from './in-memory/repository'
 
-export { repository } from './repository-select'
+export { repository } from './in-memory/repository'

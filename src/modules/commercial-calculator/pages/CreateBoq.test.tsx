@@ -22,7 +22,7 @@ function sku(overrides: Partial<CommercialSku> = {}): CommercialSku {
   }
 }
 
-function renderCreateBoq() {
+function renderCreateBoq(skuOverrides: Partial<CommercialSku> = {}) {
   const create = { mutateAsync: vi.fn().mockResolvedValue({ boq: { id: 'b1', boqNumber: 'BOQ-2026-000001' } }) }
   vi.spyOn(api, 'useMasters').mockImplementation((key: string) => {
     if (key === 'verticals') return { data: [{ id: 'v1', code: 'GOV', name: 'Government', description: '', active: true, displayOrder: 0 }] } as never
@@ -36,7 +36,7 @@ function renderCreateBoq() {
     }
     return { data: [] } as never
   })
-  vi.spyOn(api, 'useSkus').mockReturnValue({ data: [sku()] } as never)
+  vi.spyOn(api, 'useSkus').mockReturnValue({ data: [sku(skuOverrides)] } as never)
   vi.spyOn(api, 'useAllBomItems').mockReturnValue({ data: [] } as never)
   vi.spyOn(api, 'useBoqMutations').mockReturnValue({
     create,
@@ -169,5 +169,44 @@ describe('CreateBoq — line rows', () => {
     renderCreateBoq()
     await addOneLine(user)
     expect(screen.getByText(/18% tax/)).toBeInTheDocument()
+  })
+
+  it('shows the empty-state message before any line is added, and hides it once a line exists', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    expect(screen.getByText(/no skus added yet/i)).toBeInTheDocument()
+    await addOneLine(user)
+    expect(screen.queryByText(/no skus added yet/i)).not.toBeInTheDocument()
+  })
+
+  it('formats a floating-point-noisy discount cleanly on the collapsed row and in the Preview table (spec: no "7.000000000000001%" leakage)', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    await addOneLine(user)
+    await user.click(screen.getByLabelText(/toggle pricing details/i))
+    await user.click(screen.getByRole('button', { name: /add pricing level/i }))
+    await user.click(await screen.findByRole('checkbox', { name: /^internal$/i }))
+    await user.click(screen.getByRole('button', { name: /add selected/i }))
+    const priceInput = screen.getByLabelText(/internal selling price/i)
+    await user.type(priceInput, '930') // list price 1000 -> (1000-930)/1000*100 = 7.000000000000001
+    await user.tab()
+    expect(screen.getByText(/^7% off$/)).toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: /^preview$/i })[0])
+    expect(await screen.findByText('7%')).toBeInTheDocument()
+    expect(screen.queryByText(/7\.000000000000001/)).not.toBeInTheDocument()
+  })
+
+  it('marks a negative overall margin (selling price below cost) with a clear warning in the Pricing Summary section', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq({ baseSoftwareCost: 1200 }) // cost 1200 > list price 1000, even at zero discount
+    await addOneLine(user)
+    expect(screen.getAllByText(/below cost/i).length).toBeGreaterThan(0)
+  })
+
+  it('does not show a margin warning for a normal positive-margin line', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    await addOneLine(user)
+    expect(screen.queryByText(/below cost/i)).not.toBeInTheDocument()
   })
 })

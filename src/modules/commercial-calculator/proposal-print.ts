@@ -1,3 +1,4 @@
+import { formatPercent } from './format'
 import type { CommercialBoq, CommercialBoqLineItem, CommercialSku } from './types'
 
 export interface ProposalPrintInput {
@@ -42,7 +43,7 @@ export function buildProposalPrintHtml(input: ProposalPrintInput): string {
         <td><span class="sku-code">${escapeHtml(sku?.skuCode ?? '—')}</span> ${escapeHtml(sku?.name ?? 'Unknown SKU')}</td>
         <td>${line.quantity}</td>
         <td>${line.unitPrice.toLocaleString()}</td>
-        <td>${line.discountPct}%</td>
+        <td>${formatPercent(line.discountPct)}</td>
         <td>${line.taxPct}%</td>
         <td class="right">${line.lineTotal.toLocaleString()}</td>
       </tr>`

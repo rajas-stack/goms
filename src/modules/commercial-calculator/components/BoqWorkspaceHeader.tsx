@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
+import { formatPercent, isNegativeMargin } from '../format'
 
 /** Sticky identity + live totals + primary actions bar (BOQ workbench spec
  *  §2) — a single compact row above the existing sticky section-jump nav,
@@ -24,12 +25,24 @@ export function BoqWorkspaceHeader({
   submit?: { onClick: () => void; label: string; disabled?: boolean }
 }) {
   return (
-    <div className="sticky top-0 z-20 flex shrink-0 flex-wrap items-center gap-3 border-b border-line bg-white/95 px-4 py-1.5 text-[12px] backdrop-blur">
+    // No sticky positioning of its own — the caller wraps this together with
+    // whatever sticky bar follows it (e.g. the section-jump nav) in a single
+    // `sticky top-0` container, so the two never both pin to the same
+    // coordinate and fight over it (a `position: sticky` element ignores its
+    // sibling's height; two independent `top-0` bars land on top of each
+    // other once both are stuck, silently swallowing clicks on whichever one
+    // has the lower z-index).
+    <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-line bg-white/95 px-4 py-1.5 text-[12px] backdrop-blur">
       <span className="font-semibold text-ink-900">{boqNumber ?? 'New BOQ'}</span>
       <span className="rounded-full bg-panel px-2 py-0.5 text-[11px] font-medium text-ink-700">{statusLabel}</span>
       <span className="truncate text-muted">{customerName || '—'}</span>
       <span className="text-muted">Lines <span className="font-medium text-ink-900">{lineCount}</span></span>
-      <span className="text-muted">Margin <span className="font-medium text-ink-900">{marginPct.toFixed(1)}%</span></span>
+      <span className="text-muted">
+        Margin{' '}
+        <span className={isNegativeMargin(marginPct) ? 'font-medium text-rose-700' : 'font-medium text-ink-900'}>
+          {formatPercent(marginPct)}{isNegativeMargin(marginPct) ? ' — Below Cost' : ''}
+        </span>
+      </span>
       <span className="text-muted">
         Grand Total <span className="font-medium text-ink-900">{currencyCode} {grandTotal.toLocaleString()}</span>
       </span>

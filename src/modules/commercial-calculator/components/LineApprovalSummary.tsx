@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { resolveApprovalBand } from '../repository-logic'
+import { formatPercent } from '../format'
 import type { ApprovalMatrixRule, CommercialBoqLineItem } from '../types'
 import type { Employee } from '@/lib/types'
 
@@ -28,20 +29,19 @@ export function LineApprovalSummary({ line, approvalMatrix, employees, onDecide 
 
   return (
     <div className="mt-2 rounded-lg border border-line bg-panel/40 px-3 py-2 text-[12px]">
-      {band.allowAutoApproval ? (
-        <p className="text-emerald-700">
-          No approval required — this line's discount of {line.discountPct.toFixed(1)}% is within the auto-approval band (≤ {band.maxDiscountPct}%).
-        </p>
-      ) : (
-        <p className="text-amber-800">
-          Approval required — this line's discount of {line.discountPct.toFixed(1)}% falls in the {bandLabel} band (needs approval at {band.minDiscountPct}% and above).
-        </p>
-      )}
-      {(line.approvalStatus === 'approved' || line.approvalStatus === 'rejected') && (
-        <p className="mt-1 text-ink-700">
+      {line.approvalStatus === 'approved' || line.approvalStatus === 'rejected' ? (
+        <p className={line.approvalStatus === 'approved' ? 'text-emerald-700' : 'text-rose-700'}>
           {line.approvalStatus === 'approved' ? 'Approved' : 'Rejected'}
           {line.approvalDate ? ` on ${line.approvalDate}` : ''}
           {line.approvalRemarks ? ` — "${line.approvalRemarks}"` : ''}
+        </p>
+      ) : band.allowAutoApproval ? (
+        <p className="text-emerald-700">
+          No approval required — this line's discount of {formatPercent(line.discountPct)} is within the auto-approval band (≤ {band.maxDiscountPct}%).
+        </p>
+      ) : (
+        <p className="text-amber-800">
+          Approval required — this line's discount of {formatPercent(line.discountPct)} falls in the {bandLabel} band (needs approval at {band.minDiscountPct}% and above).
         </p>
       )}
       {showDecisionControls && (

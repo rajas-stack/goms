@@ -8,30 +8,23 @@ import {
 import type { BulkPricingResult } from '../pricing-levels-logic'
 import type { CommercialBoqLineItem, CommercialSku, PricingLevelKey } from '../types'
 
-type Action = 'setDiscount' | 'setSellingPrice' | 'clearDiscount' | 'setQuantity' | 'switchPricingLevel' | 'delete'
+type Action = 'setDiscount' | 'setSellingPrice' | 'clearDiscount' | 'setQuantity' | 'switchPricingLevel'
 
 /** Shows which lines are selected, lets the user pick one bulk action, and
  *  computes the per-line result set via the same validated pure logic a
  *  single-line edit uses — it never mutates anything itself; the caller
  *  applies each `ok: true` result and reports the `ok: false` ones
- *  (spec §10: "clearly show which lines will be affected before applying").
- *  Delete is a separate `onDelete` callback rather than a `BulkPricingResult`
- *  shape, since there's nothing to compute or validate for it. */
-export function BulkEditBar({ selectedLines, skusById, onApply, onDelete }: {
+ *  (spec §10: "clearly show which lines will be affected before applying"). */
+export function BulkEditBar({ selectedLines, skusById, onApply }: {
   selectedLines: CommercialBoqLineItem[]
   skusById: Map<string, CommercialSku>
   onApply: (results: BulkPricingResult[]) => void
-  onDelete: (lineIds: string[]) => void
 }) {
   const [action, setAction] = useState<Action>('setDiscount')
   const [level, setLevel] = useState<PricingLevelKey>('internal')
   const [value, setValue] = useState('')
 
   function apply() {
-    if (action === 'delete') {
-      onDelete(selectedLines.map((l) => l.id))
-      return
-    }
     const numeric = Number(value)
     let results: BulkPricingResult[]
     if (action === 'clearDiscount') results = computeBulkClearDiscount(selectedLines, skusById)
@@ -57,7 +50,6 @@ export function BulkEditBar({ selectedLines, skusById, onApply, onDelete }: {
           <option value="clearDiscount">Clear Discount</option>
           <option value="setQuantity">Change Quantity</option>
           <option value="switchPricingLevel">Change Pricing Level</option>
-          <option value="delete">Delete</option>
         </Select>
       </Field>
       {needsLevel && (
@@ -72,8 +64,8 @@ export function BulkEditBar({ selectedLines, skusById, onApply, onDelete }: {
           <Input type="number" aria-label={valueLabel} value={value} onChange={(e) => setValue(e.target.value)} className="w-32" />
         </Field>
       )}
-      <Button variant={action === 'delete' ? 'danger' : 'primary'} size="sm" onClick={apply} disabled={!canApply}>
-        {action === 'delete' ? `Delete ${selectedLines.length} line${selectedLines.length === 1 ? '' : 's'}` : 'Apply'}
+      <Button variant="primary" size="sm" onClick={apply} disabled={!canApply}>
+        Apply
       </Button>
     </div>
   )

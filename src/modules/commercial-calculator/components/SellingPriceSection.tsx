@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
 import { Checkbox } from '@/components/ui/Checkbox'
@@ -10,6 +10,7 @@ import {
   marginPctForSellingPrice, maxDiscountPercentForLevel, removePricingLevel, sellingPriceForDiscountPct,
   sellingPriceForMargin, skuPriceForLevel, upsertPricingLevel, validateSellingPrice,
 } from '../pricing-levels-logic'
+import { roundMoney } from '../format'
 import type { CommercialBomItem, CommercialSku, LinePricingLevel, PricingLevelKey } from '../types'
 
 interface Props {
@@ -29,6 +30,12 @@ export function SellingPriceSection({ sku, bomItems, skusById, pricingLevels, ac
   const availableLevels = PRICING_LEVEL_KEYS.filter((k) => !pricingLevels.some((l) => l.level === k))
   const showReselectPrompt = pricingLevels.length > 0 && activePricingLevel === null
   const [pendingAdd, setPendingAdd] = useState<PricingLevelKey[]>([])
+  // Accordion: only one pricing-level card is expanded at a time. Kept here
+  // (not in the card) so adding a level doesn't leave every existing card's
+  // own `useState(true)` default expanded — the previous per-card local
+  // state bug this replaces.
+  const [expandedLevel, setExpandedLevel] = useState<PricingLevelKey | null>(null)
+  const effectiveExpandedLevel = pricingLevels.some((l) => l.level === expandedLevel) ? expandedLevel : pricingLevels[0]?.level ?? null
 
   function toggleQueued(level: PricingLevelKey) {
     setPendingAdd((prev) => (prev.includes(level) ? prev.filter((l) => l !== level) : [...prev, level]))
@@ -110,6 +117,8 @@ export function SellingPriceSection({ sku, bomItems, skusById, pricingLevels, ac
                 skusById={skusById}
                 entry={entry}
                 active={entry.level === activePricingLevel}
+                open={entry.level === effectiveExpandedLevel}
+                onExpand={() => setExpandedLevel(entry.level)}
                 onSetActive={() => setActive(entry.level)}
                 onRemove={() => removeLevel(entry.level)}
                 onSetSellingPrice={(v) => setSellingPrice(entry.level, v)}
@@ -123,25 +132,39 @@ export function SellingPriceSection({ sku, bomItems, skusById, pricingLevels, ac
   )
 }
 
-function PricingLevelCard({ sku, bomItems, skusById, entry, active, onSetActive, onRemove, onSetSellingPrice, onSetMargin }: {
+function PricingLevelCard({ sku, bomItems, skusById, entry, active, open, onExpand, onSetActive, onRemove, onSetSellingPrice, onSetMargin }: {
   sku: CommercialSku
   bomItems: CommercialBomItem[]
   skusById: Map<string, CommercialSku>
   entry: LinePricingLevel
   active: boolean
+  open: boolean
+  onExpand: () => void
   onSetActive: () => void
   onRemove: () => void
   onSetSellingPrice: (v: number) => void
   onSetMargin: (v: number) => void
 }) {
-  const [open, setOpen] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [priceDraft, setPriceDraft] = useState(entry.sellingPrice === null ? '' : String(entry.sellingPrice))
+  const [priceDraft, setPriceDraft] = useState(entry.sellingPrice === null ? '' : String(roundMoney(entry.sellingPrice)))
   const currentMargin = entry.sellingPrice === null ? null : marginPctForSellingPrice(sku, bomItems, skusById, entry.sellingPrice)
   const [marginDraft, setMarginDraft] = useState(currentMargin === null ? '' : currentMargin.toFixed(1))
   const discountPct = entry.sellingPrice === null ? null : discountPctForSellingPrice(sku.listPrice, entry.sellingPrice)
   const [discountDraft, setDiscountDraft] = useState(discountPct === null ? '' : discountPct.toFixed(1))
   const label = PRICING_LEVEL_LABEL[entry.level]
+
+  // Selling Price / Discount % / Margin % are three views onto the same
+  // stored `entry.sellingPrice` (spec §4.2) — whichever field the user just
+  // committed already matches this effect's result, but the other two only
+  // ever get their value from local `useState` initializers, so without this
+  // they'd stay stuck at their pre-edit numbers until the card unmounts.
+  useEffect(() => {
+    setPriceDraft(entry.sellingPrice === null ? '' : String(roundMoney(entry.sellingPrice)))
+    setDiscountDraft(entry.sellingPrice === null ? '' : discountPctForSellingPrice(sku.listPrice, entry.sellingPrice).toFixed(1))
+    setMarginDraft(entry.sellingPrice === null ? '' : marginPctForSellingPrice(sku, bomItems, skusById, entry.sellingPrice).toFixed(1))
+    setError(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entry.sellingPrice])
 
   function commitPrice() {
     const next = Number(priceDraft)
@@ -151,7 +174,7 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, onSetActive,
       onSetSellingPrice(next)
     } catch (e) {
       setError(e instanceof PricingValidationError ? e.message : 'Could not save this price.')
-      setPriceDraft(entry.sellingPrice === null ? '' : String(entry.sellingPrice))
+      setPriceDraft(entry.sellingPrice === null ? '' : String(roundMoney(entry.sellingPrice)))
     }
   }
 
@@ -184,7 +207,7 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, onSetActive,
   return (
     <div className="rounded-xl border border-line bg-panel/30 p-3">
       <div className="flex items-center gap-2">
-        <button type="button" onClick={() => setOpen((v) => !v)} className="flex items-center gap-1.5 text-[13px] font-medium text-ink-800">
+        <button type="button" onClick={onExpand} className="flex items-center gap-1.5 text-[13px] font-medium text-ink-800">
           <Icon name={open ? 'ChevronDown' : 'ChevronRight'} size={14} />
           {label}
         </button>

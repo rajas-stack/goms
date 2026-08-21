@@ -44,6 +44,27 @@ describe('BoqWorkspaceHeader', () => {
     expect(screen.queryByRole('button', { name: /submit/i })).not.toBeInTheDocument()
   })
 
+  it('marks a negative overall margin with a clear warning instead of a plain value', () => {
+    render(
+      <BoqWorkspaceHeader
+        boqNumber="BOQ-2026-000042" statusLabel="Draft" customerName="Acme Corp"
+        lineCount={1} marginPct={-58.4} grandTotal={1000} currencyCode="INR" onPreview={() => {}}
+      />,
+    )
+    expect(screen.getByText(/-58\.4%/)).toBeInTheDocument()
+    expect(screen.getByText(/below cost/i)).toBeInTheDocument()
+  })
+
+  it('does not show a warning for a normal positive margin', () => {
+    render(
+      <BoqWorkspaceHeader
+        boqNumber="BOQ-2026-000042" statusLabel="Draft" customerName="Acme Corp"
+        lineCount={1} marginPct={18.4} grandTotal={1000} currencyCode="INR" onPreview={() => {}}
+      />,
+    )
+    expect(screen.queryByText(/below cost/i)).not.toBeInTheDocument()
+  })
+
   it('shows "New BOQ" when boqNumber is null (pre-save)', () => {
     render(
       <BoqWorkspaceHeader

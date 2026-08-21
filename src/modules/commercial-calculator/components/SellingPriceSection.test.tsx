@@ -121,6 +121,42 @@ describe('SellingPriceSection', () => {
     })
   })
 
+  it('displays a clean selling price with no floating-point noise after a discount back-solve (85000 list, 30% max)', async () => {
+    const user = userEvent.setup()
+    const bigSku = sku({ listPrice: 85000, maximumDiscountPercent: 30 })
+    const { onChange, rerender } = setup({
+      sku: bigSku, skusById: new Map([['s1', bigSku]]),
+      pricingLevels: [{ level: 'internal', sellingPrice: null }], activePricingLevel: 'internal',
+    })
+    const discountInput = screen.getByLabelText(/internal discount/i)
+    await user.type(discountInput, '30')
+    await user.tab()
+    expect(onChange).toHaveBeenLastCalledWith({
+      pricingLevels: [{ level: 'internal', sellingPrice: 85000 * 0.7 }], activePricingLevel: 'internal',
+    })
+    rerender({ pricingLevels: [{ level: 'internal', sellingPrice: 85000 * 0.7 }], activePricingLevel: 'internal' })
+    const priceInput = screen.getByLabelText(/internal selling price/i) as HTMLInputElement
+    expect(priceInput.value).toBe('59500')
+  })
+
+  it('displays a clean selling price with no floating-point noise after a margin back-solve (cost 400, 95% margin)', async () => {
+    const user = userEvent.setup()
+    const bigSku = sku({ listPrice: 8000, baseSoftwareCost: 400, maximumDiscountPercent: 30 })
+    const { onChange, rerender } = setup({
+      sku: bigSku, skusById: new Map([['s1', bigSku]]),
+      pricingLevels: [{ level: 'internal', sellingPrice: null }], activePricingLevel: 'internal',
+    })
+    const marginInput = screen.getByLabelText(/internal margin/i)
+    await user.type(marginInput, '95') // cost 400 / (1 - 0.95) = 7999.999999999993 in IEEE754
+    await user.tab()
+    expect(onChange).toHaveBeenLastCalledWith({
+      pricingLevels: [{ level: 'internal', sellingPrice: 400 / (1 - 95 / 100) }], activePricingLevel: 'internal',
+    })
+    rerender({ pricingLevels: [{ level: 'internal', sellingPrice: 400 / (1 - 95 / 100) }], activePricingLevel: 'internal' })
+    const priceInput = screen.getByLabelText(/internal selling price/i) as HTMLInputElement
+    expect(priceInput.value).toBe('8000')
+  })
+
   it('rejects a discount % edit that exceeds maximumDiscountPercent, without calling onChange', async () => {
     const user = userEvent.setup()
     const { onChange } = setup({ pricingLevels: [{ level: 'internal', sellingPrice: 900 }], activePricingLevel: 'internal' })
@@ -157,6 +193,26 @@ describe('SellingPriceSection', () => {
       pricingLevels: [{ level: 'internal', sellingPrice: 900 }, { level: 'government', sellingPrice: 850 }],
       activePricingLevel: 'government',
     })
+  })
+
+  it('accordion: only one pricing-level card is expanded at a time, and clicking another swaps which one', async () => {
+    const user = userEvent.setup()
+    const levels = [{ level: 'internal' as const, sellingPrice: 900 }, { level: 'government' as const, sellingPrice: 850 }]
+    setup({ pricingLevels: levels, activePricingLevel: 'internal' })
+    expect(screen.getByLabelText(/internal selling price/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/government selling price/i)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^government$/i }))
+    expect(screen.queryByLabelText(/internal selling price/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/government selling price/i)).toBeInTheDocument()
+  })
+
+  it('adding a new pricing level does not expand every existing level', () => {
+    const levels = [{ level: 'internal' as const, sellingPrice: 900 }]
+    const { rerender } = setup({ pricingLevels: levels, activePricingLevel: 'internal' })
+    expect(screen.getByLabelText(/internal selling price/i)).toBeInTheDocument()
+    rerender({ pricingLevels: [...levels, { level: 'government', sellingPrice: null }], activePricingLevel: 'internal' })
+    expect(screen.getByLabelText(/internal selling price/i)).toBeInTheDocument()
+    expect(screen.queryByLabelText(/government selling price/i)).not.toBeInTheDocument()
   })
 
   it('removing the active level clears activePricingLevel and shows an inline prompt rather than silently falling back', async () => {

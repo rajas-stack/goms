@@ -29,8 +29,13 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *  v10 customers (Phase 2 Task 6). Starts empty — a new entity with no prior
  *      in-memory data to backfill, and 'customers' is Supabase-backed from
  *      creation, so this only exists to keep GormsData's shape complete.
+ *  v11 Backfills `selectedPricingLevels: []` onto every existing SKU row —
+ *      the field was added to `CommercialSku` (2026-08-20 pricing-overhaul)
+ *      with no migration, so SKUs seeded/created before that change had it
+ *      missing entirely rather than empty, crashing any UI that assumed it
+ *      was always an array (SkuFormDialog, maxDiscountPercentForLevel).
  */
-export const SCHEMA_VERSION = 10
+export const SCHEMA_VERSION = 11
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -236,12 +241,22 @@ function toV9(data: SnapshotShape): SnapshotShape {
 }
 
 /** v9 → v10. Adds the `customers` collection. Always starts empty — no
- *  legacy field maps to it and 'customers' is Supabase-backed from creation
- *  (see repository-select.ts's MIGRATED set), so this in-memory array is
- *  never actually read; it exists only so GormsData's shape stays complete. */
+ *  legacy snapshot has this field, so upgrading just backfills `[]`. */
 function toV10(data: SnapshotShape): SnapshotShape {
   if (Array.isArray(data.customers)) return data
   return { ...data, customers: [] }
+}
+
+/** v10 → v11. See `SCHEMA_VERSION` doc comment. */
+function toV11(data: SnapshotShape): SnapshotShape {
+  const cc = (data.commercialCalculator && typeof data.commercialCalculator === 'object' && !Array.isArray(data.commercialCalculator))
+    ? data.commercialCalculator as Record<string, unknown>
+    : undefined
+  if (!cc) return data
+  const commercialSkus = asArray(cc.commercialSkus).map((sku) =>
+    Array.isArray(sku.selectedPricingLevels) ? sku : { ...sku, selectedPricingLevels: [] },
+  )
+  return { ...data, commercialCalculator: { ...cc, commercialSkus } }
 }
 
 /** Keyed by the version each step PRODUCES, so applying every key from
@@ -256,6 +271,7 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   8: toV8,
   9: toV9,
   10: toV10,
+  11: toV11,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

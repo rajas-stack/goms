@@ -1,4 +1,5 @@
 import { skuTotalUnitCostWithBom } from './repository-logic'
+import { formatPercent } from './format'
 import type { CommercialBomItem, CommercialBoqLineItem, CommercialSku, LinePricingLevel, PricingLevelKey } from './types'
 
 export const PRICING_LEVEL_KEYS: PricingLevelKey[] = ['internal', 'floor', 'partner', 'government', 'enterprise', 'corporate']
@@ -48,13 +49,23 @@ export function maxDiscountPercentForLevel(sku: CommercialSku, level: PricingLev
 /** Validates a candidate selling price against the applicable maximum
  *  discount — `level`'s own override when the SKU has one, else the SKU's
  *  overall `maximumDiscountPercent` — measured against List Price. Throws
- *  rather than clamping. */
+ *  rather than clamping.
+ *
+ *  The epsilon guards a real floating-point round trip, not a rule change: a
+ *  discount typed as exactly the maximum goes through
+ *  `sellingPriceForDiscountPct` (a division) to get a selling price, then
+ *  back through `discountPctForSellingPrice` (the inverse) here — e.g. list
+ *  85000 / 30% max lands on a selling price of 59499.999999999993, which
+ *  recomputes to 30.000000000000014%, not exactly 30. Without the epsilon
+ *  that noise reads as "exceeds the maximum" and rejects a discount that is
+ *  exactly at the limit. */
 export function validateSellingPrice(sku: CommercialSku, sellingPrice: number, level?: PricingLevelKey): void {
   const discountPct = discountPctForSellingPrice(sku.listPrice, sellingPrice)
   const maxDiscountPct = level ? maxDiscountPercentForLevel(sku, level) : sku.maximumDiscountPercent
-  if (discountPct > maxDiscountPct) {
+  const FLOAT_EPSILON = 1e-9
+  if (discountPct > maxDiscountPct + FLOAT_EPSILON) {
     throw new PricingValidationError(
-      `A selling price of ${sellingPrice} implies a ${discountPct.toFixed(1)}% discount, which exceeds this SKU's maximum allowed discount of ${maxDiscountPct}%.`,
+      `A selling price of ${sellingPrice} implies a ${formatPercent(discountPct)} discount, which exceeds this SKU's maximum allowed discount of ${maxDiscountPct}%.`,
     )
   }
 }

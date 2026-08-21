@@ -10,7 +10,8 @@ import { useAllBomItems, useAllBoqLineItems, useAuditLogs, useMasters, useSkuMut
 import { SkuFormDialog } from '../components/SkuFormDialog'
 import { SkuBomEditor } from '../components/SkuBomEditor'
 import { computeSkuMarginPercent, skuTotalUnitCost, skuTotalUnitCostWithBom } from '../repository-logic'
-import { PRICING_LEVEL_LABEL } from '../pricing-levels-logic'
+import { marginPctForSellingPrice, PRICING_LEVEL_LABEL } from '../pricing-levels-logic'
+import { formatPercent } from '../format'
 import type { CommercialBomItem, CommercialSku, CreateSkuInput, PricingLevelKey } from '../types'
 
 const LIFECYCLE_STYLE: Record<CommercialSku['lifecycleStatus'], string> = {
@@ -132,7 +133,7 @@ export function SkuCatalog() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted">
               <span>{categoryName.get(sku.categoryId) ?? '—'}</span>
               <span>List {sku.listPrice.toLocaleString()}</span>
-              <span>Margin {computeSkuMarginPercent(sku, allBomItems, skusById).toFixed(1)}%</span>
+              <span>Margin {formatPercent(computeSkuMarginPercent(sku, allBomItems, skusById))}</span>
               <span>{usageCountBySku.get(sku.id) ?? 0} BOM refs</span>
               <span>{boqCountBySku.get(sku.id)?.size ?? 0} BOQs</span>
             </div>
@@ -228,7 +229,7 @@ function SkuDetail({ sku, tab, onTabChange, usageCount, boqCount, categoryName, 
       <div className="grid grid-cols-2 gap-3 rounded-xl border border-line p-3 text-sm sm:grid-cols-5">
         <DetailField label="Status" value={sku.lifecycleStatus} />
         <DetailField label="List Price" value={sku.listPrice.toLocaleString()} />
-        <DetailField label="Margin" value={`${computeSkuMarginPercent(sku, bomItems, skusById).toFixed(1)}%`} />
+        <DetailField label="Margin" value={formatPercent(computeSkuMarginPercent(sku, bomItems, skusById))} />
         <DetailField label="Used in BOMs" value={String(usageCount)} />
         <DetailField label="Used in BOQs" value={String(boqCount)} />
       </div>
@@ -296,29 +297,44 @@ const LEVEL_PRICE: Record<PricingLevelKey, keyof CommercialSku> = {
   government: 'governmentPrice', enterprise: 'enterprisePrice', corporate: 'corporatePrice',
 }
 
+/** Pricing Levels is the primary pricing model (spec: BOQ/SKU share one
+ *  pricing-level model, no second one here) — List Price/Minimum Allowed/
+ *  Default Max Discount % are just the SKU's fallback defaults for lines with
+ *  no level selected, so they're demoted to a clearly-labelled read-only
+ *  "Base Pricing / SKU Defaults" subsection rather than the tab's headline. */
 function PricingTab({ sku, bomItems, skusById }: { sku: CommercialSku; bomItems: CommercialBomItem[]; skusById: Map<string, CommercialSku> }) {
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-2 gap-4 rounded-xl border border-line p-4 sm:grid-cols-4">
-        <DetailField label="List Price" value={sku.listPrice.toLocaleString()} />
-        <DetailField label="Minimum Allowed" value={sku.minimumAllowedPrice.toLocaleString()} />
-        <DetailField label="Default Max Discount %" value={`${sku.maximumDiscountPercent}%`} />
-        <DetailField label="Margin at List Price" value={`${computeSkuMarginPercent(sku, bomItems, skusById).toFixed(1)}%`} />
-      </div>
       <div>
         <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">Pricing Levels</div>
         {sku.selectedPricingLevels.length === 0 ? (
           <p className="text-[13px] text-muted">No pricing levels configured for this SKU yet.</p>
         ) : (
-          <div className="grid grid-cols-2 gap-4 rounded-xl border border-line p-4 sm:grid-cols-4">
-            {sku.selectedPricingLevels.map((entry) => (
-              <div key={entry.level} className="flex flex-col gap-2">
-                <DetailField label={`${PRICING_LEVEL_LABEL[entry.level]} Selling Price`} value={(sku[LEVEL_PRICE[entry.level]] as number).toLocaleString()} />
-                <DetailField label={`${PRICING_LEVEL_LABEL[entry.level]} Max Discount %`} value={`${entry.maximumDiscountPercent}%`} />
-              </div>
-            ))}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+            {sku.selectedPricingLevels.map((entry) => {
+              const sellingPrice = sku[LEVEL_PRICE[entry.level]] as number
+              const margin = marginPctForSellingPrice(sku, bomItems, skusById, sellingPrice)
+              return (
+                <div key={entry.level} className="flex flex-col gap-2 rounded-xl border border-line p-3">
+                  <div className="text-[12px] font-semibold text-ink-900">{PRICING_LEVEL_LABEL[entry.level]}</div>
+                  <DetailField label="Selling Price" value={sellingPrice.toLocaleString()} />
+                  <DetailField label="Maximum Discount %" value={`${entry.maximumDiscountPercent}%`} />
+                  <DetailField label="Margin" value={formatPercent(margin)} />
+                </div>
+              )
+            })}
           </div>
         )}
+      </div>
+
+      <div className="rounded-xl border border-line bg-panel/30 p-4">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">Base Pricing / SKU Defaults</div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <DetailField label="List Price" value={sku.listPrice.toLocaleString()} />
+          <DetailField label="Minimum Allowed" value={sku.minimumAllowedPrice.toLocaleString()} />
+          <DetailField label="Default Max Discount %" value={`${sku.maximumDiscountPercent}%`} />
+          <DetailField label="Margin at List Price" value={formatPercent(computeSkuMarginPercent(sku, bomItems, skusById))} />
+        </div>
       </div>
     </div>
   )

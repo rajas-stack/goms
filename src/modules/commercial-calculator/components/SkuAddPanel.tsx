@@ -5,6 +5,7 @@ import { Field, Input } from '@/components/ui/Field'
 import { useMasters } from '../api'
 import { skuToBoqConversionFactor } from '../repository-logic'
 import { effectiveUnitPrice, resolveLineUnitPrice } from '../pricing-levels-logic'
+import { formatPercent } from '../format'
 import { SellingPriceSection } from './SellingPriceSection'
 import type { CommercialBomItem, CommercialSku, LinePricingLevel, PricingLevelKey } from '../types'
 
@@ -65,7 +66,7 @@ export function SkuAddPanel({ sku, skusById, currencyCode, bomItems, onAdd }: {
       <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 rounded-lg border border-line bg-white px-3 py-2 text-[12px]">
         <span className="text-muted">List Price <span className="font-medium text-ink-900">{sku.listPrice.toLocaleString()}</span></span>
         <span className="text-muted">Post-discount Unit <span className="font-medium text-ink-900">{unitPrice.toLocaleString()}</span></span>
-        <span className="text-muted">Discount <span className="font-medium text-ink-900">{discountPct.toFixed(1)}%</span></span>
+        <span className="text-muted">Discount <span className="font-medium text-ink-900">{formatPercent(discountPct)}</span></span>
         <span className="text-muted">Tax <span className="font-medium text-ink-900">{taxPct}%</span></span>
         <span className="text-muted">
           Line Total (Qty {qty}){' '}

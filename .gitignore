@@ -47,6 +47,3 @@ coverage/
 # Local isolated workspaces for subagent-driven plan execution.
 .worktrees/
 
-# Supabase local dev
-.branches
-.temp

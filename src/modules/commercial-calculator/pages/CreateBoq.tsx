@@ -11,7 +11,9 @@ import { useToast } from '@/components/ui/Toast'
 import { useAllBomItems, useBoqMutations, useMasters, useSkus } from '../api'
 import { resolveApprovalBand, skuToBoqConversionFactor, skuTotalUnitCostWithBom } from '../repository-logic'
 import { PRICING_LEVEL_LABEL, effectiveUnitPrice, resolveLineUnitPrice } from '../pricing-levels-logic'
+import { formatPercent, isNegativeMargin } from '../format'
 import { useBoqWorkspaceShortcuts } from '../use-boq-workspace-shortcuts'
+import { useStickyScrollOffset } from '../use-sticky-scroll-offset'
 import { BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
 import { SkuLinePicker } from '../components/SkuLinePicker'
 import { SkuSearchBar } from '../components/SkuSearchBar'
@@ -266,13 +268,22 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     onEscape: () => { if (expandedLineIndex !== null) setExpandedLineIndex(null) },
   })
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const stickyBarRef = useRef<HTMLDivElement>(null)
+  useStickyScrollOffset(scrollContainerRef, stickyBarRef)
+
   return (
-    <div className="flex h-full flex-col overflow-y-auto">
+    <div ref={scrollContainerRef} className="flex h-full flex-col overflow-y-auto">
       <div className="shrink-0 border-b border-line bg-white px-4 py-3">
         <h1 className="font-display text-lg font-semibold text-ink-900">Create BOQ</h1>
         <p className="text-[12px] text-muted">Configure the commercial proposal, then save as draft or submit for review.</p>
       </div>
 
+      {/* Both bars pin together as one unit — stacking two independent
+         `sticky top-0` elements would land them on the same coordinate once
+         both are stuck, hiding whichever has the lower z-index behind the
+         other and silently swallowing clicks meant for it. */}
+      <div ref={stickyBarRef} className="sticky top-0 z-20 flex flex-col">
       <BoqWorkspaceHeader
         boqNumber={null}
         statusLabel="Draft"
@@ -289,7 +300,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         submit={{ onClick: () => save(true), label: pending === 'submit' ? 'Submitting…' : 'Submit', disabled: pending !== null || !canSave }}
       />
 
-      <div className="sticky top-0 z-10 flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-white/95 px-4 py-1.5 backdrop-blur">
+      <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-white/95 px-4 py-1.5 backdrop-blur">
         {[
           { id: 'section-opportunity', label: 'Opportunity' },
           { id: 'section-customer', label: 'Customer' },
@@ -306,6 +317,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
             {s.label}
           </button>
         ))}
+      </div>
       </div>
 
       <div className="flex flex-col gap-6 p-4">
@@ -537,7 +549,11 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         <Collapsible title="Pricing Summary" icon="FileSpreadsheet">
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <SummaryStat label="Taxes" value={totalTax.toLocaleString()} />
-            <SummaryStat label="Margin" value={`${marginPreview.toFixed(1)}%`} />
+            <SummaryStat
+              label="Margin"
+              value={isNegativeMargin(marginPreview) ? `${formatPercent(marginPreview)} — Below Cost` : formatPercent(marginPreview)}
+              warn={isNegativeMargin(marginPreview)}
+            />
             <SummaryStat label="Line Items" value={String(lines.length)} />
             <SummaryStat label="Grand Total" value={`${effectiveCurrencyCode} ${grandTotal.toLocaleString()}`} emphasis />
           </div>
@@ -559,7 +575,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                   {pendingApprovalLines.map(({ sku, band, discountPct }, i) => (
                     <div key={i} className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
                       <span className="font-mono">{sku?.skuCode}</span>
-                      <span>{discountPct.toFixed(1)}% discount</span>
+                      <span>{formatPercent(discountPct)} discount</span>
                       <span className="ml-auto font-medium">{band.approvalLevelLabel || band.name}</span>
                     </div>
                   ))}
@@ -605,7 +621,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                             <span className="ml-2">{sku?.name}</span>
                           </td>
                           <td className="px-3 py-2">{line.quantity}</td>
-                          <td className="px-3 py-2">{sku ? effectivePrice(line, sku).discountPct.toFixed(1) : line.discountPct}%</td>
+                          <td className="px-3 py-2">{formatPercent(sku ? effectivePrice(line, sku).discountPct : line.discountPct)}</td>
                           <td className="px-3 py-2">{taxRateById.get(sku?.taxClassId ?? '') ?? 0}%</td>
                           <td className="px-3 py-2 text-right font-medium text-ink-900">{lineTotal(line).toLocaleString()}</td>
                         </tr>
@@ -701,7 +717,7 @@ function ConfiguredLineRow({
           {line.activePricingLevel ? PRICING_LEVEL_LABEL[line.activePricingLevel] : 'List Price'}
         </span>
         <span className="text-muted">Sell {unitPrice.toLocaleString()}</span>
-        <span className="text-muted">{discountPct.toFixed(1)}% off</span>
+        <span className="text-muted">{formatPercent(discountPct)} off</span>
         <span className="text-muted">{taxPct}% tax</span>
         <span className="font-medium text-ink-900">{lineTotal.toLocaleString()}</span>
         <Button size="icon" onClick={onMoveUp} disabled={isFirst} title="Move up" aria-label="Move up"><Icon name="ArrowUp" size={14} /></Button>
@@ -725,11 +741,13 @@ function ConfiguredLineRow({
   )
 }
 
-function SummaryStat({ label, value, emphasis }: { label: string; value: string; emphasis?: boolean }) {
+function SummaryStat({ label, value, emphasis, warn }: { label: string; value: string; emphasis?: boolean; warn?: boolean }) {
+  const size = emphasis ? 'text-xl font-semibold' : 'text-base font-medium'
+  const tone = warn ? 'text-rose-700' : 'text-ink-900'
   return (
     <div>
       <div className="text-[11px] uppercase tracking-wide text-muted">{label}</div>
-      <div className={emphasis ? 'text-xl font-semibold text-ink-900' : 'text-base font-medium text-ink-900'}>{value}</div>
+      <div className={`${size} ${tone}`}>{value}</div>
     </div>
   )
 }
