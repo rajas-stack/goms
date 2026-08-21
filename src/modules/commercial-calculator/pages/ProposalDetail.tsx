@@ -18,6 +18,7 @@ import { buildProposalPrintHtml } from '../proposal-print'
 import { computeBoqMarginPercent } from '../repository-logic'
 import { PRICING_LEVEL_LABEL, resolveLineUnitPrice } from '../pricing-levels-logic'
 import type { BulkPricingResult } from '../pricing-levels-logic'
+import { BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
 import { SkuLinePicker } from '../components/SkuLinePicker'
 import { SkuSearchBar } from '../components/SkuSearchBar'
 import { SellingPriceSection } from '../components/SellingPriceSection'
@@ -80,6 +81,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   const navigate = useNavigate()
   const [deleting, setDeleting] = useState(false)
   const [expandedLineId, setExpandedLineId] = useState<string | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   function toggleExpandedLine(id: string) {
     setExpandedLineId((prev) => (prev === id ? null : id))
@@ -162,9 +164,11 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             <p className="text-[13px] text-muted">{boq.customerName}</p>
           </div>
           <div className="flex gap-2">
-            {NEXT_STATUSES[boq.status].filter((next) => next !== 'archived').map((next) => (
-              <Button key={next} size="sm" onClick={() => transition(next)}>{STATUS_LABEL[next]}</Button>
-            ))}
+            {NEXT_STATUSES[boq.status]
+              .filter((next) => next !== 'archived' && !(boq.status === 'draft' && next === 'submitted'))
+              .map((next) => (
+                <Button key={next} size="sm" onClick={() => transition(next)}>{STATUS_LABEL[next]}</Button>
+              ))}
             <Button size="sm" onClick={handleDuplicate}><Icon name="Copy" size={13} />Duplicate</Button>
             {(boq.status === 'approved' || boq.status === 'rejected' || boq.status === 'archived') && (
               <Button size="sm" onClick={handleRevise}><Icon name="Copy" size={13} />Revise</Button>
@@ -211,6 +215,29 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
           <div><div className="text-[11px] uppercase text-muted">Margin</div>{margin.toFixed(1)}%</div>
         </div>
       </div>
+
+      <BoqWorkspaceHeader
+        boqNumber={boq.boqNumber}
+        statusLabel={STATUS_LABEL[boq.status]}
+        customerName={boq.customerName}
+        lineCount={lines.length}
+        marginPct={margin}
+        grandTotal={boq.grandTotal}
+        currencyCode={boq.currency}
+        onPreview={() => {
+          setPreviewOpen(true)
+          document.getElementById('section-preview')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }}
+        saveDraft={boq.status === 'draft' ? {
+          onClick: () => toast('All changes are saved automatically as you edit.'),
+          label: 'Save Draft',
+        } : undefined}
+        submit={boq.status === 'draft' ? {
+          onClick: () => transition('submitted'),
+          label: 'Submit',
+          disabled: updateStatus.isPending,
+        } : undefined}
+      />
 
       <div className="sticky top-0 z-10 mt-3 flex shrink-0 gap-1 overflow-x-auto border-y border-line bg-white/95 px-4 py-1.5 backdrop-blur">
         {SECTIONS.map((s) => (
@@ -261,6 +288,8 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             departmentName={departments.find((d) => d.id === boq.departmentId)?.name ?? '—'}
             verticalName={verticals.find((v) => v.id === boq.verticalId)?.name ?? '—'}
             salesPersonName={salesPersons.find((p) => p.id === boq.salesPersonId)?.name ?? '—'}
+            open={previewOpen}
+            onOpenChange={setPreviewOpen}
           />
         </div>
       </div>
@@ -810,13 +839,15 @@ function NonDraftLineRow({ line, sku, approvalMatrix, employees, onDecide, expan
   )
 }
 
-function PreviewTab({ boq, lines, skuById, departmentName, verticalName, salesPersonName }: {
+function PreviewTab({ boq, lines, skuById, departmentName, verticalName, salesPersonName, open, onOpenChange }: {
   boq: CommercialBoq
   lines: CommercialBoqLineItem[]
   skuById: Map<string, CommercialSku>
   departmentName: string
   verticalName: string
   salesPersonName: string
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }) {
   function handlePrint() {
     const html = buildProposalPrintHtml({ boq, lines, skuById, departmentName, verticalName, salesPersonName })
@@ -832,7 +863,7 @@ function PreviewTab({ boq, lines, skuById, departmentName, verticalName, salesPe
   }
 
   return (
-    <Collapsible title="Preview" icon="FileText" defaultOpen={false}>
+    <Collapsible title="Preview" icon="FileText" open={open} onOpenChange={onOpenChange}>
       <div className="flex flex-col gap-4 rounded-xl border border-line bg-white p-5">
         <div className="flex items-start justify-between gap-4 border-b border-line pb-4">
           <div>

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
+import { ToastProvider } from '@/components/ui/Toast'
 import { ProposalDetail } from './ProposalDetail'
 import * as api from '../api'
 import * as libApi from '@/lib/api'
@@ -105,7 +106,9 @@ function renderProposalDetail(opts: { boq?: CommercialBoq; lines?: CommercialBoq
     ...render(
       <MemoryRouter>
         <QueryClientProvider client={qc}>
-          <ProposalDetail boqId={theBoq.id} />
+          <ToastProvider>
+            <ProposalDetail boqId={theBoq.id} />
+          </ToastProvider>
         </QueryClientProvider>
       </MemoryRouter>,
     ),
@@ -224,6 +227,37 @@ describe('ProposalDetail — non-draft BOQs stay frozen', () => {
     expect(screen.queryByRole('button', { name: /move up/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /move down/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /duplicate line/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('ProposalDetail — sticky workspace header', () => {
+  it('renders the sticky header with boq number, status, customer, live totals, Save Draft and Submit while draft', () => {
+    renderProposalDetail()
+    expect(screen.getAllByText('BOQ-2026-000001').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('ACME Corp').length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: /save draft/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^submit$/i })).toBeInTheDocument()
+  })
+
+  it('clicking the header\'s Save Draft shows an acknowledgment toast rather than issuing a mutation (edits already persist immediately)', async () => {
+    const user = userEvent.setup()
+    const { updateMutateAsync, lineUpdateMutateAsync } = renderProposalDetail()
+    await user.click(screen.getByRole('button', { name: /save draft/i }))
+    expect(screen.getByText(/saved automatically/i)).toBeInTheDocument()
+    expect(updateMutateAsync).not.toHaveBeenCalled()
+    expect(lineUpdateMutateAsync).not.toHaveBeenCalled()
+  })
+
+  it('a non-draft BOQ\'s header has no Save Draft/Submit buttons, only Preview', () => {
+    renderProposalDetail({ boq: boq({ status: 'approved' }) })
+    expect(screen.queryByRole('button', { name: /save draft/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^submit$/i })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /preview/i }).length).toBeGreaterThan(0)
+  })
+
+  it('does not show a second, duplicate "Submitted" transition button while draft (the header covers it)', () => {
+    renderProposalDetail()
+    expect(screen.queryByRole('button', { name: /^submitted$/i })).not.toBeInTheDocument()
   })
 })
 
