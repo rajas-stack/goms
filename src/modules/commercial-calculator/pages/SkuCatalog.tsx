@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
 import { useAllBomItems, useAllBoqLineItems, useAuditLogs, useMasters, useSkuMutations, useSkus } from '../api'
 import { SkuFormDialog } from '../components/SkuFormDialog'
 import { SkuBomEditor } from '../components/SkuBomEditor'
-import { computeSkuMarginPercent, skuTotalUnitCost, skuTotalUnitCostWithBom } from '../repository-logic'
+import { computeSkuMarginPercent } from '../repository-logic'
 import { marginPctForSellingPrice, PRICING_LEVEL_LABEL } from '../pricing-levels-logic'
 import { formatPercent } from '../format'
 import type { CommercialBomItem, CommercialSku, CreateSkuInput, PricingLevelKey } from '../types'
@@ -21,11 +21,10 @@ const LIFECYCLE_STYLE: Record<CommercialSku['lifecycleStatus'], string> = {
   retired: 'bg-rose-50 text-rose-700',
 }
 
-type Tab = 'overview' | 'pricing' | 'costs' | 'bom' | 'audit'
+type Tab = 'overview' | 'pricing' | 'bom' | 'audit'
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'pricing', label: 'Pricing' },
-  { key: 'costs', label: 'Costs' },
   { key: 'bom', label: 'BOM' },
   { key: 'audit', label: 'Audit History' },
 ]
@@ -33,7 +32,7 @@ const TABS: { key: Tab; label: string }[] = [
 /** SKU Catalog, redesigned 2026-08-03 from a flat searchable card list into a
  *  product-detail experience (list + master-detail, matching HierarchyView's
  *  pattern): a compact filterable list on the left, a full product page with
- *  Overview/Pricing/Costs/BOM/Audit tabs on the right. Commercial BOM has no
+ *  Overview/Pricing/BOM/Audit tabs on the right. Commercial BOM has no
  *  standalone module tab anymore — it's the BOM tab here, scoped to whichever
  *  SKU is selected. */
 export function SkuCatalog() {
@@ -251,7 +250,6 @@ function SkuDetail({ sku, tab, onTabChange, usageCount, boqCount, categoryName, 
       <div className="pt-1">
         {tab === 'overview' && <OverviewTab sku={sku} categoryName={categoryName} />}
         {tab === 'pricing' && <PricingTab sku={sku} bomItems={bomItems} skusById={skusById} />}
-        {tab === 'costs' && <CostsTab sku={sku} bomItems={bomItems} skusById={skusById} />}
         {tab === 'bom' && <SkuBomEditor skuId={sku.id} />}
         {tab === 'audit' && <AuditTab skuId={sku.id} />}
       </div>
@@ -297,63 +295,28 @@ const LEVEL_PRICE: Record<PricingLevelKey, keyof CommercialSku> = {
   government: 'governmentPrice', enterprise: 'enterprisePrice', corporate: 'corporatePrice',
 }
 
-/** Pricing Levels is the primary pricing model (spec: BOQ/SKU share one
- *  pricing-level model, no second one here) — List Price/Minimum Allowed/
- *  Default Max Discount % are just the SKU's fallback defaults for lines with
- *  no level selected, so they're demoted to a clearly-labelled read-only
- *  "Base Pricing / SKU Defaults" subsection rather than the tab's headline. */
 function PricingTab({ sku, bomItems, skusById }: { sku: CommercialSku; bomItems: CommercialBomItem[]; skusById: Map<string, CommercialSku> }) {
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">Pricing Levels</div>
-        {sku.selectedPricingLevels.length === 0 ? (
-          <p className="text-[13px] text-muted">No pricing levels configured for this SKU yet.</p>
-        ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            {sku.selectedPricingLevels.map((entry) => {
-              const sellingPrice = sku[LEVEL_PRICE[entry.level]] as number
-              const margin = marginPctForSellingPrice(sku, bomItems, skusById, sellingPrice)
-              return (
-                <div key={entry.level} className="flex flex-col gap-2 rounded-xl border border-line p-3">
-                  <div className="text-[12px] font-semibold text-ink-900">{PRICING_LEVEL_LABEL[entry.level]}</div>
-                  <DetailField label="Selling Price" value={sellingPrice.toLocaleString()} />
-                  <DetailField label="Maximum Discount %" value={`${entry.maximumDiscountPercent}%`} />
-                  <DetailField label="Margin" value={formatPercent(margin)} />
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-
-      <div className="rounded-xl border border-line bg-panel/30 p-4">
-        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">Base Pricing / SKU Defaults</div>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <DetailField label="List Price" value={sku.listPrice.toLocaleString()} />
-          <DetailField label="Minimum Allowed" value={sku.minimumAllowedPrice.toLocaleString()} />
-          <DetailField label="Default Max Discount %" value={`${sku.maximumDiscountPercent}%`} />
-          <DetailField label="Margin at List Price" value={formatPercent(computeSkuMarginPercent(sku, bomItems, skusById))} />
+    <div>
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">Pricing Levels</div>
+      {sku.selectedPricingLevels.length === 0 ? (
+        <p className="text-[13px] text-muted">No pricing levels configured for this SKU yet.</p>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          {sku.selectedPricingLevels.map((entry) => {
+            const sellingPrice = sku[LEVEL_PRICE[entry.level]] as number
+            const margin = marginPctForSellingPrice(sku, bomItems, skusById, sellingPrice)
+            return (
+              <div key={entry.level} className="flex flex-col gap-2 rounded-xl border border-line p-3">
+                <div className="text-[12px] font-semibold text-ink-900">{PRICING_LEVEL_LABEL[entry.level]}</div>
+                <DetailField label="Selling Price" value={sellingPrice.toLocaleString()} />
+                <DetailField label="Maximum Discount %" value={`${entry.maximumDiscountPercent}%`} />
+                <DetailField label="Margin" value={formatPercent(margin)} />
+              </div>
+            )
+          })}
         </div>
-      </div>
-    </div>
-  )
-}
-
-function CostsTab({ sku, bomItems, skusById }: { sku: CommercialSku; bomItems: CommercialBomItem[]; skusById: Map<string, CommercialSku> }) {
-  const mandatoryBomCost = skuTotalUnitCostWithBom(sku, bomItems, skusById) - skuTotalUnitCost(sku)
-  return (
-    <div className="grid grid-cols-2 gap-4 rounded-xl border border-line p-4 sm:grid-cols-4">
-      <DetailField label="Base Software" value={sku.baseSoftwareCost.toLocaleString()} />
-      <DetailField label="Implementation / MM" value={sku.implementationCostPerMM.toLocaleString()} />
-      <DetailField label="Integration" value={sku.integrationCost.toLocaleString()} />
-      <DetailField label="Third Party" value={sku.thirdPartyCost.toLocaleString()} />
-      <DetailField label="Hardware" value={sku.hardwareCost.toLocaleString()} />
-      <DetailField label="Cloud" value={sku.cloudCost.toLocaleString()} />
-      <DetailField label="Support" value={sku.supportCost.toLocaleString()} />
-      <DetailField label="Training" value={sku.trainingCost.toLocaleString()} />
-      <DetailField label="Mandatory BOM Components" value={mandatoryBomCost.toLocaleString()} />
-      <DetailField label="Total Cost (incl. mandatory BOM)" value={skuTotalUnitCostWithBom(sku, bomItems, skusById).toLocaleString()} />
+      )}
     </div>
   )
 }
