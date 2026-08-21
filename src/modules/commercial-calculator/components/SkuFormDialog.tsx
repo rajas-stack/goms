@@ -7,8 +7,7 @@ import { Field, Input, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { Menu } from '@/components/ui/Menu'
 import { useMasters } from '../api'
-import { computeSkuMarginPercent } from '../repository-logic'
-import { formatPercent, roundMoney } from '../format'
+import { roundMoney } from '../format'
 import {
   discountPctForSellingPrice, marginPctForSellingPrice, PricingValidationError,
   PRICING_LEVEL_KEYS, PRICING_LEVEL_LABEL, sellingPriceForDiscountPct, sellingPriceForMargin, validateSellingPrice,
@@ -110,15 +109,14 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
 
   // A placeholder base when creating (no `editing` row to spread fields
   // like `id`/`skuCode`/`createdAt` from yet) — irrelevant to the pricing
-  // math itself, just enough to satisfy computeSkuMarginPercent/the pricing-
-  // level helpers' shape so every preview here shares the same live values
-  // rather than a hand-rolled second copy of each formula.
+  // math itself, just enough to satisfy the pricing-level helpers' shape
+  // so every preview here shares the same live values rather than a
+  // hand-rolled second copy of each formula.
   const previewSku = {
     ...(editing ?? { id: '', skuCode: '', createdAt: '', createdBy: null }),
     ...values,
     activeTill: values.activeTill || null,
   } as CommercialSku
-  const previewMargin = computeSkuMarginPercent(previewSku)
 
   async function submit() {
     setPending(true)
@@ -159,15 +157,6 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
           <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Identity</h3>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Name"><Input value={values.name} onChange={(e) => set('name', e.target.value)} /></Field>
-            <Field label="List Price" hint={`Margin at List Price: ${formatPercent(previewMargin)}`}>
-              <Input type="number" value={values.listPrice} onChange={(e) => set('listPrice', Number(e.target.value))} />
-            </Field>
-            <Field label="Minimum Allowed">
-              <Input type="number" value={values.minimumAllowedPrice} onChange={(e) => set('minimumAllowedPrice', Number(e.target.value))} />
-            </Field>
-            <Field label="Default Max Discount %" hint="Fallback ceiling for lines with no pricing level selected.">
-              <Input type="number" value={values.maximumDiscountPercent} onChange={(e) => set('maximumDiscountPercent', Math.min(90, Number(e.target.value)))} />
-            </Field>
             <Field label="SKU Category">
               <Select value={values.categoryId} onChange={(e) => set('categoryId', e.target.value)}>
                 <option value="">Select…</option>
