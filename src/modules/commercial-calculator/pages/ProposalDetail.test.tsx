@@ -259,6 +259,22 @@ describe('ProposalDetail — sticky workspace header', () => {
     renderProposalDetail()
     expect(screen.queryByRole('button', { name: /^submitted$/i })).not.toBeInTheDocument()
   })
+
+  it('Esc collapses the currently-expanded line row', async () => {
+    const user = userEvent.setup()
+    renderProposalDetail({ lines: [line({ id: 'l1', approvalStatus: 'pending', discountPct: 20 })] })
+    await user.click(screen.getByLabelText(/toggle approval summary/i))
+    expect(screen.getByRole('button', { name: /^approve$/i })).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('button', { name: /^approve$/i })).not.toBeInTheDocument()
+  })
+
+  it('Ctrl+S shows the "saved automatically" acknowledgment while draft', async () => {
+    const user = userEvent.setup()
+    renderProposalDetail()
+    await user.keyboard('{Control>}s{/Control}')
+    expect(screen.getByText(/saved automatically/i)).toBeInTheDocument()
+  })
 })
 
 describe('ProposalDetail — fast SKU search + Browse Catalog', () => {

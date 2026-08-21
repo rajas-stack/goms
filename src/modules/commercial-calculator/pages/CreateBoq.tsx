@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useAllBomItems, useBoqMutations, useMasters, useSkus } from '../api'
 import { resolveApprovalBand, skuToBoqConversionFactor, skuTotalUnitCostWithBom } from '../repository-logic'
 import { PRICING_LEVEL_LABEL, effectiveUnitPrice, resolveLineUnitPrice } from '../pricing-levels-logic'
+import { useBoqWorkspaceShortcuts } from '../use-boq-workspace-shortcuts'
 import { BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
 import { SkuLinePicker } from '../components/SkuLinePicker'
 import { SkuSearchBar } from '../components/SkuSearchBar'
@@ -259,6 +260,11 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
       setPending(null)
     }
   }
+
+  useBoqWorkspaceShortcuts({
+    onSave: () => { if (canSave && pending === null) save(false) },
+    onEscape: () => { if (expandedLineIndex !== null) setExpandedLineIndex(null) },
+  })
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">

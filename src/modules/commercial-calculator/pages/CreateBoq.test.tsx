@@ -94,6 +94,23 @@ describe('CreateBoq — sticky workspace header', () => {
     expect(screen.getAllByRole('button', { name: /save draft/i })).toHaveLength(1)
     expect(screen.getAllByRole('button', { name: /^submit$/i })).toHaveLength(1)
   })
+
+  it('Esc collapses the currently-expanded configured line row', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    await addOneLine(user)
+    await user.click(screen.getByLabelText(/toggle pricing details/i))
+    expect(screen.getByText(/set selling price/i)).toBeInTheDocument()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByText(/set selling price/i)).not.toBeInTheDocument()
+  })
+
+  it('Ctrl+S respects the same validation gate as the (disabled) Save Draft button — does not save while required fields are missing', async () => {
+    const user = userEvent.setup()
+    const { create } = renderCreateBoq()
+    await user.keyboard('{Control>}s{/Control}')
+    expect(create.mutateAsync).not.toHaveBeenCalled()
+  })
 })
 
 describe('CreateBoq — fast SKU search + Browse Catalog', () => {

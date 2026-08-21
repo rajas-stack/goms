@@ -17,6 +17,7 @@ import { useAllBomItems, useBoqLineItemMutations, useBoqLineItems, useBoqMutatio
 import { buildProposalPrintHtml } from '../proposal-print'
 import { computeBoqMarginPercent } from '../repository-logic'
 import { PRICING_LEVEL_LABEL, resolveLineUnitPrice } from '../pricing-levels-logic'
+import { useBoqWorkspaceShortcuts } from '../use-boq-workspace-shortcuts'
 import type { BulkPricingResult } from '../pricing-levels-logic'
 import { BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
 import { SkuLinePicker } from '../components/SkuLinePicker'
@@ -91,6 +92,11 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   const skuById = new Map(skus.map((s) => [s.id, s]))
   const margin = boq ? computeBoqMarginPercent(boq, lines, skuById, currencies, bomItems) : 0
   const buSalesPersons = salesPersons.filter((p) => (postings[p.id]?.designation ?? '').toLowerCase().includes('bu sales'))
+
+  useBoqWorkspaceShortcuts({
+    onSave: boq?.status === 'draft' ? () => toast('All changes are saved automatically as you edit.') : undefined,
+    onEscape: () => { if (expandedLineId) setExpandedLineId(null) },
+  })
 
   async function transition(next: BoqStatus) {
     if (!boq) return
