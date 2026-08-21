@@ -88,14 +88,15 @@ describe('CreateBoq — line rows', () => {
     await user.click(screen.getByRole('button', { name: /duplicate line/i }))
     const moveUpButtons = screen.getAllByRole('button', { name: /move up/i })
     expect(moveUpButtons[0]).toBeDisabled()
-    // The first getAllByLabelText match is the SkuLinePicker's own (always-present) Quantity
-    // field, above the line list — the line rows' own Quantity inputs are the rest, in order.
-    const secondLineQty = screen.getAllByLabelText(/^quantity$/i)[2]
+    // SkuAddPanel's own Quantity field only renders while a SKU is resolved, and picking a
+    // Feature resets the picker's selection right after Add — so by now only the two line
+    // rows' own Quantity inputs remain, in order.
+    const secondLineQty = screen.getAllByLabelText(/^quantity$/i)[1]
     await user.clear(secondLineQty)
     await user.type(secondLineQty, '9')
-    const quantityInputsBefore = screen.getAllByLabelText(/^quantity$/i).slice(1).map((el) => (el as HTMLInputElement).value)
+    const quantityInputsBefore = screen.getAllByLabelText(/^quantity$/i).map((el) => (el as HTMLInputElement).value)
     await user.click(screen.getAllByRole('button', { name: /move down/i })[0])
-    const quantityInputsAfter = screen.getAllByLabelText(/^quantity$/i).slice(1).map((el) => (el as HTMLInputElement).value)
+    const quantityInputsAfter = screen.getAllByLabelText(/^quantity$/i).map((el) => (el as HTMLInputElement).value)
     expect(quantityInputsAfter).toEqual([quantityInputsBefore[1], quantityInputsBefore[0]])
   })
 
