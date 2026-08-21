@@ -159,6 +159,40 @@ describe('migrateSnapshot', () => {
       { id: 'sku1', skuCode: 'X-Y-Z-F-NEW', selectedPricingLevels: [{ level: 'internal', maximumDiscountPercent: 10 }] },
     ])
   })
+
+  it('backfills pricingLevels/activePricingLevel onto a legacy BOQ line item that predates the field', () => {
+    const legacy = {
+      ...v1Snapshot(),
+      commercialCalculator: {
+        ...(migrateSnapshot(v1Snapshot(), 1)!.commercialCalculator),
+        commercialBoqLineItems: [{ id: 'li1', boqId: 'boq1', skuId: 'sku1' }],
+      },
+    }
+    const out = migrateSnapshot(legacy, 11)
+    expect(out).not.toBeNull()
+    expect(out!.commercialCalculator.commercialBoqLineItems).toEqual([
+      { id: 'li1', boqId: 'boq1', skuId: 'sku1', pricingLevels: [], activePricingLevel: null },
+    ])
+  })
+
+  it('does not clobber a BOQ line item that already has pricingLevels', () => {
+    const withLevels = {
+      ...v1Snapshot(),
+      commercialCalculator: {
+        ...(migrateSnapshot(v1Snapshot(), 1)!.commercialCalculator),
+        commercialBoqLineItems: [{
+          id: 'li1', boqId: 'boq1', skuId: 'sku1',
+          pricingLevels: [{ level: 'internal', sellingPrice: 900 }], activePricingLevel: 'internal',
+        }],
+      },
+    }
+    const out = migrateSnapshot(withLevels, 11)
+    expect(out).not.toBeNull()
+    expect(out!.commercialCalculator.commercialBoqLineItems).toEqual([{
+      id: 'li1', boqId: 'boq1', skuId: 'sku1',
+      pricingLevels: [{ level: 'internal', sellingPrice: 900 }], activePricingLevel: 'internal',
+    }])
+  })
 })
 
 describe('v2 — opportunities extracted from department metadata', () => {

@@ -34,8 +34,15 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *      with no migration, so SKUs seeded/created before that change had it
  *      missing entirely rather than empty, crashing any UI that assumed it
  *      was always an array (SkuFormDialog, maxDiscountPercentForLevel).
+ *  v12 Backfills `pricingLevels: []`/`activePricingLevel: null` onto every
+ *      existing BOQ line item row — the same 2026-08-20 pricing-overhaul
+ *      added these fields to `CommercialBoqLineItem` too, but only the SKU
+ *      side got a migration (v11). Line items created before the overhaul
+ *      had `pricingLevels` missing entirely, crashing `SellingPriceSection`
+ *      (`pricingLevels.some(...)`) and `withLiveDraftPricing` on any draft
+ *      BOQ containing one.
  */
-export const SCHEMA_VERSION = 11
+export const SCHEMA_VERSION = 12
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -259,6 +266,18 @@ function toV11(data: SnapshotShape): SnapshotShape {
   return { ...data, commercialCalculator: { ...cc, commercialSkus } }
 }
 
+/** v11 → v12. See `SCHEMA_VERSION` doc comment. */
+function toV12(data: SnapshotShape): SnapshotShape {
+  const cc = (data.commercialCalculator && typeof data.commercialCalculator === 'object' && !Array.isArray(data.commercialCalculator))
+    ? data.commercialCalculator as Record<string, unknown>
+    : undefined
+  if (!cc) return data
+  const commercialBoqLineItems = asArray(cc.commercialBoqLineItems).map((li) =>
+    Array.isArray(li.pricingLevels) ? li : { ...li, pricingLevels: [], activePricingLevel: li.activePricingLevel ?? null },
+  )
+  return { ...data, commercialCalculator: { ...cc, commercialBoqLineItems } }
+}
+
 /** Keyed by the version each step PRODUCES, so applying every key from
  *  `fromVersion + 1` up to `SCHEMA_VERSION` walks the chain in order. */
 export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> = {
@@ -272,6 +291,7 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   9: toV9,
   10: toV10,
   11: toV11,
+  12: toV12,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.
