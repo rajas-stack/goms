@@ -49,6 +49,9 @@ function renderProposalDetail(opts: { boq?: CommercialBoq; lines?: CommercialBoq
   const theBoq = opts.boq ?? boq()
   const updateMutateAsync = vi.fn().mockResolvedValue(theBoq)
   const lineUpdateMutateAsync = vi.fn().mockResolvedValue(undefined)
+  const addMutateAsync = vi.fn().mockResolvedValue(undefined)
+  const reorderMutateAsync = vi.fn().mockResolvedValue(undefined)
+  const removeMutateAsync = vi.fn().mockResolvedValue(undefined)
 
   vi.spyOn(api, 'useBoqs').mockReturnValue({ data: [theBoq] } as never)
   vi.spyOn(api, 'useBoqLineItems').mockReturnValue({ data: opts.lines ?? [] } as never)
@@ -82,9 +85,10 @@ function renderProposalDetail(opts: { boq?: CommercialBoq; lines?: CommercialBoq
     remove: { mutateAsync: vi.fn() },
   } as never)
   vi.spyOn(api, 'useBoqLineItemMutations').mockReturnValue({
-    add: { mutateAsync: vi.fn() },
+    add: { mutateAsync: addMutateAsync },
     update: { mutateAsync: lineUpdateMutateAsync },
-    remove: { mutateAsync: vi.fn() },
+    remove: { mutateAsync: removeMutateAsync },
+    reorder: { mutateAsync: reorderMutateAsync },
   } as never)
   vi.spyOn(libApi, 'useDepartments').mockReturnValue({ data: [{ id: 'd1', name: 'Dept One' }] } as never)
   vi.spyOn(libApi, 'useSalesPersons').mockReturnValue({ data: [{ id: 'sp1', name: 'Sales Person One' }] } as never)
@@ -95,6 +99,9 @@ function renderProposalDetail(opts: { boq?: CommercialBoq; lines?: CommercialBoq
   return {
     updateMutateAsync,
     lineUpdateMutateAsync,
+    addMutateAsync,
+    reorderMutateAsync,
+    removeMutateAsync,
     ...render(
       <MemoryRouter>
         <QueryClientProvider client={qc}>
@@ -210,5 +217,84 @@ describe('ProposalDetail — non-draft BOQs stay frozen', () => {
     renderProposalDetail({ boq: boq({ status: 'approved' }), lines: [line()] })
     expect(screen.queryByLabelText(/^quantity$/i)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /add pricing level/i })).not.toBeInTheDocument()
+  })
+
+  it('has no Move Up/Down or Duplicate Line controls on a frozen line', () => {
+    renderProposalDetail({ boq: boq({ status: 'approved' }), lines: [line()] })
+    expect(screen.queryByRole('button', { name: /move up/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /move down/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /duplicate line/i })).not.toBeInTheDocument()
+  })
+})
+
+describe('ProposalDetail — Line Items compact rows and bulk editing', () => {
+  it('the collapsed row shows active pricing level, selling price, discount, and tax without expanding', () => {
+    renderProposalDetail({
+      lines: [line({ id: 'l1', unitPrice: 850, discountPct: 15, taxPct: 18, activePricingLevel: 'government', pricingLevels: [{ level: 'government', sellingPrice: 850 }] })],
+    })
+    // "Government" also appears in the always-visible Set Selling Price card's own toggle
+    // button — this only asserts the compact row's badge is one of the places it shows.
+    expect(screen.getAllByText('Government').length).toBeGreaterThan(0)
+    expect(screen.getByText(/850/)).toBeInTheDocument()
+    expect(screen.getByText(/15\.0% off/)).toBeInTheDocument()
+    expect(screen.getByText(/18% tax/)).toBeInTheDocument()
+  })
+
+  it('only one line row is expanded at a time', async () => {
+    const user = userEvent.setup()
+    renderProposalDetail({ lines: [line({ id: 'l1' }), line({ id: 'l2' })] })
+    const toggles = screen.getAllByLabelText(/toggle approval summary/i)
+    await user.click(toggles[0])
+    expect(screen.getAllByText(/set selling price/i)).toHaveLength(2) // always-visible, one per row — unaffected by expand
+    // Expand state itself only gates the LineApprovalSummary panel — verify only one is open by
+    // checking the approval-band explanation text appears exactly once even after expanding both.
+    await user.click(toggles[1])
+    expect(screen.getAllByText(/no approval required/i)).toHaveLength(1)
+  })
+
+  it('reorders lines via Move Up / Move Down and calls reorder.mutateAsync with the full new order', async () => {
+    const user = userEvent.setup()
+    const { reorderMutateAsync } = renderProposalDetail({
+      lines: [line({ id: 'l1' }), line({ id: 'l2' }), line({ id: 'l3' })],
+    })
+    const moveUpButtons = screen.getAllByRole('button', { name: /move up/i })
+    expect(moveUpButtons[0]).toBeDisabled()
+    const moveDownButtons = screen.getAllByRole('button', { name: /move down/i })
+    expect(moveDownButtons[2]).toBeDisabled()
+    await user.click(moveDownButtons[0])
+    expect(reorderMutateAsync).toHaveBeenCalledWith(['l2', 'l1', 'l3'])
+  })
+
+  it('Duplicate Line adds a new line with the same SKU/quantity/pricing, via lineMutations.add', async () => {
+    const user = userEvent.setup()
+    const { addMutateAsync } = renderProposalDetail({
+      lines: [line({ id: 'l1', quantity: 3, unitPrice: 900, discountPct: 10 })],
+    })
+    await user.click(screen.getAllByRole('button', { name: /duplicate line/i })[0])
+    expect(addMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ skuId: 's1', quantity: 3, unitPrice: 900, discountPct: 10 }))
+  })
+
+  it('Change Pricing Level bulk-applies only unitPrice/discountPct/activePricingLevel, not pricingLevels, for a Clear-Discount-shaped result', async () => {
+    const user = userEvent.setup()
+    const { lineUpdateMutateAsync } = renderProposalDetail({
+      lines: [line({ id: 'l1', pricingLevels: [{ level: 'internal', sellingPrice: 900 }], activePricingLevel: 'internal' })],
+    })
+    await user.click(screen.getByLabelText(/select sku-1/i))
+    await user.selectOptions(screen.getByLabelText(/^action$/i), 'clearDiscount')
+    await user.click(screen.getByRole('button', { name: /apply/i }))
+    const patchArg = lineUpdateMutateAsync.mock.calls[0][0].patch
+    expect(Object.keys(patchArg)).not.toContain('pricingLevels')
+  })
+
+  it('bulk Delete removes every selected line via lineMutations.remove', async () => {
+    const user = userEvent.setup()
+    const { removeMutateAsync } = renderProposalDetail({
+      lines: [line({ id: 'l1' }), line({ id: 'l2' })],
+    })
+    await user.click(screen.getByLabelText(/select all lines/i))
+    await user.selectOptions(screen.getByLabelText(/^action$/i), 'delete')
+    await user.click(screen.getByRole('button', { name: /delete 2 lines/i }))
+    expect(removeMutateAsync).toHaveBeenCalledWith('l1')
+    expect(removeMutateAsync).toHaveBeenCalledWith('l2')
   })
 })

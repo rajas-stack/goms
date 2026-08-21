@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils'
 import { useAllBomItems, useBoqLineItemMutations, useBoqLineItems, useBoqMutations, useBoqs, useMasters, useSkus } from '../api'
 import { buildProposalPrintHtml } from '../proposal-print'
 import { computeBoqMarginPercent } from '../repository-logic'
-import { resolveLineUnitPrice } from '../pricing-levels-logic'
+import { PRICING_LEVEL_LABEL, resolveLineUnitPrice } from '../pricing-levels-logic'
 import type { BulkPricingResult } from '../pricing-levels-logic'
 import { SkuLinePicker } from '../components/SkuLinePicker'
 import { SellingPriceSection } from '../components/SellingPriceSection'
@@ -78,6 +78,11 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   const toast = useToast()
   const navigate = useNavigate()
   const [deleting, setDeleting] = useState(false)
+  const [expandedLineId, setExpandedLineId] = useState<string | null>(null)
+
+  function toggleExpandedLine(id: string) {
+    setExpandedLineId((prev) => (prev === id ? null : id))
+  }
 
   const boq = boqs.find((b) => b.id === boqId) ?? null
   const skuById = new Map(skus.map((s) => [s.id, s]))
@@ -242,6 +247,8 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             employees={employees}
             lineMutations={lineMutations}
             onDecide={decideLine}
+            expandedLineId={expandedLineId}
+            onToggleExpand={toggleExpandedLine}
           />
         </div>
 
@@ -507,7 +514,7 @@ function BoqDetailsSection({ boq, departments, salesPersons, buSalesPersons, ver
   )
 }
 
-function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, employees, lineMutations, onDecide }: {
+function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, employees, lineMutations, onDecide, expandedLineId, onToggleExpand }: {
   boq: CommercialBoq
   lines: CommercialBoqLineItem[]
   skuById: Map<string, CommercialSku>
@@ -516,6 +523,8 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, emplo
   employees: Employee[]
   lineMutations: ReturnType<typeof useBoqLineItemMutations>
   onDecide: (lineId: string, decision: 'approved' | 'rejected', approverId: string, remarks: string) => void
+  expandedLineId: string | null
+  onToggleExpand: (id: string) => void
 }) {
   const toast = useToast()
   const isDraft = boq.status === 'draft'
@@ -533,11 +542,14 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, emplo
   async function applyBulkResults(results: BulkPricingResult[]) {
     const failed = results.filter((r) => !r.ok)
     for (const r of results.filter((r) => r.ok)) {
+      const patch: Partial<Pick<CommercialBoqLineItem, 'quantity' | 'unitPrice' | 'discountPct' | 'pricingLevels' | 'activePricingLevel'>> = {}
+      if (r.quantity !== undefined) patch.quantity = r.quantity
+      if (r.unitPrice !== undefined) patch.unitPrice = r.unitPrice
+      if (r.discountPct !== undefined) patch.discountPct = r.discountPct
+      if (r.pricingLevels !== undefined) patch.pricingLevels = r.pricingLevels
+      if (r.activePricingLevel !== undefined) patch.activePricingLevel = r.activePricingLevel
       try {
-        await lineMutations.update.mutateAsync({
-          id: r.lineId,
-          patch: { unitPrice: r.unitPrice, discountPct: r.discountPct, pricingLevels: r.pricingLevels, activePricingLevel: r.activePricingLevel },
-        })
+        await lineMutations.update.mutateAsync({ id: r.lineId, patch })
       } catch (e) {
         failed.push({ lineId: r.lineId, ok: false, error: e instanceof Error ? e.message : 'Could not save.' })
       }
@@ -548,6 +560,44 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, emplo
       toast('Bulk update applied.')
     }
     setSelectedIds([])
+  }
+
+  async function applyBulkDelete(lineIds: string[]) {
+    let failedCount = 0
+    for (const id of lineIds) {
+      try {
+        await lineMutations.remove.mutateAsync(id)
+      } catch {
+        failedCount += 1
+      }
+    }
+    toast(failedCount > 0 ? `${failedCount} of ${lineIds.length} line(s) could not be deleted.` : `${lineIds.length} line(s) deleted.`)
+    setSelectedIds([])
+  }
+
+  async function moveLine(lineId: string, direction: 'up' | 'down') {
+    const ids = lines.map((l) => l.id)
+    const idx = ids.indexOf(lineId)
+    const swapWith = direction === 'up' ? idx - 1 : idx + 1
+    if (swapWith < 0 || swapWith >= ids.length) return
+    const next = [...ids]
+    ;[next[idx], next[swapWith]] = [next[swapWith], next[idx]]
+    try {
+      await lineMutations.reorder.mutateAsync(next)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not reorder line items.')
+    }
+  }
+
+  async function duplicateLine(line: CommercialBoqLineItem) {
+    try {
+      await lineMutations.add.mutateAsync({
+        skuId: line.skuId, quantity: line.quantity, unitPrice: line.unitPrice, discountPct: line.discountPct,
+        pricingLevels: line.pricingLevels, activePricingLevel: line.activePricingLevel,
+      })
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not duplicate line item.')
+    }
   }
 
   async function handleAdd(line: { skuId: string; quantity: number; discountPct: number; pricingLevels: CommercialBoqLineItem['pricingLevels']; activePricingLevel: CommercialBoqLineItem['activePricingLevel'] }) {
@@ -577,21 +627,28 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, emplo
       )}
       {isDraft && selectedLines.length > 0 && (
         <div className="mb-2">
-          <BulkEditBar selectedLines={selectedLines} skusById={skuById} onApply={applyBulkResults} />
+          <BulkEditBar selectedLines={selectedLines} skusById={skuById} onApply={applyBulkResults} onDelete={applyBulkDelete} />
         </div>
       )}
       <div className="flex flex-col gap-2">
-        {lines.map((line) => {
+        {lines.map((line, i) => {
           const sku = skuById.get(line.skuId)
+          const rowProps = { expanded: expandedLineId === line.id, onToggleExpand: () => onToggleExpand(line.id) }
           return isDraft ? (
             <div key={line.id} className="flex items-start gap-2">
               <Checkbox checked={selectedIds.includes(line.id)} onChange={() => toggleOne(line.id)} aria-label={`Select ${sku?.skuCode ?? 'line'}`} />
               <div className="flex-1">
-                <DraftLineRow line={line} sku={sku} bomItems={bomItems} skuById={skuById} approvalMatrix={approvalMatrix} employees={employees} lineMutations={lineMutations} onDecide={onDecide} />
+                <DraftLineRow
+                  line={line} sku={sku} bomItems={bomItems} skuById={skuById} approvalMatrix={approvalMatrix} employees={employees}
+                  lineMutations={lineMutations} onDecide={onDecide} {...rowProps}
+                  isFirst={i === 0} isLast={i === lines.length - 1}
+                  onMoveUp={() => moveLine(line.id, 'up')} onMoveDown={() => moveLine(line.id, 'down')}
+                  onDuplicate={() => duplicateLine(line)}
+                />
               </div>
             </div>
           ) : (
-            <NonDraftLineRow key={line.id} line={line} sku={sku} approvalMatrix={approvalMatrix} employees={employees} onDecide={onDecide} />
+            <NonDraftLineRow key={line.id} line={line} sku={sku} approvalMatrix={approvalMatrix} employees={employees} onDecide={onDecide} {...rowProps} />
           )
         })}
       </div>
@@ -609,7 +666,10 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, emplo
  *  uncontrolled-by-the-server-value-on-every-keystroke draft — it commits
  *  once on blur/Enter, not per keystroke, and rolls back to the last known
  *  server value on a failed commit (e.g. the SKU floor-price check). */
-function DraftLineRow({ line, sku, bomItems, skuById, approvalMatrix, employees, lineMutations, onDecide }: {
+function DraftLineRow({
+  line, sku, bomItems, skuById, approvalMatrix, employees, lineMutations, onDecide,
+  expanded, onToggleExpand, isFirst, isLast, onMoveUp, onMoveDown, onDuplicate,
+}: {
   line: CommercialBoqLineItem
   sku: CommercialSku | undefined
   bomItems: CommercialBomItem[]
@@ -618,10 +678,16 @@ function DraftLineRow({ line, sku, bomItems, skuById, approvalMatrix, employees,
   employees: Employee[]
   lineMutations: ReturnType<typeof useBoqLineItemMutations>
   onDecide: (lineId: string, decision: 'approved' | 'rejected', approverId: string, remarks: string) => void
+  expanded: boolean
+  onToggleExpand: () => void
+  isFirst: boolean
+  isLast: boolean
+  onMoveUp: () => void
+  onMoveDown: () => void
+  onDuplicate: () => void
 }) {
   const toast = useToast()
   const [qty, setQty] = useState(String(line.quantity))
-  const [expanded, setExpanded] = useState(false)
 
   useEffect(() => setQty(String(line.quantity)), [line.quantity])
 
@@ -667,7 +733,7 @@ function DraftLineRow({ line, sku, bomItems, skuById, approvalMatrix, employees,
   return (
     <div className="rounded-xl border border-line bg-white px-3 py-2.5 text-[13px]">
       <div className="flex items-center gap-3">
-        <button type="button" onClick={() => setExpanded((v) => !v)} aria-label="Toggle approval summary" className="text-muted">
+        <button type="button" onClick={onToggleExpand} aria-label="Toggle approval summary" className="text-muted">
           <Icon name={expanded ? 'ChevronDown' : 'ChevronRight'} size={14} />
         </button>
         <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode ?? '—'}</span>
@@ -681,8 +747,16 @@ function DraftLineRow({ line, sku, bomItems, skuById, approvalMatrix, employees,
           className="w-20"
           aria-label="Quantity"
         />
-        <span className="text-muted">List {sku?.listPrice.toLocaleString() ?? '—'}</span>
+        <span className="rounded-full bg-panel px-2 py-0.5 text-[11px] font-medium text-ink-700">
+          {line.activePricingLevel ? PRICING_LEVEL_LABEL[line.activePricingLevel] : 'List Price'}
+        </span>
+        <span className="text-muted">Sell {line.unitPrice.toLocaleString()}</span>
+        <span className="text-muted">{line.discountPct.toFixed(1)}% off</span>
+        <span className="text-muted">{line.taxPct}% tax</span>
         <span className="font-medium text-ink-900">{line.lineTotal.toLocaleString()}</span>
+        <Button size="icon" onClick={onMoveUp} disabled={isFirst} title="Move up" aria-label="Move up"><Icon name="ArrowUp" size={14} /></Button>
+        <Button size="icon" onClick={onMoveDown} disabled={isLast} title="Move down" aria-label="Move down"><Icon name="ArrowDown" size={14} /></Button>
+        <Button size="icon" onClick={onDuplicate} title="Duplicate line" aria-label="Duplicate line"><Icon name="Copy" size={14} /></Button>
         <Button size="icon" onClick={handleRemove} title="Remove"><Icon name="Trash2" size={14} /></Button>
       </div>
       {sku && (
@@ -702,24 +776,29 @@ function DraftLineRow({ line, sku, bomItems, skuById, approvalMatrix, employees,
   )
 }
 
-function NonDraftLineRow({ line, sku, approvalMatrix, employees, onDecide }: {
+function NonDraftLineRow({ line, sku, approvalMatrix, employees, onDecide, expanded, onToggleExpand }: {
   line: CommercialBoqLineItem
   sku: CommercialSku | undefined
   approvalMatrix: ApprovalMatrixRule[]
   employees: Employee[]
   onDecide: (lineId: string, decision: 'approved' | 'rejected', approverId: string, remarks: string) => void
+  expanded: boolean
+  onToggleExpand: () => void
 }) {
-  const [expanded, setExpanded] = useState(false)
   return (
     <div className="rounded-xl border border-line bg-white px-3 py-2.5 text-[13px]">
       <div className="flex items-center gap-3">
-        <button type="button" onClick={() => setExpanded((v) => !v)} aria-label="Toggle approval summary" className="text-muted">
+        <button type="button" onClick={onToggleExpand} aria-label="Toggle approval summary" className="text-muted">
           <Icon name={expanded ? 'ChevronDown' : 'ChevronRight'} size={14} />
         </button>
         <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode ?? '—'}</span>
         <span className="min-w-0 flex-1 truncate">{sku?.name ?? 'Unknown SKU'}</span>
         <span className="text-muted">Qty {line.quantity}</span>
+        <span className="rounded-full bg-panel px-2 py-0.5 text-[11px] font-medium text-ink-700">
+          {line.activePricingLevel ? PRICING_LEVEL_LABEL[line.activePricingLevel] : 'List Price'}
+        </span>
         <span className="text-muted">{line.discountPct}% off</span>
+        <span className="text-muted">{line.taxPct}% tax</span>
         <span className="font-medium text-ink-900">{line.lineTotal.toLocaleString()}</span>
       </div>
       {expanded && <LineApprovalSummary line={line} approvalMatrix={approvalMatrix} employees={employees} onDecide={onDecide} />}
