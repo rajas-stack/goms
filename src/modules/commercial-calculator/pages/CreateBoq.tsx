@@ -11,6 +11,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useAllBomItems, useBoqMutations, useMasters, useSkus } from '../api'
 import { resolveApprovalBand, skuToBoqConversionFactor, skuTotalUnitCostWithBom } from '../repository-logic'
 import { PRICING_LEVEL_LABEL, effectiveUnitPrice, resolveLineUnitPrice } from '../pricing-levels-logic'
+import { BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
 import { SkuLinePicker } from '../components/SkuLinePicker'
 import { SkuSearchBar } from '../components/SkuSearchBar'
 import { SellingPriceSection } from '../components/SellingPriceSection'
@@ -88,6 +89,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
 
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<'draft' | 'submit' | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   function toggleExpandedLine(index: number) {
     setExpandedLineIndex((prev) => (prev === index ? null : index))
@@ -264,6 +266,22 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         <h1 className="font-display text-lg font-semibold text-ink-900">Create BOQ</h1>
         <p className="text-[12px] text-muted">Configure the commercial proposal, then save as draft or submit for review.</p>
       </div>
+
+      <BoqWorkspaceHeader
+        boqNumber={null}
+        statusLabel="Draft"
+        customerName={customerName}
+        lineCount={lines.length}
+        marginPct={marginPreview}
+        grandTotal={grandTotal}
+        currencyCode={effectiveCurrencyCode}
+        onPreview={() => {
+          setPreviewOpen(true)
+          document.getElementById('section-preview')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }}
+        saveDraft={{ onClick: () => save(false), label: pending === 'draft' ? 'Saving…' : 'Save Draft', disabled: pending !== null || !canSave }}
+        submit={{ onClick: () => save(true), label: pending === 'submit' ? 'Submitting…' : 'Submit', disabled: pending !== null || !canSave }}
+      />
 
       <div className="sticky top-0 z-10 flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-white/95 px-4 py-1.5 backdrop-blur">
         {[
@@ -547,7 +565,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         </div>
 
         <div id="section-preview">
-        <Collapsible title="BOQ Preview" icon="FileText" defaultOpen={false}>
+        <Collapsible title="BOQ Preview" icon="FileText" open={previewOpen} onOpenChange={setPreviewOpen}>
           {lines.length === 0 ? (
             <p className="text-[13px] text-muted">The full proposal preview appears once at least one line is configured.</p>
           ) : (
@@ -599,15 +617,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         </div>
 
         <div className="flex flex-col items-end gap-1.5 border-t border-line pt-4">
-          <div className="flex gap-2">
-            <Button onClick={onCancel} disabled={pending !== null}>Cancel</Button>
-            <Button onClick={() => save(false)} disabled={pending !== null || !canSave}>
-              {pending === 'draft' ? 'Saving…' : 'Save Draft'}
-            </Button>
-            <Button variant="primary" onClick={() => save(true)} disabled={pending !== null || !canSave}>
-              {pending === 'submit' ? 'Submitting…' : 'Save & Submit'}
-            </Button>
-          </div>
+          <Button onClick={onCancel} disabled={pending !== null}>Cancel</Button>
           {missingRequirements.length > 0 && (
             <p className="text-[11px] text-muted">Missing: {missingRequirements.join(', ')}</p>
           )}

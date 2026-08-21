@@ -72,6 +72,30 @@ async function addOneLine(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole('button', { name: /add to proposal/i }))
 }
 
+describe('CreateBoq — sticky workspace header', () => {
+  it('renders the sticky header showing New BOQ and Save Draft/Submit', () => {
+    renderCreateBoq()
+    expect(screen.getByText('New BOQ')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save draft/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^submit$/i })).toBeInTheDocument()
+  })
+
+  it('clicking the header\'s Preview button expands the BOQ Preview section', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    // The sticky section-jump nav also has a "Preview" pill with the same accessible name — the
+    // header's own Preview action button is the first "Preview" in the DOM (rendered above the nav).
+    await user.click(screen.getAllByRole('button', { name: /^preview$/i })[0])
+    expect(screen.getByRole('button', { name: /boq preview/i })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('the bottom action row no longer has its own Save Draft/Submit buttons', () => {
+    renderCreateBoq()
+    expect(screen.getAllByRole('button', { name: /save draft/i })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: /^submit$/i })).toHaveLength(1)
+  })
+})
+
 describe('CreateBoq — fast SKU search + Browse Catalog', () => {
   it('shows the fast SKU search bar above a collapsed "Browse Catalog" cascading picker once a Vertical is picked', async () => {
     const user = userEvent.setup()
