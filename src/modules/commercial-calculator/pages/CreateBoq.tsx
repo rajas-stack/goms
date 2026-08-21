@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useCurrentPostings, useDepartments, useEmployeeMutations, useEmployeesUnder, useSalesPersons } from '@/lib/api'
 import { convertWorkAmount, formatBudgetRange, WORK_VALUE_UNITS } from '@/features/nodes/department-meta'
 import { EmployeePicker } from '@/features/employees/EmployeePicker'
@@ -10,9 +10,10 @@ import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
 import { useAllBomItems, useBoqMutations, useMasters, useSkus } from '../api'
 import { resolveApprovalBand, skuToBoqConversionFactor, skuTotalUnitCostWithBom } from '../repository-logic'
-import { resolveLineUnitPrice } from '../pricing-levels-logic'
+import { PRICING_LEVEL_LABEL, effectiveUnitPrice, resolveLineUnitPrice } from '../pricing-levels-logic'
 import { SkuLinePicker } from '../components/SkuLinePicker'
-import type { CommercialSku, LinePricingLevel, PricingLevelKey } from '../types'
+import { SellingPriceSection } from '../components/SellingPriceSection'
+import type { CommercialBomItem, CommercialSku, LinePricingLevel, PricingLevelKey } from '../types'
 import type { Employee } from '@/lib/types'
 
 interface LineDraft {
@@ -82,9 +83,27 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     : employeesUnderDept
 
   const [lines, setLines] = useState<LineDraft[]>([])
+  const [expandedLineIndex, setExpandedLineIndex] = useState<number | null>(null)
 
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<'draft' | 'submit' | null>(null)
+
+  function toggleExpandedLine(index: number) {
+    setExpandedLineIndex((prev) => (prev === index ? null : index))
+  }
+  function moveLine(index: number, direction: 'up' | 'down') {
+    setLines((prev) => {
+      const swapWith = direction === 'up' ? index - 1 : index + 1
+      if (swapWith < 0 || swapWith >= prev.length) return prev
+      const next = [...prev]
+      ;[next[index], next[swapWith]] = [next[swapWith], next[index]]
+      return next
+    })
+    setExpandedLineIndex(null)
+  }
+  function duplicateLine(index: number) {
+    setLines((prev) => [...prev.slice(0, index + 1), { ...prev[index] }, ...prev.slice(index + 1)])
+  }
 
   const buSalesPersons = salesPersons.filter((p) => (postings[p.id]?.designation ?? '').toLowerCase().includes('bu sales'))
   const skuById = new Map(skus.map((s) => [s.id, s]))
@@ -153,6 +172,9 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   function removeLine(index: number) {
     setLines((prev) => prev.filter((_, i) => i !== index))
   }
+  function updateLine(index: number, patch: Partial<LineDraft>) {
+    setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)))
+  }
 
   function effectivePrice(line: LineDraft, sku: CommercialSku) {
     return resolveLineUnitPrice(sku, line.discountPct, line.pricingLevels, line.activePricingLevel)
@@ -161,15 +183,15 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     const sku = skuById.get(line.skuId)
     if (!sku) return 0
     const taxPct = taxRateById.get(sku.taxClassId) ?? 0
-    const { unitPrice, discountPct } = effectivePrice(line, sku)
-    return line.quantity * unitPrice * (1 - discountPct / 100) * (1 + taxPct / 100) * conversionFactorFor(sku)
+    const { unitPrice, discountPct, isAbsolutePrice } = effectivePrice(line, sku)
+    return line.quantity * effectiveUnitPrice(unitPrice, discountPct, isAbsolutePrice) * (1 + taxPct / 100) * conversionFactorFor(sku)
   }
   const grandTotal = lines.reduce((sum, l) => sum + lineTotal(l), 0)
   const revenuePreTax = lines.reduce((sum, l) => {
     const sku = skuById.get(l.skuId)
     if (!sku) return sum
-    const { unitPrice, discountPct } = effectivePrice(l, sku)
-    return sum + l.quantity * unitPrice * (1 - discountPct / 100) * conversionFactorFor(sku)
+    const { unitPrice, discountPct, isAbsolutePrice } = effectivePrice(l, sku)
+    return sum + l.quantity * effectiveUnitPrice(unitPrice, discountPct, isAbsolutePrice) * conversionFactorFor(sku)
   }, 0)
   const totalCost = lines.reduce((sum, l) => {
     const sku = skuById.get(l.skuId)
@@ -181,8 +203,8 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     const sku = skuById.get(l.skuId)
     if (!sku) return sum
     const taxPct = taxRateById.get(sku.taxClassId) ?? 0
-    const { unitPrice, discountPct } = effectivePrice(l, sku)
-    return sum + l.quantity * unitPrice * (1 - discountPct / 100) * (taxPct / 100) * conversionFactorFor(sku)
+    const { unitPrice, discountPct, isAbsolutePrice } = effectivePrice(l, sku)
+    return sum + l.quantity * effectiveUnitPrice(unitPrice, discountPct, isAbsolutePrice) * (taxPct / 100) * conversionFactorFor(sku)
   }, 0)
 
   const approvalPreview = lines.map((l) => {
@@ -450,14 +472,24 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               {lines.map((line, i) => {
                 const sku = skuById.get(line.skuId)
                 return (
-                  <div key={i} className="flex items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5 text-[13px]">
-                    <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode}</span>
-                    <span className="min-w-0 flex-1 truncate">{sku?.name}</span>
-                    <span className="text-muted">Qty {line.quantity}</span>
-                    <span className="text-muted">{sku ? effectivePrice(line, sku).discountPct.toFixed(1) : line.discountPct}% off</span>
-                    <span className="font-medium text-ink-900">{lineTotal(line).toLocaleString()}</span>
-                    <Button size="icon" onClick={() => removeLine(i)} title="Remove"><Icon name="Trash2" size={14} /></Button>
-                  </div>
+                  <ConfiguredLineRow
+                    key={i}
+                    line={line}
+                    sku={sku}
+                    bomItems={bomItems}
+                    skuById={skuById}
+                    lineTotal={lineTotal(line)}
+                    taxRateById={taxRateById}
+                    onUpdate={(patch) => updateLine(i, patch)}
+                    onRemove={() => removeLine(i)}
+                    expanded={expandedLineIndex === i}
+                    onToggleExpand={() => toggleExpandedLine(i)}
+                    isFirst={i === 0}
+                    isLast={i === lines.length - 1}
+                    onMoveUp={() => moveLine(i, 'up')}
+                    onMoveDown={() => moveLine(i, 'down')}
+                    onDuplicate={() => duplicateLine(i)}
+                  />
                 )
               })}
             </div>
@@ -569,6 +601,98 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** An already-added line, editable in place (quantity + pricing levels) so
+ *  fixing a line never requires deleting and re-adding it. Mirrors
+ *  `ProposalDetail.tsx`'s `DraftLineRow`, but mutates local `lines` state
+ *  directly instead of issuing a mutation, since nothing here is persisted
+ *  until the BOQ itself is saved. */
+function ConfiguredLineRow({
+  line, sku, bomItems, skuById, lineTotal, taxRateById, onUpdate, onRemove,
+  expanded, onToggleExpand, isFirst, isLast, onMoveUp, onMoveDown, onDuplicate,
+}: {
+  line: LineDraft
+  sku: CommercialSku | undefined
+  bomItems: CommercialBomItem[]
+  skuById: Map<string, CommercialSku>
+  lineTotal: number
+  taxRateById: Map<string, number>
+  onUpdate: (patch: Partial<LineDraft>) => void
+  onRemove: () => void
+  expanded: boolean
+  onToggleExpand: () => void
+  isFirst: boolean
+  isLast: boolean
+  onMoveUp: () => void
+  onMoveDown: () => void
+  onDuplicate: () => void
+}) {
+  const [qty, setQty] = useState(String(line.quantity))
+
+  useEffect(() => setQty(String(line.quantity)), [line.quantity])
+
+  function commitQuantity() {
+    const next = Number(qty)
+    if (!Number.isFinite(next) || next <= 0) {
+      setQty(String(line.quantity))
+      return
+    }
+    onUpdate({ quantity: next })
+  }
+
+  function commitOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') e.currentTarget.blur()
+  }
+
+  const { unitPrice, discountPct } = sku
+    ? resolveLineUnitPrice(sku, line.discountPct, line.pricingLevels, line.activePricingLevel)
+    : { unitPrice: 0, discountPct: line.discountPct }
+  const taxPct = sku ? taxRateById.get(sku.taxClassId) ?? 0 : 0
+
+  return (
+    <div className="rounded-xl border border-line bg-white px-3 py-2.5 text-[13px]">
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={onToggleExpand} aria-label="Toggle pricing details" className="text-muted">
+          <Icon name={expanded ? 'ChevronDown' : 'ChevronRight'} size={14} />
+        </button>
+        <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode}</span>
+        <span className="min-w-0 flex-1 truncate">{sku?.name}</span>
+        <Input
+          type="number"
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          onBlur={commitQuantity}
+          onKeyDown={commitOnEnter}
+          className="w-20"
+          aria-label="Quantity"
+        />
+        <span className="rounded-full bg-panel px-2 py-0.5 text-[11px] font-medium text-ink-700">
+          {line.activePricingLevel ? PRICING_LEVEL_LABEL[line.activePricingLevel] : 'List Price'}
+        </span>
+        <span className="text-muted">Sell {unitPrice.toLocaleString()}</span>
+        <span className="text-muted">{discountPct.toFixed(1)}% off</span>
+        <span className="text-muted">{taxPct}% tax</span>
+        <span className="font-medium text-ink-900">{lineTotal.toLocaleString()}</span>
+        <Button size="icon" onClick={onMoveUp} disabled={isFirst} title="Move up" aria-label="Move up"><Icon name="ArrowUp" size={14} /></Button>
+        <Button size="icon" onClick={onMoveDown} disabled={isLast} title="Move down" aria-label="Move down"><Icon name="ArrowDown" size={14} /></Button>
+        <Button size="icon" onClick={onDuplicate} title="Duplicate line" aria-label="Duplicate line"><Icon name="Copy" size={14} /></Button>
+        <Button size="icon" onClick={onRemove} title="Remove"><Icon name="Trash2" size={14} /></Button>
+      </div>
+      {expanded && sku && (
+        <div className="mt-2 border-t border-line pt-2">
+          <SellingPriceSection
+            sku={sku}
+            bomItems={bomItems}
+            skusById={skuById}
+            pricingLevels={line.pricingLevels}
+            activePricingLevel={line.activePricingLevel}
+            onChange={(next) => onUpdate(next)}
+          />
+        </div>
+      )}
     </div>
   )
 }
