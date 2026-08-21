@@ -19,6 +19,7 @@ import { computeBoqMarginPercent } from '../repository-logic'
 import { PRICING_LEVEL_LABEL, resolveLineUnitPrice } from '../pricing-levels-logic'
 import type { BulkPricingResult } from '../pricing-levels-logic'
 import { SkuLinePicker } from '../components/SkuLinePicker'
+import { SkuSearchBar } from '../components/SkuSearchBar'
 import { SellingPriceSection } from '../components/SellingPriceSection'
 import { LineApprovalSummary } from '../components/LineApprovalSummary'
 import { BulkEditBar } from '../components/BulkEditBar'
@@ -653,8 +654,11 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, emplo
         })}
       </div>
       {isDraft && (
-        <div className="mt-2">
-          <SkuLinePicker verticalId={boq.verticalId} currencyCode={boq.currency} bomItems={bomItems} onAdd={handleAdd} />
+        <div className="mt-2 flex flex-col gap-2">
+          <SkuSearchBar verticalId={boq.verticalId} currencyCode={boq.currency} bomItems={bomItems} onAdd={handleAdd} />
+          <Collapsible title="Browse Catalog" icon="Boxes" defaultOpen={false}>
+            <SkuLinePicker verticalId={boq.verticalId} currencyCode={boq.currency} bomItems={bomItems} onAdd={handleAdd} />
+          </Collapsible>
         </div>
       )}
     </Collapsible>

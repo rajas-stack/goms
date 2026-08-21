@@ -12,6 +12,7 @@ import { useAllBomItems, useBoqMutations, useMasters, useSkus } from '../api'
 import { resolveApprovalBand, skuToBoqConversionFactor, skuTotalUnitCostWithBom } from '../repository-logic'
 import { PRICING_LEVEL_LABEL, effectiveUnitPrice, resolveLineUnitPrice } from '../pricing-levels-logic'
 import { SkuLinePicker } from '../components/SkuLinePicker'
+import { SkuSearchBar } from '../components/SkuSearchBar'
 import { SellingPriceSection } from '../components/SellingPriceSection'
 import type { CommercialBomItem, CommercialSku, LinePricingLevel, PricingLevelKey } from '../types'
 import type { Employee } from '@/lib/types'
@@ -456,13 +457,24 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
           {!verticalId ? (
             <p className="text-[13px] text-muted">Select a Vertical above to start configuring this proposal.</p>
           ) : (
-            <SkuLinePicker
-              key={verticalId}
-              verticalId={verticalId}
-              currencyCode={effectiveCurrencyCode}
-              bomItems={bomItems}
-              onAdd={(line) => setLines((prev) => [...prev, line])}
-            />
+            <div className="flex flex-col gap-2">
+              <SkuSearchBar
+                key={`search-${verticalId}`}
+                verticalId={verticalId}
+                currencyCode={effectiveCurrencyCode}
+                bomItems={bomItems}
+                onAdd={(line) => setLines((prev) => [...prev, line])}
+              />
+              <Collapsible title="Browse Catalog" icon="Boxes" defaultOpen={false}>
+                <SkuLinePicker
+                  key={`browse-${verticalId}`}
+                  verticalId={verticalId}
+                  currencyCode={effectiveCurrencyCode}
+                  bomItems={bomItems}
+                  onAdd={(line) => setLines((prev) => [...prev, line])}
+                />
+              </Collapsible>
+            </div>
           )}
 
           {lines.length === 0 ? (

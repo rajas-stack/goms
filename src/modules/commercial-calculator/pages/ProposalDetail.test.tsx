@@ -227,6 +227,14 @@ describe('ProposalDetail — non-draft BOQs stay frozen', () => {
   })
 })
 
+describe('ProposalDetail — fast SKU search + Browse Catalog', () => {
+  it('shows the fast SKU search bar above a collapsed "Browse Catalog" cascading picker', () => {
+    renderProposalDetail()
+    expect(screen.getByLabelText(/search by sku code or name/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /browse catalog/i })).toHaveAttribute('aria-expanded', 'false')
+  })
+})
+
 describe('ProposalDetail — Line Items compact rows and bulk editing', () => {
   it('the collapsed row shows active pricing level, selling price, discount, and tax without expanding', () => {
     renderProposalDetail({

@@ -65,11 +65,22 @@ async function pickCombobox(user: ReturnType<typeof userEvent.setup>, label: str
 
 async function addOneLine(user: ReturnType<typeof userEvent.setup>) {
   await pickCombobox(user, 'Vertical', 'Government')
+  await user.click(screen.getByRole('button', { name: /browse catalog/i }))
   await pickCombobox(user, 'Product', 'GOMS')
   await pickCombobox(user, 'Module', 'Account Mapping')
   await pickCombobox(user, 'Feature', 'Hierarchy Tree')
   await user.click(screen.getByRole('button', { name: /add to proposal/i }))
 }
+
+describe('CreateBoq — fast SKU search + Browse Catalog', () => {
+  it('shows the fast SKU search bar above a collapsed "Browse Catalog" cascading picker once a Vertical is picked', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    await pickCombobox(user, 'Vertical', 'Government')
+    expect(screen.getByLabelText(/search by sku code or name/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /browse catalog/i })).toHaveAttribute('aria-expanded', 'false')
+  })
+})
 
 describe('CreateBoq — line rows', () => {
   it('adding the same SKU twice via Duplicate Line produces a second, independently editable row', async () => {
