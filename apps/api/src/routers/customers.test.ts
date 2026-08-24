@@ -11,15 +11,25 @@ describe('customers router', () => {
     const caller = appRouter.createCaller({})
     const created = await caller.customers.create({ name: 'Acme' })
     expect(created.name).toBe('Acme')
+    expect(created.organization).toBe('')
     const list = await caller.customers.list()
     expect(list.map((c) => c.id)).toContain(created.id)
   })
 
-  it('gets a customer by id', async () => {
+  it('gets a customer by id, and null for a missing one', async () => {
     const caller = appRouter.createCaller({})
     const created = await caller.customers.create({ name: 'Acme' })
     const fetched = await caller.customers.get({ id: created.id })
-    expect(fetched.name).toBe('Acme')
+    expect(fetched?.name).toBe('Acme')
+    const missing = await caller.customers.get({ id: '00000000-0000-0000-0000-000000000000' })
+    expect(missing).toBeNull()
+  })
+
+  it('updates a customer without a concurrency token (last-write-wins)', async () => {
+    const caller = appRouter.createCaller({})
+    const created = await caller.customers.create({ name: 'Acme' })
+    const updated = await caller.customers.update({ id: created.id, patch: { name: 'Acme Corp' } })
+    expect(updated.name).toBe('Acme Corp')
   })
 
   it('updates a customer with a matching expectedUpdatedAt', async () => {
@@ -27,25 +37,25 @@ describe('customers router', () => {
     const created = await caller.customers.create({ name: 'Acme' })
     const updated = await caller.customers.update({
       id: created.id,
-      name: 'Acme Corp',
-      expectedUpdatedAt: created.updated_at,
+      patch: { name: 'Acme Corp' },
+      expectedUpdatedAt: created.updatedAt,
     })
     expect(updated.name).toBe('Acme Corp')
   })
 
-  it('rejects an update with a stale updatedAt', async () => {
+  it('rejects an update with a stale expectedUpdatedAt', async () => {
     const caller = appRouter.createCaller({})
     const created = await caller.customers.create({ name: 'Acme' })
     await caller.customers.update({
       id: created.id,
-      name: 'Acme Corp',
-      expectedUpdatedAt: created.updated_at,
+      patch: { name: 'Acme Corp' },
+      expectedUpdatedAt: created.updatedAt,
     })
     await expect(
       caller.customers.update({
         id: created.id,
-        name: 'Acme Inc',
-        expectedUpdatedAt: created.updated_at,
+        patch: { name: 'Acme Inc' },
+        expectedUpdatedAt: created.updatedAt,
       })
     ).rejects.toThrow('CONFLICT')
   })
