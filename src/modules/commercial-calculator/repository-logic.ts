@@ -1,7 +1,7 @@
 import { uid } from '@/lib/utils'
 import { conversionFactor, currencyByCode, currencyById } from './currency'
 import { enforceSingleBaseCurrency, findMasterChildren, validateMasterCode, validateParentExists } from './master-rules'
-import { effectiveUnitPrice, isAbsoluteLinePrice, resolveLineUnitPrice } from './pricing-levels-logic'
+import { DISCOUNT_FLOAT_EPSILON, effectiveUnitPrice, isAbsoluteLinePrice, resolveLineUnitPrice } from './pricing-levels-logic'
 import { STANDARD_EDITION_ID } from './seed-defaults'
 import type {
   ApprovalMatrixRule, BoqStatus, CommercialAuditLog, CommercialBoq, CommercialBoqLineItem, CommercialBomItem,
@@ -348,7 +348,27 @@ export function listAllBoqLineItemsLogic(data: CommercialCalculatorData): Commer
   return data.commercialBoqLineItems
 }
 
+/** Case/whitespace-insensitive lookup for the "Opportunity Name must be
+ *  unique across all BOQs" rule (BOQ workbench QA pass) — the UI previously
+ *  claimed this but nothing enforced it, so a duplicate silently created a
+ *  second BOQ. Exported so `CreateBoq.tsx`/`ProposalDetail.tsx` can preview
+ *  the same clash before the user even tries to save, using the exact same
+ *  matching rule the repository itself gates on below (never a second,
+ *  possibly-drifting implementation). Blank names never clash with each
+ *  other — uniqueness is a real-name concern, not a "no name yet" one. */
+export function findBoqByOpportunityName(
+  boqs: CommercialBoq[], opportunityName: string, excludeId: string | null,
+): CommercialBoq | null {
+  const trimmed = opportunityName.trim()
+  if (!trimmed) return null
+  return boqs.find((b) => b.id !== excludeId && b.opportunityName.trim().toLowerCase() === trimmed.toLowerCase()) ?? null
+}
+
 export function createBoqLogic(data: CommercialCalculatorData, input: CreateBoqInput): CommercialBoq {
+  const clash = findBoqByOpportunityName(data.commercialBoqs, input.opportunityName, null)
+  if (clash) {
+    throw new Error(`Opportunity Name "${input.opportunityName.trim()}" is already used by ${clash.boqNumber}.`)
+  }
   const now = new Date().toISOString()
   const row: CommercialBoq = {
     ...input,
@@ -383,6 +403,12 @@ export function updateBoqLogic(data: CommercialCalculatorData, id: string, patch
   if (!boq) throw new Error(`No such BOQ: ${id}`)
   if (boq.status !== 'draft') {
     throw new Error('Only a Draft BOQ can have its details edited.')
+  }
+  if (patch.opportunityName !== undefined) {
+    const clash = findBoqByOpportunityName(data.commercialBoqs, patch.opportunityName, id)
+    if (clash) {
+      throw new Error(`Opportunity Name "${patch.opportunityName.trim()}" is already used by ${clash.boqNumber}.`)
+    }
   }
   const fields = Object.keys(patch) as (keyof UpdateBoqInput)[]
   for (const field of fields) {
@@ -439,6 +465,36 @@ export function computeLineTotal(
   return quantity * effectiveUnitPrice(unitPrice, discountPct, isAbsolutePrice) * (1 + taxPct / 100) * factorToBoqCurrency
 }
 
+/** Validates a BOQ line's `discountPct` against this SKU's own maximum
+ *  allowed discount — rejects (throws) rather than silently clamping into
+ *  range, so an invalid value never gets rewritten into something the
+ *  caller never asked for (BOQ workbench QA pass: the repository layer must
+ *  agree with `validateSellingPrice`'s "reject, don't clamp" rule, which the
+ *  UI already follows). The epsilon tolerance matches
+ *  `validateSellingPrice`'s — `discountPct` here is frequently a value
+ *  derived from a selling price via `discountPctForSellingPrice`, which can
+ *  land a hair above the true maximum on a float round-trip. */
+function validateLineDiscountPct(discountPct: number, sku: CommercialSku): number {
+  if (!Number.isFinite(discountPct) || discountPct < 0) {
+    throw new Error('Discount % must be a valid, non-negative number.')
+  }
+  const maxDiscountPct = Math.min(90, sku.maximumDiscountPercent)
+  if (discountPct > maxDiscountPct + DISCOUNT_FLOAT_EPSILON) {
+    throw new Error(`Discount of ${discountPct}% exceeds this SKU's maximum allowed discount of ${maxDiscountPct}%.`)
+  }
+  return discountPct
+}
+
+/** Quantity must always be >= 1 (BOQ workbench QA pass) — rejects 0,
+ *  negative, fractional-below-1, and non-finite values alike; never
+ *  silently coerced into range. */
+function validateLineQuantity(quantity: number): number {
+  if (!Number.isFinite(quantity) || quantity < 1) {
+    throw new Error('Quantity must be at least 1.')
+  }
+  return quantity
+}
+
 function recomputeBoqGrandTotal(data: CommercialCalculatorData, boqId: string): void {
   const boq = data.commercialBoqs.find((b) => b.id === boqId)
   if (!boq) return
@@ -454,11 +510,9 @@ export function addBoqLineItemLogic(
   if (!boq) throw new Error(`No such BOQ: ${boqId}`)
   const sku = data.commercialSkus.find((s) => s.id === input.skuId)
   if (!sku) throw new Error(`No such SKU: ${input.skuId}`)
-  if (input.quantity <= 0) {
-    throw new Error('Quantity must be greater than 0.')
-  }
+  const quantity = validateLineQuantity(input.quantity)
 
-  const discountPct = Math.max(0, Math.min(input.discountPct, Math.min(90, sku.maximumDiscountPercent)))
+  const discountPct = validateLineDiscountPct(input.discountPct, sku)
   const pricingLevels = input.pricingLevels ?? []
   const activePricingLevel = input.activePricingLevel ?? null
   const isAbsolutePrice = isAbsoluteLinePrice(pricingLevels, activePricingLevel)
@@ -480,7 +534,7 @@ export function addBoqLineItemLogic(
     id: uid('bli'),
     boqId,
     skuId: input.skuId,
-    quantity: input.quantity,
+    quantity,
     unitPrice: input.unitPrice,
     discountPct,
     taxPct,
@@ -488,7 +542,7 @@ export function addBoqLineItemLogic(
     approvalDate: null,
     approvalRemarks: input.approvalRemarks ?? '',
     approvalStatus: band.allowAutoApproval ? 'auto_approved' : 'pending',
-    lineTotal: computeLineTotal(input.quantity, input.unitPrice, discountPct, taxPct, factor, isAbsolutePrice),
+    lineTotal: computeLineTotal(quantity, input.unitPrice, discountPct, taxPct, factor, isAbsolutePrice),
     pricingLevels,
     activePricingLevel,
   }
@@ -511,14 +565,9 @@ export function updateBoqLineItemLogic(
   const boq = data.commercialBoqs.find((b) => b.id === row.boqId)
   if (!boq) throw new Error(`No such BOQ: ${row.boqId}`)
 
-  const quantity = patch.quantity ?? row.quantity
-  if (quantity <= 0) {
-    throw new Error('Quantity must be greater than 0.')
-  }
+  const quantity = patch.quantity !== undefined ? validateLineQuantity(patch.quantity) : row.quantity
   const unitPrice = patch.unitPrice ?? row.unitPrice
-  const discountPct = patch.discountPct !== undefined
-    ? Math.max(0, Math.min(patch.discountPct, Math.min(90, sku.maximumDiscountPercent)))
-    : row.discountPct
+  const discountPct = patch.discountPct !== undefined ? validateLineDiscountPct(patch.discountPct, sku) : row.discountPct
   const pricingLevels = patch.pricingLevels ?? row.pricingLevels
   const activePricingLevel = patch.activePricingLevel !== undefined ? patch.activePricingLevel : row.activePricingLevel
   const isAbsolutePrice = isAbsoluteLinePrice(pricingLevels, activePricingLevel)

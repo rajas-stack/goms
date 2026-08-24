@@ -38,6 +38,7 @@ function renderCreateBoq(skuOverrides: Partial<CommercialSku> = {}) {
   })
   vi.spyOn(api, 'useSkus').mockReturnValue({ data: [sku(skuOverrides)] } as never)
   vi.spyOn(api, 'useAllBomItems').mockReturnValue({ data: [] } as never)
+  vi.spyOn(api, 'useBoqs').mockReturnValue({ data: [] } as never)
   vi.spyOn(api, 'useBoqMutations').mockReturnValue({
     create,
     updateStatus: { mutateAsync: vi.fn() },
@@ -80,13 +81,13 @@ describe('CreateBoq — sticky workspace header', () => {
     expect(screen.getByRole('button', { name: /^submit$/i })).toBeInTheDocument()
   })
 
-  it('clicking the header\'s Preview button expands the BOQ Preview section', async () => {
+  it('clicking the header\'s Preview button expands the Preview section', async () => {
     const user = userEvent.setup()
     renderCreateBoq()
     // The sticky section-jump nav also has a "Preview" pill with the same accessible name — the
     // header's own Preview action button is the first "Preview" in the DOM (rendered above the nav).
     await user.click(screen.getAllByRole('button', { name: /^preview$/i })[0])
-    expect(screen.getByRole('button', { name: /boq preview/i })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: /^preview$/i, expanded: true })).toBeInTheDocument()
   })
 
   it('the bottom action row no longer has its own Save Draft/Submit buttons', () => {
@@ -95,14 +96,14 @@ describe('CreateBoq — sticky workspace header', () => {
     expect(screen.getAllByRole('button', { name: /^submit$/i })).toHaveLength(1)
   })
 
-  it('Esc collapses the currently-expanded configured line row', async () => {
+  it('Esc collapses the currently-expanded configured line row\'s approval summary', async () => {
     const user = userEvent.setup()
     renderCreateBoq()
     await addOneLine(user)
-    await user.click(screen.getByLabelText(/toggle pricing details/i))
-    expect(screen.getByText(/set selling price/i)).toBeInTheDocument()
+    await user.click(screen.getByLabelText(/toggle approval summary/i))
+    expect(screen.getByText(/no approval required/i)).toBeInTheDocument()
     await user.keyboard('{Escape}')
-    expect(screen.queryByText(/set selling price/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/no approval required/i)).not.toBeInTheDocument()
   })
 
   it('Ctrl+S respects the same validation gate as the (disabled) Save Draft button — does not save while required fields are missing', async () => {
@@ -110,6 +111,26 @@ describe('CreateBoq — sticky workspace header', () => {
     const { create } = renderCreateBoq()
     await user.keyboard('{Control>}s{/Control}')
     expect(create.mutateAsync).not.toHaveBeenCalled()
+  })
+})
+
+describe('CreateBoq — no separate Pricing/Approval tabs', () => {
+  it('renders a section-jump nav with BOQ Details / Line Items / Preview only', () => {
+    renderCreateBoq()
+    expect(screen.getAllByRole('button', { name: /boq details/i }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: /line items/i }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: /^preview$/i }).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: /^pricing$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^approval$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^opportunity$/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^customer$/i })).not.toBeInTheDocument()
+  })
+
+  it('combines Opportunity and Customer fields into a single BOQ Details section', () => {
+    renderCreateBoq()
+    expect(screen.getByRole('button', { name: /boq details/i, expanded: true })).toBeInTheDocument()
+    expect(screen.getByLabelText(/opportunity name/i)).toBeInTheDocument()
+    expect(screen.getByText(/^stakeholder contact$/i)).toBeInTheDocument()
   })
 })
 
@@ -133,35 +154,48 @@ describe('CreateBoq — line rows', () => {
     expect(rows).toHaveLength(2)
   })
 
-  it('Move Up is disabled on the first line; Move Down swaps two lines\' displayed order', async () => {
+  it('Move Up is disabled on the first line', async () => {
     const user = userEvent.setup()
     renderCreateBoq()
     await addOneLine(user)
     await user.click(screen.getByRole('button', { name: /duplicate line/i }))
     const moveUpButtons = screen.getAllByRole('button', { name: /move up/i })
     expect(moveUpButtons[0]).toBeDisabled()
-    // SkuAddPanel's own Quantity field only renders while a SKU is resolved, and picking a
-    // Feature resets the picker's selection right after Add — so by now only the two line
-    // rows' own Quantity inputs remain, in order.
-    const secondLineQty = screen.getAllByLabelText(/^quantity$/i)[1]
-    await user.clear(secondLineQty)
-    await user.type(secondLineQty, '9')
-    const quantityInputsBefore = screen.getAllByLabelText(/^quantity$/i).map((el) => (el as HTMLInputElement).value)
-    await user.click(screen.getAllByRole('button', { name: /move down/i })[0])
-    const quantityInputsAfter = screen.getAllByLabelText(/^quantity$/i).map((el) => (el as HTMLInputElement).value)
-    expect(quantityInputsAfter).toEqual([quantityInputsBefore[1], quantityInputsBefore[0]])
   })
 
-  it('only one configured line row is expanded at a time', async () => {
+  it('Move Down swaps two lines\' quantities in the underlying data', async () => {
     const user = userEvent.setup()
     renderCreateBoq()
     await addOneLine(user)
     await user.click(screen.getByRole('button', { name: /duplicate line/i }))
-    const toggles = screen.getAllByLabelText(/toggle pricing details/i)
+    const secondLineQty = screen.getAllByLabelText(/^quantity$/i)[1]
+    await user.clear(secondLineQty)
+    await user.type(secondLineQty, '9')
+    await user.tab()
+    const quantityInputsBefore = screen.getAllByLabelText(/^quantity$/i).map((el) => (el as HTMLInputElement).value)
+    expect(quantityInputsBefore).toEqual(['1', '9'])
+    await user.click(screen.getAllByRole('button', { name: /move down/i })[0])
+    const quantityInputsAfter = screen.getAllByLabelText(/^quantity$/i).map((el) => (el as HTMLInputElement).value)
+    expect(quantityInputsAfter).toEqual(['9', '1'])
+  })
+
+  it('only one configured line row has its approval summary expanded at a time', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    await addOneLine(user)
+    await user.click(screen.getByRole('button', { name: /duplicate line/i }))
+    const toggles = screen.getAllByLabelText(/toggle approval summary/i)
     await user.click(toggles[0])
-    expect(screen.getAllByText(/set selling price/i)).toHaveLength(1)
+    expect(screen.getAllByText(/no approval required/i)).toHaveLength(1)
     await user.click(toggles[1])
-    expect(screen.getAllByText(/set selling price/i)).toHaveLength(1)
+    expect(screen.getAllByText(/no approval required/i)).toHaveLength(1)
+  })
+
+  it('the Set Selling Price section is always visible, without needing to expand the row', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    await addOneLine(user)
+    expect(screen.getByText(/set selling price/i)).toBeInTheDocument()
   })
 
   it('the collapsed row shows tax without expanding', async () => {
@@ -179,11 +213,34 @@ describe('CreateBoq — line rows', () => {
     expect(screen.queryByText(/no skus added yet/i)).not.toBeInTheDocument()
   })
 
+  it('rejects a quantity of 0 with an inline message and preserves the previous valid quantity', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    await addOneLine(user)
+    const qtyInput = screen.getByLabelText(/^quantity$/i)
+    await user.clear(qtyInput)
+    await user.type(qtyInput, '0')
+    await user.tab()
+    expect(screen.getByText(/at least 1/i)).toBeInTheDocument()
+    expect(qtyInput).toHaveValue(1)
+  })
+
+  it('rejects a negative quantity with an inline message', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    await addOneLine(user)
+    const qtyInput = screen.getByLabelText(/^quantity$/i)
+    await user.clear(qtyInput)
+    await user.type(qtyInput, '-5')
+    await user.tab()
+    expect(screen.getByText(/at least 1/i)).toBeInTheDocument()
+    expect(qtyInput).toHaveValue(1)
+  })
+
   it('formats a floating-point-noisy discount cleanly on the collapsed row and in the Preview table (spec: no "7.000000000000001%" leakage)', async () => {
     const user = userEvent.setup()
     renderCreateBoq()
     await addOneLine(user)
-    await user.click(screen.getByLabelText(/toggle pricing details/i))
     await user.click(screen.getByRole('button', { name: /add pricing level/i }))
     await user.click(await screen.findByRole('checkbox', { name: /^internal$/i }))
     await user.click(screen.getByRole('button', { name: /add selected/i }))
@@ -196,7 +253,7 @@ describe('CreateBoq — line rows', () => {
     expect(screen.queryByText(/7\.000000000000001/)).not.toBeInTheDocument()
   })
 
-  it('marks a negative overall margin (selling price below cost) with a clear warning in the Pricing Summary section', async () => {
+  it('marks a negative overall margin (selling price below cost) with a clear warning', async () => {
     const user = userEvent.setup()
     renderCreateBoq({ baseSoftwareCost: 1200 }) // cost 1200 > list price 1000, even at zero discount
     await addOneLine(user)
@@ -208,5 +265,49 @@ describe('CreateBoq — line rows', () => {
     renderCreateBoq()
     await addOneLine(user)
     expect(screen.queryByText(/below cost/i)).not.toBeInTheDocument()
+  })
+})
+
+describe('CreateBoq — bulk editing', () => {
+  it('offers Select all and the shared BulkEditBar once lines exist, without a Delete action', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    await addOneLine(user)
+    await user.click(screen.getByLabelText(/select all lines/i))
+    expect(screen.getByLabelText(/^action$/i)).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /^delete$/i })).not.toBeInTheDocument()
+  })
+
+  it('bulk Change Quantity updates every selected line\'s quantity', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    await addOneLine(user)
+    await user.click(screen.getByRole('button', { name: /duplicate line/i }))
+    await user.click(screen.getByLabelText(/select all lines/i))
+    await user.selectOptions(screen.getByLabelText(/^action$/i), 'setQuantity')
+    // The BulkEditBar's own "Quantity" value field renders above the line rows'
+    // per-line "Quantity" inputs, all sharing the same accessible name.
+    await user.type(screen.getAllByLabelText(/^quantity$/i)[0], '7')
+    await user.click(screen.getByRole('button', { name: /apply/i }))
+    const quantityInputs = screen.getAllByLabelText(/^quantity$/i).map((el) => (el as HTMLInputElement).value)
+    expect(quantityInputs).toEqual(['7', '7'])
+  })
+})
+
+describe('CreateBoq — Opportunity Name uniqueness', () => {
+  it('blocks Save and shows an inline message when the typed name is already used by another BOQ', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    // Set after the initial render (which itself mocks an empty BOQ list) — the
+    // typing below triggers a re-render that re-reads this updated mock.
+    vi.spyOn(api, 'useBoqs').mockReturnValue({
+      data: [{ id: 'other', boqNumber: 'BOQ-2026-000001', opportunityName: 'Existing Opp' }],
+    } as never)
+    await user.type(screen.getByLabelText(/opportunity name/i), 'Existing Opp')
+    // Both the inline field error and the "Missing:" checklist mention the
+    // clashing BOQ number — assert on the inline field error specifically.
+    const fieldError = await screen.findByText(/already used by boq-2026-000001\. choose a different name/i)
+    expect(fieldError).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /save draft/i })).toBeDisabled()
   })
 })

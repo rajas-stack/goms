@@ -227,9 +227,11 @@ describe('computeBulkSetQuantity', () => {
     ])
   })
 
-  it('reports every line as failed for a non-positive quantity, without throwing', () => {
+  it('reports every line as failed for a quantity below 1, without throwing', () => {
     const results = computeBulkSetQuantity([line({ id: 'l1' })], 0)
-    expect(results).toEqual([{ lineId: 'l1', ok: false, error: expect.stringMatching(/greater than 0/i) }])
+    expect(results).toEqual([{ lineId: 'l1', ok: false, error: expect.stringMatching(/at least 1/i) }])
+    const fractional = computeBulkSetQuantity([line({ id: 'l1' })], 0.5)
+    expect(fractional[0].ok).toBe(false)
   })
 })
 

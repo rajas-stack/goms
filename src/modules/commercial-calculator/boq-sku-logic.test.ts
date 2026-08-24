@@ -230,6 +230,37 @@ describe('BOQ lifecycle', () => {
   })
 })
 
+describe('Opportunity Name uniqueness (BOQ workbench QA pass)', () => {
+  let data: CommercialCalculatorData
+  beforeEach(() => { data = buildDefaultCommercialCalculatorData() })
+
+  it('blocks creating a second BOQ with the same Opportunity Name and names the clashing BOQ', () => {
+    const first = createBoqLogic(data, baseBoqInput())
+    expect(() => createBoqLogic(data, baseBoqInput())).toThrow(new RegExp(first.boqNumber))
+  })
+
+  it('is case- and whitespace-insensitive', () => {
+    createBoqLogic(data, baseBoqInput())
+    expect(() => createBoqLogic(data, { ...baseBoqInput(), opportunityName: '  test opportunity  ' })).toThrow(/already used/i)
+  })
+
+  it('does not block two BOQs that both happen to have a blank Opportunity Name', () => {
+    createBoqLogic(data, { ...baseBoqInput(), opportunityName: '' })
+    expect(() => createBoqLogic(data, { ...baseBoqInput(), opportunityName: '' })).not.toThrow()
+  })
+
+  it('does not block renaming a BOQ\'s own Opportunity Name to itself', () => {
+    const boq = createBoqLogic(data, baseBoqInput())
+    expect(() => updateBoqLogic(data, boq.id, { opportunityName: 'Test Opportunity' })).not.toThrow()
+  })
+
+  it('blocks renaming a draft BOQ\'s Opportunity Name into another BOQ\'s', () => {
+    const other = createBoqLogic(data, baseBoqInput())
+    const boq = createBoqLogic(data, { ...baseBoqInput(), opportunityName: 'Something Else' })
+    expect(() => updateBoqLogic(data, boq.id, { opportunityName: 'Test Opportunity' })).toThrow(new RegExp(other.boqNumber))
+  })
+})
+
 describe('updateBoqLogic', () => {
   let data: CommercialCalculatorData
   beforeEach(() => { data = buildDefaultCommercialCalculatorData() })
@@ -364,10 +395,20 @@ describe('BOQ line items — discount/approval matrix (spec §8)', () => {
     expect(line.lineTotal).toBeCloseTo(2 * 2000 * 0.9 * 1.18, 5)
   })
 
-  it('clamps discount to the SKU maximumDiscountPercent', () => {
+  it('rejects a discount exceeding the SKU maximumDiscountPercent instead of silently clamping it', () => {
     updateSkuLogic(data, sku.id, { maximumDiscountPercent: 30 }, 'tighten')
-    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 80 })
-    expect(line.discountPct).toBe(30)
+    expect(() => addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 80 }))
+      .toThrow(/exceeds this sku's maximum allowed discount/i)
+  })
+
+  it('rejects a negative discount instead of silently clamping it to 0', () => {
+    expect(() => addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: -5 }))
+      .toThrow(/non-negative/i)
+  })
+
+  it('rejects a non-finite discount on update instead of silently clamping it', () => {
+    const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 5 })
+    expect(() => updateBoqLineItemLogic(data, line.id, { discountPct: NaN })).toThrow(/non-negative/i)
   })
 
   it('persists pricingLevels/activePricingLevel on add, defaulting to empty/null', () => {
@@ -470,16 +511,21 @@ describe('BOQ line items — discount/approval matrix (spec §8)', () => {
     expect(() => updateBoqStatusLogic(data, boqId, 'approved', 'x')).toThrow(/approved discount status/i)
   })
 
-  it('rejects a non-positive quantity when adding a line', () => {
+  it('rejects a quantity below 1 (zero, negative, fractional, or non-finite) when adding a line', () => {
     expect(() => addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 0, unitPrice: 2000, discountPct: 0 }))
-      .toThrow(/quantity must be greater than 0/i)
+      .toThrow(/quantity must be at least 1/i)
     expect(() => addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: -1, unitPrice: 2000, discountPct: 0 }))
-      .toThrow(/quantity must be greater than 0/i)
+      .toThrow(/quantity must be at least 1/i)
+    expect(() => addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 0.5, unitPrice: 2000, discountPct: 0 }))
+      .toThrow(/quantity must be at least 1/i)
+    expect(() => addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: NaN, unitPrice: 2000, discountPct: 0 }))
+      .toThrow(/quantity must be at least 1/i)
   })
 
-  it('rejects a non-positive quantity when updating a line', () => {
+  it('rejects a quantity below 1 when updating a line', () => {
     const line = addBoqLineItemLogic(data, boqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 })
-    expect(() => updateBoqLineItemLogic(data, line.id, { quantity: 0 })).toThrow(/quantity must be greater than 0/i)
+    expect(() => updateBoqLineItemLogic(data, line.id, { quantity: 0 })).toThrow(/quantity must be at least 1/i)
+    expect(() => updateBoqLineItemLogic(data, line.id, { quantity: 0.5 })).toThrow(/quantity must be at least 1/i)
   })
 
   it('editing discountPct on an approved line resets status, approver, date, and remarks together', () => {
@@ -602,7 +648,7 @@ describe('reorderBoqLineItemsLogic', () => {
   })
 
   it('does not disturb another BOQ\'s line items or their relative order', () => {
-    const otherBoqId = createBoqLogic(data, baseBoqInput()).id
+    const otherBoqId = createBoqLogic(data, { ...baseBoqInput(), opportunityName: 'Other Opportunity' }).id
     const otherLineIds = [
       addBoqLineItemLogic(data, otherBoqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 }).id,
       addBoqLineItemLogic(data, otherBoqId, { skuId: sku.id, quantity: 1, unitPrice: 2000, discountPct: 0 }).id,

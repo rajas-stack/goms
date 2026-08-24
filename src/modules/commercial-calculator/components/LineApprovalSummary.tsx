@@ -14,8 +14,16 @@ import type { Employee } from '@/lib/types'
  *  approver/remarks/Approve/Reject controls that used to live in the
  *  removed `ApprovalsTab` — same `decideLine` handler, new location (BOQ
  *  editable-workspace overhaul spec §6). */
+/** The minimal line shape this needs — narrower than the full
+ *  `CommercialBoqLineItem` so a not-yet-saved `CreateBoq.tsx` draft line
+ *  (no `boqId`/`taxPct`/`lineTotal` yet) can preview the same approval-band
+ *  explanation a saved line gets, via this exact component rather than a
+ *  second one. A real `CommercialBoqLineItem` already satisfies this
+ *  structurally. */
+export type ApprovalSummaryLine = Pick<CommercialBoqLineItem, 'id' | 'discountPct' | 'approvalStatus' | 'approvalDate' | 'approvalRemarks'>
+
 export function LineApprovalSummary({ line, approvalMatrix, employees, onDecide }: {
-  line: CommercialBoqLineItem
+  line: ApprovalSummaryLine
   approvalMatrix: ApprovalMatrixRule[]
   employees?: Employee[]
   onDecide?: (lineId: string, decision: 'approved' | 'rejected', approverId: string, remarks: string) => void

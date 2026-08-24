@@ -21,7 +21,7 @@ function sku(overrides: Partial<CommercialSku> = {}): CommercialSku {
   }
 }
 
-function renderSearchBar(onAdd = vi.fn()) {
+function renderSearchBar(onAdd = vi.fn(), existingSkuIds?: Set<string>) {
   vi.spyOn(api, 'useSkus').mockReturnValue({ data: [sku(), sku({ id: 's2', skuCode: 'OTHER-CODE', name: 'Unrelated', featureId: 'f2' })] } as never)
   vi.spyOn(api, 'useMasters').mockImplementation((key: string) => {
     if (key === 'products') return { data: [{ id: 'p1', code: 'GOMS', name: 'GOMS', description: '', active: true, displayOrder: 0, verticalId: 'v1' }] } as never
@@ -41,7 +41,7 @@ function renderSearchBar(onAdd = vi.fn()) {
   const qc = new QueryClient()
   return render(
     <QueryClientProvider client={qc}>
-      <SkuSearchBar verticalId="v1" currencyCode="INR" bomItems={[]} onAdd={onAdd} />
+      <SkuSearchBar verticalId="v1" currencyCode="INR" bomItems={[]} existingSkuIds={existingSkuIds} onAdd={onAdd} />
     </QueryClientProvider>,
   )
 }
@@ -77,5 +77,35 @@ describe('SkuSearchBar', () => {
     await user.click(screen.getByText(/hierarchy tree feature/i))
     await user.click(screen.getByRole('button', { name: /add to proposal/i }))
     expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ skuId: 's1' }))
+  })
+
+  it('shows "no SKU matches your search" when the Vertical has SKUs but none match the typed text', async () => {
+    const user = userEvent.setup()
+    renderSearchBar()
+    await user.type(screen.getByLabelText(/search by sku code or name/i), 'nonexistent-code')
+    expect(screen.getByText(/no sku matches your search/i)).toBeInTheDocument()
+    expect(screen.queryByText(/no skus are configured for this vertical/i)).not.toBeInTheDocument()
+  })
+
+  it('shows "no SKUs configured for this Vertical" — distinct from a no-match search — when the Vertical has none at all', () => {
+    vi.spyOn(api, 'useSkus').mockReturnValue({ data: [] } as never)
+    vi.spyOn(api, 'useMasters').mockImplementation(() => ({ data: [] }) as never)
+    const qc = new QueryClient()
+    render(
+      <QueryClientProvider client={qc}>
+        <SkuSearchBar verticalId="v1" currencyCode="INR" bomItems={[]} onAdd={vi.fn()} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByText(/no skus are configured for this vertical/i)).toBeInTheDocument()
+    expect(screen.queryByText(/no sku matches your search/i)).not.toBeInTheDocument()
+  })
+
+  it('warns, without blocking, when the picked SKU is already on the BOQ', async () => {
+    const user = userEvent.setup()
+    renderSearchBar(vi.fn(), new Set(['s1']))
+    await user.type(screen.getByLabelText(/search by sku code or name/i), 'HIER')
+    await user.click(screen.getByText(/hierarchy tree feature/i))
+    expect(screen.getByText(/already in the boq/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /add to proposal/i })).not.toBeDisabled()
   })
 })

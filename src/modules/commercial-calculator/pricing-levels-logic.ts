@@ -13,6 +13,15 @@ export const PRICING_LEVEL_LABEL: Record<PricingLevelKey, string> = {
  *  and blocks the save; nothing here ever silently clamps (spec §2). */
 export class PricingValidationError extends Error {}
 
+/** Shared tolerance for float round-trips through a discount <-> selling
+ *  price conversion (division then its inverse) — see `validateSellingPrice`
+ *  for the concrete example. Exported so `repository-logic.ts`'s own
+ *  discount-percent validation (BOQ line `discountPct`, which is frequently
+ *  a value derived the same way via `discountPctForSellingPrice`) uses the
+ *  exact same tolerance rather than defining a second one that could drift
+ *  out of sync with this one. */
+export const DISCOUNT_FLOAT_EPSILON = 1e-9
+
 /** The SKU's own tier price for a level — a starting hint only, never
  *  auto-filled into the Selling Price input (spec §3: stays empty until the
  *  user types a value). */
@@ -62,8 +71,7 @@ export function maxDiscountPercentForLevel(sku: CommercialSku, level: PricingLev
 export function validateSellingPrice(sku: CommercialSku, sellingPrice: number, level?: PricingLevelKey): void {
   const discountPct = discountPctForSellingPrice(sku.listPrice, sellingPrice)
   const maxDiscountPct = level ? maxDiscountPercentForLevel(sku, level) : sku.maximumDiscountPercent
-  const FLOAT_EPSILON = 1e-9
-  if (discountPct > maxDiscountPct + FLOAT_EPSILON) {
+  if (discountPct > maxDiscountPct + DISCOUNT_FLOAT_EPSILON) {
     throw new PricingValidationError(
       `A selling price of ${sellingPrice} implies a ${formatPercent(discountPct)} discount, which exceeds this SKU's maximum allowed discount of ${maxDiscountPct}%.`,
     )
@@ -157,9 +165,17 @@ export interface BulkPricingResult {
   error?: string
 }
 
+/** The minimal line shape every bulk-edit helper below actually reads —
+ *  narrower than the full `CommercialBoqLineItem` so a not-yet-saved line
+ *  (e.g. `CreateBoq.tsx`'s in-progress draft lines, which have no `boqId`/
+ *  `taxPct`/`lineTotal`/approval fields yet) can be bulk-edited with this
+ *  exact same logic instead of a second implementation. A real
+ *  `CommercialBoqLineItem` already satisfies this structurally. */
+export type BulkEditableLine = Pick<CommercialBoqLineItem, 'id' | 'skuId' | 'discountPct' | 'pricingLevels'>
+
 function bulkApply(
-  lines: CommercialBoqLineItem[], skusById: Map<string, CommercialSku>,
-  compute: (sku: CommercialSku, line: CommercialBoqLineItem) => Omit<BulkPricingResult, 'lineId' | 'ok'>,
+  lines: BulkEditableLine[], skusById: Map<string, CommercialSku>,
+  compute: (sku: CommercialSku, line: BulkEditableLine) => Omit<BulkPricingResult, 'lineId' | 'ok'>,
 ): BulkPricingResult[] {
   return lines.map((line) => {
     const sku = skusById.get(line.skuId)
@@ -173,7 +189,7 @@ function bulkApply(
 }
 
 export function computeBulkSetDiscount(
-  lines: CommercialBoqLineItem[], skusById: Map<string, CommercialSku>, level: PricingLevelKey, discountPct: number,
+  lines: BulkEditableLine[], skusById: Map<string, CommercialSku>, level: PricingLevelKey, discountPct: number,
 ): BulkPricingResult[] {
   return bulkApply(lines, skusById, (sku, line) => {
     const sellingPrice = sellingPriceForDiscountPct(sku.listPrice, discountPct)
@@ -186,7 +202,7 @@ export function computeBulkSetDiscount(
 }
 
 export function computeBulkSetSellingPrice(
-  lines: CommercialBoqLineItem[], skusById: Map<string, CommercialSku>, level: PricingLevelKey, sellingPrice: number,
+  lines: BulkEditableLine[], skusById: Map<string, CommercialSku>, level: PricingLevelKey, sellingPrice: number,
 ): BulkPricingResult[] {
   return bulkApply(lines, skusById, (sku, line) => {
     validateSellingPrice(sku, sellingPrice, level)
@@ -198,14 +214,16 @@ export function computeBulkSetSellingPrice(
 }
 
 export function computeBulkClearDiscount(
-  lines: CommercialBoqLineItem[], skusById: Map<string, CommercialSku>,
+  lines: BulkEditableLine[], skusById: Map<string, CommercialSku>,
 ): BulkPricingResult[] {
   return bulkApply(lines, skusById, (sku) => ({ unitPrice: sku.listPrice, discountPct: 0, activePricingLevel: null }))
 }
 
-export function computeBulkSetQuantity(lines: CommercialBoqLineItem[], quantity: number): BulkPricingResult[] {
-  if (!Number.isFinite(quantity) || quantity <= 0) {
-    return lines.map((line) => ({ lineId: line.id, ok: false, error: 'Quantity must be greater than 0.' }))
+/** Quantity must always be >= 1 (BOQ workbench QA pass) — a fractional
+ *  amount like 0.5 is still rejected even though it's "greater than 0". */
+export function computeBulkSetQuantity(lines: BulkEditableLine[], quantity: number): BulkPricingResult[] {
+  if (!Number.isFinite(quantity) || quantity < 1) {
+    return lines.map((line) => ({ lineId: line.id, ok: false, error: 'Quantity must be at least 1.' }))
   }
   return lines.map((line) => ({ lineId: line.id, ok: true, quantity }))
 }
@@ -215,7 +233,7 @@ export function computeBulkSetQuantity(lines: CommercialBoqLineItem[], quantity:
  *  level are reported as failures so the caller can list them by SKU,
  *  never silently skipped. */
 export function computeBulkSwitchActivePricingLevel(
-  lines: CommercialBoqLineItem[], skusById: Map<string, CommercialSku>, level: PricingLevelKey,
+  lines: BulkEditableLine[], skusById: Map<string, CommercialSku>, level: PricingLevelKey,
 ): BulkPricingResult[] {
   return lines.map((line) => {
     const sku = skusById.get(line.skuId)

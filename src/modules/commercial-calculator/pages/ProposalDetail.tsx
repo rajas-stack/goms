@@ -15,13 +15,13 @@ import { isoToday } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 import { useAllBomItems, useBoqLineItemMutations, useBoqLineItems, useBoqMutations, useBoqs, useMasters, useSkus } from '../api'
 import { buildProposalPrintHtml } from '../proposal-print'
-import { computeBoqMarginPercent } from '../repository-logic'
+import { computeBoqMarginPercent, findBoqByOpportunityName } from '../repository-logic'
 import { PRICING_LEVEL_LABEL, resolveLineUnitPrice } from '../pricing-levels-logic'
 import { formatPercent, isNegativeMargin } from '../format'
 import { useBoqWorkspaceShortcuts } from '../use-boq-workspace-shortcuts'
 import { useStickyScrollOffset } from '../use-sticky-scroll-offset'
 import type { BulkPricingResult } from '../pricing-levels-logic'
-import { BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
+import { BOQ_WORKSPACE_SECTIONS, BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
 import { SkuLinePicker } from '../components/SkuLinePicker'
 import { SkuSearchBar } from '../components/SkuSearchBar'
 import { SellingPriceSection } from '../components/SellingPriceSection'
@@ -54,12 +54,6 @@ function DetailField({ label, value }: { label: string; value: string }) {
     </div>
   )
 }
-
-const SECTIONS = [
-  { id: 'section-details', label: 'BOQ Details' },
-  { id: 'section-lines', label: 'Line Items' },
-  { id: 'section-preview', label: 'Preview' },
-]
 
 /** BOQ editable-workspace overhaul: a single continuous, section-based
  *  document rather than a tabbed report. Approvals no longer have their own
@@ -262,7 +256,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
       />
 
       <div className="mt-3 flex shrink-0 gap-1 overflow-x-auto border-y border-line bg-white/95 px-4 py-1.5 backdrop-blur">
-        {SECTIONS.map((s) => (
+        {BOQ_WORKSPACE_SECTIONS.map((s) => (
           <button
             key={s.id}
             onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
@@ -278,6 +272,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
         <div id="section-details">
           <BoqDetailsSection
             boq={boq}
+            boqs={boqs}
             departments={departments}
             salesPersons={salesPersons}
             buSalesPersons={buSalesPersons}
@@ -350,8 +345,9 @@ function fieldsFromBoq(boq: CommercialBoq): BoqDetailsDraft {
  *  (customerName/Contact/Address/Organization are plain text here rather
  *  than replicating Create's department-scoped stakeholder picker — a
  *  deliberate scope simplification, not a spec requirement). */
-function BoqDetailsSection({ boq, departments, salesPersons, buSalesPersons, verticals, currencies, preSalesList, update }: {
+function BoqDetailsSection({ boq, boqs, departments, salesPersons, buSalesPersons, verticals, currencies, preSalesList, update }: {
   boq: CommercialBoq
+  boqs: CommercialBoq[]
   departments: { id: string; name: string }[]
   salesPersons: { id: string; name: string }[]
   buSalesPersons: { id: string; name: string }[]
@@ -377,6 +373,7 @@ function BoqDetailsSection({ boq, departments, salesPersons, buSalesPersons, ver
 
   const original = fieldsFromBoq(boq)
   const dirty = (Object.keys(draft) as (keyof BoqDetailsDraft)[]).some((k) => draft[k] !== original[k])
+  const opportunityNameClash = editing ? findBoqByOpportunityName(boqs, draft.opportunityName, boq.id) : null
 
   async function save() {
     setSaving(true)
@@ -414,14 +411,17 @@ function BoqDetailsSection({ boq, departments, salesPersons, buSalesPersons, ver
         ) : (
           <>
             <Button size="sm" onClick={cancelEditing} disabled={saving}>Cancel</Button>
-            <Button size="sm" variant="primary" onClick={save} disabled={saving || !dirty}>{saving ? 'Saving…' : 'Save'}</Button>
+            <Button size="sm" variant="primary" onClick={save} disabled={saving || !dirty || !!opportunityNameClash}>{saving ? 'Saving…' : 'Save'}</Button>
           </>
         )}
       </div>
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
         {editing ? (
-          <Field label="Opportunity Name">
+          <Field label="Opportunity Name" hint="Must be unique across all BOQs.">
             <Input value={draft.opportunityName} onChange={(e) => setDraft((d) => ({ ...d, opportunityName: e.target.value }))} />
+            {opportunityNameClash && (
+              <p className="mt-1 text-[12px] text-rose-700">Already used by {opportunityNameClash.boqNumber}. Choose a different name.</p>
+            )}
           </Field>
         ) : <DetailField label="Opportunity Name" value={boq.opportunityName} />}
 
@@ -584,6 +584,7 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, emplo
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const selectedLines = lines.filter((l) => selectedIds.includes(l.id))
   const pendingCount = lines.filter((l) => l.approvalStatus === 'pending').length
+  const existingSkuIds = new Set(lines.map((l) => l.skuId))
 
   function toggleOne(id: string) {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
@@ -662,9 +663,9 @@ function LineItemsSection({ boq, lines, skuById, bomItems, approvalMatrix, emplo
     >
       {isDraft && (
         <div className="mb-3 flex flex-col gap-2">
-          <SkuSearchBar verticalId={boq.verticalId} currencyCode={boq.currency} bomItems={bomItems} onAdd={handleAdd} />
+          <SkuSearchBar verticalId={boq.verticalId} currencyCode={boq.currency} bomItems={bomItems} existingSkuIds={existingSkuIds} onAdd={handleAdd} />
           <Collapsible title="Browse Catalog" icon="Boxes" defaultOpen={false}>
-            <SkuLinePicker verticalId={boq.verticalId} currencyCode={boq.currency} bomItems={bomItems} onAdd={handleAdd} />
+            <SkuLinePicker verticalId={boq.verticalId} currencyCode={boq.currency} bomItems={bomItems} existingSkuIds={existingSkuIds} onAdd={handleAdd} />
           </Collapsible>
         </div>
       )}
@@ -736,15 +737,22 @@ function DraftLineRow({
 }) {
   const toast = useToast()
   const [qty, setQty] = useState(String(line.quantity))
+  const [qtyError, setQtyError] = useState<string | null>(null)
 
   useEffect(() => setQty(String(line.quantity)), [line.quantity])
 
   async function commitQuantity() {
     const next = Number(qty)
-    if (!Number.isFinite(next) || next <= 0 || next === line.quantity) {
+    if (next === line.quantity) {
+      setQtyError(null)
+      return
+    }
+    if (!Number.isFinite(next) || next < 1) {
+      setQtyError('Quantity must be a valid number of at least 1.')
       setQty(String(line.quantity))
       return
     }
+    setQtyError(null)
     try {
       await lineMutations.update.mutateAsync({ id: line.id, patch: { quantity: next } })
     } catch (e) {
@@ -793,15 +801,19 @@ function DraftLineRow({
         </button>
         <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode ?? '—'}</span>
         <span className="min-w-0 flex-1 truncate">{sku?.name ?? 'Unknown SKU'}</span>
-        <Input
-          type="number"
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          onBlur={commitQuantity}
-          onKeyDown={commitOnEnter}
-          className="w-20"
-          aria-label="Quantity"
-        />
+        <div>
+          <Input
+            type="number"
+            value={qty}
+            onChange={(e) => { setQty(e.target.value); setQtyError(null) }}
+            onBlur={commitQuantity}
+            onKeyDown={commitOnEnter}
+            aria-invalid={!!qtyError}
+            className="w-20"
+            aria-label="Quantity"
+          />
+          {qtyError && <p className="mt-1 w-32 text-[11px] text-rose-700">{qtyError}</p>}
+        </div>
         <span className="rounded-full bg-panel px-2 py-0.5 text-[11px] font-medium text-ink-700">
           {line.activePricingLevel ? PRICING_LEVEL_LABEL[line.activePricingLevel] : 'List Price'}
         </span>

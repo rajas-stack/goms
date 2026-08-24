@@ -2,26 +2,32 @@ import { useEffect, useRef, useState } from 'react'
 import { useCurrentPostings, useDepartments, useEmployeeMutations, useEmployeesUnder, useSalesPersons } from '@/lib/api'
 import { convertWorkAmount, formatBudgetRange, WORK_VALUE_UNITS } from '@/features/nodes/department-meta'
 import { EmployeePicker } from '@/features/employees/EmployeePicker'
+import { uid } from '@/lib/utils'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
+import { Checkbox } from '@/components/ui/Checkbox'
 import { Collapsible } from '@/components/ui/Collapsible'
 import { Combobox } from '@/components/ui/Combobox'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
-import { useAllBomItems, useBoqMutations, useMasters, useSkus } from '../api'
-import { resolveApprovalBand, skuToBoqConversionFactor, skuTotalUnitCostWithBom } from '../repository-logic'
+import { useAllBomItems, useBoqMutations, useBoqs, useMasters, useSkus } from '../api'
+import { findBoqByOpportunityName, resolveApprovalBand, skuToBoqConversionFactor, skuTotalUnitCostWithBom } from '../repository-logic'
 import { PRICING_LEVEL_LABEL, effectiveUnitPrice, resolveLineUnitPrice } from '../pricing-levels-logic'
 import { formatPercent, isNegativeMargin } from '../format'
 import { useBoqWorkspaceShortcuts } from '../use-boq-workspace-shortcuts'
 import { useStickyScrollOffset } from '../use-sticky-scroll-offset'
-import { BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
+import { BOQ_WORKSPACE_SECTIONS, BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
 import { SkuLinePicker } from '../components/SkuLinePicker'
 import { SkuSearchBar } from '../components/SkuSearchBar'
 import { SellingPriceSection } from '../components/SellingPriceSection'
-import type { CommercialBomItem, CommercialSku, LinePricingLevel, PricingLevelKey } from '../types'
+import { LineApprovalSummary } from '../components/LineApprovalSummary'
+import { BulkEditBar } from '../components/BulkEditBar'
+import type { BulkPricingResult } from '../pricing-levels-logic'
+import type { ApprovalMatrixRule, CommercialBomItem, CommercialSku, LinePricingLevel, PricingLevelKey } from '../types'
 import type { Employee } from '@/lib/types'
 
 interface LineDraft {
+  id: string
   skuId: string
   quantity: number
   discountPct: number
@@ -34,7 +40,12 @@ interface LineDraft {
  *  proposal workspace, never a modal/wizard dialog. Opportunity -> Customer
  *  -> Commercial Configuration (cascading Vertical -> Product -> Module ->
  *  Feature -> generated SKU, matching split-pane CPQ conventions like
- *  Salesforce/SAP/Dynamics) -> Approval Summary -> BOQ Preview -> Submit. */
+ *  Salesforce/SAP/Dynamics) -> Approval Summary -> BOQ Preview -> Submit.
+ *
+ *  BOQ workbench QA pass (spec §3): shares the exact same Details / Line
+ *  Items / Preview structure, sticky header, compact line rows, Set Selling
+ *  Price interaction, and inline (not tabbed) approval that
+ *  `ProposalDetail.tsx` uses — a user learns the BOQ interface once. */
 export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCreated: (boqId: string) => void }) {
   const { data: departments = [] } = useDepartments()
   const { data: salesPersons = [] } = useSalesPersons()
@@ -46,6 +57,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const { data: approvalMatrix = [] } = useMasters('approvalMatrix')
   const { data: skus = [] } = useSkus()
   const { data: bomItems = [] } = useAllBomItems()
+  const { data: boqs = [] } = useBoqs()
   const { create, updateStatus } = useBoqMutations()
   const { create: createEmployee } = useEmployeeMutations()
   const toast = useToast()
@@ -88,14 +100,15 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     : employeesUnderDept
 
   const [lines, setLines] = useState<LineDraft[]>([])
-  const [expandedLineIndex, setExpandedLineIndex] = useState<number | null>(null)
+  const [expandedLineId, setExpandedLineId] = useState<string | null>(null)
+  const [selectedLineIds, setSelectedLineIds] = useState<string[]>([])
 
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<'draft' | 'submit' | null>(null)
   const [previewOpen, setPreviewOpen] = useState(false)
 
-  function toggleExpandedLine(index: number) {
-    setExpandedLineIndex((prev) => (prev === index ? null : index))
+  function toggleExpandedLine(id: string) {
+    setExpandedLineId((prev) => (prev === id ? null : id))
   }
   function moveLine(index: number, direction: 'up' | 'down') {
     setLines((prev) => {
@@ -105,10 +118,9 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
       ;[next[index], next[swapWith]] = [next[swapWith], next[index]]
       return next
     })
-    setExpandedLineIndex(null)
   }
   function duplicateLine(index: number) {
-    setLines((prev) => [...prev.slice(0, index + 1), { ...prev[index] }, ...prev.slice(index + 1)])
+    setLines((prev) => [...prev.slice(0, index + 1), { ...prev[index], id: uid('line') }, ...prev.slice(index + 1)])
   }
 
   const buSalesPersons = salesPersons.filter((p) => (postings[p.id]?.designation ?? '').toLowerCase().includes('bu sales'))
@@ -118,6 +130,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const salesPersonById = new Map(salesPersons.map((p) => [p.id, p]))
   const verticalById = new Map(verticals.map((v) => [v.id, v]))
   const preSalesById = new Map(preSalesList.map((p) => [p.id, p]))
+  const existingSkuIds = new Set(lines.map((l) => l.skuId))
 
   // The proposal's own currency, explicit rather than derived from whichever
   // SKU happens to be added first (P0 fix) — defaults to the configured base
@@ -176,7 +189,11 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   }
 
   function removeLine(index: number) {
-    setLines((prev) => prev.filter((_, i) => i !== index))
+    setLines((prev) => {
+      const removedId = prev[index]?.id
+      setSelectedLineIds((ids) => ids.filter((id) => id !== removedId))
+      return prev.filter((_, i) => i !== index)
+    })
   }
   function updateLine(index: number, patch: Partial<LineDraft>) {
     setLines((prev) => prev.map((l, i) => (i === index ? { ...l, ...patch } : l)))
@@ -205,13 +222,6 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     return sum + l.quantity * skuTotalUnitCostWithBom(sku, bomItems, skuById) * conversionFactorFor(sku)
   }, 0)
   const marginPreview = revenuePreTax === 0 ? 0 : ((revenuePreTax - totalCost) / revenuePreTax) * 100
-  const totalTax = lines.reduce((sum, l) => {
-    const sku = skuById.get(l.skuId)
-    if (!sku) return sum
-    const taxPct = taxRateById.get(sku.taxClassId) ?? 0
-    const { unitPrice, discountPct, isAbsolutePrice } = effectivePrice(l, sku)
-    return sum + l.quantity * effectiveUnitPrice(unitPrice, discountPct, isAbsolutePrice) * (taxPct / 100) * conversionFactorFor(sku)
-  }, 0)
 
   const approvalPreview = lines.map((l) => {
     const sku = skuById.get(l.skuId)
@@ -219,16 +229,18 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     const band = resolveApprovalBand(approvalMatrix, discountPct)
     return { line: l, sku, band, discountPct }
   })
-  const autoApprovedCount = approvalPreview.filter((p) => p.band.allowAutoApproval).length
   const pendingApprovalLines = approvalPreview.filter((p) => !p.band.allowAutoApproval)
+
+  const opportunityNameClash = findBoqByOpportunityName(boqs, opportunityName, null)
 
   // Save/Submit stay disabled until every one of these is met, but a
   // disabled button alone tells the user nothing — surfaced as a checklist
   // next to the buttons so "why can't I submit" always has a visible answer.
   const missingRequirements = [
     !opportunityName.trim() && 'Opportunity Name',
+    opportunityNameClash && `a unique Opportunity Name (already used by ${opportunityNameClash.boqNumber})`,
     !departmentId && 'Department',
-    !customerName.trim() && 'Stakeholder Contact',
+    !customerName.trim() && 'a confirmed Stakeholder Contact — select one from the list or finish adding a new one',
     !verticalId && 'Vertical',
     !salesPersonId && 'Sales Person',
     lines.length === 0 && 'at least one SKU line',
@@ -263,9 +275,38 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     }
   }
 
+  function applyBulkResults(results: BulkPricingResult[]) {
+    const failed = results.filter((r) => !r.ok)
+    setLines((prev) => prev.map((l) => {
+      const r = results.find((res) => res.lineId === l.id && res.ok)
+      if (!r) return l
+      return {
+        ...l,
+        ...(r.quantity !== undefined ? { quantity: r.quantity } : {}),
+        ...(r.discountPct !== undefined ? { discountPct: r.discountPct } : {}),
+        ...(r.pricingLevels !== undefined ? { pricingLevels: r.pricingLevels } : {}),
+        ...(r.activePricingLevel !== undefined ? { activePricingLevel: r.activePricingLevel } : {}),
+      }
+    }))
+    if (failed.length > 0) {
+      toast(`${failed.length} line(s) could not be updated: ${failed.map((f) => f.error).join('; ')}`)
+    } else {
+      toast('Bulk update applied.')
+    }
+    setSelectedLineIds([])
+  }
+
+  function toggleOneSelected(id: string) {
+    setSelectedLineIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]))
+  }
+  function toggleAllSelected() {
+    setSelectedLineIds((prev) => (prev.length === lines.length ? [] : lines.map((l) => l.id)))
+  }
+  const selectedLines = lines.filter((l) => selectedLineIds.includes(l.id))
+
   useBoqWorkspaceShortcuts({
     onSave: () => { if (canSave && pending === null) save(false) },
-    onEscape: () => { if (expandedLineIndex !== null) setExpandedLineIndex(null) },
+    onEscape: () => { if (expandedLineId !== null) setExpandedLineId(null) },
   })
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -301,14 +342,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
       />
 
       <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-line bg-white/95 px-4 py-1.5 backdrop-blur">
-        {[
-          { id: 'section-opportunity', label: 'Opportunity' },
-          { id: 'section-customer', label: 'Customer' },
-          { id: 'section-lines', label: 'Line Items' },
-          { id: 'section-pricing', label: 'Pricing' },
-          { id: 'section-approval', label: 'Approval' },
-          { id: 'section-preview', label: 'Preview' },
-        ].map((s) => (
+        {BOQ_WORKSPACE_SECTIONS.map((s) => (
           <button
             key={s.id}
             onClick={() => document.getElementById(s.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
@@ -323,11 +357,14 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
       <div className="flex flex-col gap-6 p-4">
         {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</p>}
 
-        <div id="section-opportunity">
-        <Collapsible title="Opportunity Information" icon="Briefcase">
+        <div id="section-details">
+        <Collapsible title="BOQ Details" icon="Briefcase">
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
             <Field label="Opportunity Name" hint="Must be unique across all BOQs.">
               <Input value={opportunityName} onChange={(e) => setOpportunityName(e.target.value)} />
+              {opportunityNameClash && (
+                <p className="mt-1 text-[12px] text-rose-700">Already used by {opportunityNameClash.boqNumber}. Choose a different name.</p>
+              )}
             </Field>
             <Field label="Department">
               <Combobox
@@ -452,12 +489,8 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               </Select>
             </Field>
           </div>
-        </Collapsible>
-        </div>
 
-        <div id="section-customer">
-        <Collapsible title="Customer Information" icon="Building2">
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+          <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-3">
             <Field
               label="Stakeholder Contact"
               hint={
@@ -477,6 +510,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                 includeVacant
                 onCreate={departmentId ? handleCreateStakeholder : undefined}
                 createLabel={(name) => `Add new stakeholder “${name}”`}
+                unconfirmedHint="This name hasn't been selected or added yet — pick a match from the list, or finish “Add new stakeholder”. Typed text alone won't be saved."
               />
             </Field>
             <Field label="Organization"><Input value={customerOrganization} onChange={(e) => setCustomerOrganization(e.target.value)} /></Field>
@@ -489,7 +523,11 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         </div>
 
         <div id="section-lines">
-        <Collapsible title="Commercial Configuration" icon="Boxes">
+        <Collapsible
+          title="Line Items"
+          icon="Boxes"
+          badge={pendingApprovalLines.length > 0 ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-800">{pendingApprovalLines.length} pending</span> : undefined}
+        >
           {!verticalId ? (
             <p className="text-[13px] text-muted">Select a Vertical above to start configuring this proposal.</p>
           ) : (
@@ -499,7 +537,8 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                 verticalId={verticalId}
                 currencyCode={effectiveCurrencyCode}
                 bomItems={bomItems}
-                onAdd={(line) => setLines((prev) => [...prev, line])}
+                existingSkuIds={existingSkuIds}
+                onAdd={(line) => setLines((prev) => [...prev, { ...line, id: uid('line') }])}
               />
               <Collapsible title="Browse Catalog" icon="Boxes" defaultOpen={false}>
                 <SkuLinePicker
@@ -507,9 +546,22 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                   verticalId={verticalId}
                   currencyCode={effectiveCurrencyCode}
                   bomItems={bomItems}
-                  onAdd={(line) => setLines((prev) => [...prev, line])}
+                  existingSkuIds={existingSkuIds}
+                  onAdd={(line) => setLines((prev) => [...prev, { ...line, id: uid('line') }])}
                 />
               </Collapsible>
+            </div>
+          )}
+
+          {lines.length > 0 && (
+            <div className="mt-3 flex items-center gap-2">
+              <Checkbox checked={selectedLineIds.length === lines.length} indeterminate={selectedLineIds.length > 0 && selectedLineIds.length < lines.length} onChange={toggleAllSelected} aria-label="Select all lines" />
+              <span className="text-[12px] text-muted">Select all</span>
+            </div>
+          )}
+          {selectedLines.length > 0 && (
+            <div className="mt-2">
+              <BulkEditBar selectedLines={selectedLines} skusById={skuById} onApply={applyBulkResults} />
             </div>
           )}
 
@@ -520,24 +572,33 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               {lines.map((line, i) => {
                 const sku = skuById.get(line.skuId)
                 return (
-                  <ConfiguredLineRow
-                    key={i}
-                    line={line}
-                    sku={sku}
-                    bomItems={bomItems}
-                    skuById={skuById}
-                    lineTotal={lineTotal(line)}
-                    taxRateById={taxRateById}
-                    onUpdate={(patch) => updateLine(i, patch)}
-                    onRemove={() => removeLine(i)}
-                    expanded={expandedLineIndex === i}
-                    onToggleExpand={() => toggleExpandedLine(i)}
-                    isFirst={i === 0}
-                    isLast={i === lines.length - 1}
-                    onMoveUp={() => moveLine(i, 'up')}
-                    onMoveDown={() => moveLine(i, 'down')}
-                    onDuplicate={() => duplicateLine(i)}
-                  />
+                  <div key={line.id} className="flex items-start gap-2">
+                    <Checkbox
+                      checked={selectedLineIds.includes(line.id)}
+                      onChange={() => toggleOneSelected(line.id)}
+                      aria-label={`Select ${sku?.skuCode ?? 'line'}`}
+                    />
+                    <div className="flex-1">
+                      <ConfiguredLineRow
+                        line={line}
+                        sku={sku}
+                        bomItems={bomItems}
+                        skuById={skuById}
+                        approvalMatrix={approvalMatrix}
+                        lineTotal={lineTotal(line)}
+                        taxRateById={taxRateById}
+                        onUpdate={(patch) => updateLine(i, patch)}
+                        onRemove={() => removeLine(i)}
+                        expanded={expandedLineId === line.id}
+                        onToggleExpand={() => toggleExpandedLine(line.id)}
+                        isFirst={i === 0}
+                        isLast={i === lines.length - 1}
+                        onMoveUp={() => moveLine(i, 'up')}
+                        onMoveDown={() => moveLine(i, 'down')}
+                        onDuplicate={() => duplicateLine(i)}
+                      />
+                    </div>
+                  </div>
                 )
               })}
             </div>
@@ -545,49 +606,8 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         </Collapsible>
         </div>
 
-        <div id="section-pricing">
-        <Collapsible title="Pricing Summary" icon="FileSpreadsheet">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <SummaryStat label="Taxes" value={totalTax.toLocaleString()} />
-            <SummaryStat
-              label="Margin"
-              value={isNegativeMargin(marginPreview) ? `${formatPercent(marginPreview)} — Below Cost` : formatPercent(marginPreview)}
-              warn={isNegativeMargin(marginPreview)}
-            />
-            <SummaryStat label="Line Items" value={String(lines.length)} />
-            <SummaryStat label="Grand Total" value={`${effectiveCurrencyCode} ${grandTotal.toLocaleString()}`} emphasis />
-          </div>
-        </Collapsible>
-        </div>
-
-        <div id="section-approval">
-        <Collapsible title="Approval Summary" icon="Check">
-          {lines.length === 0 ? (
-            <p className="text-[13px] text-muted">Add lines above to see which will need manual approval.</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-wrap gap-4 text-[13px]">
-                <span className="text-emerald-700">{autoApprovedCount} line(s) auto-approved</span>
-                <span className="text-amber-700">{pendingApprovalLines.length} line(s) require manual approval</span>
-              </div>
-              {pendingApprovalLines.length > 0 && (
-                <div className="flex flex-col gap-1.5">
-                  {pendingApprovalLines.map(({ sku, band, discountPct }, i) => (
-                    <div key={i} className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] text-amber-800">
-                      <span className="font-mono">{sku?.skuCode}</span>
-                      <span>{formatPercent(discountPct)} discount</span>
-                      <span className="ml-auto font-medium">{band.approvalLevelLabel || band.name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </Collapsible>
-        </div>
-
         <div id="section-preview">
-        <Collapsible title="BOQ Preview" icon="FileText" open={previewOpen} onOpenChange={setPreviewOpen}>
+        <Collapsible title="Preview" icon="FileText" open={previewOpen} onOpenChange={setPreviewOpen}>
           {lines.length === 0 ? (
             <p className="text-[13px] text-muted">The full proposal preview appears once at least one line is configured.</p>
           ) : (
@@ -612,10 +632,10 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                     </tr>
                   </thead>
                   <tbody>
-                    {lines.map((line, i) => {
+                    {lines.map((line) => {
                       const sku = skuById.get(line.skuId)
                       return (
-                        <tr key={i} className="border-b border-line last:border-0">
+                        <tr key={line.id} className="border-b border-line last:border-0">
                           <td className="px-3 py-2">
                             <span className="rounded bg-panel px-1.5 py-0.5 font-mono text-[11px] text-ink-700">{sku?.skuCode}</span>
                             <span className="ml-2">{sku?.name}</span>
@@ -630,8 +650,13 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                   </tbody>
                 </table>
               </div>
-              <div className="flex justify-end text-sm font-semibold text-ink-900">
-                Grand Total: {effectiveCurrencyCode} {grandTotal.toLocaleString()}
+              <div className="flex flex-wrap items-center justify-end gap-4 text-sm">
+                <span className={isNegativeMargin(marginPreview) ? 'font-medium text-rose-700' : 'text-muted'}>
+                  Margin {formatPercent(marginPreview)}{isNegativeMargin(marginPreview) ? ' — Below Cost' : ''}
+                </span>
+                <span className="font-semibold text-ink-900">
+                  Grand Total: {effectiveCurrencyCode} {grandTotal.toLocaleString()}
+                </span>
               </div>
             </div>
           )}
@@ -653,15 +678,18 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
  *  fixing a line never requires deleting and re-adding it. Mirrors
  *  `ProposalDetail.tsx`'s `DraftLineRow`, but mutates local `lines` state
  *  directly instead of issuing a mutation, since nothing here is persisted
- *  until the BOQ itself is saved. */
+ *  until the BOQ itself is saved. Selling Price is always visible, exactly
+ *  like `DraftLineRow` — the row's own expand/collapse only gates the
+ *  approval-band preview, not pricing (BOQ workbench QA pass §3). */
 function ConfiguredLineRow({
-  line, sku, bomItems, skuById, lineTotal, taxRateById, onUpdate, onRemove,
+  line, sku, bomItems, skuById, approvalMatrix, lineTotal, taxRateById, onUpdate, onRemove,
   expanded, onToggleExpand, isFirst, isLast, onMoveUp, onMoveDown, onDuplicate,
 }: {
   line: LineDraft
   sku: CommercialSku | undefined
   bomItems: CommercialBomItem[]
   skuById: Map<string, CommercialSku>
+  approvalMatrix: ApprovalMatrixRule[]
   lineTotal: number
   taxRateById: Map<string, number>
   onUpdate: (patch: Partial<LineDraft>) => void
@@ -675,15 +703,22 @@ function ConfiguredLineRow({
   onDuplicate: () => void
 }) {
   const [qty, setQty] = useState(String(line.quantity))
+  const [qtyError, setQtyError] = useState<string | null>(null)
 
   useEffect(() => setQty(String(line.quantity)), [line.quantity])
 
   function commitQuantity() {
     const next = Number(qty)
-    if (!Number.isFinite(next) || next <= 0) {
+    if (next === line.quantity) {
+      setQtyError(null)
+      return
+    }
+    if (!Number.isFinite(next) || next < 1) {
+      setQtyError('Quantity must be a valid number of at least 1.')
       setQty(String(line.quantity))
       return
     }
+    setQtyError(null)
     onUpdate({ quantity: next })
   }
 
@@ -699,20 +734,24 @@ function ConfiguredLineRow({
   return (
     <div className="rounded-xl border border-line bg-white px-3 py-2.5 text-[13px]">
       <div className="flex items-center gap-3">
-        <button type="button" onClick={onToggleExpand} aria-label="Toggle pricing details" className="text-muted">
+        <button type="button" onClick={onToggleExpand} aria-label="Toggle approval summary" className="text-muted">
           <Icon name={expanded ? 'ChevronDown' : 'ChevronRight'} size={14} />
         </button>
         <span className="rounded bg-panel px-1.5 py-0.5 text-[11px] font-mono text-ink-700">{sku?.skuCode}</span>
         <span className="min-w-0 flex-1 truncate">{sku?.name}</span>
-        <Input
-          type="number"
-          value={qty}
-          onChange={(e) => setQty(e.target.value)}
-          onBlur={commitQuantity}
-          onKeyDown={commitOnEnter}
-          className="w-20"
-          aria-label="Quantity"
-        />
+        <div>
+          <Input
+            type="number"
+            value={qty}
+            onChange={(e) => { setQty(e.target.value); setQtyError(null) }}
+            onBlur={commitQuantity}
+            onKeyDown={commitOnEnter}
+            aria-invalid={!!qtyError}
+            className="w-20"
+            aria-label="Quantity"
+          />
+          {qtyError && <p className="mt-1 w-32 text-[11px] text-rose-700">{qtyError}</p>}
+        </div>
         <span className="rounded-full bg-panel px-2 py-0.5 text-[11px] font-medium text-ink-700">
           {line.activePricingLevel ? PRICING_LEVEL_LABEL[line.activePricingLevel] : 'List Price'}
         </span>
@@ -725,7 +764,7 @@ function ConfiguredLineRow({
         <Button size="icon" onClick={onDuplicate} title="Duplicate line" aria-label="Duplicate line"><Icon name="Copy" size={14} /></Button>
         <Button size="icon" onClick={onRemove} title="Remove"><Icon name="Trash2" size={14} /></Button>
       </div>
-      {expanded && sku && (
+      {sku && (
         <div className="mt-2 border-t border-line pt-2">
           <SellingPriceSection
             sku={sku}
@@ -737,17 +776,12 @@ function ConfiguredLineRow({
           />
         </div>
       )}
-    </div>
-  )
-}
-
-function SummaryStat({ label, value, emphasis, warn }: { label: string; value: string; emphasis?: boolean; warn?: boolean }) {
-  const size = emphasis ? 'text-xl font-semibold' : 'text-base font-medium'
-  const tone = warn ? 'text-rose-700' : 'text-ink-900'
-  return (
-    <div>
-      <div className="text-[11px] uppercase tracking-wide text-muted">{label}</div>
-      <div className={`${size} ${tone}`}>{value}</div>
+      {expanded && (
+        <LineApprovalSummary
+          line={{ id: line.id, discountPct, approvalStatus: 'pending', approvalDate: null, approvalRemarks: '' }}
+          approvalMatrix={approvalMatrix}
+        />
+      )}
     </div>
   )
 }

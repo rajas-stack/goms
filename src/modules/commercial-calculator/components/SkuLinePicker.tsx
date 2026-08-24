@@ -14,10 +14,13 @@ import type { CommercialBomItem } from '../types'
  *  BOQ's already-fixed `verticalId`/`currencyCode` as props — unlike
  *  `CreateBoq.tsx`, where Vertical is itself a top-level field the user
  *  picks once, an existing BOQ's Vertical is fixed. */
-export function SkuLinePicker({ verticalId, currencyCode, bomItems, onAdd }: {
+export function SkuLinePicker({ verticalId, currencyCode, bomItems, existingSkuIds, onAdd }: {
   verticalId: string
   currencyCode: string
   bomItems: CommercialBomItem[]
+  /** SKU ids already on this BOQ — drives the non-blocking "already in the
+   *  BOQ" warning shown once a SKU is resolved here (BOQ workbench QA pass). */
+  existingSkuIds?: Set<string>
   onAdd: (line: SkuLineDraft) => void
 }) {
   const { data: products = [] } = useMasters('products')
@@ -89,7 +92,14 @@ export function SkuLinePicker({ verticalId, currencyCode, bomItems, onAdd }: {
 
       {resolvedSku && (
         <div className="mt-3">
-          <SkuAddPanel sku={resolvedSku} skusById={skusById} currencyCode={currencyCode} bomItems={bomItems} onAdd={handleAdd} />
+          <SkuAddPanel
+            sku={resolvedSku}
+            skusById={skusById}
+            currencyCode={currencyCode}
+            bomItems={bomItems}
+            alreadyInBoq={existingSkuIds?.has(resolvedSku.id)}
+            onAdd={handleAdd}
+          />
         </div>
       )}
       {featureHasNoSellableSku && (

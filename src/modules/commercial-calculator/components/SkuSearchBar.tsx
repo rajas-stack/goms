@@ -10,10 +10,13 @@ import type { CommercialBomItem, CommercialSku } from '../types'
  *  picker retained separately as "Browse Catalog". `CommercialSku` has no
  *  direct verticalId — it's resolved via featureId -> module -> product, the
  *  same chain `SkuLinePicker` already walks via its Product combobox. */
-export function SkuSearchBar({ verticalId, currencyCode, bomItems, onAdd }: {
+export function SkuSearchBar({ verticalId, currencyCode, bomItems, existingSkuIds, onAdd }: {
   verticalId: string
   currencyCode: string
   bomItems: CommercialBomItem[]
+  /** SKU ids already on this BOQ — drives the non-blocking "already in the
+   *  BOQ" warning shown once a SKU is picked here (BOQ workbench QA pass). */
+  existingSkuIds?: Set<string>
   onAdd: (line: SkuLineDraft) => void
 }) {
   const { data: skus = [] } = useSkus()
@@ -63,10 +66,13 @@ export function SkuSearchBar({ verticalId, currencyCode, bomItems, onAdd }: {
           aria-label="Search by SKU code or name"
         />
       </Field>
-      {normalizedQuery.length > 0 && !selectedSku && (
+      {sellableSkus.length === 0 && (
+        <p className="mt-2 text-[12px] text-amber-700">No SKUs are configured for this Vertical yet — add one in the SKU Catalog first.</p>
+      )}
+      {sellableSkus.length > 0 && normalizedQuery.length > 0 && !selectedSku && (
         <ul className="mt-2 flex flex-col gap-1 rounded-lg border border-line bg-white p-1">
           {results.length === 0 ? (
-            <li className="px-2 py-1.5 text-[12px] text-muted">No matching SKU.</li>
+            <li className="px-2 py-1.5 text-[12px] text-muted">No SKU matches your search.</li>
           ) : results.map((s) => (
             <li key={s.id}>
               <button
@@ -83,7 +89,14 @@ export function SkuSearchBar({ verticalId, currencyCode, bomItems, onAdd }: {
       )}
       {selectedSku && (
         <div className="mt-3">
-          <SkuAddPanel sku={selectedSku} skusById={skusById} currencyCode={currencyCode} bomItems={bomItems} onAdd={handleAdd} />
+          <SkuAddPanel
+            sku={selectedSku}
+            skusById={skusById}
+            currencyCode={currencyCode}
+            bomItems={bomItems}
+            alreadyInBoq={existingSkuIds?.has(selectedSku.id)}
+            onAdd={handleAdd}
+          />
         </div>
       )}
     </div>

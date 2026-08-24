@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { SkuFormDialog } from './SkuFormDialog'
@@ -42,10 +42,11 @@ function renderDialog(editing: CommercialSku | null, onSubmit = vi.fn()) {
   return { onSubmit }
 }
 
-describe('SkuFormDialog — List Price / Minimum Allowed / Default Max Discount % are not editable here', () => {
-  it('does not render these fields anywhere in the dialog, standalone or inside Identity', () => {
+describe('SkuFormDialog — List Price lives in Identity; Minimum Allowed / Default Max Discount % are gone', () => {
+  it('shows List Price once, inside Identity, but never Minimum Allowed or Default Max Discount %', () => {
     renderDialog(sku())
-    expect(screen.queryByLabelText(/^list price/i)).not.toBeInTheDocument()
+    const identitySection = screen.getByText('Identity').closest('section')!
+    expect(within(identitySection).getByLabelText(/^list price/i)).toBeInTheDocument()
     expect(screen.queryByLabelText(/^minimum allowed/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/^default max discount %/i)).not.toBeInTheDocument()
     // No standalone "Base Pricing" section was introduced either.

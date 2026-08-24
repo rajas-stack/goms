@@ -67,4 +67,40 @@ describe('SkuAddPanel', () => {
     expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ skuId: 's1', quantity: 4, discountPct: 0, pricingLevels: [], activePricingLevel: null }))
     expect(screen.getByLabelText(/quantity/i)).toHaveValue(1)
   })
+
+  it('disables Add to Proposal and shows an inline message for a quantity of 0, without calling onAdd', async () => {
+    const user = userEvent.setup()
+    const onAdd = vi.fn()
+    renderPanel({ onAdd })
+    await user.clear(screen.getByLabelText(/quantity/i))
+    await user.type(screen.getByLabelText(/quantity/i), '0')
+    expect(screen.getByText(/at least 1/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /add to proposal/i })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: /add to proposal/i }))
+    expect(onAdd).not.toHaveBeenCalled()
+  })
+
+  it('disables Add to Proposal for a negative quantity', async () => {
+    const user = userEvent.setup()
+    renderPanel()
+    await user.clear(screen.getByLabelText(/quantity/i))
+    await user.type(screen.getByLabelText(/quantity/i), '-3')
+    expect(screen.getByRole('button', { name: /add to proposal/i })).toBeDisabled()
+  })
+
+  it('shows a non-blocking "already in the BOQ" warning when alreadyInBoq is set', () => {
+    vi.spyOn(api, 'useMasters').mockImplementation((key: string) => {
+      if (key === 'taxClasses') return { data: [] } as never
+      if (key === 'currencies') return { data: [] } as never
+      return { data: [] } as never
+    })
+    const qc = new QueryClient()
+    render(
+      <QueryClientProvider client={qc}>
+        <SkuAddPanel sku={sku()} skusById={new Map([['s1', sku()]])} currencyCode="INR" bomItems={[]} alreadyInBoq onAdd={vi.fn()} />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByText(/already in the boq/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /add to proposal/i })).not.toBeDisabled()
+  })
 })

@@ -157,6 +157,14 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
           <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Identity</h3>
           <div className="grid grid-cols-2 gap-4">
             <Field label="Name"><Input value={values.name} onChange={(e) => set('name', e.target.value)} /></Field>
+            <Field label="List Price" hint="Reference price each pricing level's Discount % is computed against.">
+              <Input
+                type="number"
+                value={values.listPrice === 0 ? '' : values.listPrice}
+                onChange={(e) => set('listPrice', e.target.value === '' ? 0 : Number(e.target.value))}
+                placeholder="e.g. 50000"
+              />
+            </Field>
             <Field label="SKU Category">
               <Select value={values.categoryId} onChange={(e) => set('categoryId', e.target.value)}>
                 <option value="">Select…</option>
@@ -334,11 +342,11 @@ function SkuPricingLevelCard({ sku, entry, sellingPrice, onSellingPriceChange, o
 }) {
   const [open, setOpen] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [priceDraft, setPriceDraft] = useState(String(roundMoney(sellingPrice)))
+  const [priceDraft, setPriceDraft] = useState(sellingPrice === 0 ? '' : String(roundMoney(sellingPrice)))
   const currentMargin = marginPctForSellingPrice(sku, [], new Map(), sellingPrice)
-  const [marginDraft, setMarginDraft] = useState(currentMargin.toFixed(1))
+  const [marginDraft, setMarginDraft] = useState(sellingPrice === 0 ? '' : currentMargin.toFixed(1))
   const discountPct = discountPctForSellingPrice(sku.listPrice, sellingPrice)
-  const [discountDraft, setDiscountDraft] = useState(discountPct.toFixed(1))
+  const [discountDraft, setDiscountDraft] = useState(sellingPrice === 0 ? '' : discountPct.toFixed(1))
   const label = PRICING_LEVEL_LABEL[entry.level]
 
   function commitPrice() {
@@ -350,7 +358,7 @@ function SkuPricingLevelCard({ sku, entry, sellingPrice, onSellingPriceChange, o
       onSellingPriceChange(next)
     } catch (e) {
       setError(e instanceof PricingValidationError ? e.message : 'Could not save this price.')
-      setPriceDraft(String(roundMoney(sellingPrice)))
+      setPriceDraft(sellingPrice === 0 ? '' : String(roundMoney(sellingPrice)))
     }
   }
 
@@ -364,7 +372,7 @@ function SkuPricingLevelCard({ sku, entry, sellingPrice, onSellingPriceChange, o
       onSellingPriceChange(candidatePrice)
     } catch (e) {
       setError(e instanceof PricingValidationError ? e.message : 'Could not save this discount.')
-      setDiscountDraft(discountPct.toFixed(1))
+      setDiscountDraft(sellingPrice === 0 ? '' : discountPct.toFixed(1))
     }
   }
 
@@ -377,7 +385,7 @@ function SkuPricingLevelCard({ sku, entry, sellingPrice, onSellingPriceChange, o
       onSellingPriceChange(candidatePrice)
     } catch (e) {
       setError(e instanceof PricingValidationError ? e.message : 'Could not save this margin.')
-      setMarginDraft(currentMargin.toFixed(1))
+      setMarginDraft(sellingPrice === 0 ? '' : currentMargin.toFixed(1))
     }
   }
 
@@ -400,6 +408,7 @@ function SkuPricingLevelCard({ sku, entry, sellingPrice, onSellingPriceChange, o
               value={priceDraft}
               onChange={(e) => setPriceDraft(e.target.value)}
               onBlur={commitPrice}
+              placeholder={`e.g. ${sku.listPrice}`}
               aria-label={`${label} Selling Price`}
             />
           </Field>
@@ -409,14 +418,16 @@ function SkuPricingLevelCard({ sku, entry, sellingPrice, onSellingPriceChange, o
               value={discountDraft}
               onChange={(e) => setDiscountDraft(e.target.value)}
               onBlur={commitDiscount}
+              placeholder="e.g. 20"
               aria-label={`${label} Discount %`}
             />
           </Field>
           <Field label={`${label} Maximum Discount %`}>
             <Input
               type="number"
-              value={entry.maximumDiscountPercent}
-              onChange={(e) => onMaxDiscountChange(Math.min(90, Number(e.target.value)))}
+              value={entry.maximumDiscountPercent === 0 ? '' : entry.maximumDiscountPercent}
+              onChange={(e) => onMaxDiscountChange(e.target.value === '' ? 0 : Math.min(90, Number(e.target.value)))}
+              placeholder="e.g. 90"
               aria-label={`${label} Maximum Discount %`}
             />
           </Field>
@@ -426,6 +437,7 @@ function SkuPricingLevelCard({ sku, entry, sellingPrice, onSellingPriceChange, o
               value={marginDraft}
               onChange={(e) => setMarginDraft(e.target.value)}
               onBlur={commitMargin}
+              placeholder="e.g. 20"
               aria-label={`${label} Margin`}
             />
           </Field>

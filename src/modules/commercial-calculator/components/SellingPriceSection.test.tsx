@@ -73,7 +73,7 @@ describe('SellingPriceSection', () => {
     setup({ pricingLevels: [{ level: 'internal', sellingPrice: null }], activePricingLevel: 'internal' })
     const input = screen.getByLabelText(/internal selling price/i) as HTMLInputElement
     expect(input.value).toBe('')
-    expect(input.placeholder).toMatch(/enter selling price/i)
+    expect(input.placeholder).toMatch(/^e\.g\. \d+$/)
   })
 
   it('derives and displays discount % against list price as the user types a selling price', async () => {

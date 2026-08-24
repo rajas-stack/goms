@@ -202,6 +202,12 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, open, onExpa
     }
   }
 
+  // Enter commits exactly like blur does — same commit functions, just
+  // triggered a keystroke earlier instead of waiting for focus to leave.
+  function commitOnEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') e.currentTarget.blur()
+  }
+
   const maxDiscountPct = maxDiscountPercentForLevel(sku, entry.level)
 
   return (
@@ -225,9 +231,10 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, open, onExpa
             <Input
               type="number"
               value={priceDraft}
-              onChange={(e) => setPriceDraft(e.target.value)}
+              onChange={(e) => { setPriceDraft(e.target.value); setError(null) }}
               onBlur={commitPrice}
-              placeholder={`Enter selling price (e.g. ${skuPriceForLevel(sku, entry.level)})`}
+              onKeyDown={commitOnEnter}
+              placeholder={`e.g. ${skuPriceForLevel(sku, entry.level)}`}
               aria-label={`${label} Selling Price`}
             />
           </Field>
@@ -235,9 +242,10 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, open, onExpa
             <Input
               type="number"
               value={discountDraft}
-              onChange={(e) => setDiscountDraft(e.target.value)}
+              onChange={(e) => { setDiscountDraft(e.target.value); setError(null) }}
               onBlur={commitDiscount}
-              placeholder="Enter target discount"
+              onKeyDown={commitOnEnter}
+              placeholder="e.g. 20"
               aria-label={`${label} Discount %`}
             />
           </Field>
@@ -250,9 +258,10 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, open, onExpa
             <Input
               type="number"
               value={marginDraft}
-              onChange={(e) => setMarginDraft(e.target.value)}
+              onChange={(e) => { setMarginDraft(e.target.value); setError(null) }}
               onBlur={commitMargin}
-              placeholder="Enter target margin"
+              onKeyDown={commitOnEnter}
+              placeholder="e.g. 20"
               aria-label={`${label} Margin`}
             />
           </Field>

@@ -5,8 +5,8 @@ import {
   PRICING_LEVEL_KEYS, PRICING_LEVEL_LABEL, computeBulkClearDiscount, computeBulkSetDiscount,
   computeBulkSetQuantity, computeBulkSetSellingPrice, computeBulkSwitchActivePricingLevel,
 } from '../pricing-levels-logic'
-import type { BulkPricingResult } from '../pricing-levels-logic'
-import type { CommercialBoqLineItem, CommercialSku, PricingLevelKey } from '../types'
+import type { BulkEditableLine, BulkPricingResult } from '../pricing-levels-logic'
+import type { CommercialSku, PricingLevelKey } from '../types'
 
 type Action = 'setDiscount' | 'setSellingPrice' | 'clearDiscount' | 'setQuantity' | 'switchPricingLevel'
 
@@ -16,7 +16,7 @@ type Action = 'setDiscount' | 'setSellingPrice' | 'clearDiscount' | 'setQuantity
  *  applies each `ok: true` result and reports the `ok: false` ones
  *  (spec §10: "clearly show which lines will be affected before applying"). */
 export function BulkEditBar({ selectedLines, skusById, onApply }: {
-  selectedLines: CommercialBoqLineItem[]
+  selectedLines: BulkEditableLine[]
   skusById: Map<string, CommercialSku>
   onApply: (results: BulkPricingResult[]) => void
 }) {
@@ -39,6 +39,7 @@ export function BulkEditBar({ selectedLines, skusById, onApply }: {
   const needsLevel = action === 'setDiscount' || action === 'setSellingPrice' || action === 'switchPricingLevel'
   const canApply = selectedLines.length > 0 && (!needsValue || (value.trim() !== '' && Number.isFinite(Number(value))))
   const valueLabel = action === 'setDiscount' ? 'Discount %' : action === 'setSellingPrice' ? 'Selling Price' : 'Quantity'
+  const valuePlaceholder = action === 'setDiscount' ? 'e.g. 20' : action === 'setSellingPrice' ? 'e.g. 50000' : 'e.g. 5'
 
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-xl border border-ink-900/20 bg-ink-900/[0.03] p-3">
@@ -61,7 +62,14 @@ export function BulkEditBar({ selectedLines, skusById, onApply }: {
       )}
       {needsValue && (
         <Field label={valueLabel}>
-          <Input type="number" aria-label={valueLabel} value={value} onChange={(e) => setValue(e.target.value)} className="w-32" />
+          <Input
+            type="number"
+            aria-label={valueLabel}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            placeholder={valuePlaceholder}
+            className="w-32"
+          />
         </Field>
       )}
       <Button variant="primary" size="sm" onClick={apply} disabled={!canApply}>

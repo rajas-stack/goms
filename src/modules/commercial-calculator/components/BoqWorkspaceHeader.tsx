@@ -2,6 +2,16 @@ import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { formatPercent, isNegativeMargin } from '../format'
 
+/** The section-jump nav shared by `CreateBoq.tsx` and `ProposalDetail.tsx` —
+ *  one implementation so a user learns the BOQ workspace's navigation once
+ *  and it stays identical whether creating or editing a draft (BOQ workbench
+ *  QA pass §3). */
+export const BOQ_WORKSPACE_SECTIONS = [
+  { id: 'section-details', label: 'BOQ Details' },
+  { id: 'section-lines', label: 'Line Items' },
+  { id: 'section-preview', label: 'Preview' },
+] as const
+
 /** Sticky identity + live totals + primary actions bar (BOQ workbench spec
  *  §2) — a single compact row above the existing sticky section-jump nav,
  *  shared by `CreateBoq.tsx` (pre-save, `boqNumber: null`) and

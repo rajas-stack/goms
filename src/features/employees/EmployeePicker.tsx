@@ -22,6 +22,15 @@ interface Props {
    *  designation itself is the thing being selected, e.g. a government
    *  stakeholder contact that's still unfilled. */
   includeVacant?: boolean
+  /** When set, shown as an inline warning beneath the input — and the input
+   *  is given a visually distinct (amber) border — whenever the user has
+   *  typed something but not yet selected a match or finished the "create
+   *  new person" flow. Opt-in and undefined by default so existing callers
+   *  (sales ownership, transfer targets, etc.) see no visual change; a
+   *  caller for whom a confirmed selection is required (e.g. a required
+   *  stakeholder contact) passes this to make that unconfirmed state
+   *  unmistakable rather than looking like a saved value. */
+  unconfirmedHint?: string
 }
 
 /** Displayed name for a candidate row — a vacant seat has no `name`, so it
@@ -37,7 +46,7 @@ function personLabel(c: Employee): string {
  *  designation inline. Mirrors ManagerPicker's look. */
 export function EmployeePicker({
   candidates, value, onChange, placeholder = 'Search a person…', emptyLabel = '— None —',
-  onCreate, createLabel, includeVacant = false,
+  onCreate, createLabel, includeVacant = false, unconfirmedHint,
 }: Props) {
   const toast = useToast()
   const [query, setQuery] = useState('')
@@ -132,7 +141,10 @@ export function EmployeePicker({
     )
   }
 
+  const hasUnconfirmedText = !!unconfirmedHint && query.trim() !== ''
+
   return (
+    <div>
     <div ref={anchorRef} className="relative">
       <input
         value={query}
@@ -140,7 +152,11 @@ export function EmployeePicker({
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => { if (!formOpen) roving.onKeyDown(e) }}
         placeholder={placeholder}
-        className="h-10 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink placeholder:text-muted/70 focus:border-ink-600 focus-visible:focus-ring"
+        aria-invalid={hasUnconfirmedText}
+        className={cn(
+          'h-10 w-full rounded-lg border bg-white px-3 text-sm text-ink placeholder:text-muted/70 focus:border-ink-600 focus-visible:focus-ring',
+          hasUnconfirmedText ? 'border-amber-400' : 'border-line',
+        )}
       />
       <PopoverPanel open={open} anchorRef={anchorRef} onClose={close} matchAnchorWidth maxPanelHeight={420}>
         {() => (
@@ -234,6 +250,8 @@ export function EmployeePicker({
           </div>
         )}
       </PopoverPanel>
+    </div>
+    {hasUnconfirmedText && <p className="mt-1 text-[12px] text-amber-700">{unconfirmedHint}</p>}
     </div>
   )
 }
