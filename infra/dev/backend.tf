@@ -7,7 +7,7 @@
 # init`; everywhere else in this tree uses var.project_id.
 terraform {
   backend "gcs" {
-    bucket = "<GCP_PROJECT_ID_DEV>-tfstate"
+    bucket = "goms-dev-tfstate"
     prefix = "goms/dev"
   }
   required_providers {
