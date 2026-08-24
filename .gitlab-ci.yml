@@ -13,9 +13,8 @@ variables:
   # foundation-implementation-plan.md), Phase 10. Not secrets — WIF's
   # attribute_condition (infra/dev/wif.tf) is what actually restricts who
   # can assume goms-ci-deploy; these just say which identity to request.
-  # Fill in once the dev GCP project exists (plan §0.5).
-  GCP_PROJECT_ID_DEV: "<GCP_PROJECT_ID_DEV>"
-  GCP_PROJECT_NUMBER_DEV: "<GCP_PROJECT_NUMBER_DEV>"
+  GCP_PROJECT_ID_DEV: "goms-dev"
+  GCP_PROJECT_NUMBER_DEV: "453079755108"
 
 stages: [test, build, deploy-dev, deploy] # 'deploy' kept for the existing pages job below, untouched
 
