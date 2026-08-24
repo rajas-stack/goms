@@ -41,7 +41,9 @@ resource "google_sql_user" "goms_app" {
 
 resource "google_secret_manager_secret" "goms_db_password" {
   secret_id = "goms-db-password"
-  replication { auto {} }
+  replication {
+    auto {}
+  }
 }
 
 resource "google_secret_manager_secret_version" "goms_db_password" {
@@ -51,7 +53,9 @@ resource "google_secret_manager_secret_version" "goms_db_password" {
 
 resource "google_secret_manager_secret" "goms_db_url" {
   secret_id = "goms-db-url"
-  replication { auto {} }
+  replication {
+    auto {}
+  }
 }
 
 resource "google_secret_manager_secret_version" "goms_db_url" {
