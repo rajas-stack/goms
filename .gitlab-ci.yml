@@ -9,6 +9,72 @@ variables:
   # files as Rollup modules; they're now served from public/ and fetched at
   # runtime instead, so Rollup never parses them. Left at 8192 as headroom.
   NODE_OPTIONS: "--max-old-space-size=8192"
+  # GCP GOMS backend plan (docs/superpowers/plans/2026-08-24-goms-gcp-
+  # foundation-implementation-plan.md), Phase 10. Not secrets — WIF's
+  # attribute_condition (infra/dev/wif.tf) is what actually restricts who
+  # can assume goms-ci-deploy; these just say which identity to request.
+  # Fill in once the dev GCP project exists (plan §0.5).
+  GCP_PROJECT_ID_DEV: "<GCP_PROJECT_ID_DEV>"
+  GCP_PROJECT_NUMBER_DEV: "<GCP_PROJECT_NUMBER_DEV>"
+
+stages: [test, build, deploy-dev, deploy] # 'deploy' kept for the existing pages job below, untouched
+
+test-api:
+  stage: test
+  image: node:20
+  services:
+    - postgres:16
+  variables:
+    POSTGRES_PASSWORD: test
+    POSTGRES_DB: goms_test
+    DATABASE_URL: "postgresql://postgres:test@postgres:5432/goms_test"
+  script:
+    - npm ci
+    - npm --workspace apps/api run test
+
+build-api:
+  stage: build
+  image: google/cloud-sdk:slim
+  id_tokens:
+    GCP_ID_TOKEN:
+      aud: https://iam.googleapis.com/projects/$GCP_PROJECT_NUMBER_DEV/locations/global/workloadIdentityPools/gitlab-pool/providers/gitlab-oidc
+  script:
+    - echo "$GCP_ID_TOKEN" > /tmp/gitlab_token
+    - >
+      gcloud iam workload-identity-pools create-cred-config
+      projects/$GCP_PROJECT_NUMBER_DEV/locations/global/workloadIdentityPools/gitlab-pool/providers/gitlab-oidc
+      --service-account=goms-ci-deploy@$GCP_PROJECT_ID_DEV.iam.gserviceaccount.com
+      --credential-source-file=/tmp/gitlab_token --output-file=/tmp/creds.json
+    - export GOOGLE_APPLICATION_CREDENTIALS=/tmp/creds.json
+    - gcloud auth login --cred-file=/tmp/creds.json
+    - gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
+    - docker build -f apps/api/Dockerfile -t asia-south1-docker.pkg.dev/$GCP_PROJECT_ID_DEV/goms/goms-api:$CI_COMMIT_SHA .
+    - docker push asia-south1-docker.pkg.dev/$GCP_PROJECT_ID_DEV/goms/goms-api:$CI_COMMIT_SHA
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+deploy-dev:
+  stage: deploy-dev
+  image: google/cloud-sdk:slim
+  id_tokens:
+    GCP_ID_TOKEN:
+      aud: https://iam.googleapis.com/projects/$GCP_PROJECT_NUMBER_DEV/locations/global/workloadIdentityPools/gitlab-pool/providers/gitlab-oidc
+  script:
+    - echo "$GCP_ID_TOKEN" > /tmp/gitlab_token
+    - >
+      gcloud iam workload-identity-pools create-cred-config
+      projects/$GCP_PROJECT_NUMBER_DEV/locations/global/workloadIdentityPools/gitlab-pool/providers/gitlab-oidc
+      --service-account=goms-ci-deploy@$GCP_PROJECT_ID_DEV.iam.gserviceaccount.com
+      --credential-source-file=/tmp/gitlab_token --output-file=/tmp/creds.json
+    - export GOOGLE_APPLICATION_CREDENTIALS=/tmp/creds.json
+    - gcloud auth login --cred-file=/tmp/creds.json
+    - >
+      gcloud run deploy goms-api --project=$GCP_PROJECT_ID_DEV --region=asia-south1
+      --image=asia-south1-docker.pkg.dev/$GCP_PROJECT_ID_DEV/goms/goms-api:$CI_COMMIT_SHA
+  environment:
+    name: dev
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
 
 pages:
   stage: deploy

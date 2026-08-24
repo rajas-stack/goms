@@ -47,3 +47,11 @@ coverage/
 # Local isolated workspaces for subagent-driven plan execution.
 .worktrees/
 
+# Terraform local state/cache and the real (filled-in) tfvars — only
+# terraform.tfvars.example is committed.
+infra/**/.terraform/
+infra/**/.terraform.lock.hcl
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+infra/**/terraform.tfvars
+
