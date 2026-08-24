@@ -13,8 +13,12 @@ resource "google_iam_workload_identity_pool_provider" "gitlab_oidc" {
     "attribute.ref"          = "assertion.ref"
   }
   # Restrict to this exact GitLab project and branch — not any GitLab
-  # project, not any ref.
-  attribute_condition = "assertion.project_path == \"${var.gitlab_project_path}\" && assertion.ref == \"refs/heads/main\""
+  # project, not any ref. GitLab's own `ref` claim is the bare branch name
+  # (e.g. "main"), unlike GitHub Actions' "refs/heads/main" convention this
+  # was originally modeled on -- confirmed against GitLab's ID token docs
+  # after a real pipeline run failed STS exchange with "credential is
+  # rejected by the attribute condition" (the condition never matched).
+  attribute_condition = "assertion.project_path == \"${var.gitlab_project_path}\" && assertion.ref == \"main\""
   oidc {
     issuer_uri = "https://gitlab.com"
   }
