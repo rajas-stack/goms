@@ -9,6 +9,7 @@ resource "google_sql_database_instance" "goms_pg" {
   depends_on       = [google_service_networking_connection.goms_psa]
 
   settings {
+    edition           = "ENTERPRISE" # required for db-f1-micro -- ENTERPRISE_PLUS (now GCP's default for new instances) rejects shared-core tiers
     tier              = "db-f1-micro" # smallest shared-core tier, single zone — spec §7.1
     availability_type = "ZONAL"
     ip_configuration {
