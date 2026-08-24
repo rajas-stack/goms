@@ -35,22 +35,52 @@ test-api:
 
 build-api:
   stage: build
-  image: google/cloud-sdk:slim
+  # Built with kaniko, not `docker build` -- this runner's job containers have no Docker
+  # daemon/socket and no dind service, so `docker` isn't available (see git history for
+  # the exact failure). Kaniko builds OCI images without a daemon and needs no privileged
+  # mode, so it doesn't depend on the runner enabling dind.
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: [""]
   id_tokens:
     GCP_ID_TOKEN:
       aud: https://iam.googleapis.com/projects/$GCP_PROJECT_NUMBER_DEV/locations/global/workloadIdentityPools/gitlab-pool/providers/gitlab-oidc
   script:
-    - echo "$GCP_ID_TOKEN" > /tmp/gitlab_token
+    # kaniko's debug image has no /tmp (confirmed by running it locally -- it's built on a
+    # minimal base with only /kaniko, /workspace, /bin, /busybox); /kaniko itself is
+    # world-writable, so credentials go there instead.
+    - mkdir -p /kaniko/creds
+    - echo "$GCP_ID_TOKEN" > /kaniko/creds/gitlab_token
+    # kaniko's image has no gcloud, so the WIF credential-config JSON that
+    # `gcloud iam workload-identity-pools create-cred-config` would normally generate is
+    # written by hand here. Shape verified by running that exact gcloud command offline
+    # against placeholder values and diffing the output -- this must match it exactly.
+    - |
+      cat > /kaniko/creds/creds.json <<CREDSEOF
+      {
+        "universe_domain": "googleapis.com",
+        "type": "external_account",
+        "audience": "//iam.googleapis.com/projects/$GCP_PROJECT_NUMBER_DEV/locations/global/workloadIdentityPools/gitlab-pool/providers/gitlab-oidc",
+        "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+        "token_url": "https://sts.googleapis.com/v1/token",
+        "credential_source": { "file": "/kaniko/creds/gitlab_token" },
+        "service_account_impersonation_url": "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/goms-ci-deploy@$GCP_PROJECT_ID_DEV.iam.gserviceaccount.com:generateAccessToken"
+      }
+      CREDSEOF
+    - export GOOGLE_APPLICATION_CREDENTIALS=/kaniko/creds/creds.json
+    # docker-credential-gcr is bundled in this image and wires itself into
+    # /kaniko/.docker/config.json (the file kaniko's executor checks for registry auth) as
+    # the credential helper for every GCR/AR host, including asia-south1-docker.pkg.dev.
+    # It resolves ADC from GOOGLE_APPLICATION_CREDENTIALS, including WIF external_account
+    # files -- verified locally: pointed at a fake pool/provider, it correctly attempted a
+    # real STS + impersonation token exchange and failed only on "invalid_target" (the
+    # fake pool not existing), not on an unrecognized-credential-type error.
+    - /kaniko/docker-credential-gcr configure-docker -include-artifact-registry
     - >
-      gcloud iam workload-identity-pools create-cred-config
-      projects/$GCP_PROJECT_NUMBER_DEV/locations/global/workloadIdentityPools/gitlab-pool/providers/gitlab-oidc
-      --service-account=goms-ci-deploy@$GCP_PROJECT_ID_DEV.iam.gserviceaccount.com
-      --credential-source-file=/tmp/gitlab_token --output-file=/tmp/creds.json
-    - export GOOGLE_APPLICATION_CREDENTIALS=/tmp/creds.json
-    - gcloud auth login --cred-file=/tmp/creds.json
-    - gcloud auth configure-docker asia-south1-docker.pkg.dev --quiet
-    - docker build -f apps/api/Dockerfile -t asia-south1-docker.pkg.dev/$GCP_PROJECT_ID_DEV/goms/goms-api:$CI_COMMIT_SHA .
-    - docker push asia-south1-docker.pkg.dev/$GCP_PROJECT_ID_DEV/goms/goms-api:$CI_COMMIT_SHA
+      /kaniko/executor
+      --context "${CI_PROJECT_DIR}"
+      --dockerfile "${CI_PROJECT_DIR}/apps/api/Dockerfile"
+      --destination "asia-south1-docker.pkg.dev/${GCP_PROJECT_ID_DEV}/goms/goms-api:${CI_COMMIT_SHA}"
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
 
