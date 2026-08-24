@@ -30,6 +30,7 @@ test-api:
     DATABASE_URL: "postgresql://postgres:test@postgres:5432/goms_test"
   script:
     - npm ci
+    - npm --workspace apps/api run migrate up
     - npm --workspace apps/api run test
 
 build-api:
