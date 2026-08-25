@@ -199,12 +199,16 @@ export const hierarchyRouter = router({
     }),
 
   deleteNode: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
-    // Opportunities cascade still deferred to Phase 7 (table doesn't exist yet).
     const ids = await subtreeIds(input.id)
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
       await client.query(`DELETE FROM employees WHERE org_node_id = ANY($1)`, [ids])
+      // Opportunities used to live inside the node's own metadata, so they
+      // died with it automatically. Now they're a separate table keyed by
+      // department_id, so a node delete has to cascade to them explicitly —
+      // stage_changes cascades via FK once the opportunity rows are gone.
+      await client.query(`DELETE FROM opportunities WHERE department_id = ANY($1)`, [ids])
       await client.query(`DELETE FROM hierarchy_nodes WHERE id = ANY($1)`, [ids])
       await client.query('COMMIT')
     } catch (e) {

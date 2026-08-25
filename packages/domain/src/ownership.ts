@@ -1,8 +1,10 @@
-import type { HierNode } from './hierarchy.js'
-
-/** Minimal structural shapes — the real frontend `Employee`/`Opportunity`
- *  types (and a Postgres row mapped to the same two fields) satisfy these
- *  for free. Only the fields ownership resolution actually touches. */
+/** Minimal structural shapes — the real frontend `HierNode`/`Employee`/
+ *  `Opportunity` types (and a Postgres row mapped to the same fields)
+ *  satisfy these for free. Only the fields ownership resolution touches. */
+export interface OwnershipNode {
+  id: string
+  parentId: string | null
+}
 export interface OwnershipEmployee {
   id: string
   orgNodeId: string
@@ -27,7 +29,7 @@ export interface OwnershipAssignmentRow {
  *  this module stays pure and testable — it never touches a repository or a
  *  database directly. */
 export interface OwnershipContext {
-  nodes: HierNode[]
+  nodes: OwnershipNode[]
   employees: OwnershipEmployee[]
   opportunities: OwnershipOpportunity[]
 }

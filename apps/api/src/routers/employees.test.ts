@@ -11,6 +11,11 @@ describe('employees router', () => {
     await pool.query('DELETE FROM transfers')
     await pool.query('DELETE FROM timeline_events')
     await pool.query('DELETE FROM employee_charges')
+    // opportunities.department_id FKs (RESTRICT) into hierarchy_nodes too —
+    // clear it first so this doesn't conflict with rows left behind by
+    // opportunities.test.ts/ownership.test.ts/search.test.ts (Phase 7).
+    await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM opportunities')
     await pool.query('DELETE FROM employees')
     await pool.query('DELETE FROM hierarchy_nodes')
     const caller = appRouter.createCaller({})

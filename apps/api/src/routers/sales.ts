@@ -103,7 +103,7 @@ export const salesRouter = router({
     .input(z.object({ id: z.string().uuid(), status: statusSchema }))
     .mutation(({ input }) => pool.query('UPDATE sales_persons SET status=$1, updated_at=now() WHERE id=$2', [input.status, input.id]).then(() => undefined)),
   delete: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) =>
-    // sales_postings cascades via FK; ownership_assignments cleanup deferred to Phase 7 (table doesn't exist yet).
+    // sales_postings and ownership_assignments both cascade via FK.
     pool.query('DELETE FROM sales_persons WHERE id=$1', [input.id]).then(() => undefined)
   ),
   transfer: publicProcedure

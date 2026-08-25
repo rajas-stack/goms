@@ -5,9 +5,14 @@ import { hierarchyRouter } from './routers/hierarchy.js'
 import { employeesRouter } from './routers/employees.js'
 import { salesRouter } from './routers/sales.js'
 import { commercialRouter } from './routers/commercial.js'
+import { ownershipRouter } from './routers/ownership.js'
+import { opportunitiesRouter } from './routers/opportunities.js'
+import { followUpsRouter } from './routers/follow-ups.js'
+import { searchRouter } from './routers/search.js'
 
 export const appRouter = router({
   health: healthRouter, customers: customersRouter, hierarchy: hierarchyRouter,
   employees: employeesRouter, sales: salesRouter, commercial: commercialRouter,
+  ownership: ownershipRouter, opportunities: opportunitiesRouter, followUps: followUpsRouter, search: searchRouter,
 })
 export type AppRouter = typeof appRouter

@@ -4,12 +4,15 @@ import { pool } from '../db.js'
 
 describe('hierarchy router', () => {
   beforeEach(async () => {
-    // employees.org_node_id and commercial_boqs.department_id both FK (RESTRICT)
-    // into hierarchy_nodes — clear dependents first so this file's cleanup
-    // doesn't conflict with rows left behind by employees.test.ts or
-    // commercial-boq.test.ts (Phase 6).
+    // employees.org_node_id, commercial_boqs.department_id, and
+    // opportunities.department_id all FK (RESTRICT) into hierarchy_nodes —
+    // clear dependents first so this file's cleanup doesn't conflict with
+    // rows left behind by employees.test.ts, commercial-boq.test.ts (Phase 6),
+    // or opportunities.test.ts/ownership.test.ts/search.test.ts (Phase 7).
     await pool.query('DELETE FROM commercial_boq_line_items')
     await pool.query('DELETE FROM commercial_boqs')
+    await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM opportunities')
     await pool.query('DELETE FROM employees')
     await pool.query('DELETE FROM hierarchy_nodes')
   })

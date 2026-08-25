@@ -369,7 +369,7 @@ export const employeesRouter = router({
       await client.query('BEGIN')
       const removedManagerId = (await client.query('SELECT manager_id FROM employees WHERE id=$1', [input.id])).rows[0]?.manager_id ?? null
       await client.query(`UPDATE employees SET manager_id=$1 WHERE manager_id=$2`, [removedManagerId, input.id])
-      // follow_ups cleanup deferred to Phase 7 (table doesn't exist yet).
+      await client.query(`DELETE FROM follow_ups WHERE entity_type='contact' AND entity_id=$1`, [input.id])
       await client.query('DELETE FROM employees WHERE id=$1', [input.id])
       await client.query('COMMIT')
     } catch (e) {

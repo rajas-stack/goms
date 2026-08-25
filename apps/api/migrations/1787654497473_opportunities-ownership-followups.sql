@@ -45,7 +45,14 @@ CREATE TABLE opportunity_stage_changes (
   to_stage_key TEXT NOT NULL,
   changed_at DATE NOT NULL DEFAULT CURRENT_DATE,
   changed_by TEXT,
-  note TEXT NOT NULL DEFAULT ''
+  note TEXT NOT NULL DEFAULT '',
+  -- changed_at is a plain DATE (day granularity, matching the in-memory
+  -- isoToday() field), so two changes on the same day tie on it. In-memory
+  -- breaks that tie by `id`, which is safe there only because uid() mints
+  -- monotonically increasing strings — a Postgres UUID has no such
+  -- ordering, so a real insertion-order column is needed to reproduce the
+  -- same "oldest first" guarantee.
+  seq BIGSERIAL
 );
 
 CREATE INDEX opportunity_stage_changes_opportunity_id_idx ON opportunity_stage_changes (opportunity_id);
