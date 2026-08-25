@@ -6,6 +6,8 @@ import type {
 import { uid } from '@/lib/utils'
 import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf } from '@/lib/node-types'
+import { MERGEABLE_FIELDS, type MergeableField } from '@goms/domain'
+export { MERGEABLE_FIELDS, type MergeableField }
 import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from '../pipeline-stages'
 import { coversDate } from '@/lib/intervals'
 import { tierRank } from '../sales-tiers'
@@ -138,18 +140,6 @@ export interface ImportEmployeeRow {
   phone?: string
   connected?: boolean
 }
-
-/** Scalar `Employee` fields a merge can conflict on — anything not scalar
- *  (charges, visitingCards, preferredComm, metadata) is combined by the merge
- *  itself rather than offered as a per-field choice. */
-export type MergeableField =
-  | 'name' | 'designation' | 'email' | 'phone' | 'company' | 'address' | 'website'
-  | 'relationshipStatus' | 'relationshipQuality' | 'relationshipType' | 'introducedBy' | 'notes'
-
-export const MERGEABLE_FIELDS: MergeableField[] = [
-  'name', 'designation', 'email', 'phone', 'company', 'address', 'website',
-  'relationshipStatus', 'relationshipQuality', 'relationshipType', 'introducedBy', 'notes',
-]
 
 export interface MergeEmployeesInput {
   /** The record that stays. */
