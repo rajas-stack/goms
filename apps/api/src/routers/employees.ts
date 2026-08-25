@@ -429,12 +429,12 @@ export const employeesRouter = router({
         patchValues.push(survivor.id)
         await client.query(`UPDATE employees SET ${[...setClauses, 'updated_at=now()'].join(', ')} WHERE id=$${patchValues.length}`, patchValues)
 
-        const timelineMoved = (await client.query('UPDATE timeline_events SET employee_id=$1 WHERE employee_id=$2 RETURNING id', [survivor.id, duplicate.id])).rowCount
-        const transfersMoved = (await client.query('UPDATE transfers SET employee_id=$1 WHERE employee_id=$2 RETURNING id', [survivor.id, duplicate.id])).rowCount
-        const chargesMoved = (await client.query('UPDATE employee_charges SET employee_id=$1 WHERE employee_id=$2 RETURNING id', [survivor.id, duplicate.id])).rowCount
+        const timelineMoved = (await client.query('UPDATE timeline_events SET employee_id=$1 WHERE employee_id=$2 RETURNING id', [survivor.id, duplicate.id])).rowCount ?? 0
+        const transfersMoved = (await client.query('UPDATE transfers SET employee_id=$1 WHERE employee_id=$2 RETURNING id', [survivor.id, duplicate.id])).rowCount ?? 0
+        const chargesMoved = (await client.query('UPDATE employee_charges SET employee_id=$1 WHERE employee_id=$2 RETURNING id', [survivor.id, duplicate.id])).rowCount ?? 0
         const directReportsMoved = (await client.query(
           'UPDATE employees SET manager_id=$1 WHERE manager_id=$2 AND id NOT IN ($1,$2) RETURNING id', [survivor.id, duplicate.id],
-        )).rowCount
+        )).rowCount ?? 0
 
         if (survivor.manager_id === duplicate.id) {
           await client.query('UPDATE employees SET manager_id=$1 WHERE id=$2', [duplicate.manager_id, survivor.id])
@@ -444,7 +444,7 @@ export const employeesRouter = router({
         const departmentHeadshipsMoved = (await client.query(
           `UPDATE hierarchy_nodes SET metadata = jsonb_set(metadata, '{deptHead}', to_jsonb($1::text)) WHERE metadata->>'deptHead' = $2 RETURNING id`,
           [survivor.id, duplicate.id],
-        )).rowCount
+        )).rowCount ?? 0
 
         await client.query(`UPDATE employees SET metadata = metadata - 'duplicateOf' WHERE id=$1 AND metadata->>'duplicateOf' = $2`, [survivor.id, duplicate.id])
         await client.query(

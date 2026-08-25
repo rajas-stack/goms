@@ -39,4 +39,29 @@ describe.skipIf(!import.meta.env.VITE_API_BASE_URL)('RemoteRepository (integrati
     expect(await repo.getNode!(dept.id)).toBeUndefined()
     expect(await repo.getNode!(branch.id)).toBeUndefined()
   })
+
+  it('round-trips an employee through create/get/transfer/timeline/delete', async () => {
+    const dept = await repo.createNode!({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Integration Test Dept' })
+    const officeA = await repo.createNode!({ domain: 'org', typeKey: 'office', parentId: dept.id, stateCode: 27, name: 'Office A' })
+    const officeB = await repo.createNode!({ domain: 'org', typeKey: 'office', parentId: dept.id, stateCode: 27, name: 'Office B' })
+
+    const emp = await repo.createEmployee!({
+      name: 'Integration Employee', designation: 'Officer', email: 'test@example.com', phone: '9999999999',
+      orgNodeId: officeA.id, managerId: null,
+    })
+    expect(emp.name).toBe('Integration Employee')
+
+    const transfer = await repo.transferEmployee!({
+      employeeId: emp.id, toOrgNodeId: officeB.id, toDesignation: 'Senior Officer',
+      effectiveDate: '2026-02-01', reason: 'Promotion',
+    })
+    expect(transfer.toOrgNodeId).toBe(officeB.id)
+
+    const timeline = await repo.listTimeline!(emp.id)
+    expect(timeline.some((t) => t.type === 'transferred')).toBe(true)
+
+    await repo.deleteEmployee!(emp.id)
+    expect(await repo.getEmployee!(emp.id)).toBeNull()
+    await repo.deleteNode!(dept.id)
+  })
 })
