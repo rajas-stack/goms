@@ -64,4 +64,23 @@ describe.skipIf(!import.meta.env.VITE_API_BASE_URL)('RemoteRepository (integrati
     expect(await repo.getEmployee!(emp.id)).toBeNull()
     await repo.deleteNode!(dept.id)
   })
+
+  it('round-trips a sales person through create/get/transfer/currentPostings/delete', async () => {
+    const person = await repo.createSalesPerson!({
+      name: 'Integration Sales', officialEmail: `integration-${Date.now()}@example.com`,
+      designation: 'Account Manager', tierKey: 'accountManager',
+    })
+    expect(person.name).toBe('Integration Sales')
+
+    const posting = await repo.transferSalesPerson!({
+      salesPersonId: person.id, designation: 'Regional Manager', tierKey: 'rm', effectiveDate: '2099-01-01',
+    })
+    expect(posting.changeType).toBe('promotion')
+
+    const current = await repo.currentPostings!()
+    expect(current[person.id]?.tierKey).toBe('rm')
+
+    await repo.deleteSalesPerson!(person.id)
+    expect(await repo.getSalesPerson!(person.id)).toBeNull()
+  })
 })

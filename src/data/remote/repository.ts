@@ -6,10 +6,12 @@ import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import type { AppRouter } from '../../../apps/api/src/index'
 import type {
   Repository, CreateCustomerInput, CreateNodeInput, CreateEmployeeInput, AddTimelineInput,
-  ImportChildRow, ImportEmployeeRow, MergeEmployeesInput, TransferInput, StateSummary,
+  ImportChildRow, ImportEmployeeRow, MergeEmployeesInput, TransferInput,
+  CreateSalesPersonInput, TransferSalesPersonInput, StateSummary,
 } from '../repository'
 import type {
   Customer, HierNode, Status, Employee, Charge, TimelineEvent, TimelineEventType, Transfer, MergeAuditRecord,
+  SalesPerson, SalesPosting,
 } from '@/lib/types'
 
 export class RemoteRepository implements Partial<Repository> {
@@ -87,4 +89,15 @@ export class RemoteRepository implements Partial<Repository> {
 
   listTransfers = (employeeId: string): Promise<Transfer[]> => this.client.employees.transfers.listForEmployee.query({ employeeId })
   transferEmployee = (input: TransferInput): Promise<Transfer> => this.client.employees.transfers.transfer.mutate(input)
+
+  listSalesPersons = (): Promise<SalesPerson[]> => this.client.sales.listPersons.query()
+  getSalesPerson = (id: string): Promise<SalesPerson | null> => this.client.sales.getPerson.query({ id })
+  listSalesPostings = (salesPersonId: string): Promise<SalesPosting[]> => this.client.sales.listPostings.query({ salesPersonId })
+  currentPostings = (): Promise<Record<string, SalesPosting>> => this.client.sales.currentPostings.query()
+  createSalesPerson = (input: CreateSalesPersonInput): Promise<SalesPerson> => this.client.sales.create.mutate(input)
+  updateSalesPerson = (id: string, patch: Partial<SalesPerson>): Promise<SalesPerson> =>
+    this.client.sales.update.mutate({ id, patch: patch as any }).then((r) => r!)
+  setSalesPersonStatus = (id: string, status: SalesPerson['status']): Promise<void> => this.client.sales.setStatus.mutate({ id, status })
+  deleteSalesPerson = (id: string): Promise<void> => this.client.sales.delete.mutate({ id })
+  transferSalesPerson = (input: TransferSalesPersonInput): Promise<SalesPosting> => this.client.sales.transfer.mutate(input)
 }
