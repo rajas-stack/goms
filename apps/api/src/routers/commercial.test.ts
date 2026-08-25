@@ -4,6 +4,12 @@ import { pool } from '../db.js'
 
 describe('commercial.masters router', () => {
   beforeEach(async () => {
+    // Cleared for the same cross-file-leftover reason as commercial-skus.test.ts.
+    await pool.query('DELETE FROM commercial_audit_logs')
+    await pool.query('DELETE FROM commercial_boq_line_items')
+    await pool.query('DELETE FROM commercial_boqs')
+    await pool.query('DELETE FROM commercial_bom_items')
+    await pool.query('DELETE FROM commercial_skus')
     await pool.query('DELETE FROM edition_features')
     await pool.query('DELETE FROM commercial_masters')
   })
@@ -114,6 +120,9 @@ describe('commercial.masters router', () => {
       key: 'features', id: feature.id, patch: { status: 'modified' }, changeReason: 'Reworked per client feedback',
     })
     expect(updated!.status).toBe('modified')
+    const logs = await caller.commercial.auditLogs.list({ entityType: 'feature', entityId: feature.id })
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toMatchObject({ field: 'status', oldValue: 'existing', newValue: 'modified', action: 'status_change', reason: 'Reworked per client feedback' })
   })
 
   it('enforces a single base currency', async () => {

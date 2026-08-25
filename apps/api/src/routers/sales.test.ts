@@ -4,6 +4,11 @@ import { pool } from '../db.js'
 
 describe('sales router', () => {
   beforeEach(async () => {
+    // commercial_boqs.sales_person_id FKs (RESTRICT) into sales_persons —
+    // clear dependents first so this file's cleanup doesn't conflict with
+    // rows left behind by commercial-boq.test.ts (Phase 6).
+    await pool.query('DELETE FROM commercial_boq_line_items')
+    await pool.query('DELETE FROM commercial_boqs')
     await pool.query('DELETE FROM sales_postings')
     await pool.query('DELETE FROM sales_persons')
   })

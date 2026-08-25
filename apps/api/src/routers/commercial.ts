@@ -5,7 +5,27 @@ import { pool } from '../db.js'
 import {
   buildSkuCode, MASTER_CHILD_OF, MASTER_EXTRA_FIELDS, MASTER_PARENT_FIELD, findMasterCodeClash,
   SKU_SENSITIVE_FIELDS, type CommercialMasterKey,
+  BOQ_TRANSITIONS, LINE_STATES_CLEARED_FOR_APPROVAL, DELETABLE_BOQ_STATUSES, formatBoqNumber, type BoqStatus,
+  computeLineTotal, validateLineQuantity, validateLineDiscountPct, resolveApprovalBand, freshLineApprovalState,
+  effectiveUnitPrice, isAbsoluteLinePrice, discountPctForSellingPrice, conversionFactorFromRates,
 } from '@goms/domain'
+
+/** Every mutation this router logs goes through this one insert — the same
+ *  shape (`CommercialAuditLog`) the frontend's in-memory `writeAuditLogEntry`
+ *  produces, so `commercial.auditLogs.list` reads identically regardless of
+ *  which backend wrote the row. Generic across every domain, not just BOQ —
+ *  `entityType`/`entityId` are plain TEXT, matching `employee_merge_audit`'s
+ *  precedent of not FK-constraining a history log to a row that may since
+ *  have been deleted. */
+async function writeAuditLog(client: any, entry: {
+  entityType: string; entityId: string; field: string; oldValue: string; newValue: string; reason: string; action: string
+}) {
+  await client.query(
+    `INSERT INTO commercial_audit_logs (entity_type, entity_id, field, old_value, new_value, reason, action)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [entry.entityType, entry.entityId, entry.field, entry.oldValue, entry.newValue, entry.reason, entry.action],
+  )
+}
 
 const masterKeySchema = z.enum([
   'verticals', 'products', 'modules', 'features', 'skuCategories', 'unitsOfMeasure',
@@ -144,12 +164,17 @@ const commercialMastersRouter = router({
         if (parentRule) await assertParentExists(client, key, merged[parentRule.field])
 
         // A feature's status change must carry a reason (spec parity with the
-        // frontend's updateMasterLogic); persisting it to an audit log is
-        // deferred until the phase that introduces commercial_audit_logs.
+        // frontend's updateMasterLogic), and — now that commercial_audit_logs
+        // exists (Phase 6) — closes the audit-log deferral Phase 4 left open.
         if (key === 'features' && patch.status !== undefined && patch.status !== current.status) {
           if (!changeReason?.trim()) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: "changeReason is required when changing a feature's status." })
           }
+          await writeAuditLog(client, {
+            entityType: 'feature', entityId: id, field: 'status',
+            oldValue: String(current.status), newValue: String(patch.status),
+            reason: changeReason, action: 'status_change',
+          })
         }
 
         const extraPatch = buildExtra(key, patch)
@@ -439,8 +464,13 @@ const commercialSkusRouter = router({
           minimumAllowedPrice, maximumDiscountPercent, JSON.stringify(input.selectedPricingLevels ?? []),
         ],
       )
+      const row = insertResult.rows[0]
+      await writeAuditLog(client, {
+        entityType: 'sku', entityId: row.id, field: 'skuCode', oldValue: '', newValue: row.sku_code,
+        reason: '', action: 'create',
+      })
       await client.query('COMMIT')
-      return toSku(insertResult.rows[0])
+      return toSku(row)
     } catch (e) {
       await client.query('ROLLBACK')
       throw e
@@ -450,9 +480,9 @@ const commercialSkusRouter = router({
   }),
 
   /** `changeReason` is required whenever `patch` touches `lifecycleStatus` or
-   *  any cost/pricing field (spec §15/§6.6) — persisting the change to an
-   *  audit log is deferred until `commercial_audit_logs` exists (Phase 6),
-   *  matching Phase 4's identical deferral for `features.status` changes. */
+   *  any cost/pricing field (spec §15/§6.6) — now that `commercial_audit_logs`
+   *  exists (Phase 6), this also closes the audit-log deferral Phase 5 left
+   *  open, writing one entry per touched sensitive field. */
   update: publicProcedure
     .input(z.object({ id: z.string().uuid(), patch: z.object(skuPatchShape), changeReason: z.string().optional() }))
     .mutation(async ({ input }) => {
@@ -468,6 +498,13 @@ const commercialSkusRouter = router({
         const touchedFields = SKU_SENSITIVE_FIELDS.filter((f) => patch[f] !== undefined && patch[f] !== current[f])
         if (touchedFields.length > 0 && !input.changeReason?.trim()) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'changeReason is required when changing lifecycle status, cost, or pricing fields.' })
+        }
+        for (const field of touchedFields) {
+          await writeAuditLog(client, {
+            entityType: 'sku', entityId: input.id, field,
+            oldValue: String(current[field]), newValue: String(patch[field]),
+            reason: input.changeReason ?? '', action: field === 'lifecycleStatus' ? 'status_change' : 'update',
+          })
         }
 
         for (const [field, key, label] of skuFkChecks) {
@@ -492,13 +529,15 @@ const commercialSkusRouter = router({
       return toSku(result.rows[0])
     }),
 
-  /** PCS-038: throws if any BOM item still references this SKU (as parent or
-   *  component). The BOQ-line-item half of this check is deferred until
-   *  `commercial_boq_line_items` exists (Phase 6) — same deferral pattern as
-   *  Phase 2's employees.delete leaving the follow_ups cleanup for Phase 7. */
+  /** PCS-038: throws if any BOM item or BOQ line item still references this
+   *  SKU (as parent/component, or as the line's sku_id) — the BOQ-line-item
+   *  half now that `commercial_boq_line_items` exists (Phase 6), closing the
+   *  deferral Phase 5 left open (same pattern as Phase 2's employees.delete
+   *  leaving the follow_ups cleanup for Phase 7). */
   delete: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
     const inUse = await pool.query(
-      'SELECT 1 FROM commercial_bom_items WHERE parent_sku_id=$1 OR component_sku_id=$1 LIMIT 1',
+      `SELECT 1 FROM commercial_bom_items WHERE parent_sku_id=$1 OR component_sku_id=$1
+       UNION ALL SELECT 1 FROM commercial_boq_line_items WHERE sku_id=$1 LIMIT 1`,
       [input.id],
     )
     if (inUse.rows.length) {
@@ -586,8 +625,715 @@ const commercialBomRouter = router({
   }),
 })
 
+// --- Commercial BOQ + line items (spec §6.5/§9/§10/§12/§13) ----------------
+
+const boqStatusSchema = z.enum(['draft', 'submitted', 'under_review', 'approved', 'rejected', 'cancelled', 'archived'])
+const linePricingLevelSchema = z.object({ level: pricingLevelKeySchema, sellingPrice: z.number().nullable() })
+
+function toBoq(row: any) {
+  return {
+    id: row.id, boqNumber: row.boq_number, opportunityName: row.opportunity_name, departmentId: row.department_id,
+    customerName: row.customer_name, customerOrganization: row.customer_organization,
+    customerAddress: row.customer_address, customerContact: row.customer_contact, verticalId: row.vertical_id,
+    budgetAmount: row.budget_amount, budgetUnit: row.budget_unit, budgetKnown: row.budget_known,
+    emdAmount: row.emd_amount, emdUnit: row.emd_unit,
+    salesPersonId: row.sales_person_id, buSalesPersonId: row.bu_sales_person_id, preSalesId: row.pre_sales_id,
+    status: row.status, boqVersion: row.boq_version, revisionNumber: row.revision_number, parentBoqId: row.parent_boq_id,
+    currency: row.currency, grandTotal: Number(row.grand_total),
+    createdAt: row.created_at.toISOString(), createdBy: row.created_by,
+    lastModifiedAt: row.updated_at.toISOString(), lastModifiedBy: row.last_modified_by,
+  }
+}
+
+function toLineItem(row: any) {
+  return {
+    id: row.id, boqId: row.boq_id, skuId: row.sku_id,
+    quantity: Number(row.quantity), unitPrice: Number(row.unit_price), discountPct: Number(row.discount_pct),
+    taxPct: Number(row.tax_pct), approverId: row.approver_id, approvalDate: row.approval_date,
+    approvalRemarks: row.approval_remarks, approvalStatus: row.approval_status, lineTotal: Number(row.line_total),
+    pricingLevels: row.pricing_levels, activePricingLevel: row.active_pricing_level,
+  }
+}
+
+function toAuditLog(row: any) {
+  return {
+    id: row.id, entityType: row.entity_type, entityId: row.entity_id, field: row.field,
+    oldValue: row.old_value, newValue: row.new_value, reason: row.reason, action: row.action,
+    changedAt: row.changed_at.toISOString(), changedBy: row.changed_by,
+  }
+}
+
+async function currencyRateByCode(client: any, code: string): Promise<number> {
+  const result = await client.query(
+    `SELECT (extra->>'exchangeRate')::numeric AS rate FROM commercial_masters WHERE master_key='currencies' AND code=$1`, [code],
+  )
+  if (!result.rows[0]) throw new TRPCError({ code: 'BAD_REQUEST', message: `No such currency code: ${code}` })
+  return Number(result.rows[0].rate)
+}
+
+async function currencyRateById(client: any, id: string): Promise<number> {
+  const result = await client.query(
+    `SELECT (extra->>'exchangeRate')::numeric AS rate FROM commercial_masters WHERE master_key='currencies' AND id=$1`, [id],
+  )
+  if (!result.rows[0]) throw new TRPCError({ code: 'BAD_REQUEST', message: `No such currency: ${id}` })
+  return Number(result.rows[0].rate)
+}
+
+/** Mirrors the frontend's `skuToBoqConversionFactor` — a SKU's cost/price
+ *  fields are in that SKU's own currency; `commercial_boqs.currency` is a
+ *  single code the whole document is denominated in. */
+async function skuToBoqConversionFactor(client: any, boqCurrencyCode: string, sku: any): Promise<number> {
+  const fromRate = await currencyRateById(client, sku.currency_id)
+  const toRate = await currencyRateByCode(client, boqCurrencyCode)
+  return conversionFactorFromRates(fromRate, toRate)
+}
+
+async function fetchApprovalMatrix(client: any): Promise<{ minDiscountPct: number; maxDiscountPct: number; allowAutoApproval: boolean }[]> {
+  const result = await client.query(`SELECT extra FROM commercial_masters WHERE master_key='approvalMatrix'`)
+  return result.rows.map((r: any) => ({
+    minDiscountPct: Number(r.extra.minDiscountPct), maxDiscountPct: Number(r.extra.maxDiscountPct),
+    allowAutoApproval: Boolean(r.extra.allowAutoApproval),
+  }))
+}
+
+/** Mirrors the frontend's `resolveLineUnitPrice` — a small per-item lookup
+ *  (not a full-array traversal), so only the shared arithmetic
+ *  (`discountPctForSellingPrice`) moved to `@goms/domain`; this lookup itself
+ *  stays local, same as every prior phase's traversal/algorithm split. */
+function resolveLineUnitPrice(sku: any, currentDiscountPct: number, pricingLevels: any[], activePricingLevel: string | null) {
+  const active = activePricingLevel ? pricingLevels.find((l: any) => l.level === activePricingLevel) : undefined
+  if (!active || active.sellingPrice === null) {
+    return { unitPrice: Number(sku.list_price), discountPct: currentDiscountPct, isAbsolutePrice: false }
+  }
+  return {
+    unitPrice: active.sellingPrice,
+    discountPct: discountPctForSellingPrice(Number(sku.list_price), active.sellingPrice),
+    isAbsolutePrice: true,
+  }
+}
+
+/** A BOQ line's `unit_price`/`tax_pct`/`line_total` are snapshots taken when
+ *  the line was added — once the BOQ leaves `draft`, that snapshot IS the
+ *  quoted price. While still `draft`, every read instead recomputes live off
+ *  each line's SKU's *current* price/tax/currency, mirroring the frontend's
+ *  `withLiveDraftPricing` exactly (including: never writes the recompute
+ *  back to the row, only to the returned value). */
+async function withLiveDraftPricing(client: any, boq: any, lines: any[]): Promise<any[]> {
+  if (boq.status !== 'draft' || !lines.length) return lines
+  const skuIds = [...new Set(lines.map((l: any) => l.sku_id))]
+  const skuRows = (await client.query('SELECT * FROM commercial_skus WHERE id = ANY($1)', [skuIds])).rows
+  const skusById = new Map<string, any>(skuRows.map((s: any) => [s.id, s]))
+
+  const taxClassIds = [...new Set(skuRows.map((s: any) => s.tax_class_id))]
+  const taxRows = taxClassIds.length
+    ? (await client.query(`SELECT id, (extra->>'ratePct')::numeric AS rate_pct FROM commercial_masters WHERE id = ANY($1)`, [taxClassIds])).rows
+    : []
+  const taxPctById = new Map<string, number>(taxRows.map((t: any) => [t.id, Number(t.rate_pct)]))
+
+  const currencyIds = [...new Set(skuRows.map((s: any) => s.currency_id))]
+  const currencyRows = currencyIds.length
+    ? (await client.query(
+        `SELECT id, (extra->>'exchangeRate')::numeric AS rate FROM commercial_masters WHERE master_key='currencies' AND id = ANY($1)`,
+        [currencyIds],
+      )).rows
+    : []
+  const rateById = new Map<string, number>(currencyRows.map((c: any) => [c.id, Number(c.rate)]))
+  const boqRate = await currencyRateByCode(client, boq.currency)
+
+  return lines.map((line: any) => {
+    const sku = skusById.get(line.sku_id)
+    if (!sku) return line
+    const taxPct = taxPctById.get(sku.tax_class_id) ?? 0
+    const factor = conversionFactorFromRates(rateById.get(sku.currency_id) ?? 1, boqRate)
+    const { unitPrice, discountPct, isAbsolutePrice } = resolveLineUnitPrice(sku, Number(line.discount_pct), line.pricing_levels, line.active_pricing_level)
+    return {
+      ...line, unit_price: unitPrice, discount_pct: discountPct, tax_pct: taxPct,
+      line_total: computeLineTotal(Number(line.quantity), unitPrice, discountPct, taxPct, factor, isAbsolutePrice),
+    }
+  })
+}
+
+/** Recomputes a BOQ's `grand_total` from its line items' `line_total`s —
+ *  mirrors the frontend's `recomputeBoqGrandTotal`, called after every
+ *  add/update/remove of a line. */
+async function recomputeBoqGrandTotal(client: any, boqId: string): Promise<void> {
+  const result = await client.query('SELECT COALESCE(SUM(line_total), 0) AS total FROM commercial_boq_line_items WHERE boq_id=$1', [boqId])
+  await client.query('UPDATE commercial_boqs SET grand_total=$1, updated_at=now() WHERE id=$2', [result.rows[0].total, boqId])
+}
+
+/** Mirrors the frontend's `withLiveDraftGrandTotal` — only recomputes (never
+ *  persists) while the BOQ is still `draft`. */
+async function withLiveDraftGrandTotal(client: any, boq: any): Promise<any> {
+  if (boq.status !== 'draft') return boq
+  const lines = (await client.query('SELECT * FROM commercial_boq_line_items WHERE boq_id=$1', [boq.id])).rows
+  const liveLines = await withLiveDraftPricing(client, boq, lines)
+  const grandTotal = liveLines.reduce((sum: number, li: any) => sum + Number(li.line_total), 0)
+  return grandTotal === Number(boq.grand_total) ? boq : { ...boq, grand_total: grandTotal }
+}
+
+async function assertOpportunityNameAvailable(client: any, opportunityName: string, excludeId: string | null): Promise<void> {
+  const trimmed = opportunityName.trim()
+  if (!trimmed) return
+  const result = excludeId
+    ? await client.query(`SELECT boq_number FROM commercial_boqs WHERE id<>$1 AND lower(trim(opportunity_name))=lower($2)`, [excludeId, trimmed])
+    : await client.query(`SELECT boq_number FROM commercial_boqs WHERE lower(trim(opportunity_name))=lower($1)`, [trimmed])
+  if (result.rows[0]) {
+    throw new TRPCError({ code: 'CONFLICT', message: `Opportunity Name "${trimmed}" is already used by ${result.rows[0].boq_number}.` })
+  }
+}
+
+/** Allocates the next BOQ number for the current year — a single atomic
+ *  `INSERT ... ON CONFLICT DO UPDATE` (row-level lock implicit in the
+ *  upsert), matching the frontend's `generateBoqNumber`'s "never reset,
+ *  never reused" counter semantics without a separate SELECT-then-UPDATE
+ *  race window. */
+async function allocateBoqNumber(client: any): Promise<string> {
+  const year = new Date().getFullYear()
+  const result = await client.query(
+    `INSERT INTO commercial_boq_number_sequences (year, next_value) VALUES ($1, 2)
+     ON CONFLICT (year) DO UPDATE SET next_value = commercial_boq_number_sequences.next_value + 1
+     RETURNING next_value - 1 AS allocated`,
+    [year],
+  )
+  return formatBoqNumber(year, result.rows[0].allocated)
+}
+
+const boqColumnFor: Record<string, string> = {
+  opportunityName: 'opportunity_name', departmentId: 'department_id', customerName: 'customer_name',
+  customerOrganization: 'customer_organization', customerAddress: 'customer_address', customerContact: 'customer_contact',
+  verticalId: 'vertical_id', budgetAmount: 'budget_amount', budgetUnit: 'budget_unit', budgetKnown: 'budget_known',
+  emdAmount: 'emd_amount', emdUnit: 'emd_unit', salesPersonId: 'sales_person_id',
+  buSalesPersonId: 'bu_sales_person_id', preSalesId: 'pre_sales_id', currency: 'currency',
+}
+
+// opportunityName has no min-length here — the repository layer accepts a
+// blank name (findBoqByOpportunityName treats blanks as never-clashing);
+// "must be non-blank" is a CreateBoq.tsx save-readiness check, UI-only.
+const boqInputShape = {
+  opportunityName: z.string(), departmentId: z.string().uuid(),
+  customerName: z.string(), customerOrganization: z.string(), customerAddress: z.string(), customerContact: z.string(),
+  verticalId: z.string().uuid(),
+  budgetAmount: z.string(), budgetUnit: z.string(), budgetKnown: z.string(), emdAmount: z.string(), emdUnit: z.string(),
+  salesPersonId: z.string().uuid(), buSalesPersonId: z.string().uuid().nullable(), preSalesId: z.string().uuid().nullable(),
+  currency: z.string().min(1),
+}
+
+const boqPatchShape = {
+  opportunityName: z.string().optional(), departmentId: z.string().uuid().optional(),
+  customerName: z.string().optional(), customerOrganization: z.string().optional(),
+  customerAddress: z.string().optional(), customerContact: z.string().optional(),
+  verticalId: z.string().uuid().optional(),
+  budgetAmount: z.string().optional(), budgetUnit: z.string().optional(), budgetKnown: z.string().optional(),
+  emdAmount: z.string().optional(), emdUnit: z.string().optional(),
+  salesPersonId: z.string().uuid().optional(), buSalesPersonId: z.string().uuid().nullable().optional(),
+  preSalesId: z.string().uuid().nullable().optional(), currency: z.string().min(1).optional(),
+}
+
+/** Every column this router's `commercial_boqs` INSERTs come from is a
+ *  foreign key — a bad id would otherwise surface as a raw Postgres
+ *  FK-violation (23503) rather than a friendly message. Caught once here
+ *  rather than a bespoke pre-check per field (unlike the SKU router's
+ *  `skuFkChecks`, which needs per-field labels for a 7-FK row) — a fine
+ *  house-style variance between routers within the same migration. */
+function isForeignKeyViolation(e: unknown): e is { code: '23503'; detail?: string } {
+  return typeof e === 'object' && e !== null && (e as any).code === '23503'
+}
+
+const BOQ_LINE_ITEM_INSERT_COLUMNS =
+  `boq_id, sku_id, quantity, unit_price, discount_pct, tax_pct, approver_id, approval_date, approval_remarks,
+   approval_status, line_total, pricing_levels, active_pricing_level, sort_order`
+
+async function copyLineItemsForRevisionOrDuplicate(client: any, fromBoqId: string, toBoqId: string): Promise<void> {
+  const linesResult = await client.query('SELECT * FROM commercial_boq_line_items WHERE boq_id=$1 ORDER BY sort_order', [fromBoqId])
+  const approvalMatrix = await fetchApprovalMatrix(client)
+  for (const line of linesResult.rows) {
+    const fresh = freshLineApprovalState(approvalMatrix, Number(line.discount_pct))
+    await client.query(
+      `INSERT INTO commercial_boq_line_items (${BOQ_LINE_ITEM_INSERT_COLUMNS})
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      [
+        toBoqId, line.sku_id, line.quantity, line.unit_price, line.discount_pct, line.tax_pct,
+        fresh.approverId, fresh.approvalDate, fresh.approvalRemarks, fresh.approvalStatus,
+        line.line_total, JSON.stringify(line.pricing_levels), line.active_pricing_level, line.sort_order,
+      ],
+    )
+  }
+}
+
+const commercialBoqRouter = router({
+  list: publicProcedure.query(async () => {
+    const result = await pool.query('SELECT * FROM commercial_boqs ORDER BY created_at DESC')
+    const withTotals = await Promise.all(result.rows.map((r: any) => withLiveDraftGrandTotal(pool, r)))
+    return withTotals.map(toBoq)
+  }),
+
+  get: publicProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+    const result = await pool.query('SELECT * FROM commercial_boqs WHERE id=$1', [input.id])
+    if (!result.rows[0]) return null
+    return toBoq(await withLiveDraftGrandTotal(pool, result.rows[0]))
+  }),
+
+  listLineItems: publicProcedure.input(z.object({ boqId: z.string().uuid() })).query(async ({ input }) => {
+    const boqResult = await pool.query('SELECT * FROM commercial_boqs WHERE id=$1', [input.boqId])
+    const linesResult = await pool.query('SELECT * FROM commercial_boq_line_items WHERE boq_id=$1 ORDER BY sort_order', [input.boqId])
+    const lines = boqResult.rows[0] ? await withLiveDraftPricing(pool, boqResult.rows[0], linesResult.rows) : linesResult.rows
+    return lines.map(toLineItem)
+  }),
+
+  /** Every BOQ line item across every BOQ — read-only aggregate for the SKU
+   *  Catalog's "BOQ Count" column. */
+  listAllLineItems: publicProcedure.query(async () => {
+    const result = await pool.query('SELECT * FROM commercial_boq_line_items')
+    return result.rows.map(toLineItem)
+  }),
+
+  create: publicProcedure.input(z.object(boqInputShape)).mutation(async ({ input }) => {
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      await assertOpportunityNameAvailable(client, input.opportunityName, null)
+      const boqNumber = await allocateBoqNumber(client)
+      const insertResult = await client.query(
+        `INSERT INTO commercial_boqs (
+           boq_number, opportunity_name, department_id, customer_name, customer_organization, customer_address, customer_contact,
+           vertical_id, budget_amount, budget_unit, budget_known, emd_amount, emd_unit,
+           sales_person_id, bu_sales_person_id, pre_sales_id, currency
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+         RETURNING *`,
+        [
+          boqNumber, input.opportunityName, input.departmentId, input.customerName, input.customerOrganization,
+          input.customerAddress, input.customerContact, input.verticalId, input.budgetAmount, input.budgetUnit,
+          input.budgetKnown, input.emdAmount, input.emdUnit, input.salesPersonId, input.buSalesPersonId,
+          input.preSalesId, input.currency,
+        ],
+      )
+      const row = insertResult.rows[0]
+      await writeAuditLog(client, {
+        entityType: 'boq', entityId: row.id, field: 'boqNumber', oldValue: '', newValue: row.boq_number,
+        reason: '', action: 'create',
+      })
+      await client.query('COMMIT')
+      return toBoq(row)
+    } catch (e) {
+      await client.query('ROLLBACK')
+      if (isForeignKeyViolation(e)) throw new TRPCError({ code: 'BAD_REQUEST', message: e.detail ?? 'A referenced row does not exist.' })
+      throw e
+    } finally {
+      client.release()
+    }
+  }),
+
+  /** BOQ-level metadata patch — throws unless `status === 'draft'` (BOQ
+   *  editable-workspace overhaul spec §3). */
+  update: publicProcedure.input(z.object({ id: z.string().uuid(), patch: z.object(boqPatchShape) })).mutation(async ({ input }) => {
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const currentResult = await client.query('SELECT * FROM commercial_boqs WHERE id=$1 FOR UPDATE', [input.id])
+      const current = currentResult.rows[0]
+      if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: `No such BOQ: ${input.id}` })
+      if (current.status !== 'draft') {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only a Draft BOQ can have its details edited.' })
+      }
+      const patch = input.patch as Record<string, any>
+      if (patch.opportunityName !== undefined) await assertOpportunityNameAvailable(client, patch.opportunityName, input.id)
+
+      const fields = Object.keys(patch)
+      for (const field of fields) {
+        const column = boqColumnFor[field]
+        const oldValue = current[column]
+        const newValue = patch[field]
+        if (newValue !== oldValue) {
+          await writeAuditLog(client, {
+            entityType: 'boq', entityId: input.id, field,
+            oldValue: oldValue === null ? '' : String(oldValue), newValue: newValue === null ? '' : String(newValue),
+            reason: '', action: 'update',
+          })
+        }
+      }
+      if (fields.length) {
+        const values = fields.map((f) => patch[f])
+        const setClauses = fields.map((f, i) => `${boqColumnFor[f]}=$${i + 1}`)
+        values.push(input.id)
+        await client.query(`UPDATE commercial_boqs SET ${[...setClauses, 'updated_at=now()'].join(', ')} WHERE id=$${values.length}`, values)
+      }
+      await client.query('COMMIT')
+    } catch (e) {
+      await client.query('ROLLBACK')
+      if (isForeignKeyViolation(e)) throw new TRPCError({ code: 'BAD_REQUEST', message: e.detail ?? 'A referenced row does not exist.' })
+      throw e
+    } finally {
+      client.release()
+    }
+    const result = await pool.query('SELECT * FROM commercial_boqs WHERE id=$1', [input.id])
+    return toBoq(await withLiveDraftGrandTotal(pool, result.rows[0]))
+  }),
+
+  addLineItem: publicProcedure
+    .input(z.object({
+      boqId: z.string().uuid(), skuId: z.string().uuid(), quantity: z.number(), unitPrice: z.number(), discountPct: z.number(),
+      approverId: z.string().uuid().nullable().optional(), approvalRemarks: z.string().optional(),
+      pricingLevels: z.array(linePricingLevelSchema).optional(), activePricingLevel: pricingLevelKeySchema.nullable().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const boqResult = await client.query('SELECT * FROM commercial_boqs WHERE id=$1 FOR UPDATE', [input.boqId])
+        const boq = boqResult.rows[0]
+        if (!boq) throw new TRPCError({ code: 'NOT_FOUND', message: `No such BOQ: ${input.boqId}` })
+        const skuResult = await client.query('SELECT * FROM commercial_skus WHERE id=$1', [input.skuId])
+        const sku = skuResult.rows[0]
+        if (!sku) throw new TRPCError({ code: 'BAD_REQUEST', message: `No such SKU: ${input.skuId}` })
+
+        validateLineQuantity(input.quantity)
+        validateLineDiscountPct(input.discountPct, Math.min(90, Number(sku.maximum_discount_percent)))
+
+        const pricingLevels = input.pricingLevels ?? []
+        const activePricingLevel = input.activePricingLevel ?? null
+        const isAbsolutePrice = isAbsoluteLinePrice(pricingLevels, activePricingLevel)
+        const postDiscountPrice = effectiveUnitPrice(input.unitPrice, input.discountPct, isAbsolutePrice)
+        if (postDiscountPrice < Number(sku.minimum_allowed_price)) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Discounted unit price (${postDiscountPrice.toFixed(2)}) is below this SKU's minimum allowed price (${Number(sku.minimum_allowed_price)}).`,
+          })
+        }
+
+        const taxRateResult = await client.query(`SELECT (extra->>'ratePct')::numeric AS rate FROM commercial_masters WHERE id=$1`, [sku.tax_class_id])
+        const taxPct = Number(taxRateResult.rows[0]?.rate ?? 0)
+        const approvalMatrix = await fetchApprovalMatrix(client)
+        const band = resolveApprovalBand(approvalMatrix, input.discountPct)
+        const factor = await skuToBoqConversionFactor(client, boq.currency, sku)
+        const lineTotal = computeLineTotal(input.quantity, input.unitPrice, input.discountPct, taxPct, factor, isAbsolutePrice)
+        const sortOrderResult = await client.query('SELECT COUNT(*)::int AS n FROM commercial_boq_line_items WHERE boq_id=$1', [input.boqId])
+
+        const insertResult = await client.query(
+          `INSERT INTO commercial_boq_line_items (${BOQ_LINE_ITEM_INSERT_COLUMNS})
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+           RETURNING *`,
+          [
+            input.boqId, input.skuId, input.quantity, input.unitPrice, input.discountPct, taxPct,
+            input.approverId ?? null, null, input.approvalRemarks ?? '', band.allowAutoApproval ? 'auto_approved' : 'pending',
+            lineTotal, JSON.stringify(pricingLevels), activePricingLevel, sortOrderResult.rows[0].n,
+          ],
+        )
+        await recomputeBoqGrandTotal(client, input.boqId)
+        await client.query('COMMIT')
+        return toLineItem(insertResult.rows[0])
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
+    }),
+
+  updateLineItem: publicProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      patch: z.object({
+        quantity: z.number().optional(), unitPrice: z.number().optional(), discountPct: z.number().optional(),
+        approverId: z.string().uuid().nullable().optional(), approvalDate: z.string().nullable().optional(),
+        approvalRemarks: z.string().optional(), approvalStatus: z.enum(['auto_approved', 'pending', 'approved', 'rejected']).optional(),
+        pricingLevels: z.array(linePricingLevelSchema).optional(), activePricingLevel: pricingLevelKeySchema.nullable().optional(),
+      }),
+    }))
+    .mutation(async ({ input }) => {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const rowResult = await client.query('SELECT * FROM commercial_boq_line_items WHERE id=$1 FOR UPDATE', [input.id])
+        const row = rowResult.rows[0]
+        if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: `No such BOQ line item: ${input.id}` })
+        const skuResult = await client.query('SELECT * FROM commercial_skus WHERE id=$1', [row.sku_id])
+        const sku = skuResult.rows[0]
+        if (!sku) throw new TRPCError({ code: 'BAD_REQUEST', message: `No such SKU: ${row.sku_id}` })
+        const boqResult = await client.query('SELECT * FROM commercial_boqs WHERE id=$1', [row.boq_id])
+        const boq = boqResult.rows[0]
+        if (!boq) throw new TRPCError({ code: 'BAD_REQUEST', message: `No such BOQ: ${row.boq_id}` })
+
+        const patch = input.patch
+        if (patch.quantity !== undefined) validateLineQuantity(patch.quantity)
+        const quantity = patch.quantity !== undefined ? patch.quantity : Number(row.quantity)
+        const unitPrice = patch.unitPrice ?? Number(row.unit_price)
+        if (patch.discountPct !== undefined) validateLineDiscountPct(patch.discountPct, Math.min(90, Number(sku.maximum_discount_percent)))
+        const discountPct = patch.discountPct !== undefined ? patch.discountPct : Number(row.discount_pct)
+        const pricingLevels = patch.pricingLevels ?? row.pricing_levels
+        const activePricingLevel = patch.activePricingLevel !== undefined ? patch.activePricingLevel : row.active_pricing_level
+        const isAbsolutePrice = isAbsoluteLinePrice(pricingLevels, activePricingLevel)
+
+        const postDiscountPrice = effectiveUnitPrice(unitPrice, discountPct, isAbsolutePrice)
+        if (postDiscountPrice < Number(sku.minimum_allowed_price)) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `Discounted unit price (${postDiscountPrice.toFixed(2)}) is below this SKU's minimum allowed price (${Number(sku.minimum_allowed_price)}).`,
+          })
+        }
+
+        const oldQuantity = Number(row.quantity)
+        const oldDiscountPct = Number(row.discount_pct)
+
+        let approvalStatus = patch.approvalStatus ?? row.approval_status
+        let approverId = patch.approverId !== undefined ? patch.approverId : row.approver_id
+        let approvalDate = patch.approvalDate !== undefined ? patch.approvalDate : row.approval_date
+        let approvalRemarks = patch.approvalRemarks !== undefined ? patch.approvalRemarks : row.approval_remarks
+
+        // A changed discount invalidates whatever approval decision (or lack
+        // of one) the line had — mirrors the frontend's identical reset.
+        if (patch.discountPct !== undefined) {
+          const approvalMatrix = await fetchApprovalMatrix(client)
+          const fresh = freshLineApprovalState(approvalMatrix, discountPct)
+          approvalStatus = fresh.approvalStatus
+          approverId = fresh.approverId
+          approvalDate = fresh.approvalDate
+          approvalRemarks = fresh.approvalRemarks
+        }
+
+        const factor = await skuToBoqConversionFactor(client, boq.currency, sku)
+        const lineTotal = computeLineTotal(quantity, unitPrice, discountPct, Number(row.tax_pct), factor, isAbsolutePrice)
+
+        await client.query(
+          `UPDATE commercial_boq_line_items SET
+             quantity=$1, unit_price=$2, discount_pct=$3, approver_id=$4, approval_date=$5, approval_remarks=$6,
+             approval_status=$7, pricing_levels=$8, active_pricing_level=$9, line_total=$10
+           WHERE id=$11`,
+          [quantity, unitPrice, discountPct, approverId, approvalDate, approvalRemarks,
+            approvalStatus, JSON.stringify(pricingLevels), activePricingLevel, lineTotal, input.id],
+        )
+        await recomputeBoqGrandTotal(client, row.boq_id)
+
+        if (patch.quantity !== undefined && quantity !== oldQuantity) {
+          await writeAuditLog(client, {
+            entityType: 'boqLineItem', entityId: input.id, field: 'quantity',
+            oldValue: String(oldQuantity), newValue: String(quantity), reason: '', action: 'update',
+          })
+        }
+        if (patch.discountPct !== undefined && discountPct !== oldDiscountPct) {
+          await writeAuditLog(client, {
+            entityType: 'boqLineItem', entityId: input.id, field: 'discountPct',
+            oldValue: String(oldDiscountPct), newValue: String(discountPct), reason: '', action: 'update',
+          })
+        }
+        await client.query('COMMIT')
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
+      const result = await pool.query('SELECT * FROM commercial_boq_line_items WHERE id=$1', [input.id])
+      return toLineItem(result.rows[0])
+    }),
+
+  removeLineItem: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+    const existing = await pool.query('SELECT boq_id FROM commercial_boq_line_items WHERE id=$1', [input.id])
+    if (!existing.rows[0]) return
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query('DELETE FROM commercial_boq_line_items WHERE id=$1', [input.id])
+      await recomputeBoqGrandTotal(client, existing.rows[0].boq_id)
+      await client.query('COMMIT')
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
+  }),
+
+  /** Reorders a draft BOQ's line items — `orderedIds` must be exactly this
+   *  BOQ's current line item ids, each exactly once, in the desired order.
+   *  Throws unless `status === 'draft'` (BOQ workbench spec §6). */
+  reorderLineItems: publicProcedure
+    .input(z.object({ boqId: z.string().uuid(), orderedIds: z.array(z.string().uuid()) }))
+    .mutation(async ({ input }) => {
+      const boqResult = await pool.query('SELECT status FROM commercial_boqs WHERE id=$1', [input.boqId])
+      const boq = boqResult.rows[0]
+      if (!boq) throw new TRPCError({ code: 'NOT_FOUND', message: `No such BOQ: ${input.boqId}` })
+      if (boq.status !== 'draft') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only a Draft BOQ can have its line items reordered.' })
+      const ownResult = await pool.query('SELECT id FROM commercial_boq_line_items WHERE boq_id=$1', [input.boqId])
+      const ownIds = new Set(ownResult.rows.map((r: any) => r.id))
+      if (input.orderedIds.length !== ownIds.size || !input.orderedIds.every((id) => ownIds.has(id))) {
+        throw new TRPCError({ code: 'BAD_REQUEST', message: "orderedIds must contain exactly this BOQ's current line item ids, each exactly once." })
+      }
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        for (let i = 0; i < input.orderedIds.length; i++) {
+          await client.query('UPDATE commercial_boq_line_items SET sort_order=$1 WHERE id=$2', [i, input.orderedIds[i]])
+        }
+        await client.query('COMMIT')
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
+    }),
+
+  /** Throws on an invalid lifecycle transition (spec §10's `BOQ_TRANSITIONS`);
+   *  blocks a transition to `approved` while any line item's approval status
+   *  isn't cleared (PCS-029). */
+  updateStatus: publicProcedure
+    .input(z.object({ id: z.string().uuid(), nextStatus: boqStatusSchema, changeReason: z.string() }))
+    .mutation(async ({ input }) => {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const boqResult = await client.query('SELECT * FROM commercial_boqs WHERE id=$1 FOR UPDATE', [input.id])
+        const boq = boqResult.rows[0]
+        if (!boq) throw new TRPCError({ code: 'NOT_FOUND', message: `No such BOQ: ${input.id}` })
+        const allowed = BOQ_TRANSITIONS[boq.status as BoqStatus]
+        if (!allowed.includes(input.nextStatus)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: `Cannot transition a BOQ from "${boq.status}" to "${input.nextStatus}".` })
+        }
+        if (input.nextStatus === 'approved') {
+          const unresolvedResult = await client.query(
+            'SELECT COUNT(*)::int AS n FROM commercial_boq_line_items WHERE boq_id=$1 AND approval_status <> ALL($2)',
+            [input.id, LINE_STATES_CLEARED_FOR_APPROVAL],
+          )
+          const unresolvedCount = unresolvedResult.rows[0].n
+          if (unresolvedCount > 0) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `Cannot approve this BOQ — ${unresolvedCount} line item(s) do not have an approved discount status.`,
+            })
+          }
+        }
+        await client.query('UPDATE commercial_boqs SET status=$1, updated_at=now() WHERE id=$2', [input.nextStatus, input.id])
+        await writeAuditLog(client, {
+          entityType: 'boq', entityId: input.id, field: 'status', oldValue: boq.status, newValue: input.nextStatus,
+          reason: input.changeReason, action: 'status_change',
+        })
+        await client.query('COMMIT')
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
+      const result = await pool.query('SELECT * FROM commercial_boqs WHERE id=$1', [input.id])
+      return toBoq(result.rows[0])
+    }),
+
+  /** Creates a new BOQ row carrying the same `boqNumber` forward, with
+   *  `boqVersion` incremented and its line items copied (spec §9/§13). */
+  revise: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const originalResult = await client.query('SELECT * FROM commercial_boqs WHERE id=$1', [input.id])
+      const original = originalResult.rows[0]
+      if (!original) throw new TRPCError({ code: 'NOT_FOUND', message: `No such BOQ: ${input.id}` })
+
+      const insertResult = await client.query(
+        `INSERT INTO commercial_boqs (
+           boq_number, opportunity_name, department_id, customer_name, customer_organization, customer_address, customer_contact,
+           vertical_id, budget_amount, budget_unit, budget_known, emd_amount, emd_unit,
+           sales_person_id, bu_sales_person_id, pre_sales_id, status, boq_version, revision_number, parent_boq_id, currency, grand_total
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'draft',$17,0,$18,$19,$20)
+         RETURNING *`,
+        [
+          original.boq_number, original.opportunity_name, original.department_id, original.customer_name, original.customer_organization,
+          original.customer_address, original.customer_contact, original.vertical_id, original.budget_amount, original.budget_unit,
+          original.budget_known, original.emd_amount, original.emd_unit, original.sales_person_id, original.bu_sales_person_id,
+          original.pre_sales_id, original.boq_version + 1, original.id, original.currency, original.grand_total,
+        ],
+      )
+      const revised = insertResult.rows[0]
+      await copyLineItemsForRevisionOrDuplicate(client, original.id, revised.id)
+      await writeAuditLog(client, {
+        entityType: 'boq', entityId: revised.id, field: 'boqVersion',
+        oldValue: String(original.boq_version), newValue: String(revised.boq_version),
+        reason: 'Revision of an existing BOQ.', action: 'create',
+      })
+      await client.query('COMMIT')
+      return toBoq(revised)
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
+  }),
+
+  /** Creates an independent new BOQ — fresh `boqNumber`, `status: 'draft'`,
+   *  `boqVersion: 1`, no `parentBoqId` — copying this BOQ's fields and line
+   *  items as a starting point. Distinct from `revise`, which keeps the same
+   *  `boqNumber` and links back via `parentBoqId`. */
+  duplicate: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const originalResult = await client.query('SELECT * FROM commercial_boqs WHERE id=$1', [input.id])
+      const original = originalResult.rows[0]
+      if (!original) throw new TRPCError({ code: 'NOT_FOUND', message: `No such BOQ: ${input.id}` })
+
+      const boqNumber = await allocateBoqNumber(client)
+      const insertResult = await client.query(
+        `INSERT INTO commercial_boqs (
+           boq_number, opportunity_name, department_id, customer_name, customer_organization, customer_address, customer_contact,
+           vertical_id, budget_amount, budget_unit, budget_known, emd_amount, emd_unit,
+           sales_person_id, bu_sales_person_id, pre_sales_id, status, boq_version, revision_number, parent_boq_id, currency, grand_total
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'draft',1,0,NULL,$17,$18)
+         RETURNING *`,
+        [
+          boqNumber, original.opportunity_name, original.department_id, original.customer_name, original.customer_organization,
+          original.customer_address, original.customer_contact, original.vertical_id, original.budget_amount, original.budget_unit,
+          original.budget_known, original.emd_amount, original.emd_unit, original.sales_person_id, original.bu_sales_person_id,
+          original.pre_sales_id, original.currency, original.grand_total,
+        ],
+      )
+      const duplicate = insertResult.rows[0]
+      await copyLineItemsForRevisionOrDuplicate(client, original.id, duplicate.id)
+      await writeAuditLog(client, {
+        entityType: 'boq', entityId: duplicate.id, field: 'boqNumber', oldValue: '', newValue: duplicate.boq_number,
+        reason: `Duplicated from ${original.boq_number}.`, action: 'create',
+      })
+      await client.query('COMMIT')
+      return toBoq(duplicate)
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
+  }),
+
+  /** Hard-deletes a BOQ and its line items (cascade via FK). Throws unless
+   *  the BOQ is `draft`/`cancelled`/`rejected`/`archived` — anything still
+   *  active in the pipeline must be cancelled first via `updateStatus`. */
+  delete: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+    const result = await pool.query('SELECT status FROM commercial_boqs WHERE id=$1', [input.id])
+    const boq = result.rows[0]
+    if (!boq) throw new TRPCError({ code: 'NOT_FOUND', message: `No such BOQ: ${input.id}` })
+    if (!DELETABLE_BOQ_STATUSES.includes(boq.status)) {
+      throw new TRPCError({ code: 'CONFLICT', message: `Cannot delete a BOQ in "${boq.status}" status — cancel it first.` })
+    }
+    await pool.query('DELETE FROM commercial_boqs WHERE id=$1', [input.id])
+  }),
+})
+
+const commercialAuditLogsRouter = router({
+  list: publicProcedure
+    .input(z.object({ entityType: z.string().optional(), entityId: z.string().optional() }).optional())
+    .query(async ({ input }) => {
+      const conditions: string[] = []
+      const params: any[] = []
+      if (input?.entityType) { params.push(input.entityType); conditions.push(`entity_type=$${params.length}`) }
+      if (input?.entityId) { params.push(input.entityId); conditions.push(`entity_id=$${params.length}`) }
+      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+      const result = await pool.query(`SELECT * FROM commercial_audit_logs ${where} ORDER BY changed_at DESC`, params)
+      return result.rows.map(toAuditLog)
+    }),
+})
+
 export const commercialRouter = router({
   masters: commercialMastersRouter,
   skus: commercialSkusRouter,
   bom: commercialBomRouter,
+  boq: commercialBoqRouter,
+  auditLogs: commercialAuditLogsRouter,
 })

@@ -4,6 +4,13 @@ import { pool } from '../db.js'
 
 describe('commercial.skus + commercial.bom routers', () => {
   beforeEach(async () => {
+    // Cleared even though this suite doesn't create BOQs itself — a prior
+    // file's leftover BOQ line item referencing a SKU (ON DELETE RESTRICT)
+    // would otherwise fail this suite's own `DELETE FROM commercial_skus`,
+    // the same class of cross-file bug Phase 2 hit with hierarchy_nodes.
+    await pool.query('DELETE FROM commercial_audit_logs')
+    await pool.query('DELETE FROM commercial_boq_line_items')
+    await pool.query('DELETE FROM commercial_boqs')
     await pool.query('DELETE FROM commercial_bom_items')
     await pool.query('DELETE FROM commercial_skus')
     await pool.query('DELETE FROM edition_features')
@@ -178,6 +185,10 @@ describe('commercial.skus + commercial.bom routers', () => {
 
     const activated = await caller.commercial.skus.update({ id: sku.id, patch: { lifecycleStatus: 'active' }, changeReason: 'Go-live' })
     expect(activated.lifecycleStatus).toBe('active')
+
+    const logs = await caller.commercial.auditLogs.list({ entityType: 'sku', entityId: sku.id })
+    expect(logs.filter((l) => l.field === 'lifecycleStatus')).toHaveLength(1)
+    expect(logs.find((l) => l.field === 'lifecycleStatus')).toMatchObject({ action: 'status_change', newValue: 'active', reason: 'Go-live' })
   })
 
   it('requires a changeReason when changing a cost or pricing field', async () => {

@@ -42,11 +42,15 @@ CREATE TABLE commercial_boqs (
   last_modified_by TEXT
 );
 CREATE INDEX commercial_boqs_number_idx ON commercial_boqs (boq_number);
--- Opportunity Name uniqueness excludes blanks (findBoqByOpportunityName:
--- "blank names never clash") — a plain unique index would collide the first
--- time two draft BOQs are created with no name yet.
-CREATE UNIQUE INDEX commercial_boqs_opportunity_name_idx ON commercial_boqs (lower(trim(opportunity_name)))
-  WHERE trim(opportunity_name) <> '';
+-- NOT a unique index: findBoqByOpportunityName's uniqueness check runs only
+-- at the two "new value" entry points (createBoqLogic/updateBoqLogic) — the
+-- copy paths (reviseBoqLogic/duplicateBoqLogic) never re-check it and
+-- deliberately carry the original's opportunity_name forward unchanged, so
+-- a revision/duplicate legitimately shares its name with its source. A DB
+-- UNIQUE constraint here would block every revise/duplicate of a named BOQ;
+-- uniqueness is enforced at the application layer (assertOpportunityNameAvailable
+-- in the router) only for create/update, matching the real in-memory behavior.
+CREATE INDEX commercial_boqs_opportunity_name_idx ON commercial_boqs (lower(trim(opportunity_name)));
 CREATE INDEX commercial_boqs_department_id_idx ON commercial_boqs (department_id);
 CREATE INDEX commercial_boqs_sales_person_id_idx ON commercial_boqs (sales_person_id);
 CREATE INDEX commercial_boqs_parent_boq_id_idx ON commercial_boqs (parent_boq_id);
