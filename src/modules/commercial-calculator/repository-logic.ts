@@ -1,4 +1,5 @@
 import { uid } from '@/lib/utils'
+import { buildSkuCode, SKU_COST_FIELDS, SKU_PRICE_FIELDS, SKU_SENSITIVE_FIELDS } from '@goms/domain'
 import { conversionFactor, currencyByCode, currencyById } from './currency'
 import { enforceSingleBaseCurrency, findMasterChildren, validateMasterCode, validateParentExists } from './master-rules'
 import { DISCOUNT_FLOAT_EPSILON, effectiveUnitPrice, isAbsoluteLinePrice, resolveLineUnitPrice } from './pricing-levels-logic'
@@ -110,8 +111,6 @@ export function setEditionFeaturesLogic(
 
 // --- SKU code generation & margin (spec §7) --------------------------------
 
-const FEATURE_STATUS_CODE: Record<string, string> = { existing: 'EXG', modified: 'MOD', new: 'NEW' }
-
 function resolveSkuHierarchy(data: CommercialCalculatorData, featureId: string) {
   const feature = data.masters.features.find((f) => f.id === featureId)
   if (!feature) throw new Error(`No such feature: ${featureId}`)
@@ -127,8 +126,7 @@ function resolveSkuHierarchy(data: CommercialCalculatorData, featureId: string) 
 /** PCS-012 format: `{Vertical.code}-{Product.code}-{Module.code}-{Feature.code}-{STATUS}`. */
 export function generateSkuCode(data: CommercialCalculatorData, featureId: string): string {
   const { feature, module: mod, product, vertical } = resolveSkuHierarchy(data, featureId)
-  const statusCode = FEATURE_STATUS_CODE[feature.status] ?? 'NEW'
-  return `${vertical.code}-${product.code}-${mod.code}-${feature.code}-${statusCode}`.toUpperCase()
+  return buildSkuCode(vertical.code, product.code, mod.code, feature.code, feature.status)
 }
 
 /** Sum of the 8 cost fields — shared by SKU-level and BOQ-level margin. */
@@ -207,15 +205,7 @@ export function createSkuLogic(data: CommercialCalculatorData, input: CreateSkuI
   return row
 }
 
-const SKU_COST_FIELDS = [
-  'baseSoftwareCost', 'implementationCostPerMM', 'integrationCost', 'thirdPartyCost',
-  'hardwareCost', 'cloudCost', 'supportCost', 'trainingCost',
-] as const
-const SKU_PRICE_FIELDS = [
-  'internalPrice', 'floorPrice', 'partnerPrice', 'governmentPrice', 'enterprisePrice', 'corporatePrice', 'listPrice',
-  'minimumAllowedPrice', 'maximumDiscountPercent',
-] as const
-const SKU_SENSITIVE_FIELDS: (keyof CommercialSku)[] = ['lifecycleStatus', ...SKU_COST_FIELDS, ...SKU_PRICE_FIELDS]
+const SKU_SENSITIVE_FIELD_KEYS = SKU_SENSITIVE_FIELDS as (keyof CommercialSku)[]
 
 /** `changeReason` is required whenever `patch` touches `lifecycleStatus` or
  *  any cost/pricing field — spec §15/§6.6. */
@@ -225,7 +215,7 @@ export function updateSkuLogic(
   const row = data.commercialSkus.find((s) => s.id === id)
   if (!row) throw new Error(`No such SKU: ${id}`)
 
-  const touchedFields = SKU_SENSITIVE_FIELDS.filter((f) => patch[f] !== undefined && patch[f] !== row[f])
+  const touchedFields = SKU_SENSITIVE_FIELD_KEYS.filter((f) => patch[f] !== undefined && patch[f] !== row[f])
   if (touchedFields.length > 0 && !changeReason?.trim()) {
     throw new Error('changeReason is required when changing lifecycle status, cost, or pricing fields.')
   }

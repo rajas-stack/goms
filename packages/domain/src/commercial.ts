@@ -62,3 +62,39 @@ export function enforceSingleBaseCurrency(rows: { id: string; isBaseCurrency: bo
     row.isBaseCurrency = row.id === winnerId
   }
 }
+
+// --- SKU code generation (spec §7 / PCS-012) -------------------------------
+
+export const FEATURE_STATUS_CODE: Record<string, string> = { existing: 'EXG', modified: 'MOD', new: 'NEW' }
+
+/** Format `{Vertical.code}-{Product.code}-{Module.code}-{Feature.code}-{STATUS}`,
+ *  uppercased. Pure string formatting only — resolving the feature's
+ *  vertical/product/module ancestry (an in-memory array walk on the
+ *  frontend, a `parent_id` chain query on the backend) stays with each
+ *  caller, since those two traversals have no shared shape to extract. */
+export function buildSkuCode(
+  verticalCode: string, productCode: string, moduleCode: string, featureCode: string, featureStatus: string,
+): string {
+  const statusCode = FEATURE_STATUS_CODE[featureStatus] ?? 'NEW'
+  return `${verticalCode}-${productCode}-${moduleCode}-${featureCode}-${statusCode}`.toUpperCase()
+}
+
+// --- SKU changeReason gating (spec §15/§6.6) -------------------------------
+
+/** Fields whose change on a `CommercialSku` requires a non-empty
+ *  `changeReason` — shared by the frontend's `updateSkuLogic` (audit-log
+ *  writer) and `apps/api`'s `commercial.skus.update` procedure (gate only;
+ *  audit persistence itself arrives with `commercial_audit_logs` in a later
+ *  phase) so the two never independently drift on which fields are
+ *  "sensitive". */
+export const SKU_COST_FIELDS = [
+  'baseSoftwareCost', 'implementationCostPerMM', 'integrationCost', 'thirdPartyCost',
+  'hardwareCost', 'cloudCost', 'supportCost', 'trainingCost',
+] as const
+
+export const SKU_PRICE_FIELDS = [
+  'internalPrice', 'floorPrice', 'partnerPrice', 'governmentPrice', 'enterprisePrice', 'corporatePrice', 'listPrice',
+  'minimumAllowedPrice', 'maximumDiscountPercent',
+] as const
+
+export const SKU_SENSITIVE_FIELDS: string[] = ['lifecycleStatus', ...SKU_COST_FIELDS, ...SKU_PRICE_FIELDS]
