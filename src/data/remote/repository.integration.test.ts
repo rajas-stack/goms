@@ -169,4 +169,79 @@ describe.skipIf(!import.meta.env.VITE_API_BASE_URL)('RemoteRepository (integrati
     await repo.deleteMaster!('products', product.id)
     await repo.deleteMaster!('verticals', vertical.id)
   })
+
+  it('round-trips a BOQ through create/addLineItem/updateStatus/revise/duplicate/delete', async () => {
+    const dept = await repo.createNode!({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Integration BOQ Dept' })
+    const salesPerson = await repo.createSalesPerson!({
+      name: 'Integration BOQ Sales', officialEmail: `integration-boq-${Date.now()}@example.com`,
+      designation: 'Account Manager', tierKey: 'accountManager',
+    })
+
+    const vertical = await repo.createMaster!('verticals', { code: `INT-BOQ-V-${Date.now()}`, name: 'Integration Vertical', description: '' })
+    const product = await repo.createMaster!('products', { code: `INT-BOQ-P-${Date.now()}`, name: 'Integration Product', description: '', verticalId: vertical.id })
+    const module_ = await repo.createMaster!('modules', { code: `INT-BOQ-M-${Date.now()}`, name: 'Integration Module', description: '', productId: product.id })
+    const feature = await repo.createMaster!('features', { code: `INT-BOQ-F-${Date.now()}`, name: 'Integration Feature', description: '', moduleId: module_.id, status: 'new' })
+    const category = await repo.createMaster!('skuCategories', { code: `INT-BOQ-CAT-${Date.now()}`, name: 'Integration Category', description: '' })
+    const uom = await repo.createMaster!('unitsOfMeasure', { code: `INT-BOQ-UOM-${Date.now()}`, name: 'Integration UoM', description: '' })
+    const currency = await repo.createMaster!('currencies', { code: `INTBOQ${Date.now()}`.slice(0, 8), name: 'Integration Currency', description: '', symbol: '$', decimalPlaces: 2, exchangeRate: 1, isBaseCurrency: false })
+    const taxClass = await repo.createMaster!('taxClasses', { code: `INT-BOQ-TAX-${Date.now()}`, name: 'Integration Tax', description: '', ratePct: 18 })
+    const billingType = await repo.createMaster!('billingTypes', { code: `INT-BOQ-BIL-${Date.now()}`, name: 'Integration Billing', description: '' })
+
+    const sku = await repo.createSku!({
+      name: 'Integration BOQ SKU', categoryId: category.id, featureId: feature.id,
+      uomId: uom.id, currencyId: currency.id, taxClassId: taxClass.id, billingTypeId: billingType.id,
+      activeFrom: '2026-01-01', activeTill: null,
+      baseSoftwareCost: 1000, implementationCostPerMM: 0, integrationCost: 0, thirdPartyCost: 0,
+      hardwareCost: 0, cloudCost: 0, supportCost: 0, trainingCost: 0,
+      internalPrice: 5000, floorPrice: 6000, partnerPrice: 7000, governmentPrice: 8000,
+      enterprisePrice: 9000, corporatePrice: 9500, listPrice: 10000,
+    })
+
+    const boq = await repo.createBoq!({
+      opportunityName: `Integration Opportunity ${Date.now()}`, departmentId: dept.id,
+      customerName: 'Integration Customer', customerOrganization: '', customerAddress: '', customerContact: '',
+      verticalId: vertical.id, budgetAmount: '', budgetUnit: '', budgetKnown: 'yes', emdAmount: '', emdUnit: '',
+      salesPersonId: salesPerson.id, buSalesPersonId: null, preSalesId: null, currency: currency.code,
+    })
+    expect(boq.status).toBe('draft')
+
+    const line = await repo.addBoqLineItem!(boq.id, { skuId: sku.id, quantity: 1, unitPrice: 10000, discountPct: 5 })
+    expect(line.approvalStatus).toBe('auto_approved')
+
+    const submitted = await repo.updateBoqStatus!(boq.id, 'submitted', 'Submitted for integration test')
+    expect(submitted.status).toBe('submitted')
+    await repo.updateBoqStatus!(boq.id, 'under_review', 'Under review')
+    const approved = await repo.updateBoqStatus!(boq.id, 'approved', 'Approved for integration test')
+    expect(approved.status).toBe('approved')
+
+    const revised = await repo.reviseBoq!(boq.id)
+    expect(revised.boqNumber).toBe(boq.boqNumber)
+    expect(revised.parentBoqId).toBe(boq.id)
+
+    const duplicate = await repo.duplicateBoq!(boq.id)
+    expect(duplicate.boqNumber).not.toBe(boq.boqNumber)
+
+    const logs = await repo.listAuditLogs!({ entityType: 'boq', entityId: boq.id })
+    expect(logs.length).toBeGreaterThan(0)
+
+    await repo.removeBoqLineItem!(line.id)
+    await repo.deleteBoq!(revised.id)
+    await repo.deleteBoq!(duplicate.id)
+    await repo.updateBoqStatus!(boq.id, 'archived', 'Archived for cleanup')
+    await repo.deleteBoq!(boq.id)
+    expect(await repo.getBoq!(boq.id)).toBeNull()
+
+    await repo.deleteSku!(sku.id)
+    await repo.deleteMaster!('features', feature.id)
+    await repo.deleteMaster!('modules', module_.id)
+    await repo.deleteMaster!('products', product.id)
+    await repo.deleteMaster!('verticals', vertical.id)
+    await repo.deleteMaster!('skuCategories', category.id)
+    await repo.deleteMaster!('unitsOfMeasure', uom.id)
+    await repo.deleteMaster!('currencies', currency.id)
+    await repo.deleteMaster!('taxClasses', taxClass.id)
+    await repo.deleteMaster!('billingTypes', billingType.id)
+    await repo.deleteSalesPerson!(salesPerson.id)
+    await repo.deleteNode!(dept.id)
+  })
 })

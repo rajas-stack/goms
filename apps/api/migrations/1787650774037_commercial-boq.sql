@@ -30,7 +30,13 @@ CREATE TABLE commercial_boqs (
     CHECK (status IN ('draft','submitted','under_review','approved','rejected','cancelled','archived')),
   boq_version INTEGER NOT NULL DEFAULT 1,
   revision_number INTEGER NOT NULL DEFAULT 0,
-  parent_boq_id UUID REFERENCES commercial_boqs(id) ON DELETE RESTRICT,
+  -- No FK: deleteBoqLogic never checks for revisions pointing back at a BOQ
+  -- before deleting it — a revision's parent_boq_id is allowed to dangle
+  -- after its source is deleted, same as employee_merge_audit.duplicate_id's
+  -- unenforced reference to a row that's since been merged away. A `RESTRICT`
+  -- FK here would block deleting any BOQ that has ever been revised, which
+  -- the real in-memory behavior never blocks.
+  parent_boq_id UUID,
   -- A currency CODE (e.g. "INR"), not an FK — matches the real frontend
   -- CommercialBoq.currency: string field, resolved against
   -- commercial_masters (master_key='currencies').code at the application layer.

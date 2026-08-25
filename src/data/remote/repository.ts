@@ -16,6 +16,7 @@ import type {
 import type {
   CommercialBomItem, CommercialSku, CreateBomItemInput, CreateSkuInput,
   MasterEntityKey, MasterRowMap, CreateMasterInput, ProductEditionFeature,
+  CommercialBoq, CommercialBoqLineItem, CommercialAuditLog, CreateBoqInput, UpdateBoqInput, CreateBoqLineItemInput, BoqStatus,
 } from '@/modules/commercial-calculator/types'
 
 export class RemoteRepository implements Partial<Repository> {
@@ -140,4 +141,31 @@ export class RemoteRepository implements Partial<Repository> {
   updateBomItem = (id: string, patch: Partial<CommercialBomItem>): Promise<CommercialBomItem> =>
     this.client.commercial.bom.update.mutate({ id, patch })
   deleteBomItem = (id: string): Promise<void> => this.client.commercial.bom.delete.mutate({ id })
+
+  listBoqs = (): Promise<CommercialBoq[]> => this.client.commercial.boq.list.query()
+  getBoq = (id: string): Promise<CommercialBoq | null> => this.client.commercial.boq.get.query({ id })
+  listBoqLineItems = (boqId: string): Promise<CommercialBoqLineItem[]> => this.client.commercial.boq.listLineItems.query({ boqId })
+  listAllBoqLineItems = (): Promise<CommercialBoqLineItem[]> => this.client.commercial.boq.listAllLineItems.query()
+  createBoq = (input: CreateBoqInput): Promise<CommercialBoq> => this.client.commercial.boq.create.mutate(input)
+  updateBoq = (id: string, patch: UpdateBoqInput): Promise<CommercialBoq> => this.client.commercial.boq.update.mutate({ id, patch })
+  addBoqLineItem = (boqId: string, input: CreateBoqLineItemInput): Promise<CommercialBoqLineItem> =>
+    this.client.commercial.boq.addLineItem.mutate({ boqId, ...input })
+  updateBoqLineItem = (
+    id: string,
+    patch: Partial<Pick<CommercialBoqLineItem,
+      'quantity' | 'unitPrice' | 'discountPct' | 'approverId' | 'approvalDate' | 'approvalRemarks' | 'approvalStatus'
+      | 'pricingLevels' | 'activePricingLevel'
+    >>,
+  ): Promise<CommercialBoqLineItem> => this.client.commercial.boq.updateLineItem.mutate({ id, patch })
+  removeBoqLineItem = (id: string): Promise<void> => this.client.commercial.boq.removeLineItem.mutate({ id })
+  reorderBoqLineItems = (boqId: string, orderedIds: string[]): Promise<void> =>
+    this.client.commercial.boq.reorderLineItems.mutate({ boqId, orderedIds })
+  updateBoqStatus = (id: string, nextStatus: BoqStatus, changeReason: string): Promise<CommercialBoq> =>
+    this.client.commercial.boq.updateStatus.mutate({ id, nextStatus, changeReason })
+  reviseBoq = (id: string): Promise<CommercialBoq> => this.client.commercial.boq.revise.mutate({ id })
+  duplicateBoq = (id: string): Promise<CommercialBoq> => this.client.commercial.boq.duplicate.mutate({ id })
+  deleteBoq = (id: string): Promise<void> => this.client.commercial.boq.delete.mutate({ id })
+
+  listAuditLogs = (filter?: { entityType?: string; entityId?: string }): Promise<CommercialAuditLog[]> =>
+    this.client.commercial.auditLogs.list.query(filter)
 }
