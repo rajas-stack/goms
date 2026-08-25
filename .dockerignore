@@ -1,0 +1,39 @@
+# Root .dockerignore — scoped for apps/api/Dockerfile's `COPY . .` build stage.
+# apps/api only needs: root package.json + package-lock.json (npm workspaces),
+# apps/api/**, and packages/domain/** (its one workspace dependency). Everything
+# below is either regenerated inside the image (node_modules, dist) or belongs
+# to the frontend/mobile app and tooling that apps/api never imports.
+
+.git
+node_modules
+dist
+android
+public
+src
+docs
+scripts
+infra
+
+# Editor/OS/tooling cruft
+.vscode
+.idea
+.vite
+.superpowers
+.vercel
+.claude
+.impeccable
+.playwright-mcp
+.worktrees
+*.log
+tsconfig.tsbuildinfo
+
+# Env files (never belong in an image layer)
+.env
+.env.*
+!.env.example
+
+# Stray root documents, not part of any workspace
+*.docx
+*.xlsx
+*.png
+*.zip
