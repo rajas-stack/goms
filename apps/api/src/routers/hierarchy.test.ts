@@ -187,4 +187,22 @@ describe('hierarchy router', () => {
     expect(updated.name).toBe('Renamed')
     expect(updated.metadata).toEqual({ region: 'west' })
   })
+
+  it('listStates reports real active, non-vacant employee counts', async () => {
+    const caller = appRouter.createCaller({})
+    await makeNode({ typeKey: 'state', name: 'Test State', stateCode: 27, domain: 'geo' })
+    const dept = await makeNode({ typeKey: 'department', name: 'Dept' })
+    await caller.employees.create({ name: 'A', designation: 'Officer', email: '', phone: '', orgNodeId: dept.id, managerId: null })
+    await caller.employees.create({ name: 'B', designation: 'Officer', email: '', phone: '', orgNodeId: dept.id, managerId: null, vacant: true })
+    const states = await caller.hierarchy.listStates()
+    expect(states.find((s) => s.code === 27)?.employees).toBe(1)
+  })
+
+  it('deleteNode cascades to employees under the deleted subtree', async () => {
+    const caller = appRouter.createCaller({})
+    const dept = await makeNode({ typeKey: 'department', name: 'Dept' })
+    const emp = await caller.employees.create({ name: 'A', designation: 'Officer', email: '', phone: '', orgNodeId: dept.id, managerId: null })
+    await caller.hierarchy.deleteNode({ id: dept.id })
+    expect(await caller.employees.get({ id: emp.id })).toBeNull()
+  })
 })

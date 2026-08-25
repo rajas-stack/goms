@@ -70,6 +70,11 @@ export const hierarchyRouter = router({
         `SELECT * FROM hierarchy_nodes WHERE domain = 'org' AND state_code = $1`,
         [s.stateCode],
       )).rows.map(toNode)
+      const employeeCount = (await pool.query(
+        `SELECT COUNT(*)::int AS n FROM employees e JOIN hierarchy_nodes n ON n.id = e.org_node_id
+         WHERE n.domain='org' AND n.state_code=$1 AND e.status='active' AND e.vacant=false`,
+        [s.stateCode],
+      )).rows[0].n
       out.push({
         // A 'state' node always carries a stateCode by app convention
         // (matching InMemoryRepository's own `s.stateCode!` non-null
@@ -78,9 +83,7 @@ export const hierarchyRouter = router({
         name: s.name,
         departments: orgUnder.filter((n: any) => n.typeKey === 'department').length,
         offices: orgUnder.filter((n: any) => n.typeKey === 'office').length,
-        // Employee counts are added once the employees table exists (Phase 2
-        // of the migration plan) — 0 until then, matching an empty roster.
-        employees: 0,
+        employees: employeeCount,
       })
     }
     return out.sort((a, b) => a.name.localeCompare(b.name))
@@ -196,11 +199,20 @@ export const hierarchyRouter = router({
     }),
 
   deleteNode: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
-    // Cascades only within hierarchy_nodes today — employees/opportunities
-    // cascades are added in Phase 2/Phase 7 of the migration plan once those
-    // tables exist.
+    // Opportunities cascade still deferred to Phase 7 (table doesn't exist yet).
     const ids = await subtreeIds(input.id)
-    await pool.query(`DELETE FROM hierarchy_nodes WHERE id = ANY($1)`, [ids])
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query(`DELETE FROM employees WHERE org_node_id = ANY($1)`, [ids])
+      await client.query(`DELETE FROM hierarchy_nodes WHERE id = ANY($1)`, [ids])
+      await client.query('COMMIT')
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
   }),
 
   moveNode: publicProcedure
