@@ -8,10 +8,13 @@ import type {
   Repository, CreateCustomerInput, CreateNodeInput, CreateEmployeeInput, AddTimelineInput,
   ImportChildRow, ImportEmployeeRow, MergeEmployeesInput, TransferInput,
   CreateSalesPersonInput, TransferSalesPersonInput, StateSummary,
+  CreateOpportunityInput, AssignOwnerInput, TransferBookOfBusinessInput, CreateFollowUpInput,
+  RelationshipAnalytics,
 } from '../repository'
+import type { OwnerResolution } from '@/data/ownership'
 import type {
   Customer, HierNode, Status, Employee, Charge, TimelineEvent, TimelineEventType, Transfer, MergeAuditRecord,
-  SalesPerson, SalesPosting,
+  SalesPerson, SalesPosting, Opportunity, OpportunityStageChange, OwnershipAssignment, FollowUp, SearchResult,
 } from '@/lib/types'
 import type {
   CommercialBomItem, CommercialSku, CreateBomItemInput, CreateSkuInput,
@@ -168,4 +171,42 @@ export class RemoteRepository implements Partial<Repository> {
 
   listAuditLogs = (filter?: { entityType?: string; entityId?: string }): Promise<CommercialAuditLog[]> =>
     this.client.commercial.auditLogs.list.query(filter)
+
+  listOpportunities = (): Promise<Opportunity[]> => this.client.opportunities.list.query()
+  listOpportunitiesByDepartment = (departmentId: string): Promise<Opportunity[]> =>
+    this.client.opportunities.listByDepartment.query({ departmentId })
+  getOpportunity = (id: string): Promise<Opportunity | null> => this.client.opportunities.get.query({ id })
+  listOpportunityStageChanges = (opportunityId: string): Promise<OpportunityStageChange[]> =>
+    this.client.opportunities.listStageChanges.query({ opportunityId })
+  createOpportunity = (input: CreateOpportunityInput): Promise<Opportunity> => this.client.opportunities.create.mutate(input)
+  updateOpportunity = (id: string, patch: Partial<Opportunity>): Promise<Opportunity> =>
+    this.client.opportunities.update.mutate({ id, patch: patch as any })
+  deleteOpportunity = (id: string): Promise<void> => this.client.opportunities.delete.mutate({ id })
+
+  listOwnershipAssignments = (): Promise<OwnershipAssignment[]> => this.client.ownership.listAssignments.query()
+  listOwnershipFor = (entityType: string, entityId: string): Promise<OwnershipAssignment[]> =>
+    this.client.ownership.listFor.query({ entityType, entityId })
+  listOwnedBy = (salesPersonId: string, asOf: string): Promise<OwnershipAssignment[]> =>
+    this.client.ownership.listOwnedBy.query({ salesPersonId, asOf })
+  resolveOwner = (entityType: string, entityId: string, asOf: string): Promise<OwnerResolution | null> =>
+    this.client.ownership.resolveOwner.query({ entityType, entityId, asOf })
+  resolveOwners = (entityType: string, entityIds: string[], asOf: string): Promise<Record<string, OwnerResolution>> =>
+    this.client.ownership.resolveOwners.query({ entityType, entityIds, asOf })
+  assignOwner = (input: AssignOwnerInput): Promise<OwnershipAssignment> => this.client.ownership.assign.mutate(input)
+  endOwnership = (id: string, endDate: string): Promise<void> => this.client.ownership.end.mutate({ id, endDate })
+  transferBookOfBusiness = (input: TransferBookOfBusinessInput): Promise<OwnershipAssignment[]> =>
+    this.client.ownership.transferBookOfBusiness.mutate(input)
+
+  listFollowUps = (entityType: string, entityId: string): Promise<FollowUp[]> =>
+    this.client.followUps.listForEntity.query({ entityType, entityId })
+  listOpenFollowUps = (): Promise<FollowUp[]> => this.client.followUps.listOpen.query()
+  createFollowUp = (input: CreateFollowUpInput): Promise<FollowUp> => this.client.followUps.create.mutate(input)
+  setFollowUpStatus = (id: string, status: FollowUp['status']): Promise<void> =>
+    this.client.followUps.setStatus.mutate({ id, status })
+  deleteFollowUp = (id: string): Promise<void> => this.client.followUps.delete.mutate({ id })
+
+  search = (query: string, stateCode?: number): Promise<SearchResult[]> =>
+    this.client.search.search.query({ query, stateCode })
+  relatedRecords = (result: SearchResult): Promise<SearchResult[]> => this.client.search.relatedRecords.query(result)
+  relationshipAnalytics = (): Promise<RelationshipAnalytics> => this.client.search.relationshipAnalytics.query()
 }

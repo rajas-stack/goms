@@ -244,4 +244,102 @@ describe.skipIf(!import.meta.env.VITE_API_BASE_URL)('RemoteRepository (integrati
     await repo.deleteSalesPerson!(salesPerson.id)
     await repo.deleteNode!(dept.id)
   })
+
+  it('round-trips an opportunity through create/update (stage change + closedOn)/delete', async () => {
+    const dept = await repo.createNode!({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Integration Opp Dept' })
+
+    const opp = await repo.createOpportunity!({ departmentId: dept.id, opportunityName: 'Integration Opportunity' })
+    expect(opp.stageKey).toBe('pipeline')
+    expect(opp.closedOn).toBeNull()
+
+    const won = await repo.updateOpportunity!(opp.id, { stageKey: 'won' })
+    expect(won.closedOn).not.toBeNull()
+
+    const changes = await repo.listOpportunityStageChanges!(opp.id)
+    expect(changes.map((c) => c.toStageKey)).toEqual(['pipeline', 'won'])
+
+    await repo.deleteOpportunity!(opp.id)
+    expect(await repo.getOpportunity!(opp.id)).toBeNull()
+    await repo.deleteNode!(dept.id)
+  })
+
+  it('round-trips ownership through assign/resolveOwner (inherited)/transferBookOfBusiness/end', async () => {
+    const dept = await repo.createNode!({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Integration Own Dept' })
+    const branch = await repo.createNode!({ domain: 'org', typeKey: 'branch', parentId: dept.id, stateCode: 27, name: 'Integration Own Branch' })
+    const personA = await repo.createSalesPerson!({
+      name: 'Integration Owner A', officialEmail: `integration-own-a-${Date.now()}@example.com`,
+      designation: 'RM', tierKey: 'rm',
+    })
+    const personB = await repo.createSalesPerson!({
+      name: 'Integration Owner B', officialEmail: `integration-own-b-${Date.now()}@example.com`,
+      designation: 'RM', tierKey: 'rm',
+    })
+
+    const assignment = await repo.assignOwner!({ entityType: 'orgNode', entityId: dept.id, salesPersonId: personA.id, startDate: '2025-01-01' })
+    expect(assignment.role).toBe('owner')
+
+    const inherited = await repo.resolveOwner!('orgNode', branch.id, '2025-06-01')
+    expect(inherited).toMatchObject({ salesPersonId: personA.id, source: 'inherited' })
+
+    const moved = await repo.transferBookOfBusiness!({ fromSalesPersonId: personA.id, toSalesPersonId: personB.id, effectiveDate: '2025-06-01' })
+    expect(moved).toHaveLength(1)
+    const afterTransfer = await repo.resolveOwner!('orgNode', dept.id, '2025-06-01')
+    expect(afterTransfer?.salesPersonId).toBe(personB.id)
+
+    const history = await repo.listOwnershipFor!('orgNode', dept.id)
+    const openRow = history.find((h) => h.salesPersonId === personB.id)!
+    await repo.endOwnership!(openRow.id, '2025-12-01')
+    expect(await repo.resolveOwner!('orgNode', dept.id, '2025-12-01')).toBeNull()
+
+    await repo.deleteSalesPerson!(personA.id)
+    await repo.deleteSalesPerson!(personB.id)
+    await repo.deleteNode!(dept.id)
+  })
+
+  it('round-trips a follow-up through create/listForEntity/setStatus/delete', async () => {
+    const dept = await repo.createNode!({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Integration FollowUp Dept' })
+    const office = await repo.createNode!({ domain: 'org', typeKey: 'office', parentId: dept.id, stateCode: 27, name: 'Integration FollowUp Office' })
+    const emp = await repo.createEmployee!({
+      name: 'Integration FollowUp Contact', designation: 'Officer', email: 'fu@example.com', phone: '9999999999',
+      orgNodeId: office.id, managerId: null,
+    })
+
+    const followUp = await repo.createFollowUp!({ entityType: 'contact', entityId: emp.id, dueDate: '2026-01-01' })
+    expect(followUp.status).toBe('open')
+
+    const list = await repo.listFollowUps!('contact', emp.id)
+    expect(list.map((f) => f.id)).toContain(followUp.id)
+
+    await repo.setFollowUpStatus!(followUp.id, 'done')
+    expect(await repo.listOpenFollowUps!()).not.toContainEqual(expect.objectContaining({ id: followUp.id }))
+
+    await repo.deleteFollowUp!(followUp.id)
+    await repo.deleteEmployee!(emp.id)
+    await repo.deleteNode!(dept.id)
+  })
+
+  it('round-trips search across categories, relatedRecords, and relationshipAnalytics', async () => {
+    const dept = await repo.createNode!({
+      domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: `Integration Search Dept ${Date.now()}`,
+    })
+    const emp = await repo.createEmployee!({
+      name: `Integration Search Contact ${Date.now()}`, designation: 'Officer', email: 'search@example.com',
+      phone: '9999999999', orgNodeId: dept.id, managerId: null,
+    })
+
+    const results = await repo.search!(emp.name.split(' ').pop()!)
+    expect(results.some((r) => r.category === 'employee' && r.id === emp.id)).toBe(true)
+
+    const related = await repo.relatedRecords!({
+      kind: 'employee', category: 'employee', id: emp.id, title: emp.name, subtitle: emp.designation,
+      code: emp.code, domain: null, stateCode: 27,
+    })
+    expect(related.some((r) => r.category === 'department' && r.id === dept.id)).toBe(true)
+
+    const stats = await repo.relationshipAnalytics!()
+    expect(typeof stats.total).toBe('number')
+
+    await repo.deleteEmployee!(emp.id)
+    await repo.deleteNode!(dept.id)
+  })
 })
