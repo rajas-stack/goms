@@ -192,7 +192,8 @@ export type CreateBomItemInput = Omit<CommercialBomItem, 'id'>
 
 // --- BOQ (spec §6.5) -------------------------------------------------------
 
-export type BoqStatus = 'draft' | 'submitted' | 'under_review' | 'approved' | 'rejected' | 'cancelled' | 'archived'
+import type { BoqStatus } from '@goms/domain'
+export type { BoqStatus }
 
 export interface CommercialBoq {
   id: string

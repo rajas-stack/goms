@@ -1,14 +1,26 @@
 import { uid } from '@/lib/utils'
-import { buildSkuCode, SKU_COST_FIELDS, SKU_PRICE_FIELDS, SKU_SENSITIVE_FIELDS } from '@goms/domain'
+import {
+  buildSkuCode, SKU_COST_FIELDS, SKU_PRICE_FIELDS, SKU_SENSITIVE_FIELDS,
+  BOQ_TRANSITIONS, isBoqPendingApproval, LINE_STATES_CLEARED_FOR_APPROVAL, DELETABLE_BOQ_STATUSES, formatBoqNumber,
+  computeLineTotal as computeLineTotalCore, validateLineQuantity as validateLineQuantityCore,
+  validateLineDiscountPct as validateLineDiscountPctCore, resolveApprovalBand as resolveApprovalBandCore,
+  freshLineApprovalState as freshLineApprovalStateCore, skuTotalUnitCost as skuTotalUnitCostCore,
+  skuTotalUnitCostWithBom as skuTotalUnitCostWithBomCore, computeBoqMarginPercent as computeBoqMarginPercentCore,
+} from '@goms/domain'
 import { conversionFactor, currencyByCode, currencyById } from './currency'
 import { enforceSingleBaseCurrency, findMasterChildren, validateMasterCode, validateParentExists } from './master-rules'
-import { DISCOUNT_FLOAT_EPSILON, effectiveUnitPrice, isAbsoluteLinePrice, resolveLineUnitPrice } from './pricing-levels-logic'
+import { effectiveUnitPrice, isAbsoluteLinePrice, resolveLineUnitPrice } from './pricing-levels-logic'
 import { STANDARD_EDITION_ID } from './seed-defaults'
 import type {
   ApprovalMatrixRule, BoqStatus, CommercialAuditLog, CommercialBoq, CommercialBoqLineItem, CommercialBomItem,
   CommercialCalculatorData, CommercialSku, CreateBoqInput, CreateBoqLineItemInput, CreateBomItemInput,
   CreateMasterInput, CreateSkuInput, Currency, MasterEntityKey, MasterRowMap, UpdateBoqInput,
 } from './types'
+
+// Re-exported (not redeclared) — apps/api's BOQ router shares this exact
+// state machine, and existing frontend consumers (e.g. ProposalDetail.tsx)
+// keep importing these from this module's own public surface.
+export { BOQ_TRANSITIONS, isBoqPendingApproval, LINE_STATES_CLEARED_FOR_APPROVAL, DELETABLE_BOQ_STATUSES }
 
 // --- Generic Masters CRUD (Phase 0/1) --------------------------------------
 
@@ -129,10 +141,11 @@ export function generateSkuCode(data: CommercialCalculatorData, featureId: strin
   return buildSkuCode(vertical.code, product.code, mod.code, feature.code, feature.status)
 }
 
-/** Sum of the 8 cost fields — shared by SKU-level and BOQ-level margin. */
+/** Sum of the 8 cost fields — shared by SKU-level and BOQ-level margin.
+ *  Delegates to `@goms/domain` (Phase 6) — the backend BOQ router shares this
+ *  exact rollup. */
 export function skuTotalUnitCost(sku: CommercialSku): number {
-  return sku.baseSoftwareCost + sku.implementationCostPerMM + sku.integrationCost + sku.thirdPartyCost
-    + sku.hardwareCost + sku.cloudCost + sku.supportCost + sku.trainingCost
+  return skuTotalUnitCostCore(sku)
 }
 
 /** BOM Option B (cost rollup): a SKU's fully-loaded unit cost is its own
@@ -141,17 +154,12 @@ export function skuTotalUnitCost(sku: CommercialSku): number {
  *  unconditionally part of every unit sold, so their cost shouldn't be
  *  baked into a margin figure the customer may never actually incur. One
  *  level deep: a component's own BOM (if it has one) isn't recursed into,
- *  since nested kits aren't a case the catalog has today. */
+ *  since nested kits aren't a case the catalog has today. Delegates to
+ *  `@goms/domain` (Phase 6). */
 export function skuTotalUnitCostWithBom(
   sku: CommercialSku, bomItems: CommercialBomItem[], skusById: Map<string, CommercialSku>,
 ): number {
-  const componentCost = bomItems
-    .filter((b) => b.parentSkuId === sku.id && b.mandatory)
-    .reduce((sum, b) => {
-      const component = skusById.get(b.componentSkuId)
-      return component ? sum + b.quantity * skuTotalUnitCost(component) : sum
-    }, 0)
-  return skuTotalUnitCost(sku) + componentCost
+  return skuTotalUnitCostWithBomCore(sku, bomItems, skusById)
 }
 
 /** `bomItems`/`skusById` are optional so existing call sites that don't have
@@ -281,7 +289,7 @@ export function generateBoqNumber(data: CommercialCalculatorData): string {
   const year = String(new Date().getFullYear())
   const seq = (data.boqSequenceByYear[year] ?? 0) + 1
   data.boqSequenceByYear[year] = seq
-  return `BOQ-${year}-${String(seq).padStart(6, '0')}`
+  return formatBoqNumber(year, seq)
 }
 
 // --- CommercialBoq CRUD & lifecycle (spec §6.5, §10, §12, §13) -------------
@@ -426,10 +434,7 @@ export function updateBoqLogic(data: CommercialCalculatorData, id: string, patch
  *  never reaches the UI layer) so Create BOQ can preview a line's approval
  *  status before it's actually added — same matching logic, no duplication. */
 export function resolveApprovalBand(approvalMatrix: ApprovalMatrixRule[], discountPct: number): ApprovalMatrixRule {
-  const bands = [...approvalMatrix].sort((a, b) => a.minDiscountPct - b.minDiscountPct)
-  let match = bands[0]
-  for (const b of bands) if (discountPct >= b.minDiscountPct) match = b
-  return match
+  return resolveApprovalBandCore(approvalMatrix, discountPct)
 }
 
 /** `unitPrice`/cost fields on a SKU are always in that SKU's own currency
@@ -452,7 +457,7 @@ export function computeLineTotal(
   quantity: number, unitPrice: number, discountPct: number, taxPct: number, factorToBoqCurrency: number,
   isAbsolutePrice = false,
 ): number {
-  return quantity * effectiveUnitPrice(unitPrice, discountPct, isAbsolutePrice) * (1 + taxPct / 100) * factorToBoqCurrency
+  return computeLineTotalCore(quantity, unitPrice, discountPct, taxPct, factorToBoqCurrency, isAbsolutePrice)
 }
 
 /** Validates a BOQ line's `discountPct` against this SKU's own maximum
@@ -465,13 +470,7 @@ export function computeLineTotal(
  *  derived from a selling price via `discountPctForSellingPrice`, which can
  *  land a hair above the true maximum on a float round-trip. */
 function validateLineDiscountPct(discountPct: number, sku: CommercialSku): number {
-  if (!Number.isFinite(discountPct) || discountPct < 0) {
-    throw new Error('Discount % must be a valid, non-negative number.')
-  }
-  const maxDiscountPct = Math.min(90, sku.maximumDiscountPercent)
-  if (discountPct > maxDiscountPct + DISCOUNT_FLOAT_EPSILON) {
-    throw new Error(`Discount of ${discountPct}% exceeds this SKU's maximum allowed discount of ${maxDiscountPct}%.`)
-  }
+  validateLineDiscountPctCore(discountPct, Math.min(90, sku.maximumDiscountPercent))
   return discountPct
 }
 
@@ -479,9 +478,7 @@ function validateLineDiscountPct(discountPct: number, sku: CommercialSku): numbe
  *  negative, fractional-below-1, and non-finite values alike; never
  *  silently coerced into range. */
 function validateLineQuantity(quantity: number): number {
-  if (!Number.isFinite(quantity) || quantity < 1) {
-    throw new Error('Quantity must be at least 1.')
-  }
+  validateLineQuantityCore(quantity)
   return quantity
 }
 
@@ -636,33 +633,6 @@ export function reorderBoqLineItemsLogic(data: CommercialCalculatorData, boqId: 
   data.commercialBoqLineItems = data.commercialBoqLineItems.map((li) => (li.boqId === boqId ? reordered[cursor++] : li))
 }
 
-/** Spec §10 — `cancelled`/`archived` are terminal, and a decision already
- *  reached (approved/rejected) can only move to `archived`, never `cancelled`. */
-export const BOQ_TRANSITIONS: Record<BoqStatus, BoqStatus[]> = {
-  draft: ['submitted', 'cancelled'],
-  submitted: ['under_review', 'cancelled'],
-  under_review: ['approved', 'rejected', 'cancelled'],
-  approved: ['archived'],
-  rejected: ['archived'],
-  cancelled: [],
-  archived: [],
-}
-
-/** Pending Approval is defined by exclusion (spec §10), not enumeration. */
-export function isBoqPendingApproval(status: BoqStatus): boolean {
-  return !['draft', 'approved', 'rejected', 'cancelled', 'archived'].includes(status)
-}
-
-/** The only two line-level states that mean "this discount is actually
- *  cleared for a customer-facing approval" — everything else (`pending`,
- *  `rejected`, and any future addition to the union) must block the BOQ
- *  itself from reaching `approved`. Written as an explicit whitelist rather
- *  than excluding `pending` alone: excluding just one bad state silently
- *  passes every other one, including `rejected` — a line an approver
- *  explicitly turned down must not be able to ride along to document
- *  approval just because nothing re-checked it. */
-export const LINE_STATES_CLEARED_FOR_APPROVAL: CommercialBoqLineItem['approvalStatus'][] = ['auto_approved', 'approved']
-
 /** `PCS-029` ("validate discounts against approval hierarchy") was, until
  *  this check, enforced only at the line level (`approvalStatus` gets set
  *  by `resolveApprovalBand` when a line is added) — nothing stopped the
@@ -706,18 +676,8 @@ export function updateBoqStatusLogic(
  *  fields reset so no stale approverId/date/remarks implies a decision was
  *  already made on the new copy. */
 export function freshLineApprovalState(approvalMatrix: ApprovalMatrixRule[], discountPct: number) {
-  const band = resolveApprovalBand(approvalMatrix, discountPct)
-  return {
-    approvalStatus: band.allowAutoApproval ? 'auto_approved' as const : 'pending' as const,
-    approverId: null, approvalDate: null, approvalRemarks: '',
-  }
+  return freshLineApprovalStateCore(approvalMatrix, discountPct)
 }
-
-/** A BOQ still in an active pipeline state (`submitted`/`under_review`/
- *  `approved`) must be cancelled first (an existing `BOQ_TRANSITIONS` move)
- *  before it can be deleted — deletion itself is unrestricted once a BOQ
- *  has reached one of these terminal-or-never-left-draft states. */
-export const DELETABLE_BOQ_STATUSES: BoqStatus[] = ['draft', 'cancelled', 'rejected', 'archived']
 
 /** Hard-deletes a BOQ and its line items. Line items have no independent
  *  lifecycle of their own (spec §6.5) — they always cascade with their
@@ -816,17 +776,7 @@ export function computeBoqMarginPercent(
   boq: CommercialBoq, lines: CommercialBoqLineItem[], skusById: Map<string, CommercialSku>, currencies: Currency[],
   bomItems: CommercialBomItem[] = [],
 ): number {
-  let revenue = 0
-  let cost = 0
-  for (const line of lines) {
-    const sku = skusById.get(line.skuId)
-    if (!sku) continue
-    const factor = skuToBoqConversionFactor(currencies, boq.currency, sku)
-    const isAbsolutePrice = isAbsoluteLinePrice(line.pricingLevels, line.activePricingLevel)
-    revenue += line.quantity * effectiveUnitPrice(line.unitPrice, line.discountPct, isAbsolutePrice) * factor
-    cost += line.quantity * skuTotalUnitCostWithBom(sku, bomItems, skusById) * factor
-  }
-  return revenue === 0 ? 0 : ((revenue - cost) / revenue) * 100
+  return computeBoqMarginPercentCore(lines, skusById, bomItems, (sku: CommercialSku) => skuToBoqConversionFactor(currencies, boq.currency, sku))
 }
 
 // --- Audit log (spec §6.6, §15) --------------------------------------------

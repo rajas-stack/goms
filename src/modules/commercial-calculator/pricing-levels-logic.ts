@@ -1,3 +1,11 @@
+import {
+  DISCOUNT_FLOAT_EPSILON, PricingValidationError,
+  discountPctForSellingPrice as discountPctForSellingPriceCore,
+  sellingPriceForDiscountPct as sellingPriceForDiscountPctCore,
+  maxDiscountPercentForLevel as maxDiscountPercentForLevelCore,
+  isAbsoluteLinePrice as isAbsoluteLinePriceCore,
+  effectiveUnitPrice as effectiveUnitPriceCore,
+} from '@goms/domain'
 import { skuTotalUnitCostWithBom } from './repository-logic'
 import { formatPercent } from './format'
 import type { CommercialBomItem, CommercialBoqLineItem, CommercialSku, LinePricingLevel, PricingLevelKey } from './types'
@@ -10,17 +18,10 @@ export const PRICING_LEVEL_LABEL: Record<PricingLevelKey, string> = {
 }
 
 /** Thrown by every validating helper below — the UI shows `.message` inline
- *  and blocks the save; nothing here ever silently clamps (spec §2). */
-export class PricingValidationError extends Error {}
-
-/** Shared tolerance for float round-trips through a discount <-> selling
- *  price conversion (division then its inverse) — see `validateSellingPrice`
- *  for the concrete example. Exported so `repository-logic.ts`'s own
- *  discount-percent validation (BOQ line `discountPct`, which is frequently
- *  a value derived the same way via `discountPctForSellingPrice`) uses the
- *  exact same tolerance rather than defining a second one that could drift
- *  out of sync with this one. */
-export const DISCOUNT_FLOAT_EPSILON = 1e-9
+ *  and blocks the save; nothing here ever silently clamps (spec §2).
+ *  Re-exported from `@goms/domain` (Phase 6) — the backend BOQ router throws
+ *  the same class for the same reason, sharing one identity. */
+export { PricingValidationError, DISCOUNT_FLOAT_EPSILON }
 
 /** The SKU's own tier price for a level — a starting hint only, never
  *  auto-filled into the Selling Price input (spec §3: stays empty until the
@@ -37,22 +38,24 @@ export function skuPriceForLevel(sku: CommercialSku, level: PricingLevelKey): nu
 }
 
 /** Discount % is always derived against List Price, uniformly across every
- *  pricing level (spec §2/§3) — never against that level's own tier price. */
+ *  pricing level (spec §2/§3) — never against that level's own tier price.
+ *  Delegates to `@goms/domain` (Phase 6) — the backend BOQ router shares this
+ *  exact arithmetic. */
 export function discountPctForSellingPrice(listPrice: number, sellingPrice: number): number {
-  if (listPrice === 0) return 0
-  return ((listPrice - sellingPrice) / listPrice) * 100
+  return discountPctForSellingPriceCore(listPrice, sellingPrice)
 }
 
 export function sellingPriceForDiscountPct(listPrice: number, discountPct: number): number {
-  return listPrice * (1 - discountPct / 100)
+  return sellingPriceForDiscountPctCore(listPrice, discountPct)
 }
 
 /** A `level`'s own `maximumDiscountPercent` (set via the SKU form's "Set
  *  Pricing Levels" section) if the SKU has enabled that level — otherwise
  *  the SKU-wide fallback used by lines with no active level at all. Never a
- *  field shared between two different levels (2026-08-20 UI correction). */
+ *  field shared between two different levels (2026-08-20 UI correction).
+ *  Delegates to `@goms/domain` (Phase 6). */
 export function maxDiscountPercentForLevel(sku: CommercialSku, level: PricingLevelKey): number {
-  return sku.selectedPricingLevels.find((s) => s.level === level)?.maximumDiscountPercent ?? sku.maximumDiscountPercent
+  return maxDiscountPercentForLevelCore(sku, level)
 }
 
 /** Validates a candidate selling price against the applicable maximum
@@ -121,17 +124,17 @@ export function removePricingLevel(levels: LinePricingLevel[], level: PricingLev
  *  applied to. `discountPct` stays meaningful either way (approval banding,
  *  the "X% off" display), but total/floor-check math must apply it only in
  *  the second case, or an absolute price gets discounted a second time on
- *  top of a value that's already net. */
+ *  top of a value that's already net. Delegates to `@goms/domain` (Phase 6). */
 export function isAbsoluteLinePrice(pricingLevels: LinePricingLevel[], activePricingLevel: PricingLevelKey | null): boolean {
-  if (!activePricingLevel) return false
-  return pricingLevels.some((l) => l.level === activePricingLevel && l.sellingPrice !== null)
+  return isAbsoluteLinePriceCore(pricingLevels, activePricingLevel)
 }
 
 /** The unit price actually charged per unit before tax: `unitPrice` itself
  *  when it's already absolute (see `isAbsoluteLinePrice`), otherwise
- *  `unitPrice` discounted by `discountPct`. */
+ *  `unitPrice` discounted by `discountPct`. Delegates to `@goms/domain`
+ *  (Phase 6) — the backend BOQ router shares this exact arithmetic. */
 export function effectiveUnitPrice(unitPrice: number, discountPct: number, isAbsolutePrice: boolean): number {
-  return isAbsolutePrice ? unitPrice : unitPrice * (1 - discountPct / 100)
+  return effectiveUnitPriceCore(unitPrice, discountPct, isAbsolutePrice)
 }
 
 /** Given a line's pricingLevels + activePricingLevel, resolves the effective

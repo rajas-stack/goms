@@ -1,3 +1,4 @@
+import { conversionFactorFromRates } from '@goms/domain'
 import type { Currency } from './types'
 
 /** Resolves a `CommercialBoq.currency` code (e.g. "INR") back to its master
@@ -21,5 +22,5 @@ export function currencyById(currencies: Currency[], id: string): Currency {
  *  just the ratio of their rates: multiply an amount in `from` by this to
  *  get the equivalent amount in `to`. */
 export function conversionFactor(from: Currency, to: Currency): number {
-  return from.exchangeRate / to.exchangeRate
+  return conversionFactorFromRates(from.exchangeRate, to.exchangeRate)
 }
