@@ -6,24 +6,17 @@
  *  without invalidating the postings that already reference it.
  *
  *  Keys are open strings. Never narrow this to a union — the config dialog
- *  edits this ladder, and a union would make user-added tiers a build error. */
-export interface SalesTierDef {
-  key: string
-  label: string
-  /** 0 = most senior. Drives promote/demote detection. */
-  rank: number
-  active: boolean
-}
+ *  edits this ladder, and a union would make user-added tiers a build error.
+ *
+ *  The data and `tierRank` now live in `@goms/domain` (shared with apps/api's
+ *  sales router, which needs the same rank ordering to derive `changeType`
+ *  consistently) — this file re-exports them and keeps the frontend-only
+ *  label/parsing helpers below. */
+import { SALES_TIERS, tierRank } from '@goms/domain'
+export type { SalesTierDef } from '@goms/domain'
+export { SALES_TIERS, tierRank }
 
-export const SALES_TIERS: SalesTierDef[] = [
-  { key: 'salesHead', label: 'Sales Head', rank: 0, active: true },
-  { key: 'regionalHead', label: 'Regional Head', rank: 1, active: true },
-  { key: 'gm', label: 'General Manager', rank: 2, active: true },
-  { key: 'rm', label: 'Regional Manager', rank: 3, active: true },
-  { key: 'accountManager', label: 'Account Manager', rank: 4, active: true },
-]
-
-const SALES_TIER_MAP: Record<string, SalesTierDef> = Object.fromEntries(
+const SALES_TIER_MAP: Record<string, import('@goms/domain').SalesTierDef> = Object.fromEntries(
   SALES_TIERS.map((t) => [t.key, t]),
 )
 
@@ -34,10 +27,6 @@ const DEFAULT_TIER_KEY = 'accountManager'
  *  something meaningful instead of blank. */
 export function tierLabel(key: string): string {
   return SALES_TIER_MAP[key]?.label ?? key
-}
-
-export function tierRank(key: string): number {
-  return SALES_TIER_MAP[key]?.rank ?? Number.MAX_SAFE_INTEGER
 }
 
 /** Maps a legacy `SALES_TEAM` designation string to a tier key. The existing
