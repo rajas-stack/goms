@@ -546,7 +546,10 @@ const commercialBomRouter = router({
   update: publicProcedure
     .input(z.object({
       id: z.string().uuid(),
-      patch: z.object({ mandatory: z.boolean().optional(), quantity: z.number().optional(), notes: z.string().optional() }),
+      patch: z.object({
+        parentSkuId: z.string().uuid().optional(), componentSkuId: z.string().uuid().optional(),
+        mandatory: z.boolean().optional(), quantity: z.number().optional(), notes: z.string().optional(),
+      }),
     }))
     .mutation(async ({ input }) => {
       const currentResult = await pool.query('SELECT * FROM commercial_bom_items WHERE id=$1', [input.id])
@@ -555,7 +558,19 @@ const commercialBomRouter = router({
       const fields = Object.keys(input.patch)
       if (!fields.length) return toBomItem(currentResult.rows[0])
 
-      const columnFor: Record<string, string> = { mandatory: 'mandatory', quantity: 'quantity', notes: 'notes' }
+      if (input.patch.parentSkuId !== undefined) {
+        const exists = await pool.query('SELECT 1 FROM commercial_skus WHERE id=$1', [input.patch.parentSkuId])
+        if (!exists.rows.length) throw new TRPCError({ code: 'BAD_REQUEST', message: `No such parent SKU: ${input.patch.parentSkuId}` })
+      }
+      if (input.patch.componentSkuId !== undefined) {
+        const exists = await pool.query('SELECT 1 FROM commercial_skus WHERE id=$1', [input.patch.componentSkuId])
+        if (!exists.rows.length) throw new TRPCError({ code: 'BAD_REQUEST', message: `No such component SKU: ${input.patch.componentSkuId}` })
+      }
+
+      const columnFor: Record<string, string> = {
+        parentSkuId: 'parent_sku_id', componentSkuId: 'component_sku_id',
+        mandatory: 'mandatory', quantity: 'quantity', notes: 'notes',
+      }
       const values = fields.map((f) => (input.patch as any)[f])
       const setClauses = fields.map((f, i) => `${columnFor[f]}=$${i + 1}`)
       values.push(input.id)

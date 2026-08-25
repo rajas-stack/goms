@@ -117,4 +117,56 @@ describe.skipIf(!import.meta.env.VITE_API_BASE_URL)('RemoteRepository (integrati
     await repo.deleteMaster!('verticals', vertical.id)
     expect(await repo.getMaster!('verticals', vertical.id)).toBeNull()
   })
+
+  it('round-trips a SKU + BOM component through create/update/delete, enforcing the delete guard', async () => {
+    const vertical = await repo.createMaster!('verticals', { code: `INT-SKU-V-${Date.now()}`, name: 'Integration Vertical', description: '' })
+    const product = await repo.createMaster!('products', { code: `INT-SKU-P-${Date.now()}`, name: 'Integration Product', description: '', verticalId: vertical.id })
+    const module_ = await repo.createMaster!('modules', { code: `INT-SKU-M-${Date.now()}`, name: 'Integration Module', description: '', productId: product.id })
+    const feature = await repo.createMaster!('features', { code: `INT-SKU-F-${Date.now()}`, name: 'Integration Feature', description: '', moduleId: module_.id, status: 'new' })
+    const componentFeature = await repo.createMaster!('features', { code: `INT-SKU-F2-${Date.now()}`, name: 'Integration Component Feature', description: '', moduleId: module_.id, status: 'new' })
+
+    const category = await repo.createMaster!('skuCategories', { code: `INT-CAT-${Date.now()}`, name: 'Integration Category', description: '' })
+    const uom = await repo.createMaster!('unitsOfMeasure', { code: `INT-UOM-${Date.now()}`, name: 'Integration UoM', description: '' })
+    const currency = await repo.createMaster!('currencies', { code: `INT-CUR-${Date.now()}`, name: 'Integration Currency', description: '', symbol: '$', decimalPlaces: 2, exchangeRate: 1, isBaseCurrency: false })
+    const taxClass = await repo.createMaster!('taxClasses', { code: `INT-TAX-${Date.now()}`, name: 'Integration Tax', description: '', ratePct: 18 })
+    const billingType = await repo.createMaster!('billingTypes', { code: `INT-BIL-${Date.now()}`, name: 'Integration Billing', description: '' })
+    const editions = await repo.listMaster!('productEditions')
+    if (!editions.some((e) => e.code.toLowerCase() === 'std')) {
+      await repo.createMaster!('productEditions', { code: 'STD', name: 'Standard', description: '' })
+    }
+
+    const skuInput = {
+      name: 'Integration SKU', categoryId: category.id, featureId: feature.id,
+      uomId: uom.id, currencyId: currency.id, taxClassId: taxClass.id, billingTypeId: billingType.id,
+      activeFrom: '2026-01-01', activeTill: null,
+      baseSoftwareCost: 1000, implementationCostPerMM: 0, integrationCost: 0, thirdPartyCost: 0,
+      hardwareCost: 0, cloudCost: 0, supportCost: 0, trainingCost: 0,
+      internalPrice: 5000, floorPrice: 6000, partnerPrice: 7000, governmentPrice: 8000,
+      enterprisePrice: 9000, corporatePrice: 9500, listPrice: 10000,
+    }
+    const sku = await repo.createSku!(skuInput)
+    expect(sku.skuCode).toContain(vertical.code)
+    expect(sku.minimumAllowedPrice).toBe(6000)
+    expect(sku.maximumDiscountPercent).toBe(90)
+
+    const componentSku = await repo.createSku!({ ...skuInput, featureId: componentFeature.id, listPrice: 500 })
+    const bom = await repo.createBomItem!({ parentSkuId: sku.id, componentSkuId: componentSku.id, mandatory: true, quantity: 2, notes: 'bundled' })
+    expect((await repo.listBomItemsForSku!(sku.id)).map((b) => b.id)).toContain(bom.id)
+
+    await expect(repo.deleteSku!(componentSku.id)).rejects.toThrow()
+
+    const updated = await repo.updateSku!(sku.id, { listPrice: 11000 }, 'Integration price revision')
+    expect(updated.listPrice).toBe(11000)
+
+    await repo.deleteBomItem!(bom.id)
+    await repo.deleteSku!(componentSku.id)
+    await repo.deleteSku!(sku.id)
+    expect(await repo.getSku!(sku.id)).toBeNull()
+
+    await repo.deleteMaster!('features', feature.id)
+    await repo.deleteMaster!('features', componentFeature.id)
+    await repo.deleteMaster!('modules', module_.id)
+    await repo.deleteMaster!('products', product.id)
+    await repo.deleteMaster!('verticals', vertical.id)
+  })
 })

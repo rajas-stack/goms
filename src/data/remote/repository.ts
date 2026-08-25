@@ -14,6 +14,7 @@ import type {
   SalesPerson, SalesPosting,
 } from '@/lib/types'
 import type {
+  CommercialBomItem, CommercialSku, CreateBomItemInput, CreateSkuInput,
   MasterEntityKey, MasterRowMap, CreateMasterInput, ProductEditionFeature,
 } from '@/modules/commercial-calculator/types'
 
@@ -122,4 +123,21 @@ export class RemoteRepository implements Partial<Repository> {
     this.client.commercial.masters.listEditionFeatures.query({ editionId })
   setEditionFeatures = (editionId: string, rows: { featureId: string; mandatory: boolean }[]): Promise<void> =>
     this.client.commercial.masters.setEditionFeatures.mutate({ editionId, rows })
+
+  listSkus = (): Promise<CommercialSku[]> => this.client.commercial.skus.list.query() as unknown as Promise<CommercialSku[]>
+  getSku = (id: string): Promise<CommercialSku | null> =>
+    this.client.commercial.skus.get.query({ id }) as unknown as Promise<CommercialSku | null>
+  createSku = (input: CreateSkuInput): Promise<CommercialSku> =>
+    this.client.commercial.skus.create.mutate(input as any) as unknown as Promise<CommercialSku>
+  updateSku = (id: string, patch: Partial<CommercialSku>, changeReason?: string): Promise<CommercialSku> =>
+    this.client.commercial.skus.update.mutate({ id, patch: patch as any, changeReason }) as unknown as Promise<CommercialSku>
+  deleteSku = (id: string): Promise<void> => this.client.commercial.skus.delete.mutate({ id })
+
+  listBomItemsForSku = (parentSkuId: string): Promise<CommercialBomItem[]> =>
+    this.client.commercial.bom.listForSku.query({ parentSkuId })
+  listAllBomItems = (): Promise<CommercialBomItem[]> => this.client.commercial.bom.listAll.query()
+  createBomItem = (input: CreateBomItemInput): Promise<CommercialBomItem> => this.client.commercial.bom.create.mutate(input)
+  updateBomItem = (id: string, patch: Partial<CommercialBomItem>): Promise<CommercialBomItem> =>
+    this.client.commercial.bom.update.mutate({ id, patch })
+  deleteBomItem = (id: string): Promise<void> => this.client.commercial.bom.delete.mutate({ id })
 }
