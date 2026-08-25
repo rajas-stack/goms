@@ -22,4 +22,21 @@ describe.skipIf(!import.meta.env.VITE_API_BASE_URL)('RemoteRepository (integrati
     const afterDelete = await repo.getCustomer!(created.id)
     expect(afterDelete).toBeNull()
   })
+
+  it('round-trips a hierarchy node through create/getNode/listChildren/deleteNode', async () => {
+    const dept = await repo.createNode!({
+      domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Integration Test Dept',
+    })
+    expect(dept.name).toBe('Integration Test Dept')
+
+    const branch = await repo.createNode!({
+      domain: 'org', typeKey: 'branch', parentId: dept.id, stateCode: 27, name: 'Integration Test Branch',
+    })
+    const children = await repo.listChildren!(dept.id)
+    expect(children.map((c) => c.id)).toContain(branch.id)
+
+    await repo.deleteNode!(dept.id)
+    expect(await repo.getNode!(dept.id)).toBeUndefined()
+    expect(await repo.getNode!(branch.id)).toBeUndefined()
+  })
 })
