@@ -1,0 +1,121 @@
+import { describe, it, expect, beforeEach } from 'vitest'
+import { appRouter } from '../index.js'
+import { pool } from '../db.js'
+
+describe('sales router', () => {
+  beforeEach(async () => {
+    await pool.query('DELETE FROM sales_postings')
+    await pool.query('DELETE FROM sales_persons')
+  })
+
+  async function makePerson(overrides: Partial<{ name: string; officialEmail: string; tierKey: string; designation: string; managerId: string | null }> = {}) {
+    const caller = appRouter.createCaller({})
+    return caller.sales.create({
+      name: overrides.name ?? 'Alex Sales', officialEmail: overrides.officialEmail ?? `alex-${Math.random()}@example.com`,
+      designation: overrides.designation ?? 'Account Manager', tierKey: overrides.tierKey ?? 'accountManager',
+      managerId: overrides.managerId,
+    })
+  }
+
+  it('creates a sales person with an initial posting', async () => {
+    const caller = appRouter.createCaller({})
+    const person = await makePerson({ name: 'Alex Sales' })
+    expect(person.name).toBe('Alex Sales')
+    expect(person.status).toBe('active')
+    const postings = await caller.sales.listPostings({ salesPersonId: person.id })
+    expect(postings).toHaveLength(1)
+    expect(postings[0].changeType).toBe('initial')
+    expect(postings[0].endDate).toBeNull()
+  })
+
+  it('rejects a duplicate officialEmail', async () => {
+    await makePerson({ officialEmail: 'dup@example.com' })
+    await expect(makePerson({ officialEmail: 'dup@example.com' })).rejects.toThrow('already exists')
+  })
+
+  it('gets a person by id, and null for a missing one', async () => {
+    const caller = appRouter.createCaller({})
+    const person = await makePerson()
+    expect((await caller.sales.getPerson({ id: person.id }))?.name).toBe('Alex Sales')
+    expect(await caller.sales.getPerson({ id: '00000000-0000-0000-0000-000000000000' })).toBeNull()
+  })
+
+  it('derives changeType as promotion when moving to a lower-rank (more senior) tier', async () => {
+    const caller = appRouter.createCaller({})
+    const person = await makePerson({ tierKey: 'accountManager' })
+    const posting = await caller.sales.transfer({
+      salesPersonId: person.id, designation: 'Regional Manager', tierKey: 'rm', effectiveDate: '2099-01-01',
+    })
+    expect(posting.changeType).toBe('promotion')
+  })
+
+  it('derives changeType as demotion when moving to a higher-rank (less senior) tier', async () => {
+    const caller = appRouter.createCaller({})
+    const person = await makePerson({ tierKey: 'rm' })
+    const posting = await caller.sales.transfer({
+      salesPersonId: person.id, designation: 'Account Manager', tierKey: 'accountManager', effectiveDate: '2099-01-01',
+    })
+    expect(posting.changeType).toBe('demotion')
+  })
+
+  it('closes the prior posting and keeps exactly one current posting', async () => {
+    const caller = appRouter.createCaller({})
+    const person = await makePerson({ tierKey: 'accountManager' })
+    const [initial] = await caller.sales.listPostings({ salesPersonId: person.id })
+    await caller.sales.transfer({ salesPersonId: person.id, designation: 'RM', tierKey: 'rm', effectiveDate: '2099-01-01' })
+    const postings = await caller.sales.listPostings({ salesPersonId: person.id })
+    expect(postings).toHaveLength(2)
+    const closed = postings.find((p) => p.id === initial.id)
+    expect(closed?.endDate).toBe('2099-01-01')
+    expect(postings.filter((p) => p.endDate === null)).toHaveLength(1)
+  })
+
+  it('rejects a transfer effective on or before the current posting\'s own start date', async () => {
+    const caller = appRouter.createCaller({})
+    const person = await makePerson({ tierKey: 'accountManager' })
+    const [initial] = await caller.sales.listPostings({ salesPersonId: person.id })
+    await expect(caller.sales.transfer({
+      salesPersonId: person.id, designation: 'RM', tierKey: 'rm', effectiveDate: initial.startDate,
+    })).rejects.toThrow()
+  })
+
+  it('reports currentPostings keyed by salesPersonId, one row per person', async () => {
+    const caller = appRouter.createCaller({})
+    const a = await makePerson({ name: 'A' })
+    const b = await makePerson({ name: 'B' })
+    const current = await caller.sales.currentPostings()
+    expect(current[a.id]).toBeDefined()
+    expect(current[b.id]).toBeDefined()
+  })
+
+  it('updates a sales person', async () => {
+    const caller = appRouter.createCaller({})
+    const person = await makePerson()
+    const updated = await caller.sales.update({ id: person.id, patch: { notes: 'VIP account' } })
+    expect(updated!.notes).toBe('VIP account')
+  })
+
+  it('sets status without touching postings', async () => {
+    const caller = appRouter.createCaller({})
+    const person = await makePerson()
+    await caller.sales.setStatus({ id: person.id, status: 'resigned' })
+    expect((await caller.sales.getPerson({ id: person.id }))?.status).toBe('resigned')
+  })
+
+  it('deletes a sales person and its postings', async () => {
+    const caller = appRouter.createCaller({})
+    const person = await makePerson()
+    await caller.sales.delete({ id: person.id })
+    expect(await caller.sales.getPerson({ id: person.id })).toBeNull()
+    expect(await caller.sales.listPostings({ salesPersonId: person.id })).toHaveLength(0)
+  })
+
+  it('nulls out manager_id on postings that pointed at a deleted manager', async () => {
+    const caller = appRouter.createCaller({})
+    const manager = await makePerson({ name: 'Manager' })
+    const report = await makePerson({ name: 'Report', managerId: manager.id })
+    await caller.sales.delete({ id: manager.id })
+    const [posting] = await caller.sales.listPostings({ salesPersonId: report.id })
+    expect(posting.managerId).toBeNull()
+  })
+})
