@@ -249,29 +249,7 @@ export interface ExternalId {
   value: string
 }
 
-export interface SearchResult {
-  /** Navigation discriminant only. 'node'/'employee' route via the existing
-   *  ws.select() workspace-selection mechanism; 'other' routes via the
-   *  owning category's `path()` instead (see search-categories.ts). Adding a
-   *  new entity type never adds a new value here — it's 'other' unless it's
-   *  literally backed by HierNode or Employee. */
-  kind: 'node' | 'employee' | 'other'
-  /** Open string key into SEARCH_CATEGORIES (search-categories.ts) — not a
-   *  closed union, same "data not enum" convention as HierNode.typeKey. */
-  category: string
-  id: string
-  title: string
-  subtitle: string
-  code: string | null
-  domain: Domain | null
-  stateCode: number | null
-  /** Short reason the result matched, shown by natural-language search. */
-  note?: string
-  /** For a `kind: 'other'` result that isn't independently addressable — the
-   *  HierNode id its `path()` should navigate to instead (e.g. a Work's
-   *  owning department). Omitted for results that don't need it. */
-  containerId?: string
-}
+export type { SearchResult } from '@goms/domain'
 
 export interface FieldDef {
   key: string

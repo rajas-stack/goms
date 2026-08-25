@@ -6,16 +6,16 @@ import type {
 import { uid } from '@/lib/utils'
 import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf } from '@/lib/node-types'
-import { MERGEABLE_FIELDS, type MergeableField } from '@goms/domain'
-export { MERGEABLE_FIELDS, type MergeableField }
-import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from '../pipeline-stages'
-import { coversDate } from '@/lib/intervals'
-import { tierRank } from '../sales-tiers'
 import {
+  MERGEABLE_FIELDS, type MergeableField,
+  DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP,
   buildOwnerMap, effectiveOwner, OWNABLE_ENTITY_MAP,
   type OwnerResolution, type OwnershipContext,
-} from '../ownership'
-import { SEARCH_CATEGORIES, SEARCH_CATEGORY_MAP, type SearchContext } from '@/lib/search-categories'
+  performSearch, performRelatedRecords, type SearchData,
+} from '@goms/domain'
+export { MERGEABLE_FIELDS, type MergeableField }
+import { coversDate } from '@/lib/intervals'
+import { tierRank } from '../sales-tiers'
 import { buildSeed, type GormsData } from '../seed'
 import { clearSnapshot, loadSnapshot, scheduleSave } from '../persist'
 import {
@@ -1582,167 +1582,33 @@ class InMemoryRepository implements Repository {
     emp.charges = emp.charges.filter((c) => c.id !== chargeId)
   }
 
-  private buildSearchContext(scopeState: number | null): SearchContext {
-    const nodeById = new Map(this.data.nodes.map((n) => [n.id, n] as const))
+  /** Everything `@goms/domain`'s `performSearch`/`performRelatedRecords` need,
+   *  sourced from this store. Rebuilt per call rather than cached, same
+   *  reasoning as `ownershipContext()` above. */
+  private searchData(): SearchData {
     return {
-      nodeById,
-      activeNodes: this.data.nodes.filter((n) => n.status === 'active'),
-      activeEmployees: this.data.employees.filter((e) => e.status === 'active'),
+      nodes: this.data.nodes,
+      employees: this.data.employees.filter((e) => e.status === 'active'),
+      transfers: this.data.transfers,
       timeline: this.data.timeline,
       opportunities: this.data.opportunities,
       salesPersons: this.data.salesPersons,
-      currentDesignationOf: new Map(
-        this.data.salesPostings.filter((p) => p.endDate === null).map((p) => [p.salesPersonId, p.designation]),
-      ),
-      scopeState,
-      inScope: (nodeId) => scopeState == null || nodeById.get(nodeId)?.stateCode === scopeState,
-      subtreeIds: (id) => this.subtreeIds(id),
-      departmentOf: (orgNodeId) => {
-        let cur = nodeById.get(orgNodeId)
-        while (cur) {
-          if (cur.typeKey === 'department') return cur
-          cur = cur.parentId ? nodeById.get(cur.parentId) : undefined
-        }
-        return undefined
-      },
+      postings: this.data.salesPostings,
+      today: isoToday(),
     }
   }
 
   /** Natural-language-aware search. Recognises intent keywords ("connected",
    *  "vacant", "transferred", "follow-ups due"), a state scope by name, and
    *  relational phrases ("under X", "reporting to X"), then falls back to
-   *  fuzzy matching over names/codes/designations/locations. */
+   *  fuzzy matching over names/codes/designations/locations. See
+   *  `@goms/domain`'s `performSearch` for the algorithm itself. */
   async search(query: string, stateCode?: number): Promise<SearchResult[]> {
-    const raw = query.trim()
-    if (!raw) return []
-    const q = raw.toLowerCase()
-    const nodeById = new Map(this.data.nodes.map((n) => [n.id, n] as const))
-    const activeEmps = this.data.employees.filter((e) => e.status === 'active')
-    const transferredIds = new Set(this.data.transfers.map((t) => t.employeeId))
-    const today = isoToday()
-
-    const categoryForNode = (n: HierNode): string =>
-      n.domain === 'geo' ? 'geography' : n.typeKey === 'department' ? 'department' : 'office'
-
-    const empResult = (e: Employee, note?: string): SearchResult => ({
-      kind: 'employee', category: 'employee', id: e.id,
-      title: e.vacant ? `${e.designation || 'Vacant position'} · Vacant` : e.name,
-      subtitle: e.designation || nodeById.get(e.orgNodeId)?.name || '—',
-      code: e.code, domain: null, stateCode: nodeById.get(e.orgNodeId)?.stateCode ?? null, note,
-    })
-    const nodeResult = (n: HierNode, note?: string): SearchResult => ({
-      kind: 'node', category: categoryForNode(n), id: n.id, title: n.name,
-      subtitle: NODE_TYPE_MAP[n.typeKey]?.label ?? n.typeKey,
-      code: n.code, domain: n.domain, stateCode: n.stateCode, note,
-    })
-
-    // --- state scope: an explicit state name in the query wins over context ---
-    let scopeState = stateCode ?? null
-    let scopeName = ''
-    for (const s of this.data.nodes.filter((n) => n.typeKey === 'state')) {
-      const nm = s.name.toLowerCase()
-      if (nm.length >= 3 && q.includes(nm) && nm.length > scopeName.length) {
-        scopeState = s.stateCode
-        scopeName = nm
-      }
-    }
-    const inScope = (nodeId: string) => scopeState == null || nodeById.get(nodeId)?.stateCode === scopeState
-
-    let rest = scopeName ? q.replace(scopeName, ' ') : q
-
-    // --- relational phrases ---------------------------------------------------
-    const reportsTo = rest.match(/report(?:s|ing)?\s+to\s+(.+)$/)
-    if (reportsTo) {
-      const term = reportsTo[1].trim()
-      const managers = activeEmps.filter((m) =>
-        !m.vacant && (m.name.toLowerCase().includes(term) || m.designation.toLowerCase().includes(term)))
-      const mIds = new Set(managers.map((m) => m.id))
-      return activeEmps
-        .filter((e) => e.managerId && mIds.has(e.managerId) && inScope(e.orgNodeId))
-        .slice(0, 24)
-        .map((e) => empResult(e, 'Reports to match'))
-    }
-    const under = rest.match(/(?:under|within|inside|below)\s+(.+)$/)
-    if (under) {
-      const term = under[1].trim()
-      const container = this.data.nodes.find((n) =>
-        n.status === 'active' && n.name.toLowerCase().includes(term) && inScope(n.id))
-      if (container) {
-        const ids = new Set(this.subtreeIds(container.id))
-        const out: SearchResult[] = [nodeResult(container, 'Container')]
-        for (const e of activeEmps) {
-          if (ids.has(e.orgNodeId)) out.push(empResult(e, `Under ${container.name}`))
-          if (out.length >= 24) break
-        }
-        return out
-      }
-    }
-
-    // --- intent flags ---------------------------------------------------------
-    const has = (re: RegExp) => re.test(q)
-    const wantVacant = has(/\bvacan/)
-    const wantTransferred = has(/\btransfer/)
-    const wantNotConnected = has(/\b(not connected|unconnected|no contact)\b/)
-    const wantConnected = !wantNotConnected && has(/\bconnected\b/)
-    const wantFollowUp = has(/\bfollow[-\s]?ups?\b/)
-    const wantImportant = has(/\b(high[-\s]?priority|important|vip|priority)\b/)
-    const dueToday = wantFollowUp && has(/\btoday\b/)
-
-    const intentActive = wantVacant || wantTransferred || wantConnected || wantNotConnected
-      || wantFollowUp || wantImportant
-
-    if (intentActive) {
-      // Free-text remainder after stripping recognised keywords, matched
-      // against name/designation/office so "collector" in "connected collector"
-      // still narrows the set.
-      const stop = /\b(connected|unconnected|vacant|vacancy|vacancies|transferred|transfers?|follow[-\s]?ups?|due|today|high|priority|important|vip|officers?|people|show|list|all|in|the|not|no|contact)\b/g
-      const text = rest.replace(stop, ' ').replace(/\s+/g, ' ').trim()
-      const results = activeEmps.filter((e) => {
-        if (!inScope(e.orgNodeId)) return false
-        if (wantVacant && !e.vacant) return false
-        if (!wantVacant && e.vacant && !(wantTransferred || wantFollowUp)) return false
-        if (wantConnected && (!e.connected || e.vacant)) return false
-        if (wantNotConnected && (e.connected || e.vacant)) return false
-        if (wantTransferred && !transferredIds.has(e.id)) return false
-        if (wantImportant && !e.importantContact) return false
-        if (wantFollowUp) {
-          if (!e.followUpDate) return false
-          if (dueToday ? e.followUpDate !== today : e.followUpDate > today) return false
-        }
-        if (text) {
-          const hay = `${e.name} ${e.designation} ${nodeById.get(e.orgNodeId)?.name ?? ''} ${nodeById.get(e.orgNodeId)?.metadata.location ?? ''}`.toLowerCase()
-          if (!hay.includes(text)) return false
-        }
-        return true
-      })
-      const label = wantVacant ? 'Vacant' : wantTransferred ? 'Transferred'
-        : wantFollowUp ? (dueToday ? 'Due today' : 'Follow-up due') : wantImportant ? 'High priority'
-        : wantNotConnected ? 'Not connected' : 'Connected'
-      return results.slice(0, 24).map((e) => empResult(e, label))
-    }
-
-    // --- fuzzy fallback: one call per registered category, capped per-category -----
-    const ctx = this.buildSearchContext(scopeState)
-    const results: SearchResult[] = []
-    for (const category of SEARCH_CATEGORIES) {
-      try {
-        results.push(...category.match(rest, ctx).slice(0, category.cap))
-      } catch {
-        // one category's bug never blanks the rest of the palette
-      }
-    }
-    return results
+    return performSearch(query, stateCode, this.searchData())
   }
 
   async relatedRecords(result: SearchResult): Promise<SearchResult[]> {
-    const category = SEARCH_CATEGORY_MAP[result.category]
-    if (!category) return []
-    const ctx = this.buildSearchContext(null)
-    try {
-      return category.related(result, ctx)
-    } catch {
-      return []
-    }
+    return performRelatedRecords(result, this.searchData())
   }
 
   async moveTargets(nodeId: string) {
