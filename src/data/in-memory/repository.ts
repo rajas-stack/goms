@@ -5,7 +5,7 @@ import type {
 } from '@/lib/types'
 import { uid } from '@/lib/utils'
 import { isoToday } from '@/lib/dates'
-import { NODE_TYPE_MAP, childTypesOf } from '@/lib/node-types'
+import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf } from '@/lib/node-types'
 import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from '../pipeline-stages'
 import { coversDate } from '@/lib/intervals'
 import { tierRank } from '../sales-tiers'
@@ -469,9 +469,6 @@ export interface Repository {
 // Re-exported (not redefined) so existing `@/data/repository` import sites
 // keep working while the implementation lives in the date module.
 export { isoToday } from '@/lib/dates'
-
-/** Org node types an employee can be posted at. */
-const POSTING_TYPES = new Set(['department', 'branch', 'division', 'office', 'unit'])
 
 class InMemoryRepository implements Repository {
   private data: GormsData = buildSeed()

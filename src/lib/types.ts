@@ -1,32 +1,9 @@
-/** Three hierarchies over one node engine. `'sales'` carries AMNEX coverage
- *  areas (Zone/Region/Cluster/…); its NODE_TYPES rows arrive with the
- *  Coverage phase, so today the value is admitted but unused. */
-export type Domain = 'geo' | 'org' | 'sales'
-export type Status = 'active' | 'archived'
-
-export interface NodeType {
-  key: string
-  domain: Domain
-  label: string
-  icon: string
-  /** allowed child type keys; empty = any */
-  childKeys: string[]
-  level: number
-}
-
-export interface HierNode {
-  id: string
-  domain: Domain
-  typeKey: string
-  parentId: string | null
-  /** state LGD code this node belongs under (org nodes are jurisdictioned to a state) */
-  stateCode: number | null
-  name: string
-  code: string | null
-  sortOrder: number
-  metadata: Record<string, string>
-  status: Status
-}
+// Domain/Status/NodeType/HierNode now live in packages/domain (shared with
+// apps/api's hierarchy router) — re-imported and re-exported here so every
+// existing import path (`@/lib/types`) keeps working unchanged, including
+// this file's own later use of Domain/Status below.
+import type { Domain, Status, NodeType, HierNode } from '@goms/domain'
+export type { Domain, Status, NodeType, HierNode }
 
 export type RelationshipStatus = 'engaged' | 'developing' | 'dormant' | 'new'
 /** Five-point relationship quality scale. */
