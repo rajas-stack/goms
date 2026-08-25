@@ -13,6 +13,9 @@ import type {
   Customer, HierNode, Status, Employee, Charge, TimelineEvent, TimelineEventType, Transfer, MergeAuditRecord,
   SalesPerson, SalesPosting,
 } from '@/lib/types'
+import type {
+  MasterEntityKey, MasterRowMap, CreateMasterInput, ProductEditionFeature,
+} from '@/modules/commercial-calculator/types'
 
 export class RemoteRepository implements Partial<Repository> {
   private client = createTRPCClient<AppRouter>({
@@ -100,4 +103,23 @@ export class RemoteRepository implements Partial<Repository> {
   setSalesPersonStatus = (id: string, status: SalesPerson['status']): Promise<void> => this.client.sales.setStatus.mutate({ id, status })
   deleteSalesPerson = (id: string): Promise<void> => this.client.sales.delete.mutate({ id })
   transferSalesPerson = (input: TransferSalesPersonInput): Promise<SalesPosting> => this.client.sales.transfer.mutate(input)
+
+  listMaster = <K extends MasterEntityKey>(key: K): Promise<MasterRowMap[K][]> =>
+    this.client.commercial.masters.list.query({ key }) as unknown as Promise<MasterRowMap[K][]>
+  getMaster = <K extends MasterEntityKey>(key: K, id: string): Promise<MasterRowMap[K] | null> =>
+    this.client.commercial.masters.get.query({ key, id }) as unknown as Promise<MasterRowMap[K] | null>
+  createMaster = <K extends MasterEntityKey>(key: K, input: CreateMasterInput<K>): Promise<MasterRowMap[K]> =>
+    this.client.commercial.masters.create.mutate({ key, input } as any) as unknown as Promise<MasterRowMap[K]>
+  updateMaster = <K extends MasterEntityKey>(
+    key: K, id: string, patch: Partial<MasterRowMap[K]>, changeReason?: string,
+  ): Promise<MasterRowMap[K]> =>
+    this.client.commercial.masters.update.mutate({ key, id, patch, changeReason } as any).then((r) => r as unknown as MasterRowMap[K])
+  setMasterActive = (key: MasterEntityKey, id: string, active: boolean): Promise<void> =>
+    this.client.commercial.masters.setActive.mutate({ key, id, active })
+  deleteMaster = (key: MasterEntityKey, id: string): Promise<void> =>
+    this.client.commercial.masters.delete.mutate({ key, id })
+  listEditionFeatures = (editionId: string): Promise<ProductEditionFeature[]> =>
+    this.client.commercial.masters.listEditionFeatures.query({ editionId })
+  setEditionFeatures = (editionId: string, rows: { featureId: string; mandatory: boolean }[]): Promise<void> =>
+    this.client.commercial.masters.setEditionFeatures.mutate({ editionId, rows })
 }

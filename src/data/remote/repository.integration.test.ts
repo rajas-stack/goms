@@ -83,4 +83,38 @@ describe.skipIf(!import.meta.env.VITE_API_BASE_URL)('RemoteRepository (integrati
     await repo.deleteSalesPerson!(person.id)
     expect(await repo.getSalesPerson!(person.id)).toBeNull()
   })
+
+  it('round-trips the Vertical -> Product -> Module -> Feature chain and edition features', async () => {
+    const vertical = await repo.createMaster!('verticals', {
+      code: `INT-V-${Date.now()}`, name: 'Integration Vertical', description: '',
+    })
+    const product = await repo.createMaster!('products', {
+      code: `INT-P-${Date.now()}`, name: 'Integration Product', description: '', verticalId: vertical.id,
+    })
+    const module_ = await repo.createMaster!('modules', {
+      code: `INT-M-${Date.now()}`, name: 'Integration Module', description: '', productId: product.id,
+    })
+    const feature = await repo.createMaster!('features', {
+      code: `INT-F-${Date.now()}`, name: 'Integration Feature', description: '', moduleId: module_.id, status: 'new',
+    })
+    expect(product.verticalId).toBe(vertical.id)
+    expect(feature.moduleId).toBe(module_.id)
+
+    const products = await repo.listMaster!('products')
+    expect(products.map((p) => p.id)).toContain(product.id)
+
+    const edition = await repo.createMaster!('productEditions', {
+      code: `INT-E-${Date.now()}`, name: 'Integration Edition', description: '',
+    })
+    await repo.setEditionFeatures!(edition.id, [{ featureId: feature.id, mandatory: true }])
+    const editionFeatures = await repo.listEditionFeatures!(edition.id)
+    expect(editionFeatures).toHaveLength(1)
+    expect(editionFeatures[0].featureId).toBe(feature.id)
+
+    await repo.deleteMaster!('features', feature.id)
+    await repo.deleteMaster!('modules', module_.id)
+    await repo.deleteMaster!('products', product.id)
+    await repo.deleteMaster!('verticals', vertical.id)
+    expect(await repo.getMaster!('verticals', vertical.id)).toBeNull()
+  })
 })
