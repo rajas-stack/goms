@@ -26,7 +26,7 @@ function toNode(row: any): HierNode {
 
 const domainSchema = z.enum(['geo', 'org', 'sales'])
 
-async function subtreeIds(id: string): Promise<string[]> {
+export async function subtreeIds(id: string): Promise<string[]> {
   const result = await pool.query(
     `WITH RECURSIVE subtree AS (
        SELECT id FROM hierarchy_nodes WHERE id = $1
