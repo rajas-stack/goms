@@ -101,6 +101,14 @@ deploy-dev:
     - >
       gcloud run deploy goms-api --project=$GCP_PROJECT_ID_DEV --region=asia-south1
       --image=asia-south1-docker.pkg.dev/$GCP_PROJECT_ID_DEV/goms/goms-api:$CI_COMMIT_SHA
+    # goms-migrate (added outside this plan, see the GCP foundation plan's Task 6.5) was
+    # left pinned to its original :bootstrap image tag here — every migration added since
+    # silently applied nothing, because the job never ran the image that actually contained
+    # it. Keep the job's image in lockstep with the service on every dev deploy so this
+    # can't happen again; goms-ci-deploy's existing roles/run.admin already covers jobs too.
+    - >
+      gcloud run jobs update goms-migrate --project=$GCP_PROJECT_ID_DEV --region=asia-south1
+      --image=asia-south1-docker.pkg.dev/$GCP_PROJECT_ID_DEV/goms/goms-api:$CI_COMMIT_SHA
   environment:
     name: dev
   rules:
