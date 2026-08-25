@@ -4,6 +4,10 @@ import { pool } from '../db.js'
 
 describe('hierarchy router', () => {
   beforeEach(async () => {
+    // employees.org_node_id FKs into hierarchy_nodes (Phase 2) — clear
+    // dependents first so this file's cleanup doesn't race/conflict with
+    // rows left behind by employees.test.ts.
+    await pool.query('DELETE FROM employees')
     await pool.query('DELETE FROM hierarchy_nodes')
   })
 
