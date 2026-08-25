@@ -71,7 +71,10 @@ export const hierarchyRouter = router({
         [s.stateCode],
       )).rows.map(toNode)
       out.push({
-        code: s.stateCode,
+        // A 'state' node always carries a stateCode by app convention
+        // (matching InMemoryRepository's own `s.stateCode!` non-null
+        // assertion for this exact case).
+        code: s.stateCode as number,
         name: s.name,
         departments: orgUnder.filter((n: any) => n.typeKey === 'department').length,
         offices: orgUnder.filter((n: any) => n.typeKey === 'office').length,
