@@ -28,6 +28,13 @@ describe('admin data import routes', () => {
     expect(paths).not.toContain('/admin/data-import/:domain')
   })
 
+  it('routes geography to its own panel ahead of the generic :domain wizard', async () => {
+    vi.stubEnv('VITE_ADMIN_IMPORT_ENABLED', 'true')
+    const { router } = await import('./router')
+    const paths = router.routes[0].children?.map((c) => c.path) ?? []
+    expect(paths.indexOf('/admin/data-import/geography')).toBeLessThan(paths.indexOf('/admin/data-import/:domain'))
+  })
+
   it('keeps the catch-all NotFound route last regardless of the flag', async () => {
     vi.stubEnv('VITE_ADMIN_IMPORT_ENABLED', 'true')
     const { router } = await import('./router')

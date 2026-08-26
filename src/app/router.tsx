@@ -19,6 +19,9 @@ const AdminImportDashboard = lazy(() =>
 const ImportWizard = lazy(() =>
   import('@/modules/admin-data-import/ImportWizard').then((m) => ({ default: m.ImportWizard })),
 )
+const GeographyLoadPanel = lazy(() =>
+  import('@/modules/admin-data-import/GeographyLoadPanel').then((m) => ({ default: m.GeographyLoadPanel })),
+)
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
 // Admin Data Import is gated behind its own env flag — unset/false by
@@ -30,6 +33,10 @@ const adminImportRoutes =
   import.meta.env.VITE_ADMIN_IMPORT_ENABLED === 'true'
     ? [
         { path: '/admin/data-import', element: <AdminImportDashboard /> },
+        // Geography is a one-click load with no uploaded file at all, so it
+        // gets its own panel rather than the spreadsheet wizard. Its literal
+        // path must precede the :domain param route to win the match.
+        { path: '/admin/data-import/geography', element: <GeographyLoadPanel /> },
         { path: '/admin/data-import/:domain', element: <ImportWizard /> },
       ]
     : []
