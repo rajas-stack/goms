@@ -3,7 +3,16 @@ import cors from '@fastify/cors'
 import { fastifyTRPCPlugin } from '@trpc/server/adapters/fastify'
 import { appRouter } from './index.js'
 
-const app = Fastify()
+// Fastify's find-my-way router defaults maxParamLength to 100 characters.
+// tRPC's fastify adapter matches the batched procedure-name list (e.g.
+// "hierarchy.listStates,hierarchy.listOrgRoots,...") as a single route param,
+// and httpBatchLink freely coalesces many same-tick queries into one request
+// — trivially over 100 chars on a real page. Discovered live during the
+// 2026-08-26 dev cutover browser test: the resulting 414 has no CORS headers
+// at all (rejected before the CORS hook runs), which Chrome then reports as
+// a generic "blocked by CORS policy" console error — a red herring for what
+// is actually a route-param length limit, not an origin problem.
+const app = Fastify({ routerOptions: { maxParamLength: 2000 } })
 
 // Explicit allow-list only — never `origin: true`/`*`, since every procedure
 // here is a `publicProcedure` with no auth check of its own (see the
