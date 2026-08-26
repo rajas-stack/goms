@@ -13,6 +13,7 @@ import { validateEmployeeRows, commitEmployeeRows } from '../import/domains/empl
 import { validateSalesRosterRows, commitSalesRosterRows } from '../import/domains/salesRoster.js'
 import { validateSkuRows, commitSkuRows } from '../import/domains/skus.js'
 import { validateBomRows, commitBomRows } from '../import/domains/bom.js'
+import { previewGeographyLoad, commitGeographyLoad } from '../import/domains/geography.js'
 import { recordImportRun, listImportHistory } from '../import/auditLog.js'
 import type { ImportDomainKey, ImportRowResult } from '../import/types.js'
 
@@ -174,7 +175,33 @@ export const adminImportRouter = router({
     .input(z.object({ domain: domainSchema }))
     .query(({ input }) => listImportHistory(input.domain)),
 
+  // Geography has no client-supplied rows at all (the source is the bundled
+  // LGD dataset, not an upload) — its own preview/commit pair, distinct
+  // from the generic validate/commit above.
+  previewGeographyLoad: adminImportProcedure.mutation(() => previewGeographyLoad(pool)),
+
+  commitGeographyLoad: adminImportProcedure
+    .input(z.object({ commitToken: z.string() }))
+    .mutation(async ({ input }) => {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const result = await commitGeographyLoad(client, input.commitToken)
+        await recordImportRun(client, 'geography', result.summary, [])
+        await client.query('COMMIT')
+        return result
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
+    }),
+
   listDomains: adminImportProcedure.query(async () => {
+    const geoCountResult = await pool.query(`SELECT COUNT(*) FROM hierarchy_nodes WHERE domain='geo'`)
+    const geographyCount = Number(geoCountResult.rows[0].count)
+
     const countResult = await pool.query(
       `SELECT master_key, COUNT(*) FROM commercial_masters GROUP BY master_key
        UNION ALL SELECT 'employees', COUNT(*) FROM employees
@@ -188,6 +215,7 @@ export const adminImportRouter = router({
     const catalogTotal = ['verticals', 'products', 'modules', 'features'].reduce((sum, key) => sum + (countByKey.get(key) ?? 0), 0)
 
     return [
+      { domain: 'geography' as const, label: 'Geography', currentRowCount: geographyCount, dependencyStatus: 'ready' as const },
       { domain: 'organizationHierarchy' as const, label: 'Organization Hierarchy', currentRowCount: countByKey.get('organizationHierarchy') ?? 0, dependencyStatus: 'ready' as const },
       { domain: 'employees' as const, label: 'Employees', currentRowCount: countByKey.get('employees') ?? 0, dependencyStatus: (countByKey.get('organizationHierarchy') ?? 0) > 0 ? 'ready' as const : { blockedOn: ['organizationHierarchy'] as ImportDomainKey[] } },
       { domain: 'salesRoster' as const, label: 'Sales Roster & Postings', currentRowCount: countByKey.get('salesPersons') ?? 0, dependencyStatus: 'ready' as const },

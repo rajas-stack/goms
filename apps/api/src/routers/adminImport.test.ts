@@ -16,6 +16,7 @@ describe('adminImport router', () => {
     await pool.query('DELETE FROM edition_features')
     await pool.query('DELETE FROM commercial_masters')
     await pool.query('DELETE FROM sales_persons')
+    await pool.query(`DELETE FROM hierarchy_nodes WHERE domain='geo'`)
     await pool.query('DELETE FROM admin_import_runs')
   })
   afterEach(() => {
@@ -104,4 +105,18 @@ describe('adminImport router', () => {
     const dbRows = await pool.query(`SELECT official_email FROM sales_persons`)
     expect(dbRows.rows).toEqual([{ official_email: 'a@amnex.com' }])
   })
+
+  it('previewGeographyLoad and commitGeographyLoad work end-to-end through the router', async () => {
+    const caller = appRouter.createCaller({})
+    const preview = await caller.adminImport.previewGeographyLoad()
+    expect(preview.reconciliation.matches).toBe(true)
+    expect(preview.summary.toCreate).toBeGreaterThan(7000)
+    expect(typeof preview.commitToken).toBe('string')
+
+    const result = await caller.adminImport.commitGeographyLoad({ commitToken: preview.commitToken })
+    expect(result.summary.toCreate).toBe(preview.summary.toCreate)
+
+    const domains = await caller.adminImport.listDomains()
+    expect(domains.find((d) => d.domain === 'geography')?.currentRowCount).toBeGreaterThan(7000)
+  }, 30000)
 })
