@@ -71,11 +71,15 @@ export function summarize(rows: ImportRowResult[]): ImportSummary {
   }
 }
 
-export function computeCommitToken(domain: ImportDomainKey, rows: unknown[]): string {
+// `rows` is `unknown`, not `unknown[]` — most domains submit a flat array,
+// but the multi-sheet domains (Commercial Masters Flat/Catalog, Sales
+// Roster) submit a `{ sheetName: rows[] }` dictionary instead. Either shape
+// hashes fine; only the router cares about the distinction.
+export function computeCommitToken(domain: ImportDomainKey, rows: unknown): string {
   return createHash('sha256').update(domain).update(JSON.stringify(rows)).digest('hex')
 }
 
-export function verifyCommitToken(domain: ImportDomainKey, rows: unknown[], token: string): boolean {
+export function verifyCommitToken(domain: ImportDomainKey, rows: unknown, token: string): boolean {
   return computeCommitToken(domain, rows) === token
 }
 
