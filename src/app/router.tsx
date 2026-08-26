@@ -13,7 +13,26 @@ const SalesWorkspace = lazy(() => import('./routes/SalesWorkspace').then((m) => 
 const CommercialCalculatorWorkspace = lazy(() =>
   import('@/modules/commercial-calculator/CommercialCalculatorWorkspace').then((m) => ({ default: m.CommercialCalculatorWorkspace })),
 )
+const AdminImportDashboard = lazy(() =>
+  import('@/modules/admin-data-import/AdminImportDashboard').then((m) => ({ default: m.AdminImportDashboard })),
+)
+const ImportWizard = lazy(() =>
+  import('@/modules/admin-data-import/ImportWizard').then((m) => ({ default: m.ImportWizard })),
+)
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
+
+// Admin Data Import is gated behind its own env flag — unset/false by
+// default everywhere, including goms-prod — since it has no real
+// authentication yet (see AdminImportBanner). Building the route list
+// conditionally (rather than gating inside each route's element) keeps the
+// routes entirely absent from the router when the flag is off.
+const adminImportRoutes =
+  import.meta.env.VITE_ADMIN_IMPORT_ENABLED === 'true'
+    ? [
+        { path: '/admin/data-import', element: <AdminImportDashboard /> },
+        { path: '/admin/data-import/:domain', element: <ImportWizard /> },
+      ]
+    : []
 
 export const router = createBrowserRouter([
   {
@@ -31,6 +50,7 @@ export const router = createBrowserRouter([
       { path: '/commercial-calculator', element: <CommercialCalculatorWorkspace /> },
       { path: '/commercial-calculator/:section', element: <CommercialCalculatorWorkspace /> },
       { path: '/commercial-calculator/boq/:boqId', element: <CommercialCalculatorWorkspace /> },
+      ...adminImportRoutes,
       { path: '*', element: <NotFound /> },
     ],
   },
