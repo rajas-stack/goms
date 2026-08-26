@@ -8,7 +8,12 @@ export const MAX_IMPORT_ROWS = 5000
 
 export function classifyRows<TRow, TExisting>(opts: {
   rows: TRow[]
-  getBusinessKey: (row: TRow) => string | null
+  /** `index` lets a domain mint a per-row synthetic key (e.g. when the
+   *  real key field is blank/invalid) so two equally-invalid rows never
+   *  falsely collide as "duplicates" of each other — each still reaches
+   *  `validateRow` independently and gets its own specific error. Only
+   *  return `null` when no key — real or synthetic — can be derived at all. */
+  getBusinessKey: (row: TRow, index: number) => string | null
   existingByKey: Map<string, TExisting>
   diffFields: (row: TRow, existing: TExisting) => ImportFieldDiff[]
   validateRow: (row: TRow, index: number) => string[]
@@ -19,7 +24,7 @@ export function classifyRows<TRow, TExisting>(opts: {
 
   rows.forEach((row, index) => {
     const rowNumber = index + 1
-    const businessKey = getBusinessKey(row)
+    const businessKey = getBusinessKey(row, index)
 
     if (businessKey === null) {
       results.push({ rowNumber, businessKey: '', action: 'reject', errors: ['business key could not be determined for this row'] })
