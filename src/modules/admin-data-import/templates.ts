@@ -225,14 +225,35 @@ const MULTI_SHEET_KEYS: Partial<Record<SpreadsheetDomainKey, Record<string, stri
   salesRoster: { 'Sales Persons': 'persons', Postings: 'postings' },
 }
 
+function sheetHeaders(worksheet: XLSX.WorkSheet): string[] {
+  const [headerRow] = XLSX.utils.sheet_to_json<string[]>(worksheet, { header: 1, blankrows: false })
+  return (headerRow ?? []).map((h) => String(h).trim())
+}
+
+export class UnrecognizedWorkbookError extends Error {}
+
 /** Parses an uploaded workbook into exactly the `rows` shape
  *  `adminImport.validate` expects for this domain. Rows that are entirely
  *  blank are dropped, so a template's trailing empty rows don't become
- *  rejected rows in the preview. */
+ *  rejected rows in the preview.
+ *
+ *  Throws `UnrecognizedWorkbookError` when no sheet carries any of this
+ *  domain's expected headers. SheetJS parses arbitrary bytes leniently
+ *  rather than throwing, so without this check a wrong-template or
+ *  not-a-spreadsheet upload would silently validate as zero rows —
+ *  indistinguishable from a correctly-filled-but-empty template. */
 export function parseWorkbook(domain: SpreadsheetDomainKey, data: ArrayBuffer): ImportRows {
   const workbook = XLSX.read(data, { type: 'array' })
   const sheetKeys = MULTI_SHEET_KEYS[domain]
   const isBlank = (row: ImportRow) => Object.values(row).every((v) => v === '' || v === undefined)
+
+  const expectedHeaders = new Set(TEMPLATE_COLUMNS[domain].flatMap((s) => s.columns))
+  const foundAnyExpectedHeader = workbook.SheetNames.some((name) =>
+    sheetHeaders(workbook.Sheets[name]).some((h) => expectedHeaders.has(h)),
+  )
+  if (!foundAnyExpectedHeader) {
+    throw new UnrecognizedWorkbookError(`No ${domain} columns found in this workbook.`)
+  }
 
   if (!sheetKeys) {
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]]

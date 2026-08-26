@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as XLSX from 'xlsx'
-import { TEMPLATE_COLUMNS, HEADER_TO_FIELD, SPREADSHEET_DOMAIN_KEYS, parseCellValue, parseWorkbook } from './templates'
+import { TEMPLATE_COLUMNS, HEADER_TO_FIELD, SPREADSHEET_DOMAIN_KEYS, parseCellValue, parseWorkbook, UnrecognizedWorkbookError } from './templates'
 
 function workbookBuffer(sheets: { sheet: string; rows: unknown[][] }[]): ArrayBuffer {
   const workbook = XLSX.utils.book_new()
@@ -97,6 +97,16 @@ describe('parseWorkbook', () => {
       { sheet: 'Tax Classes', rows: [TEMPLATE_COLUMNS.taxClasses[0].columns, ['GST18', 'GST 18%', '', '18', 'Y', '0'], ['', '', '', '', '', '']] },
     ])
     expect(parseWorkbook('taxClasses', buffer)).toHaveLength(1)
+  })
+
+  it('rejects a workbook carrying none of this domain\'s columns, rather than silently parsing zero rows', () => {
+    const buffer = workbookBuffer([{ sheet: 'Sheet1', rows: [['Something Else Entirely'], ['x']] }])
+    expect(() => parseWorkbook('taxClasses', buffer)).toThrow(UnrecognizedWorkbookError)
+  })
+
+  it('accepts a correctly-headed but data-empty template, unlike an unrecognized workbook', () => {
+    const buffer = workbookBuffer([{ sheet: 'Tax Classes', rows: [TEMPLATE_COLUMNS.taxClasses[0].columns] }])
+    expect(parseWorkbook('taxClasses', buffer)).toEqual([])
   })
 
   it('returns empty rows for a sheet the uploaded workbook omits entirely', () => {
