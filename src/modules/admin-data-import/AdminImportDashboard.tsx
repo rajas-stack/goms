@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { AdminImportBanner } from './AdminImportBanner'
-import { useAdminImportDomains, type DomainListEntry } from './api'
+import { useAdminImportDomains, type DomainListEntry, type SpreadsheetDomainKey } from './api'
+import { downloadTemplate } from './templates'
 
 function StatusCell({ status, labelByDomain }: { status: DomainListEntry['dependencyStatus']; labelByDomain: Map<string, string> }) {
   if (status === 'ready') return <span className="text-emerald-700">Ready</span>
@@ -18,13 +19,18 @@ function ActionsCell({ domain, status }: { domain: DomainListEntry['domain']; st
   }
   const blocked = status !== 'ready'
   return (
-    <Link
-      to={`/admin/data-import/${domain}`}
-      aria-disabled={blocked}
-      className={blocked ? 'pointer-events-none text-slate-400 underline' : 'text-sky-700 underline'}
-    >
-      Upload & Review
-    </Link>
+    <div className="flex gap-3">
+      <button type="button" onClick={() => downloadTemplate(domain as SpreadsheetDomainKey)} className="text-sky-700 underline">
+        Download Template
+      </button>
+      <Link
+        to={`/admin/data-import/${domain}`}
+        aria-disabled={blocked}
+        className={blocked ? 'pointer-events-none text-slate-400 underline' : 'text-sky-700 underline'}
+      >
+        Upload & Review
+      </Link>
+    </div>
   )
 }
 
