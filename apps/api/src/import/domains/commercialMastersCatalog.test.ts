@@ -3,6 +3,19 @@ import { pool } from '../../db.js'
 import { validateCatalogRows, commitCatalogRows } from './commercialMastersCatalog.js'
 
 async function clearCatalogMasters() {
+  // This suite runs sequentially against one shared real Postgres
+  // (vitest.config.ts's fileParallelism:false) — commercial_skus/
+  // edition_features/commercial_boqs* all reference commercial_masters
+  // ON DELETE RESTRICT (default), so a leftover row from another test file
+  // (e.g. commercial-skus.test.ts, commercial-boq.test.ts) blocks deleting
+  // commercial_masters unless cleared first, same convention
+  // commercial.test.ts's own beforeEach already establishes.
+  await pool.query('DELETE FROM commercial_audit_logs')
+  await pool.query('DELETE FROM commercial_boq_line_items')
+  await pool.query('DELETE FROM commercial_boqs')
+  await pool.query('DELETE FROM commercial_bom_items')
+  await pool.query('DELETE FROM commercial_skus')
+  await pool.query('DELETE FROM edition_features')
   // Children first — commercial_masters.parent_id is ON DELETE RESTRICT.
   await pool.query(`DELETE FROM commercial_masters WHERE master_key='features'`)
   await pool.query(`DELETE FROM commercial_masters WHERE master_key='modules'`)

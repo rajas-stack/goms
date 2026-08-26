@@ -5,6 +5,13 @@ import { summarize } from '../engine.js'
 
 describe('approvalMatrix importer', () => {
   beforeEach(async () => {
+    // Same cross-file-leftover reason as taxClasses.test.ts — commercial_skus
+    // references commercial_masters ON DELETE RESTRICT.
+    await pool.query('DELETE FROM commercial_audit_logs')
+    await pool.query('DELETE FROM commercial_boq_line_items')
+    await pool.query('DELETE FROM commercial_boqs')
+    await pool.query('DELETE FROM commercial_bom_items')
+    await pool.query('DELETE FROM commercial_skus')
     await pool.query(`DELETE FROM commercial_masters WHERE master_key='approvalMatrix'`)
   })
 

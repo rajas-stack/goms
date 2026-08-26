@@ -5,6 +5,22 @@ import { summarize } from '../engine.js'
 
 describe('organizationHierarchy importer', () => {
   beforeEach(async () => {
+    // This suite runs sequentially against one shared real Postgres
+    // (vitest.config.ts's fileParallelism:false), so a leftover row from
+    // another test file referencing an `org`-domain hierarchy_nodes row
+    // (employees.org_node_id, opportunities/commercial_boqs.department_id —
+    // all ON DELETE RESTRICT) blocks the delete below unless cleared first.
+    // Same convention employees.test.ts's own beforeEach already establishes
+    // for the identical reason.
+    await pool.query('DELETE FROM employee_merge_audit')
+    await pool.query('DELETE FROM transfers')
+    await pool.query('DELETE FROM timeline_events')
+    await pool.query('DELETE FROM employee_charges')
+    await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM opportunities')
+    await pool.query('DELETE FROM commercial_boq_line_items')
+    await pool.query('DELETE FROM commercial_boqs')
+    await pool.query('DELETE FROM employees')
     // Single statement covering the whole `domain='org'` subtree — Postgres
     // checks the self-referencing hierarchy_nodes.parent_id FK at
     // statement-end, not per-row, so deleting parents and children together

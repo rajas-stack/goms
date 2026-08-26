@@ -4,9 +4,16 @@ import { validateSalesRosterRows, commitSalesRosterRows } from './salesRoster.js
 
 describe('salesRoster importer', () => {
   beforeEach(async () => {
-    // sales_postings.sales_person_id references sales_persons ON DELETE
-    // CASCADE (1787639705341_sales.sql:23), so deleting sales_persons
-    // clears both tables in one statement.
+    // commercial_boqs.sales_person_id is ON DELETE RESTRICT
+    // (1787650774037_commercial-boq.sql:26) — a leftover BOQ row from
+    // another test file (this suite runs sequentially against one shared
+    // real Postgres, per vitest.config.ts's fileParallelism:false) blocks
+    // deleting sales_persons unless cleared first, same convention
+    // sales.test.ts's own beforeEach already follows. sales_postings and
+    // ownership_assignments both reference sales_persons ON DELETE CASCADE,
+    // so deleting sales_persons still clears those two in the same statement.
+    await pool.query(`DELETE FROM commercial_boq_line_items`)
+    await pool.query(`DELETE FROM commercial_boqs`)
     await pool.query(`DELETE FROM sales_persons`)
   })
 
