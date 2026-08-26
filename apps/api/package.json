@@ -11,6 +11,7 @@
     "migrate": "node-pg-migrate"
   },
   "dependencies": {
+    "@fastify/cors": "^10.0.1",
     "@goms/domain": "*",
     "@trpc/server": "^11.0.0",
     "fastify": "^5.1.0",

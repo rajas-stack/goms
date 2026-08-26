@@ -25,4 +25,14 @@ function render() {
 // queries and show seed data that then silently swaps underneath the user.
 // `bootstrapRepository` never rejects — if IndexedDB is unavailable it resolves
 // having changed nothing, and the app runs on seed data as it always did.
-void bootstrapRepository().then(render)
+//
+// Skipped entirely when VITE_API_BASE_URL is set (opt-in remote mode, via an
+// untracked .env.local — see repository.ts): `RemoteRepository` has no local
+// cache to hydrate, so bootstrapping the in-memory store would just be a
+// wasted IndexedDB open/read on every load. See the 2026-08-26 cutover
+// readiness report §2.
+if (import.meta.env.VITE_API_BASE_URL) {
+  render()
+} else {
+  void bootstrapRepository().then(render)
+}

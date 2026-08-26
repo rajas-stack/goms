@@ -11,6 +11,11 @@ interface Props {
   onOpenDrawer: () => void
 }
 
+/** Set only via an untracked `.env.local` for opt-in local testing against a
+ *  deployed backend — never the default for `npm run dev`/tests/builds. See
+ *  the 2026-08-26 cutover readiness report §4. */
+const remoteApiBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined
+
 export function TopBar({ onOpenDrawer }: Props) {
   const { openSearch, openImport, openExport, openSettings } = useShell()
   const location = useLocation()
@@ -36,6 +41,14 @@ export function TopBar({ onOpenDrawer }: Props) {
             {moduleLabel}
           </span>
         </div>
+      )}
+      {remoteApiBaseUrl && (
+        <Tooltip label={`Reading and writing live data at ${remoteApiBaseUrl}`} side="bottom" className="shrink-0">
+          <span className="hidden items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 sm:inline-flex">
+            <Icon name="Database" size={11} />
+            Connected to goms-dev
+          </span>
+        </Tooltip>
       )}
 
       {/* Search/Import/Export operate on Account Mapping's hierarchy data

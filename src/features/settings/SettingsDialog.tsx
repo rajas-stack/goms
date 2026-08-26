@@ -8,6 +8,12 @@ import { getFullSnapshot, restoreFromBackup } from '@/data/repository'
 import { downloadBackup, parseBackupFile } from '@/data/backup'
 import type { GormsData } from '@/data/seed'
 
+/** Set only via an untracked `.env.local` — see TopBar.tsx. Backup/restore
+ *  reads and writes the local IndexedDB store, which is a different (and,
+ *  in remote mode, irrelevant) dataset from whatever `RemoteRepository` is
+ *  showing — see the 2026-08-26 cutover readiness report §2. */
+const isRemoteMode = Boolean(import.meta.env.VITE_API_BASE_URL)
+
 /** Whole-app JSON backup/restore — separate from `ExportDialog`/`ImportDialog`,
  *  which only handle Account Mapping's CSV datasets. This covers every
  *  collection in `GormsData`, including Sales and the Commercial Calculator
@@ -75,47 +81,57 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
       open={open}
       onClose={handleClose}
       title="Settings"
-      description="Back up every record in GOMS to a file, or restore from one taken earlier."
+      description={
+        isRemoteMode
+          ? 'Connected to a remote backend — data lives on the server, not this device.'
+          : "Back up every record in GOMS to a file, or restore from one taken earlier."
+      }
       size="lg"
       footer={<Button onClick={handleClose}>Close</Button>}
     >
-      <div className="space-y-5">
-        <section className="space-y-2">
-          <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Export full backup</h3>
-          <p className="text-[13px] text-muted">Downloads every record — hierarchy, people, sales, and Commercial Calculator data — as one JSON file.</p>
-          <Button variant="primary" onClick={handleExport} disabled={exporting}>
-            <Icon name="Download" size={14} />
-            {exporting ? 'Preparing…' : 'Export full backup (JSON)'}
-          </Button>
-        </section>
+      {isRemoteMode ? (
+        <p className="rounded-lg border border-line bg-panel px-3 py-2.5 text-[13px] text-muted">
+          Backup and restore work on this device's local data and aren't available while connected to a remote backend — the server's data is backed up separately.
+        </p>
+      ) : (
+        <div className="space-y-5">
+          <section className="space-y-2">
+            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Export full backup</h3>
+            <p className="text-[13px] text-muted">Downloads every record — hierarchy, people, sales, and Commercial Calculator data — as one JSON file.</p>
+            <Button variant="primary" onClick={handleExport} disabled={exporting}>
+              <Icon name="Download" size={14} />
+              {exporting ? 'Preparing…' : 'Export full backup (JSON)'}
+            </Button>
+          </section>
 
-        <section className="space-y-2 border-t border-line pt-4">
-          <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Restore from backup</h3>
-          <p className="text-[13px] text-muted">Replaces all data currently on this device. This can't be undone.</p>
-          <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={onFile} />
-          <Button onClick={() => fileInputRef.current?.click()}>
-            <Icon name="Upload" size={14} />
-            Choose backup file…
-          </Button>
-          {restoreError && (
-            <p className="rounded-lg bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{restoreError}</p>
-          )}
-          {pendingRestore && (
-            <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
-              <p className="flex items-center gap-1.5 text-[13px] text-amber-800">
-                <Icon name="TriangleAlert" size={14} />
-                Restore the backup from {pendingRestore.exportedAt ? new Date(pendingRestore.exportedAt).toLocaleString() : 'an unknown date'}? All current data on this device will be overwritten.
-              </p>
-              <div className="flex gap-2">
-                <Button onClick={() => setPendingRestore(null)} disabled={restoring}>Cancel</Button>
-                <Button variant="danger" onClick={confirmRestore} disabled={restoring}>
-                  {restoring ? 'Restoring…' : 'Restore and overwrite'}
-                </Button>
+          <section className="space-y-2 border-t border-line pt-4">
+            <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Restore from backup</h3>
+            <p className="text-[13px] text-muted">Replaces all data currently on this device. This can't be undone.</p>
+            <input ref={fileInputRef} type="file" accept="application/json" className="hidden" onChange={onFile} />
+            <Button onClick={() => fileInputRef.current?.click()}>
+              <Icon name="Upload" size={14} />
+              Choose backup file…
+            </Button>
+            {restoreError && (
+              <p className="rounded-lg bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{restoreError}</p>
+            )}
+            {pendingRestore && (
+              <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="flex items-center gap-1.5 text-[13px] text-amber-800">
+                  <Icon name="TriangleAlert" size={14} />
+                  Restore the backup from {pendingRestore.exportedAt ? new Date(pendingRestore.exportedAt).toLocaleString() : 'an unknown date'}? All current data on this device will be overwritten.
+                </p>
+                <div className="flex gap-2">
+                  <Button onClick={() => setPendingRestore(null)} disabled={restoring}>Cancel</Button>
+                  <Button variant="danger" onClick={confirmRestore} disabled={restoring}>
+                    {restoring ? 'Restoring…' : 'Restore and overwrite'}
+                  </Button>
+                </div>
               </div>
-            </div>
-          )}
-        </section>
-      </div>
+            )}
+          </section>
+        </div>
+      )}
     </Dialog>
   )
 }
