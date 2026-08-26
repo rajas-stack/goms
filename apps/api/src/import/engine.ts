@@ -78,3 +78,43 @@ export function computeCommitToken(domain: ImportDomainKey, rows: unknown[]): st
 export function verifyCommitToken(domain: ImportDomainKey, rows: unknown[], token: string): boolean {
   return computeCommitToken(domain, rows) === token
 }
+
+/** Resolves self-referencing tree structures (Organization Hierarchy's
+ *  Parent Code, Employees'/Sales Postings' Manager code, Commercial Masters
+ *  Catalog's Parent Code chain) where one row in an uploaded file can name
+ *  another row *earlier or later in the same file* as its parent. Reapplies
+ *  the same "resolve what you can now, defer what you can't yet, retry until
+ *  nothing changes" two-pass algorithm `gov-hierarchy.ts`'s `buildOrgTree`
+ *  already uses for its `pendingManagers` list, generically instead of
+ *  copy-pasted per domain. A row is "resolved" once its own key has been
+ *  added to the resolved set — either because it has no parent, or because
+ *  its parent was already resolved (in the database or earlier in this same
+ *  pass). Anything left in `unresolved` after the loop stalls either names a
+ *  parent that exists nowhere, or is part of a genuine cycle — both are
+ *  reported the same way (as unresolved indices) since the caller turns
+ *  each into its own "no such parent code" rejection either way. */
+export function resolveTreeReferences<TRow>(opts: {
+  rows: TRow[]
+  getOwnKey: (row: TRow) => string
+  getParentKey: (row: TRow) => string | null
+  existingKeys: Set<string>
+}): { unresolved: number[] } {
+  const { rows, getOwnKey, getParentKey, existingKeys } = opts
+  const resolvedKeys = new Set(existingKeys)
+  const pending = new Set(rows.map((_, i) => i))
+
+  let progressed = true
+  while (progressed && pending.size > 0) {
+    progressed = false
+    for (const index of Array.from(pending)) {
+      const parentKey = getParentKey(rows[index])
+      if (parentKey === null || resolvedKeys.has(parentKey)) {
+        resolvedKeys.add(getOwnKey(rows[index]))
+        pending.delete(index)
+        progressed = true
+      }
+    }
+  }
+
+  return { unresolved: Array.from(pending).sort((a, b) => a - b) }
+}

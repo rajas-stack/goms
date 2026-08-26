@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { classifyRows, summarize, computeCommitToken, verifyCommitToken, MAX_IMPORT_ROWS } from './engine.js'
+import { classifyRows, resolveTreeReferences, summarize, computeCommitToken, verifyCommitToken, MAX_IMPORT_ROWS } from './engine.js'
 
 describe('classifyRows', () => {
   type Row = { code: string; name: string }
@@ -85,5 +85,57 @@ describe('commit token', () => {
 describe('MAX_IMPORT_ROWS', () => {
   it('is a bounded, positive limit', () => {
     expect(MAX_IMPORT_ROWS).toBe(5000)
+  })
+})
+
+describe('resolveTreeReferences', () => {
+  it('resolves a reference to a row already in the database', () => {
+    const out = resolveTreeReferences({
+      rows: [{ code: 'B', parentCode: 'A' }],
+      getOwnKey: (r) => r.code,
+      getParentKey: (r) => r.parentCode,
+      existingKeys: new Set(['A']),
+    })
+    expect(out.unresolved).toEqual([])
+  })
+
+  it('resolves a forward reference to a row later in the same file', () => {
+    const out = resolveTreeReferences({
+      rows: [{ code: 'B', parentCode: 'A' }, { code: 'A', parentCode: null }],
+      getOwnKey: (r) => r.code,
+      getParentKey: (r) => r.parentCode,
+      existingKeys: new Set(),
+    })
+    expect(out.unresolved).toEqual([])
+  })
+
+  it('leaves a row unresolved when its named parent exists nowhere', () => {
+    const out = resolveTreeReferences({
+      rows: [{ code: 'B', parentCode: 'GHOST' }],
+      getOwnKey: (r) => r.code,
+      getParentKey: (r) => r.parentCode,
+      existingKeys: new Set(),
+    })
+    expect(out.unresolved).toEqual([0])
+  })
+
+  it('leaves a genuine cycle unresolved on both sides rather than looping forever', () => {
+    const out = resolveTreeReferences({
+      rows: [{ code: 'A', parentCode: 'B' }, { code: 'B', parentCode: 'A' }],
+      getOwnKey: (r) => r.code,
+      getParentKey: (r) => r.parentCode,
+      existingKeys: new Set(),
+    })
+    expect(out.unresolved.sort()).toEqual([0, 1])
+  })
+
+  it('resolves a multi-level chain (grandparent -> parent -> child) regardless of file order', () => {
+    const out = resolveTreeReferences({
+      rows: [{ code: 'C', parentCode: 'B' }, { code: 'A', parentCode: null }, { code: 'B', parentCode: 'A' }],
+      getOwnKey: (r) => r.code,
+      getParentKey: (r) => r.parentCode,
+      existingKeys: new Set(),
+    })
+    expect(out.unresolved).toEqual([])
   })
 })
