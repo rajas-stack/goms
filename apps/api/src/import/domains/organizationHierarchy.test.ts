@@ -1,0 +1,122 @@
+import { describe, it, expect, beforeEach } from 'vitest'
+import { pool } from '../../db.js'
+import { validateOrgHierarchyRows, commitOrgHierarchyRows } from './organizationHierarchy.js'
+import { summarize } from '../engine.js'
+
+describe('organizationHierarchy importer', () => {
+  beforeEach(async () => {
+    // Single statement covering the whole `domain='org'` subtree — Postgres
+    // checks the self-referencing hierarchy_nodes.parent_id FK at
+    // statement-end, not per-row, so deleting parents and children together
+    // in one DELETE is safe (same reasoning hierarchy.ts's deleteNode relies
+    // on for its own multi-row delete).
+    await pool.query(`DELETE FROM hierarchy_nodes WHERE domain='org'`)
+  })
+
+  it('creates a root department with no Parent Code', async () => {
+    const rows = [{ nodeType: 'department', name: 'Traffic Dept', code: 'TRAFDEPT', parentCode: null, stateCode: null, status: 'active' }]
+    const preview = await validateOrgHierarchyRows(pool, rows)
+    expect(preview[0].action).toBe('create')
+  })
+
+  it('resolves a child office against a department earlier in the same file', async () => {
+    const rows = [
+      { nodeType: 'department', name: 'Traffic Dept', code: 'TRAFDEPT', parentCode: null, stateCode: null, status: 'active' },
+      { nodeType: 'office', name: 'Traffic Office', code: 'TRAFOFF', parentCode: 'TRAFDEPT', stateCode: null, status: 'active' },
+    ]
+    const preview = await validateOrgHierarchyRows(pool, rows)
+    expect(preview[0].action).toBe('create')
+    expect(preview[1].action).toBe('create')
+  })
+
+  it('rejects a Node Type outside department/branch/division/office/unit', async () => {
+    const rows = [{ nodeType: 'headquarters', name: 'HQ', code: 'HQ1', parentCode: null, stateCode: null, status: 'active' }]
+    const preview = await validateOrgHierarchyRows(pool, rows)
+    expect(preview[0].action).toBe('reject')
+    expect(preview[0].errors[0]).toMatch(/node type/i)
+  })
+
+  it('rejects a row whose Parent Code matches nothing in the file or the database', async () => {
+    const rows = [{ nodeType: 'office', name: 'Ghost Office', code: 'GOFF', parentCode: 'GHOST', stateCode: null, status: 'active' }]
+    const preview = await validateOrgHierarchyRows(pool, rows)
+    expect(preview[0].action).toBe('reject')
+    expect(preview[0].errors[0]).toMatch(/GHOST/)
+  })
+
+  it("an existing node's Code match with an identical Parent Code/Name/State Code/Status is unchanged", async () => {
+    const rows = [{ nodeType: 'department', name: 'Traffic Dept', code: 'TRAFDEPT', parentCode: null, stateCode: 21, status: 'active' }]
+    const preview = await validateOrgHierarchyRows(pool, rows)
+    await commitOrgHierarchyRows(pool, rows, preview)
+    const secondPreview = await validateOrgHierarchyRows(pool, rows)
+    expect(summarize(secondPreview)).toMatchObject({ toCreate: 0, toUpdate: 0, unchanged: 1 })
+  })
+
+  it("changing an existing node's Name is classified update with a name diff", async () => {
+    const rows = [{ nodeType: 'department', name: 'Traffic Dept', code: 'TRAFDEPT', parentCode: null, stateCode: null, status: 'active' }]
+    const preview = await validateOrgHierarchyRows(pool, rows)
+    await commitOrgHierarchyRows(pool, rows, preview)
+    const changed = [{ ...rows[0], name: 'Traffic Department' }]
+    const secondPreview = await validateOrgHierarchyRows(pool, changed)
+    expect(secondPreview[0].action).toBe('update')
+    expect(secondPreview[0].diff).toEqual([{ field: 'name', oldValue: 'Traffic Dept', newValue: 'Traffic Department' }])
+  })
+
+  // --- Additional coverage beyond the plan's named list, exercising the
+  // parts of the spec (order-independent resolution, commit's actual writes,
+  // reject-rows-never-written) that the named list alone doesn't reach. ---
+
+  it('resolves a child office against a department later in the same file (reverse order)', async () => {
+    const rows = [
+      { nodeType: 'office', name: 'Traffic Office', code: 'TRAFOFF', parentCode: 'TRAFDEPT', stateCode: null, status: 'active' },
+      { nodeType: 'department', name: 'Traffic Dept', code: 'TRAFDEPT', parentCode: null, stateCode: null, status: 'active' },
+    ]
+    const preview = await validateOrgHierarchyRows(pool, rows)
+    expect(preview[0].action).toBe('create')
+    expect(preview[1].action).toBe('create')
+  })
+
+  it('commit resolves and persists the parent chain correctly even when the child row appears first', async () => {
+    const rows = [
+      { nodeType: 'office', name: 'Traffic Office', code: 'TRAFOFF', parentCode: 'TRAFDEPT', stateCode: null, status: 'active' },
+      { nodeType: 'department', name: 'Traffic Dept', code: 'TRAFDEPT', parentCode: null, stateCode: null, status: 'active' },
+    ]
+    const preview = await validateOrgHierarchyRows(pool, rows)
+    await commitOrgHierarchyRows(pool, rows, preview)
+    const result = await pool.query(
+      `SELECT child.code AS child_code, parent.code AS parent_code
+       FROM hierarchy_nodes child JOIN hierarchy_nodes parent ON parent.id = child.parent_id
+       WHERE child.domain='org' AND child.code='TRAFOFF'`,
+    )
+    expect(result.rows[0]).toMatchObject({ child_code: 'TRAFOFF', parent_code: 'TRAFDEPT' })
+  })
+
+  it('commits only create/update rows, never touching rejected ones', async () => {
+    const rows = [
+      { nodeType: 'department', name: 'Traffic Dept', code: 'TRAFDEPT', parentCode: null, stateCode: null, status: 'active' },
+      { nodeType: 'not-a-real-type', name: 'Bad', code: 'BAD1', parentCode: null, stateCode: null, status: 'active' },
+    ]
+    const preview = await validateOrgHierarchyRows(pool, rows)
+    await commitOrgHierarchyRows(pool, rows, preview)
+    const result = await pool.query(`SELECT code FROM hierarchy_nodes WHERE domain='org'`)
+    expect(result.rows.map((r) => r.code)).toEqual(['TRAFDEPT'])
+  })
+
+  it('a root row with a blank Parent Code creates a node with no parent', async () => {
+    const rows = [{ nodeType: 'department', name: 'Traffic Dept', code: 'TRAFDEPT', parentCode: '', stateCode: null, status: 'active' }]
+    const preview = await validateOrgHierarchyRows(pool, rows)
+    await commitOrgHierarchyRows(pool, rows, preview)
+    const result = await pool.query(`SELECT parent_id FROM hierarchy_nodes WHERE domain='org' AND code='TRAFDEPT'`)
+    expect(result.rows[0].parent_id).toBeNull()
+  })
+
+  it('rejects the second occurrence of a duplicate Code within the same file', async () => {
+    const rows = [
+      { nodeType: 'department', name: 'Traffic Dept', code: 'TRAFDEPT', parentCode: null, stateCode: null, status: 'active' },
+      { nodeType: 'department', name: 'Traffic Dept Again', code: 'trafdept', parentCode: null, stateCode: null, status: 'active' },
+    ]
+    const preview = await validateOrgHierarchyRows(pool, rows)
+    expect(preview[0].action).toBe('create')
+    expect(preview[1].action).toBe('reject')
+    expect(preview[1].errors[0]).toMatch(/duplicate of row 1/i)
+  })
+})
