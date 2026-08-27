@@ -1,0 +1,40 @@
+# Dockerfile-specific ignore for scripts/seed-import.Dockerfile (BuildKit
+# picks this up automatically over the root .dockerignore for this
+# Dockerfile). Unlike apps/api's build, this image needs src/ and scripts/,
+# so it can't reuse the root .dockerignore as-is.
+
+.git
+node_modules
+dist
+android
+docs
+infra
+apps
+# ~6,350 static village JSON files, fetched client-side at runtime by the
+# browser -- buildSeed()'s dependency chain never reads public/, confirmed by
+# the same import-audit the seed-import plan already did for src/data/seed.ts.
+public
+
+# Editor/OS/tooling cruft
+.vscode
+.idea
+.vite
+.superpowers
+.vercel
+.claude
+.impeccable
+.playwright-mcp
+.worktrees
+*.log
+tsconfig.tsbuildinfo
+
+# Env files (never belong in an image layer)
+.env
+.env.*
+!.env.example
+
+# Stray root documents, not part of any workspace
+*.docx
+*.xlsx
+*.png
+*.zip
