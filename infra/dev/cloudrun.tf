@@ -112,3 +112,50 @@ resource "google_cloud_run_v2_job" "goms_migrate" {
     }
   }
 }
+
+# One-time seed of the frontend's reference/demo data into a fresh Postgres --
+# same reasoning and same network path as goms_migrate above (no public
+# Cloud SQL IP, so this must also run from inside goms_vpc), just a
+# different image, since goms-api's own runtime image is deliberately
+# minimal and doesn't carry the frontend src/ tree scripts/seed-import.ts
+# needs. Image built from scripts/seed-import.Dockerfile (built+pushed
+# manually the first time, same one-time-manual-push caveat
+# google_cloud_run_v2_service.goms_api's own image tag already has above --
+# CI does not build this image).
+#
+# Run once with: gcloud run jobs execute goms-seed-import --project=<id>
+# --region=asia-south1. Safe to destroy afterward (`terraform destroy
+# -target=google_cloud_run_v2_job.goms_seed_import`) -- it's a one-shot tool,
+# not a standing service; nothing else references it.
+resource "google_cloud_run_v2_job" "goms_seed_import" {
+  name     = "goms-seed-import"
+  location = "asia-south1"
+
+  template {
+    template {
+      service_account = google_service_account.goms_api_runtime.email
+      max_retries     = 0
+
+      vpc_access {
+        network_interfaces {
+          network    = google_compute_network.goms_vpc.id
+          subnetwork = google_compute_subnetwork.goms_subnet.id
+        }
+        egress = "PRIVATE_RANGES_ONLY"
+      }
+
+      containers {
+        image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-seed-import:bootstrap"
+        env {
+          name = "DATABASE_URL"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.goms_db_url.secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+}

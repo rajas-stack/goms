@@ -2,3 +2,13 @@
 # and GitLab access exist — plan §0.5.
 project_id           = "<GCP_PROJECT_ID_DEV>"
 gitlab_project_path  = "<GITLAB_PROJECT>"
+
+# Stage B — monitoring (2026-08-26 production-readiness plan §3/§7). Both
+# required, no default on purpose — see variables.tf.
+# notification_channel_ids is empty here only as a placeholder for this
+# .example file; do not apply with an empty list for real, since that pages
+# nobody. Fill in real channel resource IDs once the recipient is decided
+# (`google_monitoring_notification_channel` IDs, format
+# "projects/<project>/notificationChannels/<id>").
+notification_channel_ids = []
+api_hostname              = "<GOMS_API_RUN_APP_HOST>" # e.g. goms-api-xxxxx-el.a.run.app, no scheme/path

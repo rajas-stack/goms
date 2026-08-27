@@ -18,6 +18,11 @@ pnpm-debug.log*
 .env.*
 !.env.example
 
+# Firebase Hosting project alias — names a real GCP project id once goms-prod
+# exists; only .firebaserc.example (a placeholder) is committed.
+.firebaserc
+.firebase/
+
 # Editor files
 .vscode/
 .idea/
@@ -54,4 +59,12 @@ infra/**/.terraform.lock.hcl
 infra/**/*.tfstate
 infra/**/*.tfstate.*
 infra/**/terraform.tfvars
+
+# Saved Terraform plan files (`terraform plan -out=tfplan`). Binary artifacts
+# that embed a verbatim copy of the .tf config, the resolved variable values,
+# and — once a prior state exists — sensitive attribute values read from that
+# state. Always regenerable, and stale the moment the config or state moves.
+tfplan
+*.tfplan
+tfplan.json
 

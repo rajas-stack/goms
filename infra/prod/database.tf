@@ -1,6 +1,8 @@
-# Phase 3 — Cloud SQL (PostgreSQL), app user, password secret.
-# Phase 5 — the assembled connection-string secret. Both applied together
-# (the plan lists them as separate phases, but 5.1 depends on 3.1's outputs).
+# Mirrors infra/dev/database.tf exactly — same db-f1-micro tier, no HA, no
+# public IP, PITR enabled. Stage B plan §5: prod does NOT get a bigger tier
+# by default (matches the cost-sensitive framing already established for
+# this project) — size up only on an explicit, separate decision once real
+# prod traffic exists, not as part of standing the environment up.
 
 resource "google_sql_database_instance" "goms_pg" {
   name             = "goms-pg"
@@ -10,15 +12,15 @@ resource "google_sql_database_instance" "goms_pg" {
 
   settings {
     edition           = "ENTERPRISE"  # required for db-f1-micro -- ENTERPRISE_PLUS (now GCP's default for new instances) rejects shared-core tiers
-    tier              = "db-f1-micro" # smallest shared-core tier, single zone — spec §7.1
+    tier              = "db-f1-micro" # smallest shared-core tier, single zone — matches dev; revisit only on an explicit prod-sizing decision
     availability_type = "ZONAL"
     ip_configuration {
-      ipv4_enabled    = false # no public IP — spec §6.2
+      ipv4_enabled    = false # no public IP
       private_network = google_compute_network.goms_vpc.id
     }
     backup_configuration {
       enabled                        = true
-      point_in_time_recovery_enabled = true # spec §14
+      point_in_time_recovery_enabled = true # required for the rollback runbook's PITR path — see docs/superpowers/analysis/goms-prod-rollback-runbook.md
     }
   }
   deletion_protection = true

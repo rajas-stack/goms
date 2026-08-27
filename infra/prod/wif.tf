@@ -1,4 +1,18 @@
-# Phase 7 — Workload Identity Federation for GitLab CI (no long-lived keys).
+# Mirrors infra/dev/wif.tf exactly — Workload Identity Federation for GitLab
+# CI, no long-lived keys. A separate pool/provider/deploy-SA per project
+# (never shared across dev/prod), matching the project-level isolation
+# principle from the architecture doc §16.
+#
+# Stage B plan §5 flagged an open question here: does deploy-prod use a
+# different git ref/trigger than deploy-dev? On reflection, it doesn't need
+# to at the WIF layer — the attribute_condition below only controls which
+# git ref may assume the goms-ci-deploy identity at all, not when a deploy
+# actually runs. The real promotion control is a future `deploy-prod` stage
+# in .gitlab-ci.yml gated `when: manual` (architecture doc §18) — same ref,
+# same image tag already validated in dev, promoted only on an explicit
+# human click. That CI stage is out of scope for this pass (Stage B task
+# list: "do not redesign CI" while the shared-runner quota is exhausted) —
+# not added here.
 
 resource "google_iam_workload_identity_pool" "gitlab_pool" {
   workload_identity_pool_id = "gitlab-pool"
@@ -12,12 +26,6 @@ resource "google_iam_workload_identity_pool_provider" "gitlab_oidc" {
     "attribute.project_path" = "assertion.project_path"
     "attribute.ref"          = "assertion.ref"
   }
-  # Restrict to this exact GitLab project and branch — not any GitLab
-  # project, not any ref. GitLab's own `ref` claim is the bare branch name
-  # (e.g. "main"), unlike GitHub Actions' "refs/heads/main" convention this
-  # was originally modeled on -- confirmed against GitLab's ID token docs
-  # after a real pipeline run failed STS exchange with "credential is
-  # rejected by the attribute condition" (the condition never matched).
   attribute_condition = "assertion.project_path == \"${var.gitlab_project_path}\" && assertion.ref == \"main\""
   oidc {
     issuer_uri = "https://gitlab.com"

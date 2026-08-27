@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars (gitignored) and fill in once the goms-prod GCP
+# project, billing, domain, and deploy trigger are approved and exist —
+# Stage B production-readiness plan §5/§7. Nothing here is real yet.
+project_id           = "<GCP_PROJECT_ID_PROD>" # e.g. "goms-prod" — project must be created first, see backend.tf
+gitlab_project_path  = "<GITLAB_PROJECT>"      # same value as infra/dev — see wif.tf's comment
+
+# Monitoring (plan §3/§7) — required, no default.
+# notification_channel_ids is empty here only as a placeholder for this
+# .example file; do not apply with an empty list for real, since that pages
+# nobody. Fill in real channel resource IDs once the recipient is decided.
+notification_channel_ids = []
+api_hostname              = "<GOMS_API_RUN_APP_HOST_OR_HOSTING_DOMAIN>" # no scheme/path — doesn't exist until the prod Cloud Run service (or Firebase Hosting domain) is stood up

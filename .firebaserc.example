@@ -1,0 +1,6 @@
+{
+  "//": "Copy this to .firebaserc (git-ignored, never commit the real one — it names a real GCP project id) once goms-prod exists and has been linked to a Firebase project via `firebase projects:addfirebase goms-prod`. This is not a secret by itself, but it is environment-specific and should not be committed so a local `firebase deploy` can never accidentally target the wrong project.",
+  "projects": {
+    "default": "goms-prod"
+  }
+}
