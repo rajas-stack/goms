@@ -111,8 +111,17 @@ deploy-dev:
       --image=asia-south1-docker.pkg.dev/$GCP_PROJECT_ID_DEV/goms/goms-api:$CI_COMMIT_SHA
   environment:
     name: dev
+  # Manual (and non-blocking) rather than automatic on every main push. Two
+  # reasons: this job had been failing on a real GCP/WIF error while still
+  # being retried on every push, and a full pipeline was costing ~16 min
+  # against the 400 min/month shared-runner allowance — which ran out
+  # (2026-08-27: "No more compute minutes available", all jobs refused
+  # before starting). Deploys are deliberate acts; trigger this from the
+  # pipeline view when a dev deploy is actually wanted.
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+      allow_failure: true
 
 pages:
   stage: deploy
@@ -144,5 +153,19 @@ pages:
       - public
     expire_in: 1 hour
 
+  # Manual (and non-blocking). A main-branch pipeline was costing ~16 min
+  # (measured end-to-end, not per job) and ran on every push, which exhausted
+  # the 400 min/month shared-runner allowance — 2026-08-27: "No more compute
+  # minutes available", every job refused before starting. This job does
+  # `npm ci` plus a full Vite build over the ~6300 bundled village JSON files,
+  # so it is a substantial share of that, though the per-job split was never
+  # measured.
+  #
+  # It also publishes to GitLab Pages, which firebase.json + infra/**/cloudrun.tf
+  # supersede: Firebase Hosting is the chosen frontend host (static hosting plus
+  # an /api/** rewrite to Cloud Run, no load balancer). Kept as a manual button
+  # rather than deleted until that migration is actually live.
   rules:
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "master"
+      when: manual
+      allow_failure: true
