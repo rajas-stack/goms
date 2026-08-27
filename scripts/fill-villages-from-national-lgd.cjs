@@ -32,7 +32,10 @@ const readline = require('readline')
 
 const ROOT = path.join(__dirname, '..')
 const VILLAGE_DIR = path.join(ROOT, 'src', 'assets', 'village-shapes')
-const NAMES_DIR = path.join(ROOT, 'src', 'assets', 'villages')
+// public/villages/, not src/assets/ -- moved there to dodge the CI Rollup
+// glob-import OOM, scoped by state since taluka code alone isn't nationally
+// unique (a few codes collide across states/districts).
+const NAMES_DIR = path.join(ROOT, 'public', 'villages')
 
 const admin = require(path.join(ROOT, 'src', 'data', 'india-admin.json'))
 const subdistricts = require(path.join(ROOT, 'src', 'data', 'subdistricts.json'))
@@ -149,14 +152,15 @@ function existingVillageCodes(stateCode) {
 }
 
 const nameCache = new Map()
-function fallbackNames(talukaCode) {
-  if (!nameCache.has(talukaCode)) {
-    const file = path.join(NAMES_DIR, `${talukaCode}.json`)
-    nameCache.set(talukaCode, fs.existsSync(file)
+function fallbackNames(stateCode, talukaCode) {
+  const key = `${stateCode}/${talukaCode}`
+  if (!nameCache.has(key)) {
+    const file = path.join(NAMES_DIR, String(stateCode), `${talukaCode}.json`)
+    nameCache.set(key, fs.existsSync(file)
       ? new Map(JSON.parse(fs.readFileSync(file, 'utf8')).map(([c, n]) => [String(Number(c)), n]))
       : null)
   }
-  return nameCache.get(talukaCode)
+  return nameCache.get(key)
 }
 
 // Resolves a source (dtname, sdtname) pair to a hierarchy taluka node, caching
@@ -194,7 +198,7 @@ function flushState(stateCode, buckets) {
   const dir = path.join(VILLAGE_DIR, String(stateCode))
   for (const [talukaCode, villageMap] of buckets) {
     if (already.has(talukaCode)) continue // keep the existing (village-derived) file
-    const names = fallbackNames(talukaCode)
+    const names = fallbackNames(stateCode, talukaCode)
     const features = []
     for (const [code, v] of villageMap) {
       const resolvedName = v.name || names?.get(code) || ''

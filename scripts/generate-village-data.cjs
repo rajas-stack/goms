@@ -19,21 +19,25 @@ const ROOT = path.join(__dirname, '..')
 // taluka, so the two never collide on disk or in either module's glob.
 const OUT_DIR = path.join(ROOT, 'src', 'assets', 'village-shapes')
 // The pre-existing name-only village list (villages.ts's fallback), keyed by
-// taluka code → [villageLGDcode, name] pairs. ~10% of shapefile rows carry a
+// state then taluka code → [villageLGDcode, name] pairs (public/villages/,
+// not src/assets/ -- moved there to dodge the CI Rollup glob-import OOM;
+// scoped by state since taluka code alone isn't nationally unique, a few
+// codes collide across states/districts). ~10% of shapefile rows carry a
 // blank Vill_name; this separate LGD snapshot names ~80% of those, joined by
 // village LGD code, so we backfill from it before giving up on a name.
-const NAMES_DIR = path.join(ROOT, 'src', 'assets', 'villages')
+const NAMES_DIR = path.join(ROOT, 'public', 'villages')
 
 const fallbackNameCache = new Map()
-function fallbackNames(talukaCode) {
-  if (fallbackNameCache.has(talukaCode)) return fallbackNameCache.get(talukaCode)
-  const file = path.join(NAMES_DIR, `${talukaCode}.json`)
+function fallbackNames(stateCode, talukaCode) {
+  const key = `${stateCode}/${talukaCode}`
+  if (fallbackNameCache.has(key)) return fallbackNameCache.get(key)
+  const file = path.join(NAMES_DIR, String(stateCode), `${talukaCode}.json`)
   let map = null
   if (fs.existsSync(file)) {
     const arr = JSON.parse(fs.readFileSync(file, 'utf8'))
     map = new Map(arr.map(([code, name]) => [String(Number(code)), name]))
   }
-  fallbackNameCache.set(talukaCode, map)
+  fallbackNameCache.set(key, map)
   return map
 }
 
@@ -231,7 +235,7 @@ async function convertOne(zipName) {
     }
 
     for (const { stateCode, talukaCode, villages } of byTaluka.values()) {
-      const names = fallbackNames(talukaCode)
+      const names = fallbackNames(stateCode, talukaCode)
       const features = [...villages.entries()].map(([code, { name, polygons }]) => ({
         type: 'Feature',
         properties: { name: name || names?.get(code) || 'Unnamed village', code },

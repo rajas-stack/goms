@@ -128,7 +128,12 @@ export function buildSeed(): GormsData {
 
       const talukas = subdistrictsByDtCode.get(dtKey(st.st_code, d.dt_code)) ?? []
       talukas.forEach((sd, sdi) => {
-        const sdId = `geo_sd_${sd.code}`
+        // Disambiguated with the state+district key, same reason as `dId`
+        // above: `sd.code` (LGD subdistrict code) is only guaranteed unique
+        // within a district, not nationally — a handful of talukas in
+        // different states/districts reuse the same code (e.g. Odisha's
+        // Barpali and Sikkim's Mangalbarey both carry code 7233).
+        const sdId = `geo_sd_${dtKey(st.st_code, d.dt_code)}_${sd.code}`
         nodes.push({
           id: sdId, domain: 'geo', typeKey: 'taluka', parentId: dId, stateCode: st.st_code,
           name: sd.name, code: sd.code, sortOrder: sdi,

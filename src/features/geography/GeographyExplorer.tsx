@@ -137,8 +137,8 @@ export function GeographyExplorer({ stateNodeId }: { stateNodeId: string }) {
 
   // Named-tile fallback: villages as a flat list where no polygons exist.
   const { data: villageRows } = useQuery({
-    queryKey: ['villages', talukaCode],
-    queryFn: () => loadVillages(talukaCode!),
+    queryKey: ['villages', stateCode, talukaCode],
+    queryFn: () => loadVillages(talukaCode!, stateCode!),
     enabled: level === 'taluka' && !!talukaCode && !hasVillageMap && !villagesLoading,
   })
   const villageNodes = useMemo<HierNode[]>(() => {

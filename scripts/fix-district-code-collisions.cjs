@@ -32,12 +32,46 @@ const SUBS_PATH = path.join(ROOT, 'src', 'data', 'subdistricts.json')
 // { stateName: { districtName: newCode } } — the side of each collision with
 // fewer dependent talukas (verified against subdistricts.json before writing
 // this list), reassigned to a fresh code above the current max (996).
+//
+// Tamil Nadu's four newest districts (carved out after this app's LGD
+// vintage snapshot -- Chengalpattu/Ranipet/Tenkasi/Tirupathur, all split off
+// in 2019-2020) never got a real LGD dt_code at all; whatever originally
+// built india-admin.json left all four on the placeholder '0' rather than
+// resolving a real one. That's a same-state collision the cross-state fixes
+// above never covered (this script's own name notwithstanding, a same-state
+// 4-way collision is the same underlying bug, just missed the first pass) --
+// found by a duplicate-node-id assertion the taluka id fix in src/data/
+// seed.ts surfaced. None of the four has a real claim to '0', so all four
+// get fresh codes rather than picking a "winner".
 const FIXES = {
   Gujarat: { 'Gir Somnath': 2001, 'Vav-Tharad': 2002 },
   Sikkim: { Pakyong: 2003, Soreng: 2004 },
   Mizoram: {
     Aizawl: 2005, Champhai: 2006, Kolasib: 2007, Lawngtlai: 2008,
     Lunglei: 2009, Mamit: 2010, Saiha: 2011, Serchhip: 2012,
+  },
+  // A same-state collision can't be disambiguated by state+oldCode alone
+  // (all four districts' talukas share both) -- these four give an explicit
+  // taluka-name allowlist instead, verified against each district's real
+  // taluk list and against subdistricts.json's own array order (the 26
+  // talukas already sit in four contiguous, correctly-grouped blocks).
+  'Tamil Nadu': {
+    Chengalpattu: {
+      code: 2013,
+      talukas: ['Chengalpattu', 'Cheyyur', 'Maduranthakam', 'Pallavaram', 'Tambaram', 'Tirukalukundram', 'Tiruporur', 'Vandalur'],
+    },
+    Ranipet: {
+      code: 2014,
+      talukas: ['Arakonam', 'Arcot', 'Kalavai', 'Nemili', 'Sholinghur', 'Wallajah'],
+    },
+    Tenkasi: {
+      code: 2015,
+      talukas: ['Alangulam', 'Kadayanallur', 'Sankarankoil', 'Shenkottai', 'Sivagiri', 'Tenkasi', 'Tiruvengadam', 'Veerakeralamputhur'],
+    },
+    Tirupathur: {
+      code: 2016,
+      talukas: ['Ambur', 'Natrampalli', 'Tirupathur', 'Vaniyambadi'],
+    },
   },
 }
 
@@ -50,20 +84,23 @@ function main() {
     if (!state) { console.warn(`  ! state "${stateName}" not found`); continue }
     const stateCode = Number(state.st_code)
 
-    for (const [districtName, newCodeNum] of Object.entries(districtFixes)) {
+    for (const [districtName, fix] of Object.entries(districtFixes)) {
       const d = state.districts.find((x) => x.district === districtName)
       if (!d) { console.warn(`  ! ${stateName}/${districtName} not found`); continue }
       const oldCode = String(Number(d.dt_code))
-      const newCode = String(newCodeNum)
+      const talukaAllowlist = typeof fix === 'object' ? new Set(fix.talukas) : null
+      const newCode = String(typeof fix === 'object' ? fix.code : fix)
 
       d.dt_code = newCode
       let retagged = 0
       subs = subs.map((s) => {
-        if (Number(s.stCode) === stateCode && String(Number(s.dtCode)) === oldCode) {
-          retagged++
-          return { ...s, dtCode: newCode }
-        }
-        return s
+        if (Number(s.stCode) !== stateCode || String(Number(s.dtCode)) !== oldCode) return s
+        // Same-state collisions (talukaAllowlist set) can't be told apart by
+        // dtCode alone -- only retag the talukas verified to belong to this
+        // district by name.
+        if (talukaAllowlist && !talukaAllowlist.has(s.name)) return s
+        retagged++
+        return { ...s, dtCode: newCode }
       })
       console.log(`  ${stateName}/${districtName}: ${oldCode} -> ${newCode} (${retagged} taluka(s) retagged)`)
     }

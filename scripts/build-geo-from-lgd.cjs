@@ -31,7 +31,11 @@ const { robustUnionWithTimeout, dropSliverHoles } = require('./robust-union.cjs'
 const ROOT = path.join(__dirname, '..')
 const VILLAGE_DIR = path.join(ROOT, 'src', 'assets', 'village-shapes')
 const TALUKA_DIR = path.join(ROOT, 'src', 'assets', 'talukas')
-const NAMES_DIR = path.join(ROOT, 'src', 'assets', 'villages')
+// public/villages/, not src/assets/ -- moved there to dodge the CI Rollup
+// glob-import OOM (see village-shapes.ts), scoped by state like village
+// shapes since the taluka code alone isn't nationally unique (a few codes
+// collide across states/districts).
+const NAMES_DIR = path.join(ROOT, 'public', 'villages')
 const REPORT = path.join(ROOT, 'scripts', 'geo-build-report.json')
 
 const admin = require(path.join(ROOT, 'src', 'data', 'india-admin.json'))
@@ -219,14 +223,15 @@ function geomOf(polys) {
 // LGD code. Keyed by hierarchy taluka code, so only consulted after the taluka
 // has been resolved.
 const nameCache = new Map()
-function fallbackNames(talukaCode) {
-  if (!nameCache.has(talukaCode)) {
-    const file = path.join(NAMES_DIR, `${talukaCode}.json`)
-    nameCache.set(talukaCode, fs.existsSync(file)
+function fallbackNames(stateCode, talukaCode) {
+  const key = `${stateCode}/${talukaCode}`
+  if (!nameCache.has(key)) {
+    const file = path.join(NAMES_DIR, String(stateCode), `${talukaCode}.json`)
+    nameCache.set(key, fs.existsSync(file)
       ? new Map(JSON.parse(fs.readFileSync(file, 'utf8')).map(([c, n]) => [String(Number(c)), n]))
       : null)
   }
-  return nameCache.get(talukaCode)
+  return nameCache.get(key)
 }
 
 // A village with no name anywhere in the source still usually carries a
@@ -395,7 +400,7 @@ async function convertOne(zipName, report) {
     for (const b of buckets.values()) {
       counts[b.how]++
       const stateCode = b.info.stateCode
-      const names = b.how === 'extra' ? null : fallbackNames(b.talukaCode)
+      const names = b.how === 'extra' ? null : fallbackNames(stateCode, b.talukaCode)
 
       const features = []
       const allPolys = []

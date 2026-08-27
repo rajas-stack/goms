@@ -39,7 +39,10 @@ const { readLines } = require('./linereader.cjs')
 const ROOT = path.join(__dirname, '..')
 const TALUKA_DIR = path.join(ROOT, 'src', 'assets', 'talukas')
 const VILLAGE_DIR = path.join(ROOT, 'src', 'assets', 'village-shapes')
-const NAMES_DIR = path.join(ROOT, 'src', 'assets', 'villages')
+// public/villages/, not src/assets/ -- moved there to dodge the CI Rollup
+// glob-import OOM, scoped by state since taluka code alone isn't nationally
+// unique (a few codes collide across states/districts).
+const NAMES_DIR = path.join(ROOT, 'public', 'villages')
 
 const admin = require(path.join(ROOT, 'src', 'data', 'india-admin.json'))
 const subdistricts = require(path.join(ROOT, 'src', 'data', 'subdistricts.json'))
@@ -255,14 +258,15 @@ function geomOf(polys) {
 }
 
 const nameCache = new Map()
-function fallbackNames(talukaCode) {
-  if (!nameCache.has(talukaCode)) {
-    const file = path.join(NAMES_DIR, `${talukaCode}.json`)
-    nameCache.set(talukaCode, fs.existsSync(file)
+function fallbackNames(stateCode, talukaCode) {
+  const key = `${stateCode}/${talukaCode}`
+  if (!nameCache.has(key)) {
+    const file = path.join(NAMES_DIR, String(stateCode), `${talukaCode}.json`)
+    nameCache.set(key, fs.existsSync(file)
       ? new Map(JSON.parse(fs.readFileSync(file, 'utf8')).map(([c, n]) => [String(Number(c)), n]))
       : null)
   }
-  return nameCache.get(talukaCode)
+  return nameCache.get(key)
 }
 
 function existingVillageCodes(stateCode) {
@@ -308,7 +312,7 @@ async function main() {
     let written = 0
     for (const [talukaCode, villages] of buckets) {
       if (already.has(talukaCode)) continue
-      const names = fallbackNames(talukaCode)
+      const names = fallbackNames(curState, talukaCode)
       const geoFeatures = villages.map(({ name, polys }, i) => ({
         type: 'Feature',
         properties: { name: name || names?.get(String(i)) || 'Unnamed village', code: `${schemaName}-${i}` },

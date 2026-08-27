@@ -10,10 +10,15 @@
 
 /** [village LGD code, village name] pairs for one taluka, or null if this
  *  taluka has no bundled village data (its district was created after the
- *  source LGD snapshot this was built from, or the request failed). */
-export async function loadVillages(subdistrictCode: string): Promise<[string, string][] | null> {
+ *  source LGD snapshot this was built from, or the request failed).
+ *
+ *  Scoped by stateCode like village-shapes.ts — subdistrictCode (LGD code)
+ *  is only guaranteed unique within a district, not nationally, so a flat
+ *  fetch-by-code alone can silently return one taluka's villages for a
+ *  different, code-colliding taluka. */
+export async function loadVillages(subdistrictCode: string, stateCode: number): Promise<[string, string][] | null> {
   try {
-    const res = await fetch(`/villages/${subdistrictCode}.json`)
+    const res = await fetch(`/villages/${stateCode}/${subdistrictCode}.json`)
     if (!res.ok) return null
     return await res.json()
   } catch {
