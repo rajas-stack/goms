@@ -849,14 +849,31 @@ class InMemoryRepository implements Repository {
   }
 
   async deleteEmployee(id: string) {
+    // Looked up BEFORE the employee is removed from the array below — the
+    // previous version looked this up afterward, so `removed` was always
+    // undefined and every direct report's managerId was unconditionally set
+    // to null instead of falling back to the removed person's own manager,
+    // contradicting this function's own contract (matches
+    // apps/api/src/routers/employees.ts's `delete`, which reads manager_id
+    // before deleting for exactly this reason).
+    const removed = this.data.employees.find((e) => e.id === id)
     this.data.employees = this.data.employees.filter((e) => e.id !== id)
     this.data.timeline = this.data.timeline.filter((t) => t.employeeId !== id)
     this.data.transfers = this.data.transfers.filter((t) => t.employeeId !== id)
     this.data.followUps = this.data.followUps.filter((f) => !(f.entityType === 'contact' && f.entityId === id))
     // Orphaned reports fall back to the removed person's manager.
-    const removed = this.data.employees.find((e) => e.id === id)
     for (const e of this.data.employees) {
       if (e.managerId === id) e.managerId = removed?.managerId ?? null
+    }
+    // Clears a dangling deptHead pointer if the deleted employee headed a
+    // department — mergeEmployees (below) already does the equivalent
+    // reassignment for its own case; a plain delete has no replacement
+    // employee to reassign to, so the key is removed outright.
+    for (const n of this.data.nodes) {
+      if (n.metadata.deptHead === id) {
+        const { deptHead: _deptHead, ...rest } = n.metadata
+        n.metadata = rest
+      }
     }
   }
 
