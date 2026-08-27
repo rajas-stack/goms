@@ -1,7 +1,16 @@
 {
   "hosting": {
     "public": "dist",
-    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+
+      "**/village-shapes/**",
+
+      "**/*.gz",
+      "**/*.br"
+    ],
     "rewrites": [
       {
         "source": "/api/**",
