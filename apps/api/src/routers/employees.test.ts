@@ -11,11 +11,15 @@ describe('employees router', () => {
     await pool.query('DELETE FROM transfers')
     await pool.query('DELETE FROM timeline_events')
     await pool.query('DELETE FROM employee_charges')
-    // opportunities.department_id FKs (RESTRICT) into hierarchy_nodes too —
-    // clear it first so this doesn't conflict with rows left behind by
-    // opportunities.test.ts/ownership.test.ts/search.test.ts (Phase 7).
+    // opportunities.department_id and commercial_boqs.department_id both FK
+    // (RESTRICT) into hierarchy_nodes too — clear them first so this
+    // doesn't conflict with rows left behind by opportunities.test.ts/
+    // ownership.test.ts/search.test.ts (Phase 7) or sales.test.ts
+    // (2026-08-26 hardening pass).
     await pool.query('DELETE FROM opportunity_stage_changes')
     await pool.query('DELETE FROM opportunities')
+    await pool.query('DELETE FROM commercial_boq_line_items')
+    await pool.query('DELETE FROM commercial_boqs')
     await pool.query('DELETE FROM employees')
     await pool.query('DELETE FROM hierarchy_nodes')
     const caller = appRouter.createCaller({})
@@ -145,5 +149,36 @@ describe('employees router', () => {
       rows: [{ name: 'Row One', designation: 'Clerk' }, { name: '', designation: 'Clerk' }, { name: 'Row Two', designation: 'Clerk' }],
     })
     expect(added).toBe(2)
+  })
+
+  // 2026-08-26 backend hardening pass.
+
+  it('never creates a reporting cycle when two setManager calls point two employees at each other concurrently', async () => {
+    const caller = appRouter.createCaller({})
+    const x = await makeEmployee({ name: 'X' })
+    const y = await makeEmployee({ name: 'Y' })
+
+    const results = await Promise.allSettled([
+      caller.employees.setManager({ employeeId: x.id, managerId: y.id }),
+      caller.employees.setManager({ employeeId: y.id, managerId: x.id }),
+    ])
+    const fulfilledCount = results.filter((r) => r.status === 'fulfilled').length
+    expect(fulfilledCount).toBeLessThanOrEqual(1)
+
+    const finalX = await caller.employees.get({ id: x.id })
+    const finalY = await caller.employees.get({ id: y.id })
+    expect(finalX!.managerId === y.id && finalY!.managerId === x.id).toBe(false)
+  })
+
+  it('clears a dangling deptHead pointer on a hierarchy node when the department head is deleted', async () => {
+    const caller = appRouter.createCaller({})
+    const dept = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Dept With Head' })
+    const head = await makeEmployee({ name: 'Head', orgNodeId: dept.id })
+    await caller.hierarchy.updateNode({ id: dept.id, patch: { metadata: { deptHead: head.id } } })
+    expect((await caller.hierarchy.getNode({ id: dept.id }))?.metadata?.deptHead).toBe(head.id)
+
+    await caller.employees.delete({ id: head.id })
+
+    expect((await caller.hierarchy.getNode({ id: dept.id }))?.metadata?.deptHead).toBeUndefined()
   })
 })

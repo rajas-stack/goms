@@ -351,4 +351,130 @@ describe('commercial.boq + commercial.auditLogs routers', () => {
     await caller.commercial.boq.addLineItem({ boqId: boq.id, skuId: sku.id, quantity: 1, unitPrice: 10000, discountPct: 0 })
     await expect(caller.commercial.skus.delete({ id: sku.id })).rejects.toThrow(/still referenced/i)
   })
+
+  // 2026-08-26 backend hardening pass — regression tests for the concrete
+  // findings below.
+
+  it('never lets a concurrent delete succeed on a BOQ a simultaneous updateStatus just moved out of the deletable set', async () => {
+    // Regression for the unlocked delete TOCTOU: delete used to read status,
+    // then unconditionally DELETE with no re-check and no row lock — a
+    // concurrent updateStatus landing in between could leave the BOQ
+    // deleted despite having just left the deletable set. delete now locks
+    // the row and re-checks status inside the same transaction, so exactly
+    // one of these two concurrent calls must "win" and the other must see a
+    // result consistent with it — asserted below regardless of which one
+    // actually won the race (that ordering isn't deterministic; the
+    // invariant that matters is that they can never both succeed).
+    const caller = appRouter.createCaller({})
+    const { dept, salesPerson, masters } = await setup(caller)
+    const boq = await makeBoq(caller, dept, salesPerson, { verticalId: masters.vertical.id })
+
+    const [delResult, statusResult] = await Promise.allSettled([
+      caller.commercial.boq.delete({ id: boq.id }),
+      caller.commercial.boq.updateStatus({ id: boq.id, nextStatus: 'submitted', changeReason: 'x' }),
+    ])
+
+    const after = await caller.commercial.boq.get({ id: boq.id })
+    if (delResult.status === 'fulfilled') {
+      // Delete won (it saw status still 'draft' and committed first) — the
+      // BOQ is gone, so the status change — blocked behind delete's row
+      // lock — correctly fails with NOT_FOUND once it finally runs, rather
+      // than silently succeeding against a row that no longer exists.
+      expect(after).toBeNull()
+      expect(statusResult.status).toBe('rejected')
+      expect((statusResult as PromiseRejectedResult).reason).toMatchObject({ code: 'NOT_FOUND' })
+    } else {
+      // updateStatus won — the BOQ still exists, now submitted, and the
+      // delete attempt — blocked behind updateStatus's row lock — correctly
+      // fails with CONFLICT once it finally runs (never a raw/unhandled
+      // error, and never a silent delete of a now-submitted BOQ).
+      expect(after).not.toBeNull()
+      expect(after!.status).toBe('submitted')
+      expect(statusResult.status).toBe('fulfilled')
+      expect((delResult as PromiseRejectedResult).reason).toMatchObject({ code: 'CONFLICT' })
+    }
+  })
+
+  it('recomputes the correct grand total when two line items on the same BOQ are edited concurrently (no lost update)', async () => {
+    // Regression for recomputeBoqGrandTotal's lost-update race: updateLineItem
+    // and removeLineItem now lock the BOQ row before recomputing, so two
+    // concurrent edits to two different lines on the same BOQ must both be
+    // reflected in the final grand_total, not just whichever committed last.
+    const caller = appRouter.createCaller({})
+    const { dept, salesPerson, masters, sku } = await setup(caller)
+    const boq = await makeBoq(caller, dept, salesPerson, { verticalId: masters.vertical.id })
+    const lineA = await caller.commercial.boq.addLineItem({ boqId: boq.id, skuId: sku.id, quantity: 1, unitPrice: 10000, discountPct: 0 })
+    const lineB = await caller.commercial.boq.addLineItem({ boqId: boq.id, skuId: sku.id, quantity: 1, unitPrice: 10000, discountPct: 0 })
+
+    await Promise.all([
+      caller.commercial.boq.updateLineItem({ id: lineA.id, patch: { quantity: 3 } }),
+      caller.commercial.boq.updateLineItem({ id: lineB.id, patch: { quantity: 5 } }),
+    ])
+
+    const lines = await caller.commercial.boq.listLineItems({ boqId: boq.id })
+    const expectedTotal = lines.reduce((sum, l) => sum + l.lineTotal, 0)
+    const finalBoq = await caller.commercial.boq.get({ id: boq.id })
+    expect(finalBoq!.grandTotal).toBeCloseTo(expectedTotal, 5)
+    // Both edits must actually be visible — a lost update would show one
+    // line still at its original quantity.
+    const updatedA = lines.find((l) => l.id === lineA.id)!
+    const updatedB = lines.find((l) => l.id === lineB.id)!
+    expect(updatedA.quantity).toBe(3)
+    expect(updatedB.quantity).toBe(5)
+  })
+
+  it('list() computes each draft BOQ\'s own live grand total from its own lines (batched line-item fetch, not mixed across BOQs)', async () => {
+    // Regression for the boq.list N+1 fix: line items are now batch-fetched
+    // for every draft BOQ in one query and grouped by boq_id in application
+    // code — this proves that grouping is correct (each BOQ's total reflects
+    // only its own lines) rather than accidentally merging/misattributing
+    // lines across BOQs.
+    const caller = appRouter.createCaller({})
+    const { dept, salesPerson, masters, sku } = await setup(caller)
+    const boqA = await makeBoq(caller, dept, salesPerson, { verticalId: masters.vertical.id })
+    const boqB = await makeBoq(caller, dept, salesPerson, { verticalId: masters.vertical.id })
+    const lineA1 = await caller.commercial.boq.addLineItem({ boqId: boqA.id, skuId: sku.id, quantity: 1, unitPrice: 10000, discountPct: 0 })
+    const lineB1 = await caller.commercial.boq.addLineItem({ boqId: boqB.id, skuId: sku.id, quantity: 2, unitPrice: 10000, discountPct: 0 })
+    const lineB2 = await caller.commercial.boq.addLineItem({ boqId: boqB.id, skuId: sku.id, quantity: 3, unitPrice: 10000, discountPct: 0 })
+
+    const listed = await caller.commercial.boq.list()
+    const listedA = listed.find((b) => b.id === boqA.id)!
+    const listedB = listed.find((b) => b.id === boqB.id)!
+    // Computed from each line's own lineTotal (includes tax — not a plain
+    // quantity*unitPrice product) rather than a hand-derived number, so this
+    // assertion doesn't have to duplicate computeLineTotal's tax math. If
+    // the batched fetch mis-grouped lines across BOQs, boqA's total here
+    // would be inflated by boqB's lines (or vice versa) and these would fail.
+    expect(listedA.grandTotal).toBeCloseTo(lineA1.lineTotal, 5)
+    expect(listedB.grandTotal).toBeCloseTo(lineB1.lineTotal + lineB2.lineTotal, 5)
+  })
+
+  it('masters.delete rejects deleting a vertical still referenced by a BOQ', async () => {
+    const caller = appRouter.createCaller({})
+    const { dept, salesPerson } = await setup(caller)
+    // A second, standalone vertical with no products/SKUs under it — makes
+    // sure this test actually exercises the new BOQ-reference check, not
+    // the older self-referencing parent/child check (which would otherwise
+    // fire first for `setup()`'s own vertical, since that one already has a
+    // product/module/feature chain under it).
+    const vertical2 = await caller.commercial.masters.create({ key: 'verticals', input: { code: 'GOV2', name: 'Government 2', description: '' } })
+    await makeBoq(caller, dept, salesPerson, { verticalId: vertical2.id })
+    await expect(caller.commercial.masters.delete({ key: 'verticals', id: vertical2.id }))
+      .rejects.toThrow(/still referenced by at least one boq/i)
+  })
+
+  it('masters.delete rejects deleting a currency still referenced by a BOQ (no FK backs this — app-level check only)', async () => {
+    const caller = appRouter.createCaller({})
+    const { dept, salesPerson, masters } = await setup(caller)
+    // A second, standalone currency not used by setup()'s SKU — makes sure
+    // this exercises the BOQ.currency text-match check specifically, not
+    // the SKU-column check (which would otherwise fire first, since
+    // setup()'s own currency master is already the SKU's currencyId).
+    const currency2 = await caller.commercial.masters.create({
+      key: 'currencies', input: { code: 'USD2', name: 'US Dollar 2', description: '', symbol: '$', decimalPlaces: 2, exchangeRate: 83, isBaseCurrency: false },
+    })
+    await makeBoq(caller, dept, salesPerson, { verticalId: masters.vertical.id, currency: currency2.code })
+    await expect(caller.commercial.masters.delete({ key: 'currencies', id: currency2.id }))
+      .rejects.toThrow(/still referenced by at least one boq/i)
+  })
 })

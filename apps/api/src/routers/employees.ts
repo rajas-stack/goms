@@ -349,8 +349,24 @@ export const employeesRouter = router({
       if (input.employeeId === input.managerId) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'An employee cannot report to themselves' })
       }
-      if (input.managerId) {
-        const cycle = await pool.query(
+      if (!input.managerId) {
+        await pool.query(`UPDATE employees SET manager_id=$1, updated_at=now() WHERE id=$2`, [input.managerId, input.employeeId])
+        return
+      }
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        // Locks both employees involved, in a stable (sorted) order so two
+        // concurrent setManager calls touching the same two people can't
+        // deadlock each other. Without this lock, two concurrent calls (A:
+        // set X's manager to Y; B, at the same instant: set Y's manager to
+        // X) can each pass the cycle-detection query below before the
+        // other commits — both see a pre-change manager chain, both pass,
+        // and both UPDATEs land, producing a real 2-node reporting cycle
+        // that `reportingChain`'s chain-walk would then loop on forever.
+        const lockIds = [input.employeeId, input.managerId].sort()
+        await client.query('SELECT id FROM employees WHERE id = ANY($1) ORDER BY id FOR UPDATE', [lockIds])
+        const cycle = await client.query(
           `WITH RECURSIVE chain AS (
              SELECT id, manager_id FROM employees WHERE id=$1
              UNION ALL
@@ -360,8 +376,14 @@ export const employeesRouter = router({
           [input.managerId, input.employeeId],
         )
         if (cycle.rows.length) throw new TRPCError({ code: 'BAD_REQUEST', message: 'That would create a reporting cycle' })
+        await client.query(`UPDATE employees SET manager_id=$1, updated_at=now() WHERE id=$2`, [input.managerId, input.employeeId])
+        await client.query('COMMIT')
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
       }
-      await pool.query(`UPDATE employees SET manager_id=$1, updated_at=now() WHERE id=$2`, [input.managerId, input.employeeId])
     }),
   delete: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
     const client = await pool.connect()
@@ -369,6 +391,13 @@ export const employeesRouter = router({
       await client.query('BEGIN')
       const removedManagerId = (await client.query('SELECT manager_id FROM employees WHERE id=$1', [input.id])).rows[0]?.manager_id ?? null
       await client.query(`UPDATE employees SET manager_id=$1 WHERE manager_id=$2`, [removedManagerId, input.id])
+      // Clears a dangling deptHead pointer if the deleted employee headed a
+      // department — the same cleanup `merge` already does (by reassigning
+      // the pointer to the survivor, `departmentHeadshipsMoved` below) for
+      // its own case; plain delete has no replacement employee to reassign
+      // to, so the key is removed outright rather than left pointing at a
+      // now-nonexistent employee id.
+      await client.query(`UPDATE hierarchy_nodes SET metadata = metadata - 'deptHead' WHERE metadata->>'deptHead' = $1`, [input.id])
       await client.query(`DELETE FROM follow_ups WHERE entity_type='contact' AND entity_id=$1`, [input.id])
       await client.query('DELETE FROM employees WHERE id=$1', [input.id])
       await client.query('COMMIT')

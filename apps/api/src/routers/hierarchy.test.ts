@@ -211,4 +211,72 @@ describe('hierarchy router', () => {
     await caller.hierarchy.deleteNode({ id: dept.id })
     expect(await caller.employees.get({ id: emp.id })).toBeNull()
   })
+
+  // 2026-08-26 backend hardening pass.
+
+  it('creating the same branch name under the same parent concurrently never produces two nodes (serialized by an advisory lock)', async () => {
+    const caller1 = appRouter.createCaller({})
+    const caller2 = appRouter.createCaller({})
+    const parent = await makeNode()
+    const [a, b] = await Promise.all([
+      caller1.hierarchy.createNode({ domain: 'org', typeKey: 'branch', parentId: parent.id, stateCode: 27, name: 'Branch A' }),
+      caller2.hierarchy.createNode({ domain: 'org', typeKey: 'branch', parentId: parent.id, stateCode: 27, name: 'branch a' }),
+    ])
+    expect(a.id).toBe(b.id)
+    const children = await caller1.hierarchy.listChildren({ parentId: parent.id })
+    expect(children).toHaveLength(1)
+  })
+
+  it('never creates a parent_id cycle when two nodes are moved under each other concurrently', async () => {
+    const caller = appRouter.createCaller({})
+    const root = await makeNode({ typeKey: 'department', name: 'Root' })
+    const x = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'branch', parentId: root.id, stateCode: 27, name: 'X' })
+    const y = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'branch', parentId: root.id, stateCode: 27, name: 'Y' })
+
+    const results = await Promise.allSettled([
+      caller.hierarchy.moveNode({ id: x.id, newParentId: y.id }),
+      caller.hierarchy.moveNode({ id: y.id, newParentId: x.id }),
+    ])
+    // At most one of the two swaps can have actually landed — if both did,
+    // X and Y would each be the other's parent, an unrecoverable cycle.
+    const fulfilledCount = results.filter((r) => r.status === 'fulfilled').length
+    expect(fulfilledCount).toBeLessThanOrEqual(1)
+
+    const finalX = await caller.hierarchy.getNode({ id: x.id })
+    const finalY = await caller.hierarchy.getNode({ id: y.id })
+    expect(finalX!.parentId === y.id && finalY!.parentId === x.id).toBe(false)
+  })
+
+  it('deleteNode gives a friendly CONFLICT (not a raw error) when the subtree contains a node a past transfer still points at', async () => {
+    // transfers.to_org_node_id is ON DELETE RESTRICT (employees.sql) and
+    // isn't pre-checked by deleteNode's own subtree cleanup — this proves
+    // the resulting 23503 is translated, not left as a raw unhandled error.
+    const caller = appRouter.createCaller({})
+    const deptA = await makeNode({ typeKey: 'department', name: 'Dept A' })
+    const deptB = await makeNode({ typeKey: 'department', name: 'Dept B' })
+    const deptC = await makeNode({ typeKey: 'department', name: 'Dept C' })
+    const emp = await caller.employees.create({ name: 'A', designation: 'Officer', email: '', phone: '', orgNodeId: deptA.id, managerId: null })
+    await caller.employees.transfers.transfer({ employeeId: emp.id, toOrgNodeId: deptB.id, toDesignation: 'Officer', effectiveDate: '2026-01-01', reason: 'reorg' })
+    // Transfers on again, out of deptB — deptB is now empty, but a
+    // historical transfers row still points at it via to_org_node_id.
+    await caller.employees.transfers.transfer({ employeeId: emp.id, toOrgNodeId: deptC.id, toDesignation: 'Officer', effectiveDate: '2026-02-01', reason: 'reorg2' })
+    await expect(caller.hierarchy.deleteNode({ id: deptB.id })).rejects.toThrow(/still referenced elsewhere/i)
+  })
+
+  it('importChildren respects the branch-name dedup rule createNode enforces, including duplicates within the same import batch', async () => {
+    const caller = appRouter.createCaller({})
+    const dept = await makeNode({ typeKey: 'department', name: 'Dept' })
+    await caller.hierarchy.createNode({ domain: 'org', typeKey: 'branch', parentId: dept.id, stateCode: 27, name: 'Existing Branch' })
+    const added = await caller.hierarchy.importChildren({
+      parentId: dept.id,
+      rows: [
+        { name: 'existing branch', type: 'Branch' }, // dupes the pre-existing branch
+        { name: 'New Branch', type: 'Branch' },
+        { name: 'new branch', type: 'Branch' }, // dupes the row immediately above, within the same batch
+      ],
+    })
+    expect(added).toBe(1) // only "New Branch" is genuinely new
+    const children = await caller.hierarchy.listChildren({ parentId: dept.id })
+    expect(children.map((c) => c.name).sort()).toEqual(['Existing Branch', 'New Branch'])
+  })
 })

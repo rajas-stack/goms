@@ -89,6 +89,24 @@ describe('commercial.skus + commercial.bom routers', () => {
     await expect(caller.commercial.skus.create(baseSkuInput(feature, masters))).rejects.toThrow(/already exists/)
   })
 
+  it('2026-08-26 hardening: gives a friendly CONFLICT (never a raw error) when two concurrent creates race for the same generated code', async () => {
+    // The dupResult SELECT in skus.create isn't atomic with its INSERT —
+    // commercial_skus_sku_code_idx is what actually stops the duplicate,
+    // this proves the loser of the race gets a translated CONFLICT.
+    const caller = appRouter.createCaller({})
+    const { feature } = await makeHierarchy(caller)
+    const masters = await makeSupportingMasters(caller)
+    const results = await Promise.allSettled([
+      appRouter.createCaller({}).commercial.skus.create(baseSkuInput(feature, masters)),
+      appRouter.createCaller({}).commercial.skus.create(baseSkuInput(feature, masters)),
+    ])
+    const fulfilled = results.filter((r) => r.status === 'fulfilled')
+    const rejected = results.filter((r) => r.status === 'rejected')
+    expect(fulfilled).toHaveLength(1)
+    expect(rejected).toHaveLength(1)
+    expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({ code: 'CONFLICT' })
+  })
+
   it('defaults minimumAllowedPrice to floorPrice when omitted', async () => {
     const caller = appRouter.createCaller({})
     const { feature } = await makeHierarchy(caller)

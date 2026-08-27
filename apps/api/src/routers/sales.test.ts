@@ -6,11 +6,24 @@ describe('sales router', () => {
   beforeEach(async () => {
     // commercial_boqs.sales_person_id FKs (RESTRICT) into sales_persons —
     // clear dependents first so this file's cleanup doesn't conflict with
-    // rows left behind by commercial-boq.test.ts (Phase 6).
+    // rows left behind by commercial-boq.test.ts (Phase 6). commercial_masters
+    // and hierarchy_nodes (2026-08-26 hardening pass, this file's own BOQ
+    // reference test) are cleared for the same cross-file-leftover reason.
     await pool.query('DELETE FROM commercial_boq_line_items')
     await pool.query('DELETE FROM commercial_boqs')
     await pool.query('DELETE FROM sales_postings')
     await pool.query('DELETE FROM sales_persons')
+    await pool.query('DELETE FROM commercial_bom_items')
+    await pool.query('DELETE FROM commercial_skus')
+    await pool.query('DELETE FROM edition_features')
+    await pool.query('DELETE FROM commercial_masters')
+    // employees.org_node_id and opportunities.department_id also RESTRICT
+    // into hierarchy_nodes — clear them first, same reasoning as
+    // hierarchy.test.ts's own beforeEach.
+    await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM opportunities')
+    await pool.query('DELETE FROM employees')
+    await pool.query('DELETE FROM hierarchy_nodes')
   })
 
   async function makePerson(overrides: Partial<{ name: string; officialEmail: string; tierKey: string; designation: string; managerId: string | null }> = {}) {
@@ -122,5 +135,27 @@ describe('sales router', () => {
     await caller.sales.delete({ id: manager.id })
     const [posting] = await caller.sales.listPostings({ salesPersonId: report.id })
     expect(posting.managerId).toBeNull()
+  })
+
+  // 2026-08-26 backend hardening pass.
+  it('gives a friendly CONFLICT (not a raw error) when deleting a sales person still referenced by a BOQ', async () => {
+    // commercial_boqs.sales_person_id is ON DELETE RESTRICT — unlike
+    // sales_postings/ownership_assignments (both CASCADE), this isn't
+    // pre-checked before the DELETE, so it previously surfaced as a raw,
+    // unhandled 23503 instead of a friendly message.
+    const caller = appRouter.createCaller({})
+    const person = await makePerson()
+    const dept = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Dept' })
+    // Randomized code — this file's beforeEach doesn't clear commercial_masters
+    // (it's not otherwise this file's concern), so a fixed code risks
+    // colliding with rows left behind by another test file in the same run.
+    const vertical = await caller.commercial.masters.create({ key: 'verticals', input: { code: `GOV-${Math.random()}`, name: 'Government', description: '' } })
+    await caller.commercial.boq.create({
+      opportunityName: `Deal ${Math.random()}`, departmentId: dept.id, customerName: 'Acme', customerOrganization: '',
+      customerAddress: '', customerContact: '', verticalId: vertical.id,
+      budgetAmount: '', budgetUnit: '', budgetKnown: 'yes', emdAmount: '', emdUnit: '',
+      salesPersonId: person.id, buSalesPersonId: null, preSalesId: null, currency: 'INR',
+    })
+    await expect(caller.sales.delete({ id: person.id })).rejects.toThrow(/still referenced by at least one boq/i)
   })
 })

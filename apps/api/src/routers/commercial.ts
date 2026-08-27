@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { isForeignKeyViolation, isUniqueViolation } from '../db-errors.js'
 import {
   buildSkuCode, MASTER_CHILD_OF, MASTER_EXTRA_FIELDS, MASTER_PARENT_FIELD, findMasterCodeClash,
   SKU_SENSITIVE_FIELDS, type CommercialMasterKey,
@@ -140,6 +141,13 @@ const commercialMastersRouter = router({
         return toMaster(row)
       } catch (e) {
         await client.query('ROLLBACK')
+        // assertCodeAvailable's SELECT-based check isn't atomic with this
+        // INSERT — two concurrent creates for the same (key, code) can both
+        // pass it. The unique index backing it (commercial_masters_key_code_idx)
+        // still stops the duplicate from landing, but without this catch the
+        // loser gets a raw, unhandled 23505 instead of the same friendly
+        // CONFLICT the pre-check was meant to produce.
+        if (isUniqueViolation(e)) throw new TRPCError({ code: 'CONFLICT', message: `Code "${input.code.trim()}" is already used by another ${key} row.` })
         throw e
       } finally {
         client.release()
@@ -203,6 +211,7 @@ const commercialMastersRouter = router({
         return oneMaster(key, id)
       } catch (e) {
         await client.query('ROLLBACK')
+        if (isUniqueViolation(e)) throw new TRPCError({ code: 'CONFLICT', message: `Code "${String(patch.code ?? '').trim()}" is already used by another ${key} row.` })
         throw e
       } finally {
         client.release()
@@ -230,7 +239,49 @@ const commercialMastersRouter = router({
           throw new TRPCError({ code: 'CONFLICT', message: `Cannot delete this ${input.key} row — ${childCount} row(s) still reference it.` })
         }
       }
-      await pool.query('DELETE FROM commercial_masters WHERE master_key=$1 AND id=$2', [input.key, input.id])
+      // Unlike the self-referencing parent/child check above, this master
+      // row can also be referenced across tables — commercial_skus' 7 FK
+      // columns (RESTRICT by default) and commercial_boqs.vertical_id
+      // (RESTRICT). Without this pre-check those deletes still fail (the DB
+      // constraint holds either way), just as a raw, unhandled Postgres
+      // 23503 instead of this router's usual friendly CONFLICT — the same
+      // gap skus.delete already closes for BOM/BOQ-line-item references.
+      const skuColumn = MASTER_KEY_TO_SKU_COLUMN[input.key]
+      if (skuColumn) {
+        const inUse = await pool.query(`SELECT 1 FROM commercial_skus WHERE ${skuColumn}=$1 LIMIT 1`, [input.id])
+        if (inUse.rows.length) {
+          throw new TRPCError({ code: 'CONFLICT', message: `Cannot delete this ${input.key} row — it is still referenced by at least one SKU.` })
+        }
+      }
+      if (input.key === 'verticals') {
+        const inUse = await pool.query('SELECT 1 FROM commercial_boqs WHERE vertical_id=$1 LIMIT 1', [input.id])
+        if (inUse.rows.length) {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete this vertical — it is still referenced by at least one BOQ.' })
+        }
+      }
+      // commercial_boqs.currency is deliberately plain TEXT, not an FK
+      // (commercial-boq.sql's own comment: resolved at the application
+      // layer) — so unlike every other case above, the DB gives no RESTRICT
+      // backstop at all here. Without this explicit check, deleting a
+      // currency master still in use by a draft BOQ would silently succeed
+      // and only surface later as a BAD_REQUEST the next time anyone prices
+      // that BOQ (withLiveDraftPricing's currencyRateByCode lookup).
+      if (input.key === 'currencies') {
+        const codeResult = await pool.query('SELECT code FROM commercial_masters WHERE master_key=$1 AND id=$2', [input.key, input.id])
+        const code = codeResult.rows[0]?.code
+        if (code) {
+          const inUse = await pool.query('SELECT 1 FROM commercial_boqs WHERE currency=$1 LIMIT 1', [code])
+          if (inUse.rows.length) {
+            throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete this currency — it is still referenced by at least one BOQ.' })
+          }
+        }
+      }
+      try {
+        await pool.query('DELETE FROM commercial_masters WHERE master_key=$1 AND id=$2', [input.key, input.id])
+      } catch (e) {
+        if (isForeignKeyViolation(e)) throw new TRPCError({ code: 'CONFLICT', message: `Cannot delete this ${input.key} row — it is still referenced elsewhere.` })
+        throw e
+      }
     }),
 
   listEditionFeatures: publicProcedure
@@ -411,6 +462,17 @@ const skuFkChecks: [string, CommercialMasterKey, string][] = [
   ['billingTypeId', 'billingTypes', 'billing type'],
 ]
 
+// The column-name half of skuFkChecks, keyed by master key instead of SKU
+// field — used by commercialMastersRouter.delete to check whether a master
+// row is still referenced by any SKU before deleting it (skuFkChecks itself
+// is used the other direction, validating a SKU's inputs against its
+// masters). snake_case here since it's used directly in a SQL identifier
+// position, unlike skuFkChecks' camelCase field names.
+const MASTER_KEY_TO_SKU_COLUMN: Partial<Record<CommercialMasterKey, string>> = {
+  productEditions: 'edition_id', skuCategories: 'category_id', features: 'feature_id',
+  unitsOfMeasure: 'uom_id', currencies: 'currency_id', taxClasses: 'tax_class_id', billingTypes: 'billing_type_id',
+}
+
 const commercialSkusRouter = router({
   list: publicProcedure.query(async () => {
     const result = await pool.query('SELECT * FROM commercial_skus ORDER BY display_order')
@@ -424,10 +486,13 @@ const commercialSkusRouter = router({
 
   create: publicProcedure.input(z.object(createSkuInputShape)).mutation(async ({ input }) => {
     const client = await pool.connect()
+    // Declared outside the try block so the catch's unique-violation
+    // translation below can still reference it.
+    let skuCode = ''
     try {
       await client.query('BEGIN')
       const { feature, module: mod, product, vertical } = await resolveFeatureHierarchy(client, input.featureId)
-      const skuCode = buildSkuCode(vertical.code, product.code, mod.code, feature.code, feature.extra?.status ?? 'new')
+      skuCode = buildSkuCode(vertical.code, product.code, mod.code, feature.code, feature.extra?.status ?? 'new')
       const dupResult = await client.query('SELECT 1 FROM commercial_skus WHERE sku_code=$1', [skuCode])
       if (dupResult.rows.length) throw new TRPCError({ code: 'CONFLICT', message: `A SKU with code "${skuCode}" already exists.` })
 
@@ -473,6 +538,11 @@ const commercialSkusRouter = router({
       return toSku(row)
     } catch (e) {
       await client.query('ROLLBACK')
+      // Same race as commercial_masters' code check above: the dupResult
+      // SELECT isn't atomic with this INSERT, so a concurrent create of the
+      // same skuCode is still stopped by commercial_skus_sku_code_idx, just
+      // as a raw 23505 without this translation.
+      if (isUniqueViolation(e)) throw new TRPCError({ code: 'CONFLICT', message: `A SKU with code "${skuCode}" already exists.` })
       throw e
     } finally {
       client.release()
@@ -762,10 +832,18 @@ async function recomputeBoqGrandTotal(client: any, boqId: string): Promise<void>
 }
 
 /** Mirrors the frontend's `withLiveDraftGrandTotal` — only recomputes (never
- *  persists) while the BOQ is still `draft`. */
-async function withLiveDraftGrandTotal(client: any, boq: any): Promise<any> {
+ *  persists) while the BOQ is still `draft`. `preFetchedLines`, when passed,
+ *  skips this function's own per-BOQ line-items SELECT — used by `list`
+ *  (below) to batch-fetch every draft BOQ's lines in one query instead of
+ *  one query per BOQ (an N+1 that used to fire on every BOQ-list page load).
+ *  `withLiveDraftPricing` still issues its own SKU/tax/currency lookups per
+ *  BOQ — a smaller, separate N+1 left as-is here (see the 2026-08-26 backend
+ *  hardening checkpoint for why: batching it would mean threading a
+ *  cross-BOQ prefetch through `withLiveDraftPricing`'s per-BOQ signature, a
+ *  larger refactor of shared pricing logic than this pass takes on). */
+async function withLiveDraftGrandTotal(client: any, boq: any, preFetchedLines?: any[]): Promise<any> {
   if (boq.status !== 'draft') return boq
-  const lines = (await client.query('SELECT * FROM commercial_boq_line_items WHERE boq_id=$1', [boq.id])).rows
+  const lines = preFetchedLines ?? (await client.query('SELECT * FROM commercial_boq_line_items WHERE boq_id=$1', [boq.id])).rows
   const liveLines = await withLiveDraftPricing(client, boq, lines)
   const grandTotal = liveLines.reduce((sum: number, li: any) => sum + Number(li.line_total), 0)
   return grandTotal === Number(boq.grand_total) ? boq : { ...boq, grand_total: grandTotal }
@@ -829,15 +907,9 @@ const boqPatchShape = {
   preSalesId: z.string().uuid().nullable().optional(), currency: z.string().min(1).optional(),
 }
 
-/** Every column this router's `commercial_boqs` INSERTs come from is a
- *  foreign key — a bad id would otherwise surface as a raw Postgres
- *  FK-violation (23503) rather than a friendly message. Caught once here
- *  rather than a bespoke pre-check per field (unlike the SKU router's
- *  `skuFkChecks`, which needs per-field labels for a 7-FK row) — a fine
- *  house-style variance between routers within the same migration. */
-function isForeignKeyViolation(e: unknown): e is { code: '23503'; detail?: string } {
-  return typeof e === 'object' && e !== null && (e as any).code === '23503'
-}
+// isForeignKeyViolation/isUniqueViolation now live in ../db-errors.js —
+// shared with hierarchy.ts and sales.ts, which have the identical
+// unhandled-RESTRICT-violation gap this router originally solved alone.
 
 const BOQ_LINE_ITEM_INSERT_COLUMNS =
   `boq_id, sku_id, quantity, unit_price, discount_pct, tax_pct, approver_id, approval_date, approval_remarks,
@@ -861,9 +933,24 @@ async function copyLineItemsForRevisionOrDuplicate(client: any, fromBoqId: strin
 }
 
 const commercialBoqRouter = router({
+  // Batches every draft BOQ's line items into one query instead of one
+  // query per BOQ (previously: 1 + N round trips for N draft BOQs, on every
+  // load of this list — see the function comment on withLiveDraftGrandTotal).
   list: publicProcedure.query(async () => {
     const result = await pool.query('SELECT * FROM commercial_boqs ORDER BY created_at DESC')
-    const withTotals = await Promise.all(result.rows.map((r: any) => withLiveDraftGrandTotal(pool, r)))
+    const draftIds = result.rows.filter((r: any) => r.status === 'draft').map((r: any) => r.id)
+    const linesByBoqId = new Map<string, any[]>()
+    if (draftIds.length) {
+      const linesResult = await pool.query('SELECT * FROM commercial_boq_line_items WHERE boq_id = ANY($1)', [draftIds])
+      for (const line of linesResult.rows) {
+        const existing = linesByBoqId.get(line.boq_id)
+        if (existing) existing.push(line)
+        else linesByBoqId.set(line.boq_id, [line])
+      }
+    }
+    const withTotals = await Promise.all(
+      result.rows.map((r: any) => withLiveDraftGrandTotal(pool, r, linesByBoqId.get(r.id) ?? [])),
+    )
     return withTotals.map(toBoq)
   }),
 
@@ -1049,7 +1136,14 @@ const commercialBoqRouter = router({
         const skuResult = await client.query('SELECT * FROM commercial_skus WHERE id=$1', [row.sku_id])
         const sku = skuResult.rows[0]
         if (!sku) throw new TRPCError({ code: 'BAD_REQUEST', message: `No such SKU: ${row.sku_id}` })
-        const boqResult = await client.query('SELECT * FROM commercial_boqs WHERE id=$1', [row.boq_id])
+        // FOR UPDATE: recomputeBoqGrandTotal below reads this BOQ's line
+        // items' SUM() then writes grand_total — without holding this row's
+        // lock for the rest of the transaction, a concurrent updateLineItem/
+        // removeLineItem on a sibling line of the same BOQ can compute its
+        // own SUM() before this transaction's UPDATE is visible to it (and
+        // vice versa), and whichever commits last overwrites the other's
+        // already-committed change out of the aggregate — a lost update.
+        const boqResult = await client.query('SELECT * FROM commercial_boqs WHERE id=$1 FOR UPDATE', [row.boq_id])
         const boq = boqResult.rows[0]
         if (!boq) throw new TRPCError({ code: 'BAD_REQUEST', message: `No such BOQ: ${row.boq_id}` })
 
@@ -1127,11 +1221,18 @@ const commercialBoqRouter = router({
     }),
 
   removeLineItem: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
-    const existing = await pool.query('SELECT boq_id FROM commercial_boq_line_items WHERE id=$1', [input.id])
-    if (!existing.rows[0]) return
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
+      const existing = await client.query('SELECT boq_id FROM commercial_boq_line_items WHERE id=$1', [input.id])
+      if (!existing.rows[0]) {
+        await client.query('COMMIT')
+        return
+      }
+      // Same FOR UPDATE reasoning as updateLineItem above — locks the BOQ
+      // row for the rest of this transaction so the SUM()-then-UPDATE in
+      // recomputeBoqGrandTotal can't lose a concurrent sibling-line change.
+      await client.query('SELECT id FROM commercial_boqs WHERE id=$1 FOR UPDATE', [existing.rows[0].boq_id])
       await client.query('DELETE FROM commercial_boq_line_items WHERE id=$1', [input.id])
       await recomputeBoqGrandTotal(client, existing.rows[0].boq_id)
       await client.query('COMMIT')
@@ -1304,15 +1405,34 @@ const commercialBoqRouter = router({
 
   /** Hard-deletes a BOQ and its line items (cascade via FK). Throws unless
    *  the BOQ is `draft`/`cancelled`/`rejected`/`archived` — anything still
-   *  active in the pipeline must be cancelled first via `updateStatus`. */
+   *  active in the pipeline must be cancelled first via `updateStatus`.
+   *
+   *  The status check and the DELETE run inside one transaction with the
+   *  row locked FOR UPDATE — without this, a concurrent `updateStatus` call
+   *  moving the BOQ out of a deletable status (e.g. draft -> submitted)
+   *  between this mutation's own status read and its unconditional DELETE
+   *  could silently destroy a BOQ that had, by the time the DELETE ran, just
+   *  left the deletable set. Locking the row here also means a concurrent
+   *  `updateStatus` (which itself takes FOR UPDATE, see below) simply waits
+   *  its turn rather than racing. */
   delete: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
-    const result = await pool.query('SELECT status FROM commercial_boqs WHERE id=$1', [input.id])
-    const boq = result.rows[0]
-    if (!boq) throw new TRPCError({ code: 'NOT_FOUND', message: `No such BOQ: ${input.id}` })
-    if (!DELETABLE_BOQ_STATUSES.includes(boq.status)) {
-      throw new TRPCError({ code: 'CONFLICT', message: `Cannot delete a BOQ in "${boq.status}" status — cancel it first.` })
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const result = await client.query('SELECT status FROM commercial_boqs WHERE id=$1 FOR UPDATE', [input.id])
+      const boq = result.rows[0]
+      if (!boq) throw new TRPCError({ code: 'NOT_FOUND', message: `No such BOQ: ${input.id}` })
+      if (!DELETABLE_BOQ_STATUSES.includes(boq.status)) {
+        throw new TRPCError({ code: 'CONFLICT', message: `Cannot delete a BOQ in "${boq.status}" status — cancel it first.` })
+      }
+      await client.query('DELETE FROM commercial_boqs WHERE id=$1', [input.id])
+      await client.query('COMMIT')
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
     }
-    await pool.query('DELETE FROM commercial_boqs WHERE id=$1', [input.id])
   }),
 })
 

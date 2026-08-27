@@ -16,4 +16,21 @@ types.setTypeParser(1082, (val) => val)
 // `number` throughout — same trade-off, not a new one).
 types.setTypeParser(1700, (val) => Number(val))
 
-export const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+export const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  // Unset, `pg.Pool` defaults to max: 10 with no connection timeout — fine
+  // in isolation, but Cloud Run's own default concurrency (80 requests/
+  // instance) means a burst of concurrent mutations could ask for far more
+  // simultaneous pool clients than 10, and each one would wait indefinitely
+  // rather than failing fast. `max: 8` leaves headroom under Cloud SQL's own
+  // connection ceiling for `db-f1-micro` (~25 total, shared across however
+  // many Cloud Run instances are live) — 8 per instance keeps a handful of
+  // concurrently-scaled instances well under that ceiling, tune upward only
+  // alongside a real instance-tier/connection-ceiling change, not by default.
+  // `connectionTimeoutMillis` turns "no client available" into a clear,
+  // bounded error instead of a request hanging forever if the pool is ever
+  // saturated.
+  max: 8,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+})

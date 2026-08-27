@@ -14,11 +14,11 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:component": "vitest run --config vitest.component.config.ts"
+    "test:component": "vitest run --config vitest.component.config.ts",
+    "seed:import": "tsx scripts/seed-import.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
-    "@trpc/client": "^11.0.0",
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.4.2",
     "@capacitor/filesystem": "^8.1.2",
@@ -26,6 +26,7 @@
     "@goms/domain": "*",
     "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-virtual": "^3.14.8",
+    "@trpc/client": "^11.0.0",
     "clsx": "^2.1.1",
     "d3-geo": "^3.1.1",
     "framer-motion": "^11.15.0",
@@ -34,7 +35,8 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
     "tailwind-merge": "^2.5.5",
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.2",
@@ -43,12 +45,14 @@
     "@testing-library/user-event": "^14.6.5",
     "@turf/simplify": "^7.3.5",
     "@types/d3-geo": "^3.1.0",
+    "@types/pg": "^8.11.10",
     "@types/react": "^18.3.17",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "7zip-min": "^3.0.1",
     "autoprefixer": "^10.4.20",
     "jsdom": "^25.0.1",
+    "pg": "^8.13.1",
     "polygon-clipping": "^0.15.7",
     "postcss": "^8.4.49",
     "proj4": "^2.20.9",

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { isUniqueViolation } from '../db-errors.js'
 import { buildOwnerMap, effectiveOwner, OWNABLE_ENTITY_MAP, type OwnershipContext } from '@goms/domain'
 
 function toAssignment(row: any) {
@@ -129,6 +130,16 @@ export const ownershipRouter = router({
         return toAssignment(result.rows[0])
       } catch (e) {
         await client.query('ROLLBACK')
+        // The FOR UPDATE above only locks existing open-owner rows — it
+        // locks nothing when this is the entity's first-ever assignment, so
+        // two concurrent `assign` calls for the same never-before-owned
+        // entity can both pass the check above and both attempt this
+        // INSERT. ownership_assignments_one_open_owner_per_entity (see the
+        // 2026-08-26 migration) stops the second one from landing; this
+        // just gives its loser a friendly message instead of a raw 23505.
+        if (isUniqueViolation(e)) {
+          throw new TRPCError({ code: 'CONFLICT', message: 'This entity already has an open owner — refresh and try again.' })
+        }
         throw e
       } finally {
         client.release()

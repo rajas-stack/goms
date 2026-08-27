@@ -8,11 +8,14 @@ describe('followUps router', () => {
 
   beforeEach(async () => {
     await pool.query('DELETE FROM follow_ups')
-    // opportunities.department_id FKs (RESTRICT) into hierarchy_nodes too —
-    // clear it first so this doesn't conflict with rows left behind by
-    // opportunities.test.ts.
+    // opportunities.department_id and commercial_boqs.department_id both FK
+    // (RESTRICT) into hierarchy_nodes too — clear them first so this
+    // doesn't conflict with rows left behind by opportunities.test.ts or
+    // sales.test.ts (2026-08-26 hardening pass).
     await pool.query('DELETE FROM opportunity_stage_changes')
     await pool.query('DELETE FROM opportunities')
+    await pool.query('DELETE FROM commercial_boq_line_items')
+    await pool.query('DELETE FROM commercial_boqs')
     await pool.query('DELETE FROM employees')
     await pool.query('DELETE FROM hierarchy_nodes')
     const caller = appRouter.createCaller({})

@@ -14,6 +14,11 @@ describe('ownership router', () => {
     await pool.query('DELETE FROM ownership_assignments')
     await pool.query('DELETE FROM opportunity_stage_changes')
     await pool.query('DELETE FROM opportunities')
+    // commercial_boqs.department_id also FKs (RESTRICT) into hierarchy_nodes
+    // — clear it first so this doesn't conflict with rows left behind by
+    // sales.test.ts (2026-08-26 hardening pass).
+    await pool.query('DELETE FROM commercial_boq_line_items')
+    await pool.query('DELETE FROM commercial_boqs')
     await pool.query('DELETE FROM employees')
     await pool.query('DELETE FROM hierarchy_nodes')
     await pool.query('DELETE FROM sales_postings')
@@ -165,5 +170,28 @@ describe('ownership router', () => {
     await caller.sales.delete({ id: personA })
     const history = await caller.ownership.listFor({ entityType: 'orgNode', entityId: deptId })
     expect(history).toEqual([])
+  })
+
+  // 2026-08-26 backend hardening pass.
+
+  it('never leaves two simultaneously-open owners when two concurrent first-ever assigns race for the same entity', async () => {
+    // The FOR UPDATE in `assign` only locks existing open-owner rows — for
+    // an entity with no owner yet, there's nothing to lock, so without
+    // ownership_assignments_one_open_owner_per_entity (the 2026-08-26
+    // migration) both concurrent assigns could pass and both insert.
+    const results = await Promise.allSettled([
+      appRouter.createCaller({}).ownership.assign({ entityType: 'orgNode', entityId: deptId, salesPersonId: personA, startDate: '2025-01-01' }),
+      appRouter.createCaller({}).ownership.assign({ entityType: 'orgNode', entityId: deptId, salesPersonId: personB, startDate: '2025-01-01' }),
+    ])
+    const fulfilled = results.filter((r) => r.status === 'fulfilled')
+    const rejected = results.filter((r) => r.status === 'rejected')
+    expect(fulfilled).toHaveLength(1)
+    expect(rejected).toHaveLength(1)
+    expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({ code: 'CONFLICT' })
+
+    const caller = appRouter.createCaller({})
+    const openOwners = (await caller.ownership.listFor({ entityType: 'orgNode', entityId: deptId }))
+      .filter((a) => a.role === 'owner' && a.endDate === null)
+    expect(openOwners).toHaveLength(1)
   })
 })

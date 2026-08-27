@@ -10,7 +10,11 @@ describe('opportunities router', () => {
     await pool.query('DELETE FROM opportunities')
     // Other test files (sharing this DB, fileParallelism off) may leave
     // employee rows behind, which would otherwise block deleting
-    // hierarchy_nodes below via employees.org_node_id's RESTRICT FK.
+    // hierarchy_nodes below via employees.org_node_id's RESTRICT FK. Same
+    // reasoning for commercial_boqs.department_id (2026-08-26 hardening
+    // pass added a sales.test.ts case that leaves one behind).
+    await pool.query('DELETE FROM commercial_boq_line_items')
+    await pool.query('DELETE FROM commercial_boqs')
     await pool.query('DELETE FROM employees')
     await pool.query('DELETE FROM hierarchy_nodes')
     const caller = appRouter.createCaller({})

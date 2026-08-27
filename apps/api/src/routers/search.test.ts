@@ -16,6 +16,11 @@ describe('search router', () => {
     await pool.query('DELETE FROM follow_ups')
     await pool.query('DELETE FROM opportunity_stage_changes')
     await pool.query('DELETE FROM opportunities')
+    // commercial_boqs.department_id also FKs (RESTRICT) into hierarchy_nodes
+    // — clear it first so this doesn't conflict with rows left behind by
+    // sales.test.ts (2026-08-26 hardening pass).
+    await pool.query('DELETE FROM commercial_boq_line_items')
+    await pool.query('DELETE FROM commercial_boqs')
     await pool.query('DELETE FROM transfers')
     await pool.query('DELETE FROM timeline_events')
     await pool.query('DELETE FROM employee_charges')

@@ -169,4 +169,50 @@ describe('commercial.masters router', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0].featureId).toBe(featureB.id)
   })
+
+  // 2026-08-26 backend hardening pass.
+
+  it('gives a friendly CONFLICT (never a raw/unhandled error) when two concurrent creates race for the same code', async () => {
+    // assertCodeAvailable's SELECT-based pre-check isn't atomic with the
+    // INSERT — the unique index (commercial_masters_key_code_idx) is what
+    // actually stops the duplicate from landing under concurrency, and this
+    // proves the loser gets a translated CONFLICT, not a raw 23505.
+    const results = await Promise.allSettled([
+      appRouter.createCaller({}).commercial.masters.create({ key: 'verticals', input: { code: 'RACE', name: 'A', description: '' } }),
+      appRouter.createCaller({}).commercial.masters.create({ key: 'verticals', input: { code: 'RACE', name: 'B', description: '' } }),
+    ])
+    const fulfilled = results.filter((r) => r.status === 'fulfilled')
+    const rejected = results.filter((r) => r.status === 'rejected')
+    expect(fulfilled).toHaveLength(1)
+    expect(rejected).toHaveLength(1)
+    expect((rejected[0] as PromiseRejectedResult).reason).toMatchObject({ code: 'CONFLICT' })
+    const verticals = await appRouter.createCaller({}).commercial.masters.list({ key: 'verticals' })
+    expect(verticals.filter((v: any) => v.code === 'RACE')).toHaveLength(1)
+  })
+
+  it('refuses to delete a master still referenced by a SKU (unlike the self-referencing parent/child check, this is a cross-table reference)', async () => {
+    const caller = appRouter.createCaller({})
+    const vertical = await makeVertical({ code: 'GOV' })
+    const product = await caller.commercial.masters.create({ key: 'products', input: { code: 'GOMS', name: 'GOMS', description: '', verticalId: vertical.id } })
+    const module_ = await caller.commercial.masters.create({ key: 'modules', input: { code: 'ACCT', name: 'Account Mapping', description: '', productId: product.id } })
+    const feature = await caller.commercial.masters.create({ key: 'features', input: { code: 'F1', name: 'Feature 1', description: '', moduleId: module_.id, status: 'new' } })
+    const category = await caller.commercial.masters.create({ key: 'skuCategories', input: { code: 'STD', name: 'Standard', description: '' } })
+    const uom = await caller.commercial.masters.create({ key: 'unitsOfMeasure', input: { code: 'LIC', name: 'License', description: '' } })
+    const currency = await caller.commercial.masters.create({
+      key: 'currencies', input: { code: 'INR', name: 'Indian Rupee', description: '', symbol: '₹', decimalPlaces: 2, exchangeRate: 1, isBaseCurrency: true },
+    })
+    const taxClass = await caller.commercial.masters.create({ key: 'taxClasses', input: { code: 'GST18', name: 'GST 18%', description: '', ratePct: 18 } })
+    const billingType = await caller.commercial.masters.create({ key: 'billingTypes', input: { code: 'OT', name: 'One-Time', description: '' } })
+    const edition = await caller.commercial.masters.create({ key: 'productEditions', input: { code: 'STD', name: 'Standard', description: '' } })
+    await caller.commercial.skus.create({
+      name: 'License', categoryId: category.id, featureId: feature.id, uomId: uom.id, currencyId: currency.id,
+      taxClassId: taxClass.id, billingTypeId: billingType.id, editionId: edition.id, activeFrom: '2026-01-01', activeTill: null,
+      baseSoftwareCost: 0, implementationCostPerMM: 0, integrationCost: 0, thirdPartyCost: 0,
+      hardwareCost: 0, cloudCost: 0, supportCost: 0, trainingCost: 0,
+      internalPrice: 100, floorPrice: 100, partnerPrice: 100, governmentPrice: 100,
+      enterprisePrice: 100, corporatePrice: 100, listPrice: 100, minimumAllowedPrice: 50, maximumDiscountPercent: 10,
+    })
+    await expect(caller.commercial.masters.delete({ key: 'unitsOfMeasure', id: uom.id }))
+      .rejects.toThrow(/still referenced by at least one sku/i)
+  })
 })

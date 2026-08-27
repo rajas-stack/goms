@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { isForeignKeyViolation } from '../db-errors.js'
 import { tierRank } from '@goms/domain'
 
 function toSalesPerson(row: any) {
@@ -102,10 +103,21 @@ export const salesRouter = router({
   setStatus: publicProcedure
     .input(z.object({ id: z.string().uuid(), status: statusSchema }))
     .mutation(({ input }) => pool.query('UPDATE sales_persons SET status=$1, updated_at=now() WHERE id=$2', [input.status, input.id]).then(() => undefined)),
-  delete: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) =>
-    // sales_postings and ownership_assignments both cascade via FK.
-    pool.query('DELETE FROM sales_persons WHERE id=$1', [input.id]).then(() => undefined)
-  ),
+  delete: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+    // sales_postings and ownership_assignments both cascade via FK — but
+    // commercial_boqs.sales_person_id is RESTRICT (commercial-boq.sql:26),
+    // not cascade, and isn't pre-checked here, so deleting a salesperson
+    // who owns any BOQ still fails at the DB level. This catch only
+    // replaces that raw, unhandled 23503 with a friendly message.
+    try {
+      await pool.query('DELETE FROM sales_persons WHERE id=$1', [input.id])
+    } catch (e) {
+      if (isForeignKeyViolation(e)) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete this sales person — they are still referenced by at least one BOQ.' })
+      }
+      throw e
+    }
+  }),
   transfer: publicProcedure
     .input(z.object({
       salesPersonId: z.string().uuid(), designation: z.string().min(1), tierKey: z.string().min(1),
