@@ -139,6 +139,16 @@ describe('salesRoster importer', () => {
   })
 
   it('rejects a sales posting whose Manager Email matches a vacant employee\'s email', async () => {
+    // Same cross-file-safe order as employees.test.ts's own beforeEach —
+    // this suite runs sequentially against one shared real Postgres, so a
+    // leftover opportunities/department_id row from another test file
+    // blocks this delete via ON DELETE RESTRICT unless cleared first.
+    await pool.query('DELETE FROM employee_merge_audit')
+    await pool.query('DELETE FROM transfers')
+    await pool.query('DELETE FROM timeline_events')
+    await pool.query('DELETE FROM employee_charges')
+    await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM opportunities')
     await pool.query(`DELETE FROM hierarchy_nodes WHERE domain='org'`)
     const orgNode = await pool.query(
       `INSERT INTO hierarchy_nodes (domain, type_key, parent_id, state_code, name, code, sort_order, metadata, status)
