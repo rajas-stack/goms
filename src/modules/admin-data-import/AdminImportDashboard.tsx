@@ -9,7 +9,7 @@ function StatusCell({ status, labelByDomain }: { status: DomainListEntry['depend
   return <span className="text-amber-700">Blocked on {names}</span>
 }
 
-function ActionsCell({ domain, status }: { domain: DomainListEntry['domain']; status: DomainListEntry['dependencyStatus'] }) {
+function ActionsCell({ domain }: { domain: DomainListEntry['domain'] }) {
   if (domain === 'geography') {
     return (
       <Link to="/admin/data-import/geography" className="text-sky-700 underline">
@@ -17,20 +17,10 @@ function ActionsCell({ domain, status }: { domain: DomainListEntry['domain']; st
       </Link>
     )
   }
-  const blocked = status !== 'ready'
   return (
-    <div className="flex gap-3">
-      <button type="button" onClick={() => downloadTemplate(domain as SpreadsheetDomainKey)} className="text-sky-700 underline">
-        Download Template
-      </button>
-      <Link
-        to={`/admin/data-import/${domain}`}
-        aria-disabled={blocked}
-        className={blocked ? 'pointer-events-none text-slate-400 underline' : 'text-sky-700 underline'}
-      >
-        Upload & Review
-      </Link>
-    </div>
+    <button type="button" onClick={() => downloadTemplate(domain as SpreadsheetDomainKey)} className="text-sky-700 underline">
+      Download Template
+    </button>
   )
 }
 
@@ -42,6 +32,9 @@ export function AdminImportDashboard() {
     <div className="space-y-4 p-6">
       <AdminImportBanner />
       <h1 className="text-xl font-semibold">Admin Data Import</h1>
+      <Link to="/admin/data-import/session" className="inline-block rounded bg-sky-700 px-3 py-1 text-white">
+        Start Import Session
+      </Link>
       {isLoading || !domains ? (
         <p>Loading…</p>
       ) : (
@@ -63,7 +56,7 @@ export function AdminImportDashboard() {
                   <StatusCell status={d.dependencyStatus} labelByDomain={labelByDomain} />
                 </td>
                 <td className="py-2">
-                  <ActionsCell domain={d.domain} status={d.dependencyStatus} />
+                  <ActionsCell domain={d.domain} />
                 </td>
               </tr>
             ))}

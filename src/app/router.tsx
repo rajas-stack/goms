@@ -16,8 +16,8 @@ const CommercialCalculatorWorkspace = lazy(() =>
 const AdminImportDashboard = lazy(() =>
   import('@/modules/admin-data-import/AdminImportDashboard').then((m) => ({ default: m.AdminImportDashboard })),
 )
-const ImportWizard = lazy(() =>
-  import('@/modules/admin-data-import/ImportWizard').then((m) => ({ default: m.ImportWizard })),
+const SessionImportWizard = lazy(() =>
+  import('@/modules/admin-data-import/SessionImportWizard').then((m) => ({ default: m.SessionImportWizard })),
 )
 const GeographyLoadPanel = lazy(() =>
   import('@/modules/admin-data-import/GeographyLoadPanel').then((m) => ({ default: m.GeographyLoadPanel })),
@@ -34,10 +34,11 @@ const adminImportRoutes =
     ? [
         { path: '/admin/data-import', element: <AdminImportDashboard /> },
         // Geography is a one-click load with no uploaded file at all, so it
-        // gets its own panel rather than the spreadsheet wizard. Its literal
-        // path must precede the :domain param route to win the match.
+        // keeps its own dedicated panel — it never goes through the session
+        // wizard (design spec §4 treats it as an always-'ready' root with no
+        // uploaded rows).
         { path: '/admin/data-import/geography', element: <GeographyLoadPanel /> },
-        { path: '/admin/data-import/:domain', element: <ImportWizard /> },
+        { path: '/admin/data-import/session', element: <SessionImportWizard /> },
       ]
     : []
 

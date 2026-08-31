@@ -34,14 +34,14 @@ describe('AdminImportDashboard', () => {
     expect(screen.getByText(/blocked on Organization Hierarchy/i)).toBeInTheDocument()
   })
 
-  it('links Download Template / Upload & Review to /admin/data-import/:domain', async () => {
+  it('links Start Import Session to the session wizard route', async () => {
     vi.spyOn(adminImportApi, 'listDomains').mockResolvedValue([
       { domain: 'taxClasses', label: 'Tax Classes', currentRowCount: 5, dependencyStatus: 'ready' },
     ] as any)
 
     renderDashboard()
 
-    expect(await screen.findByRole('link', { name: /upload & review/i })).toHaveAttribute('href', '/admin/data-import/taxClasses')
+    expect(await screen.findByRole('link', { name: /start import session/i })).toHaveAttribute('href', '/admin/data-import/session')
   })
 
   it('links Geography to its own one-click route instead of the generic wizard', async () => {

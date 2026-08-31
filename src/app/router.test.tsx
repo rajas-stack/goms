@@ -17,7 +17,7 @@ describe('admin data import routes', () => {
     const { router } = await import('./router')
     const paths = router.routes[0].children?.map((c) => c.path)
     expect(paths).toContain('/admin/data-import')
-    expect(paths).toContain('/admin/data-import/:domain')
+    expect(paths).toContain('/admin/data-import/session')
   })
 
   it('omits /admin/data-import routes when VITE_ADMIN_IMPORT_ENABLED is unset (default)', async () => {
@@ -25,14 +25,15 @@ describe('admin data import routes', () => {
     const { router } = await import('./router')
     const paths = router.routes[0].children?.map((c) => c.path)
     expect(paths).not.toContain('/admin/data-import')
-    expect(paths).not.toContain('/admin/data-import/:domain')
+    expect(paths).not.toContain('/admin/data-import/session')
   })
 
-  it('routes geography to its own panel ahead of the generic :domain wizard', async () => {
+  it('registers both the geography panel and the session wizard routes', async () => {
     vi.stubEnv('VITE_ADMIN_IMPORT_ENABLED', 'true')
     const { router } = await import('./router')
     const paths = router.routes[0].children?.map((c) => c.path) ?? []
-    expect(paths.indexOf('/admin/data-import/geography')).toBeLessThan(paths.indexOf('/admin/data-import/:domain'))
+    expect(paths).toContain('/admin/data-import/geography')
+    expect(paths).toContain('/admin/data-import/session')
   })
 
   it('keeps the catch-all NotFound route last regardless of the flag', async () => {
