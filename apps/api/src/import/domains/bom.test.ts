@@ -124,4 +124,14 @@ describe('bom importer', () => {
       pool.query(`INSERT INTO commercial_bom_items (parent_sku_id, component_sku_id) VALUES ($1,$2)`, [parent, component]),
     ).rejects.toThrow(/duplicate key value violates unique constraint/)
   })
+
+  it('suggests a fuzzy candidate for a near-miss Component SKU Code', async () => {
+    const masters = await makeSupportingMasters()
+    await insertSku(masters, 'P-1')
+    await insertSku(masters, 'C-1')
+    const rows = [{ parentSkuCode: 'P-1', componentSkuCode: 'C-', mandatory: false, quantity: 1, notes: '' }]
+    const preview = await validateBomRows(pool, rows)
+    expect(preview[0].action).toBe('needs-review')
+    expect(preview[0].candidates?.[0].key).toBe('C-1')
+  })
 })

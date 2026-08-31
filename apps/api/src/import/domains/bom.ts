@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { classifyRows } from '../engine.js'
+import { classifyRows, findFuzzyCandidates } from '../engine.js'
 import type { ImportFieldDiff, ImportRowResult } from '../types.js'
 
 function normalizeCode(code: string): string {
@@ -92,20 +92,25 @@ export async function validateBomRows(client: { query: Function }, rawRows: unkn
     },
     validateRow: (raw) => {
       const parsed = bomRowSchema.safeParse(raw)
-      if (!parsed.success) return parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+      if (!parsed.success) return { errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) }
       const row = parsed.data
       const errors: string[] = []
+      let candidates: { key: string; score: number }[] | undefined
       // Matches commercial.ts:640's existing app rule verbatim.
       if (normalizeCode(row.parentSkuCode) === normalizeCode(row.componentSkuCode)) {
         errors.push('A SKU cannot be a BOM component of itself.')
       }
       if (!skuIdByCode.has(normalizeCode(row.parentSkuCode))) {
+        const suggestions = findFuzzyCandidates(normalizeCode(row.parentSkuCode), skuIdByCode.keys())
+        if (suggestions.length > 0) candidates = [...(candidates ?? []), ...suggestions].slice(0, 3)
         errors.push(`Parent SKU Code "${row.parentSkuCode}" does not match any existing SKU.`)
       }
       if (!skuIdByCode.has(normalizeCode(row.componentSkuCode))) {
+        const suggestions = findFuzzyCandidates(normalizeCode(row.componentSkuCode), skuIdByCode.keys())
+        if (suggestions.length > 0) candidates = [...(candidates ?? []), ...suggestions].slice(0, 3)
         errors.push(`Component SKU Code "${row.componentSkuCode}" does not match any existing SKU.`)
       }
-      return errors
+      return { errors, needsReview: (candidates?.length ?? 0) > 0, candidates }
     },
   })
 }
