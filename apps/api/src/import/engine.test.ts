@@ -103,7 +103,7 @@ describe('classifyRows validateRow contract', () => {
     const rows = classifyRows<{ code: string }, never>({
       rows: [{ code: 'X' }],
       getBusinessKey: (r) => r.code,
-      existingByKey: new Map(),
+      existingByKey: new Map<string, never>(),
       diffFields: () => [],
       validateRow: () => ({ errors: ['no such code: X'], needsReview: true, candidates: [{ key: 'X1', score: 0.7 }] }),
     })
@@ -115,7 +115,7 @@ describe('classifyRows validateRow contract', () => {
     const rows = classifyRows<{ code: string }, never>({
       rows: [{ code: 'X' }],
       getBusinessKey: (r) => r.code,
-      existingByKey: new Map(),
+      existingByKey: new Map<string, never>(),
       diffFields: () => [],
       validateRow: () => ({ errors: ['bad row'] }),
     })
