@@ -1,14 +1,9 @@
 import { z } from 'zod'
-import { classifyRows, resolveTreeReferences } from '../engine.js'
+import { classifyRows, resolveTreeReferences, findFuzzyCandidates } from '../engine.js'
 import type { ImportFieldDiff, ImportRowResult } from '../types.js'
 
 const STATUSES = ['active', 'archived'] as const
 
-/** Blank cells arrive as `''`/`undefined`/`null` depending on how the caller
- *  parsed the sheet — normalized to `null` before validation so "blank" has
- *  one representation throughout this module. Mirrors
- *  organizationHierarchy.ts's own `blankToNull` (not exported from there, so
- *  redefined here rather than reaching across domain modules for it). */
 function blankToNull(v: unknown): unknown {
   if (v === undefined || v === null) return null
   if (typeof v === 'string' && v.trim() === '') return null
@@ -17,7 +12,7 @@ function blankToNull(v: unknown): unknown {
 
 const employeeRowSchema = z.object({
   employeeCode: z.string().min(1, 'Employee Code is required').trim(),
-  name: z.string().min(1, 'Name is required'),
+  name: z.string().optional().default(''),
   designation: z.string().min(1, 'Designation is required'),
   email: z.string().optional().default(''),
   phone: z.string().optional().default(''),
@@ -30,6 +25,19 @@ const employeeRowSchema = z.object({
       errorMap: () => ({ message: `Status must be one of: ${STATUSES.join(', ')}` }),
     }),
   ),
+  // NEW (design spec §6.4): names an org node this employee heads. Resolved
+  // against hierarchy_nodes(domain='org', type_key='department') as it
+  // exists right now — including any row already committed earlier in this
+  // same session's transaction (organizationHierarchy always precedes
+  // employees per Task 5's dependency graph).
+  departmentHeadOf: z.preprocess(blankToNull, z.string().trim().min(1).nullable()),
+}).superRefine((row, ctx) => {
+  if (!row.vacant && row.name.trim() === '') {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['name'], message: 'Name is required' })
+  }
+  if (row.vacant && row.departmentHeadOf) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['departmentHeadOf'], message: 'A vacant employee cannot be named as a department head' })
+  }
 })
 export type EmployeeRow = z.infer<typeof employeeRowSchema>
 
@@ -39,21 +47,21 @@ interface ExistingEmployee {
   designation: string
   email: string
   phone: string
-  /** Uppercased code of the employee's current org node, or `null` if the
-   *  node it points at has no code of its own (shouldn't happen for a node
-   *  written by this importer, but a manually-created node might lack one). */
   orgNodeCode: string | null
-  /** Uppercased code of the employee's current manager, or `null` if
-   *  unmanaged. */
   managerCode: string | null
   vacant: boolean
   status: string
+  /** Code of the department-type org node this employee CURRENTLY heads
+   *  (metadata.deptHead === this employee's id), or null. Compared in
+   *  diffFields below — without this, a row whose only change is a newly
+   *  added departmentHeadOf, with every other field identical, would
+   *  classify as 'unchanged' and the commit loop would never reach the
+   *  metadata-patch step, silently dropping the assignment. This is exactly
+   *  the class of bug the redesign's "no silent partial import" rule exists
+   *  to close, so it can't be left as a gap here either. */
+  currentlyHeadsDeptCode: string | null
 }
 
-/** Best-effort Employee Code / Manager Code extraction straight off the raw
- *  row, used only by `resolveTreeReferences` (which runs before schema
- *  validation, since a report row's own manager resolution shouldn't depend
- *  on whether some *other* row in the file happens to be well-formed). */
 function rawEmployeeCode(raw: unknown): string {
   if (typeof raw !== 'object' || raw === null) return ''
   const c = (raw as Record<string, unknown>).employeeCode
@@ -68,12 +76,26 @@ function rawManagerCode(raw: unknown): string | null {
   return trimmed === '' ? null : trimmed.toUpperCase()
 }
 
+function rawVacant(raw: unknown): boolean {
+  if (typeof raw !== 'object' || raw === null) return false
+  return (raw as Record<string, unknown>).vacant === true
+}
+
+function rawDepartmentHeadOf(raw: unknown): string | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const c = (raw as Record<string, unknown>).departmentHeadOf
+  if (typeof c !== 'string') return null
+  const trimmed = c.trim()
+  return trimmed === '' ? null : trimmed.toUpperCase()
+}
+
 async function fetchExisting(client: { query: Function }): Promise<Map<string, ExistingEmployee>> {
   const result = await client.query(
-    `SELECT e.*, org.code AS org_node_code, mgr.code AS manager_code
+    `SELECT e.*, org.code AS org_node_code, mgr.code AS manager_code, head.code AS heads_dept_code
      FROM employees e
      LEFT JOIN hierarchy_nodes org ON org.id = e.org_node_id
-     LEFT JOIN employees mgr ON mgr.id = e.manager_id`,
+     LEFT JOIN employees mgr ON mgr.id = e.manager_id
+     LEFT JOIN hierarchy_nodes head ON head.domain='org' AND head.type_key='department' AND head.metadata->>'deptHead' = e.id::text`,
   )
   const map = new Map<string, ExistingEmployee>()
   for (const row of result.rows) {
@@ -87,30 +109,29 @@ async function fetchExisting(client: { query: Function }): Promise<Map<string, E
       managerCode: row.manager_code ? String(row.manager_code).trim().toUpperCase() : null,
       vacant: row.vacant,
       status: row.status,
+      currentlyHeadsDeptCode: row.heads_dept_code ? String(row.heads_dept_code).trim().toUpperCase() : null,
     })
   }
   return map
+}
+
+/** Every department-type org node's code, live right now (existing DB rows
+ *  plus any committed earlier in this same session's transaction). */
+async function fetchDepartmentCodes(client: { query: Function }): Promise<Set<string>> {
+  const result = await client.query(`SELECT code FROM hierarchy_nodes WHERE domain='org' AND type_key='department' AND code IS NOT NULL`)
+  return new Set<string>(result.rows.map((r: { code: string }) => String(r.code).trim().toUpperCase()))
 }
 
 export async function validateEmployeeRows(client: { query: Function }, rawRows: unknown[]): Promise<ImportRowResult[]> {
   const existingByKey = await fetchExisting(client)
   const existingEmployeeKeys = new Set(existingByKey.keys())
 
-  // Hard dependency (Task 12): Org Node Code must resolve against
-  // hierarchy_nodes(domain='org') as it exists in the database right now —
-  // this importer never creates org nodes itself, so there's nothing to
-  // resolve against "elsewhere in this same file" the way Manager Employee
-  // Code does. employees.org_node_id is NOT NULL REFERENCES ... ON DELETE
-  // RESTRICT, so an unresolvable code must be rejected here, before commit
-  // is even attempted, rather than surfacing as a raw 23503 FK violation.
   const orgCodesResult = await client.query(`SELECT code FROM hierarchy_nodes WHERE domain='org' AND code IS NOT NULL`)
   const existingOrgCodes = new Set<string>(
     orgCodesResult.rows.map((r: { code: string }) => String(r.code).trim().toUpperCase()),
   )
+  const existingDeptCodes = await fetchDepartmentCodes(client)
 
-  // Stage 4 (self-reference resolution): Manager Employee Code can name
-  // another row earlier or later in this same file — the same deferred
-  // two-pass resolver organizationHierarchy.ts uses for Parent Code.
   const { unresolved } = resolveTreeReferences({
     rows: rawRows,
     getOwnKey: rawEmployeeCode,
@@ -118,6 +139,26 @@ export async function validateEmployeeRows(client: { query: Function }, rawRows:
     existingKeys: existingEmployeeKeys,
   })
   const unresolvedManagerIndexes = new Set(unresolved)
+
+  // Combines DB-known vacancy with this same file's own rows, so a manager
+  // being CREATED by this very upload is still checked (design spec §6.5.7).
+  const vacantByCode = new Map<string, boolean>()
+  for (const [code, existing] of existingByKey) vacantByCode.set(code, existing.vacant)
+  for (const raw of rawRows) {
+    const code = rawEmployeeCode(raw)
+    if (code) vacantByCode.set(code, rawVacant(raw))
+  }
+
+  // departmentHeadOf duplicate-target detection: first row to name a given
+  // department wins; every later row naming the SAME department is a hard
+  // reject, mirroring the existing "duplicate of row N" convention for
+  // Employee Code itself (design spec §6.4: "one head per department, no
+  // ambiguity tolerated").
+  const firstHeadClaimRow = new Map<string, number>()
+  rawRows.forEach((raw, index) => {
+    const target = rawDepartmentHeadOf(raw)
+    if (target && !firstHeadClaimRow.has(target)) firstHeadClaimRow.set(target, index + 1)
+  })
 
   return classifyRows<unknown, ExistingEmployee>({
     rows: rawRows,
@@ -127,10 +168,6 @@ export async function validateEmployeeRows(client: { query: Function }, rawRows:
       if (typeof raw !== 'object' || raw === null) return `__row_${index}__`
       const rawCodeValue = (raw as Record<string, unknown>).employeeCode
       if (typeof rawCodeValue === 'string' && rawCodeValue.trim() !== '') return rawCodeValue.trim().toUpperCase()
-      // Blank/missing/non-string Employee Code: still a distinct, valid row —
-      // key it by its own position so it reaches validateRow (and gets the
-      // precise "Employee Code is required" message) instead of being
-      // silently swallowed as a false duplicate of some other blank-coded row.
       return `__row_${index}__`
     },
     existingByKey,
@@ -147,23 +184,53 @@ export async function validateEmployeeRows(client: { query: Function }, rawRows:
       if (rowManagerCode !== existing.managerCode) diffs.push({ field: 'managerCode', oldValue: existing.managerCode, newValue: rowManagerCode })
       if (row.vacant !== existing.vacant) diffs.push({ field: 'vacant', oldValue: existing.vacant, newValue: row.vacant })
       if (row.status !== existing.status) diffs.push({ field: 'status', oldValue: existing.status, newValue: row.status })
+      // Without this, a row whose ONLY change is a newly-set departmentHeadOf
+      // (every other field identical) would classify 'unchanged' and the
+      // commit loop below — which only patches metadata for create/update
+      // rows — would never run, silently dropping the assignment.
+      const rowDeptHeadOf = row.departmentHeadOf ? row.departmentHeadOf.toUpperCase() : null
+      if (rowDeptHeadOf !== existing.currentlyHeadsDeptCode) diffs.push({ field: 'departmentHeadOf', oldValue: existing.currentlyHeadsDeptCode, newValue: rowDeptHeadOf })
       return diffs
     },
     validateRow: (raw, index) => {
       const parsed = employeeRowSchema.safeParse(raw)
       if (!parsed.success) {
-        return parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+        return { errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) }
       }
       const errors: string[] = []
+      let needsReview = false
+      let candidates: { key: string; score: number }[] | undefined
+
       const orgNodeCode = parsed.data.orgNodeCode.toUpperCase()
       if (!existingOrgCodes.has(orgNodeCode)) {
+        const suggestions = findFuzzyCandidates(orgNodeCode, existingOrgCodes)
+        if (suggestions.length > 0) { needsReview = true; candidates = suggestions }
         errors.push(`no such organization hierarchy code: ${parsed.data.orgNodeCode}`)
       }
+
       if (unresolvedManagerIndexes.has(index)) {
-        const managerCode = rawManagerCode(raw)
+        const managerCode = rawManagerCode(raw)!
+        const suggestions = findFuzzyCandidates(managerCode, existingEmployeeKeys)
+        if (suggestions.length > 0) { needsReview = true; candidates = [...(candidates ?? []), ...suggestions].slice(0, 3) }
         errors.push(`Manager Employee Code "${managerCode}" does not match any code in this file or the existing employees`)
+      } else if (parsed.data.managerCode && vacantByCode.get(parsed.data.managerCode.toUpperCase()) === true) {
+        // Resolves fine, but a vacant seat can't supervise (design spec
+        // §6.5.7) — a hard business-rule reject, never fuzzy-eligible.
+        errors.push(`Manager Employee Code "${parsed.data.managerCode}" refers to a vacant employee, which cannot supervise anyone`)
       }
-      return errors
+
+      if (parsed.data.departmentHeadOf) {
+        const target = parsed.data.departmentHeadOf.toUpperCase()
+        if (!existingDeptCodes.has(target)) {
+          const suggestions = findFuzzyCandidates(target, existingDeptCodes)
+          if (suggestions.length > 0) { needsReview = true; candidates = [...(candidates ?? []), ...suggestions].slice(0, 3) }
+          errors.push(`no such department-type organization hierarchy code for Department Head Of: ${parsed.data.departmentHeadOf}`)
+        } else if (firstHeadClaimRow.get(target) !== index + 1) {
+          errors.push(`Department Head Of "${parsed.data.departmentHeadOf}" is already claimed by row ${firstHeadClaimRow.get(target)} in this file`)
+        }
+      }
+
+      return { errors, needsReview, candidates }
     },
   })
 }
@@ -173,22 +240,12 @@ export async function commitEmployeeRows(
   rawRows: unknown[],
   preview: ImportRowResult[],
 ): Promise<void> {
-  // Org Node Code always resolves in one pass — validateEmployeeRows already
-  // rejected any row whose code doesn't exist, and this importer never
-  // creates org nodes itself, so there's no "resolve, defer, retry" needed
-  // for it the way there is for the manager chain below.
   const orgCodeToId = new Map<string, string>()
   const orgResult = await client.query(`SELECT id, code FROM hierarchy_nodes WHERE domain='org' AND code IS NOT NULL`)
   for (const row of orgResult.rows) {
     if (row.code) orgCodeToId.set(String(row.code).trim().toUpperCase(), row.id)
   }
 
-  // Seeded with every employee code already in the database, then grown as
-  // rows are written below — lets a create/update row resolve its manager's
-  // real DB id regardless of whether that manager appears earlier or later
-  // in the file (same deferred, retry-until-no-progress strategy
-  // `resolveTreeReferences` used during validation, but performing the
-  // actual writes this time instead of just checking resolvability).
   const codeToId = new Map<string, string>()
   const existingResult = await client.query(`SELECT id, code FROM employees`)
   for (const row of existingResult.rows) {
@@ -212,8 +269,6 @@ export async function commitEmployeeRows(
         continue
       }
 
-      // Guaranteed defined: validateEmployeeRows already rejected any row
-      // whose Org Node Code doesn't resolve against the database.
       const orgNodeId = orgCodeToId.get(row.orgNodeCode.toUpperCase())!
 
       const ownKey = row.employeeCode.toUpperCase()
@@ -235,15 +290,23 @@ export async function commitEmployeeRows(
         newId = result.rows[0].id
       }
       codeToId.set(ownKey, newId)
+
+      // NEW (design spec §6.4): patch the target org node's metadata.deptHead
+      // in place — jsonb_set only ever touches this one key, so any other
+      // metadata already on that node (e.g. sales-ownership fields set via
+      // DepartmentFields.tsx) survives untouched.
+      if (row.departmentHeadOf) {
+        await client.query(
+          `UPDATE hierarchy_nodes SET metadata = jsonb_set(metadata, '{deptHead}', to_jsonb($1::text)), updated_at=now()
+           WHERE domain='org' AND lower(trim(code))=lower(trim($2))`,
+          [newId, row.departmentHeadOf],
+        )
+      }
+
       progressed = true
     }
 
     if (!progressed) {
-      // Shouldn't happen: validateEmployeeRows already rejects any row whose
-      // Manager Employee Code doesn't resolve, so every create/update row
-      // here should eventually find its manager. Guards against an infinite
-      // loop rather than silently dropping rows if that invariant is ever
-      // broken (e.g. a race between preview and commit).
       throw new Error('employees commit: unable to resolve the manager chain for the remaining rows')
     }
     pending = deferred

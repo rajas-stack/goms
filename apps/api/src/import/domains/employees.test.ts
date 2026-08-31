@@ -5,6 +5,7 @@ import { summarize } from '../engine.js'
 
 describe('employees importer', () => {
   let orgNodeCode: string
+  let deptNodeCode: string
 
   beforeEach(async () => {
     // This suite runs sequentially against one shared real Postgres
@@ -36,6 +37,12 @@ describe('employees importer', () => {
       `INSERT INTO hierarchy_nodes (domain, type_key, parent_id, state_code, name, code, sort_order, metadata, status)
        VALUES ('org','department',NULL,NULL,'Org A',$1,0,'{}','active')`,
       [orgNodeCode],
+    )
+    deptNodeCode = 'DEPTA'
+    await pool.query(
+      `INSERT INTO hierarchy_nodes (domain, type_key, parent_id, state_code, name, code, sort_order, metadata, status)
+       VALUES ('org','department',NULL,NULL,'Dept A',$1,0,'{}','active')`,
+      [deptNodeCode],
     )
   })
 
@@ -144,5 +151,83 @@ describe('employees importer', () => {
         [orgNodeCode],
       ),
     ).rejects.toThrow(/duplicate key value violates unique constraint/)
+  })
+
+  it('allows a vacant employee with a blank name', async () => {
+    const rows = [{ employeeCode: 'E200', name: '', designation: 'Officer', email: '', phone: '', orgNodeCode, managerCode: null, vacant: true, status: 'active' }]
+    const preview = await validateEmployeeRows(pool, rows)
+    expect(preview[0].action).toBe('create')
+  })
+
+  it('rejects a blank name for a non-vacant employee', async () => {
+    const rows = [{ employeeCode: 'E201', name: '', designation: 'Officer', email: '', phone: '', orgNodeCode, managerCode: null, vacant: false, status: 'active' }]
+    const preview = await validateEmployeeRows(pool, rows)
+    expect(preview[0].action).toBe('reject')
+    expect(preview[0].errors[0]).toMatch(/name is required/i)
+  })
+
+  it('reclassifies a re-imported vacant row (same code/vacant/org, blank name) as unchanged', async () => {
+    const rows = [{ employeeCode: 'E202', name: '', designation: 'Officer', email: '', phone: '', orgNodeCode, managerCode: null, vacant: true, status: 'active' }]
+    await commitEmployeeRows(pool, rows, await validateEmployeeRows(pool, rows))
+    const second = await validateEmployeeRows(pool, rows)
+    expect(second[0].action).toBe('unchanged')
+  })
+
+  it('rejects a vacant employee named as another employee\'s manager', async () => {
+    const rows = [
+      { employeeCode: 'MGR1', name: '', designation: 'Manager', email: '', phone: '', orgNodeCode, managerCode: null, vacant: true, status: 'active' },
+      { employeeCode: 'E203', name: 'Report', designation: 'Officer', email: '', phone: '', orgNodeCode, managerCode: 'MGR1', vacant: false, status: 'active' },
+    ]
+    const preview = await validateEmployeeRows(pool, rows)
+    expect(preview[1].action).toBe('reject')
+    expect(preview[1].errors.join(' ')).toMatch(/vacant/i)
+  })
+
+  it('suggests a fuzzy candidate for a near-miss Org Node Code', async () => {
+    const rows = [{ employeeCode: 'E204', name: 'Jane', designation: 'Officer', email: '', phone: '', orgNodeCode: orgNodeCode.slice(0, -1), managerCode: null, vacant: false, status: 'active' }]
+    const preview = await validateEmployeeRows(pool, rows)
+    expect(preview[0].action).toBe('needs-review')
+    expect(preview[0].candidates?.[0].key).toBe(orgNodeCode)
+  })
+
+  it('assigns a department head and patches the org node\'s metadata.deptHead without wiping other keys', async () => {
+    await pool.query(`UPDATE hierarchy_nodes SET metadata='{"region":"west"}' WHERE code=$1`, [deptNodeCode])
+    const rows = [{ employeeCode: 'HEAD1', name: 'Head Person', designation: 'Head', email: '', phone: '', orgNodeCode: deptNodeCode, managerCode: null, vacant: false, status: 'active', departmentHeadOf: deptNodeCode }]
+    await commitEmployeeRows(pool, rows, await validateEmployeeRows(pool, rows))
+    const node = await pool.query(`SELECT metadata FROM hierarchy_nodes WHERE code=$1`, [deptNodeCode])
+    const employee = await pool.query(`SELECT id FROM employees WHERE code='HEAD1'`)
+    expect(node.rows[0].metadata.deptHead).toBe(employee.rows[0].id)
+    expect(node.rows[0].metadata.region).toBe('west')
+  })
+
+  it('rejects two rows in the same file naming the same department head target', async () => {
+    const rows = [
+      { employeeCode: 'HEAD2', name: 'A', designation: 'Head', email: '', phone: '', orgNodeCode: deptNodeCode, managerCode: null, vacant: false, status: 'active', departmentHeadOf: deptNodeCode },
+      { employeeCode: 'HEAD3', name: 'B', designation: 'Head', email: '', phone: '', orgNodeCode: deptNodeCode, managerCode: null, vacant: false, status: 'active', departmentHeadOf: deptNodeCode },
+    ]
+    const preview = await validateEmployeeRows(pool, rows)
+    expect(preview[1].action).toBe('reject')
+    expect(preview[1].errors.join(' ')).toMatch(/already claimed by row 1/i)
+  })
+
+  it('rejects a vacant employee named as a department head', async () => {
+    const rows = [{ employeeCode: 'HEAD4', name: '', designation: 'Head', email: '', phone: '', orgNodeCode: deptNodeCode, managerCode: null, vacant: true, status: 'active', departmentHeadOf: deptNodeCode }]
+    const preview = await validateEmployeeRows(pool, rows)
+    expect(preview[0].action).toBe('reject')
+    expect(preview[0].errors.join(' ')).toMatch(/vacant/i)
+  })
+
+  it('classifies a newly-added departmentHeadOf as update (not unchanged) even when every other field is identical, and applies it', async () => {
+    const baseline = [{ employeeCode: 'HEAD5', name: 'Existing Head', designation: 'Head', email: '', phone: '', orgNodeCode: deptNodeCode, managerCode: null, vacant: false, status: 'active', departmentHeadOf: null }]
+    await commitEmployeeRows(pool, baseline, await validateEmployeeRows(pool, baseline))
+
+    const withHeadOf = [{ ...baseline[0], departmentHeadOf: deptNodeCode }]
+    const preview = await validateEmployeeRows(pool, withHeadOf)
+    expect(preview[0].action).toBe('update')
+
+    await commitEmployeeRows(pool, withHeadOf, preview)
+    const node = await pool.query(`SELECT metadata FROM hierarchy_nodes WHERE code=$1`, [deptNodeCode])
+    const employee = await pool.query(`SELECT id FROM employees WHERE code='HEAD5'`)
+    expect(node.rows[0].metadata.deptHead).toBe(employee.rows[0].id)
   })
 })
