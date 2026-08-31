@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { classifyRows, resolveTreeReferences } from '../engine.js'
+import { classifyRows, resolveTreeReferences, findFuzzyCandidates } from '../engine.js'
 import type { ImportFieldDiff, ImportRowResult } from '../types.js'
 
 const NODE_TYPES = ['department', 'branch', 'division', 'office', 'unit'] as const
@@ -101,6 +101,9 @@ export async function validateOrgHierarchyRows(client: { query: Function }, rawR
   })
   const unresolvedIndexes = new Set(unresolved)
 
+  const allCodesInFile = new Set(rawRows.map(rawCode).filter((c) => c !== ''))
+  const candidateHaystack = new Set([...existingKeys, ...allCodesInFile])
+
   return classifyRows<unknown, ExistingOrgNode>({
     rows: rawRows,
     getBusinessKey: (raw, index) => {
@@ -130,13 +133,18 @@ export async function validateOrgHierarchyRows(client: { query: Function }, rawR
     validateRow: (raw, index) => {
       const parsed = orgHierarchyRowSchema.safeParse(raw)
       if (!parsed.success) {
-        return parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+        return { errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) }
       }
       if (unresolvedIndexes.has(index)) {
-        const parentCode = rawParentCode(raw)
-        return [`Parent Code "${parentCode}" does not match any code in this file or the existing organization hierarchy`]
+        const parentCode = rawParentCode(raw)!
+        const candidates = findFuzzyCandidates(parentCode, candidateHaystack)
+        return {
+          errors: [`Parent Code "${parentCode}" does not match any code in this file or the existing organization hierarchy`],
+          needsReview: candidates.length > 0,
+          candidates: candidates.length > 0 ? candidates : undefined,
+        }
       }
-      return []
+      return { errors: [] }
     },
   })
 }

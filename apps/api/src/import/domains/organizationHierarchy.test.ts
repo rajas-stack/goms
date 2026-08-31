@@ -148,4 +148,15 @@ describe('organizationHierarchy importer', () => {
       ),
     ).rejects.toThrow(/duplicate key value violates unique constraint/)
   })
+
+  it('suggests a fuzzy candidate for a near-miss Parent Code', async () => {
+    await pool.query(
+      `INSERT INTO hierarchy_nodes (domain, type_key, parent_id, state_code, name, code, sort_order, metadata, status)
+       VALUES ('org','division',NULL,NULL,'Trans Division','TRAFDIV',0,'{}','active')`,
+    )
+    const rows = [{ nodeType: 'department', name: 'Traffic Dept', code: 'NEWDEPT9', parentCode: 'TRAFDIB', stateCode: null, status: 'active' }]
+    const preview = await validateOrgHierarchyRows(pool, rows)
+    expect(preview[0].action).toBe('needs-review')
+    expect(preview[0].candidates?.[0].key).toBe('TRAFDIV')
+  })
 })
