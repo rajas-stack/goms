@@ -6,32 +6,61 @@
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { AppRouter } from '../../../apps/api/src/index'
-import type { ImportDomainKey, ImportRowResult, ImportSummary } from '../../../apps/api/src/import/types'
+import type { ImportAction, ImportDomainKey, ImportRowResult, ImportSummary } from '../../../apps/api/src/import/types'
 
 const adminImportClient = createTRPCClient<AppRouter>({
   links: [httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc` })],
 }).adminImport
 
-// tRPC's vanilla client is a Proxy whose `.query`/`.mutate` terminals only
-// exist via a `get` trap — `Object.getOwnPropertyDescriptor` (what
-// `vi.spyOn` needs) returns undefined for them, so tests can't spy on
-// `adminImportClient.listDomains.query` directly. Wrapping every call in a
-// plain object of real, own-property functions makes this module testable
-// with ordinary `vi.spyOn(adminImportApi, 'listDomains')`.
+export type SpreadsheetDomainKey = Exclude<ImportDomainKey, 'geography'>
+export type ImportRow = Record<string, unknown>
+export type ImportRows = ImportRow[] | Record<string, ImportRow[]>
+export type ImportPreview = ImportRowResult[] | Record<string, ImportRowResult[]>
+
+export interface SessionDomainPreview {
+  domain: SpreadsheetDomainKey
+  preview: ImportPreview
+}
+
+export interface SessionValidateOutput {
+  domainOrder: SpreadsheetDomainKey[]
+  previews: SessionDomainPreview[]
+  summary: ImportSummary
+  sessionCommitToken: string
+}
+
+export interface ExcludedRow {
+  domain: SpreadsheetDomainKey
+  rowNumber: number
+  /** Human-readable sheet label, kept for display only. */
+  sheet?: string
+  /** The multi-sheet domain's internal key ('persons', 'verticals', ...) —
+   *  what the server (Task 7's `runSessionCommit`/`applyExclusions`) actually
+   *  matches on to find and remove the row. Undefined for a single-array
+   *  domain. Sent to the backend as-is; its own `ExcludedRow` (Task 6)
+   *  carries the identical field for the identical reason. */
+  sheetKey?: string
+  businessKey: string
+  reason: string
+}
+
+export interface SessionCommitOutput {
+  sessionId: string
+  summary: ImportSummary
+}
+
 export const adminImportApi = {
   listDomains: () => adminImportClient.listDomains.query(),
-  validate: (input: { domain: SpreadsheetDomainKey; rows: ImportRows }) => adminImportClient.validate.mutate(input),
-  commit: (input: { domain: SpreadsheetDomainKey; commitToken: string; rows: ImportRows }) => adminImportClient.commit.mutate(input),
+  validateSession: (input: { domains: Partial<Record<SpreadsheetDomainKey, ImportRows>> }) =>
+    adminImportClient.session.validate.mutate(input),
+  commitSession: (input: { domains: Partial<Record<SpreadsheetDomainKey, ImportRows>>; sessionCommitToken: string; excludedRows: ExcludedRow[] }) =>
+    adminImportClient.session.commit.mutate(input),
+  sessionHistory: (sessionId: string) => adminImportClient.session.history.query({ sessionId }),
   previewGeographyLoad: () => adminImportClient.previewGeographyLoad.mutate(),
   commitGeographyLoad: (input: { commitToken: string }) => adminImportClient.commitGeographyLoad.mutate(input),
 }
 
-export type { ImportDomainKey, ImportRowResult, ImportSummary }
-
-/** Every domain that goes through the generic spreadsheet validate/commit
- *  pair. Geography is excluded by design — it has no uploaded rows at all
- *  and uses its own previewGeographyLoad/commitGeographyLoad procedures. */
-export type SpreadsheetDomainKey = Exclude<ImportDomainKey, 'geography'>
+export type { ImportAction, ImportDomainKey, ImportRowResult, ImportSummary }
 
 export type DependencyStatus = 'ready' | { blockedOn: ImportDomainKey[] }
 
@@ -42,20 +71,28 @@ export interface DomainListEntry {
   dependencyStatus: DependencyStatus
 }
 
-// Most domains submit/receive a flat row array; the 3 multi-sheet domains
-// (commercialMastersFlat, commercialMastersCatalog, salesRoster) submit a
-// { sheetKey: rows[] } dictionary instead — matches
-// apps/api/src/routers/adminImport.ts's ADAPTERS map exactly.
-export type ImportRow = Record<string, unknown>
-export type ImportRows = ImportRow[] | Record<string, ImportRow[]>
-export type ImportPreview = ImportRowResult[] | Record<string, ImportRowResult[]>
-
-/** Flattens either preview shape into one row list for display, tagging
- *  each row with its sheet name (if not already tagged by the domain
- *  module itself, e.g. Sales Roster/Catalog already set `.sheet`). */
-export function flattenPreview(preview: ImportPreview): ImportRowResult[] {
+/** Flattens one domain's own preview shape (flat array, or a `{sheetKey:
+ *  rows[]}` dict for a multi-sheet domain) into one row list. `sheet` is
+ *  kept human-readable for display exactly like the old single-domain
+ *  wizard did (falling back to the raw internal key only when an adapter
+ *  didn't set its own `.sheet` label, e.g. commercialMastersCatalog/Flat).
+ *  `sheetKey` is a SEPARATE field carrying the raw internal key
+ *  unconditionally (never the human label) — Task 22's exclusion flow needs
+ *  an unambiguous key to route a "remove this row" instruction back to the
+ *  right array, and `sheet` alone isn't reliably that (salesRoster sets a
+ *  human title on `.sheet`; catalog/flat don't set it at all). */
+function flattenPreview(preview: ImportPreview): (ImportRowResult & { sheetKey?: string })[] {
   if (Array.isArray(preview)) return preview
-  return Object.entries(preview).flatMap(([sheet, rows]) => rows.map((r) => ({ sheet: r.sheet ?? sheet, ...r })))
+  return Object.entries(preview).flatMap(([sheetKey, rows]) => rows.map((r) => ({ ...r, sheet: r.sheet ?? sheetKey, sheetKey })))
+}
+
+/** Flattens every domain's preview in a session into one combined row list,
+ *  additionally tagging each row with which domain it belongs to — a
+ *  session covers several domains at once, unlike the old per-domain
+ *  wizard's flattenPreview, which only ever needed to distinguish sheets
+ *  within one domain. */
+export function flattenSessionPreview(previews: SessionDomainPreview[]): (ImportRowResult & { domain: SpreadsheetDomainKey; sheetKey?: string })[] {
+  return previews.flatMap(({ domain, preview }) => flattenPreview(preview).map((r) => ({ ...r, domain })))
 }
 
 const qk = {
@@ -65,18 +102,18 @@ const qk = {
 export const useAdminImportDomains = () =>
   useQuery({ queryKey: qk.domains, queryFn: () => adminImportApi.listDomains() as Promise<DomainListEntry[]> })
 
-export function useValidateImport() {
+export function useValidateSession() {
   return useMutation({
-    mutationFn: (input: { domain: SpreadsheetDomainKey; rows: ImportRows }) =>
-      adminImportApi.validate(input) as Promise<{ preview: ImportPreview; summary: ImportSummary; commitToken: string }>,
+    mutationFn: (input: { domains: Partial<Record<SpreadsheetDomainKey, ImportRows>> }) =>
+      adminImportApi.validateSession(input) as Promise<SessionValidateOutput>,
   })
 }
 
-export function useCommitImport() {
+export function useCommitSession() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (input: { domain: SpreadsheetDomainKey; commitToken: string; rows: ImportRows }) =>
-      adminImportApi.commit(input) as Promise<{ summary: ImportSummary }>,
+    mutationFn: (input: { domains: Partial<Record<SpreadsheetDomainKey, ImportRows>>; sessionCommitToken: string; excludedRows: ExcludedRow[] }) =>
+      adminImportApi.commitSession(input) as Promise<SessionCommitOutput>,
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.domains }),
   })
 }
