@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { SALES_TIERS, tierRank } from '@goms/domain'
-import { classifyRows, resolveTreeReferences } from '../engine.js'
+import { classifyRows, resolveTreeReferences, findFuzzyCandidates } from '../engine.js'
 import type { ImportFieldDiff, ImportRowResult } from '../types.js'
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -91,10 +91,15 @@ function validatePersonRows(rawRows: unknown[], existingByKey: Map<string, Exist
     diffFields: (raw, existing) => diffPerson(salesPersonRowSchema.parse(raw), existing),
     validateRow: (raw) => {
       const parsed = salesPersonRowSchema.safeParse(raw)
-      if (parsed.success) return []
-      return parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+      if (parsed.success) return { errors: [] }
+      return { errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) }
     },
   })
+}
+
+async function fetchVacantEmployeeEmails(client: { query: Function }): Promise<Set<string>> {
+  const result = await client.query(`SELECT email FROM employees WHERE vacant=true AND email <> ''`)
+  return new Set<string>(result.rows.map((r: { email: string }) => normalizeEmail(r.email)))
 }
 
 // ---------------------------------------------------------------------------
@@ -197,6 +202,7 @@ function validatePostingRows(
   rawRows: unknown[],
   resolvablePersonEmails: Set<string>,
   existingByKey: Map<string, ExistingPosting>,
+  vacantEmployeeEmails: Set<string>,
 ): ImportRowResult[] {
   // Pass 1: schema/required/Tier-Key/Sales-Person-Email validation and
   // within-file duplicate detection via the generic engine. `existingByKey`
@@ -216,16 +222,20 @@ function validatePostingRows(
     diffFields: () => [],
     validateRow: (raw) => {
       const parsed = salesPostingRowSchema.safeParse(raw)
-      if (!parsed.success) return parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+      if (!parsed.success) return { errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) }
       const row = parsed.data
       const errors: string[] = []
+      let candidates: { key: string; score: number }[] | undefined
       if (!TIER_KEYS.has(row.tierKey)) {
         errors.push(`Tier Key "${row.tierKey}" is not a recognized tier key (must be one of: ${Array.from(TIER_KEYS).join(', ')})`)
       }
-      if (!resolvablePersonEmails.has(normalizeEmail(row.salesPersonEmail))) {
+      const email = normalizeEmail(row.salesPersonEmail)
+      if (!resolvablePersonEmails.has(email)) {
+        const suggestions = findFuzzyCandidates(email, resolvablePersonEmails)
+        if (suggestions.length > 0) candidates = suggestions
         errors.push(`no such sales person for Sales Person Email: ${row.salesPersonEmail}`)
       }
-      return errors
+      return { errors, needsReview: (candidates?.length ?? 0) > 0, candidates }
     },
   })
 
@@ -260,10 +270,25 @@ function validatePostingRows(
 
     if (unresolvedManagerIndexes.has(index)) {
       const raw = rawRows[index] as Record<string, unknown>
-      return { ...result, action: 'reject', diff: undefined, errors: [`no such sales person for Manager Email: ${String(raw.managerEmail)}`] }
+      const managerEmail = normalizeEmail(String(raw.managerEmail))
+      const suggestions = findFuzzyCandidates(managerEmail, resolvablePersonEmails)
+      return {
+        ...result,
+        action: suggestions.length > 0 ? 'needs-review' : 'reject',
+        diff: undefined,
+        candidates: suggestions.length > 0 ? suggestions : undefined,
+        errors: [`no such sales person for Manager Email: ${String(raw.managerEmail)}`],
+      }
     }
 
     const row = salesPostingRowSchema.parse(rawRows[index])
+    if (row.managerEmail && vacantEmployeeEmails.has(normalizeEmail(row.managerEmail))) {
+      return {
+        ...result, action: 'reject', diff: undefined,
+        errors: [`Manager Email "${row.managerEmail}" matches a vacant employee's email, which cannot supervise anyone`],
+      }
+    }
+
     const existing = existingByKey.get(result.businessKey)
     if (!existing) return result // genuinely new posting: stays 'create'
 
@@ -298,7 +323,8 @@ export async function validateSalesRosterRows(
 
   const existingPostingsByPerson = await fetchExistingPostingsByPerson(client)
   const existingPostingsByKey = flattenExistingPostingsByKey(existingPostingsByPerson)
-  const postingsPreview = validatePostingRows(input.postings, resolvablePersonEmails, existingPostingsByKey)
+  const vacantEmployeeEmails = await fetchVacantEmployeeEmails(client)
+  const postingsPreview = validatePostingRows(input.postings, resolvablePersonEmails, existingPostingsByKey, vacantEmployeeEmails)
 
   return {
     persons: personsPreview.map((r) => ({ ...r, sheet: 'Sales Persons' })),

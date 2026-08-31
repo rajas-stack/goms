@@ -15,6 +15,11 @@ describe('salesRoster importer', () => {
     await pool.query(`DELETE FROM commercial_boq_line_items`)
     await pool.query(`DELETE FROM commercial_boqs`)
     await pool.query(`DELETE FROM sales_persons`)
+    // employees.org_node_id is ON DELETE RESTRICT into hierarchy_nodes — clear
+    // employees before this file's own vacant-manager test clears its
+    // domain='org' fixture node, so repeated runs don't collide on a
+    // leftover 'VMGR' employee code.
+    await pool.query(`DELETE FROM employees`)
   })
 
   it('rejects a posting with a Tier Key not in SALES_TIERS', async () => {
@@ -123,5 +128,35 @@ describe('salesRoster importer', () => {
        WHERE per.official_email='rep@amnex.com'`,
     )).rows[0]
     expect(rep.manager_email).toBe('mgr@amnex.com')
+  })
+
+  it('suggests a fuzzy candidate for a near-miss Sales Person Email on a posting', async () => {
+    const persons = [{ officialEmail: 'jane.doe@example.com', name: 'Jane Doe', personalEmail: '', mobile: '', altMobile: '', joinedOn: null, status: 'active' }]
+    const postings = [{ salesPersonEmail: 'jane.doee@example.com', designation: 'RM', tierKey: 'rm', managerEmail: null, office: '', startDate: '2026-01-01', reason: '' }]
+    const preview = await validateSalesRosterRows(pool, { persons, postings })
+    expect(preview.postings[0].action).toBe('needs-review')
+    expect(preview.postings[0].candidates?.[0].key).toBe('jane.doe@example.com')
+  })
+
+  it('rejects a sales posting whose Manager Email matches a vacant employee\'s email', async () => {
+    await pool.query(`DELETE FROM hierarchy_nodes WHERE domain='org'`)
+    const orgNode = await pool.query(
+      `INSERT INTO hierarchy_nodes (domain, type_key, parent_id, state_code, name, code, sort_order, metadata, status)
+       VALUES ('org','department',NULL,NULL,'Sales Org','SALESORG',0,'{}','active') RETURNING id`,
+    )
+    await pool.query(
+      `INSERT INTO employees (code, name, designation, email, org_node_id, vacant) VALUES ('VMGR','','Manager','vacant.manager@example.com',$1,true)`,
+      [orgNode.rows[0].id],
+    )
+    const persons = [
+      { officialEmail: 'vacant.manager@example.com', name: 'Vacant Manager', personalEmail: '', mobile: '', altMobile: '', joinedOn: null, status: 'active' },
+      { officialEmail: 'report@example.com', name: 'Report', personalEmail: '', mobile: '', altMobile: '', joinedOn: null, status: 'active' },
+    ]
+    const postings = [
+      { salesPersonEmail: 'report@example.com', designation: 'RM', tierKey: 'rm', managerEmail: 'vacant.manager@example.com', office: '', startDate: '2026-01-01', reason: '' },
+    ]
+    const preview = await validateSalesRosterRows(pool, { persons, postings })
+    expect(preview.postings[0].action).toBe('reject')
+    expect(preview.postings[0].errors.join(' ')).toMatch(/vacant/i)
   })
 })
