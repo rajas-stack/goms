@@ -84,6 +84,15 @@ resource "google_cloud_run_v2_service" "goms_api" {
         name  = "ADMIN_IMPORT_ENABLED"
         value = "true"
       }
+      # Lets a local frontend dev server (Task 28's Playwright lineage walk)
+      # call this goms-dev API directly instead of through a hosted frontend
+      # origin — apps/api/src/app.ts's DEFAULT_ALLOWED_ORIGINS only covers
+      # localhost:5173, which may already be running a different local dev
+      # server. goms-dev only; goms-prod's CORS allow-list is untouched.
+      env {
+        name  = "CORS_ALLOWED_ORIGINS"
+        value = "http://localhost:5190"
+      }
     }
   }
 }
