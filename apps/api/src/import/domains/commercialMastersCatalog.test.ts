@@ -115,4 +115,12 @@ describe('commercialMastersCatalog importer', () => {
     expect(after.rows[0].parent_id).toBe(verticalBefore.rows[0].id)
     expect(after.rows[0].parent_id).not.toBeNull()
   })
+
+  it('suggests a fuzzy candidate for a near-miss Parent Code on a Products row', async () => {
+    const verticals = [{ code: 'VERT1', name: 'Vertical One', description: '', active: true, displayOrder: 0, parentCode: null }]
+    const products = [{ code: 'PROD1', name: 'Product One', description: '', active: true, displayOrder: 0, parentCode: 'VERT2' }]
+    const preview = await validateCatalogRows(pool, { verticals, products, modules: [], features: [] })
+    expect(preview.products[0].action).toBe('needs-review')
+    expect(preview.products[0].candidates?.[0].key).toBe('VERT1')
+  })
 })

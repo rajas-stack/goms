@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { classifyRows, resolveTreeReferences } from '../engine.js'
+import { classifyRows, resolveTreeReferences, findFuzzyCandidates } from '../engine.js'
 import type { ImportFieldDiff, ImportRowResult } from '../types.js'
 
 /** The four sheets of one workbook (spec §"5. Commercial Masters — Catalog
@@ -222,12 +222,14 @@ function classifySheet(
     validateRow: (raw, index) => {
       const parsed = schema.safeParse(raw)
       const errors = parsed.success ? [] : parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+      let candidates: { key: string; score: number }[] | undefined
       if (unresolvedParents.has(index)) {
         const parentLabel = PARENT_LABEL[kind as Exclude<CatalogKind, 'verticals'>]
         const code = safeParentCode(raw)
+        if (code && validParentCodes) candidates = findFuzzyCandidates(code, validParentCodes)
         errors.push(`No such ${parentLabel} code: ${code ?? '(blank)'}`)
       }
-      return errors
+      return { errors, needsReview: (candidates?.length ?? 0) > 0, candidates: candidates?.length ? candidates : undefined }
     },
   })
 }
