@@ -68,3 +68,7 @@ tfplan
 *.tfplan
 tfplan.json
 
+# Generated admin-import lineage-matrix fixture workbooks (build output of
+# `npm run build-import-fixtures`, not source).
+scripts/admin-import-fixtures/out/
+

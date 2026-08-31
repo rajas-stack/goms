@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:component": "vitest run --config vitest.component.config.ts",
-    "seed:import": "tsx scripts/seed-import.ts"
+    "seed:import": "tsx scripts/seed-import.ts",
+    "build-import-fixtures": "tsx scripts/admin-import-fixtures/build-fixtures.ts"
   },
   "dependencies": {
     "@capacitor/android": "^8.4.2",
