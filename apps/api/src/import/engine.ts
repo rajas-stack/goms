@@ -66,6 +66,7 @@ export function summarize(rows: ImportRowResult[]): ImportSummary {
     toCreate: rows.filter((r) => r.action === 'create').length,
     toUpdate: rows.filter((r) => r.action === 'update').length,
     unchanged: rows.filter((r) => r.action === 'unchanged').length,
+    needsReview: rows.filter((r) => r.action === 'needs-review').length,
     rejected: rows.filter((r) => r.action === 'reject').length,
     total: rows.length,
   }

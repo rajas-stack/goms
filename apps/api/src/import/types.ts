@@ -3,12 +3,17 @@ export type ImportDomainKey =
   | 'commercialMastersCatalog' | 'organizationHierarchy' | 'employees'
   | 'salesRoster' | 'skus' | 'bom' | 'geography'
 
-export type ImportAction = 'create' | 'update' | 'unchanged' | 'reject'
+export type ImportAction = 'create' | 'update' | 'unchanged' | 'needs-review' | 'reject'
 
 export interface ImportFieldDiff {
   field: string
   oldValue: unknown
   newValue: unknown
+}
+
+export interface FuzzyCandidate {
+  key: string
+  score: number
 }
 
 export interface ImportRowResult {
@@ -20,7 +25,11 @@ export interface ImportRowResult {
   action: ImportAction
   /** Present only when action === 'update'. */
   diff?: ImportFieldDiff[]
-  /** Present only when action === 'reject'; empty array otherwise. */
+  /** Present only when action === 'needs-review'. */
+  candidates?: FuzzyCandidate[]
+  /** Set only by the session commit path when a row was explicitly excluded, never by validate. */
+  excludeReason?: string
+  /** Present only when action === 'reject' or 'needs-review'; empty array otherwise. */
   errors: string[]
 }
 
@@ -28,6 +37,7 @@ export interface ImportSummary {
   toCreate: number
   toUpdate: number
   unchanged: number
+  needsReview: number
   rejected: number
   total: number
 }

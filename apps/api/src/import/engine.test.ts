@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { classifyRows, resolveTreeReferences, summarize, computeCommitToken, verifyCommitToken, MAX_IMPORT_ROWS } from './engine.js'
+import type { ImportRowResult } from './types.js'
 
 describe('classifyRows', () => {
   type Row = { code: string; name: string }
@@ -59,7 +60,18 @@ describe('summarize', () => {
       { rowNumber: 3, businessKey: 'c', action: 'unchanged' as const, errors: [] },
       { rowNumber: 4, businessKey: 'd', action: 'reject' as const, errors: ['bad'] },
     ]
-    expect(summarize(rows)).toEqual({ toCreate: 1, toUpdate: 1, unchanged: 1, rejected: 1, total: 4 })
+    expect(summarize(rows)).toEqual({ toCreate: 1, toUpdate: 1, unchanged: 1, needsReview: 0, rejected: 1, total: 4 })
+  })
+
+  it('counts needs-review rows separately from rejected', () => {
+    const rows: ImportRowResult[] = [
+      { rowNumber: 1, businessKey: 'A', action: 'needs-review', candidates: [{ key: 'A1', score: 0.8 }], errors: ['ambiguous'] },
+      { rowNumber: 2, businessKey: 'B', action: 'reject', errors: ['no such code'] },
+    ]
+    const summary = summarize(rows)
+    expect(summary.needsReview).toBe(1)
+    expect(summary.rejected).toBe(1)
+    expect(summary.total).toBe(2)
   })
 })
 
