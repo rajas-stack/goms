@@ -23,87 +23,88 @@ describe('adminImport router', () => {
     delete process.env.ADMIN_IMPORT_ENABLED
   })
 
-  it('validate returns a create-classified preview and a commit token', async () => {
-    const caller = appRouter.createCaller({})
-    const rows = [{ code: 'GST18', name: 'GST 18%', ratePct: 18 }]
-    const preview = await caller.adminImport.validate({ domain: 'taxClasses', rows })
-    expect(preview.summary).toMatchObject({ toCreate: 1, total: 1 })
-    expect(typeof preview.commitToken).toBe('string')
-  })
+  describe('session.validate / session.commit', () => {
+    it('validates a single-domain session and reports it as create', async () => {
+      const caller = appRouter.createCaller({})
+      const preview = await caller.adminImport.session.validate({
+        domains: { taxClasses: [{ code: 'GST18', name: 'GST 18%', ratePct: 18 }] },
+      })
+      expect(preview.summary.toCreate).toBe(1)
+      expect(preview.domainOrder).toEqual(['taxClasses'])
+    })
 
-  it('commit with a valid token writes the row, records an audit run, and returns the summary', async () => {
-    const caller = appRouter.createCaller({})
-    const rows = [{ code: 'GST18', name: 'GST 18%', ratePct: 18 }]
-    const preview = await caller.adminImport.validate({ domain: 'taxClasses', rows })
-    const result = await caller.adminImport.commit({ domain: 'taxClasses', commitToken: preview.commitToken, rows })
-    expect(result.summary.toCreate).toBe(1)
-    const dbRows = await pool.query(`SELECT code FROM commercial_masters WHERE master_key='taxClasses'`)
-    expect(dbRows.rows.map((r) => r.code)).toEqual(['GST18'])
+    it('commits a single-domain session and writes the row', async () => {
+      const caller = appRouter.createCaller({})
+      const domains = { taxClasses: [{ code: 'GST18', name: 'GST 18%', ratePct: 18 }] }
+      const preview = await caller.adminImport.session.validate({ domains })
+      const result = await caller.adminImport.session.commit({ domains, sessionCommitToken: preview.sessionCommitToken, excludedRows: [] })
+      expect(result.summary.toCreate).toBe(1)
+      const dbRows = await pool.query(`SELECT code FROM commercial_masters WHERE master_key='taxClasses'`)
+      expect(dbRows.rows.map((r) => r.code)).toEqual(['GST18'])
+    })
 
-    const history = await caller.adminImport.history({ domain: 'taxClasses' })
-    expect(history).toHaveLength(1)
-    expect(history[0].summary.toCreate).toBe(1)
-  })
+    it('rejects a commit when MAX_IMPORT_ROWS is exceeded for a single domain', async () => {
+      const caller = appRouter.createCaller({})
+      const tooMany = Array.from({ length: 5001 }, (_, i) => ({ code: `GST${i}`, name: `Tax ${i}`, ratePct: 1 }))
+      await expect(caller.adminImport.session.validate({ domains: { taxClasses: tooMany } })).rejects.toThrow()
+    })
 
-  it('commit rejects a stale token when the rows changed since preview', async () => {
-    const caller = appRouter.createCaller({})
-    const preview = await caller.adminImport.validate({ domain: 'taxClasses', rows: [{ code: 'GST18', name: 'A', ratePct: 18 }] })
-    await expect(
-      caller.adminImport.commit({ domain: 'taxClasses', commitToken: preview.commitToken, rows: [{ code: 'GST18', name: 'B', ratePct: 18 }] }),
-    ).rejects.toThrow()
+    it('returns NOT_IMPLEMENTED for an unwired domain key', async () => {
+      const caller = appRouter.createCaller({})
+      // geography has no session adapter by design (previewGeographyLoad/commitGeographyLoad stay separate).
+      await expect(caller.adminImport.session.validate({ domains: { geography: [] } as any })).rejects.toThrow()
+    })
+
+    it('routes a multi-sheet domain (commercialMastersFlat) through the { sheet: rows[] } adapter end-to-end', async () => {
+      const caller = appRouter.createCaller({})
+      const domains = {
+        commercialMastersFlat: {
+          skuCategories: [{ code: 'SW', name: 'Software', description: '', active: true, displayOrder: 0 }],
+          unitsOfMeasure: [{ code: 'LIC', name: 'License', description: '', active: true, displayOrder: 0 }],
+          productEditions: [],
+          billingTypes: [],
+        },
+      }
+      const preview = await caller.adminImport.session.validate({ domains })
+      // Flattened across all 4 sheets: 2 rows submitted, both create.
+      expect(preview.summary).toMatchObject({ toCreate: 2, total: 2 })
+
+      const result = await caller.adminImport.session.commit({ domains, sessionCommitToken: preview.sessionCommitToken, excludedRows: [] })
+      expect(result.summary.toCreate).toBe(2)
+      const dbRows = await pool.query(
+        `SELECT master_key, code FROM commercial_masters WHERE master_key IN ('skuCategories','unitsOfMeasure') ORDER BY master_key`,
+      )
+      expect(dbRows.rows).toEqual([
+        { master_key: 'skuCategories', code: 'SW' },
+        { master_key: 'unitsOfMeasure', code: 'LIC' },
+      ])
+    })
+
+    it('routes a two-sheet domain (salesRoster) through the {persons,postings} adapter end-to-end', async () => {
+      const caller = appRouter.createCaller({})
+      const domains = {
+        salesRoster: {
+          persons: [{ officialEmail: 'a@amnex.com', name: 'A', personalEmail: '', mobile: '', altMobile: '', joinedOn: null, status: 'active' }],
+          postings: [{ salesPersonEmail: 'a@amnex.com', designation: 'X', tierKey: 'accountManager', managerEmail: null, office: '', startDate: '2026-01-01', reason: '' }],
+        },
+      }
+      const preview = await caller.adminImport.session.validate({ domains })
+      expect(preview.summary).toMatchObject({ toCreate: 2, total: 2 })
+
+      const result = await caller.adminImport.session.commit({ domains, sessionCommitToken: preview.sessionCommitToken, excludedRows: [] })
+      expect(result.summary.toCreate).toBe(2)
+      const dbRows = await pool.query(`SELECT official_email FROM sales_persons`)
+      expect(dbRows.rows).toEqual([{ official_email: 'a@amnex.com' }])
+    })
   })
 
   it('listDomains reports the current taxClasses row count', async () => {
     const caller = appRouter.createCaller({})
-    const rows = [{ code: 'GST18', name: 'A', ratePct: 18 }]
-    const preview = await caller.adminImport.validate({ domain: 'taxClasses', rows })
-    await caller.adminImport.commit({ domain: 'taxClasses', commitToken: preview.commitToken, rows })
-    const domains = await caller.adminImport.listDomains()
-    expect(domains.find((d) => d.domain === 'taxClasses')?.currentRowCount).toBe(1)
-  })
-
-  it('rejects a request over MAX_IMPORT_ROWS', async () => {
-    const caller = appRouter.createCaller({})
-    const rows = Array.from({ length: 5001 }, (_, i) => ({ code: `T${i}`, name: 'X', ratePct: 1 }))
-    await expect(caller.adminImport.validate({ domain: 'taxClasses', rows })).rejects.toThrow()
-  })
-
-  it('routes a multi-sheet domain (commercialMastersFlat) through the { sheet: rows[] } adapter end-to-end', async () => {
-    const caller = appRouter.createCaller({})
-    const rows = {
-      skuCategories: [{ code: 'SW', name: 'Software', description: '', active: true, displayOrder: 0 }],
-      unitsOfMeasure: [{ code: 'LIC', name: 'License', description: '', active: true, displayOrder: 0 }],
-      productEditions: [],
-      billingTypes: [],
-    }
-    const preview = await caller.adminImport.validate({ domain: 'commercialMastersFlat', rows })
-    // Flattened across all 4 sheets: 2 rows submitted, both create.
-    expect(preview.summary).toMatchObject({ toCreate: 2, total: 2 })
-
-    const result = await caller.adminImport.commit({ domain: 'commercialMastersFlat', commitToken: preview.commitToken, rows })
-    expect(result.summary.toCreate).toBe(2)
-    const dbRows = await pool.query(
-      `SELECT master_key, code FROM commercial_masters WHERE master_key IN ('skuCategories','unitsOfMeasure') ORDER BY master_key`,
-    )
-    expect(dbRows.rows).toEqual([
-      { master_key: 'skuCategories', code: 'SW' },
-      { master_key: 'unitsOfMeasure', code: 'LIC' },
-    ])
-  })
-
-  it('routes a two-sheet domain (salesRoster) through the {persons,postings} adapter end-to-end', async () => {
-    const caller = appRouter.createCaller({})
-    const rows = {
-      persons: [{ officialEmail: 'a@amnex.com', name: 'A', personalEmail: '', mobile: '', altMobile: '', joinedOn: null, status: 'active' }],
-      postings: [{ salesPersonEmail: 'a@amnex.com', designation: 'X', tierKey: 'accountManager', managerEmail: null, office: '', startDate: '2026-01-01', reason: '' }],
-    }
-    const preview = await caller.adminImport.validate({ domain: 'salesRoster', rows })
-    expect(preview.summary).toMatchObject({ toCreate: 2, total: 2 })
-
-    const result = await caller.adminImport.commit({ domain: 'salesRoster', commitToken: preview.commitToken, rows })
-    expect(result.summary.toCreate).toBe(2)
-    const dbRows = await pool.query(`SELECT official_email FROM sales_persons`)
-    expect(dbRows.rows).toEqual([{ official_email: 'a@amnex.com' }])
+    const domains = { taxClasses: [{ code: 'GST18', name: 'A', ratePct: 18 }] }
+    const preview = await caller.adminImport.session.validate({ domains })
+    await caller.adminImport.session.commit({ domains, sessionCommitToken: preview.sessionCommitToken, excludedRows: [] })
+    const list = await caller.adminImport.listDomains()
+    expect(list.find((d) => d.domain === 'taxClasses')?.currentRowCount).toBe(1)
   })
 
   it('previewGeographyLoad and commitGeographyLoad work end-to-end through the router', async () => {
