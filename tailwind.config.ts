@@ -52,6 +52,23 @@ export default {
       animation: {
         'fade-in': 'fade-in 0.3s ease both',
       },
+      // Black custom cursors for the handful of shapes this app actually
+      // uses (grepped every `cursor-*` class site — pointer/grab/grabbing/
+      // not-allowed/col-resize/default cover all of them). Every value keeps
+      // its native keyword as the final fallback, so a failed asset load, an
+      // older browser, or a forced-colors/high-contrast session all still
+      // get the correct native shape rather than an invisible cursor. Text
+      // selection and every other native shape are deliberately left
+      // untouched — not used anywhere in this codebase today, and an I-beam
+      // is too thin to meaningfully recolor at cursor scale.
+      cursor: {
+        default: 'url(/cursors/default.svg) 4 4, default',
+        pointer: 'url(/cursors/pointer.svg) 8 3, pointer',
+        grab: 'url(/cursors/grab.svg) 12 12, grab',
+        grabbing: 'url(/cursors/grabbing.svg) 12 12, grabbing',
+        'not-allowed': 'url(/cursors/not-allowed.svg) 12 12, not-allowed',
+        'col-resize': 'url(/cursors/col-resize.svg) 12 12, col-resize',
+      },
     },
   },
   plugins: [],

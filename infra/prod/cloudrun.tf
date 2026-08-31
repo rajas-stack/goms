@@ -76,7 +76,31 @@ resource "google_cloud_run_v2_service" "goms_api" {
     }
 
     containers {
+      # `:bootstrap` currently resolves to the same image that was pinned by
+      # digest (sha256:eced021...) to deploy the dist/import/data/*.json
+      # packaging fix (tsc alone never copied the bundled geography JSON
+      # files into dist/, so previewGeographyLoad 500'd) — both the digest
+      # push and this tag push happened together, so this is a no-op
+      # image-wise. Kept as a floating tag for structural parity with dev
+      # until a real dev-to-prod promotion pipeline exists (see the header
+      # comment at the top of this file).
       image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:bootstrap"
+      # This service is only ever reached through Firebase Hosting's
+      # `/api/**` rewrite (firebase.json), which arrives from a Google
+      # front-end address and carries CDN addresses in X-Forwarded-For. Without
+      # this, Fastify's per-IP rate limiter keys every visitor onto the same
+      # bucket. `firebase-hosting` makes the limiter read Fastly-Client-IP
+      # instead — see apps/api/src/client-ip.ts.
+      env {
+        name  = "TRUST_PROXY"
+        value = "firebase-hosting"
+      }
+      # ADMIN_IMPORT_ENABLED was set to "true" temporarily on 2026-08-27 to
+      # run the one-time reference-data load (scripts/prod-reference-
+      # import.ts), then removed again immediately after — see the temporary
+      # drift register's Admin Data Import entry for the full record. Stays
+      # unset here permanently until real auth exists per
+      # docs/superpowers/plans/2026-08-27-goms-prod-admin-import-enablement-plan.md.
       env {
         name = "DATABASE_URL"
         value_source {

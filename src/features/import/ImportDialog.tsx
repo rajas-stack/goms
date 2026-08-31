@@ -11,7 +11,22 @@ import { useEmployeeMutations, useNodeMutations, useOrgRoots, usePostingNodes, u
 import { useFormDraft } from '@/lib/useFormDraft'
 import { downloadCsv, toCsv } from '@/lib/csv'
 import { childTypesOf } from '@/lib/node-types'
+import { workbookToCsv } from './workbookToCsv'
 import type { ImportChildRow, ImportEmployeeRow } from '@/data/repository'
+
+const SPREADSHEET_EXTENSIONS = ['.xlsx', '.xls'] as const
+
+/** `File.arrayBuffer()` is missing from jsdom's `Blob` (works fine in a real
+ *  browser, but silently routes test code into its own catch branch) — use
+ *  `FileReader` instead, matching `SessionImportWizard.tsx`'s own helper. */
+function readAsArrayBuffer(file: File): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as ArrayBuffer)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsArrayBuffer(file)
+  })
+}
 
 type Mode = 'nodes' | 'employees'
 
@@ -165,9 +180,15 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
     const f = e.target.files?.[0]
     if (!f) return
     setFileName(f.name)
+    const isSpreadsheet = SPREADSHEET_EXTENSIONS.some((ext) => f.name.toLowerCase().endsWith(ext))
     // Row 1 is dropped as the header; the rest is kept verbatim so `parseRows`
     // stays the only thing that decides what the columns mean.
-    f.text().then((text) => setRaw(text.split(/\r?\n/).slice(1).join('\n')))
+    const text = isSpreadsheet
+      ? readAsArrayBuffer(f).then(workbookToCsv)
+      : f.text()
+    text
+      .then((t) => setRaw(t.split(/\r?\n/).slice(1).join('\n')))
+      .catch(() => toast(`Could not read "${f.name}" — is it a valid ${isSpreadsheet ? 'Excel' : 'CSV'} file?`))
   }
 
   async function submit() {
@@ -188,7 +209,7 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
       open={open}
       onClose={() => { reset(); onClose() }}
       title="Import records"
-      description="Bring in a batch of org records or people from a CSV. A full mapping-driven engine (external identifiers, upserts) lands in a later phase."
+      description="Bring in a batch of org records or people from a CSV or Excel file. A full mapping-driven engine (external identifiers, upserts) lands in a later phase."
       size="lg"
       footer={
         <>
@@ -251,15 +272,21 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
         >
           <Icon name="FileSpreadsheet" className="text-muted" />
           <span className="min-w-0 flex-1">
-            <span className="block text-sm font-medium text-ink-900">{fileName ?? 'Upload a CSV file'}</span>
+            <span className="block text-sm font-medium text-ink-900">{fileName ?? 'Upload a CSV or Excel file'}</span>
             <span className="block text-xs text-muted">
               {SCHEMA[mode].map((c) => c.label).join(', ')}
               {parent ? ` — added under “${parent.name}”` : ''}.
             </span>
           </span>
-          <span className="code-chip">.csv</span>
+          <span className="code-chip">.csv / .xlsx</span>
         </button>
-        <input ref={fileRef} type="file" accept=".csv,text/csv" onChange={onFile} className="hidden" />
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+          onChange={onFile}
+          className="hidden"
+        />
 
         {rows.length > 0 && (
           <p className="flex items-center gap-1.5 text-[12px] text-teal-600">

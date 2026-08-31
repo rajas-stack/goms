@@ -171,3 +171,141 @@ describe('error sanitization', () => {
     await app.close()
   })
 })
+
+describe('proxy trust and per-client rate-limit keying', () => {
+  // Registers a DB-free probe route so these tests exercise the real Fastify
+  // request pipeline (and the real rate-limit hook) without needing Postgres.
+  async function buildProbeApp(opts: Parameters<typeof buildApp>[0] = {}) {
+    const app = await buildApp(opts)
+    app.get('/__probe', async (request) => ({ ip: request.ip }))
+    return app
+  }
+
+  // The shape Firebase Hosting's `/api/**` rewrite actually delivers to Cloud
+  // Run: X-Forwarded-For holds Google/Fastly CDN addresses that are identical
+  // for every visitor, and the real caller is in Fastly-Client-IP.
+  const CDN_FORWARDED_FOR = '35.192.2.154, 35.192.2.154'
+
+  it('ignores forwarding headers by default, keeping request.ip the socket address', async () => {
+    const app = await buildProbeApp()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/__probe',
+      remoteAddress: '10.0.0.1',
+      headers: { 'x-forwarded-for': '203.0.113.7' },
+    })
+    expect(JSON.parse(res.payload).ip).toBe('10.0.0.1')
+    await app.close()
+  })
+
+  it('makes request.ip proxy-aware when TRUST_PROXY selects firebase-hosting', async () => {
+    const app = await buildProbeApp({ trustProxy: 'firebase-hosting' })
+    const res = await app.inject({
+      method: 'GET',
+      url: '/__probe',
+      remoteAddress: '10.0.0.1',
+      headers: { 'x-forwarded-for': '203.0.113.7' },
+    })
+    expect(JSON.parse(res.payload).ip).toBe('203.0.113.7')
+    await app.close()
+  })
+
+  it('gives each real caller its own budget behind the Firebase Hosting rewrite', async () => {
+    // THE BUG: with no trustProxy/keyGenerator, every request through the
+    // rewrite arrives from the same Google front-end address, so all of the
+    // internet shared one 300-per-5-minutes bucket. Two different visitors
+    // must not exhaust each other's budget.
+    const app = await buildProbeApp({
+      trustProxy: 'firebase-hosting',
+      rateLimit: { max: 1, timeWindow: '1 minute' },
+    })
+    const request = (clientIp: string) =>
+      app.inject({
+        method: 'GET',
+        url: '/__probe',
+        remoteAddress: '10.0.0.1',
+        headers: { 'x-forwarded-for': CDN_FORWARDED_FOR, 'fastly-client-ip': clientIp },
+      })
+
+    expect((await request('203.0.113.7')).statusCode).toBe(200)
+    expect((await request('198.51.100.4')).statusCode).toBe(200)
+    expect((await request('2001:db8::1')).statusCode).toBe(200)
+    await app.close()
+  })
+
+  it('still limits a single real caller behind the rewrite', async () => {
+    // The other half of the fix: per-caller budgets must not mean no budget.
+    const app = await buildProbeApp({
+      trustProxy: 'firebase-hosting',
+      rateLimit: { max: 2, timeWindow: '1 minute' },
+    })
+    const request = () =>
+      app.inject({
+        method: 'GET',
+        url: '/__probe',
+        remoteAddress: '10.0.0.1',
+        headers: { 'x-forwarded-for': CDN_FORWARDED_FOR, 'fastly-client-ip': '203.0.113.7' },
+      })
+
+    expect((await request()).statusCode).toBe(200)
+    expect((await request()).statusCode).toBe(200)
+    const blocked = await request()
+    expect(blocked.statusCode).toBe(429)
+    expect(blocked.headers['retry-after']).toBeDefined()
+    await app.close()
+  })
+
+  it('does not honour a client-supplied IP header when proxy trust is off', async () => {
+    // A direct caller must not be able to mint fresh budgets just by varying
+    // a header on a deployment that is not behind the rewrite.
+    const app = await buildProbeApp({ rateLimit: { max: 1, timeWindow: '1 minute' } })
+    const request = (clientIp: string) =>
+      app.inject({
+        method: 'GET',
+        url: '/__probe',
+        remoteAddress: '10.0.0.1',
+        headers: { 'fastly-client-ip': clientIp },
+      })
+
+    expect((await request('203.0.113.7')).statusCode).toBe(200)
+    expect((await request('198.51.100.4')).statusCode).toBe(429)
+    await app.close()
+  })
+
+  it('falls back to request.ip for a malformed client-IP header instead of keying on it', async () => {
+    // Guards the rate-limit store's key space: junk header values must collapse
+    // onto one key, not create an unbounded set of them.
+    const app = await buildProbeApp({
+      trustProxy: 'firebase-hosting',
+      rateLimit: { max: 1, timeWindow: '1 minute' },
+    })
+    const request = (clientIp: string) =>
+      app.inject({
+        method: 'GET',
+        url: '/__probe',
+        remoteAddress: '10.0.0.1',
+        headers: { 'x-forwarded-for': '203.0.113.7', 'fastly-client-ip': clientIp },
+      })
+
+    expect((await request('junk-value-one')).statusCode).toBe(200)
+    expect((await request('junk-value-two')).statusCode).toBe(429)
+    await app.close()
+  })
+
+  it('reads TRUST_PROXY from the environment when no override is passed', async () => {
+    process.env.TRUST_PROXY = 'firebase-hosting'
+    try {
+      const app = await buildProbeApp()
+      const res = await app.inject({
+        method: 'GET',
+        url: '/__probe',
+        remoteAddress: '10.0.0.1',
+        headers: { 'x-forwarded-for': '203.0.113.7' },
+      })
+      expect(JSON.parse(res.payload).ip).toBe('203.0.113.7')
+      await app.close()
+    } finally {
+      delete process.env.TRUST_PROXY
+    }
+  })
+})

@@ -1,0 +1,17 @@
+# Builds apps/api's image with Cloud Build (no local Docker daemon needed).
+# `gcloud builds submit --tag` alone can't be used here since it always
+# looks for a Dockerfile at the build context root, but apps/api/Dockerfile
+# lives at apps/api/Dockerfile and needs the *repo* root as its build context
+# (its `COPY . .` build stage needs root package.json/package-lock.json plus
+# every npm workspace member — see apps/api/Dockerfile's own comments).
+#
+# Usage:
+#   gcloud builds submit --project=<PROJECT> --config=cloudbuild.yaml \
+#     --substitutions=_IMAGE_URI=asia-south1-docker.pkg.dev/<PROJECT>/goms/goms-api:bootstrap .
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ['build', '-f', 'apps/api/Dockerfile', '-t', '${_IMAGE_URI}', '.']
+images:
+  - '${_IMAGE_URI}'
+options:
+  logging: CLOUD_LOGGING_ONLY

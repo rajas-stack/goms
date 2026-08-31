@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { pool } from '../../db.js'
-import { previewGeographyLoad, commitGeographyLoad } from './geography.js'
+import { previewGeographyLoad, commitGeographyLoad, buildGeographyRows } from './geography.js'
 
 describe('geography loader', () => {
   beforeEach(async () => {
@@ -64,6 +64,39 @@ describe('geography loader', () => {
     const result = await pool.query(`SELECT name FROM hierarchy_nodes WHERE domain='geo' AND type_key='country'`)
     expect(result.rows[0].name).toBe('India')
   }, 60000)
+
+  it('includes the synthetic Central Ministries virtual state row (stateCode 0)', () => {
+    // Regression test for the 2026-08-31 production bug: this row was
+    // missing from every import path (organizationHierarchy's NODE_TYPES
+    // has no 'state' value, and this domain used to explicitly exclude it),
+    // so `hierarchy.getState({code: 0})` returned null in production and
+    // StateWorkspace rendered "No state found for code 0" instead of the
+    // Central Ministries organization tree -- even though its child org
+    // nodes (MoSPI, MeitY, ...) existed and were reachable by id all along.
+    const rows = buildGeographyRows()
+    const centralRow = rows.find((r) => r.level === 'state' && r.stateCode === 0)
+    expect(centralRow).toMatchObject({
+      level: 'state', name: 'Central Ministries (Govt. of India)', lgdCode: '0', parentLgdCode: null, stateCode: 0,
+    })
+    // Exactly one -- not accidentally duplicated across code changes.
+    expect(rows.filter((r) => r.level === 'state' && r.stateCode === 0)).toHaveLength(1)
+  })
+
+  it('commits the Central Ministries virtual state as a real, queryable state node parented under India', async () => {
+    const preview = await previewGeographyLoad(pool)
+    await commitGeographyLoad(pool, preview.commitToken)
+
+    const result = await pool.query(
+      `SELECT central.name AS central_name, central.code AS central_code, country.name AS country_name
+       FROM hierarchy_nodes central
+       JOIN hierarchy_nodes country ON country.id = central.parent_id
+       WHERE central.domain='geo' AND central.type_key='state' AND central.state_code=0`,
+    )
+    expect(result.rows).toHaveLength(1)
+    expect(result.rows[0]).toMatchObject({
+      central_name: 'Central Ministries (Govt. of India)', central_code: '0', country_name: 'India',
+    })
+  }, 30000)
 
   it('correctly links a real taluka to its own district and state, not a same-numbered district in another state', async () => {
     // Haryana (st_code '06', normalized to 6) has a district whose raw LGD

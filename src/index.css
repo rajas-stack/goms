@@ -12,7 +12,7 @@
     height: 100%;
   }
   body {
-    @apply bg-paper text-ink font-sans antialiased;
+    @apply bg-paper text-ink font-sans antialiased cursor-default;
     font-feature-settings: 'cv05', 'ss01';
   }
   h1,

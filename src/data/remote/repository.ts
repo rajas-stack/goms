@@ -1,7 +1,11 @@
-// Additive, tRPC-backed Repository implementation — only wired in when
-// VITE_API_BASE_URL is set (see ../repository.ts). Implements Partial<Repository>
-// so any other method call is simply absent (undefined) rather than needing
-// ~100 hand-written throwing stubs; nothing routes through this today.
+// tRPC-backed Repository implementation — only wired in when
+// VITE_API_BASE_URL is set (see ../repository.ts). Implements every method of
+// Repository (declared as Partial<Repository> only so a future new method
+// added to the interface doesn't force an immediate implementation here) —
+// this is what https://goms-prod.web.app actually routes every read/write
+// through. Confirmed complete against the full interface as of the
+// 2026-08-31 local-vs-GCP functional parity audit
+// (docs/superpowers/analysis/2026-08-31-goms-local-vs-gcp-functional-parity-audit.md).
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import type { AppRouter } from '../../../apps/api/src/index'
 import type {

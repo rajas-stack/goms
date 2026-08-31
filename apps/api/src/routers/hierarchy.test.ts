@@ -204,6 +204,22 @@ describe('hierarchy router', () => {
     expect(states.find((s) => s.code === 27)?.employees).toBe(1)
   })
 
+  it('getState(0) resolves once the Central Ministries virtual state node exists', async () => {
+    // Regression test for the 2026-08-31 production bug: StateWorkspace.tsx's
+    // `useStateNode(stateCode)` calls exactly this procedure, and treats a
+    // null result as "no such state" -- rendering "No state found for code
+    // {code}" instead of the Organization tab, even when that state's org
+    // nodes (departments/branches/units) exist and are independently
+    // reachable via listOrgRoots. Before the geography import fix
+    // (buildGeographyRows() in apps/api/src/import/domains/geography.ts),
+    // no import path ever created this row for stateCode 0.
+    const caller = appRouter.createCaller({})
+    expect(await caller.hierarchy.getState({ code: 0 })).toBeNull()
+    await makeNode({ domain: 'geo', typeKey: 'state', stateCode: 0, name: 'Central Ministries (Govt. of India)' })
+    const state = await caller.hierarchy.getState({ code: 0 })
+    expect(state?.name).toBe('Central Ministries (Govt. of India)')
+  })
+
   it('deleteNode cascades to employees under the deleted subtree', async () => {
     const caller = appRouter.createCaller({})
     const dept = await makeNode({ typeKey: 'department', name: 'Dept' })

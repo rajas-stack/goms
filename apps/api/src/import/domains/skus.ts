@@ -22,6 +22,12 @@ const LIFECYCLE_STATUSES = ['draft', 'active', 'inactive', 'retired'] as const
 
 const numericField = (label: string) => z.number({ invalid_type_error: `${label} must be a number` }).optional().default(0)
 
+function blankToNull(v: unknown): unknown {
+  if (v === undefined || v === null) return null
+  if (typeof v === 'string' && v.trim() === '') return null
+  return v
+}
+
 const skuRowSchema = z.object({
   skuCode: z.string().min(1, 'SKU Code is required').trim(),
   name: z.string().min(1, 'Name is required'),
@@ -36,7 +42,12 @@ const skuRowSchema = z.object({
   taxClassCode: z.string().min(1, 'Tax Class Code is required').trim(),
   billingTypeCode: z.string().min(1, 'Billing Type Code is required').trim(),
   activeFrom: z.string().min(1, 'Active From is required'),
-  activeTill: z.string().nullable().optional().default(null),
+  // A blank "Active Till" cell arrives as '' (parseCellValue in
+  // templates.ts only omits a key for `undefined`, and this field isn't
+  // boolean/numeric) — an open-ended active period is the normal case for
+  // a real SKU import, so it must resolve to NULL, not the empty-string
+  // literal Postgres' date column would reject.
+  activeTill: z.preprocess(blankToNull, z.string().nullable().optional().default(null)),
   lifecycleStatus: z.enum(LIFECYCLE_STATUSES).optional().default('draft'),
   isSellable: z.boolean().optional().default(true),
   displayOrder: z.number().optional().default(0),

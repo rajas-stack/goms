@@ -4,6 +4,7 @@ import { Icon } from './ui/Icon'
 import { Button } from './ui/Button'
 import { Tooltip } from './ui/Tooltip'
 import { cn } from '@/lib/utils'
+import { resolveApiEnvironment } from '@/lib/api-environment'
 import logo from '@/assets/amnex-logo.svg'
 
 interface Props {
@@ -12,9 +13,17 @@ interface Props {
 }
 
 /** Set only via an untracked `.env.local` for opt-in local testing against a
- *  deployed backend — never the default for `npm run dev`/tests/builds. See
- *  the 2026-08-26 cutover readiness report §4. */
-const remoteApiBaseUrl = import.meta.env.VITE_API_BASE_URL as string | undefined
+ *  deployed backend, or at build time for a hosted deploy — never the default
+ *  for `npm run dev`/tests/builds. See the 2026-08-26 cutover readiness
+ *  report §4.
+ *
+ *  `VITE_API_ENV_LABEL` is the optional override for backends whose URL
+ *  carries no project name (a direct Cloud Run host); see
+ *  `resolveApiEnvironment`. */
+const apiEnvironment = resolveApiEnvironment(
+  import.meta.env.VITE_API_BASE_URL as string | undefined,
+  import.meta.env.VITE_API_ENV_LABEL as string | undefined,
+)
 
 export function TopBar({ onOpenDrawer }: Props) {
   const { openSearch, openImport, openExport, openSettings } = useShell()
@@ -42,11 +51,11 @@ export function TopBar({ onOpenDrawer }: Props) {
           </span>
         </div>
       )}
-      {remoteApiBaseUrl && (
-        <Tooltip label={`Reading and writing live data at ${remoteApiBaseUrl}`} side="bottom" className="shrink-0">
+      {apiEnvironment && (
+        <Tooltip label={`Reading and writing live data at ${apiEnvironment.baseUrl}`} side="bottom" className="shrink-0">
           <span className="hidden items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 sm:inline-flex">
             <Icon name="Database" size={11} />
-            Connected to goms-dev
+            Connected to {apiEnvironment.label}
           </span>
         </Tooltip>
       )}

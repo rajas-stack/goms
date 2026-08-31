@@ -1,0 +1,43 @@
+# Controls what `gcloud builds submit` uploads to Cloud Build. Unlike
+# .dockerignore (which only trims the Docker build context on a machine that
+# already has the files locally), this trims the *upload* itself — without
+# it, gcloud falls back to .gitignore, which doesn't exclude android/, .git/,
+# or public/ (~1.3GB, ~1.7GB, ~377MB respectively), making every build
+# needlessly upload multiple GB apps/api's Dockerfile never even reads.
+# Mirrors apps/api/Dockerfile's .dockerignore scope: only the root
+# package.json/package-lock.json (npm workspaces) plus apps/api/** and
+# packages/domain/** are ever needed to build the API image.
+
+.git
+node_modules
+dist
+android
+public
+src
+docs
+scripts
+infra
+
+# Editor/OS/tooling cruft
+.vscode
+.idea
+.vite
+.superpowers
+.vercel
+.claude
+.impeccable
+.playwright-mcp
+.worktrees
+*.log
+tsconfig.tsbuildinfo
+
+# Env files (never belong in a build upload)
+.env
+.env.*
+!.env.example
+
+# Stray root documents, not part of any workspace
+*.docx
+*.xlsx
+*.png
+*.zip

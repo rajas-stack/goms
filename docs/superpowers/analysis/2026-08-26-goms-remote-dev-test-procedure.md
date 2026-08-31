@@ -18,7 +18,7 @@ Then start the dev server as normal:
 npm run dev
 ```
 
-You should see a small "Connected to goms-dev" indicator next to the module name in the top bar — that's the signal you're in remote mode, not local IndexedDB. If you don't see it, `VITE_API_BASE_URL` isn't being picked up (check the file name/location — it must be `.env.local` at the repo root, not `apps/api/.env.local` or similar).
+You should see a small "Connected to …" indicator next to the module name in the top bar, naming the backend you pointed at (a direct Cloud Run host shows the host itself unless you also set `VITE_API_ENV_LABEL=goms-dev` — see `src/lib/api-environment.ts`) — that's the signal you're in remote mode, not local IndexedDB. If you don't see it, `VITE_API_BASE_URL` isn't being picked up (check the file name/location — it must be `.env.local` at the repo root, not `apps/api/.env.local` or similar).
 
 ## 2. Turn it off again
 
