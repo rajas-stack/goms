@@ -251,7 +251,7 @@ export function parseCellValue(field: string, raw: unknown): unknown {
   return text
 }
 
-function rowsFromSheet(worksheet: XLSX.WorkSheet): ImportRow[] {
+export function rowsFromSheet(worksheet: XLSX.WorkSheet): ImportRow[] {
   const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '', raw: false })
   return raw.map((rawRow) => {
     const row: ImportRow = {}
@@ -267,7 +267,7 @@ function rowsFromSheet(worksheet: XLSX.WorkSheet): ImportRow[] {
 
 /** Multi-sheet domains submit a `{ sheetKey: rows[] }` dictionary; the keys
  *  are the importer's own internal names, not the human sheet titles. */
-const MULTI_SHEET_KEYS: Partial<Record<SpreadsheetDomainKey, Record<string, string>>> = {
+export const MULTI_SHEET_KEYS: Partial<Record<SpreadsheetDomainKey, Record<string, string>>> = {
   commercialMastersCatalog: { Verticals: 'verticals', Products: 'products', Modules: 'modules', Features: 'features' },
   commercialMastersFlat: {
     'SKU Categories': 'skuCategories', 'Units of Measure': 'unitsOfMeasure',
@@ -276,7 +276,7 @@ const MULTI_SHEET_KEYS: Partial<Record<SpreadsheetDomainKey, Record<string, stri
   salesRoster: { 'Sales Persons': 'persons', Postings: 'postings' },
 }
 
-function sheetHeaders(worksheet: XLSX.WorkSheet): string[] {
+export function sheetHeaders(worksheet: XLSX.WorkSheet): string[] {
   const [headerRow] = XLSX.utils.sheet_to_json<string[]>(worksheet, { header: 1, blankrows: false })
   return (headerRow ?? []).map((h) => String(h).trim())
 }
