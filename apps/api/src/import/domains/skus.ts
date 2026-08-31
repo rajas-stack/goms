@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { classifyRows } from '../engine.js'
+import { classifyRows, findFuzzyCandidates } from '../engine.js'
 import type { ImportFieldDiff, ImportRowResult } from '../types.js'
 
 function normalizeCode(code: string): string {
@@ -211,17 +211,20 @@ export async function validateSkuRows(client: { query: Function }, rawRows: unkn
     },
     validateRow: (raw) => {
       const parsed = skuRowSchema.safeParse(raw)
-      if (!parsed.success) return parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+      if (!parsed.success) return { errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) }
       const row = parsed.data
       const errors: string[] = []
+      let candidates: { key: string; score: number }[] | undefined
       for (const fk of FK_COLUMNS) {
         const codeValue = row[fk.field]
         const masterMap = mastersByKey.get(fk.masterKey)
         if (!masterMap || !masterMap.has(normalizeCode(codeValue))) {
+          const suggestions = masterMap ? findFuzzyCandidates(normalizeCode(codeValue), masterMap.keys()) : []
+          if (suggestions.length > 0) candidates = [...(candidates ?? []), ...suggestions].slice(0, 3)
           errors.push(`no such ${fk.label.toLowerCase()} code: ${codeValue}`)
         }
       }
-      return errors
+      return { errors, needsReview: (candidates?.length ?? 0) > 0, candidates }
     },
   })
 }

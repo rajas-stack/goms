@@ -139,4 +139,16 @@ describe('skus importer', () => {
     const result = await pool.query('SELECT sku_code FROM commercial_skus')
     expect(result.rows.map((r) => r.sku_code)).toEqual(['X-1'])
   })
+
+  it('suggests a fuzzy candidate for a near-miss Category Code', async () => {
+    await makeSupportingMasters()
+    // makeSupportingMasters' own 'SW' category is only 2 chars — slicing one
+    // char off drops below MIN_FUZZY_SIMILARITY's floor for a 2-char string.
+    // A dedicated longer category code makes the near-miss realistic.
+    await insertMaster('skuCategories', 'SWTEST')
+    const rows = [baseRow({ skuCode: 'SKU-FUZZY', categoryCode: 'SWTES' })]
+    const preview = await validateSkuRows(pool, rows)
+    expect(preview[0].action).toBe('needs-review')
+    expect(preview[0].candidates?.[0].key).toBe('SWTEST')
+  })
 })
