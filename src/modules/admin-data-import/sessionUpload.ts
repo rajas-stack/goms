@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx'
 import { sheetHeaders, rowsFromSheet, MULTI_SHEET_KEYS } from './templates'
 import { detectDomainForSheet, type DetectionResult } from './domainDetection'
-import type { ImportRow, ImportRows, SpreadsheetDomainKey } from './api'
+import type { ExcludedRow, ImportAction, ImportRow, ImportRows, SpreadsheetDomainKey } from './api'
 
 export interface DetectedSheet {
   /** Stable across one upload session — `${fileName}::${sheetTitle}::${index}` */
@@ -60,4 +60,21 @@ export function buildSessionDomains(
   }
 
   return result
+}
+
+/** True once every `needs-review`/`reject` row in `previewRows` has a
+ *  matching entry in `excludedRows` (by domain + sheetKey + rowNumber) —
+ *  the frontend's own gate for enabling the Commit button, computed purely
+ *  from local state. Deliberately does NOT re-validate or trim anything;
+ *  `session.commit` (Task 7/9) does its own, authoritative version of this
+ *  same check server-side against live data — this is only for a
+ *  responsive UI, never trusted as the real gate. */
+export function unresolvedRowsAreAllExcluded(
+  previewRows: { domain: SpreadsheetDomainKey; sheetKey?: string; rowNumber: number; action: ImportAction }[],
+  excludedRows: ExcludedRow[],
+): boolean {
+  const unresolved = previewRows.filter((r) => r.action === 'needs-review' || r.action === 'reject')
+  return unresolved.every((r) =>
+    excludedRows.some((e) => e.domain === r.domain && e.sheetKey === r.sheetKey && e.rowNumber === r.rowNumber),
+  )
 }

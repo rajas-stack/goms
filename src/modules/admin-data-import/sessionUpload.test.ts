@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as XLSX from 'xlsx'
-import { extractSheetsFromFile, buildSessionDomains } from './sessionUpload'
+import { extractSheetsFromFile, buildSessionDomains, unresolvedRowsAreAllExcluded } from './sessionUpload'
 
 function bufferFrom(sheets: Record<string, unknown[][]>): ArrayBuffer {
   const workbook = XLSX.utils.book_new()
@@ -49,5 +49,38 @@ describe('buildSessionDomains', () => {
   it('omits a sheet with no assignment (excluded / not yet confirmed)', () => {
     const sheets = [{ id: 'a', fileName: 'f1.xlsx', sheetTitle: 'Mystery', headers: [], rows: [{ x: 1 }], detection: { kind: 'unrecognized' } }] as const
     expect(buildSessionDomains(sheets as any, new Map())).toEqual({})
+  })
+})
+
+describe('unresolvedRowsAreAllExcluded', () => {
+  it('is false while a needs-review/reject row has no matching exclusion', () => {
+    const previewRows = [
+      { domain: 'employees' as const, rowNumber: 1, action: 'create' as const },
+      { domain: 'employees' as const, rowNumber: 2, action: 'needs-review' as const },
+    ]
+    expect(unresolvedRowsAreAllExcluded(previewRows, [])).toBe(false)
+  })
+
+  it('is true once every needs-review/reject row has a matching exclusion (matched by domain + sheetKey + rowNumber)', () => {
+    const previewRows = [
+      { domain: 'employees' as const, rowNumber: 1, action: 'create' as const },
+      { domain: 'employees' as const, rowNumber: 2, action: 'needs-review' as const },
+    ]
+    const excludedRows = [{ domain: 'employees' as const, rowNumber: 2, businessKey: 'X', reason: 'bad' }]
+    expect(unresolvedRowsAreAllExcluded(previewRows, excludedRows)).toBe(true)
+  })
+
+  it('matches on sheetKey too, so an exclusion for one sheet never accidentally clears a same-numbered row in a different sheet of the same domain', () => {
+    const previewRows = [
+      { domain: 'salesRoster' as const, sheetKey: 'persons', rowNumber: 1, action: 'needs-review' as const },
+      { domain: 'salesRoster' as const, sheetKey: 'postings', rowNumber: 1, action: 'reject' as const },
+    ]
+    const excludedRows = [{ domain: 'salesRoster' as const, sheetKey: 'persons', rowNumber: 1, businessKey: 'a@b.com', reason: 'bad' }]
+    expect(unresolvedRowsAreAllExcluded(previewRows, excludedRows)).toBe(false) // the postings row is still unaccounted for
+  })
+
+  it('is true when there are no unresolved rows at all, regardless of exclusions', () => {
+    const previewRows = [{ domain: 'taxClasses' as const, rowNumber: 1, action: 'create' as const }]
+    expect(unresolvedRowsAreAllExcluded(previewRows, [])).toBe(true)
   })
 })
