@@ -19,9 +19,9 @@ describe('TEMPLATE_COLUMNS', () => {
     expect(TEMPLATE_COLUMNS.salesRoster.map((s) => s.sheet)).toEqual(['Sales Persons', 'Postings'])
   })
 
-  it('defines four sheets for each multi-sheet Commercial Masters template', () => {
+  it('defines five sheets for commercialMastersFlat, four for commercialMastersCatalog', () => {
     expect(TEMPLATE_COLUMNS.commercialMastersFlat.map((s) => s.sheet)).toEqual([
-      'SKU Categories', 'Units of Measure', 'Product Editions', 'Billing Types',
+      'SKU Categories', 'Units of Measure', 'Product Editions', 'Billing Types', 'Pre-Sales',
     ])
     expect(TEMPLATE_COLUMNS.commercialMastersCatalog.map((s) => s.sheet)).toEqual([
       'Verticals', 'Products', 'Modules', 'Features',
@@ -115,5 +115,27 @@ describe('parseWorkbook', () => {
     ])
     const rows = parseWorkbook('salesRoster', buffer) as Record<string, unknown[]>
     expect(rows.postings).toEqual([])
+  })
+
+  it('recognizes an alias header alongside the canonical one for the same field', () => {
+    expect(HEADER_TO_FIELD['Emp Code']).toBe('employeeCode')
+    expect(HEADER_TO_FIELD['Employee Code']).toBe('employeeCode')
+  })
+
+  it('parses a sheet that uses ONLY alias headers without throwing UnrecognizedWorkbookError', () => {
+    const buffer = workbookBuffer([
+      { sheet: 'Employees', rows: [['Emp Code', 'Full Name', 'Job Title', 'Org Code'], ['E1', 'Jane', 'Officer', 'ORGA']] },
+    ])
+    const rows = parseWorkbook('employees', buffer) as Record<string, unknown>[]
+    expect(rows[0]).toMatchObject({ employeeCode: 'E1', name: 'Jane', designation: 'Officer', orgNodeCode: 'ORGA' })
+  })
+
+  it('includes a Department Head Of column in the employees template', () => {
+    expect(TEMPLATE_COLUMNS.employees[0].columns).toContain('Department Head Of')
+    expect(HEADER_TO_FIELD['Department Head Of']).toBe('departmentHeadOf')
+  })
+
+  it('includes a Pre-Sales sheet in the commercialMastersFlat template', () => {
+    expect(TEMPLATE_COLUMNS.commercialMastersFlat.map((s) => s.sheet)).toContain('Pre-Sales')
   })
 })

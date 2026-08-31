@@ -24,7 +24,7 @@ export const TEMPLATE_COLUMNS: Record<SpreadsheetDomainKey, TemplateSheet[]> = {
   employees: [
     {
       sheet: 'Employees',
-      columns: ['Employee Code', 'Name', 'Designation', 'Email', 'Phone', 'Org Node Code', 'Manager Employee Code', 'Vacant', 'Status'],
+      columns: ['Employee Code', 'Name', 'Designation', 'Email', 'Phone', 'Org Node Code', 'Manager Employee Code', 'Vacant', 'Status', 'Department Head Of'],
     },
   ],
   salesRoster: [
@@ -42,6 +42,7 @@ export const TEMPLATE_COLUMNS: Record<SpreadsheetDomainKey, TemplateSheet[]> = {
     { sheet: 'Units of Measure', columns: FLAT_COLUMNS },
     { sheet: 'Product Editions', columns: FLAT_COLUMNS },
     { sheet: 'Billing Types', columns: FLAT_COLUMNS },
+    { sheet: 'Pre-Sales', columns: FLAT_COLUMNS },
   ],
   currencies: [
     {
@@ -99,6 +100,7 @@ export const HEADER_TO_FIELD: Record<string, string> = {
   'Org Node Code': 'orgNodeCode',
   'Manager Employee Code': 'managerCode',
   'Vacant': 'vacant',
+  'Department Head Of': 'departmentHeadOf',
 
   'Official Email': 'officialEmail',
   'Personal Email': 'personalEmail',
@@ -159,7 +161,56 @@ export const HEADER_TO_FIELD: Record<string, string> = {
   'Mandatory': 'mandatory',
   'Quantity': 'quantity',
   'Notes': 'notes',
+
+  // Aliases — organizationHierarchy
+  'Type': 'nodeType', 'Org Type': 'nodeType',
+  'Node Code': 'code',
+  'Parent': 'parentCode', 'Reports To Code': 'parentCode',
+
+  // Aliases — employees
+  'Emp Code': 'employeeCode', 'Employee ID': 'employeeCode', 'EmpCode': 'employeeCode',
+  'Full Name': 'name', 'Employee Name': 'name',
+  'Job Title': 'designation', 'Role': 'designation',
+  // 'Org Code' means "which org node this employee belongs to" here, not
+  // organizationHierarchy's own Code column — headers are globally unique
+  // across every template, so this one spelling belongs to exactly one field.
+  'Org Code': 'orgNodeCode', 'Department Code': 'orgNodeCode', 'Office Code': 'orgNodeCode',
+  'Manager Code': 'managerCode', 'Reporting Manager Code': 'managerCode', 'Manager Emp Code': 'managerCode',
+  'Employee Status': 'status',
+  'Is Vacant': 'vacant', 'Vacant Position': 'vacant',
+  'Dept Head Of': 'departmentHeadOf',
+
+  // Aliases — salesRoster (Sales Persons)
+  'Work Email': 'officialEmail', 'Email Address': 'officialEmail',
+
+  // Aliases — salesRoster (Postings)
+  'Person Email': 'salesPersonEmail', "Sales Person's Email": 'salesPersonEmail',
+  'Reporting Manager Email': 'managerEmail',
+  'Office Name': 'office', 'Location': 'office',
+
+  // Aliases — commercial masters / SKUs
+  'Product Code': 'skuCode', 'Item Code': 'skuCode',
+  'Category': 'categoryCode', 'SKU Category': 'categoryCode',
+  'Feature': 'featureCode',
+  'Edition': 'editionCode',
+  'UOM': 'uomCode', 'Unit of Measure': 'uomCode',
+  'Currency': 'currencyCode',
+  'Tax Class': 'taxClassCode',
+  'Billing Type': 'billingTypeCode',
 }
+
+/** Reverse of HEADER_TO_FIELD: every header spelling (canonical or alias)
+ *  that resolves to a given field. Used by parseWorkbook's own-domain
+ *  detection below, and by Task 19's per-sheet domain scorer — a single
+ *  source of truth for "which headers count as recognizing this field",
+ *  so the two can never drift apart. */
+export const FIELD_TO_HEADERS: Record<string, string[]> = Object.entries(HEADER_TO_FIELD).reduce(
+  (acc, [header, field]) => {
+    (acc[field] ??= []).push(header)
+    return acc
+  },
+  {} as Record<string, string[]>,
+)
 
 const BOOLEAN_FIELDS = new Set(['active', 'isBaseCurrency', 'vacant', 'isSellable', 'mandatory', 'allowAutoApproval'])
 
@@ -220,7 +271,7 @@ const MULTI_SHEET_KEYS: Partial<Record<SpreadsheetDomainKey, Record<string, stri
   commercialMastersCatalog: { Verticals: 'verticals', Products: 'products', Modules: 'modules', Features: 'features' },
   commercialMastersFlat: {
     'SKU Categories': 'skuCategories', 'Units of Measure': 'unitsOfMeasure',
-    'Product Editions': 'productEditions', 'Billing Types': 'billingTypes',
+    'Product Editions': 'productEditions', 'Billing Types': 'billingTypes', 'Pre-Sales': 'preSales',
   },
   salesRoster: { 'Sales Persons': 'persons', Postings: 'postings' },
 }
@@ -247,7 +298,12 @@ export function parseWorkbook(domain: SpreadsheetDomainKey, data: ArrayBuffer): 
   const sheetKeys = MULTI_SHEET_KEYS[domain]
   const isBlank = (row: ImportRow) => Object.values(row).every((v) => v === '' || v === undefined)
 
-  const expectedHeaders = new Set(TEMPLATE_COLUMNS[domain].flatMap((s) => s.columns))
+  // Recognizes an alias header exactly like a canonical one: a domain's
+  // canonical columns name its required FIELDS; expectedHeaders is every
+  // header spelling (canonical or alias) that maps to one of those fields,
+  // so a sheet using only alias headers is still correctly recognized.
+  const requiredFields = new Set(TEMPLATE_COLUMNS[domain].flatMap((s) => s.columns).map((h) => HEADER_TO_FIELD[h]).filter(Boolean))
+  const expectedHeaders = new Set([...requiredFields].flatMap((f) => FIELD_TO_HEADERS[f] ?? []))
   const foundAnyExpectedHeader = workbook.SheetNames.some((name) =>
     sheetHeaders(workbook.Sheets[name]).some((h) => expectedHeaders.has(h)),
   )
