@@ -1,13 +1,27 @@
 -- Up Migration
 
--- Scoped by domain: geo's LGD codes and org's admin-assigned codes are
--- independent namespaces and must not collide with each other, only within
--- themselves. Case/whitespace-insensitive to match every domain adapter's
--- own lower(trim(code)) lookup/update convention (organizationHierarchy.ts,
--- employees.ts, geography.ts).
-CREATE UNIQUE INDEX hierarchy_nodes_domain_code_ci_idx
+-- org's admin-assigned codes are unique across the whole 'org' domain
+-- regardless of node type — matches organizationHierarchy.ts's own lookup/
+-- update convention (`WHERE domain='org' AND lower(trim(code))=...`, no
+-- type_key in that predicate). Case/whitespace-insensitive to match it.
+CREATE UNIQUE INDEX hierarchy_nodes_org_code_ci_idx
   ON hierarchy_nodes (domain, lower(trim(code)))
-  WHERE code IS NOT NULL;
+  WHERE domain = 'org' AND code IS NOT NULL;
+
+-- geo's raw LGD codes are NOT globally unique within the domain the way
+-- org's are: they collide both across levels (a district and a taluka can
+-- share the same numeric code) and across states (two different states can
+-- have a district with the same code) -- geography.ts's own commit path
+-- disambiguates by exactly this triple ("type_key+code" alone isn't enough,
+-- see geography.ts's `updates` loop comment: "disambiguated by state_code
+-- ... since raw LGD codes collide across states"). Scoping any tighter than
+-- this (e.g. plain (domain, code) as originally drafted here) rejects real,
+-- valid bundled LGD data -- caught by geography.test.ts's own fixture data
+-- (Haryana district code '069'/69 colliding with Kalka taluka code 69)
+-- before this migration shipped.
+CREATE UNIQUE INDEX hierarchy_nodes_geo_type_code_state_ci_idx
+  ON hierarchy_nodes (domain, type_key, lower(trim(code)), state_code)
+  WHERE domain = 'geo' AND code IS NOT NULL;
 
 -- Excludes ordinary-CRUD placeholder codes (employees.ts:291's
 -- 'EMP-NEW-<4 digits>') — those are not a stable business key and can
@@ -35,4 +49,5 @@ ALTER TABLE admin_import_runs DROP COLUMN excluded_rows;
 ALTER TABLE admin_import_runs DROP COLUMN session_id;
 DROP INDEX commercial_bom_items_parent_component_idx;
 DROP INDEX employees_code_ci_idx;
-DROP INDEX hierarchy_nodes_domain_code_ci_idx;
+DROP INDEX hierarchy_nodes_geo_type_code_state_ci_idx;
+DROP INDEX hierarchy_nodes_org_code_ci_idx;
