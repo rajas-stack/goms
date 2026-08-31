@@ -114,4 +114,14 @@ describe('bom importer', () => {
     expect(secondPreview[0].action).toBe('unchanged')
     expect(summarize(secondPreview)).toMatchObject({ toCreate: 0, toUpdate: 0, unchanged: 1, rejected: 0 })
   })
+
+  it('rejects a concurrent duplicate BOM link at the DB level', async () => {
+    const masters = await makeSupportingMasters()
+    const parent = await insertSku(masters, 'P-1')
+    const component = await insertSku(masters, 'C-1')
+    await pool.query(`INSERT INTO commercial_bom_items (parent_sku_id, component_sku_id) VALUES ($1,$2)`, [parent, component])
+    await expect(
+      pool.query(`INSERT INTO commercial_bom_items (parent_sku_id, component_sku_id) VALUES ($1,$2)`, [parent, component]),
+    ).rejects.toThrow(/duplicate key value violates unique constraint/)
+  })
 })

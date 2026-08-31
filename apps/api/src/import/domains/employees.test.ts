@@ -132,4 +132,17 @@ describe('employees importer', () => {
     expect(preview[1].action).toBe('reject')
     expect(preview[1].errors[0]).toMatch(/duplicate of row 1/i)
   })
+
+  it('rejects a concurrent duplicate employee code at the DB level', async () => {
+    await pool.query(
+      `INSERT INTO employees (code, name, designation, org_node_id) SELECT 'DUPEMP', 'Original', 'Officer', id FROM hierarchy_nodes WHERE code=$1`,
+      [orgNodeCode],
+    )
+    await expect(
+      pool.query(
+        `INSERT INTO employees (code, name, designation, org_node_id) SELECT '  dupemp  ', 'Racing Insert', 'Officer', id FROM hierarchy_nodes WHERE code=$1`,
+        [orgNodeCode],
+      ),
+    ).rejects.toThrow(/duplicate key value violates unique constraint/)
+  })
 })

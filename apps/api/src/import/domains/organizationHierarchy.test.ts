@@ -135,4 +135,17 @@ describe('organizationHierarchy importer', () => {
     expect(preview[1].action).toBe('reject')
     expect(preview[1].errors[0]).toMatch(/duplicate of row 1/i)
   })
+
+  it('rejects a concurrent duplicate org code at the DB level even if two inserts race past the app-level check', async () => {
+    await pool.query(
+      `INSERT INTO hierarchy_nodes (domain, type_key, parent_id, state_code, name, code, sort_order, metadata, status)
+       VALUES ('org','department',NULL,NULL,'Original','DUPCODE',0,'{}','active')`,
+    )
+    await expect(
+      pool.query(
+        `INSERT INTO hierarchy_nodes (domain, type_key, parent_id, state_code, name, code, sort_order, metadata, status)
+         VALUES ('org','department',NULL,NULL,'Racing Insert','  dupcode  ',0,'{}','active')`,
+      ),
+    ).rejects.toThrow(/duplicate key value violates unique constraint/)
+  })
 })
