@@ -41,7 +41,16 @@ resource "google_cloud_run_v2_service" "goms_api" {
 
   template {
     service_account = google_service_account.goms_api_runtime.email
-    scaling { min_instance_count = 0 } # spec §20 — accepted cold-start tradeoff
+    # min_instance_count kept at the original spec §20 cold-start tradeoff;
+    # max_instance_count pinned to 10 to match the value CI's `gcloud run
+    # deploy` (out-of-band from Terraform) already set on the live service —
+    # left at the config's implicit default (unbounded), Task 27's plan/apply
+    # would have silently dropped this ceiling as an unintended side effect
+    # of the unrelated env-var change below.
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 10
+    }
 
     vpc_access {
       network_interfaces {
@@ -52,7 +61,13 @@ resource "google_cloud_run_v2_service" "goms_api" {
     }
 
     containers {
-      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:bootstrap"
+      # Pinned to the commit-SHA tag CI's deploy-dev job has already pushed
+      # and deployed live (out-of-band from Terraform) — using the original
+      # ":bootstrap" tag here would roll the running service back to the
+      # bootstrap image as an unintended side effect of Task 27's env-var
+      # change below. Update this alongside any future Terraform-driven
+      # deploy of goms-api.
+      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:df1f8bdc922aa48c0eb7efcc98b76efeabb01277"
       env {
         name = "DATABASE_URL"
         value_source {
@@ -61,6 +76,13 @@ resource "google_cloud_run_v2_service" "goms_api" {
             version = "latest"
           }
         }
+      }
+      # Admin Data Import redesign verification (plan Task 27) — goms-dev
+      # only, per this plan's Global Constraints. goms-prod
+      # (infra/prod/cloudrun.tf) stays unset until real auth exists.
+      env {
+        name  = "ADMIN_IMPORT_ENABLED"
+        value = "true"
       }
     }
   }
