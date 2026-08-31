@@ -9,7 +9,7 @@ import type { ImportRowResult } from '../types.js'
  *  four near-duplicate modules, matching `taxClasses.ts`'s shape exactly
  *  minus the `extra` JSONB field (`MASTER_EXTRA_FIELDS` is `[]` for all four
  *  per `packages/domain/src/commercial.ts`). */
-export type FlatMasterSheetKey = 'skuCategories' | 'unitsOfMeasure' | 'productEditions' | 'billingTypes'
+export type FlatMasterSheetKey = 'skuCategories' | 'unitsOfMeasure' | 'productEditions' | 'billingTypes' | 'preSales'
 
 const flatMasterRowSchema = z.object({
   code: z.string().min(1, 'Code is required').trim(),

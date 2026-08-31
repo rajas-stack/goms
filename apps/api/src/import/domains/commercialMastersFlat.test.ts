@@ -104,4 +104,12 @@ describe('commercialMastersFlat importer', () => {
     const result = await pool.query(`SELECT extra FROM commercial_masters WHERE master_key='skuCategories' AND code='SW'`)
     expect(result.rows[0].extra).toEqual({})
   })
+
+  it('creates a preSales master row', async () => {
+    const preview = await validateFlatMasterRows(pool, 'preSales', [{ code: 'PS03', name: 'New Exec', description: '', active: true, displayOrder: 0 }])
+    expect(preview[0].action).toBe('create')
+    await commitFlatMasterRows(pool, 'preSales', [{ code: 'PS03', name: 'New Exec', description: '', active: true, displayOrder: 0 }], preview)
+    const rows = await pool.query(`SELECT code FROM commercial_masters WHERE master_key='preSales' AND code='PS03'`)
+    expect(rows.rows).toHaveLength(1)
+  })
 })
