@@ -199,4 +199,20 @@ describe('session orchestrator', () => {
     const runs = await pool.query(`SELECT excluded_rows FROM admin_import_runs WHERE session_id=$1 AND domain='employees'`, [result.sessionId])
     expect(runs.rows[0].excluded_rows).toEqual(excludedRows)
   })
+
+  it('re-committing an identical multi-domain session a second time classifies everything unchanged', async () => {
+    const domains = {
+      organizationHierarchy: [{ nodeType: 'department', name: 'Idempotent Dept', code: 'IDEMPDEPT', parentCode: null, stateCode: null, status: 'active' }],
+      employees: [{ employeeCode: 'IDEMP1', name: 'Jane', designation: 'Officer', email: '', phone: '', orgNodeCode: 'IDEMPDEPT', managerCode: null, vacant: false, status: 'active' }],
+    }
+    const firstValidate = await runSessionValidate(pool, { domains })
+    await runSessionCommit(pool, { domains, sessionCommitToken: firstValidate.sessionCommitToken, excludedRows: [] })
+
+    const secondValidate = await runSessionValidate(pool, { domains })
+    expect(secondValidate.summary).toMatchObject({ toCreate: 0, toUpdate: 0, needsReview: 0, rejected: 0 })
+    expect(secondValidate.summary.unchanged).toBe(2)
+
+    const orgCount = await pool.query(`SELECT COUNT(*) FROM hierarchy_nodes WHERE code='IDEMPDEPT'`)
+    expect(Number(orgCount.rows[0].count)).toBe(1) // no duplicate row was created
+  })
 })
