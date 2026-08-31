@@ -1,10 +1,54 @@
 import { createHash } from 'node:crypto'
-import type { ImportDomainKey, ImportFieldDiff, ImportRowResult, ImportSummary } from './types.js'
+import type { FuzzyCandidate, ImportDomainKey, ImportFieldDiff, ImportRowResult, ImportSummary } from './types.js'
 
 /** Bounded so a single request can't hold the whole event loop hostage
  *  parsing/validating an unbounded spreadsheet — matches the "file/row/JSON
  *  size limits" requirement. An admin with more rows splits the file. */
 export const MAX_IMPORT_ROWS = 5000
+
+export const MIN_FUZZY_SIMILARITY = 0.6
+const MAX_CANDIDATES = 3
+
+function normalizeForMatch(s: string): string {
+  return s.trim().toLowerCase().split(/\s+/).sort().join(' ')
+}
+
+function levenshtein(a: string, b: string): number {
+  const dp: number[][] = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0))
+  for (let i = 0; i <= a.length; i++) dp[i][0] = i
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1])
+    }
+  }
+  return dp[a.length][b.length]
+}
+
+function similarityRatio(a: string, b: string): number {
+  const na = normalizeForMatch(a)
+  const nb = normalizeForMatch(b)
+  const maxLen = Math.max(na.length, nb.length)
+  if (maxLen === 0) return 1
+  return 1 - levenshtein(na, nb) / maxLen
+}
+
+export function findFuzzyCandidates(needle: string, haystack: Iterable<string>): FuzzyCandidate[] {
+  const scored: FuzzyCandidate[] = []
+  for (const key of haystack) {
+    const score = similarityRatio(needle, key)
+    if (score >= MIN_FUZZY_SIMILARITY) scored.push({ key, score })
+  }
+  return scored.sort((a, b) => b.score - a.score).slice(0, MAX_CANDIDATES)
+}
+
+export interface RowValidation {
+  errors: string[]
+  needsReview?: boolean
+  candidates?: FuzzyCandidate[]
+}
 
 export function classifyRows<TRow, TExisting>(opts: {
   rows: TRow[]
@@ -16,7 +60,7 @@ export function classifyRows<TRow, TExisting>(opts: {
   getBusinessKey: (row: TRow, index: number) => string | null
   existingByKey: Map<string, TExisting>
   diffFields: (row: TRow, existing: TExisting) => ImportFieldDiff[]
-  validateRow: (row: TRow, index: number) => string[]
+  validateRow: (row: TRow, index: number) => RowValidation
 }): ImportRowResult[] {
   const { rows, getBusinessKey, existingByKey, diffFields, validateRow } = opts
   const seen = new Map<string, number>() // businessKey -> first row number that claimed it
@@ -38,9 +82,14 @@ export function classifyRows<TRow, TExisting>(opts: {
     }
     seen.set(businessKey, rowNumber)
 
-    const errors = validateRow(row, index)
-    if (errors.length > 0) {
-      results.push({ rowNumber, businessKey, action: 'reject', errors })
+    const validation = validateRow(row, index)
+    if (validation.errors.length > 0) {
+      results.push({
+        rowNumber, businessKey,
+        action: validation.needsReview ? 'needs-review' : 'reject',
+        candidates: validation.candidates,
+        errors: validation.errors,
+      })
       return
     }
 

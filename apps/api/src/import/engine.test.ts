@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { classifyRows, resolveTreeReferences, summarize, computeCommitToken, verifyCommitToken, MAX_IMPORT_ROWS } from './engine.js'
+import { classifyRows, resolveTreeReferences, summarize, computeCommitToken, verifyCommitToken, MAX_IMPORT_ROWS, findFuzzyCandidates, MIN_FUZZY_SIMILARITY } from './engine.js'
 import type { ImportRowResult } from './types.js'
 
 describe('classifyRows', () => {
@@ -12,7 +12,7 @@ describe('classifyRows', () => {
       getBusinessKey: (r) => (r.code ? r.code.trim().toUpperCase() : null),
       existingByKey,
       diffFields: (r, e) => (r.name !== e.name ? [{ field: 'name', oldValue: e.name, newValue: r.name }] : []),
-      validateRow: (r) => (r.name ? [] : ['name is required']),
+      validateRow: (r) => (r.name ? { errors: [] } : { errors: ['name is required'] }),
     })
   }
 
@@ -72,6 +72,55 @@ describe('summarize', () => {
     expect(summary.needsReview).toBe(1)
     expect(summary.rejected).toBe(1)
     expect(summary.total).toBe(2)
+  })
+})
+
+describe('findFuzzyCandidates', () => {
+  it('finds a close match above the similarity floor', () => {
+    const candidates = findFuzzyCandidates('SALSE DEPT', ['SALES DEPT', 'FINANCE DEPT', 'HR DEPT'])
+    expect(candidates[0].key).toBe('SALES DEPT')
+    expect(candidates[0].score).toBeGreaterThanOrEqual(MIN_FUZZY_SIMILARITY)
+  })
+
+  it('caps candidates at 3, ranked by score descending', () => {
+    const candidates = findFuzzyCandidates('SALES', ['SALEX', 'SALEZ', 'SALEY', 'SALEW', 'FINANCE'])
+    expect(candidates.length).toBeLessThanOrEqual(3)
+    for (let i = 1; i < candidates.length; i++) expect(candidates[i].score).toBeLessThanOrEqual(candidates[i - 1].score)
+  })
+
+  it('returns nothing below the similarity floor', () => {
+    expect(findFuzzyCandidates('SALES', ['ZZZZZ QQQQQ'])).toEqual([])
+  })
+
+  it('is case- and whitespace-insensitive', () => {
+    const candidates = findFuzzyCandidates('  sales dept  ', ['SALES DEPT'])
+    expect(candidates[0]?.score).toBe(1)
+  })
+})
+
+describe('classifyRows validateRow contract', () => {
+  it('marks a row needs-review (not reject) when validateRow sets needsReview with candidates', () => {
+    const rows = classifyRows<{ code: string }, never>({
+      rows: [{ code: 'X' }],
+      getBusinessKey: (r) => r.code,
+      existingByKey: new Map(),
+      diffFields: () => [],
+      validateRow: () => ({ errors: ['no such code: X'], needsReview: true, candidates: [{ key: 'X1', score: 0.7 }] }),
+    })
+    expect(rows[0].action).toBe('needs-review')
+    expect(rows[0].candidates).toEqual([{ key: 'X1', score: 0.7 }])
+  })
+
+  it('still rejects when validateRow returns errors with no needsReview flag', () => {
+    const rows = classifyRows<{ code: string }, never>({
+      rows: [{ code: 'X' }],
+      getBusinessKey: (r) => r.code,
+      existingByKey: new Map(),
+      diffFields: () => [],
+      validateRow: () => ({ errors: ['bad row'] }),
+    })
+    expect(rows[0].action).toBe('reject')
+    expect(rows[0].candidates).toBeUndefined()
   })
 })
 
