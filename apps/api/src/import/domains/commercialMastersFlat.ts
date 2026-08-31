@@ -74,8 +74,8 @@ export async function validateFlatMasterRows(
     },
     validateRow: (raw) => {
       const parsed = flatMasterRowSchema.safeParse(raw)
-      if (parsed.success) return []
-      return parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+      if (parsed.success) return { errors: [] }
+      return { errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) }
     },
   })
 }

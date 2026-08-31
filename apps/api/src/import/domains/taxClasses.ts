@@ -61,8 +61,8 @@ export async function validateTaxClassRows(client: { query: Function }, rawRows:
     },
     validateRow: (raw) => {
       const parsed = taxClassRowSchema.safeParse(raw)
-      if (parsed.success) return []
-      return parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+      if (parsed.success) return { errors: [] }
+      return { errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) }
     },
   })
 }

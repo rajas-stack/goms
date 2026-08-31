@@ -141,11 +141,11 @@ export async function validateApprovalMatrixRows(client: { query: Function }, ra
     },
     validateRow: (raw) => {
       const parsed = approvalMatrixRowSchema.safeParse(raw)
-      if (!parsed.success) return parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+      if (!parsed.success) return { errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) }
       if (parsed.data.minDiscountPct >= parsed.data.maxDiscountPct) {
-        return ['maxDiscountPct must be greater than minDiscountPct']
+        return { errors: ['maxDiscountPct must be greater than minDiscountPct'] }
       }
-      return []
+      return { errors: [] }
     },
   })
 

@@ -154,8 +154,8 @@ export async function validateCurrencyRows(client: { query: Function }, rawRows:
     },
     validateRow: (raw) => {
       const parsed = currencyRowSchema.safeParse(raw)
-      if (parsed.success) return []
-      return parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`)
+      if (parsed.success) return { errors: [] }
+      return { errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) }
     },
   })
 

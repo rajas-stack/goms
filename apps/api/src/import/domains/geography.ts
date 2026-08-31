@@ -52,13 +52,27 @@ function businessKey(row: GeoRow): string {
   return `${row.level}|${row.stateCode ?? ''}|${row.parentLgdCode ?? ''}|${row.lgdCode}`
 }
 
+// Reserved stateCode for the virtual "Central Ministries (Govt. of India)"
+// state — must stay in sync with the frontend's own `CENTRAL_STATE_CODE`
+// (src/data/gov-hierarchy.ts): real LGD state codes start at 1.
+const CENTRAL_MINISTRIES_STATE_CODE = 0
+
 /** Builds the exact row set the bundled LGD reference data (the same files
  *  `src/data/seed.ts` reads to seed a fresh in-memory install) produces —
- *  country -> states -> districts -> talukas. Deliberately excludes the
- *  synthetic "Central Ministries" virtual state `gov-hierarchy.ts` adds
- *  (stateCode 0, no LGD code, not derivable from these two source files) —
- *  that's Organization Hierarchy's concern (any admin can add a root org
- *  node for it via that importer), not real LGD geography. */
+ *  country -> states -> districts -> talukas -- plus one synthetic "state"
+ *  row for the virtual "Central Ministries (Govt. of India)" node
+ *  `src/data/seed.ts` also adds directly (stateCode 0, no real LGD code).
+ *
+ *  This domain -- not organizationHierarchy -- is the one that can actually
+ *  carry it: organizationHierarchy's own `NODE_TYPES` enum (department/
+ *  branch/division/office/unit) has no `'state'` value, so a row here isn't
+ *  optional routing, it's the only import path this node's `typeKey`
+ *  ('state') can validate against. Previously excluded from here on the
+ *  (incorrect) assumption organizationHierarchy would cover it instead --
+ *  it can't -- which meant this node was never created by any import path,
+ *  breaking `hierarchy.getState(0)` and the entire Central Ministries page
+ *  in production even though its child org nodes existed and were reachable
+ *  by id all along (see the 2026-08-31 production frontend investigation). */
 export function buildGeographyRows(): GeoRow[] {
   const admin = JSON.parse(readFileSync(path.join(DATA_DIR, 'india-admin.json'), 'utf-8')) as RawAdminState[]
   const subdistricts = JSON.parse(readFileSync(path.join(DATA_DIR, 'subdistricts.json'), 'utf-8')) as RawSubdistrict[]
@@ -71,7 +85,13 @@ export function buildGeographyRows(): GeoRow[] {
     else subdistrictsByDtKey.set(key, [sd])
   }
 
-  const rows: GeoRow[] = [{ level: 'country', name: 'India', lgdCode: 'IN', parentLgdCode: null, stateCode: null }]
+  const rows: GeoRow[] = [
+    { level: 'country', name: 'India', lgdCode: 'IN', parentLgdCode: null, stateCode: null },
+    {
+      level: 'state', name: 'Central Ministries (Govt. of India)', lgdCode: String(CENTRAL_MINISTRIES_STATE_CODE),
+      parentLgdCode: null, stateCode: CENTRAL_MINISTRIES_STATE_CODE,
+    },
+  ]
 
   for (const st of admin) {
     // Number-normalized, matching seed.ts's own `AdminState.st_code: Number(s.st_code)`
@@ -145,7 +165,7 @@ function classify(rows: GeoRow[], existingByKey: Map<string, ExistingGeoNode>): 
       if (row.name !== existing.name) diffs.push({ field: 'name', oldValue: existing.name, newValue: row.name })
       return diffs
     },
-    validateRow: () => [], // every bundled row is trusted, well-formed reference data
+    validateRow: () => ({ errors: [] }), // every bundled row is trusted, well-formed reference data
   })
 }
 
