@@ -6,10 +6,11 @@ import { Icon } from '@/components/ui/Icon'
 import { WorkFormDialog } from './WorkFormDialog'
 import { formatBudgetRange, formatWorkValue, workUnitLabel } from './department-meta'
 import { stageLabel } from '@/data/pipeline-stages'
-import { useOpportunityMutations, useResolvedOwners, useSalesPersons } from '@/lib/api'
+import { useOpportunityMutations, useOwnershipMutations, useResolvedOwners, useSalesPersons } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
 import { OwnerBadge } from '@/features/sales/OwnerBadge'
 import { AssignOwnerDialog } from '@/features/sales/AssignOwnerDialog'
+import { assignOwnerFromEmail } from '@/lib/assignOwnerFromEmail'
 import { isoToday } from '@/lib/dates'
 import type { Opportunity } from '@/lib/types'
 
@@ -25,6 +26,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
 }) {
   const ws = useWorkspace()
   const { create, update, remove } = useOpportunityMutations()
+  const { assign } = useOwnershipMutations()
   const { data: people = [] } = useSalesPersons()
   const oppIds = opportunities.map((w) => w.id)
   const { data: owners = {} } = useResolvedOwners('opportunity', oppIds, isoToday())
@@ -42,9 +44,33 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
     setEditing(w)
     setDialogOpen(true)
   }
-  function save(draft: Omit<Opportunity, 'id' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>) {
-    if (editing) update.mutate({ id: editing.id, patch: draft })
-    else create.mutate({ departmentId, ...draft })
+  // Item 10: saving Edit Opportunity with a newly-picked Sales Person must
+  // also reflect into the real ownership ledger (`ownership_assignments`) —
+  // otherwise the card's "Unassigned" badge keeps reading a stale resolution
+  // even though `salesPersonEmail` itself saved fine. Reuses `owners` (the
+  // same `useResolvedOwners('opportunity', oppIds, ...)` already fetched
+  // above for every card in this list — `editing` is always one of
+  // `opportunities`, so `owners[editing.id]` is already the right
+  // resolution) rather than firing a second, redundant query for just this
+  // one id. Per the same ruling as the Employee form: only an existing
+  // `direct` resolution counts as "already owned" — an `inherited` one must
+  // not suppress a genuine new direct assignment.
+  async function save(draft: Omit<Opportunity, 'id' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>) {
+    if (editing) {
+      await update.mutateAsync({ id: editing.id, patch: draft })
+      const currentResolution = owners[editing.id]
+      const currentOwnerSalesPersonId = currentResolution?.source === 'direct' ? currentResolution.salesPersonId : undefined
+      await assignOwnerFromEmail({
+        entityType: 'opportunity',
+        entityId: editing.id,
+        email: draft.salesPersonEmail,
+        salesPersons: people,
+        currentOwnerSalesPersonId,
+        assignMutateAsync: assign.mutateAsync,
+      })
+    } else {
+      create.mutate({ departmentId, ...draft })
+    }
   }
 
   return (
