@@ -72,13 +72,14 @@ resource "google_cloud_run_v2_service" "goms_api" {
     }
 
     containers {
-      # Pinned to the commit-SHA/manual-fix tag actually live on goms-dev
-      # today (confirmed via `gcloud run services describe`, 2026-09-01) —
-      # using the stale tag previously recorded here would roll the running
-      # service BACK to an older image as an unintended side effect of this
-      # task's env-var change below. Update this alongside any future
-      # Terraform-driven deploy of goms-api.
-      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:dev-importfix-20260901"
+      # Pinned to the commit-SHA tag manually built+pushed+deployed
+      # (`gcloud run deploy`, out-of-band from Terraform) for the Admin Data
+      # Import authentication rollout, 2026-09-01 — the previous tag here
+      # predated all of this session's auth code, which is why an
+      # unauthenticated adminImport.* call still returned real data before
+      # this deploy. Update this alongside any future Terraform-driven
+      # deploy of goms-api.
+      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:943b362b28dc9439fa0ed01aae49531cc9f2e1eb"
       env {
         name = "DATABASE_URL"
         value_source {
