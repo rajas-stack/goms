@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CanvasProvider, useCanvas, type Edge } from './canvasContext'
 import { CanvasBranch, type CanvasItem } from './CanvasBranch'
 import { DepartmentCombobox } from './DepartmentCombobox'
@@ -111,6 +111,33 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
   const { data: outsideHeadEmployee } = useEmployee(deptHeadId && !headInSubtree ? deptHeadId : null)
   const peopleRootsBase = domain === 'people' ? rootReportsOf(deptEmployees) : []
   const peopleRoots = outsideHeadEmployee ? [outsideHeadEmployee, ...peopleRootsBase] : peopleRootsBase
+
+  // People-canvas search (item 7): a separate free-text filter over the
+  // employee cards already resolved above, scoped strictly to the People
+  // domain so it can never affect the Organization/geo/sales branches. Same
+  // predicate as the List view (`PeopleDirectory.tsx:126-127`) — lowercase/
+  // trim query, substring match against name/designation/phone/email/manager
+  // name — so the two views agree on what "matches" means.
+  const [peopleQuery, setPeopleQuery] = useState('')
+  // Resolved from the full state-scoped employee list (not just `deptEmployees`)
+  // so a root card whose manager sits outside this department (e.g. a head
+  // office role) still resolves a manager name to search against — mirroring
+  // `PeopleDirectory`'s `nameById`, which is likewise built from its full
+  // in-scope list rather than the currently-filtered one.
+  const peopleNameById = useMemo(
+    () => new Map(stateEmployees.map((e) => [e.id, e.name] as const)),
+    [stateEmployees],
+  )
+  const filteredPeopleRoots = useMemo(() => {
+    const q = peopleQuery.trim().toLowerCase()
+    if (!q) return peopleRoots
+    return peopleRoots.filter((e) => {
+      const managerName = e.managerId ? peopleNameById.get(e.managerId) ?? '' : ''
+      const haystack = [e.name, e.designation, e.phone, e.email, managerName].join(' ').toLowerCase()
+      return haystack.includes(q)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peopleRoots, peopleQuery, peopleNameById])
 
   // Flag the department head's card wherever it renders in the People view,
   // so hierarchy (who's the head vs. a peer root report) is unambiguous.
@@ -495,7 +522,7 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
     ? (stateNode ? [{ kind: 'node', node: stateNode }] : [])
     : domain === 'org'
       ? orgRoots.map((n) => ({ kind: 'node', node: n }))
-      : peopleRoots.map((e) => ({ kind: 'employee', employee: e }))
+      : filteredPeopleRoots.map((e) => ({ kind: 'employee', employee: e }))
 
   return (
     <div
@@ -550,6 +577,16 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
               <span className="eyebrow">{NODE_TYPE_MAP[peopleBranch.typeKey]?.label}</span>
             </>
           )}
+          <div className="pointer-events-auto flex h-7 items-center gap-1.5 rounded-lg border border-line bg-white px-2">
+            <Icon name="Search" size={13} className="shrink-0 text-muted" />
+            <input
+              value={peopleQuery}
+              onChange={(e) => setPeopleQuery(e.target.value)}
+              placeholder="Search people…"
+              aria-label="Search people"
+              className="h-full w-[10rem] bg-transparent text-[12px] font-semibold text-ink-900 outline-none placeholder:font-normal placeholder:text-muted/70"
+            />
+          </div>
           <span className="ml-auto flex items-center gap-1 font-medium text-muted">
             <Icon name="Users" size={12} />
             {deptEmployees.length} {deptEmployees.length === 1 ? 'person' : 'people'}
