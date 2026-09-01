@@ -144,12 +144,28 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
   const wasVacant = !!employee?.vacant
   const fillingVacancy = wasVacant && !form.vacant
 
+  function readImageFileAsDataUrl(file: File, cb: (dataUrl: string) => void) {
+    const reader = new FileReader()
+    reader.onload = () => cb(String(reader.result))
+    reader.readAsDataURL(file)
+  }
+
   function onPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => setForm((f) => ({ ...f, photoUrl: String(reader.result) }))
-    reader.readAsDataURL(file)
+    readImageFileAsDataUrl(file, (dataUrl) => setForm((f) => ({ ...f, photoUrl: dataUrl })))
+  }
+
+  function onPhotoPaste(e: React.ClipboardEvent<HTMLDivElement>) {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (file) readImageFileAsDataUrl(file, (dataUrl) => setForm((f) => ({ ...f, photoUrl: dataUrl })))
+        return
+      }
+    }
   }
 
   function onCardFile(e: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') {
@@ -396,8 +412,8 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
         )}
 
         {!reporteeMode && !form.vacant && (
-          <Field label="Profile Picture">
-            <div className="flex items-center gap-3">
+          <Field label="Profile Picture" hint="Upload, or click here and press Ctrl+V to paste an image.">
+            <div className="flex items-center gap-3" tabIndex={0} onPaste={onPhotoPaste}>
               {form.photoUrl ? (
                 <span className="relative">
                   <img src={form.photoUrl} alt="" className="h-14 w-14 rounded-xl object-cover" />

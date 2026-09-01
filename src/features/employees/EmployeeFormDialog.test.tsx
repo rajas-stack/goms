@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import * as api from '@/lib/api'
@@ -222,6 +222,56 @@ describe('EmployeeFormDialog — auto-reflecting the Relationship Owner pick int
     await waitFor(() => expect(createMutateAsync).toHaveBeenCalled())
     expect(assignMutateAsync).not.toHaveBeenCalled()
     expect(onSaved).toHaveBeenCalledWith('vacant-1')
+  })
+
+  it('pasting an image/png clipboard item into the photo area sets form.photoUrl to a data URL', async () => {
+    stubApiHooks()
+    const employee = makeEmployee()
+    renderDialog({ employee })
+
+    const dataUrl = 'data:image/png;base64,PASTED=='
+    class FakeFileReader {
+      result: string | ArrayBuffer | null = null
+      onload: (() => void) | null = null
+      readAsDataURL() {
+        this.result = dataUrl
+        this.onload?.()
+      }
+    }
+    vi.stubGlobal('FileReader', FakeFileReader as unknown as typeof FileReader)
+
+    const file = new File(['(binary)'], 'pasted.png', { type: 'image/png' })
+    const clipboardData = {
+      items: [{ type: 'image/png', getAsFile: () => file }],
+    }
+
+    const dropZone = screen.getByText('Profile Picture').closest('label')!.querySelector('div')!
+    act(() => {
+      dropZone.dispatchEvent(
+        Object.assign(new Event('paste', { bubbles: true }), { clipboardData }),
+      )
+    })
+
+    await waitFor(() => expect(screen.getByAltText('')).toHaveAttribute('src', dataUrl))
+  })
+
+  it('pasting a clipboard item with no image (e.g. plain text) is a no-op', async () => {
+    stubApiHooks()
+    const employee = makeEmployee({ photoUrl: 'data:image/png;base64,EXISTING==' })
+    renderDialog({ employee })
+
+    const clipboardData = {
+      items: [{ type: 'text/plain', getAsFile: () => null }],
+    }
+
+    const dropZone = screen.getByText('Profile Picture').closest('label')!.querySelector('div')!
+    act(() => {
+      dropZone.dispatchEvent(
+        Object.assign(new Event('paste', { bubbles: true }), { clipboardData }),
+      )
+    })
+
+    expect(screen.getByAltText('')).toHaveAttribute('src', 'data:image/png;base64,EXISTING==')
   })
 
   it('the employee save still succeeds even when assign swallows a same-day-collision internally', async () => {
