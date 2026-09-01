@@ -49,7 +49,12 @@ export async function assignOwnerFromEmail(args: {
     salesPersonId: string
     role: 'owner'
     startDate: string
-    reason: string
+    // Narrowed to the one literal this helper ever sends (line ~70 below) —
+    // was `string`, which doesn't structurally match a real caller's
+    // `AssignOwnerInput['reason']` (a closed union, not a plain string) and
+    // broke passing `useOwnershipMutations().assign.mutateAsync` straight
+    // through, as the first real caller (EmployeeFormDialog) does.
+    reason: 'reassignment'
   }) => Promise<unknown>
 }): Promise<boolean> {
   const { entityType, entityId, email, salesPersons, currentOwnerSalesPersonId, assignMutateAsync } = args

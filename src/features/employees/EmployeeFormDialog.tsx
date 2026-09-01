@@ -7,9 +7,13 @@ import { Icon } from '@/components/ui/Icon'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
 import { useFormDraft } from '@/lib/useFormDraft'
-import { useEmployeeMutations, useEmployeesByState, useFollowUpMutations, useNode } from '@/lib/api'
+import {
+  useEmployeeMutations, useEmployeesByState, useFollowUpMutations, useNode,
+  useOwnershipMutations, useResolvedOwners, useSalesPersons,
+} from '@/lib/api'
 import { isoToday } from '@/data/repository'
 import { isValidEmail, uid } from '@/lib/utils'
+import { assignOwnerFromEmail } from '@/lib/assignOwnerFromEmail'
 import { ManagerPicker } from './ManagerPicker'
 import { SalesTeamPicker } from './SalesTeamPicker'
 import { extractContact } from './contact-ocr'
@@ -54,6 +58,17 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
   const toast = useToast()
   const { create, update, addTimelineEvent } = useEmployeeMutations()
   const { create: createFollowUp } = useFollowUpMutations()
+  const { data: salesPersons = [] } = useSalesPersons()
+  const { assign } = useOwnershipMutations()
+  // Only the direct owner counts here (item 6's ruling): an `inherited`
+  // resolution (e.g. from the department) must NOT be treated as "already
+  // owned" — an explicit pick has to create a real direct assignment, not be
+  // swallowed as a no-op match against an inherited one. Always called
+  // unconditionally (hooks can't be conditional) — `employee` is null for
+  // every create path, so `resolvedOwners` is simply empty there and
+  // `currentOwnerSalesPersonId` below resolves to `undefined`, which is
+  // exactly "no current direct owner".
+  const { data: resolvedOwners = {} } = useResolvedOwners('contact', employee ? [employee.id] : [], isoToday())
   const isSaving = create.isPending || update.isPending || addTimelineEvent.isPending
   const { data: employeeOrgNode } = useNode(employee?.orgNodeId ?? null)
   const postingNode = orgNode ?? employeeOrgNode ?? null
@@ -208,6 +223,27 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
     }
   }
 
+  const currentOwnerResolution = employee ? resolvedOwners[employee.id] : undefined
+  const currentOwnerSalesPersonId = currentOwnerResolution?.source === 'direct' ? currentOwnerResolution.salesPersonId : undefined
+
+  // Auto-reflects the picked Relationship Owner into a real AMNEX ownership
+  // assignment (item 6) — an addition alongside the existing
+  // `metadata.relationshipOwner` legacy field above, not a replacement for
+  // it. A no-op when the email is blank, unresolvable, or already the
+  // current direct owner (Task 1.1's `assignOwnerFromEmail` handles all of
+  // that), and it never blocks the employee save even on the rare
+  // same-day-collision case (swallowed internally by that helper).
+  async function reflectRelationshipOwner(entityId: string) {
+    await assignOwnerFromEmail({
+      entityType: 'contact',
+      entityId,
+      email: form.relationshipOwner,
+      salesPersons,
+      currentOwnerSalesPersonId,
+      assignMutateAsync: assign.mutateAsync,
+    })
+  }
+
   async function submit() {
     if (!canSubmit) return
 
@@ -240,6 +276,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
             metadata: { ...(employee?.metadata ?? {}), relationshipOwner: form.relationshipOwner },
           },
         })
+        await reflectRelationshipOwner(personId)
         await mirrorFollowUp(personId, employee?.followUpDate)
         onSaved(personId)
       }
@@ -266,6 +303,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
     }
     if (employee) {
       await update.mutateAsync({ id: employee.id, patch })
+      await reflectRelationshipOwner(employee.id)
       if (fillingVacancy) {
         await addTimelineEvent.mutateAsync({
           employeeId: employee.id, type: 'joined',
@@ -284,6 +322,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
           ? [{ id: uid('card'), frontUrl: cardFront.url, frontName: cardFront.name, backUrl: cardBack?.url ?? null, backName: cardBack?.name ?? null }]
           : [],
       })
+      await reflectRelationshipOwner(created.id)
       toast(form.vacant ? 'Added vacant position' : `Added ${form.name.trim()}`)
       await mirrorFollowUp(created.id, null)
       onSaved(created.id)
