@@ -120,7 +120,7 @@ function applyExclusions(
  *  was computed from (see Task 6's `SessionCommitInput` doc-comment and
  *  this task's design note) — exclusions are applied here, per-domain,
  *  never by the caller pre-trimming the payload it sends. */
-export async function runSessionCommit(pool: Pool, input: SessionCommitInput): Promise<SessionCommitOutput> {
+export async function runSessionCommit(pool: Pool, input: SessionCommitInput, actorEmail: string): Promise<SessionCommitOutput> {
   const domainOrder = topologicalOrder(Object.keys(input.domains) as ImportDomainKey[])
   if (computeSessionCommitToken(domainOrder, input.domains) !== input.sessionCommitToken) {
     throw new TRPCError({ code: 'CONFLICT', message: 'This data has changed since it was previewed. Please re-validate before committing.' })
@@ -157,7 +157,7 @@ export async function runSessionCommit(pool: Pool, input: SessionCommitInput): P
     for (const { domain, preview } of previews) {
       const flat = ADAPTERS[domain]!.flatten(preview)
       const excludedForDomain = input.excludedRows.filter((r) => r.domain === domain)
-      await recordImportRun(client, sessionId, domain, summarize(flat), flat, excludedForDomain)
+      await recordImportRun(client, sessionId, domain, summarize(flat), flat, excludedForDomain, actorEmail)
     }
 
     await client.query('COMMIT')

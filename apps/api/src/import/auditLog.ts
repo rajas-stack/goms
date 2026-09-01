@@ -9,13 +9,15 @@ export async function recordImportRun(
   summary: ImportSummary,
   rejectedRows: ImportRowResult[],
   excludedRows: ExcludedRow[],
+  actorEmail: string,
 ): Promise<void> {
   await client.query(
-    `INSERT INTO admin_import_runs (session_id, domain, summary, rejected_rows, excluded_rows) VALUES ($1,$2,$3,$4,$5)`,
+    `INSERT INTO admin_import_runs (session_id, domain, summary, rejected_rows, excluded_rows, actor_email) VALUES ($1,$2,$3,$4,$5,$6)`,
     [
       sessionId, domain, JSON.stringify(summary),
       JSON.stringify(rejectedRows.filter((r) => r.action === 'reject')),
       JSON.stringify(excludedRows),
+      actorEmail,
     ],
   )
 }
@@ -28,18 +30,20 @@ export interface ImportHistoryEntry {
   rejectedRowCount: number
   excludedRows: ExcludedRow[]
   committedAt: string
+  actorEmail: string | null
 }
 
 function toEntry(r: any): ImportHistoryEntry {
   return {
     id: r.id, sessionId: r.session_id, domain: r.domain, summary: r.summary,
     rejectedRowCount: r.rejected_row_count, excludedRows: r.excluded_rows, committedAt: r.committed_at,
+    actorEmail: r.actor_email,
   }
 }
 
 export async function listImportHistory(domain: string): Promise<ImportHistoryEntry[]> {
   const result = await pool.query(
-    `SELECT id, session_id, domain, summary, jsonb_array_length(rejected_rows) AS rejected_row_count, excluded_rows, committed_at
+    `SELECT id, session_id, domain, summary, jsonb_array_length(rejected_rows) AS rejected_row_count, excluded_rows, committed_at, actor_email
      FROM admin_import_runs WHERE domain=$1 ORDER BY committed_at DESC LIMIT 50`,
     [domain],
   )
@@ -52,7 +56,7 @@ export async function listImportHistory(domain: string): Promise<ImportHistoryEn
  *  session shows as one grouped result, not 5 unrelated history rows. */
 export async function listSessionHistory(sessionId: string): Promise<ImportHistoryEntry[]> {
   const result = await pool.query(
-    `SELECT id, session_id, domain, summary, jsonb_array_length(rejected_rows) AS rejected_row_count, excluded_rows, committed_at
+    `SELECT id, session_id, domain, summary, jsonb_array_length(rejected_rows) AS rejected_row_count, excluded_rows, committed_at, actor_email
      FROM admin_import_runs WHERE session_id=$1 ORDER BY domain ASC`,
     [sessionId],
   )

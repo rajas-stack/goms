@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { pool } from '../../db.js'
 import { runSessionValidate, runSessionCommit } from './orchestrator.js'
+import { AUTHORIZED_TEST_EMAIL } from '../../testHelpers/adminImportTestAuth.js'
 
 describe('session orchestrator', () => {
   beforeEach(async () => {
@@ -39,7 +40,7 @@ describe('session orchestrator', () => {
       employees: [{ employeeCode: 'E101', name: 'Jane Doe', designation: 'Officer', email: '', phone: '', orgNodeCode: 'NEWDEPT2', managerCode: null, vacant: false, status: 'active' }],
     }
     const validated = await runSessionValidate(pool, { domains })
-    const result = await runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows: [] })
+    const result = await runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows: [] }, AUTHORIZED_TEST_EMAIL)
 
     expect(result.summary.toCreate).toBe(2)
     const org = await pool.query(`SELECT COUNT(*) FROM hierarchy_nodes WHERE code='NEWDEPT2'`)
@@ -58,7 +59,7 @@ describe('session orchestrator', () => {
     }
     const validated = await runSessionValidate(pool, { domains })
     await expect(
-      runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows: [] }),
+      runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows: [] }, AUTHORIZED_TEST_EMAIL),
     ).rejects.toThrow(/unresolved or rejected/)
     const emp = await pool.query(`SELECT COUNT(*) FROM employees WHERE code='E102'`)
     expect(Number(emp.rows[0].count)).toBe(0)
@@ -71,7 +72,7 @@ describe('session orchestrator', () => {
     }
     const validated = await runSessionValidate(pool, { domains })
     await expect(
-      runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows: [] }),
+      runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows: [] }, AUTHORIZED_TEST_EMAIL),
     ).rejects.toThrow()
     const org = await pool.query(`SELECT COUNT(*) FROM hierarchy_nodes WHERE code='RBDEPT'`)
     expect(Number(org.rows[0].count)).toBe(0)
@@ -82,7 +83,7 @@ describe('session orchestrator', () => {
     const validated = await runSessionValidate(pool, { domains })
     const tamperedDomains = { taxClasses: [{ code: 'GST18', name: 'GST 18% (tampered)', ratePct: 18 }] }
     await expect(
-      runSessionCommit(pool, { domains: tamperedDomains, sessionCommitToken: validated.sessionCommitToken, excludedRows: [] }),
+      runSessionCommit(pool, { domains: tamperedDomains, sessionCommitToken: validated.sessionCommitToken, excludedRows: [] }, AUTHORIZED_TEST_EMAIL),
     ).rejects.toThrow(/changed since it was previewed/)
   })
 
@@ -115,7 +116,7 @@ describe('session orchestrator', () => {
     // trimming, no second validate call. This is the exact shape the bug
     // broke: reusing the original token while a caller had ALSO removed the
     // excluded row from `domains` itself would have failed here.
-    const result = await runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows })
+    const result = await runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows }, AUTHORIZED_TEST_EMAIL)
     expect(result.summary.toCreate).toBe(1)
   })
 
@@ -142,7 +143,7 @@ describe('session orchestrator', () => {
       ],
     }
     await expect(
-      runSessionCommit(pool, { domains: tamperedDomains, sessionCommitToken: validated.sessionCommitToken, excludedRows }),
+      runSessionCommit(pool, { domains: tamperedDomains, sessionCommitToken: validated.sessionCommitToken, excludedRows }, AUTHORIZED_TEST_EMAIL),
     ).rejects.toThrow(/changed since it was previewed/)
   })
 
@@ -166,7 +167,7 @@ describe('session orchestrator', () => {
 
     // Commit is blocked while the needs-review row is present and unexcluded.
     await expect(
-      runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows: [] }),
+      runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows: [] }, AUTHORIZED_TEST_EMAIL),
     ).rejects.toThrow(/unresolved or rejected/)
 
     const excludedRows = [{ domain: 'employees' as const, rowNumber: 2, businessKey: 'AMBIG1', reason: 'no confident match; will re-upload with corrected code' }]
@@ -177,7 +178,7 @@ describe('session orchestrator', () => {
     // change past the staleness check.
     const tamperedDomains = { employees: [{ ...domains.employees[0], designation: 'Sneaked-in change' }, domains.employees[1]] }
     await expect(
-      runSessionCommit(pool, { domains: tamperedDomains, sessionCommitToken: validated.sessionCommitToken, excludedRows }),
+      runSessionCommit(pool, { domains: tamperedDomains, sessionCommitToken: validated.sessionCommitToken, excludedRows }, AUTHORIZED_TEST_EMAIL),
     ).rejects.toThrow(/changed since it was previewed/)
 
     // The real flow: SAME domains, SAME token from the one validate call
@@ -185,7 +186,7 @@ describe('session orchestrator', () => {
     // the shape a prior version of this design got wrong (see Task 7's design
     // note): reusing this token while ALSO removing AMBIG1 from `domains`
     // before sending it would have failed here with a false staleness error.
-    const result = await runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows })
+    const result = await runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows }, AUTHORIZED_TEST_EMAIL)
 
     // 1. Commit succeeded (reaching here at all).
     // 2. The excluded row was not written.
@@ -206,7 +207,7 @@ describe('session orchestrator', () => {
       employees: [{ employeeCode: 'IDEMP1', name: 'Jane', designation: 'Officer', email: '', phone: '', orgNodeCode: 'IDEMPDEPT', managerCode: null, vacant: false, status: 'active' }],
     }
     const firstValidate = await runSessionValidate(pool, { domains })
-    await runSessionCommit(pool, { domains, sessionCommitToken: firstValidate.sessionCommitToken, excludedRows: [] })
+    await runSessionCommit(pool, { domains, sessionCommitToken: firstValidate.sessionCommitToken, excludedRows: [] }, AUTHORIZED_TEST_EMAIL)
 
     const secondValidate = await runSessionValidate(pool, { domains })
     expect(secondValidate.summary).toMatchObject({ toCreate: 0, toUpdate: 0, needsReview: 0, rejected: 0 })

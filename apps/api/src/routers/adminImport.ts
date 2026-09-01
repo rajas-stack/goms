@@ -53,7 +53,7 @@ export const adminImportRouter = router({
 
     commit: adminImportProcedure
       .input(z.object({ domains: sessionDomainsSchema, sessionCommitToken: z.string(), excludedRows: z.array(excludedRowSchema) }))
-      .mutation(({ input }) => runSessionCommit(pool, { domains: input.domains as any, sessionCommitToken: input.sessionCommitToken, excludedRows: input.excludedRows })),
+      .mutation(({ input, ctx }) => runSessionCommit(pool, { domains: input.domains as any, sessionCommitToken: input.sessionCommitToken, excludedRows: input.excludedRows }, ctx.user.email)),
 
     history: adminImportProcedure
       .input(z.object({ sessionId: z.string() }))
@@ -70,7 +70,7 @@ export const adminImportRouter = router({
 
   commitGeographyLoad: adminImportProcedure
     .input(z.object({ commitToken: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
@@ -78,7 +78,7 @@ export const adminImportRouter = router({
         // Geography stays outside the session engine (design spec §4 treats
         // it as an always-'ready' root with no uploaded rows) — its own
         // one-off session id, one domain.
-        await recordImportRun(client, randomUUID(), 'geography', result.summary, [], [])
+        await recordImportRun(client, randomUUID(), 'geography', result.summary, [], [], ctx.user.email)
         await client.query('COMMIT')
         return result
       } catch (e) {

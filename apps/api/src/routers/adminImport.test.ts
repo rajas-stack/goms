@@ -124,6 +124,15 @@ describe('adminImport router', () => {
     expect(domains.find((d) => d.domain === 'geography')?.currentRowCount).toBeGreaterThan(7000)
   }, 30000)
 
+  it("records the authenticated caller's email on the committed session", async () => {
+    const caller = appRouter.createCaller(authorizedContext())
+    const domains = { taxClasses: [{ code: 'GST18', name: 'GST 18%', ratePct: 18 }] }
+    const preview = await caller.adminImport.session.validate({ domains })
+    const result = await caller.adminImport.session.commit({ domains, sessionCommitToken: preview.sessionCommitToken, excludedRows: [] })
+    const dbRow = await pool.query(`SELECT actor_email FROM admin_import_runs WHERE session_id=$1`, [result.sessionId])
+    expect(dbRow.rows[0].actor_email).toBe(AUTHORIZED_TEST_EMAIL)
+  })
+
   describe('adminImport identity gate', () => {
     it('rejects a call with no Authorization header', async () => {
       const caller = appRouter.createCaller({})
