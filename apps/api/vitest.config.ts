@@ -12,5 +12,6 @@ export default defineConfig({
     // state — the same trade-off `customers`/`hierarchy` never needed to
     // make because only one file touched shared tables until now.
     fileParallelism: false,
+    setupFiles: ['./src/testHelpers/setupFirebaseAdminMock.ts'],
   },
 })
