@@ -104,7 +104,7 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
             <Input type="date" value={form.submissionDate} onChange={(e) => set('submissionDate', e.target.value)} />
           </Field>
           <Field label="Component">
-            <MultiSelectDropdown value={form.component} onChange={(v) => set('component', v)} groups={WORK_COMPONENT_GROUPS} storageKey="work-component" />
+            <MultiSelectDropdown value={form.component} onChange={(v) => set('component', v)} groups={WORK_COMPONENT_GROUPS} storageKey="work-component" searchable searchPlaceholder="Search components…" />
           </Field>
           <Field label="Quantity">
             <Input value={form.quantity} onChange={(e) => set('quantity', e.target.value)} inputMode="numeric" placeholder="0" />
