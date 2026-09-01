@@ -5,11 +5,24 @@
 // its own self-contained module rather than folded into `Repository`.
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { auth } from '@/lib/firebaseAuth'
 import type { AppRouter } from '../../../apps/api/src/index'
 import type { ImportAction, ImportDomainKey, ImportRowResult, ImportSummary } from '../../../apps/api/src/import/types'
 
 const adminImportClient = createTRPCClient<AppRouter>({
-  links: [httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc` })],
+  links: [
+    httpBatchLink({
+      url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`,
+      // Reads the *current* ID token on every request rather than caching
+      // one at module-load time — getIdToken() transparently refreshes an
+      // expired token, and there is no signed-in user at all until
+      // AdminImportAuthGate's onAuthStateChanged fires.
+      headers: async () => {
+        const token = await auth.currentUser?.getIdToken()
+        return token ? { Authorization: `Bearer ${token}` } : {}
+      },
+    }),
+  ],
 }).adminImport
 
 export type SpreadsheetDomainKey = Exclude<ImportDomainKey, 'geography'>

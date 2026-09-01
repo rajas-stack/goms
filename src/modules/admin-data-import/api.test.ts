@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { adminImportApi, flattenSessionPreview } from './api'
 
+// api.ts's httpBatchLink reads auth.currentUser to attach an ID token —
+// mocked here (as AdminImportAuthGate.test.tsx also does) so this file's
+// pure-logic tests don't depend on a real Firebase project/API key existing.
+vi.mock('@/lib/firebaseAuth', () => ({ auth: { currentUser: null } }))
+
 describe('flattenSessionPreview', () => {
   it('flattens multiple domains\' previews into one list, tagging each row with its domain', () => {
     const result = flattenSessionPreview([

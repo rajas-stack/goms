@@ -22,6 +22,9 @@ const SessionImportWizard = lazy(() =>
 const GeographyLoadPanel = lazy(() =>
   import('@/modules/admin-data-import/GeographyLoadPanel').then((m) => ({ default: m.GeographyLoadPanel })),
 )
+const AdminImportAuthGate = lazy(() =>
+  import('@/modules/admin-data-import/auth/AdminImportAuthGate').then((m) => ({ default: m.AdminImportAuthGate })),
+)
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
 // Admin Data Import is gated behind its own env flag — unset/false by
@@ -32,13 +35,13 @@ const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: 
 const adminImportRoutes =
   import.meta.env.VITE_ADMIN_IMPORT_ENABLED === 'true'
     ? [
-        { path: '/admin/data-import', element: <AdminImportDashboard /> },
+        { path: '/admin/data-import', element: <AdminImportAuthGate><AdminImportDashboard /></AdminImportAuthGate> },
         // Geography is a one-click load with no uploaded file at all, so it
         // keeps its own dedicated panel — it never goes through the session
         // wizard (design spec §4 treats it as an always-'ready' root with no
         // uploaded rows).
-        { path: '/admin/data-import/geography', element: <GeographyLoadPanel /> },
-        { path: '/admin/data-import/session', element: <SessionImportWizard /> },
+        { path: '/admin/data-import/geography', element: <AdminImportAuthGate><GeographyLoadPanel /></AdminImportAuthGate> },
+        { path: '/admin/data-import/session', element: <AdminImportAuthGate><SessionImportWizard /></AdminImportAuthGate> },
       ]
     : []
 

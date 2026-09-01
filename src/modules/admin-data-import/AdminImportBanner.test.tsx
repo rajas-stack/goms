@@ -3,9 +3,9 @@ import { render, screen } from '@testing-library/react'
 import { AdminImportBanner } from './AdminImportBanner'
 
 describe('AdminImportBanner', () => {
-  it('renders the "access control not yet enforced" warning', () => {
+  it('renders the allow-list warning', () => {
     render(<AdminImportBanner />)
-    expect(screen.getByText(/access control not yet enforced/i)).toBeInTheDocument()
+    expect(screen.getByText(/explicit allow-list of authorized Google accounts/i)).toBeInTheDocument()
   })
 
   it('renders as an alert role for accessibility', () => {
