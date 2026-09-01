@@ -155,7 +155,11 @@ resource "google_cloud_run_v2_job" "goms_migrate" {
       }
 
       containers {
-        image   = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:bootstrap"
+        # Kept in lockstep with goms_api's image above — updated to the same
+        # auth-enabled build (2026-09-01) after running this job to apply
+        # the actor_email migration via `gcloud run jobs update --image`
+        # (out-of-band from Terraform, then reconciled here).
+        image   = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:943b362b28dc9439fa0ed01aae49531cc9f2e1eb"
         command = ["node"]
         args    = ["node_modules/node-pg-migrate/bin/node-pg-migrate.js", "up"]
         env {
