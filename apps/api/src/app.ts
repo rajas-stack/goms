@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import cors from '@fastify/cors'
 import rateLimit from '@fastify/rate-limit'
 import type { TRPCError } from '@trpc/server'
-import { fastifyTRPCPlugin } from '@trpc/server/adapters/fastify'
+import { fastifyTRPCPlugin, type CreateFastifyContextOptions } from '@trpc/server/adapters/fastify'
 import { appRouter } from './index.js'
 import { resolveClientIp, resolveProxyTrust } from './client-ip.js'
 
@@ -93,7 +93,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     prefix: '/api/trpc',
     trpcOptions: {
       router: appRouter,
-      createContext: ({ req }) => ({ authHeader: req.headers.authorization }),
+      createContext: ({ req }: CreateFastifyContextOptions) => ({ authHeader: req.headers.authorization }),
       // Sanitized for the client by trpc.ts's errorFormatter — logged here
       // in full (including the raw pg error) so an on-call engineer can
       // still diagnose the real cause from server logs.
