@@ -8,7 +8,7 @@ import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
 import { useFormDraft } from '@/lib/useFormDraft'
 import {
-  useEmployeeMutations, useEmployeesByState, useFollowUpMutations, useNode,
+  useBreadcrumb, useEmployeeMutations, useEmployeesByState, useFollowUpMutations, useNode,
   useOwnershipMutations, useResolvedOwners, useSalesPersons,
 } from '@/lib/api'
 import { isoToday } from '@/data/repository'
@@ -17,6 +17,7 @@ import { assignOwnerFromEmail } from '@/lib/assignOwnerFromEmail'
 import { ManagerPicker } from './ManagerPicker'
 import { SalesTeamPicker } from './SalesTeamPicker'
 import { extractContact } from './contact-ocr'
+import { resolveDepartment } from './resolveDepartment'
 import type {
   Employee, HierNode, PreferredComm, RelationshipQuality, RelationshipStatus,
 } from '@/lib/types'
@@ -42,7 +43,7 @@ const COMMS: { value: PreferredComm; label: string }[] = [
 ]
 
 const EMPTY = {
-  name: '', designation: '', email: '', phone: '', company: '', address: '', website: '',
+  name: '', designation: '', email: '', phone: '', company: '',
   photoUrl: null as string | null, managerId: '',
   selectedPersonId: '',
   selectedPersonName: '',
@@ -73,6 +74,16 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
   const { data: employeeOrgNode } = useNode(employee?.orgNodeId ?? null)
   const postingNode = orgNode ?? employeeOrgNode ?? null
   const { data: peers = [] } = useEmployeesByState(postingNode?.stateCode ?? -1)
+  // Item 3: the Company field becomes a read-only Department field, auto-
+  // resolved from wherever this employee is posted (walking up through any
+  // branch/division/office/unit to the nearest department ancestor — Task
+  // 3.1's `resolveDepartment`). The breadcrumb trail is exactly the flat node
+  // list that helper needs (this node plus every ancestor up to the root).
+  // Falls back to `null` — and the field falls back to the old editable
+  // input — when there's no department ancestor at all (shouldn't happen in
+  // practice) or the trail hasn't loaded yet.
+  const { data: postingNodeTrail = [] } = useBreadcrumb(postingNode?.id ?? null)
+  const resolvedDepartment = postingNode ? resolveDepartment(postingNode, postingNodeTrail) : null
   const photoRef = useRef<HTMLInputElement>(null)
 
   const [form, setForm] = useState(EMPTY)
@@ -99,7 +110,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
     if (employee) {
       return {
         name: employee.name, designation: employee.designation, email: employee.email,
-        phone: employee.phone, company: employee.company, address: employee.address, website: employee.website,
+        phone: employee.phone, company: employee.company,
         photoUrl: employee.photoUrl, managerId: employee.managerId ?? '',
         vacant: employee.vacant,
         connected: employee.connected,
@@ -129,6 +140,17 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, employee, presetManagerId])
 
+  // Keeps the read-only Department field's value (still submitted as
+  // `company` under the hood, per Decision #2) in lockstep with whichever
+  // department the posting resolves to — including once the breadcrumb query
+  // above finishes loading after the form has already opened and seeded from
+  // a possibly-stale `employee.company`.
+  useEffect(() => {
+    if (open && resolvedDepartment && form.company !== resolvedDepartment.name) {
+      setForm((f) => ({ ...f, company: resolvedDepartment.name }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, resolvedDepartment])
 
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [k]: e.target.value }))
@@ -196,8 +218,6 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
         email: f.email || found.email || '',
         phone: f.phone || found.phone || '',
         company: f.company || found.company || '',
-        address: f.address || found.address || '',
-        website: f.website || found.website || '',
       }))
       // Previously always claimed success, so a card that yielded nothing
       // still reported "Picked up contact details" while leaving every field
@@ -304,8 +324,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
     const patch = {
       name: form.vacant ? '' : form.name.trim(), designation: form.designation,
       email: form.vacant ? '' : form.email, phone: form.vacant ? '' : form.phone,
-      company: form.vacant ? '' : form.company, address: form.vacant ? '' : form.address,
-      website: form.vacant ? '' : form.website,
+      company: form.vacant ? '' : form.company,
       photoUrl: form.vacant ? null : form.photoUrl,
       managerId: form.managerId || null,
       vacant: form.vacant,
@@ -481,21 +500,15 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
             </Field>
           )}
           {!reporteeMode && !form.vacant && (
-            <Field label="Company" hint="From a visiting card, when this isn't a direct government posting.">
-              <Input value={form.company} onChange={set('company')} placeholder="e.g. Acme Systems Pvt Ltd" />
-            </Field>
-          )}
-          {!reporteeMode && !form.vacant && (
-            <Field label="Website">
-              <Input value={form.website} onChange={set('website')} placeholder="e.g. www.example.com" />
-            </Field>
-          )}
-          {!reporteeMode && !form.vacant && (
-            <div className="col-span-full">
-              <Field label="Address">
-                <Textarea value={form.address} onChange={set('address')} />
+            resolvedDepartment ? (
+              <Field label="Department" hint="Automatically set from the department this posting belongs to.">
+                <Input value={form.company} readOnly disabled />
               </Field>
-            </div>
+            ) : (
+              <Field label="Department" hint="No department could be resolved for this posting — enter it manually.">
+                <Input value={form.company} onChange={set('company')} placeholder="e.g. Acme Systems Pvt Ltd" />
+              </Field>
+            )
           )}
         </div>
 
