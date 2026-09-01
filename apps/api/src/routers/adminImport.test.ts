@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { appRouter } from '../index.js'
 import { pool } from '../db.js'
+import { authorizedContext, AUTHORIZED_TEST_EMAIL } from '../testHelpers/adminImportTestAuth.js'
 
 describe('adminImport router', () => {
   beforeEach(async () => {
     process.env.ADMIN_IMPORT_ENABLED = 'true'
+    process.env.ADMIN_IMPORT_ALLOWED_EMAILS = AUTHORIZED_TEST_EMAIL
     // Cleared in the established cross-file-safe order (see the 2026-08-26
     // "clear FK-dependent tables" fix) since this file exercises several
     // domains that touch commercial_masters/sales_persons/hierarchy_nodes.
@@ -21,11 +23,12 @@ describe('adminImport router', () => {
   })
   afterEach(() => {
     delete process.env.ADMIN_IMPORT_ENABLED
+    delete process.env.ADMIN_IMPORT_ALLOWED_EMAILS
   })
 
   describe('session.validate / session.commit', () => {
     it('validates a single-domain session and reports it as create', async () => {
-      const caller = appRouter.createCaller({})
+      const caller = appRouter.createCaller(authorizedContext())
       const preview = await caller.adminImport.session.validate({
         domains: { taxClasses: [{ code: 'GST18', name: 'GST 18%', ratePct: 18 }] },
       })
@@ -34,7 +37,7 @@ describe('adminImport router', () => {
     })
 
     it('commits a single-domain session and writes the row', async () => {
-      const caller = appRouter.createCaller({})
+      const caller = appRouter.createCaller(authorizedContext())
       const domains = { taxClasses: [{ code: 'GST18', name: 'GST 18%', ratePct: 18 }] }
       const preview = await caller.adminImport.session.validate({ domains })
       const result = await caller.adminImport.session.commit({ domains, sessionCommitToken: preview.sessionCommitToken, excludedRows: [] })
@@ -44,19 +47,19 @@ describe('adminImport router', () => {
     })
 
     it('rejects a commit when MAX_IMPORT_ROWS is exceeded for a single domain', async () => {
-      const caller = appRouter.createCaller({})
+      const caller = appRouter.createCaller(authorizedContext())
       const tooMany = Array.from({ length: 5001 }, (_, i) => ({ code: `GST${i}`, name: `Tax ${i}`, ratePct: 1 }))
       await expect(caller.adminImport.session.validate({ domains: { taxClasses: tooMany } })).rejects.toThrow()
     })
 
     it('returns NOT_IMPLEMENTED for an unwired domain key', async () => {
-      const caller = appRouter.createCaller({})
+      const caller = appRouter.createCaller(authorizedContext())
       // geography has no session adapter by design (previewGeographyLoad/commitGeographyLoad stay separate).
       await expect(caller.adminImport.session.validate({ domains: { geography: [] } as any })).rejects.toThrow()
     })
 
     it('routes a multi-sheet domain (commercialMastersFlat) through the { sheet: rows[] } adapter end-to-end', async () => {
-      const caller = appRouter.createCaller({})
+      const caller = appRouter.createCaller(authorizedContext())
       const domains = {
         commercialMastersFlat: {
           skuCategories: [{ code: 'SW', name: 'Software', description: '', active: true, displayOrder: 0 }],
@@ -81,7 +84,7 @@ describe('adminImport router', () => {
     })
 
     it('routes a two-sheet domain (salesRoster) through the {persons,postings} adapter end-to-end', async () => {
-      const caller = appRouter.createCaller({})
+      const caller = appRouter.createCaller(authorizedContext())
       const domains = {
         salesRoster: {
           persons: [{ officialEmail: 'a@amnex.com', name: 'A', personalEmail: '', mobile: '', altMobile: '', joinedOn: null, status: 'active' }],
@@ -99,7 +102,7 @@ describe('adminImport router', () => {
   })
 
   it('listDomains reports the current taxClasses row count', async () => {
-    const caller = appRouter.createCaller({})
+    const caller = appRouter.createCaller(authorizedContext())
     const domains = { taxClasses: [{ code: 'GST18', name: 'A', ratePct: 18 }] }
     const preview = await caller.adminImport.session.validate({ domains })
     await caller.adminImport.session.commit({ domains, sessionCommitToken: preview.sessionCommitToken, excludedRows: [] })
@@ -108,7 +111,7 @@ describe('adminImport router', () => {
   })
 
   it('previewGeographyLoad and commitGeographyLoad work end-to-end through the router', async () => {
-    const caller = appRouter.createCaller({})
+    const caller = appRouter.createCaller(authorizedContext())
     const preview = await caller.adminImport.previewGeographyLoad()
     expect(preview.reconciliation.matches).toBe(true)
     expect(preview.summary.toCreate).toBeGreaterThan(7000)
@@ -120,4 +123,21 @@ describe('adminImport router', () => {
     const domains = await caller.adminImport.listDomains()
     expect(domains.find((d) => d.domain === 'geography')?.currentRowCount).toBeGreaterThan(7000)
   }, 30000)
+
+  describe('adminImport identity gate', () => {
+    it('rejects a call with no Authorization header', async () => {
+      const caller = appRouter.createCaller({})
+      await expect(caller.adminImport.listDomains()).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    })
+
+    it('rejects a signed-in but non-allow-listed caller', async () => {
+      const caller = appRouter.createCaller(authorizedContext('someone-else@gmail.com'))
+      await expect(caller.adminImport.listDomains()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+
+    it('allows an allow-listed caller through', async () => {
+      const caller = appRouter.createCaller(authorizedContext())
+      await expect(caller.adminImport.listDomains()).resolves.toBeDefined()
+    })
+  })
 })

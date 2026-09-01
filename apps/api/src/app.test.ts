@@ -4,6 +4,7 @@ import type { FastifyInstance } from 'fastify'
 import type { AppRouter } from './index.js'
 import { buildApp } from './app.js'
 import { pool } from './db.js'
+import { fakeIdToken, AUTHORIZED_TEST_EMAIL } from './testHelpers/adminImportTestAuth.js'
 
 // Routes an httpBatchLink `fetch` call straight into the Fastify instance via
 // `.inject()` — no real socket/port needed, and it exercises the exact same
@@ -108,6 +109,7 @@ describe('rate limiting', () => {
 describe('admin import feature gate', () => {
   afterEach(() => {
     delete process.env.ADMIN_IMPORT_ENABLED
+    delete process.env.ADMIN_IMPORT_ALLOWED_EMAILS
   })
 
   it('returns 404 from adminImport routes when ADMIN_IMPORT_ENABLED is not set', async () => {
@@ -122,10 +124,38 @@ describe('admin import feature gate', () => {
     await app.close()
   })
 
-  it('serves adminImport routes when ADMIN_IMPORT_ENABLED=true', async () => {
+  it('returns 401 when the flag is on but no Authorization header is sent', async () => {
     process.env.ADMIN_IMPORT_ENABLED = 'true'
     const app = await buildApp()
     const res = await app.inject({ method: 'GET', url: '/api/trpc/adminImport.listDomains' })
+    const body = JSON.parse(res.payload)
+    expect(body.error.data.code).toBe('UNAUTHORIZED')
+    await app.close()
+  })
+
+  it('returns 403 for a signed-in caller who is not on the allow-list', async () => {
+    process.env.ADMIN_IMPORT_ENABLED = 'true'
+    process.env.ADMIN_IMPORT_ALLOWED_EMAILS = AUTHORIZED_TEST_EMAIL
+    const app = await buildApp()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/trpc/adminImport.listDomains',
+      headers: { authorization: `Bearer ${fakeIdToken({ email: 'someone-else@gmail.com' })}` },
+    })
+    const body = JSON.parse(res.payload)
+    expect(body.error.data.code).toBe('FORBIDDEN')
+    await app.close()
+  })
+
+  it('serves adminImport routes for a signed-in, allow-listed caller', async () => {
+    process.env.ADMIN_IMPORT_ENABLED = 'true'
+    process.env.ADMIN_IMPORT_ALLOWED_EMAILS = AUTHORIZED_TEST_EMAIL
+    const app = await buildApp()
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/trpc/adminImport.listDomains',
+      headers: { authorization: `Bearer ${fakeIdToken()}` },
+    })
     expect(res.statusCode).toBe(200)
     await app.close()
   })

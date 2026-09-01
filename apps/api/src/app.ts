@@ -93,6 +93,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     prefix: '/api/trpc',
     trpcOptions: {
       router: appRouter,
+      createContext: ({ req }) => ({ authHeader: req.headers.authorization }),
       // Sanitized for the client by trpc.ts's errorFormatter — logged here
       // in full (including the raw pg error) so an on-call engineer can
       // still diagnose the real cause from server logs.
