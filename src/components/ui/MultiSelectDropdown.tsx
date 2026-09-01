@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { motion } from 'framer-motion'
 import { Icon } from './Icon'
 import { Button } from './Button'
@@ -24,6 +24,16 @@ interface Props {
   storageKey: string
   placeholder?: string
   className?: string
+  /** Renders a text input at the top of the popover panel that filters the
+   *  visible checkbox rows by label substring match (mirrors the filter
+   *  pattern in `DepartmentCombobox`/`PeopleDirectory`). Purely a display
+   *  filter — never touches `value`/`onChange`. Default false preserves
+   *  existing behavior for call sites that don't pass it. */
+  searchable?: boolean
+  searchPlaceholder?: string
+  /** Hides the "+ Add option" footer when false. Default true preserves
+   *  existing behavior. */
+  allowCustomAdd?: boolean
 }
 
 interface FlatRow {
@@ -38,13 +48,21 @@ interface FlatRow {
  *  the ungrouped/default section (the group with `label: null`). Built on
  *  the same `PopoverPanel`/roving-index infrastructure `Combobox` uses, for
  *  visual and interaction consistency. */
-export function MultiSelectDropdown({ value, onChange, groups, storageKey, placeholder = 'Select…', className }: Props) {
+export function MultiSelectDropdown({
+  value, onChange, groups, storageKey, placeholder = 'Select…', className,
+  searchable = false, searchPlaceholder = 'Search…', allowCustomAdd = true,
+}: Props) {
   const [custom, addOption] = useCustomOptions(storageKey)
   const [open, setOpen] = useState(false)
   const [addOpen, setAddOpen] = useState(false)
   const [draft, setDraft] = useState('')
+  const [search, setSearch] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+
+  // Closing the panel clears any in-progress filter so reopening starts
+  // fresh — mirrors `openAddOption` resetting `draft` on each open.
+  useEffect(() => { if (!open) setSearch('') }, [open])
 
   const mergedGroups = useMemo(() => {
     const known = new Set(groups.flatMap((g) => g.options.map((o) => o.toLowerCase())))
@@ -55,14 +73,27 @@ export function MultiSelectDropdown({ value, onChange, groups, storageKey, place
     return groups.map((g, i) => (i === defaultIndex ? { ...g, options: [...g.options, ...extra] } : g))
   }, [groups, custom])
 
+  // Display-only filter over the merged groups — never touches `value`/
+  // `onChange`. Same lowercase/trim/substring predicate as
+  // `DepartmentCombobox`/`PeopleDirectory`. A header is dropped along with
+  // its group once none of its options match.
+  const visibleGroups = useMemo(() => {
+    if (!searchable) return mergedGroups
+    const q = search.trim().toLowerCase()
+    if (!q) return mergedGroups
+    return mergedGroups
+      .map((g) => ({ ...g, options: g.options.filter((o) => o.toLowerCase().includes(q)) }))
+      .filter((g) => g.options.length > 0)
+  }, [mergedGroups, searchable, search])
+
   const flatRows = useMemo(() => {
     const out: FlatRow[] = []
-    for (const g of mergedGroups) {
+    for (const g of visibleGroups) {
       if (g.label) out.push({ kind: 'header', label: g.label })
       for (const o of g.options) out.push({ kind: 'option', label: o })
     }
     return out
-  }, [mergedGroups])
+  }, [visibleGroups])
   const optionRows = useMemo(() => flatRows.filter((r) => r.kind === 'option'), [flatRows])
 
   function toggle(opt: string) {
@@ -139,6 +170,18 @@ export function MultiSelectDropdown({ value, onChange, groups, storageKey, place
             style={{ maxHeight }}
             className="w-full overflow-y-auto scrollbar-thin rounded-xl border border-line bg-paper p-1 shadow-pop"
           >
+            {searchable && (
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => roving.onKeyDown(e)}
+                placeholder={searchPlaceholder}
+                aria-label={searchPlaceholder}
+                autoFocus
+                className="mb-1 w-full rounded-lg border border-line bg-white px-2.5 py-1.5 text-[13px] outline-none focus-visible:focus-ring"
+              />
+            )}
             {flatRows.map((row) => {
               if (row.kind === 'header') {
                 return (
@@ -164,13 +207,15 @@ export function MultiSelectDropdown({ value, onChange, groups, storageKey, place
                 </label>
               )
             })}
-            <button
-              type="button"
-              onClick={openAddOption}
-              className="mt-1 flex min-h-9 w-full items-center gap-2 rounded-lg border-t border-line px-2.5 py-1.5 text-left text-[13px] font-medium text-teal-600 hover:bg-teal-100/40"
-            >
-              <Icon name="Plus" size={14} /> Add option
-            </button>
+            {allowCustomAdd && (
+              <button
+                type="button"
+                onClick={openAddOption}
+                className="mt-1 flex min-h-9 w-full items-center gap-2 rounded-lg border-t border-line px-2.5 py-1.5 text-left text-[13px] font-medium text-teal-600 hover:bg-teal-100/40"
+              >
+                <Icon name="Plus" size={14} /> Add option
+              </button>
+            )}
           </motion.div>
         )}
       </PopoverPanel>
