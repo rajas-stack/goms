@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
+import { Avatar } from '@/components/ui/Avatar'
 import { useToast } from '@/components/ui/Toast'
 import { useDepartments, useDirectReports, useEmployeeMutations, useTimeline, useTransfers } from '@/lib/api'
 import { MERGEABLE_FIELDS, type MergeableField } from '@/data/repository'
@@ -186,6 +187,7 @@ export function MergeEmployeesDialog({ open, onClose, employeeA, employeeB, onMe
                     onChange={() => setSurvivorId(e.id)}
                     className="mt-1 accent-ink-900"
                   />
+                  <Avatar person={{ name: e.name, photoUrl: e.photoUrl, vacant: e.vacant }} size="sm" />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-1.5">
                       <span className="truncate text-sm font-medium text-ink-900">{e.name || 'Unnamed'}</span>

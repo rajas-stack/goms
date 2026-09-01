@@ -3,6 +3,7 @@ import { Icon } from '@/components/ui/Icon'
 import { useToast } from '@/components/ui/Toast'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import { useRovingIndex } from '@/components/ui/popover/useRovingIndex'
+import { Avatar } from '@/components/ui/Avatar'
 import { cn } from '@/lib/utils'
 import type { Employee } from '@/lib/types'
 
@@ -80,9 +81,7 @@ export function ManagerPicker({ candidates, value, onChange, onCreate, placehold
   if (selected) {
     return (
       <div className="flex h-10 items-center gap-2 rounded-lg border border-line bg-white px-3">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-teal-100 text-[10px] font-semibold text-teal-600">
-          {selected.name.split(' ').map((p) => p[0]).slice(0, 2).join('')}
-        </span>
+        <Avatar person={{ name: selected.name, photoUrl: selected.photoUrl }} size="xs" />
         <span className="min-w-0 flex-1 break-words text-sm text-ink-900">{selected.name} · {selected.designation}</span>
         <button type="button" onClick={() => onChange('')} className="text-muted hover:text-ink-900" aria-label="Clear reporting manager">
           <Icon name="X" size={14} />
@@ -131,6 +130,7 @@ export function ManagerPicker({ candidates, value, onChange, onCreate, placehold
                     roving.active === i + 1 && 'bg-ink-900/[0.04]',
                   )}
                 >
+                  <Avatar person={{ name: c.name, photoUrl: c.photoUrl }} size="xs" />
                   <span className="min-w-0 flex-1 break-words text-sm text-ink-900">{c.name}</span>
                   <span className="shrink-0 break-words text-xs text-muted">{c.designation}</span>
                 </button>

@@ -64,7 +64,9 @@ export function CanvasBranch({ item, depth, parentKey, controlled }: {
 
   const isDepartment = isNode && node!.typeKey === 'department'
   const { data: deptHeadEmployee } = useEmployee(isDepartment ? node!.metadata.deptHead || null : null)
-  const deptHeadNames = deptHeadEmployee ? [deptHeadEmployee.name] : []
+  const deptHeads = deptHeadEmployee
+    ? [{ name: deptHeadEmployee.name, photoUrl: deptHeadEmployee.photoUrl, vacant: deptHeadEmployee.vacant }]
+    : []
 
   const childItems: CanvasItem[] = useMemo(() => {
     if (isNode) {
@@ -218,7 +220,7 @@ export function CanvasBranch({ item, depth, parentKey, controlled }: {
             expanded={expanded}
             canExpand={canExpand}
             showMetadata={canvas.showMetadata}
-            headNames={deptHeadNames}
+            heads={deptHeads}
             dropActive={dropActive}
             dragging={dragging}
             onSelect={onSelect}

@@ -3,7 +3,8 @@ import { Icon } from '@/components/ui/Icon'
 import { useToast } from '@/components/ui/Toast'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import { useRovingIndex } from '@/components/ui/popover/useRovingIndex'
-import { cn, initials } from '@/lib/utils'
+import { Avatar } from '@/components/ui/Avatar'
+import { cn } from '@/lib/utils'
 import type { Employee } from '@/lib/types'
 
 interface Props {
@@ -123,14 +124,7 @@ export function EmployeePicker({
   if (selected) {
     return (
       <div className="flex min-h-10 items-center gap-2 rounded-lg border border-line bg-white px-3 py-1.5">
-        <span
-          className={cn(
-            'flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[10px] font-semibold',
-            selected.vacant ? 'bg-amber-100 text-amber-600' : 'bg-teal-100 text-teal-600',
-          )}
-        >
-          {selected.vacant ? <Icon name="UserX" size={13} /> : initials(selected.name)}
-        </span>
+        <Avatar person={{ name: selected.name, photoUrl: selected.photoUrl, vacant: selected.vacant }} size="xs" />
         <span className="min-w-0 flex-1 break-words text-sm text-ink-900">
           {selected.vacant ? <>{personLabel(selected)} <span className="text-muted">· Vacant</span></> : <>{selected.name} · {selected.designation}</>}
         </span>
@@ -185,6 +179,7 @@ export function EmployeePicker({
                     roving.active === i + 1 && 'bg-ink-900/[0.04]',
                   )}
                 >
+                  <Avatar person={{ name: c.name, photoUrl: c.photoUrl, vacant: c.vacant }} size="xs" />
                   <span className="min-w-0 flex-1 break-words text-sm text-ink-900">{personLabel(c)}</span>
                   <span className="shrink-0 break-words text-xs text-muted">{c.vacant ? 'Vacant' : c.designation}</span>
                 </button>

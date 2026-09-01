@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
+import { Avatar } from '@/components/ui/Avatar'
 import { useAllEmployees, useEmployeeDepartments } from '@/lib/api'
 import { useDismissedDuplicatePairs } from '@/lib/dismissed-pairs'
 import { findDuplicateCandidates, type DuplicateCandidate } from './duplicate-detection'
@@ -43,9 +44,13 @@ export function DuplicatesPanel({ open, onClose }: { open: boolean; onClose: () 
               <div key={`${c.a.id}:${c.b.id}`} className="rounded-xl border border-line bg-white p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="break-words text-sm font-medium text-ink-900">
-                      {c.a.name || 'Unnamed'} <span className="text-muted">↔</span> {c.b.name || 'Unnamed'}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <Avatar person={{ name: c.a.name, photoUrl: c.a.photoUrl, vacant: c.a.vacant }} size="xs" />
+                      <p className="break-words text-sm font-medium text-ink-900">
+                        {c.a.name || 'Unnamed'} <span className="text-muted">↔</span> {c.b.name || 'Unnamed'}
+                      </p>
+                      <Avatar person={{ name: c.b.name, photoUrl: c.b.photoUrl, vacant: c.b.vacant }} size="xs" />
+                    </div>
                     <p className="text-[12px] text-muted">{c.a.designation || '—'} · {c.b.designation || '—'}</p>
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {c.matchedOn.map((m) => (

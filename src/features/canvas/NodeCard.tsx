@@ -4,6 +4,7 @@ import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { Menu, MenuItem } from '@/components/ui/Menu'
 import { CodeChip } from '@/components/ui/Badge'
+import { Avatar } from '@/components/ui/Avatar'
 import { fieldsForType } from '@/features/nodes/metadata-fields'
 import { NODE_TYPE_MAP, childTypesOf } from '@/lib/node-types'
 import { nodeAccent } from '@/lib/node-colors'
@@ -25,7 +26,7 @@ interface Props {
   childCountLabel?: string
   /** Top-of-chain people in this department's reporting hierarchy — shown on
    *  department cards only, so at-a-glance you can see who runs it. */
-  headNames?: string[]
+  heads?: { name: string; photoUrl?: string | null; vacant?: boolean }[]
   onSelect: () => void
   onToggle: () => void
   onAdd: () => void
@@ -40,7 +41,7 @@ interface Props {
 }
 
 export const NodeCard = forwardRef<HTMLDivElement, Props>(
-  ({ node, selected, expanded, canExpand, showMetadata, dropActive, dragging, childCountLabel, headNames, onSelect, onToggle, onAdd, onSelectEmployee, onAddChild }, ref) => {
+  ({ node, selected, expanded, canExpand, showMetadata, dropActive, dragging, childCountLabel, heads, onSelect, onToggle, onAdd, onSelectEmployee, onAddChild }, ref) => {
     const type = NODE_TYPE_MAP[node.typeKey]
     const accent = nodeAccent(node)
     const isDepartment = node.typeKey === 'department'
@@ -105,11 +106,14 @@ export const NodeCard = forwardRef<HTMLDivElement, Props>(
           </div>
         ) : null}
 
-        {headNames && headNames.length > 0 && (
-          <div className="break-words text-[11px] text-muted">
-            <span className="font-medium text-ink-700">{headNames.length === 1 ? 'Head' : 'Heads'}:</span>{' '}
-            {headNames.slice(0, 2).join(', ')}
-            {headNames.length > 2 && ` +${headNames.length - 2}`}
+        {heads && heads.length > 0 && (
+          <div className="flex items-center gap-1.5 break-words text-[11px] text-muted">
+            <Avatar person={heads[0]} size="xs" />
+            <span>
+              <span className="font-medium text-ink-700">{heads.length === 1 ? 'Head' : 'Heads'}:</span>{' '}
+              {heads.slice(0, 2).map((h) => h.name).join(', ')}
+              {heads.length > 2 && ` +${heads.length - 2}`}
+            </span>
           </div>
         )}
 

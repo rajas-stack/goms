@@ -33,6 +33,7 @@ import { cn, initials } from '@/lib/utils'
 import { useResolvedOwners } from '@/lib/api'
 import { OwnershipBlock } from '@/features/sales/OwnershipBlock'
 import { isoToday } from '@/lib/dates'
+import { Avatar } from '@/components/ui/Avatar'
 import type { Charge, Employee, TimelineEvent, Transfer } from '@/lib/types'
 
 const COMM_LABEL: Record<string, string> = {
@@ -666,11 +667,8 @@ function ChainRow({ emp, onClick, current, muted }: {
           current ? 'bg-ink-900 text-paper' : 'hover:bg-ink-900/[0.05]',
         )}
       >
-        <span className={cn(
-          'relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg font-mono text-[10px] font-semibold',
-          current ? 'bg-indigo text-paper' : muted ? 'bg-panel text-muted' : emp.vacant ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600',
-        )}>
-          {emp.vacant ? <Icon name="UserX" size={13} /> : initials(emp.name)}
+        <span className="relative z-10 shrink-0">
+          <Avatar person={{ name: emp.name, photoUrl: emp.photoUrl, vacant: emp.vacant }} size="sm" />
         </span>
         <span className="min-w-0 flex-1">
           <span className={cn('block break-words text-[13px] font-medium', current ? 'text-paper' : 'text-ink-900')}>
