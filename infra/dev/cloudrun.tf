@@ -39,6 +39,17 @@ resource "google_cloud_run_v2_service" "goms_api" {
   name     = "goms-api"
   location = "asia-south1"
 
+  # Codifies the service-level scaling block's live default (automatic
+  # scaling, not the service-level "manual instance count" feature) so an
+  # unrelated apply (Admin Data Import auth env vars, 2026-09-01) doesn't
+  # touch it — it was showing as drift purely because this file never
+  # declared it, mirroring the identical fix already made in
+  # infra/prod/cloudrun.tf.
+  scaling {
+    scaling_mode          = "AUTOMATIC"
+    manual_instance_count = 0
+  }
+
   template {
     service_account = google_service_account.goms_api_runtime.email
     # min_instance_count kept at the original spec §20 cold-start tradeoff;
@@ -61,13 +72,13 @@ resource "google_cloud_run_v2_service" "goms_api" {
     }
 
     containers {
-      # Pinned to the commit-SHA tag CI's deploy-dev job has already pushed
-      # and deployed live (out-of-band from Terraform) — using the original
-      # ":bootstrap" tag here would roll the running service back to the
-      # bootstrap image as an unintended side effect of Task 27's env-var
-      # change below. Update this alongside any future Terraform-driven
-      # deploy of goms-api.
-      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:df1f8bdc922aa48c0eb7efcc98b76efeabb01277"
+      # Pinned to the commit-SHA/manual-fix tag actually live on goms-dev
+      # today (confirmed via `gcloud run services describe`, 2026-09-01) —
+      # using the stale tag previously recorded here would roll the running
+      # service BACK to an older image as an unintended side effect of this
+      # task's env-var change below. Update this alongside any future
+      # Terraform-driven deploy of goms-api.
+      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:dev-importfix-20260901"
       env {
         name = "DATABASE_URL"
         value_source {
@@ -83,6 +94,22 @@ resource "google_cloud_run_v2_service" "goms_api" {
       env {
         name  = "ADMIN_IMPORT_ENABLED"
         value = "true"
+      }
+      # Admin Data Import authentication (2026-09-01) — verifies a Firebase
+      # ID token issued by the DEDICATED goms-dev-auth Firebase project
+      # (deliberately not goms-prod's — see
+      # docs/superpowers/plans/2026-09-01-goms-admin-import-firebase-auth-plan.md
+      # Task 6) and checks its email against this allow-list. Neither value
+      # is sensitive: FIREBASE_PROJECT_ID is a public project identifier,
+      # and this is a roster of who may use the feature, not a credential —
+      # same plain-env-var convention as ADMIN_IMPORT_ENABLED above.
+      env {
+        name  = "FIREBASE_PROJECT_ID"
+        value = "goms-dev-auth" # the dev-only project, NOT goms-prod
+      }
+      env {
+        name  = "ADMIN_IMPORT_ALLOWED_EMAILS"
+        value = "rajas@amnex.com"
       }
       # Lets a local frontend dev server (Task 28's Playwright lineage walk)
       # call this goms-dev API directly instead of through a hosted frontend
