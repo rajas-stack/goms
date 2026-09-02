@@ -54,3 +54,14 @@ resource "google_service_account_iam_member" "deploy_actas_runtime" {
   role               = "roles/iam.serviceAccountUser"
   member             = "serviceAccount:${google_service_account.goms_ci_deploy.email}"
 }
+
+# Lets deploy-dev's `firebase deploy --only hosting` (goms-dev frontend
+# build, wired to VITE_API_BASE_URL=https://goms-dev.firebaseapp.com)
+# authenticate with the same keyless WIF credential already used for the
+# gcloud steps above -- no new secret material. Dev project only; goms-prod's
+# WIF stack (infra/prod/wif.tf) is untouched and grants no such role.
+resource "google_project_iam_member" "deploy_firebase_hosting_admin" {
+  project = var.project_id
+  role    = "roles/firebasehosting.admin"
+  member  = "serviceAccount:${google_service_account.goms_ci_deploy.email}"
+}

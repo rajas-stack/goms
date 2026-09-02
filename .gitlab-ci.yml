@@ -109,6 +109,39 @@ deploy-dev:
     - >
       gcloud run jobs update goms-migrate --project=$GCP_PROJECT_ID_DEV --region=asia-south1
       --image=asia-south1-docker.pkg.dev/$GCP_PROJECT_ID_DEV/goms/goms-api:$CI_COMMIT_SHA
+    # Frontend build + deploy — previously this job only touched the API,
+    # so the hosted goms-dev.firebaseapp.com frontend had to be built and
+    # `firebase deploy`'d by hand, and nobody ever passed VITE_API_BASE_URL
+    # to that manual build. Its absence is documented as the *default*
+    # local-only IndexedDB mode (.env.example), so the hosted site silently
+    # ran fully local instead of talking to goms-api. Fixed by building here
+    # instead, with VITE_API_BASE_URL pointed at the site's own origin —
+    # same convention .env.example already documents for goms-prod
+    # (`VITE_API_BASE_URL=https://<project>.web.app`) — so it rides
+    # firebase.json's existing `/api/**` rewrite to Cloud Run and needs no
+    # CORS_ALLOWED_ORIGINS change (a direct *.a.run.app URL would need one).
+    # goms-prod is never reachable from this job: no goms-prod URL appears
+    # anywhere in it, and `--project dev` resolves only via .firebaserc's
+    # "dev": "goms-dev" alias.
+    #
+    # This job's image (google/cloud-sdk:slim) has gcloud but no Node, so
+    # Node is installed here rather than switching the job's base image —
+    # gcloud is already correctly WIF-configured above and re-doing that in
+    # a node: image would just trade one missing tool for the other.
+    - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    - apt-get install -y nodejs
+    - npm ci --cache .npm --prefer-offline
+    - VITE_API_BASE_URL=https://goms-dev.firebaseapp.com npm run build
+    # firebase-tools reads GOOGLE_APPLICATION_CREDENTIALS (exported above,
+    # same WIF creds.json the gcloud steps use) for non-interactive auth —
+    # no separate Firebase login/token needed.
+    - npx firebase-tools deploy --only hosting --project dev --non-interactive
+  cache:
+    key:
+      files:
+        - package-lock.json
+    paths:
+      - .npm/
   environment:
     name: dev
   # Manual (and non-blocking) rather than automatic on every main push. Two
