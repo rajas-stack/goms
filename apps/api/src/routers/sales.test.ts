@@ -158,4 +158,37 @@ describe('sales router', () => {
     })
     await expect(caller.sales.delete({ id: person.id })).rejects.toThrow(/still referenced by at least one boq/i)
   })
+
+  describe('updatePostingManager', () => {
+    it('updates manager_id on the open posting, leaving other fields untouched', async () => {
+      const caller = appRouter.createCaller({})
+      const manager = await makePerson({ name: 'Manager' })
+      const newManager = await makePerson({ name: 'New Manager' })
+      const person = await makePerson({ name: 'Report', managerId: manager.id, tierKey: 'accountManager', designation: 'Account Manager' })
+      const [before] = await caller.sales.listPostings({ salesPersonId: person.id })
+      const updated = await caller.sales.updatePostingManager({ personId: person.id, managerId: newManager.id })
+      expect(updated.managerId).toBe(newManager.id)
+      expect(updated.id).toBe(before.id)
+      expect(updated.startDate).toBe(before.startDate)
+      expect(updated.endDate).toBeNull()
+      expect(updated.designation).toBe(before.designation)
+      expect(updated.tierKey).toBe(before.tierKey)
+      expect(updated.changeType).toBe(before.changeType)
+    })
+
+    it('accepts managerId: null to remove a manager', async () => {
+      const caller = appRouter.createCaller({})
+      const manager = await makePerson({ name: 'Manager' })
+      const person = await makePerson({ name: 'Report', managerId: manager.id })
+      const updated = await caller.sales.updatePostingManager({ personId: person.id, managerId: null })
+      expect(updated.managerId).toBeNull()
+    })
+
+    it('throws BAD_REQUEST when the person has no open posting', async () => {
+      const caller = appRouter.createCaller({})
+      const person = await makePerson()
+      await caller.sales.delete({ id: person.id }) // deletes the person and cascades its postings
+      await expect(caller.sales.updatePostingManager({ personId: person.id, managerId: null })).rejects.toThrow(/no open posting/i)
+    })
+  })
 })

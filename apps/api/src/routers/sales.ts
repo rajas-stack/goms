@@ -154,4 +154,14 @@ export const salesRouter = router({
         client.release()
       }
     }),
+  updatePostingManager: publicProcedure
+    .input(z.object({ personId: z.string().uuid(), managerId: z.string().uuid().nullable() }))
+    .mutation(async ({ input }) => {
+      const result = await pool.query(
+        'UPDATE sales_postings SET manager_id=$1 WHERE sales_person_id=$2 AND end_date IS NULL RETURNING *',
+        [input.managerId, input.personId],
+      )
+      if (!result.rows[0]) throw new TRPCError({ code: 'BAD_REQUEST', message: `No open posting for salesperson: ${input.personId}` })
+      return toSalesPosting(result.rows[0])
+    }),
 })
