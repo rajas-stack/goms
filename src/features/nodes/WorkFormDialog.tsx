@@ -110,7 +110,7 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
             <Input value={form.quantity} onChange={(e) => set('quantity', e.target.value)} inputMode="numeric" placeholder="0" />
           </Field>
           <Field label="Sales person">
-            <SalesTeamPicker value={form.salesPersonEmail} onChange={(email) => set('salesPersonEmail', email)} />
+            <SalesTeamPicker value={form.salesPersonEmail} onChange={(email) => set('salesPersonEmail', email)} ariaLabel="Sales person" />
           </Field>
           <div className="sm:col-span-2">
             <Field label="Budget confirmed?">

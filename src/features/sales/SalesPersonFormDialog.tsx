@@ -139,7 +139,7 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
                 flow, which remains untouched and is still the path for a
                 designation/tier change. */}
             <Field label="Reporting Manager (RM)">
-              <SalesTeamPicker value={rmEmail} onChange={setRmEmail} />
+              <SalesTeamPicker value={rmEmail} onChange={setRmEmail} ariaLabel="Reporting Manager (RM)" />
             </Field>
             <Field label="GM / Higher Reporting Manager" hint="Auto-filled from Reporting Manager">
               <SalesTeamPicker value={gmEmail} onChange={() => {}} disabled />
