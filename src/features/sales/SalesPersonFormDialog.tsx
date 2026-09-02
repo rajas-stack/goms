@@ -3,8 +3,10 @@ import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
-import { useSalesPersonMutations, useSalesPersons } from '@/lib/api'
+import { useCurrentPostings, useSalesPersonMutations, useSalesPersons } from '@/lib/api'
 import { SALES_TIERS } from '@/data/sales-tiers'
+import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
+import { liveSalesRoster, resolveSalesChain } from '@/data/sales-hierarchy'
 
 /** Create/edit form for a salesperson. Editing a designation/tier/manager
  *  writes directly to their CURRENT posting rather than opening a new one —
@@ -19,7 +21,8 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
 }) {
   const toast = useToast()
   const { data: people = [] } = useSalesPersons()
-  const { create, update } = useSalesPersonMutations()
+  const { data: currentPostings = {} } = useCurrentPostings()
+  const { create, update, updatePostingManager } = useSalesPersonMutations()
   const editing = personId ? people.find((p) => p.id === personId) : undefined
 
   const [name, setName] = useState('')
@@ -29,6 +32,13 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
   const [tierKey, setTierKey] = useState(SALES_TIERS[SALES_TIERS.length - 1].key)
   const [managerId, setManagerId] = useState('')
   const [notes, setNotes] = useState('')
+  /** Editable RM email for the "quick edit" path (editing only) — bound to
+   *  the current posting's managerId, resolved to an email since
+   *  SalesTeamPicker's candidates are keyed by email, not id. Compared
+   *  against its initial value on save to decide whether to call
+   *  `updatePostingManager` at all. */
+  const [rmEmail, setRmEmail] = useState('')
+  const [initialRmEmail, setInitialRmEmail] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -39,12 +49,25 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
     setDesignation('')
     setTierKey(SALES_TIERS[SALES_TIERS.length - 1].key)
     setManagerId('')
+    const currentManagerId = editing ? currentPostings[editing.id]?.managerId : null
+    const currentRmEmail = currentManagerId ? (people.find((p) => p.id === currentManagerId)?.officialEmail ?? '') : ''
+    setRmEmail(currentRmEmail)
+    setInitialRmEmail(currentRmEmail)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, personId])
+
+  // Derived, one level further up the manager chain from the picked RM —
+  // never independently editable, matches DepartmentFields.tsx's disabled
+  // GM field.
+  const gmEmail = resolveSalesChain(rmEmail, liveSalesRoster(people, currentPostings)).gm?.email ?? ''
 
   async function submit() {
     if (editing) {
       await update.mutateAsync({ id: editing.id, patch: { name, officialEmail: email, mobile, notes } })
+      if (rmEmail !== initialRmEmail) {
+        const newManagerId = rmEmail ? (people.find((p) => p.officialEmail === rmEmail)?.id ?? null) : null
+        await updatePostingManager.mutateAsync({ personId: editing.id, managerId: newManagerId })
+      }
       toast(`Updated ${name}`)
     } else {
       await create.mutateAsync({
@@ -68,7 +91,11 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!canSubmit || create.isPending || update.isPending}>
+          <Button
+            variant="primary"
+            onClick={submit}
+            disabled={!canSubmit || create.isPending || update.isPending || updatePostingManager.isPending}
+          >
             {editing ? 'Save changes' : 'Add'}
           </Button>
         </>
@@ -100,6 +127,22 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
                 <option value="">No manager</option>
                 {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </Select>
+            </Field>
+          </>
+        )}
+
+        {editing && (
+          <>
+            {/* Quick-edit path: an in-place manager change on the current
+                posting, saved alongside the person patch above. Distinct from
+                TransferSalesPersonDialog's full promotion/reorg-with-history
+                flow, which remains untouched and is still the path for a
+                designation/tier change. */}
+            <Field label="Reporting Manager (RM)">
+              <SalesTeamPicker value={rmEmail} onChange={setRmEmail} />
+            </Field>
+            <Field label="GM / Higher Reporting Manager" hint="Auto-filled from Reporting Manager">
+              <SalesTeamPicker value={gmEmail} onChange={() => {}} disabled />
             </Field>
           </>
         )}
