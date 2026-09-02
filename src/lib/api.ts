@@ -6,7 +6,7 @@ import {
   type TransferSalesPersonInput,
 } from '@/data/repository'
 import type {
-  Charge, Employee, FollowUp, HierNode, Opportunity, SalesPerson, SearchResult, Status, TimelineEventType,
+  Charge, Employee, FollowUp, HierNode, Opportunity, SalesPerson, SearchResult, Status, TimelineEvent, TimelineEventType,
 } from './types'
 
 const qk = {
@@ -316,6 +316,10 @@ export function useEmployeeMutations() {
   const addTimelineEvent = useMutation({
     mutationFn: (i: AddTimelineInput) => repository.addTimelineEvent(i), onSuccess: invalidate,
   })
+  const updateTimelineEvent = useMutation({
+    mutationFn: (a: { id: string; patch: Partial<TimelineEvent> }) => repository.updateTimelineEvent(a.id, a.patch),
+    onSuccess: invalidate,
+  })
   const deleteTimelineEvent = useMutation({
     mutationFn: (id: string) => repository.deleteTimelineEvent(id), onSuccess: invalidate,
   })
@@ -352,7 +356,7 @@ export function useEmployeeMutations() {
     },
   })
   return {
-    create, update, remove, setManager, addTimelineEvent, deleteTimelineEvent, setTimelineEventAttended,
+    create, update, remove, setManager, addTimelineEvent, updateTimelineEvent, deleteTimelineEvent, setTimelineEventAttended,
     transfer, addCharge, removeCharge, importEmployees, merge,
   }
 }

@@ -88,3 +88,49 @@ describe('InMemoryRepository.addTimelineEvent', () => {
     expect(evt.nextSteps).toBeUndefined()
   })
 })
+
+// Task 8.4 (Item 14): editing must mutate the same in-memory record — same
+// id, no new entry pushed onto `data.timeline` — and support a mixed
+// legacy/new attendees array unchanged when the patch doesn't touch it.
+describe('InMemoryRepository.updateTimelineEvent', () => {
+  beforeEach(async () => {
+    await resetLocalData()
+  })
+
+  it('updates fields in place on the same record', async () => {
+    const dept = await repository.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Dept' })
+    const emp = await repository.createEmployee({
+      name: 'Jane', designation: 'Officer', email: '', phone: '', orgNodeId: dept.id, managerId: null,
+    })
+    const evt = await repository.addTimelineEvent({
+      employeeId: emp.id, type: 'call', title: 'Quick call', date: '2026-01-02',
+    })
+    const before = (await repository.listTimeline(emp.id)).length
+
+    const updated = await repository.updateTimelineEvent(evt.id, {
+      title: 'Rescheduled call', date: '2026-01-03', agenda: 'Discuss renewal',
+    })
+
+    expect(updated.id).toBe(evt.id)
+    expect(updated.title).toBe('Rescheduled call')
+    expect(updated.date).toBe('2026-01-03')
+    expect(updated.agenda).toBe('Discuss renewal')
+    expect(await repository.listTimeline(emp.id)).toHaveLength(before)
+  })
+
+  it('leaves a mixed legacy/new attendees array unchanged when the patch omits attendees', async () => {
+    const dept = await repository.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Dept' })
+    const emp = await repository.createEmployee({
+      name: 'Jane', designation: 'Officer', email: '', phone: '', orgNodeId: dept.id, managerId: null,
+    })
+    const evt = await repository.addTimelineEvent({
+      employeeId: emp.id, type: 'meeting', title: 'Budget review', date: '2026-01-01',
+      attendees: ['Legacy Person', { salesPersonId: 'sp-1', name: 'New Snapshot Name' }],
+    })
+
+    const updated = await repository.updateTimelineEvent(evt.id, { note: 'Went well' })
+
+    expect(updated.note).toBe('Went well')
+    expect(updated.attendees).toEqual(['Legacy Person', { salesPersonId: 'sp-1', name: 'New Snapshot Name' }])
+  })
+})

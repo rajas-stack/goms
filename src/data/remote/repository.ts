@@ -95,6 +95,8 @@ export class RemoteRepository implements Partial<Repository> {
   listAllTimelineEvents = (filter?: { types?: TimelineEventType[] }): Promise<TimelineEvent[]> =>
     this.client.employees.timeline.listAll.query(filter)
   addTimelineEvent = (input: AddTimelineInput): Promise<TimelineEvent> => this.client.employees.timeline.add.mutate(input)
+  updateTimelineEvent = (id: string, patch: Partial<TimelineEvent>): Promise<TimelineEvent> =>
+    this.client.employees.timeline.update.mutate({ id, patch })
   setTimelineEventAttended = (id: string, attended: boolean | undefined): Promise<void> =>
     this.client.employees.timeline.setAttended.mutate({ id, attended })
   deleteTimelineEvent = (id: string): Promise<void> => this.client.employees.timeline.delete.mutate({ id })

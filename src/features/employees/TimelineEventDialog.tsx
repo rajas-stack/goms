@@ -10,7 +10,7 @@ import { isoToday } from '@/data/repository'
 import { useFormDraft } from '@/lib/useFormDraft'
 import { MANUAL_EVENT_TYPES, TIMELINE_META } from '@/lib/timeline-meta'
 import { EmployeePicker } from './EmployeePicker'
-import type { AttendeeRef, TimelineEventType } from '@/lib/types'
+import type { AttendeeRef, TimelineEvent, TimelineEventType } from '@/lib/types'
 
 /**
  * `employeeId: null` opens the dialog with an employee-search/pick step
@@ -25,24 +25,43 @@ import type { AttendeeRef, TimelineEventType } from '@/lib/types'
  * original behavior exactly — type defaults to 'meeting', every manual type
  * is selectable.
  */
-export function TimelineEventDialog({ open, employeeId, initialType, typeFilter, onClose }: {
+function formFromEvent(e: TimelineEvent) {
+  return {
+    type: e.type, title: e.title, customLabel: e.customLabel ?? '', date: e.date, time: e.time ?? '',
+    note: e.note, attendees: e.attendees ?? ([] as AttendeeRef[]),
+    agenda: e.agenda ?? '', outcome: e.outcome ?? '', nextSteps: e.nextSteps ?? '',
+  }
+}
+
+export function TimelineEventDialog({ open, employeeId, initialType, typeFilter, existingEvent, onClose }: {
   open: boolean
   employeeId: string | null
   /** Type the Type field starts on. Defaults to 'meeting' (prior behavior). */
   initialType?: TimelineEventType
   /** Narrows the Type dropdown to this subset. Defaults to every manual type. */
   typeFilter?: TimelineEventType[]
+  /** Task 8.4 (Item 14): when set, the dialog opens in edit mode — every
+   *  field pre-fills from this record, and submitting calls
+   *  `updateTimelineEvent` (same id, no new row) instead of `addTimelineEvent`. */
+  existingEvent?: TimelineEvent
   onClose: () => void
 }) {
   const toast = useToast()
-  const { addTimelineEvent } = useEmployeeMutations()
+  const { addTimelineEvent, updateTimelineEvent } = useEmployeeMutations()
   const { data: allEmployees = [] } = useAllEmployees()
   const { data: salesPersons = [] } = useSalesPersons()
   const [pickedEmployeeId, setPickedEmployeeId] = useState<string | null>(null)
   const activeEmployeeId = employeeId ?? pickedEmployeeId
   const showPicker = !activeEmployeeId
   const pickedEmployee = pickedEmployeeId ? allEmployees.find((e) => e.id === pickedEmployeeId) : undefined
-  const typeOptions = typeFilter && typeFilter.length > 0 ? typeFilter : MANUAL_EVENT_TYPES
+  const typeOptionsBase = typeFilter && typeFilter.length > 0 ? typeFilter : MANUAL_EVENT_TYPES
+  // An existing entry's own type might fall outside the caller's typeFilter
+  // (e.g. a 'meeting'-type entry created via the global FAB, edited from a
+  // call site that passes MEETING_LOG_TYPES) — keep it selectable rather than
+  // silently offering to change it as a side effect of opening Edit.
+  const typeOptions = existingEvent && !typeOptionsBase.includes(existingEvent.type)
+    ? [existingEvent.type, ...typeOptionsBase]
+    : typeOptionsBase
   const defaultType = initialType ?? typeOptions[0]
   const EMPTY_FORM = {
     type: defaultType, title: '', customLabel: '', date: isoToday(), time: '', note: '', attendees: [] as AttendeeRef[],
@@ -53,17 +72,20 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   // Keyed on the target person, not on this render's `defaultType` — a draft
   // must survive the dialog closing and reopening for the same person even
   // though `defaultType` (derived from `initialType`) could differ between
-  // entry points ("Log Interaction" vs "Create Meeting" on the FAB).
-  const draftKey = activeEmployeeId ? `timeline:${activeEmployeeId}` : null
+  // entry points ("Log Interaction" vs "Create Meeting" on the FAB). Disabled
+  // entirely while editing an existing event: that form is seeded from the
+  // record itself, not from an in-progress add — persisting it here would
+  // risk polluting the same person's next "+ Add meeting" draft.
+  const draftKey = !existingEvent && activeEmployeeId ? `timeline:${activeEmployeeId}` : null
   const draft = useFormDraft(draftKey, form, open, () => setForm(EMPTY_FORM))
 
   useEffect(() => {
     if (open) {
-      setForm(draft.take(EMPTY_FORM) ?? EMPTY_FORM)
+      setForm(existingEvent ? formFromEvent(existingEvent) : (draft.take(EMPTY_FORM) ?? EMPTY_FORM))
       setPickedEmployeeId(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+  }, [open, existingEvent])
 
   // MultiSelectDropdown operates over a plain string[] of names. Legacy
   // plain-string attendees (e.g. restored from a draft saved before this
@@ -95,15 +117,32 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
 
   async function submit() {
     if (!activeEmployeeId || !form.title.trim()) return
-    await addTimelineEvent.mutateAsync({
-      employeeId: activeEmployeeId, type: form.type, title: form.title.trim(),
+    const shared = {
+      type: form.type, title: form.title.trim(),
       customLabel: form.type === 'custom' ? form.customLabel.trim() : undefined,
       date: form.date, time: form.time, note: form.note, attendees: form.attendees,
-      agenda: form.agenda.trim() || undefined, outcome: form.outcome.trim() || undefined,
-      nextSteps: form.nextSteps.trim() || undefined,
-    })
-    toast('Added to timeline')
-    draft.clear()
+    }
+    if (existingEvent) {
+      // A blanked-out field must still overwrite whatever the record had —
+      // `null` (not `undefined`) is what actually clears it via the
+      // dynamic-SET patch, unlike the `add` branch below where an untouched
+      // optional field is simply omitted from the insert.
+      await updateTimelineEvent.mutateAsync({
+        id: existingEvent.id,
+        patch: {
+          ...shared,
+          agenda: form.agenda.trim() || null, outcome: form.outcome.trim() || null, nextSteps: form.nextSteps.trim() || null,
+        },
+      })
+      toast('Meeting updated')
+    } else {
+      await addTimelineEvent.mutateAsync({
+        employeeId: activeEmployeeId, ...shared,
+        agenda: form.agenda.trim() || undefined, outcome: form.outcome.trim() || undefined, nextSteps: form.nextSteps.trim() || undefined,
+      })
+      toast('Added to timeline')
+      draft.clear()
+    }
     onClose()
   }
 
@@ -128,17 +167,18 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
     )
   }
 
+  const pending = existingEvent ? updateTimelineEvent.isPending : addTimelineEvent.isPending
   return (
     <Dialog
       open={open}
       onClose={onClose}
-      title="Log to timeline"
+      title={existingEvent ? 'Edit timeline entry' : 'Log to timeline'}
       description={!employeeId && pickedEmployee ? `For ${pickedEmployee.name}` : undefined}
       footer={
         <>
-          <Button onClick={onClose} disabled={addTimelineEvent.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!form.title.trim() || addTimelineEvent.isPending}>
-            {addTimelineEvent.isPending ? 'Adding…' : 'Add entry'}
+          <Button onClick={onClose} disabled={pending}>Cancel</Button>
+          <Button variant="primary" onClick={submit} disabled={!form.title.trim() || pending}>
+            {existingEvent ? (pending ? 'Saving…' : 'Save changes') : (pending ? 'Adding…' : 'Add entry')}
           </Button>
         </>
       }
@@ -203,7 +243,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
           {legacyAttendeeNames.length > 0 && (
             <p className="mt-1.5 text-[12px] text-muted">
               Also: {legacyAttendeeNames.join(', ')}{' '}
-              <span className="italic">(from a saved draft; not editable here)</span>
+              <span className="italic">(no linked sales team record; not editable here)</span>
             </p>
           )}
         </Field>

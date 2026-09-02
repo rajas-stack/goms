@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import * as api from '@/lib/api'
 import { EmployeeDetails } from './EmployeeDetails'
@@ -26,7 +27,13 @@ beforeEach(() => {
 vi.mock('@/features/employees/EmployeeFormDialog', () => ({ EmployeeFormDialog: () => null }))
 vi.mock('@/features/employees/MarkDuplicateDialog', () => ({ MarkDuplicateDialog: () => null }))
 vi.mock('@/features/employees/MergeEmployeesDialog', () => ({ MergeEmployeesDialog: () => null }))
-vi.mock('@/features/employees/TimelineEventDialog', () => ({ TimelineEventDialog: () => null }))
+// Task 8.4: mocked with a small visible marker (rather than `() => null`) so
+// this file's Edit-button test can assert the dialog actually receives the
+// clicked entry as `existingEvent`, not just that the dialog opened.
+vi.mock('@/features/employees/TimelineEventDialog', () => ({
+  TimelineEventDialog: (props: { open: boolean; existingEvent?: { id: string; title: string } }) =>
+    props.open ? <div data-testid="timeline-dialog">{props.existingEvent ? `editing:${props.existingEvent.title}` : 'add-mode'}</div> : null,
+}))
 vi.mock('@/features/employees/TransferDialog', () => ({ TransferDialog: () => null }))
 vi.mock('@/features/employees/ChargeDialog', () => ({ ChargeDialog: () => null }))
 vi.mock('@/features/employees/VisitingCard', () => ({ VisitingCard: () => null }))
@@ -68,6 +75,7 @@ function stubApiHooks(opts: { employee: Employee; chain?: Employee[]; reports?: 
     removeCharge: { mutateAsync: vi.fn() },
     setManager: { mutateAsync: vi.fn() },
     setTimelineEventAttended: { mutate: vi.fn() },
+    updateTimelineEvent: { mutateAsync: vi.fn() },
     update: { mutateAsync: vi.fn() },
   } as unknown as ReturnType<typeof api.useEmployeeMutations>)
 }
@@ -178,5 +186,35 @@ describe('EmployeeDetails — attendee display, mixed legacy/new shapes (Task 8.
     render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
 
     expect(screen.queryByText(/^Attendees:/)).not.toBeInTheDocument()
+  })
+})
+
+// Task 8.4 (Item 14): a manual entry gets a per-entry Edit button that opens
+// TimelineEventDialog with `existingEvent` set to that exact record — a
+// system-generated entry (joined/transferred) gets none, since there's
+// nothing user-editable about it.
+describe('EmployeeDetails — per-entry Edit action (Task 8.4)', () => {
+  it('clicking Edit on a manual entry opens the dialog with that record as existingEvent', async () => {
+    const user = userEvent.setup()
+    const emp = makeEmployee()
+    const event = makeTimelineEvent({ id: 'evt-42', title: 'Quarterly review', source: 'manual' })
+    stubApiHooks({ employee: emp, timeline: [event] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.queryByTestId('timeline-dialog')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /edit quarterly review/i }))
+
+    expect(screen.getByTestId('timeline-dialog')).toHaveTextContent('editing:Quarterly review')
+  })
+
+  it('does not show an Edit button on a system-generated entry', () => {
+    const emp = makeEmployee()
+    const event = makeTimelineEvent({ id: 'evt-joined', type: 'joined', title: 'Contact created', source: 'system' })
+    stubApiHooks({ employee: emp, timeline: [event] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.queryByRole('button', { name: /edit contact created/i })).not.toBeInTheDocument()
   })
 })

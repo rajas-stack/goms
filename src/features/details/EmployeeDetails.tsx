@@ -61,6 +61,9 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
   const openFollowUps = followUps.filter((f) => f.status === 'open')
   const [cardOpen, setCardOpen] = useState(false)
   const [active, setActive] = useState<'none' | 'event' | 'transfer' | 'charge'>('none')
+  // Item 14: separate from `active` because it carries the full record being
+  // edited, not just a mode flag — the dialog seeds every field from it.
+  const [editingEvent, setEditingEvent] = useState<TimelineEvent | null>(null)
   const [reporteeMode, setReporteeMode] = useState<'junior' | 'manager' | null>(null)
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
   const [mergeCandidateId, setMergeCandidateId] = useState<string | null>(null)
@@ -277,10 +280,11 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
         />
       )}
       <TimelineEventDialog
-        open={active === 'event'}
+        open={active === 'event' || !!editingEvent}
         employeeId={emp.id}
+        existingEvent={editingEvent ?? undefined}
         typeFilter={MEETING_LOG_TYPES}
-        onClose={() => setActive('none')}
+        onClose={() => { setActive('none'); setEditingEvent(null) }}
       />
       <TransferDialog open={active === 'transfer'} employee={emp} onClose={() => setActive('none')} />
       <ChargeDialog open={active === 'charge'} employeeId={emp.id} onClose={() => setActive('none')} />
@@ -438,6 +442,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
             <TimelineList
               events={timeline}
               onSetAttended={(id, attended) => setTimelineEventAttended.mutate({ id, attended })}
+              onEdit={setEditingEvent}
               highlightId={highlightEntryId}
             />
           </section>
@@ -560,9 +565,14 @@ function TransferRow({ transfer }: { transfer: Transfer }) {
 
 const ATTENDANCE_TYPES = new Set(['meeting', 'inPerson'])
 
-function TimelineList({ events, onSetAttended, highlightId }: {
+/** Exported so Task 8.5's department-level Meetings section (DepartmentSection.tsx)
+ *  can render the exact same entries/markup rather than duplicating this —
+ *  `onSetAttended`/`onEdit` are omitted there, which hides both interactive
+ *  controls for that read-only view. */
+export function TimelineList({ events, onSetAttended, onEdit, highlightId }: {
   events: TimelineEvent[]
-  onSetAttended: (id: string, attended: boolean | undefined) => void
+  onSetAttended?: (id: string, attended: boolean | undefined) => void
+  onEdit?: (event: TimelineEvent) => void
   highlightId?: string | null
 }) {
   const [pulsing, setPulsing] = useState(false)
@@ -585,7 +595,8 @@ function TimelineList({ events, onSetAttended, highlightId }: {
       <div className="space-y-3">
         {events.map((e) => {
           const meta = TIMELINE_META[e.type]
-          const canMarkAttendance = e.source === 'manual' && ATTENDANCE_TYPES.has(e.type)
+          const canMarkAttendance = !!onSetAttended && e.source === 'manual' && ATTENDANCE_TYPES.has(e.type)
+          const canEdit = !!onEdit && e.source === 'manual'
           const isHighlighted = pulsing && e.id === highlightId
           return (
             <div
@@ -601,6 +612,16 @@ function TimelineList({ events, onSetAttended, highlightId }: {
                   <span className="text-[13px] font-medium text-ink-900">{e.title}</span>
                   {e.type !== 'joined' && <Badge tone={meta.tone}>{timelineEventLabel(e)}</Badge>}
                   {e.source === 'system' && <span className="text-[10px] uppercase tracking-wide text-muted">auto</span>}
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => onEdit!(e)}
+                      aria-label={`Edit ${e.title}`}
+                      className="ml-auto shrink-0 rounded p-1 text-muted hover:bg-ink-900/[0.05] hover:text-ink-700"
+                    >
+                      <Icon name="Pencil" size={13} />
+                    </button>
+                  )}
                 </div>
                 <div className="text-[11px] text-muted">{e.date}{e.time && ` · ${e.time}`}</div>
                 {e.note && <p className="mt-0.5 break-words text-[12px] text-ink-700">{e.note}</p>}
@@ -628,13 +649,13 @@ function TimelineList({ events, onSetAttended, highlightId }: {
                       label="Attended"
                       active={e.attended === true}
                       activeTone="emerald"
-                      onClick={() => onSetAttended(e.id, e.attended === true ? undefined : true)}
+                      onClick={() => onSetAttended!(e.id, e.attended === true ? undefined : true)}
                     />
                     <AttendanceToggle
                       label="Not attended"
                       active={e.attended === false}
                       activeTone="crimson"
-                      onClick={() => onSetAttended(e.id, e.attended === false ? undefined : false)}
+                      onClick={() => onSetAttended!(e.id, e.attended === false ? undefined : false)}
                     />
                   </div>
                 )}

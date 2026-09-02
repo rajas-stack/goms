@@ -139,6 +139,89 @@ describe('TimelineEventDialog — attendee picker (Task 8.3)', () => {
     ])
   })
 
+})
+
+// Task 8.4 (Item 14): editing an existing event pre-fills every field from
+// the record (not from a draft) and calls updateTimelineEvent instead of
+// addTimelineEvent on submit.
+const updateTimelineMutateAsync = vi.fn().mockResolvedValue({})
+
+function stubApiHooksForEdit() {
+  vi.spyOn(api, 'useEmployeeMutations').mockReturnValue({
+    addTimelineEvent: { mutateAsync: addTimelineMutateAsync, isPending: false },
+    updateTimelineEvent: { mutateAsync: updateTimelineMutateAsync, isPending: false },
+  } as unknown as ReturnType<typeof api.useEmployeeMutations>)
+  vi.spyOn(api, 'useAllEmployees').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useAllEmployees>)
+  vi.spyOn(api, 'useSalesPersons').mockReturnValue({ data: SALES_PERSONS } as unknown as ReturnType<typeof api.useSalesPersons>)
+}
+
+describe('TimelineEventDialog — edit mode (Task 8.4)', () => {
+  beforeEach(() => {
+    stubApiHooksForEdit()
+  })
+
+  const existingEvent = {
+    id: 'evt-1', employeeId: 'emp-1', type: 'meeting' as const, title: 'Budget review',
+    date: '2026-01-01', time: '14:00', note: 'Some note', source: 'manual' as const,
+    attendees: ['Legacy Person', { salesPersonId: 'sp-asha', name: 'Asha Rao' }],
+    agenda: 'Discuss Q1 budget', outcome: 'Approved with revisions', nextSteps: 'Send revised sheet by Friday',
+  }
+
+  it('pre-fills every field from the existing record, including a mixed legacy/new attendees case', async () => {
+    render(<TimelineEventDialog open employeeId="emp-1" existingEvent={existingEvent} onClose={vi.fn()} />)
+
+    expect(screen.getByLabelText(/^title$/i)).toHaveValue('Budget review')
+    expect(screen.getByLabelText(/^date$/i)).toHaveValue('2026-01-01')
+    expect(screen.getByLabelText(/^time$/i)).toHaveValue('14:00')
+    expect(screen.getByLabelText(/^note/i)).toHaveValue('Some note')
+    expect(screen.getByLabelText(/^agenda/i)).toHaveValue('Discuss Q1 budget')
+    expect(screen.getByLabelText(/^outcome/i)).toHaveValue('Approved with revisions')
+    expect(screen.getByLabelText(/^next steps/i)).toHaveValue('Send revised sheet by Friday')
+    // Resolvable attendee shows as a removable picker chip…
+    expect(screen.getByRole('button', { name: /remove asha rao/i })).toBeInTheDocument()
+    // …the legacy plain-string one shows read-only via the same "Also:" line
+    // Task 8.3 built for the draft-restore case.
+    expect(screen.getByText(/legacy person/i)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /remove legacy person/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+  })
+
+  it('calls updateTimelineEvent with the same id on save, not addTimelineEvent', async () => {
+    const user = userEvent.setup()
+    render(<TimelineEventDialog open employeeId="emp-1" existingEvent={existingEvent} onClose={vi.fn()} />)
+
+    await user.clear(screen.getByLabelText(/^title$/i))
+    await user.type(screen.getByLabelText(/^title$/i), 'Budget review v2')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(updateTimelineMutateAsync).toHaveBeenCalledTimes(1)
+    expect(addTimelineMutateAsync).not.toHaveBeenCalled()
+    const call = updateTimelineMutateAsync.mock.calls[0][0]
+    expect(call.id).toBe('evt-1')
+    expect(call.patch.title).toBe('Budget review v2')
+  })
+
+  it('sends null (not omitted) for agenda/outcome/nextSteps when cleared, so the edit actually clears them', async () => {
+    const user = userEvent.setup()
+    render(<TimelineEventDialog open employeeId="emp-1" existingEvent={existingEvent} onClose={vi.fn()} />)
+
+    await user.clear(screen.getByLabelText(/^agenda/i))
+    await user.clear(screen.getByLabelText(/^outcome/i))
+    await user.clear(screen.getByLabelText(/^next steps/i))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const call = updateTimelineMutateAsync.mock.calls[0][0]
+    expect(call.patch.agenda).toBeNull()
+    expect(call.patch.outcome).toBeNull()
+    expect(call.patch.nextSteps).toBeNull()
+  })
+})
+
+describe('TimelineEventDialog — attendee picker draft-restore text (Task 8.3, unaffected)', () => {
+  beforeEach(() => {
+    stubApiHooksWithRoster()
+  })
+
   it('displays a legacy plain-string attendee restored from a pre-picker draft read-only, without losing it', async () => {
     const draft = {
       savedAt: Date.now(),

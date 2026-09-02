@@ -297,6 +297,9 @@ export interface Repository {
    *  event types. */
   listAllTimelineEvents(filter?: { types?: TimelineEventType[] }): Promise<TimelineEvent[]>
   addTimelineEvent(input: AddTimelineInput): Promise<TimelineEvent>
+  /** Item 14: edits an existing entry's fields in place (same id, no new
+   *  row) — date/time/title/attendees/agenda/note/outcome/nextSteps. */
+  updateTimelineEvent(id: string, patch: Partial<TimelineEvent>): Promise<TimelineEvent>
   /** Marks (or un-marks) attendance on an existing entry — the only field
    *  editable after logging. */
   setTimelineEventAttended(id: string, attended: boolean | undefined): Promise<void>
@@ -1022,6 +1025,12 @@ class InMemoryRepository implements Repository {
       agenda: input.agenda || undefined, outcome: input.outcome || undefined, nextSteps: input.nextSteps || undefined,
     }
     this.data.timeline.push(evt)
+    return evt
+  }
+
+  async updateTimelineEvent(id: string, patch: Partial<TimelineEvent>) {
+    const evt = this.data.timeline.find((t) => t.id === id)!
+    Object.assign(evt, patch)
     return evt
   }
 
@@ -1791,7 +1800,7 @@ const MUTATOR_KEYS = [
   'createNode', 'updateNode', 'setNodeStatus', 'deleteNode', 'moveNode', 'duplicateNode',
   'reorderNode', 'importChildren', 'importEmployees',
   'createEmployee', 'updateEmployee', 'setManager', 'deleteEmployee', 'mergeEmployees',
-  'addTimelineEvent', 'setTimelineEventAttended', 'deleteTimelineEvent',
+  'addTimelineEvent', 'updateTimelineEvent', 'setTimelineEventAttended', 'deleteTimelineEvent',
   'transferEmployee', 'addCharge', 'removeCharge',
   'createOpportunity', 'updateOpportunity', 'deleteOpportunity',
   'createFollowUp', 'setFollowUpStatus', 'deleteFollowUp',

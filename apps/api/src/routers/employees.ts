@@ -123,6 +123,23 @@ const employeeColumnFor: Record<string, string> = {
 }
 const jsonColumns = new Set(['preferredComm', 'visitingCards', 'metadata'])
 
+// Item 14: mirrors employees.update's dynamic-SET convention exactly (see
+// employeePatchShape/employeeColumnFor above) — every field optional, only
+// the ones present in the patch get written.
+const timelineEventPatchShape = {
+  title: z.string().min(1).optional(), date: z.string().optional(), time: z.string().optional(),
+  note: z.string().optional(),
+  attendees: z.array(z.union([z.string(), z.object({ salesPersonId: z.string(), name: z.string() })])).optional(),
+  // Nullable (unlike `add`'s equivalent fields): editing must be able to
+  // clear a previously-set agenda/outcome/nextSteps back out, not just set one.
+  agenda: z.string().nullable().optional(), outcome: z.string().nullable().optional(), nextSteps: z.string().nullable().optional(),
+}
+const timelineEventColumnFor: Record<string, string> = {
+  title: 'title', date: 'date', time: 'time', note: 'note', attendees: 'attendees',
+  agenda: 'agenda', outcome: 'outcome', nextSteps: 'next_steps',
+}
+const timelineJsonColumns = new Set(['attendees'])
+
 const timelineRouter = router({
   listForEmployee: publicProcedure.input(z.object({ employeeId: z.string().uuid() })).query(async ({ input }) => {
     const result = await pool.query(`SELECT * FROM timeline_events WHERE employee_id=$1 ORDER BY date DESC, id DESC`, [input.employeeId])
@@ -159,6 +176,20 @@ const timelineRouter = router({
           input.agenda ?? null, input.outcome ?? null, input.nextSteps ?? null,
         ],
       )
+      return toTimelineEvent(result.rows[0])
+    }),
+  update: publicProcedure
+    .input(z.object({ id: z.string().uuid(), patch: z.object(timelineEventPatchShape) }))
+    .mutation(async ({ input }) => {
+      const fields = Object.keys(input.patch)
+      if (!fields.length) {
+        const existing = await pool.query('SELECT * FROM timeline_events WHERE id=$1', [input.id])
+        return toTimelineEvent(existing.rows[0])
+      }
+      const values = fields.map((f) => (timelineJsonColumns.has(f) ? JSON.stringify((input.patch as any)[f]) : (input.patch as any)[f]))
+      const setClauses = fields.map((f, i) => `${timelineEventColumnFor[f]}=$${i + 1}`)
+      values.push(input.id)
+      const result = await pool.query(`UPDATE timeline_events SET ${setClauses.join(', ')} WHERE id=$${values.length} RETURNING *`, values)
       return toTimelineEvent(result.rows[0])
     }),
   setAttended: publicProcedure

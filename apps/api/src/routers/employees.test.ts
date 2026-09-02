@@ -82,6 +82,87 @@ describe('employees router', () => {
     expect(created.nextSteps).toBeUndefined()
   })
 
+  // Task 8.4 (Item 14): editing a timeline entry must mutate the same row —
+  // no new record — and support every field, including clearing a
+  // previously-set agenda/outcome/nextSteps back out and upgrading a legacy
+  // plain-string attendee to the new {salesPersonId, name} shape.
+  describe('timeline.update', () => {
+    it('updates fields on the same record (same id, no new row)', async () => {
+      const caller = appRouter.createCaller({})
+      const emp = await makeEmployee()
+      const created = await caller.employees.timeline.add({
+        employeeId: emp.id, type: 'call', title: 'Quick call', date: '2026-01-02',
+      })
+      const updated = await caller.employees.timeline.update({
+        id: created.id,
+        patch: {
+          title: 'Rescheduled call', date: '2026-01-03', time: '14:30', note: 'Moved to afternoon',
+          agenda: 'Discuss renewal', outcome: 'Agreed to renew', nextSteps: 'Send contract',
+          attendees: [{ salesPersonId: 'sp-1', name: 'Asha Rao' }],
+        },
+      })
+      expect(updated.id).toBe(created.id)
+      expect(updated.title).toBe('Rescheduled call')
+      expect(updated.date).toBe('2026-01-03')
+      expect(updated.time).toBe('14:30')
+      expect(updated.note).toBe('Moved to afternoon')
+      expect(updated.agenda).toBe('Discuss renewal')
+      expect(updated.outcome).toBe('Agreed to renew')
+      expect(updated.nextSteps).toBe('Send contract')
+      expect(updated.attendees).toEqual([{ salesPersonId: 'sp-1', name: 'Asha Rao' }])
+
+      // The employee also carries its own "joined" event from creation —
+      // asserting the edited entry's own id/title/count within the full list
+      // (rather than the list length) confirms the edit updated in place
+      // without adding a second row for it.
+      const timeline = await caller.employees.timeline.listForEmployee({ employeeId: emp.id })
+      expect(timeline.filter((t) => t.id === created.id)).toHaveLength(1)
+      expect(timeline.filter((t) => t.title === 'Rescheduled call')).toHaveLength(1)
+    })
+
+    it('clears a previously-set agenda/outcome/nextSteps when the patch sends null', async () => {
+      const caller = appRouter.createCaller({})
+      const emp = await makeEmployee()
+      const created = await caller.employees.timeline.add({
+        employeeId: emp.id, type: 'meeting', title: 'Budget review', date: '2026-01-01',
+        agenda: 'Discuss Q1 budget', outcome: 'Approved with revisions', nextSteps: 'Send revised sheet by Friday',
+      })
+      const updated = await caller.employees.timeline.update({
+        id: created.id,
+        patch: { agenda: null, outcome: null, nextSteps: null },
+      })
+      expect(updated.agenda).toBeUndefined()
+      expect(updated.outcome).toBeUndefined()
+      expect(updated.nextSteps).toBeUndefined()
+    })
+
+    it('leaves legacy plain-string attendees intact when the patch does not touch attendees', async () => {
+      const caller = appRouter.createCaller({})
+      const emp = await makeEmployee()
+      const created = await caller.employees.timeline.add({
+        employeeId: emp.id, type: 'meeting', title: 'Budget review', date: '2026-01-01',
+        attendees: ['Legacy Person'],
+      })
+      const updated = await caller.employees.timeline.update({ id: created.id, patch: { title: 'Budget review v2' } })
+      expect(updated.title).toBe('Budget review v2')
+      expect(updated.attendees).toEqual(['Legacy Person'])
+    })
+
+    it('upgrades a legacy plain-string attendee to the new {salesPersonId, name} shape when re-picked', async () => {
+      const caller = appRouter.createCaller({})
+      const emp = await makeEmployee()
+      const created = await caller.employees.timeline.add({
+        employeeId: emp.id, type: 'meeting', title: 'Budget review', date: '2026-01-01',
+        attendees: ['Legacy Person'],
+      })
+      const updated = await caller.employees.timeline.update({
+        id: created.id,
+        patch: { attendees: [{ salesPersonId: 'sp-1', name: 'Asha Rao' }] },
+      })
+      expect(updated.attendees).toEqual([{ salesPersonId: 'sp-1', name: 'Asha Rao' }])
+    })
+  })
+
   it('gets an employee by id, and null for a missing one', async () => {
     const caller = appRouter.createCaller({})
     const emp = await makeEmployee()
