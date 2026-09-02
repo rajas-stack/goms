@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { useOwnershipFor, useSalesPersons } from '@/lib/api'
@@ -50,6 +51,7 @@ export function OwnershipBlock({ entityType, entityId, entityLabel, owner, viaLa
             className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[12px] text-sky-800"
             title={`Delegated until ${displayEndDate(delegate.endDate) ?? 'further notice'}`}
           >
+            <Avatar person={{ name: delegatePerson?.name ?? delegate.salesPersonId, photoUrl: undefined }} size="xs" />
             <Icon name="UserPlus" size={12} />
             {delegatePerson?.name ?? delegate.salesPersonId} · delegate
           </span>
@@ -70,10 +72,13 @@ export function OwnershipBlock({ entityType, entityId, entityLabel, owner, viaLa
             {past.map((a) => {
               const person = people.find((p) => p.id === a.salesPersonId)
               return (
-                <li key={a.id} className="text-[12px] text-ink-600">
-                  {person?.name ?? a.salesPersonId} · {a.startDate || 'unknown'} —{' '}
-                  {displayEndDate(a.endDate) ?? 'current'}
-                  {a.role !== 'owner' && ` · ${a.role}`}
+                <li key={a.id} className="flex items-center gap-1.5 text-[12px] text-ink-600">
+                  <Avatar person={{ name: person?.name ?? a.salesPersonId, photoUrl: undefined }} size="xs" />
+                  <span>
+                    {person?.name ?? a.salesPersonId} · {a.startDate || 'unknown'} —{' '}
+                    {displayEndDate(a.endDate) ?? 'current'}
+                    {a.role !== 'owner' && ` · ${a.role}`}
+                  </span>
                 </li>
               )
             })}

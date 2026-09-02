@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import * as api from '@/lib/api'
 import { EmployeeDetails } from './EmployeeDetails'
-import type { Employee, TimelineEvent } from '@/lib/types'
+import type { Employee, SalesPerson, TimelineEvent } from '@/lib/types'
 
 beforeEach(() => {
   // jsdom has no ResizeObserver; FitText (the header name) uses one purely
@@ -55,7 +55,16 @@ function makeEmployee(overrides: Partial<Employee> = {}): Employee {
   }
 }
 
-function stubApiHooks(opts: { employee: Employee; chain?: Employee[]; reports?: Employee[]; timeline?: TimelineEvent[] }) {
+function makeSalesPerson(overrides: Partial<SalesPerson> = {}): SalesPerson {
+  return {
+    id: 'sp-1', employeeCode: 'E1', name: 'Sales Owner', officialEmail: 'owner@amnex.com',
+    personalEmail: '', mobile: '', altMobile: '', joinedOn: null, leftOn: null,
+    status: 'active', notes: '', metadata: {}, createdAt: '2026-01-01',
+    ...overrides,
+  } as SalesPerson
+}
+
+function stubApiHooks(opts: { employee: Employee; chain?: Employee[]; reports?: Employee[]; timeline?: TimelineEvent[]; salesPersons?: SalesPerson[] }) {
   vi.spyOn(api, 'useEmployee').mockImplementation((id: string | null) =>
     ({ data: id === opts.employee.id ? opts.employee : null } as unknown as ReturnType<typeof api.useEmployee>))
   vi.spyOn(api, 'useReportingChain').mockReturnValue({ data: opts.chain ?? [] } as unknown as ReturnType<typeof api.useReportingChain>)
@@ -68,7 +77,7 @@ function stubApiHooks(opts: { employee: Employee; chain?: Employee[]; reports?: 
   vi.spyOn(api, 'useAllEmployees').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useAllEmployees>)
   vi.spyOn(api, 'useEmployeeDepartments').mockReturnValue({ data: {} } as unknown as ReturnType<typeof api.useEmployeeDepartments>)
   vi.spyOn(api, 'useResolvedOwners').mockReturnValue({ data: {} } as unknown as ReturnType<typeof api.useResolvedOwners>)
-  vi.spyOn(api, 'useSalesPersons').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useSalesPersons>)
+  vi.spyOn(api, 'useSalesPersons').mockReturnValue({ data: opts.salesPersons ?? [] } as unknown as ReturnType<typeof api.useSalesPersons>)
   vi.spyOn(api, 'useCurrentPostings').mockReturnValue({ data: {} } as unknown as ReturnType<typeof api.useCurrentPostings>)
   vi.spyOn(api, 'useEmployeeMutations').mockReturnValue({
     remove: { mutateAsync: vi.fn() },
@@ -112,6 +121,24 @@ describe('EmployeeDetails — ChainRow Avatar rollout (Task 9.1)', () => {
 
     const img = screen.getByAltText('Report Person')
     expect(img).toHaveAttribute('src', 'https://example.com/rep.jpg')
+  })
+})
+
+// Task 9.2: the legacy "Relationship Owner / AMNEX Representative" row shows
+// an avatar next to the resolved SalesPerson's name — same {name,
+// photoUrl: undefined} pattern as the other ownership call sites, since
+// SalesPerson carries no photo field.
+describe('EmployeeDetails — Relationship Owner avatar (Task 9.2)', () => {
+  it('shows an avatar next to the resolved Relationship Owner', () => {
+    const owner = makeSalesPerson({ id: 'sp-owner', name: 'Rita Owner', officialEmail: 'rita@amnex.com' })
+    const emp = makeEmployee({ metadata: { relationshipOwner: 'rita@amnex.com' } })
+    stubApiHooks({ employee: emp, salesPersons: [owner] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.getByText(/Rita Owner/)).toBeInTheDocument()
+    expect(screen.getAllByTestId('avatar').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
 })
 
@@ -165,17 +192,38 @@ describe('EmployeeDetails — Timeline Agenda/Outcome/Next Steps display (Task 8
 // eras of data sitting side by side) — the display line must render both
 // shapes correctly via the attendeeName() normalizer rather than assuming
 // every entry is a string.
-describe('EmployeeDetails — attendee display, mixed legacy/new shapes (Task 8.3)', () => {
-  it('renders both legacy plain-string and new {salesPersonId, name} attendees in one event', () => {
+//
+// Task 9.4 supersedes the plain comma-joined string with an Avatar+name pair
+// per attendee — the mixed-shape requirement carries forward unchanged, only
+// the rendering shape does.
+describe('EmployeeDetails — attendee display, mixed legacy/new shapes (Task 8.3 / 9.4 avatars)', () => {
+  it('renders both legacy plain-string and new {salesPersonId, name} attendees in one event, each with an avatar', () => {
     const emp = makeEmployee()
     const event = makeTimelineEvent({
       attendees: ['Legacy Name', { salesPersonId: 'sp-1', name: 'New Snapshot Name' }],
     })
-    stubApiHooks({ employee: emp, timeline: [event] })
+    const salesPerson = makeSalesPerson({ id: 'sp-1', name: 'New Snapshot Name' })
+    stubApiHooks({ employee: emp, timeline: [event], salesPersons: [salesPerson] })
 
     render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
 
-    expect(screen.getByText('Attendees: Legacy Name, New Snapshot Name')).toBeInTheDocument()
+    expect(screen.getByText('Attendees')).toBeInTheDocument()
+    expect(screen.getByText('Legacy Name')).toBeInTheDocument()
+    expect(screen.getByText('New Snapshot Name')).toBeInTheDocument()
+    // One avatar per attendee, both as initials — no photo field on either shape.
+    expect(screen.getAllByTestId('avatar').length).toBeGreaterThanOrEqual(2)
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('renders a legacy plain-string attendee with no crash and no lookup by a nonexistent id', () => {
+    const emp = makeEmployee()
+    const event = makeTimelineEvent({ attendees: ['Just A Name'] })
+    stubApiHooks({ employee: emp, timeline: [event], salesPersons: [] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.getByText('Just A Name')).toBeInTheDocument()
+    expect(screen.getAllByTestId('avatar').length).toBeGreaterThanOrEqual(1)
   })
 
   it('renders nothing for an event with no attendees', () => {
@@ -185,7 +233,7 @@ describe('EmployeeDetails — attendee display, mixed legacy/new shapes (Task 8.
 
     render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
 
-    expect(screen.queryByText(/^Attendees:/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Attendees')).not.toBeInTheDocument()
   })
 })
 

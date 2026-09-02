@@ -113,3 +113,20 @@ describe('DepartmentSection — Meetings section (Task 8.5)', () => {
     expect(screen.getAllByText('Shared record')).toHaveLength(1)
   })
 })
+
+// Task 9.2: the department head row shows an avatar next to the resolved
+// employee's name (same {name, photoUrl, vacant} shape ChainRow already uses
+// for the reporting chain, since `head` is a real Employee record).
+describe('DepartmentSection — department head avatar (Task 9.2)', () => {
+  it('shows an avatar next to the department head', () => {
+    const node = makeNode({ id: 'dept-1', metadata: { deptHead: 'emp-head' } })
+    const head = makeEmployee({ id: 'emp-head', name: 'Head Person', photoUrl: null })
+    stubHooks({})
+
+    render(<DepartmentSection node={node} employees={[head]} />)
+
+    expect(screen.getByText('Head Person')).toBeInTheDocument()
+    expect(screen.getAllByTestId('avatar').length).toBeGreaterThanOrEqual(1)
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+})

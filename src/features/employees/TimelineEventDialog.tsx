@@ -102,6 +102,17 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
     [form.attendees],
   )
 
+  // Task 9.4: the picker's chips and dropdown rows each show a small avatar
+  // next to the name. Resolved by matching the roster (same `salesPersons`
+  // list the options themselves come from) rather than guessing — no
+  // SalesPerson carries a photo today, so this always renders initials, but
+  // it's still a real per-person lookup (by name, since MultiSelectDropdown
+  // operates over plain option strings) rather than a hardcoded fallback.
+  function avatarForAttendee(name: string): { name: string; photoUrl?: string | null } {
+    const person = salesPersons.find((p) => p.name === name)
+    return { name: person?.name ?? name, photoUrl: undefined }
+  }
+
   function handleAttendeesChange(names: string[]) {
     setForm((f) => {
       const resolved: AttendeeRef[] = names.map((name) => {
@@ -254,6 +265,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             searchable
             searchPlaceholder="Search sales team…"
             allowCustomAdd={false}
+            avatarFor={avatarForAttendee}
           />
           {legacyAttendeeNames.length > 0 && (
             <p className="mt-1.5 text-[12px] text-muted">

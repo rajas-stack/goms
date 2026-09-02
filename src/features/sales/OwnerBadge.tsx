@@ -1,3 +1,4 @@
+import { Avatar } from '@/components/ui/Avatar'
 import { Icon } from '@/components/ui/Icon'
 import { cn } from '@/lib/utils'
 import type { OwnerResolution } from '@/data/ownership'
@@ -47,6 +48,7 @@ export function OwnerBadge({ owner, people, viaLabel, className }: {
           : 'Assigned directly'
       }
     >
+      <Avatar person={{ name, photoUrl: undefined }} size="xs" />
       <Icon name={inherited ? 'CornerLeftDown' : 'UserCheck'} size={12} />
       {name}
       {inherited && viaLabel && <span className="hidden sm:inline">· via {viaLabel}</span>}

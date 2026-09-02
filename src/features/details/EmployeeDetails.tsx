@@ -28,7 +28,7 @@ import { AddReporteeMenu } from '@/features/employees/AddReporteeMenu'
 import { abbreviateDepartmentName } from '@/features/nodes/department-meta'
 import { employeeAccent } from '@/lib/node-colors'
 import { MEETING_LOG_TYPES, TIMELINE_META, timelineEventLabel } from '@/lib/timeline-meta'
-import { attendeeName } from '@/lib/attendees'
+import { attendeeName, attendeeSalesPersonId } from '@/lib/attendees'
 import { useDismissedDuplicatePairs } from '@/lib/dismissed-pairs'
 import { cn, initials } from '@/lib/utils'
 import { useResolvedOwners } from '@/lib/api'
@@ -359,8 +359,9 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
             <DetailRow label="Relationship Owner / AMNEX Representative" icon="UserCheck">
               <button
                 onClick={() => ws.select('salesPerson', relationshipOwner.id)}
-                className="cursor-pointer text-left underline decoration-line decoration-1 underline-offset-2 hover:text-ink-700 hover:decoration-ink-600"
+                className="flex cursor-pointer items-center gap-1.5 text-left underline decoration-line decoration-1 underline-offset-2 hover:text-ink-700 hover:decoration-ink-600"
               >
+                <Avatar person={{ name: relationshipOwner.name, photoUrl: undefined }} size="xs" />
                 {relationshipOwner.name} · {currentPostings[relationshipOwner.id]?.designation || 'No current posting'}
               </button>
             </DetailRow>
@@ -577,6 +578,7 @@ export function TimelineList({ events, onSetAttended, onEdit, highlightId }: {
 }) {
   const [pulsing, setPulsing] = useState(false)
   const highlightedRef = useRef<HTMLDivElement>(null)
+  const { data: salesPersons = [] } = useSalesPersons()
 
   useEffect(() => {
     if (!highlightId) return
@@ -641,7 +643,22 @@ export function TimelineList({ events, onSetAttended, onEdit, highlightId }: {
                   </p>
                 )}
                 {e.attendees && e.attendees.length > 0 && (
-                  <p className="mt-0.5 break-words text-[12px] text-muted">Attendees: {e.attendees.map(attendeeName).join(', ')}</p>
+                  <div className="mt-0.5 text-[12px] text-muted">
+                    <span className="font-medium text-ink-900">Attendees</span>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                      {e.attendees.map((a, i) => {
+                        const name = attendeeName(a)
+                        const spId = attendeeSalesPersonId(a)
+                        const person = spId ? salesPersons.find((p) => p.id === spId) : undefined
+                        return (
+                          <span key={`${name}-${i}`} className="flex items-center gap-1">
+                            <Avatar person={{ name: person?.name ?? name, photoUrl: undefined }} size="xs" />
+                            {name}
+                          </span>
+                        )
+                      })}
+                    </div>
+                  </div>
                 )}
                 {canMarkAttendance && (
                   <div className="mt-1.5 flex items-center gap-1.5">

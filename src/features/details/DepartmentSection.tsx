@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { Avatar } from '@/components/ui/Avatar'
 import { SALES_ROLES } from '@/features/nodes/department-meta'
 import { WorksEditor } from '@/features/nodes/WorksEditor'
 import { liveSalesRoster, resolveSalesChain } from '@/data/sales-hierarchy'
@@ -78,8 +79,9 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
               <dd className="mt-0.5 text-sm text-ink-900">
                 <button
                   onClick={() => ws.select('employee', head.id)}
-                  className="cursor-pointer text-left underline decoration-line decoration-1 underline-offset-2 hover:text-ink-700 hover:decoration-ink-600"
+                  className="flex cursor-pointer items-center gap-1.5 text-left underline decoration-line decoration-1 underline-offset-2 hover:text-ink-700 hover:decoration-ink-600"
                 >
+                  <Avatar person={{ name: head.name, photoUrl: head.photoUrl, vacant: head.vacant }} size="xs" />
                   {head.name}
                 </button>
               </dd>
@@ -100,7 +102,8 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
               return (
                 <div key={o.key}>
                   <dt className="text-[11px] uppercase tracking-wide text-muted">{o.label}</dt>
-                  <dd className="mt-0.5 text-sm text-ink-900">
+                  <dd className="mt-0.5 flex items-center gap-1.5 text-sm text-ink-900">
+                    <Avatar person={{ name: o.member.name, photoUrl: undefined }} size="xs" />
                     {person ? (
                       <button
                         onClick={() => ws.select('salesPerson', person.id)}
