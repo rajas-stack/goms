@@ -118,11 +118,19 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   async function submit() {
     if (!activeEmployeeId || !form.title.trim()) return
     const shared = {
-      type: form.type, title: form.title.trim(),
-      customLabel: form.type === 'custom' ? form.customLabel.trim() : undefined,
+      title: form.title.trim(),
       date: form.date, time: form.time, note: form.note, attendees: form.attendees,
     }
     if (existingEvent) {
+      // Meeting type (and its custom label) is immutable once an event
+      // exists — the Select above is disabled to match, and `type`/
+      // `customLabel` are deliberately left out of the patch here rather
+      // than relying on the Postgres router's zod strip: the in-memory
+      // backend's updateTimelineEvent does a raw Object.assign(evt, patch)
+      // with no such filter, so including them would silently apply a type
+      // change on that backend while Postgres silently dropped it — same
+      // user action, different result depending on which backend is active.
+      //
       // A blanked-out field must still overwrite whatever the record had —
       // `null` (not `undefined`) is what actually clears it via the
       // dynamic-SET patch, unlike the `add` branch below where an untouched
@@ -138,6 +146,8 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
     } else {
       await addTimelineEvent.mutateAsync({
         employeeId: activeEmployeeId, ...shared,
+        type: form.type,
+        customLabel: form.type === 'custom' ? form.customLabel.trim() : undefined,
         agenda: form.agenda.trim() || undefined, outcome: form.outcome.trim() || undefined, nextSteps: form.nextSteps.trim() || undefined,
       })
       toast('Added to timeline')
@@ -195,10 +205,14 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
           </button>
         )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Meeting type">
+          <Field
+            label="Meeting type"
+            hint={existingEvent ? "Can't be changed after creation" : undefined}
+          >
             <Select
               value={form.type}
               onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as TimelineEventType }))}
+              disabled={!!existingEvent}
             >
               {typeOptions.map((t) => (
                 <option key={t} value={t}>{TIMELINE_META[t].label}</option>
@@ -206,11 +220,12 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             </Select>
           </Field>
           {form.type === 'custom' && (
-            <Field label="Custom type label" hint="Shown on the entry instead of “Custom”">
+            <Field label="Custom type label" hint={existingEvent ? "Can't be changed after creation" : "Shown on the entry instead of “Custom”"}>
               <Input
                 value={form.customLabel}
                 onChange={(e) => setForm((f) => ({ ...f, customLabel: e.target.value }))}
                 placeholder="e.g. Site visit"
+                disabled={!!existingEvent}
               />
             </Field>
           )}

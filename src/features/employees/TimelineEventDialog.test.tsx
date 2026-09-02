@@ -215,6 +215,34 @@ describe('TimelineEventDialog — edit mode (Task 8.4)', () => {
     expect(call.patch.outcome).toBeNull()
     expect(call.patch.nextSteps).toBeNull()
   })
+
+  // Bug fix (review of commit a30552d1): the Meeting type Select was fully
+  // editable in Edit mode, and submit() included type/customLabel in the
+  // patch sent to updateTimelineEvent. The Postgres router's zod patch shape
+  // has no type/customLabel keys, so it silently STRIPS them, while the
+  // in-memory backend's Object.assign(evt, patch) has no such filter and
+  // silently APPLIES them — same user action, different result depending on
+  // which backend is active. Fix: the Type field is immutable during Edit,
+  // and type/customLabel are never included in the patch at all, regardless
+  // of backend.
+  it('renders the Meeting type Select as disabled while editing an existing event', () => {
+    render(<TimelineEventDialog open employeeId="emp-1" existingEvent={existingEvent} onClose={vi.fn()} />)
+
+    expect(screen.getByLabelText(/^meeting type/i)).toBeDisabled()
+  })
+
+  it('never sends type or customLabel in the patch on save, regardless of which backend is active', async () => {
+    const user = userEvent.setup()
+    render(<TimelineEventDialog open employeeId="emp-1" existingEvent={existingEvent} onClose={vi.fn()} />)
+
+    await user.clear(screen.getByLabelText(/^title$/i))
+    await user.type(screen.getByLabelText(/^title$/i), 'Budget review v2')
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    const call = updateTimelineMutateAsync.mock.calls[0][0]
+    expect(call.patch).not.toHaveProperty('type')
+    expect(call.patch).not.toHaveProperty('customLabel')
+  })
 })
 
 describe('TimelineEventDialog — attendee picker draft-restore text (Task 8.3, unaffected)', () => {
