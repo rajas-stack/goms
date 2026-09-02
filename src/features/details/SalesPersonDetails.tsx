@@ -10,13 +10,14 @@ import { useToast } from '@/components/ui/Toast'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
+import { Avatar } from '@/components/ui/Avatar'
 import { Icon } from '@/components/ui/Icon'
 import { Menu, MenuDivider, MenuItem } from '@/components/ui/Menu'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { tierLabel } from '@/data/sales-tiers'
 import { displayEndDate } from '@/lib/intervals'
 import { isoToday } from '@/lib/dates'
-import { cn, initials } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { SalesPersonFormDialog } from '@/features/sales/SalesPersonFormDialog'
 import { TransferBookOfBusinessDialog } from '@/features/sales/TransferBookOfBusinessDialog'
 import { TransferSalesPersonDialog } from '@/features/sales/TransferSalesPersonDialog'
@@ -97,9 +98,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="flex h-full flex-col overflow-y-auto">
       <div className="flex items-center gap-3 border-b border-line px-4 py-4">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-panel text-sm font-semibold text-ink-700">
-          {initials(person.name)}
-        </div>
+        <Avatar person={{ name: person.name, photoUrl: undefined }} size="md" />
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-base font-semibold text-ink-900">{person.name}</h2>
           <p className="truncate text-[13px] text-muted">{current?.designation || 'No current posting'}</p>

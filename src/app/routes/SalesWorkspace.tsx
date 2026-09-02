@@ -11,6 +11,7 @@ import { MobileDetailsSheet } from './StateWorkspace'
 import { Icon } from '@/components/ui/Icon'
 import { Input } from '@/components/ui/Field'
 import { Tooltip } from '@/components/ui/Tooltip'
+import { Avatar } from '@/components/ui/Avatar'
 import { useSalesEditLock } from '@/features/sales/salesEditLock'
 import { SalesEditLockToggle } from '@/features/sales/SalesEditLockToggle'
 import { OwnerBadge } from '@/features/sales/OwnerBadge'
@@ -19,7 +20,7 @@ import { Button } from '@/components/ui/Button'
 import { tierLabel, tierRank } from '@/data/sales-tiers'
 import { PIPELINE_STAGE_MAP } from '@/data/pipeline-stages'
 import { isoToday } from '@/lib/dates'
-import { cn, initials } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import type { SalesPerson, SalesPosting } from '@/lib/types'
 
 /** The Sales Master workspace. Mirrors StateWorkspace's structure — header row
@@ -119,7 +120,7 @@ function EmptyState({ icon, message }: { icon: string; message: string }) {
   )
 }
 
-function RosterRow({ person, posting, selected, onSelect }: {
+export function RosterRow({ person, posting, selected, onSelect }: {
   person: SalesPerson
   posting: SalesPosting | undefined
   selected: boolean
@@ -133,9 +134,7 @@ function RosterRow({ person, posting, selected, onSelect }: {
         selected ? 'border-ink-900/20 bg-ink-900/[0.04]' : 'border-line bg-white hover:bg-panel',
       )}
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-panel text-[11px] font-semibold text-ink-700">
-        {initials(person.name)}
-      </div>
+      <Avatar person={{ name: person.name, photoUrl: undefined }} size="sm" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium text-ink-900">{person.name}</div>
         <div className="truncate text-[12px] text-muted">
@@ -273,7 +272,7 @@ const OWNERSHIP_VIEWS = [
  *  record), not per row — a per-row `effectiveOwner` call would re-walk the
  *  ancestor chain for each of them, which spec §13 names the design's single
  *  largest performance risk. */
-function Ownership() {
+export function Ownership() {
   const ws = useWorkspace()
   const [searchParams, setSearchParams] = useSearchParams()
   const view = OWNERSHIP_VIEWS.some((v) => v.key === searchParams.get('view')) ? searchParams.get('view')! : 'orgNode'
@@ -353,6 +352,7 @@ function Ownership() {
       {ownerFilter && (
         <div className="flex items-center gap-2 rounded-lg border border-line bg-panel/50 px-3 py-1.5 text-[12px]">
           <span className="text-muted">Owned by</span>
+          {ownerPerson && <Avatar person={{ name: ownerPerson.name, photoUrl: undefined }} size="xs" />}
           <span className="font-medium text-ink-900">{ownerPerson?.name ?? ownerFilter}</span>
           <button onClick={clearOwnerFilter} className="ml-auto font-medium text-ink-600 hover:text-ink-900">Clear</button>
         </div>
@@ -394,7 +394,7 @@ function Ownership() {
  *  the spec explicitly warns against forking for this. ~40 people doesn't
  *  need drag-to-reparent or pan/zoom for a demo; that machinery is real
  *  Phase 2 scope. */
-function OrgChartNode({ person, childrenOf, postings, depth, ws }: {
+export function OrgChartNode({ person, childrenOf, postings, depth, ws }: {
   person: SalesPerson
   childrenOf: Map<string, SalesPerson[]>
   postings: Record<string, SalesPosting>
@@ -414,9 +414,7 @@ function OrgChartNode({ person, childrenOf, postings, depth, ws }: {
           selected ? 'border-ink-900/20 bg-ink-900/[0.04]' : 'border-line bg-white hover:bg-panel',
         )}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-panel text-[10px] font-semibold text-ink-700">
-          {initials(person.name)}
-        </div>
+        <Avatar person={{ name: person.name, photoUrl: undefined }} size="sm" />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13px] font-medium text-ink-900">{person.name}</div>
           <div className="truncate text-[11px] text-muted">{posting?.designation || '—'}</div>
