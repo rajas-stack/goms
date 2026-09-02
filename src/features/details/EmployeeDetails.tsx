@@ -603,6 +603,21 @@ function TimelineList({ events, onSetAttended, highlightId }: {
                 </div>
                 <div className="text-[11px] text-muted">{e.date}{e.time && ` · ${e.time}`}</div>
                 {e.note && <p className="mt-0.5 break-words text-[12px] text-ink-700">{e.note}</p>}
+                {e.agenda && (
+                  <p className="mt-0.5 break-words text-[12px] text-ink-700">
+                    <span className="font-medium text-ink-900">Agenda: </span>{e.agenda}
+                  </p>
+                )}
+                {e.outcome && (
+                  <p className="mt-0.5 break-words text-[12px] text-ink-700">
+                    <span className="font-medium text-ink-900">Outcome: </span>{e.outcome}
+                  </p>
+                )}
+                {e.nextSteps && (
+                  <p className="mt-0.5 break-words text-[12px] text-ink-700">
+                    <span className="font-medium text-ink-900">Next steps: </span>{e.nextSteps}
+                  </p>
+                )}
                 {e.attendees && e.attendees.length > 0 && (
                   <p className="mt-0.5 break-words text-[12px] text-muted">Attendees: {e.attendees.join(', ')}</p>
                 )}

@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import * as api from '@/lib/api'
 import { EmployeeDetails } from './EmployeeDetails'
-import type { Employee } from '@/lib/types'
+import type { Employee, TimelineEvent } from '@/lib/types'
 
 beforeEach(() => {
   // jsdom has no ResizeObserver; FitText (the header name) uses one purely
@@ -48,14 +48,14 @@ function makeEmployee(overrides: Partial<Employee> = {}): Employee {
   }
 }
 
-function stubApiHooks(opts: { employee: Employee; chain?: Employee[]; reports?: Employee[] }) {
+function stubApiHooks(opts: { employee: Employee; chain?: Employee[]; reports?: Employee[]; timeline?: TimelineEvent[] }) {
   vi.spyOn(api, 'useEmployee').mockImplementation((id: string | null) =>
     ({ data: id === opts.employee.id ? opts.employee : null } as unknown as ReturnType<typeof api.useEmployee>))
   vi.spyOn(api, 'useReportingChain').mockReturnValue({ data: opts.chain ?? [] } as unknown as ReturnType<typeof api.useReportingChain>)
   vi.spyOn(api, 'useDirectReports').mockReturnValue({ data: opts.reports ?? [] } as unknown as ReturnType<typeof api.useDirectReports>)
   vi.spyOn(api, 'useNode').mockReturnValue({ data: null } as unknown as ReturnType<typeof api.useNode>)
   vi.spyOn(api, 'useBreadcrumb').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useBreadcrumb>)
-  vi.spyOn(api, 'useTimeline').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useTimeline>)
+  vi.spyOn(api, 'useTimeline').mockReturnValue({ data: opts.timeline ?? [] } as unknown as ReturnType<typeof api.useTimeline>)
   vi.spyOn(api, 'useTransfers').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useTransfers>)
   vi.spyOn(api, 'useFollowUps').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useFollowUps>)
   vi.spyOn(api, 'useAllEmployees').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useAllEmployees>)
@@ -104,5 +104,49 @@ describe('EmployeeDetails — ChainRow Avatar rollout (Task 9.1)', () => {
 
     const img = screen.getByAltText('Report Person')
     expect(img).toHaveAttribute('src', 'https://example.com/rep.jpg')
+  })
+})
+
+function makeTimelineEvent(overrides: Partial<TimelineEvent> = {}): TimelineEvent {
+  return {
+    id: 'evt-1', employeeId: 'emp-1', type: 'meeting', title: 'Budget review',
+    date: '2026-01-01', note: '', source: 'manual',
+    ...overrides,
+  }
+}
+
+// Task 8.2 (Item 13): Agenda/Outcome/Next Steps must each render in their own
+// labeled section when present, and must add nothing to the timeline entry
+// when absent — so old entries (which have none of these fields) look
+// exactly as they did before this feature shipped.
+describe('EmployeeDetails — Timeline Agenda/Outcome/Next Steps display (Task 8.2)', () => {
+  it('shows each populated field in its own labeled section', () => {
+    const emp = makeEmployee()
+    const event = makeTimelineEvent({
+      agenda: 'Discuss Q1 budget', outcome: 'Approved with revisions', nextSteps: 'Send revised sheet by Friday',
+    })
+    stubApiHooks({ employee: emp, timeline: [event] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.getByText('Agenda:')).toBeInTheDocument()
+    expect(screen.getByText('Discuss Q1 budget')).toBeInTheDocument()
+    expect(screen.getByText('Outcome:')).toBeInTheDocument()
+    expect(screen.getByText('Approved with revisions')).toBeInTheDocument()
+    expect(screen.getByText('Next steps:')).toBeInTheDocument()
+    expect(screen.getByText('Send revised sheet by Friday')).toBeInTheDocument()
+  })
+
+  it('renders nothing extra for an old entry with no agenda/outcome/nextSteps', () => {
+    const emp = makeEmployee()
+    const event = makeTimelineEvent({ note: 'Just a plain note' })
+    stubApiHooks({ employee: emp, timeline: [event] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.getByText('Just a plain note')).toBeInTheDocument()
+    expect(screen.queryByText('Agenda:')).not.toBeInTheDocument()
+    expect(screen.queryByText('Outcome:')).not.toBeInTheDocument()
+    expect(screen.queryByText('Next steps:')).not.toBeInTheDocument()
   })
 })

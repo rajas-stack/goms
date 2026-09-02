@@ -46,6 +46,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   const defaultType = initialType ?? typeOptions[0]
   const EMPTY_FORM = {
     type: defaultType, title: '', customLabel: '', date: isoToday(), time: '', note: '', attendees: [] as string[],
+    agenda: '', outcome: '', nextSteps: '',
   }
   const [form, setForm] = useState(EMPTY_FORM)
 
@@ -77,6 +78,8 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
       employeeId: activeEmployeeId, type: form.type, title: form.title.trim(),
       customLabel: form.type === 'custom' ? form.customLabel.trim() : undefined,
       date: form.date, time: form.time, note: form.note, attendees: form.attendees,
+      agenda: form.agenda.trim() || undefined, outcome: form.outcome.trim() || undefined,
+      nextSteps: form.nextSteps.trim() || undefined,
     })
     toast('Added to timeline')
     draft.clear()
@@ -188,6 +191,15 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
         </Field>
         <Field label="Note" hint="Optional details.">
           <Textarea value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
+        </Field>
+        <Field label="Agenda" hint="Optional. What this meeting was for.">
+          <Textarea value={form.agenda} onChange={(e) => setForm((f) => ({ ...f, agenda: e.target.value }))} />
+        </Field>
+        <Field label="Outcome" hint="Optional. What came out of it.">
+          <Textarea value={form.outcome} onChange={(e) => setForm((f) => ({ ...f, outcome: e.target.value }))} />
+        </Field>
+        <Field label="Next steps" hint="Optional. What happens next.">
+          <Textarea value={form.nextSteps} onChange={(e) => setForm((f) => ({ ...f, nextSteps: e.target.value }))} />
         </Field>
       </div>
     </Dialog>
