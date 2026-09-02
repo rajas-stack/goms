@@ -135,7 +135,14 @@ deploy-dev:
     # firebase-tools reads GOOGLE_APPLICATION_CREDENTIALS (exported above,
     # same WIF creds.json the gcloud steps use) for non-interactive auth —
     # no separate Firebase login/token needed.
-    - npx firebase-tools deploy --only hosting --project dev --non-interactive
+    #
+    # --project uses the literal project id, not .firebaserc's "dev" alias:
+    # .firebaserc is deliberately gitignored (it names a real GCP project id,
+    # see .firebaserc.example), so a fresh CI checkout never has it and the
+    # alias would fail to resolve here (confirmed by hand: `--project dev`
+    # errors "Failed to get Firebase project dev" with no .firebaserc
+    # present, `--project $GCP_PROJECT_ID_DEV` deploys correctly).
+    - npx firebase-tools deploy --only hosting --project $GCP_PROJECT_ID_DEV --non-interactive
   cache:
     key:
       files:
