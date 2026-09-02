@@ -23,8 +23,11 @@ const ROW_GAP = 8
 
 // Every manually-loggable timeline type is shown here in one list. Lifecycle
 // entries (`joined`/`promoted`/`transferred`) are deliberately excluded —
-// they're posting history, not a meeting or a logged interaction.
-const LOGGED_TYPES: TimelineEventType[] = ['meeting', 'inPerson', 'call', 'email', 'whatsapp', 'followup', 'note', 'document', 'custom']
+// they're posting history, not a meeting or a logged interaction. Exported
+// so Task 8.5's department-level Meetings section (DepartmentSection.tsx)
+// filters to the exact same set — both readers must agree on what counts as
+// a "meeting" or this page and the department view would silently diverge.
+export const LOGGED_TYPES: TimelineEventType[] = ['meeting', 'inPerson', 'call', 'email', 'whatsapp', 'followup', 'note', 'document', 'custom']
 
 /** Read-through, cross-employee view over `TimelineEvent` rows — the same
  *  data that's already shown embedded in each Employee's profile timeline,

@@ -1,15 +1,18 @@
+import { useMemo } from 'react'
 import { SALES_ROLES } from '@/features/nodes/department-meta'
 import { WorksEditor } from '@/features/nodes/WorksEditor'
 import { liveSalesRoster, resolveSalesChain } from '@/data/sales-hierarchy'
 import {
-  useCurrentPostings, useNode, useOpportunitiesByDepartment, useResolvedOwners, useSalesPerson, useSalesPersons,
-  useSalesPostings,
+  useAllTimelineEvents, useCurrentPostings, useEmployeeDepartments, useNode, useOpportunitiesByDepartment,
+  useResolvedOwners, useSalesPerson, useSalesPersons, useSalesPostings,
 } from '@/lib/api'
 import { OwnershipBlock } from '@/features/sales/OwnershipBlock'
 import { OwnerBadge } from '@/features/sales/OwnerBadge'
 import { Icon } from '@/components/ui/Icon'
 import { useWorkspace } from '@/features/workspace/context'
 import { isoToday } from '@/lib/dates'
+import { LOGGED_TYPES } from '@/app/routes/Meetings'
+import { TimelineList } from './EmployeeDetails'
 import type { Employee, HierNode } from '@/lib/types'
 import type { SalesTeamMember } from '@/data/sales-team'
 import type { OwnerResolution } from '@/data/ownership'
@@ -51,6 +54,19 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
   const resolvedOwner = resolvedOwners[node.id]
   const { data: viaNode } = useNode(resolvedOwner?.source === 'inherited' ? resolvedOwner.viaEntityId ?? null : null)
   const contactCount = employees.filter((e) => e.orgNodeId === node.id && !e.vacant).length
+
+  // Item 15: a meeting logged against any employee under this department
+  // (direct report or several levels down, via an office/branch/unit)
+  // surfaces here too — same record, same id, not a copy. `deptById` already
+  // resolves each employee's *nearest ancestor department*, so this needs no
+  // separate subtree walk: it's the exact join Meetings.tsx uses, filtered to
+  // this one department instead of shown unfiltered.
+  const { data: deptById = {} } = useEmployeeDepartments()
+  const { data: allTimelineEvents = [] } = useAllTimelineEvents({ types: LOGGED_TYPES })
+  const departmentTimeline = useMemo(
+    () => allTimelineEvents.filter((e) => deptById[e.employeeId]?.id === node.id),
+    [allTimelineEvents, deptById, node.id],
+  )
 
   return (
     <>
@@ -133,6 +149,14 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
           draftKeyPrefix={`work:${node.id}`}
         />
       </Block>
+
+      {/* Read-only: no "add meeting from here" affordance — logging still
+          happens from the individual employee's own profile, per item 15. */}
+      {departmentTimeline.length > 0 && (
+        <Block title={`Meetings · ${departmentTimeline.length}`}>
+          <TimelineList events={departmentTimeline} />
+        </Block>
+      )}
     </>
   )
 }
