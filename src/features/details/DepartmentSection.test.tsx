@@ -23,7 +23,7 @@ function makeEmployee(overrides: Partial<Employee> = {}): Employee {
   return {
     id: 'emp-1', code: 'C1', name: 'Some Person', designation: 'Officer',
     email: '', phone: '', company: '', address: '', website: '',
-    photoUrl: null, orgNodeId: null, managerId: null, vacant: false, connected: false,
+    photoUrl: null, orgNodeId: 'dept-1', managerId: null, vacant: false, connected: false,
     relationshipStatus: 'new', relationshipQuality: 'neutral', relationshipType: '', introducedBy: '',
     importantContact: false, preferredComm: [], lastInteractionAt: null, followUpDate: null, notes: '',
     charges: [], visitingCards: [], metadata: {}, status: 'active',
