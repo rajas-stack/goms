@@ -6,7 +6,11 @@ const FIELDS: Record<string, FieldDef[]> = {
   department: [
     { key: 'description', label: 'Description', type: 'text' },
     { key: 'website', label: 'Website', type: 'url' },
-    { key: 'contact', label: 'Department contact', type: 'phone' },
+    // The old single `contact` phone field is replaced by DepartmentFields'
+    // richer State/District/City + multi-number contact block (metadata
+    // keys contactStateNodeId/contactDistrictNodeId/contactNumbers) —
+    // rendered directly in DepartmentFields.tsx, not through this
+    // generic schema-driven list.
     { key: 'departmentEmail', label: 'Department email', type: 'email' },
     { key: 'officeAddress', label: 'Office address', type: 'text' },
   ],

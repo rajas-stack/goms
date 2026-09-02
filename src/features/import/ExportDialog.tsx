@@ -11,6 +11,7 @@ import { downloadCsv, toCsv } from '@/lib/csv'
 import { timelineEventLabel } from '@/lib/timeline-meta'
 import { attendeeName } from '@/lib/attendees'
 import { abbreviateDepartmentName, workUnitLabel } from '@/features/nodes/department-meta'
+import { parseContactNumbers } from '@/features/nodes/contact-numbers'
 import { stageLabel } from '@/data/pipeline-stages'
 import { cn } from '@/lib/utils'
 import type { Employee, HierNode, Opportunity, TimelineEvent } from '@/lib/types'
@@ -47,7 +48,10 @@ function departmentRows(ctx: Ctx): string[][] {
       d.metadata.shortName || abbreviateDepartmentName(`Department of ${d.name}`),
       d.code ?? '',
       d.metadata.website ?? '',
-      d.metadata.contact ?? '',
+      parseContactNumbers(d.metadata.contactNumbers)
+        .map((c) => (c.city ? `${c.city}: ${c.number}` : c.number))
+        .filter(Boolean)
+        .join('; '),
       d.metadata.departmentEmail ?? '',
       d.metadata.officeAddress ?? '',
       d.metadata.description ?? '',
