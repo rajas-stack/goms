@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { motion } from 'framer-motion'
 import { Icon } from './Icon'
+import { Avatar, type AvatarPerson } from './Avatar'
 import { Button } from './Button'
 import { Input } from './Field'
 import { Dialog } from './Dialog'
@@ -34,6 +35,9 @@ interface Props {
   /** Hides the "+ Add option" footer when false. Default true preserves
    *  existing behavior. */
   allowCustomAdd?: boolean
+  /** When provided, renders a small avatar before each chip and option row,
+   *  resolved per-option-label. Omitted call sites render no avatar. */
+  avatarFor?: (label: string) => AvatarPerson
 }
 
 interface FlatRow {
@@ -50,7 +54,7 @@ interface FlatRow {
  *  visual and interaction consistency. */
 export function MultiSelectDropdown({
   value, onChange, groups, storageKey, placeholder = 'Select…', className,
-  searchable = false, searchPlaceholder = 'Search…', allowCustomAdd = true,
+  searchable = false, searchPlaceholder = 'Search…', allowCustomAdd = true, avatarFor,
 }: Props) {
   const [custom, addOption] = useCustomOptions(storageKey)
   const [open, setOpen] = useState(false)
@@ -143,6 +147,7 @@ export function MultiSelectDropdown({
         ) : (
           value.map((v) => (
             <span key={v} className="flex items-center gap-1 rounded-md bg-panel px-1.5 py-0.5 text-[12px] text-ink-800">
+              {avatarFor && <Avatar person={avatarFor(v)} size="xs" className="h-4 w-4 text-[9px]" />}
               {v}
               <button
                 type="button"
@@ -203,6 +208,7 @@ export function MultiSelectDropdown({
                   )}
                 >
                   <input type="checkbox" checked={checked} onChange={() => toggle(row.label)} className="accent-ink-900" />
+                  {avatarFor && <Avatar person={avatarFor(row.label)} size="xs" />}
                   {row.label}
                 </label>
               )
