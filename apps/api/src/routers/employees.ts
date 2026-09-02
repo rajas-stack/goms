@@ -66,6 +66,7 @@ function toTimelineEvent(row: any) {
     id: row.id, employeeId: row.employee_id, type: row.type, title: row.title,
     customLabel: row.custom_label ?? undefined, date: row.date, time: row.time ?? undefined,
     note: row.note, source: row.source, attendees: row.attendees ?? undefined, attended: row.attended ?? undefined,
+    agenda: row.agenda ?? undefined, outcome: row.outcome ?? undefined, nextSteps: row.next_steps ?? undefined,
   }
 }
 
@@ -141,16 +142,18 @@ const timelineRouter = router({
       employeeId: z.string().uuid(), type: timelineEventTypeSchema, title: z.string().min(1),
       customLabel: z.string().optional(), date: z.string(), time: z.string().optional(),
       note: z.string().optional(), attendees: z.array(z.string()).optional(),
+      agenda: z.string().optional(), outcome: z.string().optional(), nextSteps: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
       const result = await pool.query(
-        `INSERT INTO timeline_events (employee_id, type, title, custom_label, date, time, note, source, attendees)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'manual',$8) RETURNING *`,
+        `INSERT INTO timeline_events (employee_id, type, title, custom_label, date, time, note, source, attendees, agenda, outcome, next_steps)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'manual',$8,$9,$10,$11) RETURNING *`,
         [
           input.employeeId, input.type, input.title,
           input.type === 'custom' ? (input.customLabel?.trim() || null) : null,
           input.date, input.time || null, input.note ?? '',
           input.attendees ? JSON.stringify(input.attendees) : null,
+          input.agenda ?? null, input.outcome ?? null, input.nextSteps ?? null,
         ],
       )
       return toTimelineEvent(result.rows[0])

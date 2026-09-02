@@ -35,6 +35,11 @@ export interface TimelineEvent {
   /** Whether the meeting/interaction actually happened. `undefined` = not
    *  marked either way (the default for every new entry). */
   attended?: boolean
+  /** Optional, separately-displayed meeting details (Item 13) — kept apart
+   *  from the generic `note` field so each can be shown in its own section. */
+  agenda?: string | null
+  outcome?: string | null
+  nextSteps?: string | null
 }
 
 /** An immutable record of a posting change. A transfer both mutates the

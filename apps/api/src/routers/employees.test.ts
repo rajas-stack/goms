@@ -54,6 +54,34 @@ describe('employees router', () => {
     expect(timeline).toHaveLength(0)
   })
 
+  it('adds a timeline event with agenda/outcome/nextSteps and round-trips them', async () => {
+    const caller = appRouter.createCaller({})
+    const emp = await makeEmployee()
+    const created = await caller.employees.timeline.add({
+      employeeId: emp.id, type: 'meeting', title: 'Budget review', date: '2026-01-01',
+      agenda: 'Discuss Q1 budget', outcome: 'Approved with revisions', nextSteps: 'Send revised sheet by Friday',
+    })
+    expect(created.agenda).toBe('Discuss Q1 budget')
+    expect(created.outcome).toBe('Approved with revisions')
+    expect(created.nextSteps).toBe('Send revised sheet by Friday')
+    const timeline = await caller.employees.timeline.listForEmployee({ employeeId: emp.id })
+    const fetched = timeline.find((t) => t.id === created.id)
+    expect(fetched?.agenda).toBe('Discuss Q1 budget')
+    expect(fetched?.outcome).toBe('Approved with revisions')
+    expect(fetched?.nextSteps).toBe('Send revised sheet by Friday')
+  })
+
+  it('adds a timeline event without agenda/outcome/nextSteps (still optional)', async () => {
+    const caller = appRouter.createCaller({})
+    const emp = await makeEmployee()
+    const created = await caller.employees.timeline.add({
+      employeeId: emp.id, type: 'call', title: 'Quick call', date: '2026-01-02',
+    })
+    expect(created.agenda).toBeUndefined()
+    expect(created.outcome).toBeUndefined()
+    expect(created.nextSteps).toBeUndefined()
+  })
+
   it('gets an employee by id, and null for a missing one', async () => {
     const caller = appRouter.createCaller({})
     const emp = await makeEmployee()

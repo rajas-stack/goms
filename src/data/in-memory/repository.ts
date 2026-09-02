@@ -122,6 +122,9 @@ export interface AddTimelineInput {
   time?: string
   note?: string
   attendees?: string[]
+  agenda?: string
+  outcome?: string
+  nextSteps?: string
 }
 
 export interface ImportChildRow {
@@ -1016,6 +1019,7 @@ class InMemoryRepository implements Repository {
       title: input.title, customLabel: input.type === 'custom' ? input.customLabel?.trim() || undefined : undefined,
       date: input.date, time: input.time || undefined,
       note: input.note ?? '', source: 'manual', attendees: input.attendees,
+      agenda: input.agenda || undefined, outcome: input.outcome || undefined, nextSteps: input.nextSteps || undefined,
     }
     this.data.timeline.push(evt)
     return evt

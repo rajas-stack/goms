@@ -45,3 +45,46 @@ describe('InMemoryRepository.deleteEmployee', () => {
     expect((await repository.getNode(dept.id))?.metadata?.deptHead).toBeUndefined()
   })
 })
+
+// Item 13: Agenda/Outcome/Next Steps are new optional TimelineEvent fields
+// that must round-trip through the in-memory repository the same way the
+// Postgres router does (apps/api/src/routers/employees.test.ts covers that
+// side), and must remain fully optional for every existing call site.
+describe('InMemoryRepository.addTimelineEvent', () => {
+  beforeEach(async () => {
+    await resetLocalData()
+  })
+
+  it('round-trips agenda/outcome/nextSteps when provided', async () => {
+    const dept = await repository.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Dept' })
+    const emp = await repository.createEmployee({
+      name: 'Jane', designation: 'Officer', email: '', phone: '', orgNodeId: dept.id, managerId: null,
+    })
+    const evt = await repository.addTimelineEvent({
+      employeeId: emp.id, type: 'meeting', title: 'Budget review', date: '2026-01-01',
+      agenda: 'Discuss Q1 budget', outcome: 'Approved with revisions', nextSteps: 'Send revised sheet by Friday',
+    })
+    expect(evt.agenda).toBe('Discuss Q1 budget')
+    expect(evt.outcome).toBe('Approved with revisions')
+    expect(evt.nextSteps).toBe('Send revised sheet by Friday')
+
+    const timeline = await repository.listTimeline(emp.id)
+    const fetched = timeline.find((t) => t.id === evt.id)
+    expect(fetched?.agenda).toBe('Discuss Q1 budget')
+    expect(fetched?.outcome).toBe('Approved with revisions')
+    expect(fetched?.nextSteps).toBe('Send revised sheet by Friday')
+  })
+
+  it('still works when agenda/outcome/nextSteps are omitted', async () => {
+    const dept = await repository.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Dept' })
+    const emp = await repository.createEmployee({
+      name: 'Jane', designation: 'Officer', email: '', phone: '', orgNodeId: dept.id, managerId: null,
+    })
+    const evt = await repository.addTimelineEvent({
+      employeeId: emp.id, type: 'call', title: 'Quick call', date: '2026-01-02',
+    })
+    expect(evt.agenda).toBeUndefined()
+    expect(evt.outcome).toBeUndefined()
+    expect(evt.nextSteps).toBeUndefined()
+  })
+})
