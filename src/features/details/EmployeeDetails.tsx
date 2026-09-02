@@ -28,6 +28,7 @@ import { AddReporteeMenu } from '@/features/employees/AddReporteeMenu'
 import { abbreviateDepartmentName } from '@/features/nodes/department-meta'
 import { employeeAccent } from '@/lib/node-colors'
 import { MEETING_LOG_TYPES, TIMELINE_META, timelineEventLabel } from '@/lib/timeline-meta'
+import { attendeeName } from '@/lib/attendees'
 import { useDismissedDuplicatePairs } from '@/lib/dismissed-pairs'
 import { cn, initials } from '@/lib/utils'
 import { useResolvedOwners } from '@/lib/api'
@@ -619,7 +620,7 @@ function TimelineList({ events, onSetAttended, highlightId }: {
                   </p>
                 )}
                 {e.attendees && e.attendees.length > 0 && (
-                  <p className="mt-0.5 break-words text-[12px] text-muted">Attendees: {e.attendees.join(', ')}</p>
+                  <p className="mt-0.5 break-words text-[12px] text-muted">Attendees: {e.attendees.map(attendeeName).join(', ')}</p>
                 )}
                 {canMarkAttendance && (
                   <div className="mt-1.5 flex items-center gap-1.5">

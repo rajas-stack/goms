@@ -150,3 +150,33 @@ describe('EmployeeDetails — Timeline Agenda/Outcome/Next Steps display (Task 8
     expect(screen.queryByText('Next steps:')).not.toBeInTheDocument()
   })
 })
+
+// Task 8.3: attendees can now be a mix of legacy plain strings and new
+// {salesPersonId, name} snapshots within the SAME event's array (a record
+// added before this change, later appended to via draft restore, or just two
+// eras of data sitting side by side) — the display line must render both
+// shapes correctly via the attendeeName() normalizer rather than assuming
+// every entry is a string.
+describe('EmployeeDetails — attendee display, mixed legacy/new shapes (Task 8.3)', () => {
+  it('renders both legacy plain-string and new {salesPersonId, name} attendees in one event', () => {
+    const emp = makeEmployee()
+    const event = makeTimelineEvent({
+      attendees: ['Legacy Name', { salesPersonId: 'sp-1', name: 'New Snapshot Name' }],
+    })
+    stubApiHooks({ employee: emp, timeline: [event] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.getByText('Attendees: Legacy Name, New Snapshot Name')).toBeInTheDocument()
+  })
+
+  it('renders nothing for an event with no attendees', () => {
+    const emp = makeEmployee()
+    const event = makeTimelineEvent({ attendees: undefined })
+    stubApiHooks({ employee: emp, timeline: [event] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.queryByText(/^Attendees:/)).not.toBeInTheDocument()
+  })
+})

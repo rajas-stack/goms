@@ -55,12 +55,23 @@ export interface SearchSalesPerson {
   name: string
   officialEmail: string
 }
+/** An attendee entry: either a legacy plain name or an ID-carrying snapshot
+ *  (`{salesPersonId, name}`) captured at selection time. Mirrors the
+ *  frontend's `AttendeeRef` (`src/lib/types.ts`) — duplicated here since this
+ *  package has no dependency on frontend code. */
+export type SearchAttendeeRef = string | { salesPersonId: string; name: string }
+
+/** Display name for an attendee, whichever shape it's in. */
+function attendeeDisplayName(a: SearchAttendeeRef): string {
+  return typeof a === 'string' ? a : a.name
+}
+
 export interface SearchTimelineEvent {
   id: string
   employeeId: string
   title: string
   note: string
-  attendees?: string[]
+  attendees?: SearchAttendeeRef[]
   date: string
   type: string
 }
@@ -301,7 +312,7 @@ const meetingCategory: SearchCategoryDef = {
     for (const t of ctx.timeline) {
       const emp = ctx.activeEmployees.find((e) => e.id === t.employeeId)
       if (!emp || !ctx.inScope(emp.orgNodeId)) continue
-      const hay = `${t.title} ${t.note} ${(t.attendees ?? []).join(' ')}`.toLowerCase()
+      const hay = `${t.title} ${t.note} ${(t.attendees ?? []).map(attendeeDisplayName).join(' ')}`.toLowerCase()
       if (matches(hay, query)) out.push(toMeetingResult(t, emp, ctx))
     }
     return out

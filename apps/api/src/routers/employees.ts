@@ -141,7 +141,10 @@ const timelineRouter = router({
     .input(z.object({
       employeeId: z.string().uuid(), type: timelineEventTypeSchema, title: z.string().min(1),
       customLabel: z.string().optional(), date: z.string(), time: z.string().optional(),
-      note: z.string().optional(), attendees: z.array(z.string()).optional(),
+      note: z.string().optional(),
+      // Legacy plain-string attendee, or the new ID-carrying snapshot
+      // captured at selection time — see src/lib/types.ts's AttendeeRef.
+      attendees: z.array(z.union([z.string(), z.object({ salesPersonId: z.string(), name: z.string() })])).optional(),
       agenda: z.string().optional(), outcome: z.string().optional(), nextSteps: z.string().optional(),
     }))
     .mutation(async ({ input }) => {

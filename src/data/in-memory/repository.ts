@@ -1,5 +1,5 @@
 import type {
-  Charge, Customer, Domain, Employee, FollowUp, HierNode, MergeAuditRecord, MergeFieldResolution, Opportunity,
+  AttendeeRef, Charge, Customer, Domain, Employee, FollowUp, HierNode, MergeAuditRecord, MergeFieldResolution, Opportunity,
   OpportunityStageChange, OwnershipAssignment, PreferredComm, RelationshipQuality, RelationshipStatus,
   SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
@@ -121,7 +121,7 @@ export interface AddTimelineInput {
   date: string
   time?: string
   note?: string
-  attendees?: string[]
+  attendees?: AttendeeRef[]
   agenda?: string
   outcome?: string
   nextSteps?: string

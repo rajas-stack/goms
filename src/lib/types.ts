@@ -16,6 +16,13 @@ export type TimelineEventType =
   | 'joined' | 'promoted' | 'transferred' | 'meeting' | 'inPerson' | 'call' | 'email'
   | 'whatsapp' | 'followup' | 'note' | 'document' | 'custom'
 
+/** An attendee entry: either a legacy plain name (pre-Task-8.3 records) or an
+ *  ID-carrying snapshot — `{salesPersonId, name}` — captured at the moment
+ *  they were selected from the roster, so the name still displays correctly
+ *  even if that sales person is later renamed or removed. Readers must accept
+ *  either form; see `attendeeName`/`attendeeSalesPersonId` in `./attendees`. */
+export type AttendeeRef = string | { salesPersonId: string; name: string }
+
 export interface TimelineEvent {
   id: string
   employeeId: string
@@ -30,8 +37,10 @@ export interface TimelineEvent {
   time?: string
   note: string
   source: 'manual' | 'system'
-  /** Names of AMNEX sales team members who attended this event. */
-  attendees?: string[]
+  /** AMNEX sales team members who attended this event. Mixed legacy
+   *  (plain-string) and new (ID-carrying) entries can coexist in the same
+   *  array — see `AttendeeRef`. */
+  attendees?: AttendeeRef[]
   /** Whether the meeting/interaction actually happened. `undefined` = not
    *  marked either way (the default for every new entry). */
   attended?: boolean

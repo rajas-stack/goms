@@ -9,6 +9,7 @@ import {
 } from '@/lib/api'
 import { downloadCsv, toCsv } from '@/lib/csv'
 import { timelineEventLabel } from '@/lib/timeline-meta'
+import { attendeeName } from '@/lib/attendees'
 import { abbreviateDepartmentName, workUnitLabel } from '@/features/nodes/department-meta'
 import { stageLabel } from '@/data/pipeline-stages'
 import { cn } from '@/lib/utils'
@@ -99,7 +100,7 @@ function meetingRows(ctx: Ctx): string[][] {
         emp?.name ?? '',
         emp?.designation ?? '',
         emp ? ctx.employeeDepartments[emp.id]?.name ?? '' : '',
-        (t.attendees ?? []).join('; '),
+        (t.attendees ?? []).map(attendeeName).join('; '),
         t.attended === undefined ? '' : t.attended ? 'yes' : 'no',
         t.source,
         t.note,

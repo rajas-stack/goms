@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { MultiSelectDropdown } from '@/components/ui/MultiSelectDropdown'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
 import { useAllEmployees, useEmployeeMutations, useSalesPersons } from '@/lib/api'
@@ -9,8 +10,7 @@ import { isoToday } from '@/data/repository'
 import { useFormDraft } from '@/lib/useFormDraft'
 import { MANUAL_EVENT_TYPES, TIMELINE_META } from '@/lib/timeline-meta'
 import { EmployeePicker } from './EmployeePicker'
-import { cn } from '@/lib/utils'
-import type { TimelineEventType } from '@/lib/types'
+import type { AttendeeRef, TimelineEventType } from '@/lib/types'
 
 /**
  * `employeeId: null` opens the dialog with an employee-search/pick step
@@ -45,7 +45,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   const typeOptions = typeFilter && typeFilter.length > 0 ? typeFilter : MANUAL_EVENT_TYPES
   const defaultType = initialType ?? typeOptions[0]
   const EMPTY_FORM = {
-    type: defaultType, title: '', customLabel: '', date: isoToday(), time: '', note: '', attendees: [] as string[],
+    type: defaultType, title: '', customLabel: '', date: isoToday(), time: '', note: '', attendees: [] as AttendeeRef[],
     agenda: '', outcome: '', nextSteps: '',
   }
   const [form, setForm] = useState(EMPTY_FORM)
@@ -65,11 +65,32 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  function toggleAttendee(name: string) {
-    setForm((f) => ({
-      ...f,
-      attendees: f.attendees.includes(name) ? f.attendees.filter((a) => a !== name) : [...f.attendees, name],
-    }))
+  // MultiSelectDropdown operates over a plain string[] of names. Legacy
+  // plain-string attendees (e.g. restored from a draft saved before this
+  // picker existed) carry no salesPersonId, so they can't be represented as
+  // a picker selection — they're split out and shown read-only instead,
+  // rather than silently dropped. Only the resolvable (ID-carrying) subset
+  // is what the picker shows/edits.
+  const resolvedAttendees = useMemo(
+    () => form.attendees.filter((a): a is { salesPersonId: string; name: string } => typeof a !== 'string'),
+    [form.attendees],
+  )
+  const legacyAttendeeNames = useMemo(
+    () => form.attendees.filter((a): a is string => typeof a === 'string'),
+    [form.attendees],
+  )
+
+  function handleAttendeesChange(names: string[]) {
+    setForm((f) => {
+      const resolved: AttendeeRef[] = names.map((name) => {
+        const existing = f.attendees.find((a) => typeof a !== 'string' && a.name === name)
+        if (existing) return existing
+        const person = salesPersons.find((p) => p.name === name)
+        return person ? { salesPersonId: person.id, name: person.name } : name
+      })
+      const legacy = f.attendees.filter((a) => typeof a === 'string')
+      return { ...f, attendees: [...legacy, ...resolved] }
+    })
   }
 
   async function submit() {
@@ -169,25 +190,22 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
           />
         </Field>
         <Field label="Attending AMNEX Sales Team Members" hint="Select any internal attendees">
-          <div className="grid max-h-40 grid-cols-1 gap-1 overflow-y-auto scrollbar-thin rounded-lg border border-line bg-white p-2 sm:grid-cols-2">
-            {salesPersons.map((p) => (
-              <label
-                key={p.id}
-                className={cn(
-                  'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm',
-                  form.attendees.includes(p.name) ? 'bg-ink-900/[0.06] text-ink-900' : 'text-ink-700 hover:bg-ink-900/[0.04]',
-                )}
-              >
-                <input
-                  type="checkbox"
-                  checked={form.attendees.includes(p.name)}
-                  onChange={() => toggleAttendee(p.name)}
-                  className="accent-ink-900"
-                />
-                <span className="min-w-0 flex-1 truncate">{p.name}</span>
-              </label>
-            ))}
-          </div>
+          <MultiSelectDropdown
+            value={resolvedAttendees.map((a) => a.name)}
+            onChange={handleAttendeesChange}
+            groups={[{ label: null, options: salesPersons.map((p) => p.name) }]}
+            storageKey="timeline-attendees"
+            placeholder="Search and select attendees…"
+            searchable
+            searchPlaceholder="Search sales team…"
+            allowCustomAdd={false}
+          />
+          {legacyAttendeeNames.length > 0 && (
+            <p className="mt-1.5 text-[12px] text-muted">
+              Also: {legacyAttendeeNames.join(', ')}{' '}
+              <span className="italic">(from a saved draft; not editable here)</span>
+            </p>
+          )}
         </Field>
         <Field label="Note" hint="Optional details.">
           <Textarea value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
