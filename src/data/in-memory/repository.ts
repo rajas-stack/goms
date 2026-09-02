@@ -333,6 +333,10 @@ export interface Repository {
   setSalesPersonStatus(id: string, status: SalesPerson['status']): Promise<void>
   deleteSalesPerson(id: string): Promise<void>
   transferSalesPerson(input: TransferSalesPersonInput): Promise<SalesPosting>
+  /** In-place manager change on the currently-open posting — distinct from
+   *  `transferSalesPerson`, which closes the current posting and opens a new
+   *  one. Does not touch designation/tier/start-end dates/changeType. */
+  updatePostingManager(personId: string, managerId: string | null): Promise<SalesPosting>
   /** Who effectively owns this entity — direct, or inherited from an ancestor. */
   resolveOwner(entityType: string, entityId: string, asOf: string): Promise<OwnerResolution | null>
   /** Batch form. Use this for lists: the per-entity call re-walks the ancestor
@@ -1275,6 +1279,16 @@ class InMemoryRepository implements Repository {
     return posting
   }
 
+  /** In-place manager change on the currently-open posting — distinct from
+   *  `transferSalesPerson`, which closes the current posting and opens a new
+   *  one. Does not touch designation/tier/start-end dates/changeType. */
+  async updatePostingManager(personId: string, managerId: string | null) {
+    const posting = this.data.salesPostings.find((p) => p.salesPersonId === personId && p.endDate === null)
+    if (!posting) throw new Error(`No open posting for salesperson: ${personId}`)
+    posting.managerId = managerId
+    return posting
+  }
+
   async updateSalesPerson(id: string, patch: Partial<SalesPerson>) {
     const person = this.data.salesPersons.find((p) => p.id === id)
     if (!person) throw new Error(`No such salesperson: ${id}`)
@@ -1778,7 +1792,7 @@ const MUTATOR_KEYS = [
   'createOpportunity', 'updateOpportunity', 'deleteOpportunity',
   'createFollowUp', 'setFollowUpStatus', 'deleteFollowUp',
   'assignOwner', 'endOwnership', 'transferBookOfBusiness',
-  'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson', 'transferSalesPerson',
+  'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson', 'transferSalesPerson', 'updatePostingManager',
   'createMaster', 'updateMaster', 'setMasterActive', 'deleteMaster', 'setEditionFeatures',
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
   'createBoq', 'updateBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'reorderBoqLineItems', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',

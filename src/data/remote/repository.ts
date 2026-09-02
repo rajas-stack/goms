@@ -112,6 +112,8 @@ export class RemoteRepository implements Partial<Repository> {
   setSalesPersonStatus = (id: string, status: SalesPerson['status']): Promise<void> => this.client.sales.setStatus.mutate({ id, status })
   deleteSalesPerson = (id: string): Promise<void> => this.client.sales.delete.mutate({ id })
   transferSalesPerson = (input: TransferSalesPersonInput): Promise<SalesPosting> => this.client.sales.transfer.mutate(input)
+  updatePostingManager = (personId: string, managerId: string | null): Promise<SalesPosting> =>
+    this.client.sales.updatePostingManager.mutate({ personId, managerId })
 
   listMaster = <K extends MasterEntityKey>(key: K): Promise<MasterRowMap[K][]> =>
     this.client.commercial.masters.list.query({ key }) as unknown as Promise<MasterRowMap[K][]>
