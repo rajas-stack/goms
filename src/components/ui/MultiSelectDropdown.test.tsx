@@ -49,11 +49,18 @@ describe('MultiSelectDropdown — default behavior (searchable/allowCustomAdd un
   })
 })
 
-describe('MultiSelectDropdown — WorkFormDialog call-site regression', () => {
-  // Mirrors the exact invocation in src/features/nodes/WorkFormDialog.tsx:
-  // <MultiSelectDropdown value={form.component} onChange={...} groups={WORK_COMPONENT_GROUPS} storageKey="work-component" />
-  // i.e. searchable and allowCustomAdd both left unset.
-  it('renders and behaves exactly as before with no search input, footer shown, and toggling works', async () => {
+describe('MultiSelectDropdown — WorkFormDialog call-site reference (searchable off)', () => {
+  // NOTE: as of the "enable search in the Component dropdown" change, the
+  // real invocation in src/features/nodes/WorkFormDialog.tsx now passes
+  // `searchable searchPlaceholder="Search components…"` — see the
+  // "WorkFormDialog call-site regression (searchable on)" block below for
+  // the test that mirrors the real call site.
+  //
+  // This block is kept as a reference case for the searchable-unset
+  // behavior (no search input, footer shown, checking still calls
+  // onChange) using the real WORK_COMPONENT_GROUPS data — it no longer
+  // mirrors WorkFormDialog.tsx's actual props.
+  it('with searchable unset: no search input, footer shown, and toggling works', async () => {
     const user = userEvent.setup()
     const onChange = vi.fn()
     render(<MultiSelectDropdown value={[]} onChange={onChange} groups={WORK_COMPONENT_GROUPS} storageKey="work-component" />)
@@ -63,6 +70,37 @@ describe('MultiSelectDropdown — WorkFormDialog call-site regression', () => {
     const firstOption = WORK_COMPONENT_GROUPS[0].options[0]
     await user.click(screen.getByRole('checkbox', { name: firstOption }))
     expect(onChange).toHaveBeenCalledWith([firstOption])
+  })
+})
+
+describe('MultiSelectDropdown — WorkFormDialog call-site regression (searchable on)', () => {
+  // Mirrors the exact real invocation in src/features/nodes/WorkFormDialog.tsx:
+  // <MultiSelectDropdown value={form.component} onChange={...} groups={WORK_COMPONENT_GROUPS}
+  //   storageKey="work-component" searchable searchPlaceholder="Search components…" />
+  it('typing in the search box filters the real WORK_COMPONENT_GROUPS options to matches', async () => {
+    const user = userEvent.setup()
+    render(<MultiSelectDropdown value={[]} onChange={() => {}} groups={WORK_COMPONENT_GROUPS} storageKey="work-component" searchable searchPlaceholder="Search components…" />)
+    await user.click(screen.getByRole('button', { name: /select/i }))
+    expect(screen.getByPlaceholderText('Search components…')).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText('Search components…'), 'ipmp')
+
+    expect(screen.getByRole('checkbox', { name: 'IPMP' })).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Hardware' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Golden Record' })).not.toBeInTheDocument()
+    // The unlabeled first group has no remaining matches and disappears,
+    // while the "AMNEX products" group (home of IPMP) stays visible.
+    expect(screen.getByText('AMNEX products')).toBeInTheDocument()
+  })
+
+  it('picking a filtered option still calls onChange with that option', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<MultiSelectDropdown value={[]} onChange={onChange} groups={WORK_COMPONENT_GROUPS} storageKey="work-component" searchable searchPlaceholder="Search components…" />)
+    await user.click(screen.getByRole('button', { name: /select/i }))
+    await user.type(screen.getByPlaceholderText('Search components…'), 'ipmp')
+    await user.click(screen.getByRole('checkbox', { name: 'IPMP' }))
+    expect(onChange).toHaveBeenCalledWith(['IPMP'])
   })
 })
 
