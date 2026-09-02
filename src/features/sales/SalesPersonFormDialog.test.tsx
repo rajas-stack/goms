@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import * as api from '@/lib/api'
 import { SalesPersonFormDialog } from './SalesPersonFormDialog'
+import { repository, resetLocalData } from '@/data/repository'
 import type { SalesPerson, SalesPosting } from '@/lib/types'
 
 // The picker's own popover/typeahead mechanics are unrelated to what this
@@ -171,5 +172,64 @@ describe('SalesPersonFormDialog — editable RM + derived-disabled GM (task 6.3)
     await waitFor(() => expect(updatePostingManagerMutateAsync).toHaveBeenCalledWith({
       personId: 'sp-report', managerId: null,
     }))
+  })
+})
+
+describe('SalesPersonFormDialog save path — Org Chart invalidation proof (fix round 6.3 review)', () => {
+  // OrgChart (src/app/routes/SalesWorkspace.tsx) reads only `useSalesPersons()`
+  // and `useCurrentPostings()` — keyed ['salesPersons'] and
+  // ['currentPostings'] — to build its manager/report tree from
+  // `postings[personId].managerId`. `OrgChart` itself isn't exported (only
+  // `OrgChartNode` is, for a narrower avatar test in SalesWorkspace.test.tsx),
+  // and mounting it alongside this dialog would mean duplicating a large
+  // slice of SalesWorkspaceBody's routing/provider setup for no extra proof:
+  // TanStack Query re-runs every consumer of an invalidated key on its next
+  // render, so once we show this dialog's REAL (unmocked) save path calls the
+  // real `updatePostingManager` mutation and that invalidates exactly the
+  // four keys OrgChart (and the posting-detail views) read from, OrgChart is
+  // guaranteed to pick up the change — it has no other way to observe stale
+  // data once those keys are invalidated. This test therefore does not stub
+  // `useSalesPersons`/`useCurrentPostings`/`useSalesPersonMutations` at all
+  // (unlike every other test in this file) — it runs the dialog against the
+  // real in-memory repository, the same one `useSalesPersonMutations.test.tsx`
+  // uses to prove `updatePostingManager`'s own invalidation list.
+  it('a real RM save invalidates salesPersons/salesPerson/salesPostings/currentPostings — the exact keys OrgChart reads', async () => {
+    await resetLocalData()
+    const manager = await repository.createSalesPerson({
+      name: 'New Manager 6.3', officialEmail: 'new-manager-6.3@example.com', designation: 'RM', tierKey: 'rm',
+    })
+    const person = await repository.createSalesPerson({
+      name: 'Edited Person 6.3', officialEmail: 'edited-person-6.3@example.com', designation: 'Account Manager', tierKey: 'accountManager',
+    })
+
+    const qc = new QueryClient()
+    // Pre-warm the cache the same way SalesWorkspaceBody already has these
+    // queries resident by the time a user opens this dialog — avoids racing
+    // the dialog's mount-time effect against the initial fetch.
+    qc.setQueryData(['salesPersons'], await repository.listSalesPersons())
+    qc.setQueryData(['currentPostings'], await repository.currentPostings())
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
+
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <QueryClientProvider client={qc}>
+        <SalesPersonFormDialog open personId={person.id} onClose={onClose} />
+      </QueryClientProvider>,
+    )
+
+    const rmField = screen.getByLabelText(/reporting manager \(rm\)/i)
+    await user.clear(rmField)
+    await user.type(rmField, manager.officialEmail)
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalled())
+    const invalidatedKeys = invalidateSpy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey[0])
+    expect(invalidatedKeys).toEqual(expect.arrayContaining(['salesPersons', 'salesPerson', 'salesPostings', 'currentPostings']))
+
+    // And the underlying data OrgChart would read on its next render really
+    // did change, not just the invalidation signal.
+    const updatedPosting = (await repository.currentPostings())[person.id]
+    expect(updatedPosting.managerId).toBe(manager.id)
   })
 })

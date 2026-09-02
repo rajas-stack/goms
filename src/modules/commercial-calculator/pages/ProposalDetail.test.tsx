@@ -46,7 +46,12 @@ function line(overrides: Partial<CommercialBoqLineItem> = {}): CommercialBoqLine
   }
 }
 
-function renderProposalDetail(opts: { boq?: CommercialBoq; lines?: CommercialBoqLineItem[]; skus?: CommercialSku[] } = {}) {
+function renderProposalDetail(opts: {
+  boq?: CommercialBoq
+  lines?: CommercialBoqLineItem[]
+  skus?: CommercialSku[]
+  postings?: Record<string, { designation?: string; managerId?: string | null }>
+} = {}) {
   const theBoq = opts.boq ?? boq()
   const updateMutateAsync = vi.fn().mockResolvedValue(theBoq)
   const lineUpdateMutateAsync = vi.fn().mockResolvedValue(undefined)
@@ -93,7 +98,7 @@ function renderProposalDetail(opts: { boq?: CommercialBoq; lines?: CommercialBoq
   } as never)
   vi.spyOn(libApi, 'useDepartments').mockReturnValue({ data: [{ id: 'd1', name: 'Dept One' }] } as never)
   vi.spyOn(libApi, 'useSalesPersons').mockReturnValue({ data: [{ id: 'sp1', name: 'Sales Person One' }] } as never)
-  vi.spyOn(libApi, 'useCurrentPostings').mockReturnValue({ data: {} } as never)
+  vi.spyOn(libApi, 'useCurrentPostings').mockReturnValue({ data: opts.postings ?? {} } as never)
   vi.spyOn(libApi, 'useAllEmployees').mockReturnValue({ data: [{ id: 'e1', name: 'Jane Approver', designation: 'Manager' }] } as never)
 
   const qc = new QueryClient()
@@ -400,5 +405,24 @@ describe('ProposalDetail — Line Items compact rows and bulk editing', () => {
     await user.click(screen.getByRole('button', { name: /apply/i }))
     const patchArg = lineUpdateMutateAsync.mock.calls[0][0].patch
     expect(Object.keys(patchArg)).not.toContain('pricingLevels')
+  })
+})
+
+describe('ProposalDetail — BOQ salesperson display unaffected by RM/GM edits (fix round 6.3 review)', () => {
+  // Task 6.3 added an editable "Reporting Manager" (managerId) field to a
+  // salesperson's own posting record, edited from the Sales Team screen. A
+  // BOQ's salesperson display here only reads `salesPersons[].name` (the
+  // read-only "Sales Person" field, line 470) and, for the BU Sales filter,
+  // `postings[].designation` (line 90 above) — it never reads
+  // `postings[].managerId`. So changing only a posting's managerId (an RM
+  // edit) must never move what a BOQ shows for its salesperson.
+  it('shows the same salesperson name whether their posting has no manager, an old manager, or a new manager', () => {
+    renderProposalDetail({ postings: { sp1: { designation: 'Regional Sales', managerId: null } } })
+    expect(screen.getByText('Sales Person One')).toBeInTheDocument()
+  })
+
+  it('still shows the same salesperson name after only the posting managerId changes (simulated RM edit)', () => {
+    renderProposalDetail({ postings: { sp1: { designation: 'Regional Sales', managerId: 'sp-some-other-manager' } } })
+    expect(screen.getByText('Sales Person One')).toBeInTheDocument()
   })
 })
