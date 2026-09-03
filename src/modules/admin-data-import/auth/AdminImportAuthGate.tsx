@@ -21,6 +21,11 @@ function isForbiddenError(error: unknown): boolean {
   return (error as { data?: { code?: string } } | null)?.data?.code === 'FORBIDDEN'
 }
 
+/** Who to email for access — whoever maintains ADMIN_IMPORT_ALLOWED_EMAILS
+ *  (apps/api/src/auth/verifyAdminImportToken.ts). Not read from env: this is
+ *  copy for a dead-end screen, not a security boundary. */
+const ADMIN_IMPORT_CONTACT_EMAIL = 'rajas@amnex.com'
+
 export function AdminImportAuthGate({ children }: { children: ReactNode }) {
   const { user, loading } = useAdminImportUser()
   // The security boundary is the server (verifyAdminImportToken's allow-list
@@ -51,12 +56,24 @@ export function AdminImportAuthGate({ children }: { children: ReactNode }) {
   if (authorizing) return null
 
   if (isError && isForbiddenError(error)) {
+    const requestAccessHref =
+      `mailto:${ADMIN_IMPORT_CONTACT_EMAIL}?subject=${encodeURIComponent('Admin Data Import access request')}` +
+      `&body=${encodeURIComponent(`Please add ${user.email} to Admin Data Import access.`)}`
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 bg-paper p-8 text-center">
-        <p className="max-w-sm text-sm text-muted">
-          Signed in as {user.email}, but this account isn't authorized for Admin Data Import.
-          Contact an administrator if you need access.
-        </p>
+        <div className="max-w-sm space-y-1.5">
+          <p className="text-sm font-medium text-ink">You're signed in, but not authorized for this</p>
+          <p className="text-sm text-muted">
+            {user.email} is a valid Google account, but it isn't on the Admin Data Import access list.
+            This is separate from your regular GovCore access, which is unaffected.
+          </p>
+        </div>
+        <a
+          href={requestAccessHref}
+          className="inline-flex h-10 items-center justify-center rounded-lg bg-ink-900 px-4 text-sm font-medium text-paper shadow-sm transition-all duration-150 hover:bg-ink-800 focus-visible:focus-ring active:scale-[0.98]"
+        >
+          Request access
+        </a>
         <Button variant="ghost" onClick={() => signOut(auth)}>Sign out</Button>
       </div>
     )

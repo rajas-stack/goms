@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as api from '@/lib/api'
+import { ALL_EVENT_TYPES, MEETING_LOG_TYPES } from '@/lib/timeline-meta'
 import { TimelineEventDialog } from './TimelineEventDialog'
 
 // Item 13: Agenda/Outcome/Next Steps are new optional fields on the
@@ -242,6 +243,54 @@ describe('TimelineEventDialog — edit mode (Task 8.4)', () => {
     const call = updateTimelineMutateAsync.mock.calls[0][0]
     expect(call.patch).not.toHaveProperty('type')
     expect(call.patch).not.toHaveProperty('customLabel')
+  })
+})
+
+// GlobalFab's "Add Activity" and EmployeeDetails' "+ Add meeting" merged
+// down to typeFilter differences on this one dialog (no more separate
+// "Create Meeting"/"Log Interaction" flows) — this covers that each list
+// still offers the right options and default, at the prop level rather than
+// through either specific caller's own UI.
+describe('TimelineEventDialog — unified type list (Add Activity consolidation)', () => {
+  beforeEach(() => {
+    stubApiHooks()
+  })
+
+  it('offers every type including Meeting, defaulting to Meeting, when given ALL_EVENT_TYPES (the FAB\'s "Add Activity")', () => {
+    render(<TimelineEventDialog open employeeId="emp-1" typeFilter={ALL_EVENT_TYPES} onClose={vi.fn()} />)
+
+    const select = screen.getByLabelText(/^meeting type/i)
+    expect(select).toHaveValue('meeting')
+    const optionLabels = within(select).getAllByRole('option').map((o) => o.textContent)
+    expect(optionLabels).toContain('Meeting')
+    expect(optionLabels).toContain('Phone Call')
+    expect(optionLabels).toContain('Email')
+  })
+
+  it('offers Meeting alongside the other contact types, still defaulting to In Person, from a profile\'s "+ Add meeting" (MEETING_LOG_TYPES)', () => {
+    render(<TimelineEventDialog open employeeId="emp-1" typeFilter={MEETING_LOG_TYPES} onClose={vi.fn()} />)
+
+    const select = screen.getByLabelText(/^meeting type/i)
+    expect(select).toHaveValue('inPerson')
+    const optionLabels = within(select).getAllByRole('option').map((o) => o.textContent)
+    expect(optionLabels).toContain('Meeting')
+  })
+
+  it('still honors an explicit initialType override for a future context-specific caller', () => {
+    render(<TimelineEventDialog open employeeId="emp-1" typeFilter={ALL_EVENT_TYPES} initialType="call" onClose={vi.fn()} />)
+
+    expect(screen.getByLabelText(/^meeting type/i)).toHaveValue('call')
+  })
+
+  it('can submit a new entry with type "meeting" through the unified type list', async () => {
+    const user = userEvent.setup()
+    render(<TimelineEventDialog open employeeId="emp-1" typeFilter={ALL_EVENT_TYPES} onClose={vi.fn()} />)
+
+    await user.type(screen.getByLabelText(/^title$/i), 'QA Sync')
+    await user.click(screen.getByRole('button', { name: 'Add entry' }))
+
+    expect(addTimelineMutateAsync).toHaveBeenCalledTimes(1)
+    expect(addTimelineMutateAsync.mock.calls[0][0].type).toBe('meeting')
   })
 })
 

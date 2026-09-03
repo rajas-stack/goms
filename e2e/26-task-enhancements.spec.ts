@@ -28,6 +28,35 @@ async function unlockSalesEditing(page: Page) {
   if (await lockBtn.count() > 0) await lockBtn.click();
 }
 
+/** Opens the FAB's "Create Department" flow, picks a real state (never
+ *  Central Ministries), and leaves the create-department dialog open with
+ *  "Full name" filled. Needed for the State/District/City/STD contact
+ *  fields specifically: DepartmentFields.tsx (commit 70bd1220, 2026-09-03)
+ *  deliberately hides that whole block for a Central Ministries department
+ *  ("they don't apply to a jurisdiction that isn't a real state") -- these
+ *  tests used to edit the suite's "QA Test" fixture for this, but QA Test
+ *  lives under Central Ministries (/state/0), so that flow is no longer
+ *  reachable there at all. Root-caused 2026-09-03: not a regression in this
+ *  flow itself, just a stale fixture choice -- a throwaway department under
+ *  a real state exercises the actual supported case instead. */
+async function createDepartmentUnderState(page: Page, stateName: string, deptName: string) {
+  await page.goto('/directory', { waitUntil: 'networkidle' });
+  await page.getByRole('button', { name: 'Create new' }).click();
+  await page.getByRole('menuitem', { name: 'Create Department' }).click();
+  await page.getByRole('button', { name: 'Choose a State' }).click();
+  await pickCombobox(page, page.getByRole('dialog').getByRole('combobox', { name: 'State' }), stateName);
+  await page.getByRole('button', { name: 'Continue' }).click();
+  // Scoped to this specific dialog, not just getByLabel('State') on the page:
+  // StatePicker's own state-search Combobox also carries aria-label="State"
+  // (StatePicker.tsx), and its Dialog can still be present (mid exit-
+  // animation) in the accessibility tree for a moment after Continue closes
+  // it -- an unscoped query strict-mode-violates against a stale second
+  // match. "New department" is this dialog's own distinct title.
+  const dialog = page.getByRole('dialog', { name: 'New department' });
+  await dialog.getByLabel('Full name').fill(deptName);
+  return dialog;
+}
+
 /** Locates a `Field`'s wrapping <label> by its visible label text. `Field`
  *  (src/components/ui/Field.tsx) wraps label text + control in one <label>,
  *  so getByLabel() only works for native inputs/selects — Combobox and
@@ -87,11 +116,10 @@ test.describe('Account Mapping — Ownership Auto-Reflect', () => {
 
 test.describe('Account Mapping — Department State/District/City/STD', () => {
   test('Phase 5.1–5.2: Department contact picker with State → District → City selection', async ({ page }) => {
-    await openQaTestDepartment(page);
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    const dialog = await createDepartmentUnderState(page, 'Odisha', `QA E2E District Test ${Date.now()}`);
 
-    await page.getByLabel('State').selectOption({ label: 'Odisha' });
-    const districtSelect = page.getByLabel('District');
+    await dialog.getByLabel('State').selectOption({ label: 'Odisha' });
+    const districtSelect = dialog.getByLabel('District');
     await expect(districtSelect).toBeEnabled();
     // The select flips enabled as soon as contactStateNodeId is set (same
     // render as the state pick resolving), but its <option> list comes from
@@ -106,20 +134,21 @@ test.describe('Account Mapping — Department State/District/City/STD', () => {
   });
 
   test('Phase 5.1–5.2: STD-code auto-populates from city selection', async ({ page }) => {
-    await openQaTestDepartment(page);
-    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    const dialog = await createDepartmentUnderState(page, 'Odisha', `QA E2E STD Test ${Date.now()}`);
+    // A freshly created department starts with zero contact-number rows
+    // (DepartmentFields.tsx: `contactNumbers` defaults to []) — add one to
+    // get a "City/Town 1"/"STD code 1" row to fill below.
+    await dialog.getByRole('button', { name: '+ Add Contact Number' }).click();
 
-    await page.getByRole('button', { name: '+ Add Contact Number' }).click();
-
-    await page.getByLabel('State').selectOption({ label: 'Odisha' });
+    await dialog.getByLabel('State').selectOption({ label: 'Odisha' });
     // Khordha is the seeded district for the Bhubaneswar → 0674 STD mapping
     // (src/data/std-codes.ts) — must pick it specifically, not just "any" district.
-    await page.getByLabel('District').selectOption({ label: 'Khordha' });
+    await dialog.getByLabel('District').selectOption({ label: 'Khordha' });
 
-    const cityField = page.getByLabel(/City\/Town 1/);
+    const cityField = dialog.getByLabel(/City\/Town 1/);
     await cityField.fill('Bhubaneswar');
 
-    const stdField = page.getByLabel(/STD code 1/);
+    const stdField = dialog.getByLabel(/STD code 1/);
     await expect(stdField).toHaveValue('0674');
   });
 

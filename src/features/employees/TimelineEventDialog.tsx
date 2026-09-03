@@ -19,11 +19,13 @@ import type { AttendeeRef, TimelineEvent, TimelineEventType } from '@/lib/types'
  * same logging flow as the profile's "+ Add entry" button, which always
  * passes a real `employeeId` and therefore never sees this step at all.
  *
- * `initialType`/`typeFilter` let the global FAB offer separate "Create
- * Meeting" and "Log Interaction" entry points from this one dialog/mutation:
- * both omitted (the profile's own "+ Add entry" call site) preserves the
- * original behavior exactly — type defaults to 'meeting', every manual type
- * is selectable.
+ * `initialType`/`typeFilter` narrow/preselect the Type field for a given
+ * call site — e.g. the employee profile's "+ Add meeting" passes
+ * `MEETING_LOG_TYPES` (contact-with-a-person categories only, defaulting to
+ * 'inPerson'), while the global FAB's "Add Activity" passes `ALL_EVENT_TYPES`
+ * (every type including Meeting, defaulting to 'meeting') and lets the user
+ * pick. Both props are optional so a future context-specific caller can
+ * still force a single preselected type without offering the others.
  */
 function formFromEvent(e: TimelineEvent) {
   return {
@@ -36,7 +38,8 @@ function formFromEvent(e: TimelineEvent) {
 export function TimelineEventDialog({ open, employeeId, initialType, typeFilter, existingEvent, onClose }: {
   open: boolean
   employeeId: string | null
-  /** Type the Type field starts on. Defaults to 'meeting' (prior behavior). */
+  /** Type the Type field starts on. Defaults to the first entry of `typeFilter`
+   *  (or of every manual type, if `typeFilter` is also omitted). */
   initialType?: TimelineEventType
   /** Narrows the Type dropdown to this subset. Defaults to every manual type. */
   typeFilter?: TimelineEventType[]
@@ -72,10 +75,10 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   // Keyed on the target person, not on this render's `defaultType` — a draft
   // must survive the dialog closing and reopening for the same person even
   // though `defaultType` (derived from `initialType`) could differ between
-  // entry points ("Log Interaction" vs "Create Meeting" on the FAB). Disabled
-  // entirely while editing an existing event: that form is seeded from the
-  // record itself, not from an in-progress add — persisting it here would
-  // risk polluting the same person's next "+ Add meeting" draft.
+  // entry points (the FAB's "Add Activity" vs. a profile's "+ Add meeting").
+  // Disabled entirely while editing an existing event: that form is seeded
+  // from the record itself, not from an in-progress add — persisting it here
+  // would risk polluting the same person's next "+ Add meeting" draft.
   const draftKey = !existingEvent && activeEmployeeId ? `timeline:${activeEmployeeId}` : null
   const draft = useFormDraft(draftKey, form, open, () => setForm(EMPTY_FORM))
 

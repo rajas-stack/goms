@@ -66,8 +66,17 @@ describe('AdminImportAuthGate', () => {
     useAdminImportDomains.mockReturnValue({ isPending: false, isError: true, error: { data: { code: 'FORBIDDEN' } } })
     render(<AdminImportAuthGate><div>Protected content</div></AdminImportAuthGate>)
     expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
-    expect(screen.getByText(/isn't authorized/i)).toBeInTheDocument()
+    expect(screen.getByText(/not authorized for this/i)).toBeInTheDocument()
     expect(screen.getByText(/someone-else@gmail\.com/)).toBeInTheDocument()
+  })
+
+  it('gives the not-authorized screen a mailto request-access link addressed to the maintainer, not the importer itself', () => {
+    onAuthStateChanged.mockImplementation((_auth, cb) => { cb({ email: 'someone-else@gmail.com' }); return () => {} })
+    useAdminImportDomains.mockReturnValue({ isPending: false, isError: true, error: { data: { code: 'FORBIDDEN' } } })
+    render(<AdminImportAuthGate><div>Protected content</div></AdminImportAuthGate>)
+    const link = screen.getByRole('link', { name: /request access/i })
+    expect(link).toHaveAttribute('href', expect.stringContaining('mailto:'))
+    expect(link).toHaveAttribute('href', expect.stringContaining('someone-else%40gmail.com'))
   })
 
   it('falls through to the protected content for a non-FORBIDDEN error (e.g. a transient network failure)', () => {

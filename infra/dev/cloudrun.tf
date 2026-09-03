@@ -110,7 +110,7 @@ resource "google_cloud_run_v2_service" "goms_api" {
       }
       env {
         name  = "ADMIN_IMPORT_ALLOWED_EMAILS"
-        value = "rajas@amnex.com"
+        value = "rajas@amnex.com,rajassaji9@gmail.com"
       }
       # Lets a local frontend dev server (Task 28's Playwright lineage walk)
       # call this goms-dev API directly instead of through a hosted frontend

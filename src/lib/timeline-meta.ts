@@ -24,11 +24,18 @@ export const MANUAL_EVENT_TYPES: TimelineEventType[] = [
   'inPerson', 'call', 'email', 'whatsapp', 'followup', 'note', 'document', 'promoted', 'custom',
 ]
 
-/** The subset of `MANUAL_EVENT_TYPES` that are actually forms of meeting/
- *  contact with a person — used to log a meeting without offering unrelated
- *  categories like Note/Document/Promoted in the same dropdown. */
+/** Every manually-loggable type including `meeting`, `meeting` listed first
+ *  so it's the default selection — used by the single "Add Activity" entry
+ *  point, which offers the complete type list rather than a curated subset. */
+export const ALL_EVENT_TYPES: TimelineEventType[] = ['meeting', ...MANUAL_EVENT_TYPES]
+
+/** The subset of `MANUAL_EVENT_TYPES` (plus `meeting`) that are actually
+ *  forms of meeting/contact with a person — used to log an entry against a
+ *  specific employee without offering unrelated categories like
+ *  Note/Document/Promoted in the same dropdown. `meeting` is appended last
+ *  to preserve `inPerson` as this flow's existing default type. */
 export const MEETING_LOG_TYPES: TimelineEventType[] = [
-  'inPerson', 'call', 'email', 'whatsapp', 'followup', 'custom',
+  'inPerson', 'call', 'email', 'whatsapp', 'followup', 'custom', 'meeting',
 ]
 
 /** Badge text for a timeline entry — a `custom` entry shows the user's own

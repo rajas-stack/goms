@@ -10,7 +10,7 @@ import {
 import { StatePicker } from '@/features/workspace/StatePicker'
 import { OrgTargetPicker } from '@/features/organization/OrgTargetPicker'
 import { TimelineEventDialog } from '@/features/employees/TimelineEventDialog'
-import { MANUAL_EVENT_TYPES } from '@/lib/timeline-meta'
+import { ALL_EVENT_TYPES } from '@/lib/timeline-meta'
 import { cn } from '@/lib/utils'
 import type { HierNode } from '@/lib/types'
 
@@ -21,19 +21,22 @@ import type { HierNode } from '@/lib/types'
 // `{ kind: 'x' | 'y' }` shape, so `Extract` would silently drop it otherwise.
 type FabItem =
   | { id: string; label: string; icon: string; kind: 'import' }
-  | { id: string; label: string; icon: string; kind: 'meeting' }
-  | { id: string; label: string; icon: string; kind: 'event' }
+  | { id: string; label: string; icon: string; kind: 'activity' }
   | { id: string; label: string; icon: string; kind: 'department' }
   | { id: string; label: string; icon: string; kind: 'person' }
   | { id: string; label: string; icon: string; kind: 'orgChild'; childKey: string }
 
-// 9 items, flat and unordered (no context-aware reordering; that's
+// 8 items, flat and unordered (no context-aware reordering; that's
 // explicitly out of scope here). "Create Location" (geo domain) was removed
 // per explicit request — no `GeoTargetPicker`/`pick-geo` flow step remains.
+// "Create Meeting" and "Log Interaction" were merged into one "Add Activity"
+// entry — both opened the same TimelineEventDialog/mutation, just with
+// different typeFilter/initialType props forcing a curated subset; the
+// dialog's own Type selector now offers the full list (Meeting included)
+// and the user picks, rather than the menu pre-deciding for them.
 const MENU: FabItem[] = [
   { id: 'import', label: 'Import Records', icon: 'Upload', kind: 'import' },
-  { id: 'meeting', label: 'Create Meeting', icon: 'Users', kind: 'meeting' },
-  { id: 'event', label: 'Log Interaction', icon: 'CalendarClock', kind: 'event' },
+  { id: 'activity', label: 'Add Activity', icon: 'CalendarClock', kind: 'activity' },
   { id: 'unit', label: 'Create Unit', icon: 'Boxes', kind: 'orgChild', childKey: 'unit' },
   { id: 'office', label: 'Create Office', icon: 'DoorOpen', kind: 'orgChild', childKey: 'office' },
   { id: 'division', label: 'Create Division', icon: 'Layers', kind: 'orgChild', childKey: 'division' },
@@ -41,8 +44,6 @@ const MENU: FabItem[] = [
   { id: 'person', label: 'Create Person', icon: 'UserPlus', kind: 'person' },
   { id: 'department', label: 'Create Department', icon: 'Building2', kind: 'department' },
 ]
-
-const NON_MEETING_TYPES = MANUAL_EVENT_TYPES.filter((t) => t !== 'meeting')
 
 type Flow =
   | { step: 'closed' }
@@ -75,7 +76,7 @@ export function GlobalFab() {
   const { openImport } = useShell()
   const [menuOpen, setMenuOpen] = useState(false)
   const [flow, setFlow] = useState<Flow>({ step: 'closed' })
-  const [timelineKind, setTimelineKind] = useState<'meeting' | 'event' | null>(null)
+  const [activityDialogOpen, setActivityDialogOpen] = useState(false)
   const menuContainerRef = useRef<HTMLDivElement>(null)
 
   // Closes the menu on an outside click/tap and on route changes (switching
@@ -115,7 +116,7 @@ export function GlobalFab() {
   function onItemClick(item: FabItem) {
     setMenuOpen(false)
     if (item.kind === 'import') { openImport(); return }
-    if (item.kind === 'meeting' || item.kind === 'event') { setTimelineKind(item.kind); return }
+    if (item.kind === 'activity') { setActivityDialogOpen(true); return }
     setFlow({ step: 'pick-state', item })
   }
 
@@ -140,19 +141,19 @@ export function GlobalFab() {
   menuOpenRef.current = menuOpen
   const flowRef = useRef(flow)
   flowRef.current = flow
-  const timelineKindRef = useRef(timelineKind)
-  timelineKindRef.current = timelineKind
+  const activityDialogOpenRef = useRef(activityDialogOpen)
+  activityDialogOpenRef.current = activityDialogOpen
 
   useEffect(() => {
     registerFabOverlayHandle({
-      isOpen: () => menuOpenRef.current || flowRef.current.step !== 'closed' || timelineKindRef.current !== null,
+      isOpen: () => menuOpenRef.current || flowRef.current.step !== 'closed' || activityDialogOpenRef.current,
       // Closes exactly one layer per call, topmost/most-recently-opened
       // first — mirrors Escape's dialog-first semantics elsewhere in the
       // app. A picker step and the menu itself are never open at the same
       // time in practice (opening a picker always closes the menu first),
       // but the ordering below is still correct if that ever changes.
       close: () => {
-        if (timelineKindRef.current !== null) { setTimelineKind(null); return }
+        if (activityDialogOpenRef.current) { setActivityDialogOpen(false); return }
         if (flowRef.current.step !== 'closed') { setFlow({ step: 'closed' }); return }
         if (menuOpenRef.current) setMenuOpen(false)
       },
@@ -226,11 +227,10 @@ export function GlobalFab() {
       />
 
       <TimelineEventDialog
-        open={timelineKind !== null}
+        open={activityDialogOpen}
         employeeId={null}
-        initialType={timelineKind === 'meeting' ? 'meeting' : 'call'}
-        typeFilter={timelineKind === 'meeting' ? ['meeting'] : NON_MEETING_TYPES}
-        onClose={() => setTimelineKind(null)}
+        typeFilter={ALL_EVENT_TYPES}
+        onClose={() => setActivityDialogOpen(false)}
       />
     </>
   )
