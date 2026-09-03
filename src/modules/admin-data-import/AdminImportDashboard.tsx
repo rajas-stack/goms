@@ -1,7 +1,7 @@
-import { Link } from 'react-router-dom'
 import { AdminImportBanner } from './AdminImportBanner'
 import { useAdminImportDomains, type DomainListEntry, type SpreadsheetDomainKey } from './api'
 import { downloadTemplate } from './templates'
+import { ImportNavLink } from './ImportNavLink'
 
 function StatusCell({ status, labelByDomain }: { status: DomainListEntry['dependencyStatus']; labelByDomain: Map<string, string> }) {
   if (status === 'ready') return <span className="text-emerald-700">Ready</span>
@@ -12,9 +12,9 @@ function StatusCell({ status, labelByDomain }: { status: DomainListEntry['depend
 function ActionsCell({ domain }: { domain: DomainListEntry['domain'] }) {
   if (domain === 'geography') {
     return (
-      <Link to="/admin/data-import/geography" className="text-sky-700 underline">
+      <ImportNavLink to="geography" className="text-sky-700 underline">
         Load/Update Official Geography Dataset
-      </Link>
+      </ImportNavLink>
     )
   }
   return (
@@ -32,9 +32,9 @@ export function AdminImportDashboard() {
     <div className="space-y-4 p-6">
       <AdminImportBanner />
       <h1 className="text-xl font-semibold">Admin Data Import</h1>
-      <Link to="/admin/data-import/session" className="inline-block rounded bg-sky-700 px-3 py-1 text-white">
+      <ImportNavLink to="session" className="inline-block rounded bg-sky-700 px-3 py-1 text-white">
         Start Import Session
-      </Link>
+      </ImportNavLink>
       {isLoading || !domains ? (
         <p>Loading…</p>
       ) : (

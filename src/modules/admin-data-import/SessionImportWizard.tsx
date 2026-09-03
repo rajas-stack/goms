@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { AdminImportBanner } from './AdminImportBanner'
+import { ImportNavLink } from './ImportNavLink'
 import { extractSheetsFromFile, buildSessionDomains, unresolvedRowsAreAllExcluded, type DetectedSheet } from './sessionUpload'
 import {
   useValidateSession, useCommitSession, flattenSessionPreview,
@@ -102,7 +102,7 @@ export function SessionImportWizard() {
       <AdminImportBanner />
       <div className="flex items-baseline justify-between">
         <h1 className="text-xl font-semibold">Import Session</h1>
-        <Link to="/admin/data-import" className="text-sky-700 underline">Back to Data Import</Link>
+        <ImportNavLink to="dashboard" className="text-sky-700 underline">Back to Data Import</ImportNavLink>
       </div>
 
       {!result && (

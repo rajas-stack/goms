@@ -1,8 +1,8 @@
-import { lazy, Suspense } from 'react'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { lazy, Suspense, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { RouteFallback } from '@/components/RouteFallback'
 import { AdminImportAuthGate } from './auth/AdminImportAuthGate'
+import { ImportNavProvider, type ImportNavTarget } from './ImportNavLink'
 
 const AdminImportDashboard = lazy(() =>
   import('./AdminImportDashboard').then((m) => ({ default: m.AdminImportDashboard })),
@@ -24,33 +24,47 @@ const GeographyLoadPanel = lazy(() =>
 // this wrapper — a modal is presentation only, never a new trust boundary.
 //
 // AdminImportDashboard/SessionImportWizard/GeographyLoadPanel cross-navigate
-// each other with `<Link to="/admin/data-import...">` (unmodified). A
-// MemoryRouter seeded at that same path lets those links work as-is inside
-// the modal without touching the app's real browser history — closing the
-// modal never leaves a stray /admin/data-import entry in history, and the
-// whole subtree (including any in-progress upload/session state) unmounts
-// with the closed dialog (Dialog.tsx only renders `children` while
-// `open`), so every reopen starts clean, matching the old ImportDialog's
-// reset-on-close behavior.
+// each other via ImportNavLink (not raw `<Link>`) — an earlier version of
+// this modal wrapped them in a MemoryRouter so their real `<Link>`s would
+// "just work", but React Router throws ("You cannot render a <Router>
+// inside another <Router>") the instant that subtree actually mounts,
+// since the whole app already lives inside one Router (createBrowserRouter
+// in router.tsx). Confirmed live 2026-09-04 — only reachable once
+// authorized, so none of this session's earlier signed-out checks hit it.
+// `step` + ImportNavProvider below is local state instead: no second
+// Router, and the app's real browser history/URL is never touched.
+//
+// Closing the modal (Dialog.tsx only renders `children` while `open`)
+// unmounts this whole subtree, so every reopen starts clean — matching the
+// old ImportDialog's reset-on-close behavior. `handleClose` also resets
+// `step` back to 'dashboard' since that state lives in this component,
+// which itself stays mounted across opens/closes (only Dialog's internal
+// children are gated on `open`).
 //
 // The full-page routes at /admin/data-import(/session|/geography) still
 // exist in router.tsx for direct navigation/bookmarks/refresh — same
-// components, same AdminImportAuthGate, so direct access enforces identical
-// auth. This modal is purely an additional entry point.
+// components, same AdminImportAuthGate, and (with no ImportNavProvider in
+// that tree) ImportNavLink falls back to a real `<Link>` there, so direct
+// access enforces identical auth and keeps normal link semantics.
 export function AdminImportModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const [step, setStep] = useState<ImportNavTarget>('dashboard')
+
+  function handleClose() {
+    setStep('dashboard')
+    onClose()
+  }
+
   return (
-    <Dialog open={open} onClose={onClose} title="Admin Data Import" size="full">
+    <Dialog open={open} onClose={handleClose} title="Admin Data Import" size="full">
       <div className="lg:h-[75vh] lg:min-h-[420px] lg:overflow-y-auto">
         <AdminImportAuthGate>
-          <MemoryRouter initialEntries={['/admin/data-import']}>
+          <ImportNavProvider value={setStep}>
             <Suspense fallback={<RouteFallback />}>
-              <Routes>
-                <Route path="/admin/data-import" element={<AdminImportDashboard />} />
-                <Route path="/admin/data-import/geography" element={<GeographyLoadPanel />} />
-                <Route path="/admin/data-import/session" element={<SessionImportWizard />} />
-              </Routes>
+              {step === 'dashboard' && <AdminImportDashboard />}
+              {step === 'session' && <SessionImportWizard />}
+              {step === 'geography' && <GeographyLoadPanel />}
             </Suspense>
-          </MemoryRouter>
+          </ImportNavProvider>
         </AdminImportAuthGate>
       </div>
     </Dialog>

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { adminImportApi } from './api'
 import { AdminImportModal } from './AdminImportModal'
@@ -13,12 +14,21 @@ const { onAuthStateChanged, signInWithPopup, signOut } = vi.hoisted(() => ({
 vi.mock('firebase/auth', () => ({ onAuthStateChanged, signInWithPopup, signOut, GoogleAuthProvider: class {} }))
 vi.mock('@/lib/firebaseAuth', () => ({ auth: {}, googleProvider: {} }))
 
+// Wrapped in an outer MemoryRouter deliberately — matches how AdminImportModal
+// really lives in the app (AppLayout, nested inside router.tsx's
+// createBrowserRouter). An earlier version of this modal rendered its own
+// nested MemoryRouter for internal navigation, which React Router only
+// rejects ("You cannot render a <Router> inside another <Router>") once
+// there's an outer Router to conflict with — a bare `render()` with no outer
+// Router (this file's original version) can't catch that class of bug.
 function renderModal(open = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <QueryClientProvider client={client}>
-      <AdminImportModal open={open} onClose={() => {}} />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={client}>
+        <AdminImportModal open={open} onClose={() => {}} />
+      </QueryClientProvider>
+    </MemoryRouter>,
   )
 }
 
@@ -59,10 +69,15 @@ describe('AdminImportModal', () => {
     expect(await screen.findByRole('heading', { name: 'Admin Data Import', level: 1 })).toBeInTheDocument()
     expect(screen.getByText('Tax Classes')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('link', { name: /start import session/i }))
+    // Buttons, not links, inside the modal — ImportNavLink swaps real
+    // `<Link>` navigation for local step state here (see AdminImportModal.tsx's
+    // design note on why: nesting a second Router to let real `<Link>`s work
+    // throws the moment that subtree mounts, since the whole app already
+    // lives inside one Router).
+    fireEvent.click(screen.getByRole('button', { name: /start import session/i }))
     expect(await screen.findByRole('heading', { name: 'Import Session' })).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('link', { name: /back to data import/i }))
+    fireEvent.click(screen.getByRole('button', { name: /back to data import/i }))
     expect(await screen.findByRole('heading', { name: 'Admin Data Import', level: 1 })).toBeInTheDocument()
   })
 

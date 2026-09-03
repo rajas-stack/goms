@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { AdminImportBanner } from './AdminImportBanner'
+import { ImportNavLink } from './ImportNavLink'
 import { useCommitGeographyLoad, usePreviewGeographyLoad, type ImportSummary } from './api'
 
 export function GeographyLoadPanel() {
@@ -16,9 +16,9 @@ export function GeographyLoadPanel() {
       <AdminImportBanner />
       <div className="flex items-baseline justify-between">
         <h1 className="text-xl font-semibold">Geography</h1>
-        <Link to="/admin/data-import" className="text-sky-700 underline">
+        <ImportNavLink to="dashboard" className="text-sky-700 underline">
           Back to Data Import
-        </Link>
+        </ImportNavLink>
       </div>
 
       <p className="text-sm text-slate-600">
