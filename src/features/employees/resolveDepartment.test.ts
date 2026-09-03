@@ -28,6 +28,16 @@ describe('resolveDepartment', () => {
     expect(resolveDepartment(branch, allNodes)).toBe(dept)
   })
 
+  it('resolves to the nearest (nested) department, not the root ancestor department', () => {
+    const rootDept = makeNode({ id: 'root-dept', typeKey: 'department', parentId: null })
+    const nestedDept = makeNode({ id: 'nested-dept', typeKey: 'department', parentId: 'root-dept' })
+    const branch = makeNode({ id: 'branch-1', typeKey: 'branch', parentId: 'nested-dept' })
+    const allNodes = [rootDept, nestedDept, branch]
+
+    expect(resolveDepartment(branch, allNodes)).toBe(nestedDept)
+    expect(resolveDepartment(nestedDept, allNodes)).toBe(nestedDept)
+  })
+
   it('returns null when no ancestor is a department', () => {
     const state = makeNode({ id: 'state-1', typeKey: 'state', parentId: null })
     const office = makeNode({ id: 'office-1', typeKey: 'office', parentId: 'state-1' })

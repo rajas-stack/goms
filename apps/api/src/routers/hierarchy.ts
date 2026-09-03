@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server'
 import { publicProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isForeignKeyViolation } from '../db-errors.js'
-import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, type HierNode } from '@goms/domain'
+import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType, type HierNode } from '@goms/domain'
 
 // Maps the DB row (snake_case) onto the frontend's `HierNode` shape
 // (camelCase) — see src/lib/types.ts (re-exported from packages/domain).
@@ -110,7 +110,7 @@ export const hierarchyRouter = router({
 
   listOrgRoots: publicProcedure.input(z.object({ stateCode: z.number() })).query(async ({ input }) => {
     const result = await pool.query(
-      `SELECT * FROM hierarchy_nodes WHERE domain='org' AND type_key='department' AND state_code=$1 AND status='active' ORDER BY sort_order`,
+      `SELECT * FROM hierarchy_nodes WHERE domain='org' AND type_key='department' AND parent_id IS NULL AND state_code=$1 AND status='active' ORDER BY sort_order`,
       [input.stateCode],
     )
     return result.rows.map(toNode)
@@ -163,6 +163,16 @@ export const hierarchyRouter = router({
       stateCode: z.number().int().nullable(), name: z.string().min(1), metadata: z.record(z.string()).optional(),
     }))
     .mutation(async ({ input }) => {
+      if (input.parentId) {
+        const parentResult = await pool.query(`SELECT type_key FROM hierarchy_nodes WHERE id=$1`, [input.parentId])
+        const parentType = parentResult.rows[0]?.type_key
+        if (parentType && !isValidChildType(parentType, input.typeKey)) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: `A ${NODE_TYPE_MAP[input.typeKey]?.label ?? input.typeKey} cannot be created under a ${NODE_TYPE_MAP[parentType]?.label ?? parentType}`,
+          })
+        }
+      }
       if (input.typeKey === 'branch' && input.parentId) {
         // Dedup check-then-insert isn't atomic on its own, and there's no
         // unique index backing "one branch per name per parent" (branch
@@ -284,7 +294,19 @@ export const hierarchyRouter = router({
           // UPDATEs land, producing a real parent_id cycle with no
           // constraint to catch it afterward.
           const lockIds = [input.id, input.newParentId].sort()
-          await client.query('SELECT id FROM hierarchy_nodes WHERE id = ANY($1) ORDER BY id FOR UPDATE', [lockIds])
+          const lockedRows = (await client.query(
+            'SELECT id, type_key FROM hierarchy_nodes WHERE id = ANY($1) ORDER BY id FOR UPDATE',
+            [lockIds],
+          )).rows
+          const typeById = new Map<string, string>(lockedRows.map((r) => [r.id, r.type_key]))
+          const movedType = typeById.get(input.id)
+          const newParentType = typeById.get(input.newParentId)
+          if (movedType && newParentType && !isValidChildType(newParentType, movedType)) {
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: `A ${NODE_TYPE_MAP[movedType]?.label ?? movedType} cannot be moved under a ${NODE_TYPE_MAP[newParentType]?.label ?? newParentType}`,
+            })
+          }
           const ids = await subtreeIds(input.id, client)
           if (ids.includes(input.newParentId)) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot move a node into its own subtree' })
@@ -397,10 +419,7 @@ export const hierarchyRouter = router({
     )).rows
     return candidates
       .filter((c) => !banned.has(c.id))
-      .filter((c) => {
-        const allowed = NODE_TYPE_MAP[c.type_key]?.childKeys ?? []
-        return allowed.length === 0 || allowed.includes(node.type_key)
-      })
+      .filter((c) => isValidChildType(c.type_key, node.type_key))
       .map(toNode)
   }),
 

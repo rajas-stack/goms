@@ -20,7 +20,8 @@ describe('followUps router', () => {
     await pool.query('DELETE FROM hierarchy_nodes')
     const caller = appRouter.createCaller({})
     const dept = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Dept' })
-    orgNodeId = (await caller.hierarchy.createNode({ domain: 'org', typeKey: 'office', parentId: dept.id, stateCode: 27, name: 'Office' })).id
+    const branch = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'branch', parentId: dept.id, stateCode: 27, name: 'Branch' })
+    orgNodeId = (await caller.hierarchy.createNode({ domain: 'org', typeKey: 'office', parentId: branch.id, stateCode: 27, name: 'Office' })).id
     empId = (await caller.employees.create({ name: 'Jane', designation: 'Officer', email: 'j@x.com', phone: '1', orgNodeId, managerId: null })).id
   })
 

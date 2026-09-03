@@ -24,8 +24,11 @@ describe('employees router', () => {
     await pool.query('DELETE FROM hierarchy_nodes')
     const caller = appRouter.createCaller({})
     const dept = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Dept' })
-    orgNodeId = (await caller.hierarchy.createNode({ domain: 'org', typeKey: 'office', parentId: dept.id, stateCode: 27, name: 'Office A' })).id
-    otherOrgNodeId = (await caller.hierarchy.createNode({ domain: 'org', typeKey: 'office', parentId: dept.id, stateCode: 27, name: 'Office B' })).id
+    // office nests under a branch, not directly under a department — see
+    // packages/domain's NODE_TYPE_MAP (department.childKeys=['branch','department']).
+    const branch = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'branch', parentId: dept.id, stateCode: 27, name: 'Branch' })
+    orgNodeId = (await caller.hierarchy.createNode({ domain: 'org', typeKey: 'office', parentId: branch.id, stateCode: 27, name: 'Office A' })).id
+    otherOrgNodeId = (await caller.hierarchy.createNode({ domain: 'org', typeKey: 'office', parentId: branch.id, stateCode: 27, name: 'Office B' })).id
   })
 
   async function makeEmployee(overrides: Partial<{ name: string; designation: string; orgNodeId: string; managerId: string | null; vacant: boolean }> = {}) {

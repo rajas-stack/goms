@@ -10,7 +10,7 @@ import {
 } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
 import { useToast } from '@/components/ui/Toast'
-import { NODE_TYPE_MAP } from '@/lib/node-types'
+import { NODE_TYPE_MAP, isValidChildType } from '@/lib/node-types'
 import type { Employee, HierNode } from '@/lib/types'
 
 export type CanvasItem =
@@ -118,8 +118,7 @@ export function CanvasBranch({ item, depth, parentKey, controlled }: {
   const dragPayload = canvas.dragPayload
   function canBeParent(target: HierNode, dragged: HierNode) {
     if (target.domain !== dragged.domain || target.stateCode !== dragged.stateCode) return false
-    const allowed = NODE_TYPE_MAP[target.typeKey]?.childKeys ?? []
-    return allowed.length === 0 || allowed.includes(dragged.typeKey)
+    return isValidChildType(target.typeKey, dragged.typeKey)
   }
   function dropValid(p: DragPayload | null): boolean {
     if (!p || p.key === key) return false

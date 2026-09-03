@@ -34,7 +34,7 @@ const NODE_TYPES: NodeType[] = [
   { key: 'taluka', domain: 'geo', label: 'Taluka', icon: 'Map', childKeys: ['village'], level: 3 },
   { key: 'village', domain: 'geo', label: 'Village', icon: 'Home', childKeys: [], level: 4 },
 
-  { key: 'department', domain: 'org', label: 'Department', icon: 'Building2', childKeys: ['branch'], level: 0 },
+  { key: 'department', domain: 'org', label: 'Department', icon: 'Building2', childKeys: ['branch', 'department'], level: 0 },
   { key: 'branch', domain: 'org', label: 'Branch', icon: 'GitBranch', childKeys: ['branch', 'division', 'office'], level: 1 },
   { key: 'division', domain: 'org', label: 'Division', icon: 'Layers', childKeys: ['office'], level: 2 },
   { key: 'office', domain: 'org', label: 'Office', icon: 'DoorOpen', childKeys: ['unit'], level: 3 },
@@ -58,4 +58,15 @@ export function childTypesOf(typeKey: string): NodeType[] {
   if (!t) return []
   const keys = t.childKeys.length ? t.childKeys : typesForDomain(t.domain).map((x) => x.key)
   return keys.map((k) => NODE_TYPE_MAP[k]).filter(Boolean)
+}
+
+/** Whether `childTypeKey` is a permitted child of `parentTypeKey`, per the
+ *  registry's `childKeys` — the single rule createNode/moveNode/moveTargets/
+ *  drag-and-drop all defer to, so a type's allowed children are only ever
+ *  declared once. An empty `childKeys` means "any type in the domain" (see
+ *  `NodeType.childKeys`'s doc comment), so an unrecognized/unrestricted
+ *  parent type key permits any child. */
+export function isValidChildType(parentTypeKey: string, childTypeKey: string): boolean {
+  const allowed = NODE_TYPE_MAP[parentTypeKey]?.childKeys ?? []
+  return allowed.length === 0 || allowed.includes(childTypeKey)
 }

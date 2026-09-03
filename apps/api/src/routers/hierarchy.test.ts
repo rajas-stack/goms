@@ -279,6 +279,52 @@ describe('hierarchy router', () => {
     await expect(caller.hierarchy.deleteNode({ id: deptB.id })).rejects.toThrow(/still referenced elsewhere/i)
   })
 
+  // Department → Department nesting.
+
+  it('creates a department nested under another department', async () => {
+    const caller = appRouter.createCaller({})
+    const parent = await makeNode({ typeKey: 'department', name: 'Electronics & IT' })
+    const child = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'department', parentId: parent.id, stateCode: 27, name: 'Industry Bodies' })
+    expect(child.parentId).toBe(parent.id)
+    const crumb = await caller.hierarchy.breadcrumb({ id: child.id })
+    expect(crumb.map((n) => n.name)).toEqual(['Electronics & IT', 'Industry Bodies'])
+  })
+
+  it('listOrgRoots excludes a department nested under another department', async () => {
+    const caller = appRouter.createCaller({})
+    const parent = await makeNode({ typeKey: 'department', name: 'Electronics & IT', stateCode: 27 })
+    await caller.hierarchy.createNode({ domain: 'org', typeKey: 'department', parentId: parent.id, stateCode: 27, name: 'Industry Bodies' })
+    const roots = await caller.hierarchy.listOrgRoots({ stateCode: 27 })
+    expect(roots.map((r) => r.name)).toEqual(['Electronics & IT'])
+  })
+
+  it('moveTargets allows moving a department under another department', async () => {
+    const caller = appRouter.createCaller({})
+    const deptA = await makeNode({ typeKey: 'department', name: 'Electronics & IT', stateCode: 27 })
+    const deptB = await makeNode({ typeKey: 'department', name: 'Industry Bodies', stateCode: 27 })
+    const targets = await caller.hierarchy.moveTargets({ nodeId: deptB.id })
+    expect(targets.map((t) => t.id)).toContain(deptA.id)
+  })
+
+  it('rejects createNode when the child type is not allowed under the parent type', async () => {
+    const caller = appRouter.createCaller({})
+    const dept = await makeNode({ typeKey: 'department', name: 'Dept' })
+    // office isn't a valid direct child of department (needs a branch/division in between)
+    await expect(
+      caller.hierarchy.createNode({ domain: 'org', typeKey: 'office', parentId: dept.id, stateCode: 27, name: 'Bad Office' }),
+    ).rejects.toThrow()
+  })
+
+  it('rejects moveNode when the target parent does not allow the moved node\'s type', async () => {
+    const caller = appRouter.createCaller({})
+    const deptA = await makeNode({ typeKey: 'department', name: 'Dept A' })
+    const deptB = await makeNode({ typeKey: 'department', name: 'Dept B' })
+    const branch = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'branch', parentId: deptA.id, stateCode: 27, name: 'Branch' })
+    const office = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'office', parentId: branch.id, stateCode: 27, name: 'Office' })
+    // department only allows branch/department children, not office directly
+    await expect(caller.hierarchy.moveNode({ id: office.id, newParentId: deptB.id })).rejects.toThrow()
+  })
+
   it('importChildren respects the branch-name dedup rule createNode enforces, including duplicates within the same import batch', async () => {
     const caller = appRouter.createCaller({})
     const dept = await makeNode({ typeKey: 'department', name: 'Dept' })

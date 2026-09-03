@@ -5,7 +5,7 @@ import type {
 } from '@/lib/types'
 import { uid } from '@/lib/utils'
 import { isoToday } from '@/lib/dates'
-import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf } from '@/lib/node-types'
+import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType } from '@/lib/node-types'
 import {
   MERGEABLE_FIELDS, type MergeableField,
   DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP,
@@ -596,7 +596,7 @@ class InMemoryRepository implements Repository {
 
   async listOrgRoots(stateCode: number) {
     return this.data.nodes
-      .filter((n) => n.domain === 'org' && n.typeKey === 'department' && n.stateCode === stateCode && n.status === 'active')
+      .filter((n) => n.domain === 'org' && n.typeKey === 'department' && n.parentId === null && n.stateCode === stateCode && n.status === 'active')
       .sort((a, b) => a.sortOrder - b.sortOrder)
   }
 
@@ -641,6 +641,12 @@ class InMemoryRepository implements Repository {
   }
 
   async createNode(input: CreateNodeInput) {
+    if (input.parentId) {
+      const parent = this.data.nodes.find((n) => n.id === input.parentId)
+      if (parent && !isValidChildType(parent.typeKey, input.typeKey)) {
+        throw new Error(`A ${NODE_TYPE_MAP[input.typeKey]?.label ?? input.typeKey} cannot be created under a ${NODE_TYPE_MAP[parent.typeKey]?.label ?? parent.typeKey}`)
+      }
+    }
     // Never create a second branch with the same name under one parent.
     if (input.typeKey === 'branch' && input.parentId) {
       const dup = this.activeChildren(input.parentId).find(
@@ -697,8 +703,15 @@ class InMemoryRepository implements Repository {
   }
 
   async moveNode(id: string, newParentId: string | null) {
-    if (newParentId && this.subtreeIds(id).includes(newParentId)) {
-      throw new Error('Cannot move a node into its own subtree')
+    if (newParentId) {
+      if (this.subtreeIds(id).includes(newParentId)) {
+        throw new Error('Cannot move a node into its own subtree')
+      }
+      const node = this.data.nodes.find((n) => n.id === id)
+      const newParent = this.data.nodes.find((n) => n.id === newParentId)
+      if (node && newParent && !isValidChildType(newParent.typeKey, node.typeKey)) {
+        throw new Error(`A ${NODE_TYPE_MAP[node.typeKey]?.label ?? node.typeKey} cannot be moved under a ${NODE_TYPE_MAP[newParent.typeKey]?.label ?? newParent.typeKey}`)
+      }
     }
     const node = this.data.nodes.find((n) => n.id === id)!
     node.parentId = newParentId
@@ -1663,8 +1676,7 @@ class InMemoryRepository implements Repository {
       if (banned.has(c.id)) return false
       if (c.domain !== node.domain || c.stateCode !== node.stateCode) return false
       if (c.status !== 'active') return false
-      const allowed = NODE_TYPE_MAP[c.typeKey]?.childKeys ?? []
-      return allowed.length === 0 || allowed.includes(node.typeKey)
+      return isValidChildType(c.typeKey, node.typeKey)
     })
   }
 

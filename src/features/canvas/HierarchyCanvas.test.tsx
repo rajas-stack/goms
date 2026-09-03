@@ -157,3 +157,24 @@ describe('HierarchyCanvas — People-canvas search (item 7)', () => {
     expect(screen.getByLabelText('Search people')).toBeInTheDocument()
   })
 })
+
+describe('HierarchyCanvas — Department → Department nesting', () => {
+  it('renders a nested department exactly once, under its parent department (not as an extra root)', async () => {
+    const NESTED_DEPARTMENT: HierNode = {
+      id: 'dept-nested', domain: 'org', typeKey: 'department', parentId: 'dept-1', stateCode: 5,
+      name: 'Industry Bodies', code: null, sortOrder: 0, metadata: {}, status: 'active',
+    }
+    // Only the true root (dept-1) comes back from useOrgRoots — mirroring the
+    // fixed listOrgRoots, which now excludes nested departments — and the
+    // nested department renders as dept-1's child via useChildren instead.
+    vi.spyOn(api, 'useChildren').mockImplementation(((parentId: string | null) =>
+      ({ data: parentId === 'dept-1' ? [NESTED_DEPARTMENT] : [] })) as unknown as typeof api.useChildren)
+
+    render(<HierarchyCanvas domain="org" stateCode={5} />)
+
+    // NodeCard renders a department's name as "Department of {name}".
+    await screen.findByText('Department of Health Department')
+    const matches = await screen.findAllByText('Department of Industry Bodies')
+    expect(matches).toHaveLength(1)
+  })
+})

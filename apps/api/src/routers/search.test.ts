@@ -32,7 +32,8 @@ describe('search router', () => {
     const caller = appRouter.createCaller({})
     stateId = (await caller.hierarchy.createNode({ domain: 'geo', typeKey: 'state', parentId: null, stateCode: 24, name: 'Gujarat' })).id
     deptId = (await caller.hierarchy.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 24, name: 'Revenue Department' })).id
-    officeId = (await caller.hierarchy.createNode({ domain: 'org', typeKey: 'office', parentId: deptId, stateCode: 24, name: 'Ahmedabad Office' })).id
+    const branchId = (await caller.hierarchy.createNode({ domain: 'org', typeKey: 'branch', parentId: deptId, stateCode: 24, name: 'Branch' })).id
+    officeId = (await caller.hierarchy.createNode({ domain: 'org', typeKey: 'office', parentId: branchId, stateCode: 24, name: 'Ahmedabad Office' })).id
 
     managerId = (await caller.employees.create({
       name: 'Priya Manager', designation: 'Collector', email: 'p@x.com', phone: '1', orgNodeId: officeId, managerId: null,

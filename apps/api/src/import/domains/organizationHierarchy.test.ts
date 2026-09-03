@@ -45,6 +45,23 @@ describe('organizationHierarchy importer', () => {
     expect(preview[1].action).toBe('create')
   })
 
+  it('commits a nested department using its parent department\'s Code as Parent Code', async () => {
+    const rows = [
+      { nodeType: 'department', name: 'Electronics & IT', code: 'ELECIT', parentCode: null, stateCode: null, status: 'active' },
+      { nodeType: 'department', name: 'Industry Bodies', code: 'INDBOD', parentCode: 'ELECIT', stateCode: null, status: 'active' },
+    ]
+    const preview = await validateOrgHierarchyRows(pool, rows)
+    expect(preview[0].action).toBe('create')
+    expect(preview[1].action).toBe('create')
+    await commitOrgHierarchyRows(pool, rows, preview)
+    const result = await pool.query(
+      `SELECT child.code AS child_code, parent.code AS parent_code
+       FROM hierarchy_nodes child JOIN hierarchy_nodes parent ON parent.id = child.parent_id
+       WHERE child.domain='org' AND child.code='INDBOD'`,
+    )
+    expect(result.rows[0]).toMatchObject({ child_code: 'INDBOD', parent_code: 'ELECIT' })
+  })
+
   it('rejects a Node Type outside department/branch/division/office/unit', async () => {
     const rows = [{ nodeType: 'headquarters', name: 'HQ', code: 'HQ1', parentCode: null, stateCode: null, status: 'active' }]
     const preview = await validateOrgHierarchyRows(pool, rows)
