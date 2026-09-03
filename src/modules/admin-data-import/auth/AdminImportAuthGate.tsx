@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth'
 import { auth, googleProvider } from '@/lib/firebaseAuth'
 import { Button } from '@/components/ui/Button'
+import { useAdminImportDomains } from '../api'
 
 function useAdminImportUser() {
   const [user, setUser] = useState<User | null>(null)
@@ -10,8 +11,27 @@ function useAdminImportUser() {
   return { user, loading }
 }
 
+/** True only for a verified TRPCClientError carrying the server's FORBIDDEN
+ *  code (apps/api/src/auth/verifyAdminImportToken.ts) — a signed-in Google
+ *  account that isn't on ADMIN_IMPORT_ALLOWED_EMAILS. Deliberately narrow:
+ *  any other error (network hiccup, UNAUTHORIZED from an expired token)
+ *  falls through to the existing signed-in view instead of this screen, so
+ *  this never claims "not authorized" for a reason that isn't actually that. */
+function isForbiddenError(error: unknown): boolean {
+  return (error as { data?: { code?: string } } | null)?.data?.code === 'FORBIDDEN'
+}
+
 export function AdminImportAuthGate({ children }: { children: ReactNode }) {
   const { user, loading } = useAdminImportUser()
+  // The security boundary is the server (verifyAdminImportToken's allow-list
+  // check, enforced on every adminImport.* call regardless of this gate) —
+  // this probe only exists so a non-allow-listed signed-in account sees an
+  // explicit "not authorized" screen instead of whatever a specific page's
+  // own error handling (or lack of it) happens to show. listDomains is the
+  // cheapest existing adminImport.* call and shares its cache with
+  // AdminImportDashboard's own identical query, so this adds no extra
+  // request once past this gate.
+  const { isPending: authorizing, isError, error } = useAdminImportDomains({ enabled: !!user })
 
   if (loading) return null
 
@@ -24,6 +44,20 @@ export function AdminImportAuthGate({ children }: { children: ReactNode }) {
         <Button variant="primary" onClick={() => signInWithPopup(auth, googleProvider)}>
           Sign in with Google
         </Button>
+      </div>
+    )
+  }
+
+  if (authorizing) return null
+
+  if (isError && isForbiddenError(error)) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 bg-paper p-8 text-center">
+        <p className="max-w-sm text-sm text-muted">
+          Signed in as {user.email}, but this account isn't authorized for Admin Data Import.
+          Contact an administrator if you need access.
+        </p>
+        <Button variant="ghost" onClick={() => signOut(auth)}>Sign out</Button>
       </div>
     )
   }

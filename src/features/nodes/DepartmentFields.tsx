@@ -10,6 +10,7 @@ import { parseContactNumbers, serializeContactNumbers, type ContactNumberEntry }
 import { citiesForDistrict, stdCodeForCity } from '@/data/std-codes'
 import { liveSalesRoster, resolveSalesChain } from '@/data/sales-hierarchy'
 import { useChildren, useCurrentPostings, useNode, useSalesPersons, useStateNode, useStates } from '@/lib/api'
+import { CENTRAL_STATE_CODE } from '@/data/gov-hierarchy'
 import type { Employee } from '@/lib/types'
 import type { SalesTier } from '@/data/sales-team'
 
@@ -24,7 +25,7 @@ const DERIVED_SALES_ROLES: { tier: SalesTier; label: string }[] = [
  *  Everything is stored on the node's metadata so the HierNode shape is
  *  untouched. Works/opportunities are managed separately, from the
  *  department's details view — never inside this form. */
-export function DepartmentFields({ meta, setMeta, onShortNameChange, employees, onCreateHead }: {
+export function DepartmentFields({ meta, setMeta, onShortNameChange, employees, onCreateHead, jurisdictionStateCode }: {
   meta: Record<string, string>
   setMeta: (updater: (m: Record<string, string>) => Record<string, string>) => void
   /** Short name has its own setter (rather than going through `set` below) so
@@ -36,6 +37,13 @@ export function DepartmentFields({ meta, setMeta, onShortNameChange, employees, 
    *  yet. Undefined while the department itself hasn't been saved (no
    *  org node to attach a new employee to). */
   onCreateHead?: (name: string, designation: string) => Promise<string>
+  /** The department's own jurisdiction (NodeFormDialog's `stateCode`) — not
+   *  to be confused with this component's own `stateCode` local state below
+   *  (the contact number's state, an independent pick). A Central Ministries
+   *  department isn't seated in any one real state/district, so its contact
+   *  numbers skip that picker entirely rather than asking for a choice that
+   *  doesn't apply. */
+  jurisdictionStateCode: number
 }) {
   const set = (key: string, value: string) => setMeta((m) => ({ ...m, [key]: value }))
   const { data: salesPersons = [] } = useSalesPersons()
@@ -121,28 +129,30 @@ export function DepartmentFields({ meta, setMeta, onShortNameChange, employees, 
 
       <div className="rounded-card border border-line bg-panel/40 p-4">
         <p className="mb-3 text-[13px] font-semibold text-ink-800">Contact numbers</p>
-        <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="State">
-            <Select value={stateCode ?? ''} onChange={(e) => handleStateSelect(e.target.value)}>
-              <option value="">Select a state…</option>
-              {states.map((s) => (
-                <option key={s.code} value={s.code}>{s.name}</option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="District">
-            <Select
-              value={meta.contactDistrictNodeId ?? ''}
-              onChange={(e) => set('contactDistrictNodeId', e.target.value)}
-              disabled={!meta.contactStateNodeId}
-            >
-              <option value="">Select a district…</option>
-              {districts.map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </Select>
-          </Field>
-        </div>
+        {jurisdictionStateCode !== CENTRAL_STATE_CODE && (
+          <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="State">
+              <Select value={stateCode ?? ''} onChange={(e) => handleStateSelect(e.target.value)}>
+                <option value="">Select a state…</option>
+                {states.map((s) => (
+                  <option key={s.code} value={s.code}>{s.name}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="District">
+              <Select
+                value={meta.contactDistrictNodeId ?? ''}
+                onChange={(e) => set('contactDistrictNodeId', e.target.value)}
+                disabled={!meta.contactStateNodeId}
+              >
+                <option value="">Select a district…</option>
+                {districts.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+        )}
 
         <div className="space-y-3">
           {contactNumbers.map((c, i) => {

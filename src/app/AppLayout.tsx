@@ -168,7 +168,23 @@ export function AppLayout() {
     <SalesEditLockProvider>
       <ToastProvider>
         <Ctx.Provider value={{
-          openSearch: () => setSearchOpen(true), openImport: () => setImportOpen(true),
+          openSearch: () => setSearchOpen(true),
+          // Root-caused 2026-09-03: ImportDialog (below) is a separate, older,
+          // always-unauthenticated CSV importer (departments/people only) —
+          // TopBar/GlobalFab's "Import" button opened it directly, giving a
+          // signed-out user a second, un-gated door into data Admin Data
+          // Import was built specifically to put behind Google Sign-In +
+          // server-side allow-list. When that feature is enabled
+          // (VITE_ADMIN_IMPORT_ENABLED), this button now goes there instead —
+          // /admin/data-import is wrapped in AdminImportAuthGate, so a
+          // signed-out visitor lands on the sign-in screen, not an importer.
+          // Falls back to the old dialog only when the flag is off (e.g.
+          // goms-prod today), so that build's existing working import path
+          // is untouched.
+          openImport: () => {
+            if (import.meta.env.VITE_ADMIN_IMPORT_ENABLED === 'true') navigate('/admin/data-import')
+            else setImportOpen(true)
+          },
           openExport: () => setExportOpen(true), openSettings: () => setSettingsOpen(true), navExpanded,
         }}>
           <div className="flex h-screen overflow-hidden bg-paper">

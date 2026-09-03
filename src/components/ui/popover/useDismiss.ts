@@ -25,9 +25,17 @@ export function useDismiss({ open, onClose, anchorRef, panelRef }: UseDismissOpt
       // opened from within this panel) portals to `document.body` as a
       // sibling, not a DOM descendant of `panelRef` — so without this check,
       // clicking an option in it would read as "outside" and close this
-      // panel out from under it. `data-canvas-ui` already marks exactly this
-      // kind of floating popover chrome elsewhere in the app.
-      if (target.closest?.('[data-canvas-ui]')) return
+      // panel out from under it. `data-popover-panel` (PopoverPanel.tsx's own
+      // portaled wrapper) marks exactly this, and only this — root-caused
+      // 2026-09-03: this used to check the much broader `data-canvas-ui`,
+      // which Dialog.tsx's full-screen wrapper *also* carries (for an
+      // unrelated reason — HierarchyCanvas's own click-outside-deselects-node
+      // guard). Since that wrapper is an ancestor of literally everything
+      // while any dialog is open, every popover using this hook (Combobox,
+      // MultiSelectDropdown, Menu, ManagerPicker, EmployeePicker,
+      // DepartmentCombobox) could never be dismissed by an outside click
+      // inside a dialog — only Escape or re-toggling its own trigger worked.
+      if (target.closest?.('[data-popover-panel]')) return
       onCloseRef.current()
     }
     function onKeyDown(e: KeyboardEvent) {

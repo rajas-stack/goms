@@ -26,7 +26,7 @@ export function Landing() {
       <section className="flex flex-col justify-center gap-8 border-b border-line px-8 py-12 lg:min-h-0 lg:overflow-y-auto lg:border-b-0 lg:border-r lg:px-12">
         <div>
           <motion.h1
-            className="font-display text-[clamp(2.2rem,4vw,3.4rem)] font-bold leading-[1.02] text-ink-900"
+            className="font-display text-[clamp(2.2rem,4vw,3.4rem)] font-normal leading-[1.02] text-ink-900"
             initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
           >
             Every office,<br />mapped to its ground.

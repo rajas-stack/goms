@@ -42,6 +42,7 @@ export function PopoverPanel({
         <Portal>
           <div
             ref={panelRef}
+            data-popover-panel
             style={{ position: 'fixed', top: position.top, left: position.left, width: position.width, zIndex: 65 }}
           >
             {children({ style: { maxHeight: position.maxHeight }, maxHeight: position.maxHeight })}

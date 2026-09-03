@@ -68,7 +68,7 @@ export function Home() {
     <div className="flex h-full items-center justify-center overflow-y-auto scrollbar-thin px-8 py-12">
       <div className="w-full max-w-2xl">
         <motion.h1
-          className="font-display text-[clamp(2.6rem,5vw,4rem)] font-bold leading-[1.03] text-ink-900"
+          className="font-display text-[clamp(2.6rem,5vw,4rem)] font-normal leading-[1.03] text-ink-900"
           initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
         >
           Every office,<br />mapped to its ground.

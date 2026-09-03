@@ -59,7 +59,7 @@ function stubApiHooks() {
   vi.spyOn(api, 'useCurrentPostings').mockReturnValue({ data: {} } as unknown as ReturnType<typeof api.useCurrentPostings>)
 }
 
-function Harness({ initialMeta = {} }: { initialMeta?: Record<string, string> }) {
+function Harness({ initialMeta = {}, jurisdictionStateCode = 21 }: { initialMeta?: Record<string, string>; jurisdictionStateCode?: number }) {
   const [meta, setMeta] = useState<Record<string, string>>(initialMeta)
   return (
     <DepartmentFields
@@ -67,6 +67,7 @@ function Harness({ initialMeta = {} }: { initialMeta?: Record<string, string> })
       setMeta={setMeta}
       onShortNameChange={() => {}}
       employees={[]}
+      jurisdictionStateCode={jurisdictionStateCode}
     />
   )
 }
@@ -160,5 +161,19 @@ describe('DepartmentFields — Contact numbers (State/District/City picker + STD
     await user.clear(numberInput)
     await user.type(numberInput, '06742345678')
     expect(numberInput).toHaveValue('06742345678')
+  })
+
+  it('hides the State/District pickers for a Central Ministries department (jurisdictionStateCode 0) — 2026-09-03', () => {
+    stubApiHooks()
+    render(<Harness jurisdictionStateCode={0} />)
+    expect(screen.queryByLabelText('State')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('District')).not.toBeInTheDocument()
+  })
+
+  it('still shows the State/District pickers for a real state', () => {
+    stubApiHooks()
+    render(<Harness jurisdictionStateCode={21} />)
+    expect(screen.getByLabelText('State')).toBeInTheDocument()
+    expect(screen.getByLabelText('District')).toBeInTheDocument()
   })
 })

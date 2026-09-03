@@ -112,8 +112,12 @@ const qk = {
   domains: ['adminImport', 'domains'] as const,
 }
 
-export const useAdminImportDomains = () =>
-  useQuery({ queryKey: qk.domains, queryFn: () => adminImportApi.listDomains() as Promise<DomainListEntry[]> })
+export const useAdminImportDomains = (options?: { enabled?: boolean }) =>
+  useQuery({
+    queryKey: qk.domains,
+    queryFn: () => adminImportApi.listDomains() as Promise<DomainListEntry[]>,
+    enabled: options?.enabled,
+  })
 
 export function useValidateSession() {
   return useMutation({

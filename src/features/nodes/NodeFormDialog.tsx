@@ -136,7 +136,7 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
     : createDepartment
       ? 'New department'
       : `Add ${typeLabel.toLowerCase()}`
-  const description = mode === 'create' && parent ? `Under ${parent.name}` : createDepartment ? `Jurisdiction: state ${stateCode}` : undefined
+  const description = mode === 'create' && parent ? `Under ${parent.name}` : undefined
 
   return (
     <Dialog
@@ -182,6 +182,7 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
             onShortNameChange={handleShortNameChange}
             employees={employees}
             onCreateHead={handleCreateHead}
+            jurisdictionStateCode={stateCode}
           />
         )}
         {fields.map((f) => {
