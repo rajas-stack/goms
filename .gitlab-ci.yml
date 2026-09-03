@@ -131,7 +131,23 @@ deploy-dev:
     - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     - apt-get install -y nodejs
     - npm ci --cache .npm --prefer-offline
-    - VITE_API_BASE_URL=https://goms-dev.firebaseapp.com npm run build
+    # VITE_ADMIN_IMPORT_ENABLED + the four VITE_FIREBASE_* values enable the
+    # /admin/data-import route on this build only (goms-dev). None of the
+    # four Firebase values are secrets — they're the public web-app config
+    # for the dedicated goms-dev-auth Firebase project (Auth-only, isolated
+    # from goms-prod's own Firebase project; see
+    # docs/superpowers/plans/2026-09-01-goms-admin-import-firebase-auth-plan.md
+    # Task 4/6) — access is enforced server-side by ADMIN_IMPORT_ALLOWED_EMAILS
+    # (infra/dev/cloudrun.tf), not by keeping this config hidden. infra/prod
+    # and goms-prod's build are untouched by this line.
+    - >
+      VITE_API_BASE_URL=https://goms-dev.firebaseapp.com
+      VITE_ADMIN_IMPORT_ENABLED=true
+      VITE_FIREBASE_API_KEY=AIzaSyDWzg-GJZ0zgkCeb_dqBXfDWMxsWNB2QR4
+      VITE_FIREBASE_AUTH_DOMAIN=goms-dev-auth.firebaseapp.com
+      VITE_FIREBASE_PROJECT_ID=goms-dev-auth
+      VITE_FIREBASE_APP_ID=1:1099447555755:web:3cb52e88bad270d68409ee
+      npm run build
     # firebase-tools reads GOOGLE_APPLICATION_CREDENTIALS (exported above,
     # same WIF creds.json the gcloud steps use) for non-interactive auth —
     # no separate Firebase login/token needed.
