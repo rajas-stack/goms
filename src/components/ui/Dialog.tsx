@@ -11,19 +11,17 @@ interface Props {
   description?: string
   children: ReactNode
   footer?: ReactNode
-  size?: 'md' | 'lg' | 'xl' | 'full'
+  size?: 'md' | 'lg' | 'xl'
 }
 
 // `lg:`-prefixed so the max-width cap only ever applies at the desktop
 // centered-modal breakpoint — below `lg` the sheet is intentionally
 // full-bleed (see the mobile bottom-sheet variant below), not shrunk to one
-// of these widths. `full` is for data-table-heavy content (e.g. the Admin
-// Data Import wizard's preview grid) that's too wide for `xl`.
+// of these widths.
 const SIZE_CLASS: Record<NonNullable<Props['size']>, string> = {
   md: 'lg:max-w-md',
   lg: 'lg:max-w-2xl',
   xl: 'lg:max-w-4xl',
-  full: 'lg:max-w-6xl',
 }
 
 export function Dialog({ open, onClose, title, description, children, footer, size = 'md' }: Props) {

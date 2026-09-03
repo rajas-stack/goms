@@ -1,6 +1,6 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AdminImportBanner } from './AdminImportBanner'
-import { ImportNavLink } from './ImportNavLink'
 import { extractSheetsFromFile, buildSessionDomains, unresolvedRowsAreAllExcluded, type DetectedSheet } from './sessionUpload'
 import {
   useValidateSession, useCommitSession, flattenSessionPreview,
@@ -105,12 +105,12 @@ export function SessionImportWizard() {
       <AdminImportBanner />
       <div className="flex items-center justify-between gap-3">
         <h1 className="font-display text-lg font-bold text-ink-900">Import Session</h1>
-        <ImportNavLink
-          to="dashboard"
+        <Link
+          to="/admin/data-import"
           className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-muted transition-colors hover:bg-ink-900/[0.05] hover:text-ink"
         >
           <Icon name="ArrowLeft" size={14} /> Back to Data Import
-        </ImportNavLink>
+        </Link>
       </div>
 
       {!result && (

@@ -1,7 +1,7 @@
+import { Link } from 'react-router-dom'
 import { AdminImportBanner } from './AdminImportBanner'
 import { useAdminImportDomains, type DomainListEntry, type SpreadsheetDomainKey } from './api'
 import { downloadTemplate } from './templates'
-import { ImportNavLink } from './ImportNavLink'
 import { Icon } from '@/components/ui/Icon'
 
 function StatusPill({ status, labelByDomain }: { status: DomainListEntry['dependencyStatus']; labelByDomain: Map<string, string> }) {
@@ -23,9 +23,9 @@ function StatusPill({ status, labelByDomain }: { status: DomainListEntry['depend
 function ActionsCell({ domain }: { domain: DomainListEntry['domain'] }) {
   if (domain === 'geography') {
     return (
-      <ImportNavLink to="geography" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-indigo hover:underline">
+      <Link to="/admin/data-import/geography" className="inline-flex items-center gap-1.5 text-[13px] font-medium text-indigo hover:underline">
         <Icon name="MapPin" size={13} /> Load/Update Official Geography Dataset
-      </ImportNavLink>
+      </Link>
     )
   }
   return (
@@ -49,12 +49,12 @@ export function AdminImportDashboard() {
 
       <div className="flex items-center justify-between gap-3">
         <h1 className="font-display text-lg font-bold text-ink-900">Admin Data Import</h1>
-        <ImportNavLink
-          to="session"
+        <Link
+          to="/admin/data-import/session"
           className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-ink-900 px-3.5 text-[13px] font-medium text-paper shadow-sm transition-all duration-150 hover:bg-ink-800 active:scale-[0.98]"
         >
           <Icon name="Upload" size={14} /> Start Import Session
-        </ImportNavLink>
+        </Link>
       </div>
 
       {isLoading || !domains ? (

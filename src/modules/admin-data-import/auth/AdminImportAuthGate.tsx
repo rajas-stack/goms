@@ -26,7 +26,9 @@ function isForbiddenError(error: unknown): boolean {
  *  copy for a dead-end screen, not a security boundary. */
 const ADMIN_IMPORT_CONTACT_EMAIL = 'rajas@amnex.com'
 
-export function AdminImportAuthGate({ children }: { children: ReactNode }) {
+export type AdminImportAuthPhase = 'loading' | 'signedOut' | 'forbidden' | 'authorized'
+
+export function AdminImportAuthGate({ children, onPhaseChange }: { children: ReactNode; onPhaseChange?: (phase: AdminImportAuthPhase) => void }) {
   const { user, loading } = useAdminImportUser()
   // The security boundary is the server (verifyAdminImportToken's allow-list
   // check, enforced on every adminImport.* call regardless of this gate) —
@@ -37,6 +39,17 @@ export function AdminImportAuthGate({ children }: { children: ReactNode }) {
   // AdminImportDashboard's own identical query, so this adds no extra
   // request once past this gate.
   const { isPending: authorizing, isError, error } = useAdminImportDomains({ enabled: !!user })
+
+  // Optional — lets a caller (AdminImportModal) react to which screen this
+  // gate is showing without duplicating its auth/allow-list logic. Fired
+  // from an effect, never during render, since it's a side effect on a
+  // value owned by this component, not this component's own output.
+  const phase: AdminImportAuthPhase =
+    loading || (!!user && authorizing) ? 'loading'
+      : !user ? 'signedOut'
+      : isError && isForbiddenError(error) ? 'forbidden'
+      : 'authorized'
+  useEffect(() => { onPhaseChange?.(phase) }, [phase, onPhaseChange])
 
   if (loading) return null
 
