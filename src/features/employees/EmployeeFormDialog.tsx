@@ -432,7 +432,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
 
         {!reporteeMode && !form.vacant && (
           <Field label="Profile Picture" hint="Upload, or click here and press Ctrl+V to paste an image.">
-            <div className="flex items-center gap-3" tabIndex={0} onPaste={onPhotoPaste}>
+            <div className="flex items-center gap-3" tabIndex={0} onPaste={onPhotoPaste} data-testid="profile-photo-dropzone">
               {form.photoUrl ? (
                 <span className="relative">
                   <img src={form.photoUrl} alt="" className="h-14 w-14 rounded-xl object-cover" />

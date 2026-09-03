@@ -353,6 +353,7 @@ function PersonRow({ employee: e, selected, onSelect }: { employee: Employee; se
   return (
     <button
       onClick={onSelect}
+      data-testid={`person-row-${e.id}`}
       className={cn(
         'flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left transition-colors',
         selected ? 'bg-ink-900 text-paper' : 'hover:bg-ink-900/[0.05]',

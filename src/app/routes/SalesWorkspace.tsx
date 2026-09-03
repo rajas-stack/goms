@@ -409,6 +409,7 @@ export function OrgChartNode({ person, childrenOf, postings, depth, ws }: {
     <div style={{ marginLeft: depth > 0 ? 20 : 0 }}>
       <button
         onClick={() => ws.select('salesPerson', person.id)}
+        data-testid={`org-chart-node-${person.id}`}
         className={cn(
           'flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left',
           selected ? 'border-ink-900/20 bg-ink-900/[0.04]' : 'border-line bg-white hover:bg-panel',
@@ -468,7 +469,7 @@ function OrgChart() {
   }
 
   return (
-    <div className="flex h-full flex-col gap-1.5 overflow-y-auto p-3">
+    <div className="flex h-full flex-col gap-1.5 overflow-y-auto p-3" data-testid="org-chart">
       {roots.map((p) => (
         <OrgChartNode key={p.id} person={p} childrenOf={childrenOf} postings={postings} depth={0} ws={ws} />
       ))}

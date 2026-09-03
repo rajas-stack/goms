@@ -87,6 +87,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                 <div
                   role="button"
                   tabIndex={0}
+                  data-testid={`opportunity-row-${w.id}`}
                   onClick={() => setOpenId(expanded ? null : w.id)}
                   onKeyDown={(e) => { if (e.key === 'Enter') setOpenId(expanded ? null : w.id) }}
                   className="flex items-center gap-2 px-2.5 py-2 text-left"
