@@ -6,10 +6,9 @@ import { Landing } from './Landing'
 
 vi.mock('@/features/map/IndiaMap', () => ({ IndiaMap: () => <div data-testid="india-map" /> }))
 
-// Same regression as Home.test.tsx (the two routes share this exact
-// headline): the font-family was already the intended new face
-// (`font-display` → "Bricolage Grotesque") but a prior change dropped it to
-// regular weight. Locks in both: the face stays, the bold weight is back.
+// Same as Home.test.tsx (the two routes share this exact headline): renders
+// via `font-display`, which maps to IBM Plex Sans (tailwind.config.ts).
+// Locks in both: the class stays wired up, the bold weight is preserved.
 describe('Landing — headline typography', () => {
   it('uses the font-display face at bold weight', () => {
     vi.spyOn(api, 'useStates').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useStates>)

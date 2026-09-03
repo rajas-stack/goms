@@ -1,4 +1,4 @@
-import { createContext, Suspense, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { App as CapacitorApp } from '@capacitor/app'
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core'
@@ -20,6 +20,14 @@ import {
   clearWorkspaceSelection, closeFabOverlay, closeWorkspaceDialog, isFabOverlayOpen, isWorkspaceDialogOpen,
   isWorkspaceSelectionActive,
 } from '@/features/workspace/backButtonBridge'
+
+// Lazy, like router.tsx's admin-import routes — keeps AdminImportAuthGate's
+// firebase/auth import (and everything the modal's content pulls in) out of
+// the main chunk for every build, including goms-prod where the flag below
+// is off and this is never rendered at all.
+const AdminImportModal = lazy(() =>
+  import('@/modules/admin-data-import/AdminImportModal').then((m) => ({ default: m.AdminImportModal })),
+)
 
 interface ShellCtx {
   openSearch: () => void
@@ -175,16 +183,15 @@ export function AppLayout() {
           // signed-out user a second, un-gated door into data Admin Data
           // Import was built specifically to put behind Google Sign-In +
           // server-side allow-list. When that feature is enabled
-          // (VITE_ADMIN_IMPORT_ENABLED), this button now goes there instead —
-          // /admin/data-import is wrapped in AdminImportAuthGate, so a
-          // signed-out visitor lands on the sign-in screen, not an importer.
+          // (VITE_ADMIN_IMPORT_ENABLED), this button opens AdminImportModal
+          // instead (below) — same auth-gated content as the /admin/data-import
+          // route, just as a modal over the current page rather than a
+          // full-page navigation, restoring the pre-existing Import UX.
           // Falls back to the old dialog only when the flag is off (e.g.
           // goms-prod today), so that build's existing working import path
-          // is untouched.
-          openImport: () => {
-            if (import.meta.env.VITE_ADMIN_IMPORT_ENABLED === 'true') navigate('/admin/data-import')
-            else setImportOpen(true)
-          },
+          // is untouched. Neither branch calls `navigate()` — the current
+          // page/route is never replaced.
+          openImport: () => setImportOpen(true),
           openExport: () => setExportOpen(true), openSettings: () => setSettingsOpen(true), navExpanded,
         }}>
           <div className="flex h-screen overflow-hidden bg-paper">
@@ -201,7 +208,13 @@ export function AppLayout() {
             </div>
           </div>
           <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
-          <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />
+          {import.meta.env.VITE_ADMIN_IMPORT_ENABLED === 'true'
+            ? (
+              <Suspense fallback={null}>
+                <AdminImportModal open={importOpen} onClose={() => setImportOpen(false)} />
+              </Suspense>
+            )
+            : <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />}
           <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
           <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
           <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />

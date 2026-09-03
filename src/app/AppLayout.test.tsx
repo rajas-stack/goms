@@ -4,6 +4,14 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AppLayout } from './AppLayout'
 
+// AdminImportModal's own behavior (auth gate, wizard content) is covered by
+// AdminImportAuthGate.test.tsx and the individual admin-data-import
+// component tests — this file only exercises the AppLayout wiring: does the
+// Import button open it, and does it leave the current page mounted behind.
+vi.mock('@/modules/admin-data-import/AdminImportModal', () => ({
+  AdminImportModal: ({ open }: { open: boolean }) => (open ? <div>Admin Data Import modal</div> : null),
+}))
+
 /** Mirrors router.tsx's real nesting (AppLayout as the parent route element,
  *  with real children) just enough to exercise TopBar's "Import" button —
  *  full route lazy-loading isn't needed for this. Needs a real
@@ -19,7 +27,6 @@ function renderAppLayoutAt(initialPath: string) {
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/directory" element={<div>Directory page</div>} />
-            <Route path="/admin/data-import" element={<div>Admin Data Import route</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -27,7 +34,7 @@ function renderAppLayoutAt(initialPath: string) {
   )
 }
 
-describe("TopBar Import button routing", () => {
+describe('TopBar Import button', () => {
   beforeEach(() => {
     vi.resetModules()
   })
@@ -36,19 +43,20 @@ describe("TopBar Import button routing", () => {
     vi.unstubAllEnvs()
   })
 
-  it('navigates to the gated Admin Data Import route when the flag is on, instead of opening the old unauthenticated dialog', async () => {
-    // Root-caused 2026-09-03: this button used to open ImportDialog directly
-    // regardless of sign-in state, giving a signed-out visitor a second,
-    // un-gated door into data Admin Data Import was built to put behind
-    // Google Sign-In + the server-side allow-list. Navigating here instead
-    // means the click lands on a route wrapped in AdminImportAuthGate.
+  it('opens AdminImportModal as an overlay, without navigating away, when the flag is on', async () => {
+    // Root-caused 2026-09-03: this button briefly navigate()'d to
+    // /admin/data-import, replacing whatever page the user was on with a
+    // full page. Restored 2026-09-04 to the pre-existing modal/popup UX —
+    // AdminImportModal opens over the current page (AppLayout.tsx's
+    // openImport no longer calls navigate() at all), and the page behind it
+    // stays mounted.
     vi.stubEnv('VITE_ADMIN_IMPORT_ENABLED', 'true')
     renderAppLayoutAt('/directory')
 
     fireEvent.click(screen.getByRole('button', { name: 'Import records' }))
 
-    expect(await screen.findByText('Admin Data Import route')).toBeInTheDocument()
-    expect(screen.queryByText('Bring in a batch of org records or people from a CSV or Excel file.', { exact: false })).not.toBeInTheDocument()
+    expect(await screen.findByText('Admin Data Import modal')).toBeInTheDocument()
+    expect(screen.getByText('Directory page')).toBeInTheDocument()
   })
 
   it('still opens the old unauthenticated ImportDialog when the flag is off (unchanged goms-prod behavior)', () => {
@@ -58,5 +66,6 @@ describe("TopBar Import button routing", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Import records' }))
 
     expect(screen.getByText('Bring in a batch of org records or people from a CSV or Excel file.', { exact: false })).toBeInTheDocument()
+    expect(screen.getByText('Directory page')).toBeInTheDocument()
   })
 })

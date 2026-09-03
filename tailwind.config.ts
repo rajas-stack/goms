@@ -34,8 +34,12 @@ export default {
         amber: { DEFAULT: '#C77A2A', 600: '#A5641F', 100: '#F7E9D6' },
         muted: '#5C6B80',
       },
+      // `display` used to be a separate face ("Bricolage Grotesque") for
+      // headings; the whole site is IBM Plex Sans now, so it mirrors `sans`
+      // — kept as its own key (rather than removed) since ~20 components
+      // reference `font-display` for headings/weights, not just body text.
       fontFamily: {
-        display: ['"Bricolage Grotesque"', 'system-ui', 'sans-serif'],
+        display: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
         sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
         mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
       },

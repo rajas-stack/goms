@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { Home } from './Home'
 
-// The homepage headline's font-family was already the intended new face
-// (`font-display` → "Bricolage Grotesque", index.html/tailwind.config.ts —
-// untouched by this fix) but a prior change dropped it from bold to regular
-// weight. This locks in both: the new face stays, and the bold weight is
-// restored.
+// The homepage headline renders via the `font-display` class, which maps to
+// IBM Plex Sans (tailwind.config.ts) — the site-wide font-family. This locks
+// in both: the class stays wired up, and the bold weight is preserved.
 describe('Home — headline typography', () => {
   it('uses the font-display face at bold weight', () => {
     render(<Home />)
