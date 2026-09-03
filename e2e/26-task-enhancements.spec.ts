@@ -365,8 +365,16 @@ test.describe('Meetings — Edit Meeting', () => {
     await page.goto('/directory', { waitUntil: 'networkidle' });
     await page.getByRole('button', { name: /Priya Nair/ }).click();
 
+    // Root-caused 2026-09-03: clicking Priya Nair triggers an async timeline
+    // fetch, so a bare, non-retrying `.count()` immediately after can race it
+    // and see 0 before the entry renders — same race class already fixed for
+    // the District select above (`expect.poll`). Waiting for the Edit
+    // affordance itself to appear first proves the timeline has rendered,
+    // giving `entriesBefore` a stable value to snapshot.
+    const editButton = desktopPanel(page).getByLabel('Edit QA Kickoff Meeting');
+    await expect(editButton).toBeVisible();
     const entriesBefore = await desktopPanel(page).locator('text=QA Kickoff Meeting').count();
-    await desktopPanel(page).getByLabel('Edit QA Kickoff Meeting').click();
+    await editButton.click();
 
     const typeSelect = page.getByLabel('Meeting type');
     await expect(typeSelect).toBeDisabled();
