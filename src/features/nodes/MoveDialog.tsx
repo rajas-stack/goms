@@ -19,10 +19,19 @@ export function MoveDialog({ open, node, stateCode, onClose }: {
   const { move } = useNodeMutations()
   const { data: targets = [] } = useMoveTargets(node?.id ?? null)
   const [pick, setPick] = useState<string | null>(null)
+  // Picking a target and confirming the move are two separate steps —
+  // moving a node relocates its entire subtree, so a single click that also
+  // doubles as "select this row" made it too easy to move something by
+  // accident. `confirming` gates a second, explicit "are you sure" step
+  // (mirroring ConfirmDeleteDialog's pattern) between the picker and the
+  // actual mutation; "Move here" only opens that step, it never moves
+  // anything itself.
+  const [confirming, setConfirming] = useState(false)
 
-  useEffect(() => { if (open) setPick(null) }, [open])
+  useEffect(() => { if (open) { setPick(null); setConfirming(false) } }, [open])
 
   const canTopLevel = node?.typeKey === 'department'
+  const pickedLabel = pick === '__root__' ? 'Top level (department root)' : targets.find((t) => t.id === pick)?.name ?? ''
 
   async function submit() {
     if (!node) return
@@ -31,6 +40,30 @@ export function MoveDialog({ open, node, stateCode, onClose }: {
     await move.mutateAsync({ id: node.id, newParentId: target })
     toast(`Moved ${node.name}`)
     onClose()
+  }
+
+  if (confirming) {
+    return (
+      <Dialog
+        open={open}
+        onClose={onClose}
+        title={`Move ${node?.name ?? ''}?`}
+        description="Its entire subtree moves with it."
+        footer={
+          <>
+            <Button onClick={() => setConfirming(false)} disabled={move.isPending}>Back</Button>
+            <Button variant="primary" onClick={submit} disabled={move.isPending}>
+              {move.isPending ? 'Moving…' : 'Move here'}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted">
+          Move <span className="font-medium text-ink-900">{node?.name}</span> under{' '}
+          <span className="font-medium text-ink-900">{pickedLabel}</span>? Its entire subtree moves with it.
+        </p>
+      </Dialog>
+    )
   }
 
   return (
@@ -42,8 +75,8 @@ export function MoveDialog({ open, node, stateCode, onClose }: {
       footer={
         <>
           <Button onClick={onClose} disabled={move.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={pick === null || move.isPending}>
-            {move.isPending ? 'Moving…' : 'Move here'}
+          <Button variant="primary" onClick={() => setConfirming(true)} disabled={pick === null || move.isPending}>
+            Move here
           </Button>
         </>
       }

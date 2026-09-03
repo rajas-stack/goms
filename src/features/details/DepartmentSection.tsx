@@ -192,8 +192,20 @@ function SalesInfoGrid({ owner, opportunityCount, contactCount }: {
   const { data: postings = [] } = useSalesPostings(owner?.salesPersonId ?? null)
   const currentPosting = postings.find((p) => p.endDate === null)
 
+  // This grid lives inside the details panel, a resizable aside that's often
+  // narrower than the viewport (MIN_DETAILS_WIDTH..MAX_DETAILS_WIDTH in
+  // StateWorkspace.tsx, roughly 320-640px) — a *viewport*-relative `sm:`
+  // breakpoint stays at 4 columns any time the browser window itself is
+  // ≥640px (i.e. on any desktop), regardless of how narrow the panel
+  // actually is, cramming Owner/Designation/Status/Opportunities+Contacts
+  // into columns too tight to hold their labels and clipping them into each
+  // other. `repeat(auto-fit, minmax(...))` sizes columns off the grid's own
+  // rendered width instead of the viewport (no container-query plugin is
+  // installed in this Tailwind 3 setup, so `@container`/`@sm:` compile to
+  // nothing), so a field drops to the next row on its own once there's no
+  // longer room for it, and reflows back up as the panel widens again.
   return (
-    <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+    <dl className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-x-6 gap-y-3">
       <div>
         <dt className="text-[11px] uppercase tracking-wide text-muted">Owner</dt>
         <dd className="mt-0.5 text-sm text-ink-900">

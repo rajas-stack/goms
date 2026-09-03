@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MultiSelectDropdown, type MultiSelectGroup } from './MultiSelectDropdown'
 import { WORK_COMPONENT_GROUPS } from '@/features/nodes/department-meta'
@@ -158,6 +158,84 @@ describe('MultiSelectDropdown — searchable', () => {
     await user.type(screen.getByPlaceholderText('Find…'), 'bravo')
     await user.click(screen.getByRole('checkbox', { name: 'Bravo' }))
     expect(onChange).toHaveBeenCalledWith(['Bravo'])
+  })
+})
+
+// Root-caused 2026-09-03: reproduced live (Playwright, both a local dev
+// build and the real goms-dev production site) that opening/toggling the
+// trigger with 2+ chips selected can fire a second, independently-trusted
+// native 'click' — sharing the exact same `timeStamp` as the click that
+// opened the trigger — targeting a chip's "Remove" button, even though that
+// button's on-screen position never overlapped the actual click coordinates.
+// The fix records the trigger-click's native timeStamp and ignores a
+// remove-click carrying that same timeStamp. jsdom/userEvent can't reproduce
+// the browser-level duplicate dispatch itself, so this test drives the fix's
+// actual guard directly: two native 'click' events forced to share one
+// timeStamp (one on the trigger, one on a chip's × button) must not mutate
+// the selection, while a normal, separately-timestamped click on × still
+// removes that chip.
+function clickWithTimeStamp(el: Element, timeStamp: number) {
+  const event = new MouseEvent('click', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'timeStamp', { value: timeStamp })
+  act(() => { el.dispatchEvent(event) })
+}
+
+describe('MultiSelectDropdown — opening must never mutate the selection (regression)', () => {
+  it('a chip-removal click sharing the trigger-open click\'s exact timeStamp is ignored', () => {
+    const onChange = vi.fn()
+    render(
+      <MultiSelectDropdown
+        value={['Alpha', 'Bravo', 'Charlie']}
+        onChange={onChange}
+        groups={GROUPS}
+        storageKey="test-phantom-click"
+      />,
+    )
+    const trigger = screen.getByRole('button', { name: /alpha/i, expanded: false })
+    const removeAlpha = screen.getByRole('button', { name: /remove alpha/i })
+
+    clickWithTimeStamp(trigger, 1000)
+    clickWithTimeStamp(removeAlpha, 1000)
+
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /remove alpha/i })).toBeInTheDocument()
+  })
+
+  it('a genuinely separate click on × (different timeStamp) still removes the chip', () => {
+    const onChange = vi.fn()
+    render(
+      <MultiSelectDropdown
+        value={['Alpha', 'Bravo', 'Charlie']}
+        onChange={onChange}
+        groups={GROUPS}
+        storageKey="test-real-remove-click"
+      />,
+    )
+    const trigger = screen.getByRole('button', { name: /alpha/i, expanded: false })
+    const removeAlpha = screen.getByRole('button', { name: /remove alpha/i })
+
+    clickWithTimeStamp(trigger, 1000)
+    clickWithTimeStamp(removeAlpha, 2000)
+
+    expect(onChange).toHaveBeenCalledWith(['Bravo', 'Charlie'])
+  })
+
+  it('opening with multiple selections never calls onChange on its own', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(
+      <MultiSelectDropdown
+        value={['Alpha', 'Bravo', 'Charlie']}
+        onChange={onChange}
+        groups={GROUPS}
+        storageKey="test-open-no-mutate"
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: /alpha/i, expanded: false }))
+    expect(onChange).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /remove alpha/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /remove bravo/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /remove charlie/i })).toBeInTheDocument()
   })
 })
 

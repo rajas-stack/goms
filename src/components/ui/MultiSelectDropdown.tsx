@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react'
 import { motion } from 'framer-motion'
 import { Icon } from './Icon'
 import { Avatar, type AvatarPerson } from './Avatar'
@@ -63,6 +63,21 @@ export function MultiSelectDropdown({
   const [search, setSearch] = useState('')
   const rootRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  // Chromium (observed both via Playwright/CDP automation and, per report,
+  // real trackpad/mouse input) can dispatch a second, independently-trusted
+  // native 'click' — sharing the exact same `timeStamp` as the click that
+  // just toggled the trigger open — targeting a chip's nested "Remove"
+  // button, even though that button's on-screen bounds never overlapped the
+  // actual click coordinates. Root-caused 2026-09-03 by tracing every native
+  // pointerdown/mouseup/click event (isTrusted, target, timeStamp,
+  // composedPath) through a live reproduction: opening/toggling the trigger
+  // with 2+ chips selected reliably produced this phantom second click,
+  // removing whichever chip's button it hit — a stray click-to-open gesture
+  // silently mutating the selection it never visually touched. Recording the
+  // trigger-click's native timeStamp and rejecting a remove-click that shares
+  // it filters out exactly this duplicate-dispatch artifact without
+  // affecting any deliberate, separately-timestamped click on the button.
+  const lastTriggerClickTsRef = useRef<number | null>(null)
 
   // Closing the panel clears any in-progress filter so reopening starts
   // fresh — mirrors `openAddOption` resetting `draft` on each open.
@@ -103,7 +118,9 @@ export function MultiSelectDropdown({
   function toggle(opt: string) {
     onChange(value.includes(opt) ? value.filter((v) => v !== opt) : [...value, opt])
   }
-  function remove(opt: string) {
+  function remove(opt: string, e: MouseEvent<HTMLButtonElement>) {
+    e.stopPropagation()
+    if (e.timeStamp === lastTriggerClickTsRef.current) return
     onChange(value.filter((v) => v !== opt))
   }
 
@@ -138,7 +155,7 @@ export function MultiSelectDropdown({
         tabIndex={0}
         aria-haspopup="listbox"
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={(e) => { lastTriggerClickTsRef.current = e.timeStamp; setOpen((v) => !v) }}
         onKeyDown={onTriggerKeyDown}
         className="flex min-h-9 w-full flex-wrap items-center gap-1 rounded-lg border border-line bg-white px-2 py-1 pr-8 text-[13px] transition-colors focus-visible:focus-ring"
       >
@@ -152,7 +169,7 @@ export function MultiSelectDropdown({
               <button
                 type="button"
                 aria-label={`Remove ${v}`}
-                onClick={(e) => { e.stopPropagation(); remove(v) }}
+                onClick={(e) => remove(v, e)}
                 className="text-muted hover:text-ink-900"
               >
                 <Icon name="X" size={11} />
@@ -183,7 +200,6 @@ export function MultiSelectDropdown({
                 onKeyDown={(e) => roving.onKeyDown(e)}
                 placeholder={searchPlaceholder}
                 aria-label={searchPlaceholder}
-                autoFocus
                 className="mb-1 w-full rounded-lg border border-line bg-white px-2.5 py-1.5 text-[13px] outline-none focus-visible:focus-ring"
               />
             )}

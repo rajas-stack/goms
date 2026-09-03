@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEmployeesByState, useStateNode } from '@/lib/api'
+import { CENTRAL_STATE_CODE } from '@/data/gov-hierarchy'
 import { WorkspaceProvider, useWorkspace } from '@/features/workspace/context'
 import { HierarchyCanvas, type CanvasView } from '@/features/canvas/HierarchyCanvas'
 import { GeographyExplorer } from '@/features/geography/GeographyExplorer'
@@ -24,6 +25,16 @@ const MIN_DETAILS_WIDTH = 320
 const MAX_DETAILS_WIDTH = 640
 const DEFAULT_DETAILS_WIDTH = 400
 
+/** The workspace's top-level tab set — Organization/Geography/People for a
+ *  real state, Organization/People only for Central Ministries (it isn't a
+ *  jurisdiction with its own geography). Exported as a pure function so the
+ *  gating rule is unit-testable without rendering the full workspace tree. */
+export function workspaceTabs(isCentral: boolean): { value: View; label: string }[] {
+  return isCentral
+    ? [{ value: 'org', label: 'Organization' }, { value: 'people', label: 'People' }]
+    : [{ value: 'org', label: 'Organization' }, { value: 'geo', label: 'Geography' }, { value: 'people', label: 'People' }]
+}
+
 function readStoredDetailsWidth(): number {
   const raw = sessionStorage.getItem(DETAILS_WIDTH_KEY)
   const n = raw ? Number(raw) : NaN
@@ -33,8 +44,18 @@ function readStoredDetailsWidth(): number {
 export function StateWorkspace() {
   const { code } = useParams()
   const stateCode = Number(code)
+  const isCentral = stateCode === CENTRAL_STATE_CODE
   const { data: stateNode, isLoading } = useStateNode(stateCode)
-  const [view, setView] = useState<View>('org')
+  const [view, setViewRaw] = useState<View>('org')
+  // Central Ministries has no real geography of its own — it isn't a state
+  // jurisdiction — so the Geography tab is hidden for it entirely (UI/nav
+  // rule only; the underlying geo data is untouched). This setter is the one
+  // place `view` ever changes, so it's also the one place that has to guard
+  // against landing on 'geo' here: the tab itself is omitted below, but
+  // `view` is local component state, not URL-driven, so nothing else could
+  // set it to 'geo' for this state either — this is a defensive backstop,
+  // not a route/deep-link case that can currently happen.
+  const setView = useCallback((v: View) => setViewRaw(isCentral && v === 'geo' ? 'org' : v), [isCentral])
   // Canvas on desktop (≥ lg) preserves the existing web behavior; List on
   // mobile suits touch better. Tracks the live breakpoint until the user
   // explicitly picks a mode via the toggle, at which point their choice
@@ -118,13 +139,14 @@ export function StateWorkspace() {
           <WorkspaceHeader
             stateName={stateNode.name}
             stateCode={stateNode.code}
+            isCentral={isCentral}
             view={view}
             onView={setView}
             displayMode={displayMode}
             onDisplayMode={setDisplayModeOverride}
           />
           <div className="relative min-h-0 flex-1">
-            {view === 'geo' ? (
+            {view === 'geo' && !isCentral ? (
               <GeographyExplorer stateNodeId={stateNode.id} />
             ) : displayMode === 'list' ? (
               view === 'org' ? <OrganizationList stateCode={stateCode} /> : <PeopleList stateCode={stateCode} />
@@ -201,9 +223,13 @@ export function MobileDetailsSheet() {
   )
 }
 
-function WorkspaceHeader({ stateName, stateCode, view, onView, displayMode, onDisplayMode }: {
+function WorkspaceHeader({ stateName, stateCode, isCentral, view, onView, displayMode, onDisplayMode }: {
   stateName: string
   stateCode: string | null
+  /** Central Ministries isn't a real jurisdiction, so it has no geography of
+   *  its own — hides the Geography tab for it (UI/nav only; the underlying
+   *  geo data is untouched). */
+  isCentral: boolean
   view: View
   onView: (v: View) => void
   displayMode: DisplayMode
@@ -212,6 +238,7 @@ function WorkspaceHeader({ stateName, stateCode, view, onView, displayMode, onDi
   const navigate = useNavigate()
   const ws = useWorkspace()
   const showDisplayToggle = view === 'org' || view === 'people'
+  const tabs = workspaceTabs(isCentral)
 
   return (
     <div className="z-20 flex flex-wrap items-center gap-3 border-b border-line bg-white/80 px-4 py-3">
@@ -225,11 +252,7 @@ function WorkspaceHeader({ stateName, stateCode, view, onView, displayMode, onDi
         <CodeChip code={stateCode} className="mt-0.5" />
       </div>
 
-      <Tabs
-        value={view}
-        onChange={onView}
-        tabs={[{ value: 'org', label: 'Organization' }, { value: 'geo', label: 'Geography' }, { value: 'people', label: 'People' }]}
-      />
+      <Tabs value={view} onChange={onView} tabs={tabs} />
 
       {showDisplayToggle && <DisplayModeToggle value={displayMode} onChange={onDisplayMode} />}
 
