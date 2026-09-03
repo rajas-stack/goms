@@ -7,6 +7,9 @@ import {
   type ExcludedRow, type SessionCommitOutput, type SpreadsheetDomainKey,
 } from './api'
 import { TEMPLATE_COLUMNS } from './templates'
+import { Button } from '@/components/ui/Button'
+import { Select } from '@/components/ui/Field'
+import { Icon } from '@/components/ui/Icon'
 
 type SheetAssignment = { domain: SpreadsheetDomainKey; sheetTitle: string } | 'excluded'
 
@@ -24,12 +27,12 @@ function readAsArrayBuffer(file: File): Promise<ArrayBuffer> {
 }
 
 const ACTION_STYLES: Record<string, string> = {
-  create: 'bg-emerald-50 text-emerald-900',
-  update: 'bg-sky-50 text-sky-900',
-  unchanged: 'bg-slate-50 text-slate-600',
-  'needs-review': 'bg-amber-50 text-amber-900',
-  reject: 'bg-rose-50 text-rose-900',
-  excluded: 'bg-slate-100 text-slate-400 line-through',
+  create: 'bg-emerald-100 text-emerald-600',
+  update: 'bg-blue-100 text-blue-600',
+  unchanged: 'bg-panel text-muted',
+  'needs-review': 'bg-amber-100 text-amber-600',
+  reject: 'bg-crimson-100 text-crimson',
+  excluded: 'bg-panel text-muted/70 line-through',
 }
 
 export function SessionImportWizard() {
@@ -100,14 +103,30 @@ export function SessionImportWizard() {
   return (
     <div className="space-y-4 p-6">
       <AdminImportBanner />
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold">Import Session</h1>
-        <ImportNavLink to="dashboard" className="text-sky-700 underline">Back to Data Import</ImportNavLink>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-display text-lg font-bold text-ink-900">Import Session</h1>
+        <ImportNavLink
+          to="dashboard"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-muted transition-colors hover:bg-ink-900/[0.05] hover:text-ink"
+        >
+          <Icon name="ArrowLeft" size={14} /> Back to Data Import
+        </ImportNavLink>
       </div>
 
       {!result && (
         <div>
-          <label htmlFor="session-import-files" className="block text-sm font-medium">Upload files</label>
+          <label htmlFor="session-import-files" className="mb-1.5 block text-[13px] font-medium text-ink-800">Upload files</label>
+          <label
+            htmlFor="session-import-files"
+            className="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-dashed border-line bg-panel/60 px-4 py-3 text-left transition-colors hover:border-ink-600"
+          >
+            <Icon name="FileSpreadsheet" className="text-muted" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium text-ink-900">Choose files to upload</span>
+              <span className="block text-xs text-muted">Multiple files — sheets are auto-detected per domain.</span>
+            </span>
+            <span className="code-chip">.xlsx / .xls / .csv</span>
+          </label>
           <input
             id="session-import-files"
             aria-label="Upload files"
@@ -115,119 +134,58 @@ export function SessionImportWizard() {
             accept=".xlsx,.xls,.csv"
             multiple
             onChange={(e) => { if (e.target.files) void handleFiles(e.target.files) }}
+            className="hidden"
           />
         </div>
       )}
 
       {sheets.length > 0 && !preview && (
-        <table className="w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b"><th className="py-1">File</th><th className="py-1">Sheet</th><th className="py-1">Rows</th><th className="py-1">Assignment</th></tr>
-          </thead>
-          <tbody>
-            {sheets.map((sheet) => {
-              const assignment = assignments.get(sheet.id)
-              return (
-                <tr key={sheet.id} className="border-b">
-                  <td className="py-1">{sheet.fileName}</td>
-                  <td className="py-1">{sheet.sheetTitle}</td>
-                  <td className="py-1">{sheet.rows.length}</td>
-                  <td className="py-1">
-                    {sheet.detection.kind === 'matched' ? (
-                      <span>{sheet.detection.domain} — {sheet.detection.sheetTitle}</span>
-                    ) : (
-                      <select
-                        value={assignment && assignment !== 'excluded' ? `${assignment.domain}::${assignment.sheetTitle}` : assignment === 'excluded' ? 'excluded' : ''}
-                        onChange={(e) => {
-                          const value = e.target.value
-                          setAssignments((prev) => {
-                            const next = new Map(prev)
-                            if (value === 'excluded') next.set(sheet.id, 'excluded')
-                            else {
-                              const [domain, sheetTitle] = value.split('::')
-                              next.set(sheet.id, { domain: domain as SpreadsheetDomainKey, sheetTitle })
-                            }
-                            return next
-                          })
-                        }}
-                      >
-                        <option value="" disabled>Which type of data is this sheet?</option>
-                        {(sheet.detection.kind === 'ambiguous' ? sheet.detection.candidates : ALL_TEMPLATE_SHEETS).map((c) => (
-                          <option key={`${c.domain}::${c.sheetTitle}`} value={`${c.domain}::${c.sheetTitle}`}>{c.domain} — {c.sheetTitle}</option>
-                        ))}
-                        <option value="excluded">Skip this sheet</option>
-                      </select>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      )}
-
-      {sheets.length > 0 && !preview && (
-        <button
-          type="button"
-          disabled={!everySheetResolved || validation.isPending}
-          onClick={() => runValidate()}
-          className="rounded bg-sky-700 px-3 py-1 text-white disabled:bg-slate-300"
-        >
-          Validate Session
-        </button>
-      )}
-
-      {summary && !result && (
-        <>
-          <div className="flex gap-4 text-sm">
-            <span>{summary.toCreate} to create</span>
-            <span>{summary.toUpdate} to update</span>
-            <span>{summary.unchanged} unchanged</span>
-            <span>{summary.needsReview} needs review</span>
-            <span>{summary.rejected} rejected</span>
-          </div>
-
-          <table className="w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b">
-                <th className="py-1">Domain</th><th className="py-1">Sheet</th><th className="py-1">Row</th>
-                <th className="py-1">Key</th><th className="py-1">Action</th><th className="py-1">Details</th><th className="py-1">Exclude</th>
+        <div className="overflow-x-auto rounded-xl border border-line">
+          <table className="w-full text-left text-[13px]">
+            <thead className="border-b border-line bg-panel/60 text-muted">
+              <tr>
+                <th className="px-3 py-2 font-medium">File</th>
+                <th className="px-3 py-2 font-medium">Sheet</th>
+                <th className="px-3 py-2 font-medium">Rows</th>
+                <th className="px-3 py-2 font-medium">Assignment</th>
               </tr>
             </thead>
             <tbody>
-              {previewRows.map((row) => {
-                const key = rowKey(row)
-                const alreadyExcluded = excludedRows.some((r) => r.domain === row.domain && r.sheetKey === row.sheetKey && r.rowNumber === row.rowNumber)
+              {sheets.map((sheet) => {
+                const assignment = assignments.get(sheet.id)
                 return (
-                  <tr key={key} className={`border-b ${ACTION_STYLES[alreadyExcluded ? 'excluded' : row.action]}`}>
-                    <td className="py-1">{row.domain}</td>
-                    <td className="py-1">{row.sheet ?? ''}</td>
-                    <td className="py-1">{row.rowNumber}</td>
-                    <td className="py-1">{row.businessKey}</td>
-                    <td className="py-1">{alreadyExcluded ? 'excluded' : row.action}</td>
-                    <td className="py-1">
-                      {row.errors.length > 0 && <ul className="list-inside list-disc">{row.errors.map((e) => <li key={e}>{e}</li>)}</ul>}
-                      {row.candidates && row.candidates.length > 0 && (
-                        <p className="text-xs text-slate-500">
-                          Did you mean: {row.candidates.map((c) => `${c.key} (${Math.round(c.score * 100)}%)`).join(', ')}?
-                        </p>
-                      )}
-                      {row.diff?.map((d) => <div key={d.field}>{d.field}: {String(d.oldValue)} → {String(d.newValue)}</div>)}
-                    </td>
-                    <td className="py-1">
-                      {(row.action === 'needs-review' || row.action === 'reject') && !alreadyExcluded && (
-                        <div className="flex gap-1">
-                          <input
-                            aria-label={`Exclusion reason for row ${row.rowNumber}`}
-                            value={excludeDraft[key] ?? ''}
-                            onChange={(e) => setExcludeDraft((prev) => ({ ...prev, [key]: e.target.value }))}
-                            placeholder="Reason"
-                            className="border px-1 text-xs"
-                          />
-                          <button type="button" onClick={() => confirmExclude(row)} className="text-xs text-rose-700 underline">
-                            {row.candidates?.length ? 'None of these — exclude' : 'Exclude'}
-                          </button>
-                        </div>
+                  <tr key={sheet.id} className="border-b border-line last:border-0">
+                    <td className="px-3 py-2 text-ink-900">{sheet.fileName}</td>
+                    <td className="px-3 py-2 text-ink-900">{sheet.sheetTitle}</td>
+                    <td className="px-3 py-2 text-muted">{sheet.rows.length}</td>
+                    <td className="px-3 py-2">
+                      {sheet.detection.kind === 'matched' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[12px] font-medium text-emerald-600">
+                          <Icon name="Check" size={12} /> {sheet.detection.domain} — {sheet.detection.sheetTitle}
+                        </span>
+                      ) : (
+                        <Select
+                          value={assignment && assignment !== 'excluded' ? `${assignment.domain}::${assignment.sheetTitle}` : assignment === 'excluded' ? 'excluded' : ''}
+                          onChange={(e) => {
+                            const value = e.target.value
+                            setAssignments((prev) => {
+                              const next = new Map(prev)
+                              if (value === 'excluded') next.set(sheet.id, 'excluded')
+                              else {
+                                const [domain, sheetTitle] = value.split('::')
+                                next.set(sheet.id, { domain: domain as SpreadsheetDomainKey, sheetTitle })
+                              }
+                              return next
+                            })
+                          }}
+                          className="h-8 text-[12px]"
+                        >
+                          <option value="" disabled>Which type of data is this sheet?</option>
+                          {(sheet.detection.kind === 'ambiguous' ? sheet.detection.candidates : ALL_TEMPLATE_SHEETS).map((c) => (
+                            <option key={`${c.domain}::${c.sheetTitle}`} value={`${c.domain}::${c.sheetTitle}`}>{c.domain} — {c.sheetTitle}</option>
+                          ))}
+                          <option value="excluded">Skip this sheet</option>
+                        </Select>
                       )}
                     </td>
                   </tr>
@@ -235,32 +193,102 @@ export function SessionImportWizard() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
 
-          <button
-            type="button"
-            disabled={!committable}
-            onClick={() => setConfirming(true)}
-            className="rounded bg-sky-700 px-3 py-1 text-white disabled:bg-slate-300"
-          >
+      {sheets.length > 0 && !preview && (
+        <Button variant="primary" disabled={!everySheetResolved || validation.isPending} onClick={() => runValidate()}>
+          {validation.isPending ? 'Validating…' : 'Validate Session'}
+        </Button>
+      )}
+
+      {summary && !result && (
+        <>
+          <div className="flex flex-wrap gap-2 text-[12px]">
+            <span className="rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-600">{summary.toCreate} to create</span>
+            <span className="rounded-full bg-blue-100 px-2.5 py-1 font-medium text-blue-600">{summary.toUpdate} to update</span>
+            <span className="rounded-full bg-panel px-2.5 py-1 font-medium text-muted">{summary.unchanged} unchanged</span>
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-600">{summary.needsReview} needs review</span>
+            <span className="rounded-full bg-crimson-100 px-2.5 py-1 font-medium text-crimson">{summary.rejected} rejected</span>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-line">
+            <table className="w-full text-left text-[12px]">
+              <thead className="border-b border-line bg-panel/60 text-muted">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Domain</th><th className="px-3 py-2 font-medium">Sheet</th><th className="px-3 py-2 font-medium">Row</th>
+                  <th className="px-3 py-2 font-medium">Key</th><th className="px-3 py-2 font-medium">Action</th><th className="px-3 py-2 font-medium">Details</th><th className="px-3 py-2 font-medium">Exclude</th>
+                </tr>
+              </thead>
+              <tbody>
+                {previewRows.map((row) => {
+                  const key = rowKey(row)
+                  const alreadyExcluded = excludedRows.some((r) => r.domain === row.domain && r.sheetKey === row.sheetKey && r.rowNumber === row.rowNumber)
+                  return (
+                    <tr key={key} className="border-b border-line last:border-0">
+                      <td className="px-3 py-2 text-ink-900">{row.domain}</td>
+                      <td className="px-3 py-2 text-muted">{row.sheet ?? ''}</td>
+                      <td className="px-3 py-2 text-muted">{row.rowNumber}</td>
+                      <td className="px-3 py-2 text-ink-900">{row.businessKey}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${ACTION_STYLES[alreadyExcluded ? 'excluded' : row.action]}`}>
+                          {alreadyExcluded ? 'excluded' : row.action}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-muted">
+                        {row.errors.length > 0 && <ul className="list-inside list-disc">{row.errors.map((e) => <li key={e}>{e}</li>)}</ul>}
+                        {row.candidates && row.candidates.length > 0 && (
+                          <p className="text-[11px] text-muted">
+                            Did you mean: {row.candidates.map((c) => `${c.key} (${Math.round(c.score * 100)}%)`).join(', ')}?
+                          </p>
+                        )}
+                        {row.diff?.map((d) => <div key={d.field}>{d.field}: {String(d.oldValue)} → {String(d.newValue)}</div>)}
+                      </td>
+                      <td className="px-3 py-2">
+                        {(row.action === 'needs-review' || row.action === 'reject') && !alreadyExcluded && (
+                          <div className="flex gap-1.5">
+                            <input
+                              aria-label={`Exclusion reason for row ${row.rowNumber}`}
+                              value={excludeDraft[key] ?? ''}
+                              onChange={(e) => setExcludeDraft((prev) => ({ ...prev, [key]: e.target.value }))}
+                              placeholder="Reason"
+                              className="h-7 w-28 rounded-md border border-line bg-white px-2 text-[11px] text-ink placeholder:text-muted/70 transition-colors focus:border-ink-600 focus-visible:focus-ring"
+                            />
+                            <Button variant="danger" size="sm" className="h-7 px-2 text-[11px]" onClick={() => confirmExclude(row)}>
+                              {row.candidates?.length ? 'None of these — exclude' : 'Exclude'}
+                            </Button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <Button variant="primary" disabled={!committable} onClick={() => setConfirming(true)}>
             Commit Session
-          </button>
+          </Button>
         </>
       )}
 
       {confirming && summary && preview && !result && (
-        <div role="dialog" aria-label="Confirm commit" className="rounded border border-slate-400 p-4">
-          <p>This will create {summary.toCreate} and update {summary.toUpdate} records across {preview.domainOrder.length} domain(s). This cannot be undone from this screen.</p>
+        <div role="dialog" aria-label="Confirm commit" className="rounded-lg border border-line bg-panel/60 p-4 text-[13px]">
+          <p className="text-ink-900">
+            This will create {summary.toCreate} and update {summary.toUpdate} records across {preview.domainOrder.length} domain(s). This cannot be undone from this screen.
+          </p>
           {excludedRows.length > 0 && (
             <>
-              <p className="mt-2 font-semibold">{excludedRows.length} row(s) will be permanently excluded from this session:</p>
-              <ul className="list-inside list-disc text-sm">
+              <p className="mt-2 font-medium text-ink-900">{excludedRows.length} row(s) will be permanently excluded from this session:</p>
+              <ul className="list-inside list-disc text-[12px] text-muted">
                 {excludedRows.map((r) => <li key={`${r.domain}-${r.sheetKey}-${r.rowNumber}`}>{r.domain} row {r.rowNumber} ({r.businessKey}) — {r.reason}</li>)}
               </ul>
             </>
           )}
-          <div className="mt-3 flex gap-3">
-            <button
-              type="button"
+          <div className="mt-3 flex gap-2">
+            <Button
+              variant="primary"
               onClick={() =>
                 // SAME domainsPayload() (untrimmed) and the SAME
                 // preview.sessionCommitToken this validate call already
@@ -273,21 +301,27 @@ export function SessionImportWizard() {
                   { onSuccess: (r) => { setResult(r); setConfirming(false) } },
                 )
               }
-              className="rounded bg-sky-700 px-3 py-1 text-white"
             >
               Confirm Commit
-            </button>
-            <button type="button" onClick={() => setConfirming(false)} className="rounded border px-3 py-1">Cancel</button>
+            </Button>
+            <Button onClick={() => setConfirming(false)}>Cancel</Button>
           </div>
         </div>
       )}
 
-      {commit.isError && <p role="alert" className="text-rose-700">Nothing was written — the session was rolled back. {(commit.error as Error).message}</p>}
+      {commit.isError && (
+        <p role="alert" className="rounded-lg border border-crimson/30 bg-crimson-100 px-3.5 py-2.5 text-[13px] text-crimson">
+          Nothing was written — the session was rolled back. {(commit.error as Error).message}
+        </p>
+      )}
 
       {result && (
-        <div className="rounded border border-emerald-500 bg-emerald-50 p-4">
-          <h2 className="font-semibold">Session complete</h2>
-          <p>{result.summary.toCreate} created, {result.summary.toUpdate} updated, {result.summary.unchanged} unchanged, {excludedRows.length} explicitly excluded.</p>
+        <div className="flex items-start gap-2.5 rounded-lg border border-emerald/30 bg-emerald-100 px-4 py-3 text-[13px] text-emerald-600">
+          <Icon name="Check" size={16} className="mt-0.5 shrink-0" />
+          <div>
+            <h2 className="font-medium">Session complete</h2>
+            <p>{result.summary.toCreate} created, {result.summary.toUpdate} updated, {result.summary.unchanged} unchanged, {excludedRows.length} explicitly excluded.</p>
+          </div>
         </div>
       )}
     </div>

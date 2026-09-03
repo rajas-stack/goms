@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { AdminImportBanner } from './AdminImportBanner'
 import { ImportNavLink } from './ImportNavLink'
 import { useCommitGeographyLoad, usePreviewGeographyLoad, type ImportSummary } from './api'
+import { Button } from '@/components/ui/Button'
+import { Icon } from '@/components/ui/Icon'
 
 export function GeographyLoadPanel() {
   const [result, setResult] = useState<ImportSummary | null>(null)
@@ -14,33 +16,35 @@ export function GeographyLoadPanel() {
   return (
     <div className="space-y-4 p-6">
       <AdminImportBanner />
-      <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-semibold">Geography</h1>
-        <ImportNavLink to="dashboard" className="text-sky-700 underline">
-          Back to Data Import
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-display text-lg font-bold text-ink-900">Geography</h1>
+        <ImportNavLink
+          to="dashboard"
+          className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium text-muted transition-colors hover:bg-ink-900/[0.05] hover:text-ink"
+        >
+          <Icon name="ArrowLeft" size={14} /> Back to Data Import
         </ImportNavLink>
       </div>
 
-      <p className="text-sm text-slate-600">
+      <p className="text-[13px] text-muted">
         Geography has no template and no upload — the official LGD dataset ships with the API. This compares that dataset
         against the current geography tree and shows what would change. Safe to run repeatedly.
       </p>
 
-      <button
-        type="button"
+      <Button
+        variant="primary"
         onClick={() => {
           setResult(null)
           preview.mutate()
         }}
         disabled={preview.isPending}
-        className="rounded bg-sky-700 px-3 py-1 text-white disabled:bg-slate-300"
       >
-        Load/Update Official Geography Dataset
-      </button>
+        <Icon name="MapPin" size={14} /> Load/Update Official Geography Dataset
+      </Button>
 
-      {preview.isPending && <p>Comparing against the current geography tree…</p>}
+      {preview.isPending && <p className="text-[13px] text-muted">Comparing against the current geography tree…</p>}
       {preview.isError && (
-        <p role="alert" className="text-rose-700">
+        <p role="alert" className="rounded-lg border border-crimson/30 bg-crimson-100 px-3.5 py-2.5 text-[13px] text-crimson">
           Could not read the bundled dataset: {(preview.error as Error).message}
         </p>
       )}
@@ -50,48 +54,50 @@ export function GeographyLoadPanel() {
           {/* Counts only, no per-row grid: 7,000+ rows is not a reviewable
               spreadsheet, so the reconciliation check below is what stands in
               for row-by-row review. */}
-          <div className="flex gap-4 text-sm">
-            <span>{data.summary.toCreate} to create</span>
-            <span>{data.summary.toUpdate} to update</span>
-            <span>{data.summary.unchanged} unchanged</span>
+          <div className="flex flex-wrap gap-2 text-[12px]">
+            <span className="rounded-full bg-emerald-100 px-2.5 py-1 font-medium text-emerald-600">{data.summary.toCreate} to create</span>
+            <span className="rounded-full bg-blue-100 px-2.5 py-1 font-medium text-blue-600">{data.summary.toUpdate} to update</span>
+            <span className="rounded-full bg-panel px-2.5 py-1 font-medium text-muted">{data.summary.unchanged} unchanged</span>
           </div>
 
           {reconciliation!.matches ? (
-            <p className="text-emerald-700">
-              Reconciliation OK — all {reconciliation!.sourceRowCount} source rows accounted for.
+            <p className="flex items-center gap-1.5 text-[13px] text-emerald-600">
+              <Icon name="Check" size={14} /> Reconciliation OK — all {reconciliation!.sourceRowCount} source rows accounted for.
             </p>
           ) : (
-            <p role="alert" className="text-rose-700">
+            <p role="alert" className="rounded-lg border border-crimson/30 bg-crimson-100 px-3.5 py-2.5 text-[13px] text-crimson">
               Reconciliation mismatch — {reconciliation!.sourceRowCount} source rows but only{' '}
               {reconciliation!.classifiedRowCount} were classified. Commit is blocked.
             </p>
           )}
 
-          <button
-            type="button"
+          <Button
+            variant="primary"
             disabled={!reconciliation!.matches || commit.isPending}
             onClick={() =>
               commit.mutate({ commitToken: data.commitToken }, { onSuccess: (r) => setResult(r.summary) })
             }
-            className="rounded bg-sky-700 px-3 py-1 text-white disabled:bg-slate-300"
           >
             Confirm Commit
-          </button>
+          </Button>
         </>
       )}
 
       {commit.isError && (
-        <p role="alert" className="text-rose-700">
+        <p role="alert" className="rounded-lg border border-crimson/30 bg-crimson-100 px-3.5 py-2.5 text-[13px] text-crimson">
           Nothing was written — the load was rolled back. {(commit.error as Error).message}
         </p>
       )}
 
       {result && (
-        <div className="rounded border border-emerald-500 bg-emerald-50 p-4">
-          <h2 className="font-semibold">Geography load complete</h2>
-          <p>
-            {result.toCreate} created, {result.toUpdate} updated, {result.unchanged} unchanged.
-          </p>
+        <div className="flex items-start gap-2.5 rounded-lg border border-emerald/30 bg-emerald-100 px-4 py-3 text-[13px] text-emerald-600">
+          <Icon name="Check" size={16} className="mt-0.5 shrink-0" />
+          <div>
+            <h2 className="font-medium">Geography load complete</h2>
+            <p>
+              {result.toCreate} created, {result.toUpdate} updated, {result.unchanged} unchanged.
+            </p>
+          </div>
         </div>
       )}
     </div>
