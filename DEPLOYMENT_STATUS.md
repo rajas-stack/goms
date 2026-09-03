@@ -172,3 +172,114 @@ resolved: yes, enable it for `goms-dev` only.
   (no password provider is actually enabled at the project level) but
   should be deleted via the Firebase console — left to the user, per their
   own instruction.
+
+---
+
+## 2026-09-03 update #2: root-caused all 4 remaining E2E failures
+
+Investigated each of the 4 failures from the previous update individually,
+per explicit instruction, against the live site. None were relabeled to make
+the suite look better than it is.
+
+1. **Phase 5.1–5.2, District select** — **test bug** (race condition), not
+   app/data/env. The District `<select>` flips `disabled=false` the instant
+   `contactStateNodeId` is set, but its `<option>` list comes from a
+   separate `hierarchy.listChildren` query that hasn't necessarily resolved
+   in that same render. The test read `.count()` synchronously (no retry)
+   right after `toBeEnabled()`, so it sometimes counted before the fetch
+   landed. Confirmed via direct API calls that Odisha's real goms-dev data
+   is complete (30 real districts) — this was never a seed-data gap. Fixed
+   by polling (`expect.poll(...).toBeGreaterThan(1)`) instead of asserting a
+   single snapshot. Verified stable across repeated reruns.
+
+2. **Phase 3.2, Company field** — **test bug** (assertion too broad), not
+   an app bug. `docs/superpowers/plans/2026-09-01-goms-15-item-enhancement-
+   plan.md` line 312 explicitly documents that the Company→Department rename
+   applies only to the Add/Edit form; `EmployeeDetails.tsx:343`'s read-only
+   view is deliberately left showing a "Company" `DetailRow` for a record
+   with `emp.company` populated (which Priya Nair's real goms-dev record
+   has). The test's `page.locator('text=Company')` was unscoped to the
+   whole page, so it matched that legitimate read-only label (doubled by
+   the desktop+mobile dual render) sitting behind the open dialog. Fixed by
+   scoping both assertions to `page.getByRole('dialog')`. Verified stable.
+
+3. **Phase 8.4, Edit Meeting** — **missing GCP seed data**, caused by a real
+   bug in `scripts/seed-import.ts`: the script builds `seed.timeline` from
+   `buildSeed()` and even `TRUNCATE`s `timeline_events` in its `--reset`
+   path, but never actually had an insert step for it. Confirmed directly:
+   `employees.timeline.listAll` on the live goms-dev API returns only the
+   2 "E2E Sales Meeting" records this test suite itself created — no
+   "QA Kickoff Meeting" exists, though `src/data/seed.ts:210-214` defines it
+   (a `source: 'manual'` event on Priya Nair, attendee `"Mr. Rohit Tiku"`).
+   Since the Edit button only renders for `source === 'manual'` events
+   (`EmployeeDetails.tsx:601`), a record that was never inserted has no
+   button to click — hence the 30s timeout, not a disabled/hidden button.
+   **Fixed the script** (`scripts/seed-import.ts`): added the missing
+   `timeline_events` insert step and its orphan-integrity check. **Not yet
+   backfilled onto goms-dev** — every other table was seeded via the
+   already-non-empty `assertEmptyOrReset()` guard, so re-running the full
+   script now needs either a destructive `--reset` (truncates and
+   re-inserts *everything* with fresh UUIDs, including the 2 real
+   "E2E Sales Meeting" rows and anything else added since) or a separate,
+   narrower backfill that only inserts `seed.timeline` against
+   already-existing employee ids. Left for an explicit decision rather than
+   done unilaterally — same reasoning as the auth housekeeping item above.
+
+4. **Phase 9.2–9.4, meeting-attendee avatar** — **same root cause as #3**,
+   not a separate bug. "Mr. Rohit Tiku" only exists as an attendee on the
+   same never-inserted "QA Kickoff Meeting" record. Verified the avatar
+   *rendering* code itself is correct and unconditional
+   (`EmployeeDetails.tsx:645-661` renders an `Avatar` with initials for any
+   attendee, matched or not) — once the data exists, this test needs no
+   separate fix.
+
+**Also found and fixed in the same pass**: rerunning the full suite after
+the above surfaced one more, unrelated flake — Phase 8.1–8.2 ("Timeline
+event with Agenda/Outcome/Next Steps") started failing with a strict-mode
+violation (3 matches for `getByText('E2E Sales Meeting')`) purely because
+repeated reruns during this investigation accumulated more of that test's
+own no-cleanup fixture data against live goms-dev. Same pre-existing pattern
+this file already handles for the Opportunity test one describe-block up;
+applied the identical `.first()` fix. One additional single-test failure
+("Phase 3.2: Company field...") appeared once and did not reproduce on two
+immediate reruns — treated as a transient environment blip (goms-api's
+Cloud Run service runs `min_instance_count = 0`, `infra/dev/cloudrun.tf`),
+not a code issue; my Company-field fix's own line wasn't even touched by
+that failure's stack trace.
+
+**Files changed:** `e2e/26-task-enhancements.spec.ts` (fixes #1, #2, and the
+Agenda/Outcome/Next Steps flake), `scripts/seed-import.ts` (fix #3/#4's root
+cause — code only, not run against goms-dev).
+
+**Final full-suite result** (3 consecutive runs, stable): **21 passed, 2
+failed** — both failures are #3 and #4 above, both pending the same
+data-backfill decision, not app bugs.
+
+**Unexplained failures: none.** All 4 original failures were root-caused;
+the one new flake encountered mid-investigation was also root-caused and
+fixed.
+
+**Production-readiness read**: the *application code* exercised by this
+suite has no known defects — every remaining failure is a live-data gap
+with a real, understood cause and a ready code fix. `goms-dev` is not yet a
+clean baseline to promote from, though: (a) the two Firebase test users
+above should be deleted, (b) the interactive Google Sign-In popup the user
+reported as closing instantly needs its own investigation before Admin Data
+Import's authenticated path can be called verified (see below), and (c) the
+timeline-events seed gap should be backfilled or explicitly accepted as a
+known dev-only gap before treating goms-dev's data as prod-representative.
+None of these are goms-prod blockers by themselves (goms-prod is untouched
+throughout), but none of them were verified clean either — I'd call this
+"code-ready, environment-not-yet-signed-off" rather than "ready to
+promote."
+
+**Not investigated this pass**: the reported Google Sign-In popup closing
+in a millisecond. Likely cause (not yet confirmed): `goms-dev.firebaseapp.com`
+is the Hosting origin the popup runs from, but Firebase Auth's popup flow
+checks the *Auth* project's (`goms-dev-auth`) own Authorized domains list —
+if that list only has `goms-dev-auth`'s own default domains and not
+`goms-dev.firebaseapp.com`, `signInWithPopup` would reject the origin and
+the popup would self-close immediately, matching the symptom. Confirming
+and fixing this means changing `goms-dev-auth`'s live Auth configuration,
+which — consistent with this session's cleanup decision above — needs the
+user's go-ahead rather than being done unilaterally.

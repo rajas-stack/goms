@@ -253,6 +253,30 @@ async function main() {
     )
   })
 
+  // 8. timeline_events -- entityId resolves against employees, inserted above.
+  // Root-caused 2026-09-03: this step never existed, despite `seed.timeline`
+  // being built and destructured right alongside every other table above,
+  // and despite the --reset TRUNCATE list (assertEmptyOrReset) already
+  // including timeline_events as if this table were seeded too. The gap was
+  // invisible locally because the in-memory/IndexedDB repository (src/data/
+  // seed.ts's actual consumer in that mode) reads `seed.timeline` directly,
+  // with no import step to forget — only this Postgres path needed it and
+  // silently didn't get it. Net effect on any already-seeded environment
+  // (e.g. goms-dev): every employee's manual/system timeline history
+  // (meetings, "Contact created" events, etc.) from the fixture data is
+  // simply absent until this script is re-run there.
+  counts.timeline_events = await insertBatch('timeline events', seed.timeline, async (client, t) => {
+    await client.query(
+      `INSERT INTO timeline_events (id, employee_id, type, title, custom_label, date, time, note, source, attendees, attended, agenda, outcome, next_steps)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+      [
+        fresh(t.id), resolve(t.employeeId), t.type, t.title, t.customLabel ?? null, t.date, t.time ?? null,
+        t.note ?? '', t.source, t.attendees ? JSON.stringify(t.attendees) : null, t.attended ?? null,
+        t.agenda ?? null, t.outcome ?? null, t.nextSteps ?? null,
+      ],
+    )
+  })
+
   await reconcile({
     hierarchy_nodes: seed.nodes.length,
     employees: seed.employees.length,
@@ -261,6 +285,7 @@ async function main() {
     commercial_masters: masterTotal,
     commercial_skus: seed.commercialCalculator.commercialSkus.length,
     ownership_assignments: ownershipAssignments.length,
+    timeline_events: seed.timeline.length,
   }, counts)
 }
 
@@ -286,6 +311,7 @@ async function reconcile(expected: Record<string, number>, actualInserted: Recor
     ['commercial_masters.parent_id orphans', `SELECT id FROM commercial_masters WHERE parent_id IS NOT NULL AND parent_id NOT IN (SELECT id FROM commercial_masters)`],
     ['commercial_skus.feature_id/edition_id orphans', `SELECT id FROM commercial_skus WHERE feature_id NOT IN (SELECT id FROM commercial_masters) OR edition_id NOT IN (SELECT id FROM commercial_masters)`],
     ['ownership_assignments.sales_person_id orphans', `SELECT id FROM ownership_assignments WHERE sales_person_id NOT IN (SELECT id FROM sales_persons)`],
+    ['timeline_events.employee_id orphans', `SELECT id FROM timeline_events WHERE employee_id NOT IN (SELECT id FROM employees)`],
   ]
   for (const [label, sql] of integrityChecks) {
     const r = await pool.query(sql)
