@@ -28,7 +28,7 @@ const ADMIN_IMPORT_CONTACT_EMAIL = 'rajas@amnex.com'
 
 export type AdminImportAuthPhase = 'loading' | 'signedOut' | 'forbidden' | 'authorized'
 
-export function AdminImportAuthGate({ children, onPhaseChange }: { children: ReactNode; onPhaseChange?: (phase: AdminImportAuthPhase) => void }) {
+export function AdminImportAuthGate({ children, onPhaseChange }: { children: ReactNode; onPhaseChange?: (phase: AdminImportAuthPhase, user: User | null) => void }) {
   const { user, loading } = useAdminImportUser()
   // The security boundary is the server (verifyAdminImportToken's allow-list
   // check, enforced on every adminImport.* call regardless of this gate) —
@@ -49,7 +49,7 @@ export function AdminImportAuthGate({ children, onPhaseChange }: { children: Rea
       : !user ? 'signedOut'
       : isError && isForbiddenError(error) ? 'forbidden'
       : 'authorized'
-  useEffect(() => { onPhaseChange?.(phase) }, [phase, onPhaseChange])
+  useEffect(() => { onPhaseChange?.(phase, user) }, [phase, user, onPhaseChange])
 
   if (loading) return null
 

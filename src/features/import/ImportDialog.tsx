@@ -127,7 +127,18 @@ async function downloadSampleCsv(mode: Mode, childLabel: string) {
   await downloadCsv(`import-sample-${mode}.csv`, toCsv(rows))
 }
 
-export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+interface Props {
+  open: boolean
+  onClose: () => void
+  /** Set only when opened from AdminImportModal (post sign-in) — shows a
+   *  "Signed in as X / Sign out" strip so that gate's own chrome isn't lost
+   *  once this swaps in for it. Omitted for the standalone/unauthenticated
+   *  usage (goms-prod today), which never had a signed-in concept at all. */
+  signedInAs?: string
+  onSignOut?: () => void
+}
+
+export function ImportDialog({ open, onClose, signedInAs, onSignOut }: Props) {
   const toast = useToast()
   const { importChildren } = useNodeMutations()
   const { importEmployees } = useEmployeeMutations()
@@ -221,6 +232,12 @@ export function ImportDialog({ open, onClose }: { open: boolean; onClose: () => 
       }
     >
       <div className="space-y-4">
+        {signedInAs && (
+          <div className="-mx-6 -mt-5 flex items-center justify-end gap-3 border-b border-line bg-panel/40 px-6 py-2 text-xs text-muted">
+            <span>Signed in as {signedInAs}</span>
+            {onSignOut && <Button variant="ghost" size="sm" onClick={onSignOut}>Sign out</Button>}
+          </div>
+        )}
         {draft.restored && <DraftNotice onDiscard={draft.discard} />}
 
         <Tabs

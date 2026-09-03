@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { adminImportApi } from './api'
@@ -64,9 +64,38 @@ describe('AdminImportModal', () => {
     expect(await screen.findByRole('heading', { name: 'Import records' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Departments' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'People' })).toBeInTheDocument()
-    // The gate's own chrome (sign-out bar, "Admin Data Import" title) is
-    // gone — ImportDialog owns the dialog end to end once swapped in.
+    // The gate's own "Admin Data Import" title is gone — ImportDialog owns
+    // the dialog end to end once swapped in — but its "Signed in as X /
+    // Sign out" strip is preserved via ImportDialog's signedInAs/onSignOut
+    // props, so that affordance isn't lost in the swap.
     expect(screen.queryByRole('heading', { name: 'Admin Data Import' })).not.toBeInTheDocument()
+    expect(screen.getByText('Signed in as admin@amnex.com')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
+  })
+
+  it('signing out from inside ImportDialog signs out and closes the modal', async () => {
+    onAuthStateChanged.mockImplementation((_auth, cb) => { cb({ email: 'admin@amnex.com' }); return () => {} })
+    vi.spyOn(adminImportApi, 'listDomains').mockResolvedValue([])
+    const onClose = vi.fn()
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <AdminImportModal open onClose={onClose} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    )
+
+    // Waits for ImportDialog's OWN title first — AdminImportAuthGate briefly
+    // renders its own "Sign out" button too (its authorized branch, for the
+    // one commit before AdminImportModal swaps to <ImportDialog>), so a bare
+    // findByRole('button', { name: 'Sign out' }) can race and grab a node
+    // that's already unmounted by the time this fires the click.
+    await screen.findByRole('heading', { name: 'Import records' })
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+
+    expect(signOut).toHaveBeenCalledTimes(1)
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('renders no dialog while closed', () => {
