@@ -1,26 +1,13 @@
 import { initTRPC, TRPCError } from '@trpc/server'
 import { verifyAdminImportToken } from './auth/verifyAdminImportToken.js'
+import { verifyFirebaseToken, isAllowListed, isAmnexAccount, type AuthenticatedUser } from './auth/identity.js'
 
-/** authHeader is the raw incoming `Authorization` header, forwarded as-is by
- *  app.ts's createContext. Every router except adminImport ignores it —
- *  DRIFT-001's broader "everything is publicProcedure" posture is deliberately
- *  unchanged (see the admin-import auth plan's Global Constraints). */
 export interface Context {
   authHeader?: string
+  user?: AuthenticatedUser
 }
 
 export const t = initTRPC.context<Context>().create({
-  // Every deliberate TRPCError a router throws (BAD_REQUEST/NOT_FOUND/
-  // CONFLICT with a purpose-written message, e.g. "Code already used by
-  // another row") passes through unchanged. INTERNAL_SERVER_ERROR only ever
-  // reaches here via tRPC's own auto-wrapping of an uncaught throw — in this
-  // codebase that's always a raw `pg` driver error escaping one of the
-  // routers' `catch (e) { await client.query('ROLLBACK'); throw e }` blocks
-  // (no router deliberately throws INTERNAL_SERVER_ERROR itself, confirmed
-  // by grep). That raw message is the database driver's own text and can
-  // name internal hosts, constraints, or column names, so it must not reach
-  // the client — the real error is still logged server-side via the fastify
-  // plugin's onError hook (apps/api/src/app.ts) before being sanitized here.
   errorFormatter({ shape, error }) {
     if (error.code === 'INTERNAL_SERVER_ERROR') {
       return { ...shape, message: 'Internal server error' }
@@ -31,18 +18,66 @@ export const t = initTRPC.context<Context>().create({
 export const router = t.router
 export const publicProcedure = t.procedure
 
-/** Every adminImport procedure chains through this. Two independent gates,
- *  both required: the ADMIN_IMPORT_ENABLED environment flag (unchanged from
- *  the original feature-flag-only version of this gate — goms-prod's
- *  Terraform never sets this var), and now a verified, allow-listed
- *  Firebase identity (2026-09-01, closing Gate 1 of the 2026-08-27
- *  enablement plan for this feature specifically — see
- *  docs/superpowers/analysis/2026-08-31-goms-prod-admin-import-deployment-
- *  safety-report.md §7 for the design this implements). Every procedure
- *  stays in the static AppRouter type regardless of either check's outcome
- *  — only the runtime call fails when a check doesn't pass. */
+/** Incident kill switch (decision doc §5) — checked unconditionally, ahead
+ *  of every other gate, regardless of whether AUTH_ENFORCEMENT_ENABLED
+ *  itself is on. A plain env var, so it toggles via Cloud Run config +
+ *  redeploy, no image rebuild. */
+function assertNotReadOnly() {
+  if (process.env.EMERGENCY_READ_ONLY === 'true') {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'GOMS is temporarily in read-only mode. Writes are disabled.' })
+  }
+}
+
+function authEnforced(): boolean {
+  return process.env.AUTH_ENFORCEMENT_ENABLED === 'true'
+}
+
+/** Ordinary authenticated-user boundary (decision doc §1/§2): every mutation
+ *  across every business router chains through this; reads stay on
+ *  publicProcedure, unchanged. Off (the default), this behaves exactly like
+ *  publicProcedure always has — deploying this code with the flag off is a
+ *  deliberate no-op release. On, every call must present a verified,
+ *  @amnex.com Google identity. */
+export const protectedProcedure = publicProcedure
+  .use(({ next }) => {
+    assertNotReadOnly()
+    return next()
+  })
+  .use(async ({ ctx, next }) => {
+    if (!authEnforced()) {
+      return next({ ctx })
+    }
+    const user = await verifyFirebaseToken(ctx.authHeader)
+    if (!isAmnexAccount(user.email)) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
+    }
+    return next({ ctx: { ...ctx, user } })
+  })
+
+/** Explicit admin allow-list (decision doc §3), generalized from the Admin
+ *  Data Import pattern rather than copy-pasted: ADMIN_ALLOWED_EMAILS is a
+ *  separate roster from ADMIN_IMPORT_ALLOWED_EMAILS, so granting one admin
+ *  surface never implicitly grants another. Inherits protectedProcedure's
+ *  read-only/enforcement gates, then adds one more check — also a no-op
+ *  when enforcement is off, for the same reason. Not applied to any router
+ *  yet; it exists as ready infrastructure for a future admin-gated surface
+ *  (decision doc §3). */
+export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (!authEnforced()) {
+    return next({ ctx })
+  }
+  if (!ctx.user || !isAllowListed(ctx.user.email, process.env.ADMIN_ALLOWED_EMAILS)) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Your account is not authorized for this administrative action.' })
+  }
+  return next({ ctx })
+})
+
+/** Unchanged from before, plus the same EMERGENCY_READ_ONLY gate every other
+ *  mutation now has — Admin Data Import's own mutations (session.commit,
+ *  commitGeographyLoad) must also stop during an incident. */
 export const adminImportProcedure = publicProcedure
   .use(({ next }) => {
+    assertNotReadOnly()
     if (process.env.ADMIN_IMPORT_ENABLED !== 'true') {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Not found' })
     }
