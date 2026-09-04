@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, router } from '../trpc.js'
+import { publicProcedure, protectedProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isForeignKeyViolation } from '../db-errors.js'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType, type HierNode } from '@goms/domain'
@@ -157,7 +157,7 @@ export const hierarchyRouter = router({
     return out
   }),
 
-  createNode: publicProcedure
+  createNode: protectedProcedure
     .input(z.object({
       domain: domainSchema, typeKey: z.string().min(1), parentId: z.string().uuid().nullable(),
       stateCode: z.number().int().nullable(), name: z.string().min(1), metadata: z.record(z.string()).optional(),
@@ -227,7 +227,7 @@ export const hierarchyRouter = router({
       return toNode(result.rows[0])
     }),
 
-  updateNode: publicProcedure
+  updateNode: protectedProcedure
     .input(z.object({ id: z.string().uuid(), patch: z.object({ name: z.string().min(1).optional(), metadata: z.record(z.string()).optional() }) }))
     .mutation(async ({ input }) => {
       const sets: string[] = []
@@ -242,14 +242,14 @@ export const hierarchyRouter = router({
       return toNode(result.rows[0])
     }),
 
-  setNodeStatus: publicProcedure
+  setNodeStatus: protectedProcedure
     .input(z.object({ id: z.string().uuid(), status: z.enum(['active', 'archived']) }))
     .mutation(async ({ input }) => {
       const ids = await subtreeIds(input.id)
       await pool.query(`UPDATE hierarchy_nodes SET status=$1, updated_at=now() WHERE id = ANY($2)`, [input.status, ids])
     }),
 
-  deleteNode: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  deleteNode: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
     const ids = await subtreeIds(input.id)
     const client = await pool.connect()
     try {
@@ -277,7 +277,7 @@ export const hierarchyRouter = router({
     }
   }),
 
-  moveNode: publicProcedure
+  moveNode: protectedProcedure
     .input(z.object({ id: z.string().uuid(), newParentId: z.string().uuid().nullable() }))
     .mutation(async ({ input }) => {
       const client = await pool.connect()
@@ -322,7 +322,7 @@ export const hierarchyRouter = router({
       }
     }),
 
-  duplicateNode: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  duplicateNode: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
     const ids = await subtreeIds(input.id)
     const rows = (await pool.query(`SELECT * FROM hierarchy_nodes WHERE id = ANY($1)`, [ids])).rows
     const idMap = new Map<string, string>()
@@ -351,7 +351,7 @@ export const hierarchyRouter = router({
     return toNode(cloneRoot.rows[0])
   }),
 
-  importChildren: publicProcedure
+  importChildren: protectedProcedure
     .input(z.object({ parentId: z.string().uuid(), rows: z.array(z.object({ name: z.string(), type: z.string().optional() })) }))
     .mutation(async ({ input }) => {
       const parentResult = await pool.query(`SELECT * FROM hierarchy_nodes WHERE id=$1`, [input.parentId])
@@ -423,7 +423,7 @@ export const hierarchyRouter = router({
       .map(toNode)
   }),
 
-  reorderNode: publicProcedure
+  reorderNode: protectedProcedure
     .input(z.object({ id: z.string().uuid(), beforeId: z.string().uuid().nullable() }))
     .mutation(async ({ input }) => {
       const nodeResult = await pool.query(`SELECT * FROM hierarchy_nodes WHERE id=$1`, [input.id])
