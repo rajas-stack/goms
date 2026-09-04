@@ -8,6 +8,7 @@
 // (docs/superpowers/analysis/2026-08-31-goms-local-vs-gcp-functional-parity-audit.md).
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import { getAuthHeaders } from './authHeaders'
+import { authPromptLink } from './authPromptLink'
 import type { AppRouter } from '../../../apps/api/src/index'
 import type {
   Repository, CreateCustomerInput, CreateNodeInput, CreateEmployeeInput, AddTimelineInput,
@@ -29,7 +30,7 @@ import type {
 
 export class RemoteRepository implements Partial<Repository> {
   private client = createTRPCClient<AppRouter>({
-    links: [httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`, headers: getAuthHeaders })],
+    links: [authPromptLink, httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`, headers: getAuthHeaders })],
   })
 
   listCustomers = (): Promise<Customer[]> => this.client.customers.list.query()
