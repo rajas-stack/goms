@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { appRouter } from '../index.js'
 import { pool } from '../db.js'
+import { contextForEmail } from '../testHelpers/authTestHelpers.js'
 
 describe('commercial.masters router', () => {
   beforeEach(async () => {
@@ -214,5 +215,206 @@ describe('commercial.masters router', () => {
     })
     await expect(caller.commercial.masters.delete({ key: 'unitsOfMeasure', id: uom.id }))
       .rejects.toThrow(/still referenced by at least one sku/i)
+  })
+
+  describe('auth enforcement', () => {
+    afterEach(() => {
+      delete process.env.AUTH_ENFORCEMENT_ENABLED
+    })
+
+    // Setup calls below always run through an unauthenticated caller before
+    // AUTH_ENFORCEMENT_ENABLED is flipped on for the test — enforcement is
+    // off by default, so those calls succeed regardless, and it avoids
+    // needing an authenticated setup path of its own. Only the call actually
+    // under test varies its caller's auth.
+
+    describe('masters.create', () => {
+      it('still allows an unauthenticated caller when enforcement is off (existing behavior)', async () => {
+        const caller = appRouter.createCaller({})
+        await expect(caller.commercial.masters.create({
+          key: 'verticals', input: { code: `V-${Math.random()}`, name: 'Government', description: '' },
+        })).resolves.toBeDefined()
+      })
+
+      it('rejects an unauthenticated mutation once enforcement is on', async () => {
+        process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+        const caller = appRouter.createCaller({})
+        await expect(caller.commercial.masters.create({
+          key: 'verticals', input: { code: `V-${Math.random()}`, name: 'Government', description: '' },
+        })).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+      })
+
+      it('allows the same mutation once enforcement is on, for a verified @amnex.com caller', async () => {
+        process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+        const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+        await expect(caller.commercial.masters.create({
+          key: 'verticals', input: { code: `V-${Math.random()}`, name: 'Government', description: '' },
+        })).resolves.toBeDefined()
+      })
+    })
+
+    describe('skus.create', () => {
+      // Same masters (feature/category/uom/currency/taxClass/billingType)
+      // skus.create needs, per baseSkuInput in commercial-skus.test.ts.
+      async function setupSkuMasters() {
+        const caller = appRouter.createCaller({})
+        const vertical = await caller.commercial.masters.create({ key: 'verticals', input: { code: `V-${Math.random()}`, name: 'Government', description: '' } })
+        const product = await caller.commercial.masters.create({ key: 'products', input: { code: 'GOMS', name: 'GOMS', description: '', verticalId: vertical.id } })
+        const module_ = await caller.commercial.masters.create({ key: 'modules', input: { code: 'ACCT', name: 'Account Mapping', description: '', productId: product.id } })
+        const feature = await caller.commercial.masters.create({ key: 'features', input: { code: 'F1', name: 'Feature 1', description: '', moduleId: module_.id, status: 'new' } })
+        const category = await caller.commercial.masters.create({ key: 'skuCategories', input: { code: 'STD', name: 'Standard', description: '' } })
+        const uom = await caller.commercial.masters.create({ key: 'unitsOfMeasure', input: { code: 'LIC', name: 'License', description: '' } })
+        const currency = await caller.commercial.masters.create({
+          key: 'currencies', input: { code: 'INR', name: 'Indian Rupee', description: '', symbol: '₹', decimalPlaces: 2, exchangeRate: 1, isBaseCurrency: true },
+        })
+        const taxClass = await caller.commercial.masters.create({ key: 'taxClasses', input: { code: 'GST18', name: 'GST 18%', description: '', ratePct: 18 } })
+        const billingType = await caller.commercial.masters.create({ key: 'billingTypes', input: { code: 'OT', name: 'One-Time', description: '' } })
+        // skus.create defaults editionId via resolveStandardEditionId, which
+        // requires a productEditions row coded 'STD' to already exist.
+        await caller.commercial.masters.create({ key: 'productEditions', input: { code: 'STD', name: 'Standard', description: '' } })
+        return { feature, category, uom, currency, taxClass, billingType }
+      }
+
+      function skuInput(m: Awaited<ReturnType<typeof setupSkuMasters>>) {
+        return {
+          name: 'Standard License', categoryId: m.category.id, featureId: m.feature.id,
+          uomId: m.uom.id, currencyId: m.currency.id, taxClassId: m.taxClass.id, billingTypeId: m.billingType.id,
+          activeFrom: '2026-01-01', activeTill: null,
+          baseSoftwareCost: 1000, implementationCostPerMM: 0, integrationCost: 0, thirdPartyCost: 0,
+          hardwareCost: 0, cloudCost: 0, supportCost: 0, trainingCost: 0,
+          internalPrice: 5000, floorPrice: 6000, partnerPrice: 7000, governmentPrice: 8000,
+          enterprisePrice: 9000, corporatePrice: 9500, listPrice: 10000,
+        }
+      }
+
+      it('still allows an unauthenticated caller when enforcement is off (existing behavior)', async () => {
+        const masters = await setupSkuMasters()
+        const caller = appRouter.createCaller({})
+        await expect(caller.commercial.skus.create(skuInput(masters))).resolves.toBeDefined()
+      })
+
+      it('rejects an unauthenticated mutation once enforcement is on', async () => {
+        const masters = await setupSkuMasters()
+        process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+        const caller = appRouter.createCaller({})
+        await expect(caller.commercial.skus.create(skuInput(masters))).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+      })
+
+      it('allows the same mutation once enforcement is on, for a verified @amnex.com caller', async () => {
+        const masters = await setupSkuMasters()
+        process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+        const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+        await expect(caller.commercial.skus.create(skuInput(masters))).resolves.toBeDefined()
+      })
+    })
+
+    describe('bom.create', () => {
+      // Two SKUs (parent + component), per commercial-skus.test.ts's
+      // makeHierarchy/makeSupportingMasters/baseSkuInput helpers.
+      async function setupBomSkus() {
+        const caller = appRouter.createCaller({})
+        const vertical = await caller.commercial.masters.create({ key: 'verticals', input: { code: `V-${Math.random()}`, name: 'Government', description: '' } })
+        const product = await caller.commercial.masters.create({ key: 'products', input: { code: 'GOMS', name: 'GOMS', description: '', verticalId: vertical.id } })
+        const module_ = await caller.commercial.masters.create({ key: 'modules', input: { code: 'ACCT', name: 'Account Mapping', description: '', productId: product.id } })
+        const featureParent = await caller.commercial.masters.create({ key: 'features', input: { code: 'FP', name: 'Feature Parent', description: '', moduleId: module_.id, status: 'new' } })
+        const featureComponent = await caller.commercial.masters.create({ key: 'features', input: { code: 'FC', name: 'Feature Component', description: '', moduleId: module_.id, status: 'new' } })
+        const category = await caller.commercial.masters.create({ key: 'skuCategories', input: { code: 'STD', name: 'Standard', description: '' } })
+        const uom = await caller.commercial.masters.create({ key: 'unitsOfMeasure', input: { code: 'LIC', name: 'License', description: '' } })
+        const currency = await caller.commercial.masters.create({
+          key: 'currencies', input: { code: 'INR', name: 'Indian Rupee', description: '', symbol: '₹', decimalPlaces: 2, exchangeRate: 1, isBaseCurrency: true },
+        })
+        const taxClass = await caller.commercial.masters.create({ key: 'taxClasses', input: { code: 'GST18', name: 'GST 18%', description: '', ratePct: 18 } })
+        const billingType = await caller.commercial.masters.create({ key: 'billingTypes', input: { code: 'OT', name: 'One-Time', description: '' } })
+        // skus.create defaults editionId via resolveStandardEditionId, which
+        // requires a productEditions row coded 'STD' to already exist.
+        await caller.commercial.masters.create({ key: 'productEditions', input: { code: 'STD', name: 'Standard', description: '' } })
+        const skuFields = (feature: { id: string }) => ({
+          name: 'Standard License', categoryId: category.id, featureId: feature.id,
+          uomId: uom.id, currencyId: currency.id, taxClassId: taxClass.id, billingTypeId: billingType.id,
+          activeFrom: '2026-01-01', activeTill: null,
+          baseSoftwareCost: 1000, implementationCostPerMM: 0, integrationCost: 0, thirdPartyCost: 0,
+          hardwareCost: 0, cloudCost: 0, supportCost: 0, trainingCost: 0,
+          internalPrice: 5000, floorPrice: 6000, partnerPrice: 7000, governmentPrice: 8000,
+          enterprisePrice: 9000, corporatePrice: 9500, listPrice: 10000,
+        })
+        const parent = await caller.commercial.skus.create(skuFields(featureParent))
+        const component = await caller.commercial.skus.create(skuFields(featureComponent))
+        return { parent, component }
+      }
+
+      function bomInput(skus: Awaited<ReturnType<typeof setupBomSkus>>) {
+        return { parentSkuId: skus.parent.id, componentSkuId: skus.component.id, mandatory: true, quantity: 1, notes: '' }
+      }
+
+      it('still allows an unauthenticated caller when enforcement is off (existing behavior)', async () => {
+        const skus = await setupBomSkus()
+        const caller = appRouter.createCaller({})
+        await expect(caller.commercial.bom.create(bomInput(skus))).resolves.toBeDefined()
+      })
+
+      it('rejects an unauthenticated mutation once enforcement is on', async () => {
+        const skus = await setupBomSkus()
+        process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+        const caller = appRouter.createCaller({})
+        await expect(caller.commercial.bom.create(bomInput(skus))).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+      })
+
+      it('allows the same mutation once enforcement is on, for a verified @amnex.com caller', async () => {
+        const skus = await setupBomSkus()
+        process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+        const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+        await expect(caller.commercial.bom.create(bomInput(skus))).resolves.toBeDefined()
+      })
+    })
+
+    describe('boq.create', () => {
+      // Department + sales person + vertical, per commercial-boq.test.ts's
+      // makeDepartment/makeSalesPerson/makeBoq helpers — boq.create itself
+      // needs no SKU.
+      async function setupBoqDeps() {
+        const caller = appRouter.createCaller({})
+        const dept = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Dept' })
+        const salesPerson = await caller.sales.create({
+          name: 'Alex Sales', officialEmail: `alex-${Math.random()}@example.com`, designation: 'Account Manager', tierKey: 'accountManager',
+        })
+        const vertical = await caller.commercial.masters.create({ key: 'verticals', input: { code: `V-${Math.random()}`, name: 'Government', description: '' } })
+        return { dept, salesPerson, vertical }
+      }
+
+      function boqInput(deps: Awaited<ReturnType<typeof setupBoqDeps>>) {
+        return {
+          opportunityName: `Opportunity ${Math.random()}`,
+          departmentId: deps.dept.id, customerName: 'Acme Corp', customerOrganization: '', customerAddress: '', customerContact: '',
+          verticalId: deps.vertical.id, budgetAmount: '', budgetUnit: '', budgetKnown: 'yes', emdAmount: '', emdUnit: '',
+          salesPersonId: deps.salesPerson.id, buSalesPersonId: null, preSalesId: null, currency: 'INR',
+        }
+      }
+
+      it('still allows an unauthenticated caller when enforcement is off (existing behavior)', async () => {
+        const deps = await setupBoqDeps()
+        const caller = appRouter.createCaller({})
+        await expect(caller.commercial.boq.create(boqInput(deps))).resolves.toBeDefined()
+      })
+
+      it('rejects an unauthenticated mutation once enforcement is on', async () => {
+        const deps = await setupBoqDeps()
+        process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+        const caller = appRouter.createCaller({})
+        await expect(caller.commercial.boq.create(boqInput(deps))).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+      })
+
+      it('allows the same mutation once enforcement is on, for a verified @amnex.com caller', async () => {
+        const deps = await setupBoqDeps()
+        process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+        const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+        await expect(caller.commercial.boq.create(boqInput(deps))).resolves.toBeDefined()
+      })
+    })
+
+    it('lets masters.list (a query) stay open even once enforcement is on', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.commercial.masters.list({ key: 'verticals' })).resolves.toBeDefined()
+    })
   })
 })
