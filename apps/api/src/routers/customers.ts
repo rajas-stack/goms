@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, router } from '../trpc.js'
+import { publicProcedure, protectedProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 
 // Maps the DB row (snake_case, TIMESTAMPTZ) onto the frontend's `Customer`
@@ -42,7 +42,7 @@ export const customersRouter = router({
       const result = await pool.query('SELECT * FROM customers WHERE id=$1', [input.id])
       return result.rows[0] ? toCustomer(result.rows[0]) : null
     }),
-  create: publicProcedure
+  create: protectedProcedure
     .input(z.object({ ...patchShape, name: z.string().min(1) }))
     .mutation(async ({ input }) => {
       const result = await pool.query(
@@ -65,7 +65,7 @@ export const customersRouter = router({
   // passes back `patch.updatedAt` gets an optimistic-concurrency CONFLICT on
   // a stale write; omitting it (as InMemoryRepository callers implicitly do
   // today) just overwrites, matching existing behavior.
-  update: publicProcedure
+  update: protectedProcedure
     .input(z.object({ id: z.string().uuid(), patch: z.object(patchShape), expectedUpdatedAt: z.string().optional() }))
     .mutation(async ({ input }) => {
       const { id, patch, expectedUpdatedAt } = input
@@ -87,7 +87,7 @@ export const customersRouter = router({
       if (result.rowCount === 0) throw new TRPCError({ code: 'CONFLICT' })
       return toCustomer(result.rows[0])
     }),
-  delete: publicProcedure
+  delete: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ input }) => pool.query('DELETE FROM customers WHERE id=$1', [input.id]).then(() => undefined)),
 })

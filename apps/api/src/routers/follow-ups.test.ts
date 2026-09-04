@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { appRouter } from '../index.js'
 import { pool } from '../db.js'
+import { contextForEmail } from '../testHelpers/authTestHelpers.js'
 
 describe('followUps router', () => {
   let empId: string
@@ -62,5 +63,40 @@ describe('followUps router', () => {
     await caller.followUps.create({ entityType: 'contact', entityId: empId, dueDate: '2025-08-01' })
     await caller.employees.delete({ id: empId })
     expect(await caller.followUps.listForEntity({ entityType: 'contact', entityId: empId })).toEqual([])
+  })
+
+  describe('auth enforcement', () => {
+    afterEach(() => {
+      delete process.env.AUTH_ENFORCEMENT_ENABLED
+    })
+
+    it('still allows an unauthenticated caller when enforcement is off (existing behavior)', async () => {
+      const caller = appRouter.createCaller({})
+      await expect(
+        caller.followUps.create({ entityType: 'contact', entityId: empId, dueDate: '2025-07-01' }),
+      ).resolves.toBeDefined()
+    })
+
+    it('rejects an unauthenticated mutation once enforcement is on', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(
+        caller.followUps.create({ entityType: 'contact', entityId: empId, dueDate: '2025-07-01' }),
+      ).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    })
+
+    it('still allows reads with no auth even when enforcement is on', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.followUps.listOpen()).resolves.toBeDefined()
+    })
+
+    it('allows the same mutation once enforcement is on, for a verified @amnex.com caller', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+      await expect(
+        caller.followUps.create({ entityType: 'contact', entityId: empId, dueDate: '2025-07-01' }),
+      ).resolves.toBeDefined()
+    })
   })
 })

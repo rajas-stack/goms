@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, router } from '../trpc.js'
+import { publicProcedure, protectedProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
 import { buildOwnerMap, effectiveOwner, OWNABLE_ENTITY_MAP, type OwnershipContext } from '@goms/domain'
@@ -72,7 +72,7 @@ export const ownershipRouter = router({
       const map = buildOwnerMap(assignments, input.entityType, input.entityIds, input.asOf, ctx)
       return Object.fromEntries(map)
     }),
-  assign: publicProcedure
+  assign: protectedProcedure
     .input(z.object({
       entityType: z.string(), entityId: z.string().uuid(), salesPersonId: z.string().uuid(),
       role: z.string().optional(), startDate: z.string(), endDate: z.string().nullable().optional(),
@@ -145,7 +145,7 @@ export const ownershipRouter = router({
         client.release()
       }
     }),
-  end: publicProcedure
+  end: protectedProcedure
     .input(z.object({ id: z.string().uuid(), endDate: z.string() }))
     .mutation(async ({ input }) => {
       const a = (await pool.query('SELECT * FROM ownership_assignments WHERE id=$1', [input.id])).rows[0]
@@ -155,7 +155,7 @@ export const ownershipRouter = router({
       }
       await pool.query('UPDATE ownership_assignments SET end_date=$1 WHERE id=$2', [input.endDate, input.id])
     }),
-  transferBookOfBusiness: publicProcedure
+  transferBookOfBusiness: protectedProcedure
     .input(z.object({
       fromSalesPersonId: z.string().uuid(), toSalesPersonId: z.string().uuid(),
       effectiveDate: z.string(), note: z.string().optional(),

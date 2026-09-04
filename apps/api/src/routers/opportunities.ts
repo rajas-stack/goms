@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, router } from '../trpc.js'
+import { publicProcedure, protectedProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from '@goms/domain'
 
@@ -68,7 +68,7 @@ export const opportunitiesRouter = router({
     )
     return result.rows.map(toStageChange)
   }),
-  create: publicProcedure
+  create: protectedProcedure
     .input(z.object({
       departmentId: z.string().uuid(), opportunityName: z.string().min(1),
       gemTenderId: z.string().optional(), publishDate: z.string().optional(), submissionDate: z.string().optional(),
@@ -114,7 +114,7 @@ export const opportunitiesRouter = router({
         client.release()
       }
     }),
-  update: publicProcedure
+  update: protectedProcedure
     .input(z.object({ id: z.string().uuid(), patch: z.object(patchShape) }))
     .mutation(async ({ input }) => {
       const client = await pool.connect()
@@ -155,7 +155,7 @@ export const opportunitiesRouter = router({
         client.release()
       }
     }),
-  delete: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) =>
+  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) =>
     // opportunity_stage_changes cascades via FK.
     pool.query('DELETE FROM opportunities WHERE id=$1', [input.id]).then(() => undefined)
   ),

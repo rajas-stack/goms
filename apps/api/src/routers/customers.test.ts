@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { appRouter } from '../index.js'
 import { pool } from '../db.js'
+import { contextForEmail } from '../testHelpers/authTestHelpers.js'
 
 describe('customers router', () => {
   beforeEach(async () => {
@@ -66,5 +67,34 @@ describe('customers router', () => {
     await caller.customers.delete({ id: created.id })
     const list = await caller.customers.list()
     expect(list.map((c) => c.id)).not.toContain(created.id)
+  })
+
+  describe('auth enforcement', () => {
+    afterEach(() => {
+      delete process.env.AUTH_ENFORCEMENT_ENABLED
+    })
+
+    it('still allows an unauthenticated caller when enforcement is off (existing behavior)', async () => {
+      const caller = appRouter.createCaller({})
+      await expect(caller.customers.create({ name: 'Acme' })).resolves.toBeDefined()
+    })
+
+    it('rejects an unauthenticated mutation once enforcement is on', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.customers.create({ name: 'Acme' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    })
+
+    it('still allows reads with no auth even when enforcement is on', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.customers.list()).resolves.toBeDefined()
+    })
+
+    it('allows the same mutation once enforcement is on, for a verified @amnex.com caller', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+      await expect(caller.customers.create({ name: 'Acme' })).resolves.toBeDefined()
+    })
   })
 })
