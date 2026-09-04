@@ -6,23 +6,20 @@
 #      place in production. Production's real initial data load (if any) is
 #      a separate, not-yet-scoped question (plan §7) — deliberately not
 #      guessed at here.
-#   2. No `allUsers` invoker grant (contrast with dev's deliberate launch
-#      decision, infra/dev/cloudrun.tf:69-74). Dev's `allUsers` grant made
-#      sense for an already-shipped, actively-used dev environment where
-#      removing it prematurely would break real usage with no compensating
-#      protection (Stage B plan §1.4 point 6). goms-prod has no such
-#      history — nothing depends on public access before cutover, and the
-#      Stage B plan's own §19.2 cutover procedure only calls for validating
-#      it under a temporary hostname with real stakeholders, not the open
-#      internet. Leaving the invoker binding out means Cloud Run defaults to
-#      requiring an authenticated caller with `roles/run.invoker` — safer by
-#      default for a not-yet-live environment. Whoever needs to reach
-#      goms-prod pre-cutover (for validation) should get an explicit,
-#      named `google_cloud_run_v2_service_iam_member` binding added when
-#      that need is concrete, not a blanket `allUsers` grant applied
-#      speculatively. This is a deviation from pure dev/prod duplication —
-#      flagged here and in the Stage B checkpoint for the user to override
-#      if a broader default is actually wanted.
+#   2. No `allUsers` invoker grant declared here (contrast with dev's
+#      deliberate launch decision, infra/dev/cloudrun.tf:69-74) — intended
+#      to keep goms-prod requiring an authenticated caller by default until
+#      a real cutover decision is made. **Known drift, not reconciled by
+#      this file (2026-09-04):** live `goms-prod` currently DOES have
+#      `allUsers` → `roles/run.invoker`, granted out-of-band via `gcloud`,
+#      not through Terraform — confirmed via `gcloud run services
+#      get-iam-policy`. Tracked as DRIFT-001 (project-wide "no auth
+#      anywhere yet" debt, see docs/superpowers/analysis/2026-08-27-goms-
+#      prod-temporary-drift-register.md), deliberately left unmanaged here
+#      rather than adding an IAM resource that would revert it on the next
+#      apply — closing/keeping this open is a availability/access decision
+#      for the user to make explicitly, not something this promotion's
+#      Terraform cleanup should decide silently either way.
 
 resource "google_artifact_registry_repository" "goms" {
   repository_id = "goms"
@@ -53,19 +50,44 @@ resource "google_storage_bucket_iam_member" "runtime_bucket_access" {
   member = "serviceAccount:${google_service_account.goms_api_runtime.email}"
 }
 
-# The image tag below must exist in Artifact Registry before this resource
-# can apply — same one-time manual push caveat as dev, except prod's first
-# real image should be the exact commit-SHA tag already validated in
-# goms-dev (architecture doc §18: "no rebuild between dev and prod"), not a
-# fresh :bootstrap build. Placeholder kept for structural parity with dev
-# until a real promotion happens.
+# Image pinned to the commit-SHA tag actually running live on goms-prod
+# today (confirmed 2026-09-04 via `gcloud run services describe` — revision
+# goms-api-00014-shs, image digest matches this tag exactly). This is NOT
+# yet the approved release candidate (b8b18705..., still awaiting explicit
+# GO before any deploy) — it is 2026-08-31's "Task 28 verification" build,
+# deployed manually (`gcloud run deploy`, out-of-band from Terraform) before
+# the Firebase auth rollout, the 26-task enhancements, or the Admin Import
+# UI rework existed. This file's job right now is to describe reality
+# accurately so `terraform plan` stops proposing an unsafe rollback to the
+# old `:bootstrap` placeholder — bumping this to the real release candidate
+# is a separate, explicitly-approved deploy step, not part of this change.
 resource "google_cloud_run_v2_service" "goms_api" {
   name     = "goms-api"
   location = "asia-south1"
 
+  # Codifies the service-level scaling block's live default (automatic
+  # scaling, not the service-level "manual instance count" feature) so this
+  # plan doesn't propose removing it — confirmed via `gcloud run services
+  # describe --format=json`'s `run.googleapis.com/scalingMode: automatic`
+  # annotation. It was showing as drift purely because this file never
+  # declared it, not because anything about it needs to change.
+  scaling {
+    scaling_mode          = "AUTOMATIC"
+    manual_instance_count = 0
+  }
+
   template {
     service_account = google_service_account.goms_api_runtime.email
-    scaling { min_instance_count = 0 } # same accepted cold-start tradeoff as dev
+    # min_instance_count: same accepted cold-start tradeoff as dev.
+    # max_instance_count=10 codifies the live value (confirmed via
+    # `autoscaling.knative.dev/maxScale: "10"`, set via a manual `gcloud run
+    # services update`, not through this file) so this plan doesn't propose
+    # reverting it to unbounded, which is what applying with the field left
+    # unset would do.
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 10
+    }
 
     vpc_access {
       network_interfaces {
@@ -76,15 +98,7 @@ resource "google_cloud_run_v2_service" "goms_api" {
     }
 
     containers {
-      # `:bootstrap` currently resolves to the same image that was pinned by
-      # digest (sha256:eced021...) to deploy the dist/import/data/*.json
-      # packaging fix (tsc alone never copied the bundled geography JSON
-      # files into dist/, so previewGeographyLoad 500'd) — both the digest
-      # push and this tag push happened together, so this is a no-op
-      # image-wise. Kept as a floating tag for structural parity with dev
-      # until a real dev-to-prod promotion pipeline exists (see the header
-      # comment at the top of this file).
-      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:bootstrap"
+      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:54a7d6ab3af64b7ee186db77f1f86cf827b5c20e"
       # This service is only ever reached through Firebase Hosting's
       # `/api/**` rewrite (firebase.json), which arrives from a Google
       # front-end address and carries CDN addresses in X-Forwarded-For. Without
@@ -95,12 +109,16 @@ resource "google_cloud_run_v2_service" "goms_api" {
         name  = "TRUST_PROXY"
         value = "firebase-hosting"
       }
-      # ADMIN_IMPORT_ENABLED was set to "true" temporarily on 2026-08-27 to
-      # run the one-time reference-data load (scripts/prod-reference-
-      # import.ts), then removed again immediately after — see the temporary
-      # drift register's Admin Data Import entry for the full record. Stays
-      # unset here permanently until real auth exists per
-      # docs/superpowers/plans/2026-08-27-goms-prod-admin-import-enablement-plan.md.
+      # ADMIN_IMPORT_ENABLED: confirmed unset on the live service as of
+      # 2026-09-04 (a same-day live-exposure incident — this had been set to
+      # "true" out-of-band with no auth gate in front of it — was found and
+      # remediated; see docs/superpowers/analysis/2026-09-03-goms-prod-
+      # final-readiness-audit.md §0). Stays unset here deliberately: no
+      # production-specific Firebase Authentication project/allow-list
+      # exists yet, and enabling Admin Data Import in production is an
+      # explicit, separate, not-yet-approved follow-up decision — not
+      # something this release should carry silently. Do not set this to
+      # "true" without a real auth gate already live in front of it.
       env {
         name = "DATABASE_URL"
         value_source {
@@ -135,7 +153,11 @@ resource "google_cloud_run_v2_job" "goms_migrate" {
       }
 
       containers {
-        image   = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:bootstrap"
+        # Kept in lockstep with goms_api's image above (confirmed identical
+        # live via `gcloud run jobs describe`) so a migration run always
+        # reflects the exact same code as the service it's migrating the
+        # schema for.
+        image   = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:54a7d6ab3af64b7ee186db77f1f86cf827b5c20e"
         command = ["node"]
         args    = ["node_modules/node-pg-migrate/bin/node-pg-migrate.js", "up"]
         env {
