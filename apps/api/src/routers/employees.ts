@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, router } from '../trpc.js'
+import { publicProcedure, protectedProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { subtreeIds } from './hierarchy.js'
 import { MERGEABLE_FIELDS, type MergeableField } from '@goms/domain'
@@ -154,7 +154,7 @@ const timelineRouter = router({
         : await pool.query(`SELECT * FROM timeline_events ORDER BY date DESC, id DESC`)
       return result.rows.map(toTimelineEvent)
     }),
-  add: publicProcedure
+  add: protectedProcedure
     .input(z.object({
       employeeId: z.string().uuid(), type: timelineEventTypeSchema, title: z.string().min(1),
       customLabel: z.string().optional(), date: z.string(), time: z.string().optional(),
@@ -178,7 +178,7 @@ const timelineRouter = router({
       )
       return toTimelineEvent(result.rows[0])
     }),
-  update: publicProcedure
+  update: protectedProcedure
     .input(z.object({ id: z.string().uuid(), patch: z.object(timelineEventPatchShape) }))
     .mutation(async ({ input }) => {
       const fields = Object.keys(input.patch)
@@ -192,10 +192,10 @@ const timelineRouter = router({
       const result = await pool.query(`UPDATE timeline_events SET ${setClauses.join(', ')} WHERE id=$${values.length} RETURNING *`, values)
       return toTimelineEvent(result.rows[0])
     }),
-  setAttended: publicProcedure
+  setAttended: protectedProcedure
     .input(z.object({ id: z.string().uuid(), attended: z.boolean().optional() }))
     .mutation(({ input }) => pool.query(`UPDATE timeline_events SET attended=$1 WHERE id=$2`, [input.attended ?? null, input.id]).then(() => undefined)),
-  delete: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) =>
+  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) =>
     pool.query('DELETE FROM timeline_events WHERE id=$1', [input.id]).then(() => undefined)
   ),
 })
@@ -205,7 +205,7 @@ const transfersRouter = router({
     const result = await pool.query(`SELECT * FROM transfers WHERE employee_id=$1 ORDER BY effective_date DESC`, [input.employeeId])
     return result.rows.map(toTransfer)
   }),
-  transfer: publicProcedure
+  transfer: protectedProcedure
     .input(z.object({
       employeeId: z.string().uuid(), toOrgNodeId: z.string().uuid(), toDesignation: z.string(),
       toManagerId: z.string().uuid().nullable().optional(), effectiveDate: z.string(),
@@ -308,7 +308,7 @@ export const employeesRouter = router({
     }
     return attachCharges(chain)
   }),
-  create: publicProcedure
+  create: protectedProcedure
     .input(z.object({
       name: z.string().min(1), designation: z.string().min(1), email: z.string(), phone: z.string(),
       photoUrl: z.string().nullable().optional(), company: z.string().optional(), address: z.string().optional(),
@@ -369,7 +369,7 @@ export const employeesRouter = router({
         client.release()
       }
     }),
-  update: publicProcedure
+  update: protectedProcedure
     .input(z.object({ id: z.string().uuid(), patch: z.object(employeePatchShape) }))
     .mutation(async ({ input }) => {
       const fields = Object.keys(input.patch)
@@ -380,7 +380,7 @@ export const employeesRouter = router({
       await pool.query(`UPDATE employees SET ${[...setClauses, 'updated_at=now()'].join(', ')} WHERE id=$${values.length}`, values)
       return oneEmployee(input.id)
     }),
-  setManager: publicProcedure
+  setManager: protectedProcedure
     .input(z.object({ employeeId: z.string().uuid(), managerId: z.string().uuid().nullable() }))
     .mutation(async ({ input }) => {
       if (input.employeeId === input.managerId) {
@@ -422,7 +422,7 @@ export const employeesRouter = router({
         client.release()
       }
     }),
-  delete: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
@@ -445,7 +445,7 @@ export const employeesRouter = router({
       client.release()
     }
   }),
-  merge: publicProcedure
+  merge: protectedProcedure
     .input(z.object({ survivorId: z.string().uuid(), duplicateId: z.string().uuid(), resolutions: z.record(z.string()).optional() }))
     .mutation(async ({ input }) => {
       if (input.survivorId === input.duplicateId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot merge a record with itself' })
@@ -559,7 +559,7 @@ export const employeesRouter = router({
       mergedAt: row.merged_at.toISOString(), fieldResolutions: row.field_resolutions, transferred: row.transferred,
     }))
   }),
-  addCharge: publicProcedure
+  addCharge: protectedProcedure
     .input(z.object({ employeeId: z.string().uuid(), charge: z.object(chargeInputShape) }))
     .mutation(async ({ input }) => {
       const client = await pool.connect()
@@ -586,10 +586,10 @@ export const employeesRouter = router({
         client.release()
       }
     }),
-  removeCharge: publicProcedure
+  removeCharge: protectedProcedure
     .input(z.object({ employeeId: z.string().uuid(), chargeId: z.string().uuid() }))
     .mutation(({ input }) => pool.query('DELETE FROM employee_charges WHERE id=$1 AND employee_id=$2', [input.chargeId, input.employeeId]).then(() => undefined)),
-  import: publicProcedure
+  import: protectedProcedure
     .input(z.object({
       orgNodeId: z.string().uuid(),
       rows: z.array(z.object({ name: z.string(), designation: z.string(), email: z.string().optional(), phone: z.string().optional(), connected: z.boolean().optional() })),

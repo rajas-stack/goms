@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { appRouter } from '../index.js'
 import { pool } from '../db.js'
+import { contextForEmail } from '../testHelpers/authTestHelpers.js'
 
 describe('employees router', () => {
   let orgNodeId: string
@@ -292,5 +293,102 @@ describe('employees router', () => {
     await caller.employees.delete({ id: head.id })
 
     expect((await caller.hierarchy.getNode({ id: dept.id }))?.metadata?.deptHead).toBeUndefined()
+  })
+
+  describe('auth enforcement', () => {
+    afterEach(() => {
+      delete process.env.AUTH_ENFORCEMENT_ENABLED
+    })
+
+    // Top-level mutation: employees.create
+    it('still allows employees.create with no auth when enforcement is off (existing behavior)', async () => {
+      const caller = appRouter.createCaller({})
+      await expect(caller.employees.create({
+        name: 'Jane Doe', designation: 'Officer', email: 'jane@example.com', phone: '9999999999',
+        orgNodeId, managerId: null,
+      })).resolves.toBeDefined()
+    })
+
+    it('rejects an unauthenticated employees.create once enforcement is on', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.employees.create({
+        name: 'Jane Doe', designation: 'Officer', email: 'jane@example.com', phone: '9999999999',
+        orgNodeId, managerId: null,
+      })).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    })
+
+    it('allows employees.create once enforcement is on, for a verified @amnex.com caller', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+      await expect(caller.employees.create({
+        name: 'Jane Doe', designation: 'Officer', email: 'jane@example.com', phone: '9999999999',
+        orgNodeId, managerId: null,
+      })).resolves.toBeDefined()
+    })
+
+    // Nested sub-router mutation: employees.timeline.add
+    it('still allows timeline.add with no auth when enforcement is off (existing behavior)', async () => {
+      const caller = appRouter.createCaller({})
+      const emp = await makeEmployee()
+      await expect(caller.employees.timeline.add({
+        employeeId: emp.id, type: 'call', title: 'Quick call', date: '2026-01-02',
+      })).resolves.toBeDefined()
+    })
+
+    it('rejects an unauthenticated timeline.add once enforcement is on', async () => {
+      const emp = await makeEmployee()
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.employees.timeline.add({
+        employeeId: emp.id, type: 'call', title: 'Quick call', date: '2026-01-02',
+      })).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    })
+
+    it('allows timeline.add once enforcement is on, for a verified @amnex.com caller', async () => {
+      const emp = await makeEmployee()
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+      await expect(caller.employees.timeline.add({
+        employeeId: emp.id, type: 'call', title: 'Quick call', date: '2026-01-02',
+      })).resolves.toBeDefined()
+    })
+
+    // Nested sub-router mutation: employees.transfers.transfer
+    it('still allows transfers.transfer with no auth when enforcement is off (existing behavior)', async () => {
+      const caller = appRouter.createCaller({})
+      const emp = await makeEmployee({ designation: 'Officer' })
+      await expect(caller.employees.transfers.transfer({
+        employeeId: emp.id, toOrgNodeId: otherOrgNodeId, toDesignation: 'Senior Officer',
+        effectiveDate: '2026-02-01', reason: 'Promotion',
+      })).resolves.toBeDefined()
+    })
+
+    it('rejects an unauthenticated transfers.transfer once enforcement is on', async () => {
+      const emp = await makeEmployee({ designation: 'Officer' })
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.employees.transfers.transfer({
+        employeeId: emp.id, toOrgNodeId: otherOrgNodeId, toDesignation: 'Senior Officer',
+        effectiveDate: '2026-02-01', reason: 'Promotion',
+      })).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    })
+
+    it('allows transfers.transfer once enforcement is on, for a verified @amnex.com caller', async () => {
+      const emp = await makeEmployee({ designation: 'Officer' })
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+      await expect(caller.employees.transfers.transfer({
+        employeeId: emp.id, toOrgNodeId: otherOrgNodeId, toDesignation: 'Senior Officer',
+        effectiveDate: '2026-02-01', reason: 'Promotion',
+      })).resolves.toBeDefined()
+    })
+
+    // Query stays open under enforcement
+    it('still allows reads (listAll) with no auth even when enforcement is on', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.employees.listAll()).resolves.toBeDefined()
+    })
   })
 })
