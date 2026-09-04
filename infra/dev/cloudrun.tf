@@ -112,6 +112,29 @@ resource "google_cloud_run_v2_service" "goms_api" {
         name  = "ADMIN_IMPORT_ALLOWED_EMAILS"
         value = "rajas@amnex.com,rajassaji9@gmail.com"
       }
+      # Mutation-auth rollout (2026-09-04, docs/superpowers/analysis/2026-09-04-
+      # goms-auth-architecture-decision.md). Both default "false": deploying
+      # this code with AUTH_ENFORCEMENT_ENABLED=false is a deliberate no-op —
+      # every procedure behaves exactly as it did before this rollout. Flip
+      # to "true" only after the full goms-dev verification runbook (plan
+      # Task 11) has passed. EMERGENCY_READ_ONLY is an independent incident
+      # kill switch, toggled the same way, that blocks mutations regardless
+      # of the enforcement flag's own state.
+      env {
+        name  = "AUTH_ENFORCEMENT_ENABLED"
+        value = "false"
+      }
+      env {
+        name  = "EMERGENCY_READ_ONLY"
+        value = "false"
+      }
+      # A separate roster from ADMIN_IMPORT_ALLOWED_EMAILS, deliberately —
+      # granting Admin Data Import access must never implicitly grant this
+      # (currently unused, decision doc §3) admin surface, or vice versa.
+      env {
+        name  = "ADMIN_ALLOWED_EMAILS"
+        value = "rajas@amnex.com"
+      }
       # Lets a local frontend dev server (Task 28's Playwright lineage walk)
       # call this goms-dev API directly instead of through a hosted frontend
       # origin — apps/api/src/app.ts's DEFAULT_ALLOWED_ORIGINS only covers
