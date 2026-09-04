@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { appRouter } from '../index.js'
 import { pool } from '../db.js'
+import { contextForEmail } from '../testHelpers/authTestHelpers.js'
 
 describe('sales router', () => {
   beforeEach(async () => {
@@ -189,6 +190,44 @@ describe('sales router', () => {
       const person = await makePerson()
       await caller.sales.delete({ id: person.id }) // deletes the person and cascades its postings
       await expect(caller.sales.updatePostingManager({ personId: person.id, managerId: null })).rejects.toThrow(/no open posting/i)
+    })
+  })
+
+  describe('auth enforcement', () => {
+    afterEach(() => {
+      delete process.env.AUTH_ENFORCEMENT_ENABLED
+    })
+
+    it('still allows an unauthenticated caller when enforcement is off (existing behavior)', async () => {
+      const caller = appRouter.createCaller({})
+      await expect(caller.sales.create({
+        name: 'Alex Sales', officialEmail: `alex-${Math.random()}@example.com`,
+        designation: 'Account Manager', tierKey: 'accountManager',
+      })).resolves.toBeDefined()
+    })
+
+    it('rejects an unauthenticated mutation once enforcement is on', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.sales.create({
+        name: 'Alex Sales', officialEmail: `alex-${Math.random()}@example.com`,
+        designation: 'Account Manager', tierKey: 'accountManager',
+      })).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    })
+
+    it('still allows reads with no auth even when enforcement is on', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.sales.listPersons()).resolves.toBeDefined()
+    })
+
+    it('allows the same mutation once enforcement is on, for a verified @amnex.com caller', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+      await expect(caller.sales.create({
+        name: 'Alex Sales', officialEmail: `alex-${Math.random()}@example.com`,
+        designation: 'Account Manager', tierKey: 'accountManager',
+      })).resolves.toBeDefined()
     })
   })
 })

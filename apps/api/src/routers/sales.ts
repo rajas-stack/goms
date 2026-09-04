@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, router } from '../trpc.js'
+import { publicProcedure, protectedProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isForeignKeyViolation } from '../db-errors.js'
 import { tierRank } from '@goms/domain'
@@ -57,7 +57,7 @@ export const salesRouter = router({
     for (const row of result.rows) out[row.sales_person_id] = toSalesPosting(row)
     return out
   }),
-  create: publicProcedure
+  create: protectedProcedure
     .input(z.object({
       name: z.string().min(1), officialEmail: z.string().min(1), personalEmail: z.string().optional(),
       mobile: z.string().optional(), altMobile: z.string().optional(), notes: z.string().optional(),
@@ -89,7 +89,7 @@ export const salesRouter = router({
         client.release()
       }
     }),
-  update: publicProcedure
+  update: protectedProcedure
     .input(z.object({ id: z.string().uuid(), patch: z.object(personPatchShape) }))
     .mutation(async ({ input }) => {
       const fields = Object.keys(input.patch)
@@ -100,10 +100,10 @@ export const salesRouter = router({
       await pool.query(`UPDATE sales_persons SET ${[...setClauses, 'updated_at=now()'].join(', ')} WHERE id=$${values.length}`, values)
       return onePerson(input.id)
     }),
-  setStatus: publicProcedure
+  setStatus: protectedProcedure
     .input(z.object({ id: z.string().uuid(), status: statusSchema }))
     .mutation(({ input }) => pool.query('UPDATE sales_persons SET status=$1, updated_at=now() WHERE id=$2', [input.status, input.id]).then(() => undefined)),
-  delete: publicProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
     // sales_postings and ownership_assignments both cascade via FK — but
     // commercial_boqs.sales_person_id is RESTRICT (commercial-boq.sql:26),
     // not cascade, and isn't pre-checked here, so deleting a salesperson
@@ -118,7 +118,7 @@ export const salesRouter = router({
       throw e
     }
   }),
-  transfer: publicProcedure
+  transfer: protectedProcedure
     .input(z.object({
       salesPersonId: z.string().uuid(), designation: z.string().min(1), tierKey: z.string().min(1),
       managerId: z.string().uuid().nullable().optional(), office: z.string().optional(),
@@ -154,7 +154,7 @@ export const salesRouter = router({
         client.release()
       }
     }),
-  updatePostingManager: publicProcedure
+  updatePostingManager: protectedProcedure
     .input(z.object({ personId: z.string().uuid(), managerId: z.string().uuid().nullable() }))
     .mutation(async ({ input }) => {
       const result = await pool.query(
