@@ -79,7 +79,16 @@ resource "google_cloud_run_v2_service" "goms_api" {
       # unauthenticated adminImport.* call still returned real data before
       # this deploy. Update this alongside any future Terraform-driven
       # deploy of goms-api.
-      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:943b362b28dc9439fa0ed01aae49531cc9f2e1eb"
+      # Reconciled 2026-09-04 ahead of Task 10's apply: `terraform plan`
+      # showed the live service running a newer image (`dfa01084`, deployed
+      # out-of-band by GitLab CI on a subsequent push to main, per this
+      # file's own established "CI deploys code, Terraform is applied
+      # separately" convention) than this file previously declared — without
+      # this reconciliation, applying Task 10's unrelated env-var addition
+      # would have silently rolled goms-dev back to the older image as a
+      # side effect. Pin to whatever is actually live at apply time, same as
+      # this file's other identical fixes.
+      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:dfa01084"
       env {
         name = "DATABASE_URL"
         value_source {
@@ -110,7 +119,12 @@ resource "google_cloud_run_v2_service" "goms_api" {
       }
       env {
         name  = "ADMIN_IMPORT_ALLOWED_EMAILS"
-        value = "rajas@amnex.com,rajassaji9@gmail.com"
+        # Reconciled 2026-09-04 to match the live out-of-band addition of
+        # shubham16@amnex.com (added directly via gcloud at some point after
+        # this file was last touched, per `terraform plan`'s drift detection
+        # ahead of Task 10's apply) — preserved here so an unrelated
+        # auth-flags change doesn't silently revoke that person's access.
+        value = "rajas@amnex.com,rajassaji9@gmail.com,shubham16@amnex.com"
       }
       # Mutation-auth rollout (2026-09-04, docs/superpowers/analysis/2026-09-04-
       # goms-auth-architecture-decision.md). Both default "false": deploying
