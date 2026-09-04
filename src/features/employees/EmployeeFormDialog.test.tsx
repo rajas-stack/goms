@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import * as api from '@/lib/api'
 import { EmployeeFormDialog } from './EmployeeFormDialog'
+import { ToastProvider } from '@/components/ui/Toast'
 import type { Employee, HierNode, SalesPerson } from '@/lib/types'
 
 // Both pickers are unrelated to what Task 1.2 is testing (the submit()
@@ -94,14 +95,16 @@ function renderDialog(props: {
   const onClose = vi.fn()
   render(
     <QueryClientProvider client={qc}>
-      <EmployeeFormDialog
-        open
-        orgNode={props.orgNode ?? null}
-        employee={props.employee ?? null}
-        reporteeMode={props.reporteeMode ?? null}
-        onClose={onClose}
-        onSaved={onSaved}
-      />
+      <ToastProvider>
+        <EmployeeFormDialog
+          open
+          orgNode={props.orgNode ?? null}
+          employee={props.employee ?? null}
+          reporteeMode={props.reporteeMode ?? null}
+          onClose={onClose}
+          onSaved={onSaved}
+        />
+      </ToastProvider>
     </QueryClientProvider>,
   )
   return { onSaved, onClose }
@@ -131,6 +134,7 @@ describe('EmployeeFormDialog — auto-reflecting the Relationship Owner pick int
     const { onSaved } = renderDialog({ orgNode: ORG_NODE, employee: null })
 
     await user.type(screen.getByLabelText(/full name/i), 'New Person')
+    await user.type(screen.getByLabelText(/^designation$/i), 'Deputy Director')
     // `getByRole('textbox', ...)` rather than `getByLabelText` — a Preferred
     // Communication checkbox is ALSO labeled "Email" (a `COMMS` option), so a
     // plain label match is ambiguous; scoping to the textbox role picks only
@@ -366,6 +370,7 @@ describe('EmployeeFormDialog — Department field (read-only, resolved) and Webs
     renderDialog({ orgNode: DEPARTMENT, employee: null })
 
     await user.type(screen.getByLabelText(/full name/i), 'New Person')
+    await user.type(screen.getByLabelText(/^designation$/i), 'Deputy Director')
     await user.type(screen.getByRole('textbox', { name: /^email$/i }), 'new.person@gov.in')
     await user.type(screen.getByLabelText(/phone number/i), '9876500000')
 
@@ -433,5 +438,42 @@ describe('EmployeeFormDialog — Department field (read-only, resolved) and Webs
     // No Address/Website fields exist to have been populated in the first place.
     expect(screen.queryByLabelText('Website')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Address')).not.toBeInTheDocument()
+  })
+})
+
+describe('EmployeeFormDialog — required designation and save-error surfacing', () => {
+  it('disables Add employee until Designation is filled, even with name/email/phone present', async () => {
+    stubApiHooks({ breadcrumbTrail: [] })
+    const user = userEvent.setup()
+    renderDialog({ orgNode: ORG_NODE, employee: null })
+
+    await user.type(screen.getByLabelText(/full name/i), 'New Person')
+    await user.type(screen.getByRole('textbox', { name: /^email$/i }), 'new.person@gov.in')
+    await user.type(screen.getByLabelText(/phone number/i), '9876500000')
+
+    expect(screen.getByRole('button', { name: /add employee/i })).toBeDisabled()
+
+    await user.type(screen.getByLabelText(/^designation$/i), 'Deputy Director')
+
+    expect(screen.getByRole('button', { name: /add employee/i })).toBeEnabled()
+  })
+
+  it('shows a toast and leaves the dialog open when the create mutation rejects, instead of failing silently', async () => {
+    stubApiHooks({ breadcrumbTrail: [] })
+    createMutateAsync.mockRejectedValue(new Error('String must contain at least 1 character(s)'))
+    const user = userEvent.setup()
+    const { onSaved, onClose } = renderDialog({ orgNode: ORG_NODE, employee: null })
+
+    await user.type(screen.getByLabelText(/full name/i), 'New Person')
+    await user.type(screen.getByLabelText(/^designation$/i), 'Deputy Director')
+    await user.type(screen.getByRole('textbox', { name: /^email$/i }), 'new.person@gov.in')
+    await user.type(screen.getByLabelText(/phone number/i), '9876500000')
+
+    await user.click(screen.getByRole('button', { name: /add employee/i }))
+
+    await waitFor(() => expect(createMutateAsync).toHaveBeenCalled())
+    await screen.findByText(/Couldn't save/i)
+    expect(onSaved).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
   })
 })

@@ -162,7 +162,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
   // A vacant seat only needs a title; a filled record needs a name + valid contacts.
   const canSubmit = reporteeMode
     ? (form.vacant ? !!form.designation.trim() : (!!form.selectedPersonId || !!form.selectedPersonName.trim()) && !!form.designation.trim())
-    : (form.vacant ? !!form.designation.trim() : !!form.name.trim() && emailValid && phoneValid)
+    : (form.vacant ? !!form.designation.trim() : !!form.name.trim() && !!form.designation.trim() && emailValid && phoneValid)
   const wasVacant = !!employee?.vacant
   const fillingVacancy = wasVacant && !form.vacant
 
@@ -282,7 +282,14 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
 
   async function submit() {
     if (!canSubmit) return
+    try {
+      await doSubmit()
+    } catch (e) {
+      toast(e instanceof Error ? `Couldn't save: ${e.message}` : "Couldn't save — please try again.")
+    }
+  }
 
+  async function doSubmit() {
     if (reporteeMode) {
       if (form.vacant) {
         if (!orgNode) return
