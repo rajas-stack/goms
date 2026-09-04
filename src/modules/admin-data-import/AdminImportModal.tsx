@@ -48,7 +48,7 @@ export function AdminImportModal({ open, onClose }: { open: boolean; onClose: ()
         open={open}
         onClose={handleClose}
         signedInAs={email ?? undefined}
-        onSignOut={() => { void signOut(auth); handleClose() }}
+        onSignOut={() => { if (auth) void signOut(auth); handleClose() }}
       />
     )
   }

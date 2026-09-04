@@ -7,7 +7,15 @@ import { useAdminImportDomains } from '../api'
 function useAdminImportUser() {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  useEffect(() => onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false) }), [])
+  useEffect(() => {
+    // `auth` is null when Firebase isn't configured for this build (see
+    // firebaseAuth.ts). Admin Data Import is itself gated behind
+    // VITE_ADMIN_IMPORT_ENABLED, so in practice whoever enables that flag
+    // also configures Firebase — but this must degrade gracefully (stuck on
+    // the "sign in" screen, sign-in disabled) rather than crash either way.
+    if (!auth) { setLoading(false); return }
+    return onAuthStateChanged(auth, (u) => { setUser(u); setLoading(false) })
+  }, [])
   return { user, loading }
 }
 
@@ -59,9 +67,10 @@ export function AdminImportAuthGate({ children, onPhaseChange }: { children: Rea
         <p className="max-w-sm text-sm text-muted">
           Sign in with your Amnex Google account to use Admin Data Import.
         </p>
-        <Button variant="primary" onClick={() => signInWithPopup(auth, googleProvider)}>
+        <Button variant="primary" disabled={!auth} onClick={() => auth && signInWithPopup(auth, googleProvider)}>
           Sign in with Google
         </Button>
+        {!auth && <p className="text-xs text-muted">Sign-in is not configured for this deployment.</p>}
       </div>
     )
   }
@@ -87,7 +96,7 @@ export function AdminImportAuthGate({ children, onPhaseChange }: { children: Rea
         >
           Request access
         </a>
-        <Button variant="ghost" onClick={() => signOut(auth)}>Sign out</Button>
+        <Button variant="ghost" onClick={() => auth && signOut(auth)}>Sign out</Button>
       </div>
     )
   }
@@ -96,7 +105,7 @@ export function AdminImportAuthGate({ children, onPhaseChange }: { children: Rea
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-end gap-3 border-b border-line px-4 py-2 text-xs text-muted">
         <span>Signed in as {user.email}</span>
-        <Button variant="ghost" size="sm" onClick={() => signOut(auth)}>Sign out</Button>
+        <Button variant="ghost" size="sm" onClick={() => auth && signOut(auth)}>Sign out</Button>
       </div>
       <div className="min-h-0 flex-1">{children}</div>
     </div>

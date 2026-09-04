@@ -18,7 +18,7 @@ const adminImportClient = createTRPCClient<AppRouter>({
       // expired token, and there is no signed-in user at all until
       // AdminImportAuthGate's onAuthStateChanged fires.
       headers: async () => {
-        const token = await auth.currentUser?.getIdToken()
+        const token = await auth?.currentUser?.getIdToken()
         return token ? { Authorization: `Bearer ${token}` } : {}
       },
     }),

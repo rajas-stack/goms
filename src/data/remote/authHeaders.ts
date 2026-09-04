@@ -10,7 +10,7 @@ import { auth } from '@/lib/firebaseAuth'
  *  src/data/remote/authPromptLink.ts (Task 9) reacts to. */
 export async function getAuthHeaders(): Promise<Record<string, string>> {
   try {
-    const token = await auth.currentUser?.getIdToken()
+    const token = await auth?.currentUser?.getIdToken()
     return token ? { Authorization: `Bearer ${token}` } : {}
   } catch {
     return {}
