@@ -39,8 +39,12 @@ function authEnforced(): boolean {
  *  deliberate no-op release. On, every call must present a verified,
  *  @amnex.com Google identity. */
 export const protectedProcedure = publicProcedure
-  .use(({ next }) => {
-    assertNotReadOnly()
+  .use(({ type, next }) => {
+    // Scoped to mutations only — EMERGENCY_READ_ONLY must not block reads
+    // (decision doc §5: "reads keep working"). Every existing usage of
+    // protectedProcedure happens to be a mutation today, which made this
+    // "accidentally safe" before this scoping was added.
+    if (type === 'mutation') assertNotReadOnly()
     return next()
   })
   .use(async ({ ctx, next }) => {
@@ -76,8 +80,13 @@ export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
  *  mutation now has — Admin Data Import's own mutations (session.commit,
  *  commitGeographyLoad) must also stop during an incident. */
 export const adminImportProcedure = publicProcedure
-  .use(({ next }) => {
-    assertNotReadOnly()
+  .use(({ type, next }) => {
+    // Scoped to mutations only (same reasoning as protectedProcedure above)
+    // — adminImportProcedure gates both reads (session.history, history,
+    // listDomains) and writes (session.commit, commitGeographyLoad), so an
+    // unconditional check here would incorrectly block Admin Data Import's
+    // reads during an EMERGENCY_READ_ONLY incident too.
+    if (type === 'mutation') assertNotReadOnly()
     if (process.env.ADMIN_IMPORT_ENABLED !== 'true') {
       throw new TRPCError({ code: 'NOT_FOUND', message: 'Not found' })
     }

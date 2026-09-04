@@ -4,6 +4,7 @@ import { contextForEmail } from './testHelpers/authTestHelpers.js'
 
 const testRouter = router({
   ping: protectedProcedure.mutation(() => 'pong'),
+  pingQuery: protectedProcedure.query(() => 'pong'),
   pingAdmin: adminProcedure.mutation(() => 'admin-pong'),
 })
 
@@ -25,6 +26,12 @@ describe('protectedProcedure', () => {
     process.env.EMERGENCY_READ_ONLY = 'true'
     const caller = testRouter.createCaller({})
     await expect(caller.ping()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+
+  it('does NOT block a query when EMERGENCY_READ_ONLY is on — reads keep working (decision doc §5)', async () => {
+    process.env.EMERGENCY_READ_ONLY = 'true'
+    const caller = testRouter.createCaller({})
+    await expect(caller.pingQuery()).resolves.toBe('pong')
   })
 
   it('rejects an unauthenticated call once enforcement is on', async () => {

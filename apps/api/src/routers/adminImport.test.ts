@@ -149,4 +149,25 @@ describe('adminImport router', () => {
       await expect(caller.adminImport.listDomains()).resolves.toBeDefined()
     })
   })
+
+  describe('EMERGENCY_READ_ONLY scoping (final review Important #2)', () => {
+    afterEach(() => {
+      delete process.env.EMERGENCY_READ_ONLY
+    })
+
+    it('still allows listDomains (a query/read) through when EMERGENCY_READ_ONLY is on', async () => {
+      process.env.EMERGENCY_READ_ONLY = 'true'
+      const caller = appRouter.createCaller(authorizedContext())
+      await expect(caller.adminImport.listDomains()).resolves.toBeDefined()
+    })
+
+    it('still blocks session.commit (a mutation/write) when EMERGENCY_READ_ONLY is on', async () => {
+      process.env.EMERGENCY_READ_ONLY = 'true'
+      const caller = appRouter.createCaller(authorizedContext())
+      const domains = { taxClasses: [{ code: 'GST18', name: 'GST 18%', ratePct: 18 }] }
+      await expect(
+        caller.adminImport.session.commit({ domains, sessionCommitToken: 'irrelevant-token', excludedRows: [] }),
+      ).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+  })
 })
