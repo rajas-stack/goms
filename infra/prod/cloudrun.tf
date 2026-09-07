@@ -51,16 +51,16 @@ resource "google_storage_bucket_iam_member" "runtime_bucket_access" {
 }
 
 # Image pinned to the commit-SHA tag actually running live on goms-prod
-# today (confirmed 2026-09-04 via `gcloud run services describe` — revision
-# goms-api-00014-shs, image digest matches this tag exactly). This is NOT
-# yet the approved release candidate (b8b18705..., still awaiting explicit
-# GO before any deploy) — it is 2026-08-31's "Task 28 verification" build,
-# deployed manually (`gcloud run deploy`, out-of-band from Terraform) before
-# the Firebase auth rollout, the 26-task enhancements, or the Admin Import
-# UI rework existed. This file's job right now is to describe reality
-# accurately so `terraform plan` stops proposing an unsafe rollback to the
-# old `:bootstrap` placeholder — bumping this to the real release candidate
-# is a separate, explicitly-approved deploy step, not part of this change.
+# (confirmed 2026-09-07 via `gcloud run services describe` — revision
+# goms-api-00016-kkd, traffic explicitly pinned to it, image digest matches
+# this tag exactly). This is the auth-architecture release candidate
+# (docs/superpowers/plans/2026-09-04-goms-auth-architecture-implementation-plan.md),
+# deployed manually (`gcloud run deploy`, out-of-band from Terraform, same
+# established pattern as every prior prod promotion) as an explicit no-op:
+# AUTH_ENFORCEMENT_ENABLED/EMERGENCY_READ_ONLY below are both "false", so
+# every procedure behaves exactly as it did on the prior image. Turning
+# enforcement on is a separate, explicitly-approved follow-up, not part of
+# this deploy.
 resource "google_cloud_run_v2_service" "goms_api" {
   name     = "goms-api"
   location = "asia-south1"
@@ -98,7 +98,7 @@ resource "google_cloud_run_v2_service" "goms_api" {
     }
 
     containers {
-      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:54a7d6ab3af64b7ee186db77f1f86cf827b5c20e"
+      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:6f376438f4ae0ef084fccab447afc8f93ac50c09"
       # This service is only ever reached through Firebase Hosting's
       # `/api/**` rewrite (firebase.json), which arrives from a Google
       # front-end address and carries CDN addresses in X-Forwarded-For. Without
@@ -108,6 +108,19 @@ resource "google_cloud_run_v2_service" "goms_api" {
       env {
         name  = "TRUST_PROXY"
         value = "firebase-hosting"
+      }
+      # Both explicitly "false" (2026-09-07), matching the no-op release
+      # described above — set explicitly rather than left unset so the
+      # deliberate off-state is visible here, same convention infra/dev
+      # already uses. Do not flip AUTH_ENFORCEMENT_ENABLED to "true" without
+      # the user's separate, explicit approval (plan's Global Constraints).
+      env {
+        name  = "AUTH_ENFORCEMENT_ENABLED"
+        value = "false"
+      }
+      env {
+        name  = "EMERGENCY_READ_ONLY"
+        value = "false"
       }
       # ADMIN_IMPORT_ENABLED: confirmed unset on the live service as of
       # 2026-09-04 (a same-day live-exposure incident — this had been set to
@@ -157,7 +170,7 @@ resource "google_cloud_run_v2_job" "goms_migrate" {
         # live via `gcloud run jobs describe`) so a migration run always
         # reflects the exact same code as the service it's migrating the
         # schema for.
-        image   = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:54a7d6ab3af64b7ee186db77f1f86cf827b5c20e"
+        image   = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:6f376438f4ae0ef084fccab447afc8f93ac50c09"
         command = ["node"]
         args    = ["node_modules/node-pg-migrate/bin/node-pg-migrate.js", "up"]
         env {
