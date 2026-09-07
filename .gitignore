@@ -72,3 +72,7 @@ tfplan.json
 # `npm run build-import-fixtures`, not source).
 scripts/admin-import-fixtures/out/
 
+# Playwright E2E per-run artifacts.
+test-results/
+playwright-report/
+
