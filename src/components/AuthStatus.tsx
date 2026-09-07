@@ -4,6 +4,8 @@ import { auth } from '@/lib/firebaseAuth'
 import { notifyAuthRequired } from '@/lib/authPrompt'
 import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
+import { Dialog } from '@/components/ui/Dialog'
+import { Button } from '@/components/ui/Button'
 
 /** Persistent sign-in indicator, visible on every screen (TopBar) — not just
  *  reactively when a mutation gets rejected (AuthPromptDialog). Signing in
@@ -11,6 +13,7 @@ import { Tooltip } from '@/components/ui/Tooltip'
  *  signInWithPopup itself, so there's one sign-in flow/error path, not two. */
 export function AuthStatus() {
   const [user, setUser] = useState<User | null>(null)
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
 
   useEffect(() => {
     if (!auth) return
@@ -36,18 +39,43 @@ export function AuthStatus() {
   }
 
   return (
-    <Tooltip label={user.email ?? 'Signed in'} side="bottom" className="shrink-0">
-      <div className="flex h-11 items-center gap-1.5 rounded-full border border-line bg-panel px-2.5 text-[11px] font-medium text-ink-700 lg:h-7">
-        <Icon name="User" size={11} />
-        <span className="max-w-[9rem] truncate">{user.email}</span>
-        <button
-          onClick={() => { void signOut(currentAuth) }}
-          aria-label="Sign out"
-          className="text-muted hover:text-ink-900"
-        >
-          <Icon name="LogOut" size={11} />
-        </button>
-      </div>
-    </Tooltip>
+    <>
+      <Tooltip label={user.email ?? 'Signed in'} side="bottom" className="shrink-0">
+        <div className="flex h-11 items-center gap-1 rounded-full border border-line bg-panel py-1 pl-2.5 pr-1 text-[11px] font-medium text-ink-700 lg:h-8">
+          <Icon name="User" size={12} />
+          <span className="max-w-[9rem] truncate">{user.email}</span>
+          <button
+            onClick={() => setConfirmSignOut(true)}
+            aria-label="Sign out"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted hover:bg-white hover:text-ink-900 lg:h-6 lg:w-6"
+          >
+            <Icon name="LogOut" size={13} />
+          </button>
+        </div>
+      </Tooltip>
+
+      <Dialog
+        open={confirmSignOut}
+        onClose={() => setConfirmSignOut(false)}
+        title="Sign out?"
+        description={user.email ?? undefined}
+        footer={
+          <>
+            <Button onClick={() => setConfirmSignOut(false)}>Cancel</Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                setConfirmSignOut(false)
+                void signOut(currentAuth)
+              }}
+            >
+              Sign out
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted">You'll need to sign in again to make changes.</p>
+      </Dialog>
+    </>
   )
 }

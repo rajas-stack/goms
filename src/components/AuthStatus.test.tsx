@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { render, screen, act, within, waitFor } from '@testing-library/react'
 import { AuthStatus } from './AuthStatus'
 import * as authPrompt from '@/lib/authPrompt'
 
@@ -38,13 +38,36 @@ describe('AuthStatus', () => {
     expect(screen.queryByRole('button', { name: /^sign in$/i })).not.toBeInTheDocument()
   })
 
-  it('signs out when the signed-in state\'s sign-out control is clicked', async () => {
+  it('asks for confirmation before signing out, rather than signing out immediately', () => {
     onAuthStateChanged.mockImplementation((_auth, cb) => { cb({ email: 'rajas@amnex.com' }); return () => {} })
     render(<AuthStatus />)
+    act(() => { screen.getByRole('button', { name: /sign out/i }).click() })
+
+    expect(signOut).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText(/sign out\?/i)).toBeInTheDocument()
+  })
+
+  it('signs out only once the confirm dialog is confirmed', async () => {
+    onAuthStateChanged.mockImplementation((_auth, cb) => { cb({ email: 'rajas@amnex.com' }); return () => {} })
+    render(<AuthStatus />)
+    act(() => { screen.getByRole('button', { name: /sign out/i }).click() })
+
+    const dialog = screen.getByRole('dialog')
     await act(async () => {
-      screen.getByRole('button', { name: /sign out/i }).click()
+      within(dialog).getByRole('button', { name: /^sign out$/i }).click()
     })
     expect(signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not sign out if the confirmation is cancelled', async () => {
+    onAuthStateChanged.mockImplementation((_auth, cb) => { cb({ email: 'rajas@amnex.com' }); return () => {} })
+    render(<AuthStatus />)
+    act(() => { screen.getByRole('button', { name: /sign out/i }).click() })
+    act(() => { screen.getByRole('button', { name: /cancel/i }).click() })
+
+    expect(signOut).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
   it('updates live when Firebase pushes a sign-out', () => {
