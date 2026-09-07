@@ -121,8 +121,8 @@ export function VisitingCard({ employeeId }: { employeeId: string }) {
       if (found.name && !emp!.name) patch.name = found.name
       if (found.designation && !emp!.designation) patch.designation = found.designation
       if (found.company && !emp!.company) patch.company = found.company
-      if (found.address && !emp!.address) patch.address = found.address
-      if (found.website && !emp!.website) patch.website = found.website
+      // Address/website belong to the Department (item 4), never to the
+      // employee — deliberately not applied here even when OCR finds them.
       const keys = Object.keys(patch)
       if (keys.length === 0) {
         // "Nothing applied" has two very different causes, and reporting both

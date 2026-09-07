@@ -582,7 +582,7 @@ const ATTENDANCE_TYPES = new Set(['meeting', 'inPerson'])
  *  can render the exact same entries/markup rather than duplicating this —
  *  `onSetAttended`/`onEdit` are omitted there, which hides both interactive
  *  controls for that read-only view. */
-export function TimelineList({ events, onSetAttended, onEdit, highlightId, contactNameById }: {
+export function TimelineList({ events, onSetAttended, onEdit, highlightId, contactById }: {
   events: TimelineEvent[]
   onSetAttended?: (id: string, attended: boolean | undefined) => void
   onEdit?: (event: TimelineEvent) => void
@@ -590,9 +590,10 @@ export function TimelineList({ events, onSetAttended, onEdit, highlightId, conta
   /** Item 15: passed only by DepartmentSection, whose Meetings block
    *  aggregates entries across every contact under the department — unlike
    *  a single employee's own profile (where the contact is implicit), each
-   *  row here needs to say WHICH contact it's about. Omitted (the default)
+   *  row here needs to say WHICH contact it's about (item 11: with an
+   *  avatar, like every other person-name surface). Omitted (the default)
    *  on the single-employee page, where showing it would be redundant. */
-  contactNameById?: Map<string, string>
+  contactById?: Map<string, Employee>
 }) {
   const [pulsing, setPulsing] = useState(false)
   const highlightedRef = useRef<HTMLDivElement>(null)
@@ -643,10 +644,14 @@ export function TimelineList({ events, onSetAttended, onEdit, highlightId, conta
                     </button>
                   )}
                 </div>
-                <div className="text-[11px] text-muted">
-                  {e.date}{e.time && ` · ${e.time}`}
-                  {contactNameById?.get(e.employeeId) && (
-                    <> · <span className="font-medium text-ink-800">{contactNameById.get(e.employeeId)}</span></>
+                <div className="flex items-center gap-1.5 text-[11px] text-muted">
+                  <span>{e.date}{e.time && ` · ${e.time}`}</span>
+                  {contactById?.get(e.employeeId) && (
+                    <>
+                      <span>·</span>
+                      <Avatar person={contactById.get(e.employeeId)!} size="xs" />
+                      <span className="font-medium text-ink-800">{contactById.get(e.employeeId)!.name}</span>
+                    </>
                   )}
                 </div>
                 {e.note && <p className="mt-0.5 break-words text-[12px] text-ink-700">{e.note}</p>}

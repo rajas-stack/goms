@@ -68,7 +68,7 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
     () => allTimelineEvents.filter((e) => deptById[e.employeeId]?.id === node.id),
     [allTimelineEvents, deptById, node.id],
   )
-  const contactNameById = useMemo(() => new Map(employees.map((e) => [e.id, e.name])), [employees])
+  const contactById = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees])
 
   return (
     <>
@@ -158,7 +158,7 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
           happens from the individual employee's own profile, per item 15. */}
       {departmentTimeline.length > 0 && (
         <Block title={`Meetings · ${departmentTimeline.length}`}>
-          <TimelineList events={departmentTimeline} contactNameById={contactNameById} />
+          <TimelineList events={departmentTimeline} contactById={contactById} />
         </Block>
       )}
     </>

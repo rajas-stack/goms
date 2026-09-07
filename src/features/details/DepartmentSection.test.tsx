@@ -136,6 +136,25 @@ describe('DepartmentSection — Meetings section (Task 8.5)', () => {
     expect(screen.getByText('Asha Rao')).toBeInTheDocument()
     expect(screen.getByText('Bilal Khan')).toBeInTheDocument()
   })
+
+  // Item 11: a person's name must never render bare — the concerned contact
+  // on an aggregated department meeting is exactly the surface the Excel
+  // requirement calls out by name ("... meetings and similar areas").
+  it('shows an avatar next to the concerned contact\'s name on each aggregated meeting', () => {
+    const node = makeNode({ id: 'dept-1' })
+    const event = makeTimelineEvent({ id: 'evt-a', employeeId: 'emp-a', title: 'Meeting with Asha' })
+    stubHooks({
+      deptById: { 'emp-a': { id: 'dept-1', name: 'Health' } },
+      timelineEvents: [event],
+    })
+
+    render(<DepartmentSection
+      node={node}
+      employees={[makeEmployee({ id: 'emp-a', name: 'Asha Rao', photoUrl: 'https://example.com/asha.jpg' })]}
+    />)
+
+    expect(screen.getByRole('img', { name: 'Asha Rao' })).toBeInTheDocument()
+  })
 })
 
 // Task 9.2: the department head row shows an avatar next to the resolved

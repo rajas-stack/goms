@@ -294,6 +294,28 @@ describe('CreateBoq — bulk editing', () => {
   })
 })
 
+describe('CreateBoq — Stakeholder Contact address (item 4: inherits from Department, not the employee)', () => {
+  it('fills Address from the selected Department, not the picked employee\'s own (possibly stale) address field', async () => {
+    const user = userEvent.setup()
+    renderCreateBoq()
+    // Overridden after the initial render (matching the Opportunity Name
+    // uniqueness test below) — a later re-render (triggered by the Department
+    // pick itself) re-reads these updated mocks.
+    vi.spyOn(libApi, 'useDepartments').mockReturnValue({
+      data: [{ id: 'd1', name: 'Dept One', metadata: { officeAddress: '1 Department Road, Capital City' } }],
+    } as never)
+    vi.spyOn(libApi, 'useEmployeesUnder').mockReturnValue({
+      data: [{ id: 'emp1', name: 'Stakeholder Person', designation: 'Director', phone: '', email: '', vacant: false, photoUrl: null, address: 'Stale Personal Address' }],
+    } as never)
+
+    await pickCombobox(user, 'Department', 'Dept One')
+    await user.type(screen.getByPlaceholderText(/search a stakeholder/i), 'Stakeholder Person')
+    await user.click(await screen.findByText('Stakeholder Person'))
+
+    expect(screen.getByLabelText(/^address$/i)).toHaveValue('1 Department Road, Capital City')
+  })
+})
+
 describe('CreateBoq — Opportunity Name uniqueness', () => {
   it('blocks Save and shows an inline message when the typed name is already used by another BOQ', async () => {
     const user = userEvent.setup()

@@ -25,7 +25,7 @@ const DATASETS: { key: DatasetKey; label: string; icon: string; describe: string
   { key: 'opportunities', label: 'Opportunities', icon: 'Briefcase', describe: 'Every opportunity with its department, stage, and value' },
 ]
 
-interface Ctx {
+export interface Ctx {
   states: { code: number; name: string }[]
   departments: HierNode[]
   employees: Employee[]
@@ -59,34 +59,41 @@ function departmentRows(ctx: Ctx): string[][] {
   ]
 }
 
-function peopleRows(ctx: Ctx): string[][] {
+export function peopleRows(ctx: Ctx): string[][] {
   const nameById = new Map(ctx.employees.map((e) => [e.id, e.name] as const))
+  const deptById = new Map(ctx.departments.map((d) => [d.id, d] as const))
   return [
     [
       'Name', 'Designation', 'Department', 'Email', 'Phone', 'Company', 'Address', 'Website',
       'Vacant', 'Connected', 'Relationship status', 'Relationship quality', 'Important contact',
       'Preferred contact', 'Reports to', 'Last interaction', 'Next follow-up', 'Notes',
     ],
-    ...ctx.employees.map((e) => [
-      e.name,
-      e.designation,
-      ctx.employeeDepartments[e.id]?.name ?? '',
-      e.email,
-      e.phone,
-      e.company,
-      e.address,
-      e.website,
-      e.vacant ? 'yes' : 'no',
-      e.connected ? 'yes' : 'no',
-      e.connected ? e.relationshipStatus : '',
-      e.connected ? e.relationshipQuality : '',
-      e.importantContact ? 'yes' : 'no',
-      e.preferredComm.join('; '),
-      e.managerId ? nameById.get(e.managerId) ?? '' : '',
-      e.lastInteractionAt ?? '',
-      e.followUpDate ?? '',
-      e.notes,
-    ]),
+    ...ctx.employees.map((e) => {
+      // Address/Website belong to the Department (item 4) — the employee's
+      // own field is only a fallback for old records the department itself
+      // has no value for yet, same rule as EmployeeDetails/CreateBoq.
+      const dept = deptById.get(ctx.employeeDepartments[e.id]?.id ?? '')
+      return [
+        e.name,
+        e.designation,
+        ctx.employeeDepartments[e.id]?.name ?? '',
+        e.email,
+        e.phone,
+        e.company,
+        dept?.metadata.officeAddress || e.address,
+        dept?.metadata.website || e.website,
+        e.vacant ? 'yes' : 'no',
+        e.connected ? 'yes' : 'no',
+        e.connected ? e.relationshipStatus : '',
+        e.connected ? e.relationshipQuality : '',
+        e.importantContact ? 'yes' : 'no',
+        e.preferredComm.join('; '),
+        e.managerId ? nameById.get(e.managerId) ?? '' : '',
+        e.lastInteractionAt ?? '',
+        e.followUpDate ?? '',
+        e.notes,
+      ]
+    }),
   ]
 }
 

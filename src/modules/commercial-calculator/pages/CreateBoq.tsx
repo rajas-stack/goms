@@ -164,7 +164,12 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
     // stakeholder identity, so it becomes the customer name instead.
     setCustomerName(emp ? (emp.vacant ? (emp.designation || 'Vacant position') : emp.name) : '')
     setCustomerContact(emp ? [emp.phone, emp.email].filter(Boolean).join(' · ') : '')
-    setCustomerAddress(emp?.address ?? '')
+    // Address belongs to the Department (item 4), not the employee — the
+    // selected Department (already known here) is authoritative; the
+    // employee's own address field is only a fallback for old records the
+    // department itself hasn't got a value for yet.
+    const dept = departments.find((d) => d.id === departmentId)
+    setCustomerAddress(dept?.metadata.officeAddress || emp?.address || '')
   }
   /** Lets a user record a government stakeholder who isn't yet an `Employee`
    *  (a new contact met for the first time on this tender) without leaving
