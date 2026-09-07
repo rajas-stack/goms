@@ -11,7 +11,6 @@ import { GlobalFab } from '@/components/GlobalFab'
 import { RouteFallback } from '@/components/RouteFallback'
 import { ImportDialog } from '@/features/import/ImportDialog'
 import { ExportDialog } from '@/features/import/ExportDialog'
-import { SettingsDialog } from '@/features/settings/SettingsDialog'
 import { ToastProvider } from '@/components/ui/Toast'
 import { SalesEditLockProvider } from '@/features/sales/salesEditLock'
 import { cn, isTypingTarget } from '@/lib/utils'
@@ -33,14 +32,13 @@ interface ShellCtx {
   openSearch: () => void
   openImport: () => void
   openExport: () => void
-  openSettings: () => void
   /** Whether SecondaryNav (Map/Directory/Insights/Meetings) is showing —
    *  derived straight from the route (anywhere but Home), so it can never
    *  drift out of sync with a reload, deep link, or browser back/forward. */
   navExpanded: boolean
 }
 const Ctx = createContext<ShellCtx>({
-  openSearch: () => {}, openImport: () => {}, openExport: () => {}, openSettings: () => {}, navExpanded: false,
+  openSearch: () => {}, openImport: () => {}, openExport: () => {}, navExpanded: false,
 })
 export const useShell = () => useContext(Ctx)
 
@@ -48,7 +46,6 @@ export function AppLayout() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const navigate = useNavigate()
   const location = useLocation()
@@ -87,8 +84,6 @@ export function AppLayout() {
   importOpenRef.current = importOpen
   const exportOpenRef = useRef(exportOpen)
   exportOpenRef.current = exportOpen
-  const settingsOpenRef = useRef(settingsOpen)
-  settingsOpenRef.current = settingsOpen
   const drawerOpenRef = useRef(drawerOpen)
   drawerOpenRef.current = drawerOpen
   const isMobileRef = useRef(isMobile)
@@ -142,10 +137,6 @@ export function AppLayout() {
         setExportOpen(false)
         return
       }
-      if (settingsOpenRef.current) {
-        setSettingsOpen(false)
-        return
-      }
       if (drawerOpenRef.current) {
         setDrawerOpen(false)
         return
@@ -192,7 +183,7 @@ export function AppLayout() {
           // is untouched. Neither branch calls `navigate()` — the current
           // page/route is never replaced.
           openImport: () => setImportOpen(true),
-          openExport: () => setExportOpen(true), openSettings: () => setSettingsOpen(true), navExpanded,
+          openExport: () => setExportOpen(true), navExpanded,
         }}>
           <div className="flex h-screen overflow-hidden bg-paper">
             <AccountMappingRail />
@@ -216,7 +207,6 @@ export function AppLayout() {
             )
             : <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />}
           <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
-          <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
           <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
           {navExpanded && <GlobalFab />}
         </Ctx.Provider>

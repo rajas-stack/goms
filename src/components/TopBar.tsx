@@ -5,7 +5,6 @@ import { Button } from './ui/Button'
 import { Tooltip } from './ui/Tooltip'
 import { AuthStatus } from './AuthStatus'
 import { cn } from '@/lib/utils'
-import { resolveApiEnvironment } from '@/lib/api-environment'
 import logo from '@/assets/amnex-logo.svg'
 
 interface Props {
@@ -13,21 +12,8 @@ interface Props {
   onOpenDrawer: () => void
 }
 
-/** Set only via an untracked `.env.local` for opt-in local testing against a
- *  deployed backend, or at build time for a hosted deploy — never the default
- *  for `npm run dev`/tests/builds. See the 2026-08-26 cutover readiness
- *  report §4.
- *
- *  `VITE_API_ENV_LABEL` is the optional override for backends whose URL
- *  carries no project name (a direct Cloud Run host); see
- *  `resolveApiEnvironment`. */
-const apiEnvironment = resolveApiEnvironment(
-  import.meta.env.VITE_API_BASE_URL as string | undefined,
-  import.meta.env.VITE_API_ENV_LABEL as string | undefined,
-)
-
 export function TopBar({ onOpenDrawer }: Props) {
-  const { openSearch, openImport, openExport, openSettings } = useShell()
+  const { openSearch, openImport, openExport } = useShell()
   const location = useLocation()
   const isHome = location.pathname === '/'
   const isCommercialCalculator = location.pathname.startsWith('/commercial-calculator')
@@ -52,15 +38,6 @@ export function TopBar({ onOpenDrawer }: Props) {
           </span>
         </div>
       )}
-      {apiEnvironment && (
-        <Tooltip label={`Reading and writing live data at ${apiEnvironment.baseUrl}`} side="bottom" className="shrink-0">
-          <span className="hidden items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 sm:inline-flex">
-            <Icon name="Database" size={11} />
-            Connected to {apiEnvironment.label}
-          </span>
-        </Tooltip>
-      )}
-
       {/* Search/Import/Export operate on Account Mapping's hierarchy data
           (src/features/import) — hidden in Commercial Calculator, same as
           SecondaryNav/GlobalFab (AppLayout.tsx's `navExpanded`). */}
@@ -97,17 +74,6 @@ export function TopBar({ onOpenDrawer }: Props) {
 
       <div className={cn('flex shrink-0 items-center gap-2', isCommercialCalculator && 'ml-auto')}>
         <AuthStatus />
-
-        <Tooltip label="Back up or restore data" side="bottom" className="shrink-0">
-          <Button
-            size="icon"
-            onClick={openSettings}
-            aria-label="Settings"
-            className="h-11 w-11 lg:h-8 lg:w-8"
-          >
-            <Icon name="Settings" size={16} />
-          </Button>
-        </Tooltip>
       </div>
     </header>
   )
