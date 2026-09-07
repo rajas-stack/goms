@@ -109,18 +109,28 @@ resource "google_cloud_run_v2_service" "goms_api" {
         name  = "TRUST_PROXY"
         value = "firebase-hosting"
       }
-      # Both explicitly "false" (2026-09-07), matching the no-op release
-      # described above — set explicitly rather than left unset so the
-      # deliberate off-state is visible here, same convention infra/dev
-      # already uses. Do not flip AUTH_ENFORCEMENT_ENABLED to "true" without
-      # the user's separate, explicit approval (plan's Global Constraints).
+      # AUTH_ENFORCEMENT_ENABLED flipped to "true" 2026-09-07 (revision
+      # goms-api-00018-qrk) — explicit user approval, config-only change, same
+      # application image as the no-op release above. EMERGENCY_READ_ONLY
+      # stays "false" — the incident kill switch, not touched by this change.
       env {
         name  = "AUTH_ENFORCEMENT_ENABLED"
-        value = "false"
+        value = "true"
       }
       env {
         name  = "EMERGENCY_READ_ONLY"
         value = "false"
+      }
+      # goms-prod's own Firebase project (Hosting-only until 2026-09-07):
+      # Authentication + Google Sign-In enabled and a web app registered
+      # this session (console step for enabling the Google provider, no API
+      # exists for it — same finding as goms-dev-auth's setup). Deliberately
+      # this project, not a separate dedicated one like goms-dev-auth — dev
+      # needed isolation from prod; prod's own users signing into prod's own
+      # project needs no such separation.
+      env {
+        name  = "FIREBASE_PROJECT_ID"
+        value = "goms-prod"
       }
       # ADMIN_IMPORT_ENABLED: confirmed unset on the live service as of
       # 2026-09-04 (a same-day live-exposure incident — this had been set to
