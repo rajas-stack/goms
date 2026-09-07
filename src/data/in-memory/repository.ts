@@ -339,10 +339,13 @@ export interface Repository {
   setSalesPersonStatus(id: string, status: SalesPerson['status']): Promise<void>
   deleteSalesPerson(id: string): Promise<void>
   transferSalesPerson(input: TransferSalesPersonInput): Promise<SalesPosting>
-  /** In-place manager change on the currently-open posting — distinct from
-   *  `transferSalesPerson`, which closes the current posting and opens a new
-   *  one. Does not touch designation/tier/start-end dates/changeType. */
-  updatePostingManager(personId: string, managerId: string | null): Promise<SalesPosting>
+  /** In-place manager/GM-override change on the currently-open posting —
+   *  distinct from `transferSalesPerson`, which closes the current posting
+   *  and opens a new one. Does not touch designation/tier/start-end
+   *  dates/changeType. `patch` only updates the keys it includes — omit a
+   *  key to leave it untouched (e.g. changing just `gmOverrideId` without
+   *  touching `managerId`). */
+  updatePostingManager(personId: string, patch: { managerId?: string | null; gmOverrideId?: string | null }): Promise<SalesPosting>
   /** Who effectively owns this entity — direct, or inherited from an ancestor. */
   resolveOwner(entityType: string, entityId: string, asOf: string): Promise<OwnerResolution | null>
   /** Batch form. Use this for lists: the per-entity call re-walks the ancestor
@@ -1254,6 +1257,7 @@ class InMemoryRepository implements Repository {
       designation: input.designation,
       tierKey: input.tierKey,
       managerId: input.managerId ?? null,
+      gmOverrideId: null,
       office: '',
       startDate: isoToday(),
       endDate: null,
@@ -1293,6 +1297,10 @@ class InMemoryRepository implements Repository {
       designation: input.designation,
       tierKey: input.tierKey,
       managerId: input.managerId ?? null,
+      // A reorg/promotion is exactly the kind of change that should force a
+      // fresh look at who the GM really is — never silently carry a stale
+      // override from the closed posting into the new one.
+      gmOverrideId: null,
       office: input.office ?? '',
       startDate: input.effectiveDate,
       endDate: null,
@@ -1305,13 +1313,15 @@ class InMemoryRepository implements Repository {
     return posting
   }
 
-  /** In-place manager change on the currently-open posting — distinct from
-   *  `transferSalesPerson`, which closes the current posting and opens a new
-   *  one. Does not touch designation/tier/start-end dates/changeType. */
-  async updatePostingManager(personId: string, managerId: string | null) {
+  /** In-place manager/GM-override change on the currently-open posting —
+   *  distinct from `transferSalesPerson`, which closes the current posting
+   *  and opens a new one. Does not touch designation/tier/start-end
+   *  dates/changeType. */
+  async updatePostingManager(personId: string, patch: { managerId?: string | null; gmOverrideId?: string | null }) {
     const posting = this.data.salesPostings.find((p) => p.salesPersonId === personId && p.endDate === null)
     if (!posting) throw new Error(`No open posting for salesperson: ${personId}`)
-    posting.managerId = managerId
+    if ('managerId' in patch) posting.managerId = patch.managerId ?? null
+    if ('gmOverrideId' in patch) posting.gmOverrideId = patch.gmOverrideId ?? null
     return posting
   }
 

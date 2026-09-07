@@ -407,7 +407,7 @@ test.describe('Meetings — Department Meeting Timeline', () => {
 // ============================================================================
 
 test.describe('Sales Team — RM/GM Editing', () => {
-  test('Phase 6.1–6.3: Edit Sales Person shows editable RM and derived read-only GM', async ({ page }) => {
+  test('Item 1: Edit Sales Person shows editable RM and independently editable GM (auto-derived by default)', async ({ page }) => {
     await page.goto('/sales/roster', { waitUntil: 'networkidle' });
     await unlockSalesEditing(page);
 
@@ -422,13 +422,14 @@ test.describe('Sales Team — RM/GM Editing', () => {
     await expect(rmField).toBeVisible();
     await expect(rmField).toBeEditable();
 
-    // The derived GM field renders as a disabled plain <div> (no role) when
-    // read-only, so it supports no toBeDisabled() semantics of its own —
-    // verify indirectly: no interactive control inside it, alongside the
-    // "Auto-filled from Reporting Manager" hint confirming the read-only state.
+    // GM is now independently editable (item 1) — auto-derived by default
+    // (no explicit override stored yet), with a hint distinguishing that
+    // from a manually-set value.
     const gmFieldWrapper = fieldByLabel(page, 'GM / Higher Reporting Manager');
-    await expect(gmFieldWrapper.getByText('Auto-filled from Reporting Manager')).toBeVisible();
-    await expect(gmFieldWrapper.locator('input, select, [role="combobox"]')).toHaveCount(0);
+    const gmField = gmFieldWrapper.getByRole('combobox');
+    await expect(gmField).toBeVisible();
+    await expect(gmField).toBeEditable();
+    await expect(gmFieldWrapper.getByText(/auto-derived from reporting manager/i)).toBeVisible();
   });
 
   test('Phase 6.1–6.3: GM auto-derives when RM is changed, and persists in org chart', async ({ page }) => {

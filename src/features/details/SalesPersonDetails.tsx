@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import {
-  useAllEmployees, useDepartments, useOpportunities, useOwnedBy, useSalesPerson, useSalesPersonMutations,
-  useSalesPersons, useSalesPostings,
+  useAllEmployees, useCurrentPostings, useDepartments, useOpportunities, useOwnedBy, useSalesPerson,
+  useSalesPersonMutations, useSalesPersons, useSalesPostings,
 } from '@/lib/api'
+import { liveSalesRoster, resolveSalesChain } from '@/data/sales-hierarchy'
 import { useWorkspace } from '@/features/workspace/context'
 import { useSalesEditLock } from '@/features/sales/salesEditLock'
 import { useToast } from '@/components/ui/Toast'
@@ -66,6 +67,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   const { data: person } = useSalesPerson(salesPersonId)
   const { data: postings = [] } = useSalesPostings(salesPersonId)
   const { data: people = [] } = useSalesPersons()
+  const { data: currentPostings = {} } = useCurrentPostings()
   const { data: owned = [] } = useOwnedBy(salesPersonId, isoToday())
   const { data: departments = [] } = useDepartments()
   const { data: employees = [] } = useAllEmployees()
@@ -83,6 +85,13 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
 
   const current = postings.find((p) => p.endDate === null)
   const manager = current?.managerId ? people.find((p) => p.id === current.managerId) : undefined
+  // Item 1: GM/Higher Reporting Manager — an explicit override on the
+  // current posting wins, otherwise it's derived by walking one level
+  // further up the manager chain from the RM (same derivation
+  // SalesPersonFormDialog's disabled-by-default field shows).
+  const gmOverride = current?.gmOverrideId ? people.find((p) => p.id === current.gmOverrideId) : undefined
+  const derivedGm = manager ? resolveSalesChain(manager.officialEmail, liveSalesRoster(people, currentPostings)).gm : undefined
+  const gmName = gmOverride?.name ?? derivedGm?.name
   const deptById = new Map(departments.map((d) => [d.id, d]))
   const empById = new Map(employees.map((e) => [e.id, e]))
   const oppById = new Map(opportunities.map((o) => [o.id, o]))
@@ -194,6 +203,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
               <Row label="Designation" value={current?.designation || '—'} icon="IdCard" />
               <Row label="Tier" value={current ? tierLabel(current.tierKey) : '—'} icon="Layers" />
               <Row label="Reporting manager" value={manager?.name ?? '—'} icon="Network" />
+              <Row label="GM / Higher Reporting Manager" value={gmName ?? '—'} icon="Network" />
             </dl>
           </div>
 
@@ -255,6 +265,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
             <Row label="Designation" value={current.designation || '—'} icon="IdCard" />
             <Row label="Tier" value={tierLabel(current.tierKey) || '—'} icon="Layers" />
             <Row label="Reporting manager" value={manager?.name ?? '—'} icon="Network" />
+            <Row label="GM / Higher Reporting Manager" value={gmName ?? '—'} icon="Network" />
             <Row label="Office" value={current.office || '—'} icon="Building2" />
             <Row label="Effective from" value={current.startDate || '—'} icon="CalendarClock" />
             <Row label="Effective to" value={displayEndDate(current.endDate) ?? 'Present'} icon="CalendarClock" />

@@ -311,6 +311,10 @@ export interface SalesPosting {
   designation: string
   tierKey: string
   managerId: string | null
+  /** Item 1: independently-settable GM/Higher Reporting Manager — null means
+   *  "keep auto-deriving from the RM chain" (resolveSalesChain), a set value
+   *  overrides that derivation. */
+  gmOverrideId: string | null
   office: string
   startDate: string
   endDate: string | null

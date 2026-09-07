@@ -30,7 +30,7 @@ const REPORT: SalesPerson = { ...ALICE, id: 'sp-report', name: 'Report Person', 
 function makePosting(overrides: Partial<SalesPosting> = {}): SalesPosting {
   return {
     id: 'post-1', salesPersonId: 'sp-report', designation: 'Account Manager', tierKey: 'accountManager',
-    managerId: null, office: '', startDate: '2024-01-01', endDate: null, changeType: 'initial',
+    managerId: null, gmOverrideId: null, office: '', startDate: '2024-01-01', endDate: null, changeType: 'initial',
     reason: '', createdAt: '', createdBy: null,
     ...overrides,
   }
@@ -76,8 +76,8 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('SalesPersonFormDialog — editable RM + derived-disabled GM (task 6.3)', () => {
-  it('editing shows an editable RM picker and a disabled, auto-derived GM field instead of hiding them', () => {
+describe('SalesPersonFormDialog — editable RM + independently editable GM (item 1)', () => {
+  it('editing shows an editable RM picker and an editable, auto-derived-by-default GM field instead of hiding them', () => {
     stubApiHooks({ currentPostings: { 'sp-report': makePosting({ managerId: 'sp-alice' }) } })
     renderDialog('sp-report')
 
@@ -86,7 +86,7 @@ describe('SalesPersonFormDialog — editable RM + derived-disabled GM (task 6.3)
     expect(rmField).toHaveValue('alice@amnex.com')
 
     const gmField = screen.getByLabelText(/gm \/ higher reporting manager/i)
-    expect(gmField).toBeDisabled()
+    expect(gmField).not.toBeDisabled()
 
     // Neither Designation nor Tier nor "Reports to" (the create-only fields)
     // should be shown while editing — this replaces that hidden block, it
@@ -172,6 +172,57 @@ describe('SalesPersonFormDialog — editable RM + derived-disabled GM (task 6.3)
     await waitFor(() => expect(updatePostingManagerMutateAsync).toHaveBeenCalledWith({
       personId: 'sp-report', managerId: null,
     }))
+  })
+
+  it('picking an explicit GM override and saving calls updatePostingManager with gmOverrideId, and RM is omitted since it did not change', async () => {
+    stubApiHooks({ currentPostings: { 'sp-report': makePosting({ managerId: 'sp-alice' }) } })
+    const user = userEvent.setup()
+    renderDialog('sp-report')
+
+    const gmField = screen.getByLabelText(/gm \/ higher reporting manager/i)
+    await user.clear(gmField)
+    await user.type(gmField, 'carol@amnex.com')
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(updatePostingManagerMutateAsync).toHaveBeenCalledWith({
+      personId: 'sp-report', gmOverrideId: 'sp-carol',
+    }))
+  })
+
+  it('an existing GM override pre-fills the field, and clearing it back to blank reverts to auto-derive (gmOverrideId: null)', async () => {
+    stubApiHooks({
+      currentPostings: {
+        'sp-report': makePosting({ managerId: 'sp-alice', gmOverrideId: 'sp-carol' }),
+      },
+    })
+    const user = userEvent.setup()
+    renderDialog('sp-report')
+
+    const gmField = screen.getByLabelText(/gm \/ higher reporting manager/i)
+    expect(gmField).toHaveValue('carol@amnex.com')
+
+    await user.clear(gmField)
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(updatePostingManagerMutateAsync).toHaveBeenCalledWith({
+      personId: 'sp-report', gmOverrideId: null,
+    }))
+  })
+
+  it('saving WITHOUT changing an existing GM override does not call updatePostingManager', async () => {
+    stubApiHooks({
+      currentPostings: {
+        'sp-report': makePosting({ managerId: 'sp-alice', gmOverrideId: 'sp-carol' }),
+      },
+    })
+    const user = userEvent.setup()
+    renderDialog('sp-report')
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(updateMutateAsync).toHaveBeenCalled())
+    expect(updatePostingManagerMutateAsync).not.toHaveBeenCalled()
   })
 })
 

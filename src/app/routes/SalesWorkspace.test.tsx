@@ -22,7 +22,7 @@ const ALICE: SalesPerson = {
 function makePosting(overrides: Partial<SalesPosting> = {}): SalesPosting {
   return {
     id: 'post-1', salesPersonId: 'sp-alice', designation: 'Account Manager', tierKey: 'tier-1',
-    managerId: null, office: '', startDate: '2024-01-01', endDate: null, changeType: 'initial',
+    managerId: null, gmOverrideId: null, office: '', startDate: '2024-01-01', endDate: null, changeType: 'initial',
     reason: '', createdAt: '', createdBy: null,
     ...overrides,
   }

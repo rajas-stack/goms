@@ -153,7 +153,10 @@ export function useSalesPersonMutations() {
     onSuccess: invalidate,
   })
   const updatePostingManager = useMutation({
-    mutationFn: (a: { personId: string; managerId: string | null }) => repository.updatePostingManager(a.personId, a.managerId),
+    mutationFn: (a: { personId: string; managerId?: string | null; gmOverrideId?: string | null }) => {
+      const { personId, ...patch } = a
+      return repository.updatePostingManager(personId, patch)
+    },
     onSuccess: invalidate,
   })
   return { create, update, setStatus, remove, transfer, updatePostingManager }

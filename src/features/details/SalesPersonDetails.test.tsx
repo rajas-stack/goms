@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import * as api from '@/lib/api'
 import { SalesPersonDetails } from './SalesPersonDetails'
-import type { SalesPerson } from '@/lib/types'
+import type { SalesPerson, SalesPosting } from '@/lib/types'
 
 // Task 9.3: the header here is the fourth (and last) Sales Team call site
 // standardizing on the shared Avatar component, initials-only (Decision #5
@@ -33,10 +33,11 @@ const ALICE: SalesPerson = {
   status: 'active', notes: '', metadata: {}, createdAt: '', createdBy: null,
 }
 
-function stubApiHooks() {
+function stubApiHooks(opts: { postings?: SalesPosting[]; people?: SalesPerson[]; currentPostings?: Record<string, SalesPosting> } = {}) {
   vi.spyOn(api, 'useSalesPerson').mockReturnValue({ data: ALICE } as unknown as ReturnType<typeof api.useSalesPerson>)
-  vi.spyOn(api, 'useSalesPostings').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useSalesPostings>)
-  vi.spyOn(api, 'useSalesPersons').mockReturnValue({ data: [ALICE] } as unknown as ReturnType<typeof api.useSalesPersons>)
+  vi.spyOn(api, 'useSalesPostings').mockReturnValue({ data: opts.postings ?? [] } as unknown as ReturnType<typeof api.useSalesPostings>)
+  vi.spyOn(api, 'useSalesPersons').mockReturnValue({ data: opts.people ?? [ALICE] } as unknown as ReturnType<typeof api.useSalesPersons>)
+  vi.spyOn(api, 'useCurrentPostings').mockReturnValue({ data: opts.currentPostings ?? {} } as unknown as ReturnType<typeof api.useCurrentPostings>)
   vi.spyOn(api, 'useOwnedBy').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useOwnedBy>)
   vi.spyOn(api, 'useDepartments').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useDepartments>)
   vi.spyOn(api, 'useAllEmployees').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useAllEmployees>)
@@ -60,5 +61,50 @@ describe('SalesPersonDetails header avatar (Task 9.3)', () => {
     stubApiHooks()
     render(<SalesPersonDetails salesPersonId="sp-alice" />)
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+})
+
+// Item 1: "salesperson details" previously showed only Reporting manager
+// (RM) — GM/Higher Reporting Manager never appeared here at all.
+describe('SalesPersonDetails — GM / Higher Reporting Manager row (item 1)', () => {
+  const BOB: SalesPerson = { ...ALICE, id: 'sp-bob', name: 'Bob Reports', officialEmail: 'bob@amnex.com' }
+  const CAROL: SalesPerson = { ...ALICE, id: 'sp-carol', name: 'Carol GM', officialEmail: 'carol@amnex.com' }
+
+  function posting(overrides: Partial<SalesPosting> = {}): SalesPosting {
+    return {
+      id: 'post-1', salesPersonId: 'sp-alice', designation: 'Account Manager', tierKey: 'accountManager',
+      managerId: null, gmOverrideId: null, office: '', startDate: '2024-01-01', endDate: null, changeType: 'initial',
+      reason: '', createdAt: '', createdBy: null,
+      ...overrides,
+    }
+  }
+
+  it('shows the auto-derived GM (one level up the RM chain) when no override is set', () => {
+    stubApiHooks({
+      people: [ALICE, BOB, CAROL],
+      postings: [posting({ managerId: 'sp-bob' })],
+      currentPostings: {
+        'sp-alice': posting({ managerId: 'sp-bob' }),
+        'sp-bob': posting({ id: 'post-bob', salesPersonId: 'sp-bob', managerId: 'sp-carol', designation: 'Regional Manager' }),
+        'sp-carol': posting({ id: 'post-carol', salesPersonId: 'sp-carol', managerId: null, designation: 'Regional Head' }),
+      },
+    })
+    render(<SalesPersonDetails salesPersonId="sp-alice" />)
+    expect(screen.getAllByText('Carol GM').length).toBeGreaterThan(0)
+  })
+
+  it('shows the explicit gmOverrideId instead of the derived value when one is set', () => {
+    stubApiHooks({
+      people: [ALICE, BOB, CAROL],
+      postings: [posting({ managerId: 'sp-bob', gmOverrideId: 'sp-alice' })],
+      currentPostings: {
+        'sp-alice': posting({ managerId: 'sp-bob', gmOverrideId: 'sp-alice' }),
+        'sp-bob': posting({ id: 'post-bob', salesPersonId: 'sp-bob', managerId: 'sp-carol', designation: 'Regional Manager' }),
+      },
+    })
+    render(<SalesPersonDetails salesPersonId="sp-alice" />)
+    // Derived would be Carol; the override picks Alice herself instead.
+    expect(screen.queryAllByText('Carol GM')).toHaveLength(0)
+    expect(screen.getAllByText(/^Alice Anderson$/).length).toBeGreaterThan(0)
   })
 })

@@ -191,6 +191,33 @@ describe('sales router', () => {
       await caller.sales.delete({ id: person.id }) // deletes the person and cascades its postings
       await expect(caller.sales.updatePostingManager({ personId: person.id, managerId: null })).rejects.toThrow(/no open posting/i)
     })
+
+    // Item 1: gmOverrideId is independently settable — a change to one field
+    // must never disturb the other on the same open posting.
+    it('sets gm_override_id without touching manager_id when only gmOverrideId is passed', async () => {
+      const caller = appRouter.createCaller({})
+      const manager = await makePerson({ name: 'Manager' })
+      const gm = await makePerson({ name: 'GM' })
+      const person = await makePerson({ name: 'Report', managerId: manager.id })
+      const updated = await caller.sales.updatePostingManager({ personId: person.id, gmOverrideId: gm.id })
+      expect(updated.gmOverrideId).toBe(gm.id)
+      expect(updated.managerId).toBe(manager.id)
+    })
+
+    it('accepts gmOverrideId: null to revert to auto-derivation', async () => {
+      const caller = appRouter.createCaller({})
+      const gm = await makePerson({ name: 'GM' })
+      const person = await makePerson({ name: 'Report' })
+      await caller.sales.updatePostingManager({ personId: person.id, gmOverrideId: gm.id })
+      const updated = await caller.sales.updatePostingManager({ personId: person.id, gmOverrideId: null })
+      expect(updated.gmOverrideId).toBeNull()
+    })
+
+    it('throws BAD_REQUEST when neither managerId nor gmOverrideId is provided', async () => {
+      const caller = appRouter.createCaller({})
+      const person = await makePerson()
+      await expect(caller.sales.updatePostingManager({ personId: person.id })).rejects.toThrow(/nothing to update/i)
+    })
   })
 
   describe('auth enforcement', () => {

@@ -39,6 +39,13 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
    *  `updatePostingManager` at all. */
   const [rmEmail, setRmEmail] = useState('')
   const [initialRmEmail, setInitialRmEmail] = useState('')
+  /** Item 1: GM/Higher Reporting Manager is independently editable — an
+   *  empty override means "keep auto-deriving from the RM chain" (below),
+   *  a picked email overrides that derivation. Compared against its initial
+   *  value on save exactly like `rmEmail`, so an untouched GM never sends a
+   *  spurious `gmOverrideId`. */
+  const [gmOverrideEmail, setGmOverrideEmail] = useState('')
+  const [initialGmOverrideEmail, setInitialGmOverrideEmail] = useState('')
 
   useEffect(() => {
     if (!open) return
@@ -49,24 +56,33 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
     setDesignation('')
     setTierKey(SALES_TIERS[SALES_TIERS.length - 1].key)
     setManagerId('')
-    const currentManagerId = editing ? currentPostings[editing.id]?.managerId : null
-    const currentRmEmail = currentManagerId ? (people.find((p) => p.id === currentManagerId)?.officialEmail ?? '') : ''
+    const currentPosting = editing ? currentPostings[editing.id] : undefined
+    const currentRmEmail = currentPosting?.managerId ? (people.find((p) => p.id === currentPosting.managerId)?.officialEmail ?? '') : ''
     setRmEmail(currentRmEmail)
     setInitialRmEmail(currentRmEmail)
+    const currentGmOverrideEmail = currentPosting?.gmOverrideId ? (people.find((p) => p.id === currentPosting.gmOverrideId)?.officialEmail ?? '') : ''
+    setGmOverrideEmail(currentGmOverrideEmail)
+    setInitialGmOverrideEmail(currentGmOverrideEmail)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, personId])
 
-  // Derived, one level further up the manager chain from the picked RM —
-  // never independently editable, matches DepartmentFields.tsx's disabled
-  // GM field.
-  const gmEmail = resolveSalesChain(rmEmail, liveSalesRoster(people, currentPostings)).gm?.email ?? ''
+  // Auto-derived one level further up the manager chain from the picked RM
+  // — shown whenever there's no explicit override.
+  const derivedGmEmail = resolveSalesChain(rmEmail, liveSalesRoster(people, currentPostings)).gm?.email ?? ''
+  const gmEmail = gmOverrideEmail || derivedGmEmail
 
   async function submit() {
     if (editing) {
       await update.mutateAsync({ id: editing.id, patch: { name, officialEmail: email, mobile, notes } })
+      const postingPatch: { managerId?: string | null; gmOverrideId?: string | null } = {}
       if (rmEmail !== initialRmEmail) {
-        const newManagerId = rmEmail ? (people.find((p) => p.officialEmail === rmEmail)?.id ?? null) : null
-        await updatePostingManager.mutateAsync({ personId: editing.id, managerId: newManagerId })
+        postingPatch.managerId = rmEmail ? (people.find((p) => p.officialEmail === rmEmail)?.id ?? null) : null
+      }
+      if (gmOverrideEmail !== initialGmOverrideEmail) {
+        postingPatch.gmOverrideId = gmOverrideEmail ? (people.find((p) => p.officialEmail === gmOverrideEmail)?.id ?? null) : null
+      }
+      if (Object.keys(postingPatch).length > 0) {
+        await updatePostingManager.mutateAsync({ personId: editing.id, ...postingPatch })
       }
       toast(`Updated ${name}`)
     } else {
@@ -141,8 +157,13 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
             <Field label="Reporting Manager (RM)">
               <SalesTeamPicker value={rmEmail} onChange={setRmEmail} ariaLabel="Reporting Manager (RM)" />
             </Field>
-            <Field label="GM / Higher Reporting Manager" hint="Auto-filled from Reporting Manager">
-              <SalesTeamPicker value={gmEmail} onChange={() => {}} disabled />
+            <Field
+              label="GM / Higher Reporting Manager"
+              hint={gmOverrideEmail
+                ? 'Manually set — overrides the Reporting Manager chain.'
+                : 'Auto-derived from Reporting Manager. Pick someone to override.'}
+            >
+              <SalesTeamPicker value={gmEmail} onChange={setGmOverrideEmail} ariaLabel="GM / Higher Reporting Manager" />
             </Field>
           </>
         )}

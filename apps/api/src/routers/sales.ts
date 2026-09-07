@@ -17,8 +17,9 @@ function toSalesPerson(row: any) {
 function toSalesPosting(row: any) {
   return {
     id: row.id, salesPersonId: row.sales_person_id, designation: row.designation, tierKey: row.tier_key,
-    managerId: row.manager_id, office: row.office, startDate: row.start_date, endDate: row.end_date,
-    changeType: row.change_type, reason: row.reason, createdAt: row.created_at.toISOString(), createdBy: null,
+    managerId: row.manager_id, gmOverrideId: row.gm_override_id, office: row.office, startDate: row.start_date,
+    endDate: row.end_date, changeType: row.change_type, reason: row.reason,
+    createdAt: row.created_at.toISOString(), createdBy: null,
   }
 }
 
@@ -155,11 +156,24 @@ export const salesRouter = router({
       }
     }),
   updatePostingManager: protectedProcedure
-    .input(z.object({ personId: z.string().uuid(), managerId: z.string().uuid().nullable() }))
+    .input(z.object({
+      personId: z.string().uuid(),
+      managerId: z.string().uuid().nullable().optional(),
+      // Item 1: independently-settable GM/Higher Reporting Manager — omitted
+      // leaves it untouched (e.g. an RM-only change), set to null reverts to
+      // auto-deriving from the RM chain.
+      gmOverrideId: z.string().uuid().nullable().optional(),
+    }))
     .mutation(async ({ input }) => {
+      const sets: string[] = []
+      const values: (string | null)[] = []
+      if (input.managerId !== undefined) { sets.push(`manager_id=$${sets.length + 1}`); values.push(input.managerId) }
+      if (input.gmOverrideId !== undefined) { sets.push(`gm_override_id=$${sets.length + 1}`); values.push(input.gmOverrideId) }
+      if (sets.length === 0) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Nothing to update' })
+      values.push(input.personId)
       const result = await pool.query(
-        'UPDATE sales_postings SET manager_id=$1 WHERE sales_person_id=$2 AND end_date IS NULL RETURNING *',
-        [input.managerId, input.personId],
+        `UPDATE sales_postings SET ${sets.join(', ')} WHERE sales_person_id=$${values.length} AND end_date IS NULL RETURNING *`,
+        values,
       )
       if (!result.rows[0]) throw new TRPCError({ code: 'BAD_REQUEST', message: `No open posting for salesperson: ${input.personId}` })
       return toSalesPosting(result.rows[0])
