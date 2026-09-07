@@ -10,6 +10,21 @@ import '@testing-library/jest-dom/vitest'
 // AdminImportAuthGate.test.tsx) can still override it with its own vi.mock.
 vi.mock('@/lib/firebaseAuth', () => ({ auth: { currentUser: null }, googleProvider: {} }))
 
+// AuthStatus.tsx (mounted in every screen via TopBar) calls the real
+// onAuthStateChanged/signOut from 'firebase/auth' against the fake `auth`
+// object above, which isn't a real Firebase Auth instance — every component
+// test that renders TopBar/AppLayout needs this stubbed, not just tests that
+// specifically exercise auth. Never invoking the callback leaves `user` null
+// (signed-out), the correct default for every test that doesn't care about
+// auth state; a file that does (e.g. AuthPromptDialog.test.tsx,
+// AuthStatus.test.tsx) overrides this with its own vi.mock.
+vi.mock('firebase/auth', () => ({
+  onAuthStateChanged: () => () => {},
+  signOut: () => Promise.resolve(),
+  signInWithPopup: () => Promise.resolve({ user: null }),
+  GoogleAuthProvider: class {},
+}))
+
 // jsdom has no scrollIntoView implementation at all — every sticky
 // section-jump nav button (CreateBoq.tsx, ProposalDetail.tsx,
 // BoqWorkspaceHeader's Preview button) calls it directly, and clicking one

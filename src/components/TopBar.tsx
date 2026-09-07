@@ -3,6 +3,7 @@ import { useShell } from '@/app/AppLayout'
 import { Icon } from './ui/Icon'
 import { Button } from './ui/Button'
 import { Tooltip } from './ui/Tooltip'
+import { AuthStatus } from './AuthStatus'
 import { cn } from '@/lib/utils'
 import { resolveApiEnvironment } from '@/lib/api-environment'
 import logo from '@/assets/amnex-logo.svg'
@@ -94,16 +95,20 @@ export function TopBar({ onOpenDrawer }: Props) {
         </>
       )}
 
-      <Tooltip label="Back up or restore data" side="bottom" className="shrink-0">
-        <Button
-          size="icon"
-          onClick={openSettings}
-          aria-label="Settings"
-          className={cn('h-11 w-11 lg:h-8 lg:w-8', isCommercialCalculator && 'ml-auto')}
-        >
-          <Icon name="Settings" size={16} />
-        </Button>
-      </Tooltip>
+      <div className={cn('flex shrink-0 items-center gap-2', isCommercialCalculator && 'ml-auto')}>
+        <AuthStatus />
+
+        <Tooltip label="Back up or restore data" side="bottom" className="shrink-0">
+          <Button
+            size="icon"
+            onClick={openSettings}
+            aria-label="Settings"
+            className="h-11 w-11 lg:h-8 lg:w-8"
+          >
+            <Icon name="Settings" size={16} />
+          </Button>
+        </Tooltip>
+      </div>
     </header>
   )
 }
