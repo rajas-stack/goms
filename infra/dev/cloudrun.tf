@@ -79,16 +79,17 @@ resource "google_cloud_run_v2_service" "goms_api" {
       # unauthenticated adminImport.* call still returned real data before
       # this deploy. Update this alongside any future Terraform-driven
       # deploy of goms-api.
-      # Reconciled 2026-09-04 ahead of Task 10's apply: `terraform plan`
-      # showed the live service running a newer image (`dfa01084`, deployed
-      # out-of-band by GitLab CI on a subsequent push to main, per this
-      # file's own established "CI deploys code, Terraform is applied
-      # separately" convention) than this file previously declared — without
-      # this reconciliation, applying Task 10's unrelated env-var addition
-      # would have silently rolled goms-dev back to the older image as a
-      # side effect. Pin to whatever is actually live at apply time, same as
-      # this file's other identical fixes.
-      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:dfa01084"
+      # Reconciled again 2026-09-07 ahead of committing Task 11's live
+      # verification: `gcloud run services describe` showed the live
+      # service running a newer image (`7e1927204ccb881cc9a1cbc91c1bd55d3e715344`,
+      # HEAD at verification time, deployed out-of-band by GitLab CI on a
+      # subsequent push to main, per this file's own established "CI deploys
+      # code, Terraform is applied separately" convention) than this file
+      # previously declared (`ce6f2d5e...`) — without this reconciliation, a
+      # future Terraform apply would silently roll goms-dev back to an older
+      # image as a side effect. Pin to whatever is actually live at apply
+      # time, same as this file's other identical fixes.
+      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:7e1927204ccb881cc9a1cbc91c1bd55d3e715344"
       env {
         name = "DATABASE_URL"
         value_source {
@@ -136,7 +137,7 @@ resource "google_cloud_run_v2_service" "goms_api" {
       # of the enforcement flag's own state.
       env {
         name  = "AUTH_ENFORCEMENT_ENABLED"
-        value = "false"
+        value = "true"
       }
       env {
         name  = "EMERGENCY_READ_ONLY"
