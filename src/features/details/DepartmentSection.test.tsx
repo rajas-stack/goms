@@ -112,6 +112,30 @@ describe('DepartmentSection — Meetings section (Task 8.5)', () => {
     // same `TimelineEvent[]` (same ids) rather than constructing its own copy.
     expect(screen.getAllByText('Shared record')).toHaveLength(1)
   })
+
+  // Item 15: aggregating meetings from multiple contacts under one department
+  // page is meaningless without saying WHICH contact each entry is about —
+  // unlike the single-employee profile (where it's implicit), this view
+  // spans many people, so each entry must name its contact.
+  it('shows which contact each aggregated meeting belongs to', () => {
+    const node = makeNode({ id: 'dept-1' })
+    const eventA = makeTimelineEvent({ id: 'evt-a', employeeId: 'emp-a', title: 'Meeting with Asha' })
+    const eventB = makeTimelineEvent({ id: 'evt-b', employeeId: 'emp-b', title: 'Meeting with Bilal' })
+    stubHooks({
+      deptById: { 'emp-a': { id: 'dept-1', name: 'Health' }, 'emp-b': { id: 'dept-1', name: 'Health' } },
+      timelineEvents: [eventA, eventB],
+    })
+
+    render(<DepartmentSection
+      node={node}
+      employees={[makeEmployee({ id: 'emp-a', name: 'Asha Rao' }), makeEmployee({ id: 'emp-b', name: 'Bilal Khan' })]}
+    />)
+
+    expect(screen.getByText('Meeting with Asha')).toBeInTheDocument()
+    expect(screen.getByText('Meeting with Bilal')).toBeInTheDocument()
+    expect(screen.getByText('Asha Rao')).toBeInTheDocument()
+    expect(screen.getByText('Bilal Khan')).toBeInTheDocument()
+  })
 })
 
 // Task 9.2: the department head row shows an avatar next to the resolved

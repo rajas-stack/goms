@@ -15,7 +15,7 @@ import { Tooltip } from '@/components/ui/Tooltip'
 import { Button } from '@/components/ui/Button'
 import { NODE_TYPE_MAP } from '@/lib/node-types'
 import { cn, isTypingTarget } from '@/lib/utils'
-import type { Domain } from '@/lib/types'
+import type { Domain, Employee } from '@/lib/types'
 
 /** The canvas renders three logical views over the same generic engine: the
  *  org containment tree, the geo containment tree, and — reusing the same
@@ -128,16 +128,31 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
     () => new Map(stateEmployees.map((e) => [e.id, e.name] as const)),
     [stateEmployees],
   )
+  // Matches over the FULL department subtree (`deptEmployees`, plus the head
+  // when they sit outside it), not just `peopleRoots` — a card only renders
+  // as one of the top-level items being mapped over below, and children only
+  // ever render once their parent branch is expanded, so filtering `roots`
+  // alone would hide a matching subordinate entirely whenever their own
+  // root manager's searchable fields happen not to match the query (the
+  // original item 7 bug: an exact name match on a non-root person returned
+  // nothing). While a query is active, matched people — root or not — are
+  // shown flattened as top-level cards instead of nested under a (possibly
+  // non-matching, now-hidden) manager; each card still resolves its own real
+  // children live via `useDirectReports` if expanded, so this only changes
+  // which cards start at depth 0 during a search, not the data itself.
+  const searchableDeptEmployees = outsideHeadEmployee ? [outsideHeadEmployee, ...deptEmployees] : deptEmployees
+  const matchesQuery = useCallback((e: Employee, q: string) => {
+    const managerName = e.managerId ? peopleNameById.get(e.managerId) ?? '' : ''
+    const haystack = [e.name, e.designation, e.phone, e.email, managerName].join(' ').toLowerCase()
+    return haystack.includes(q)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [peopleNameById])
   const filteredPeopleRoots = useMemo(() => {
     const q = peopleQuery.trim().toLowerCase()
     if (!q) return peopleRoots
-    return peopleRoots.filter((e) => {
-      const managerName = e.managerId ? peopleNameById.get(e.managerId) ?? '' : ''
-      const haystack = [e.name, e.designation, e.phone, e.email, managerName].join(' ').toLowerCase()
-      return haystack.includes(q)
-    })
+    return searchableDeptEmployees.filter((e) => matchesQuery(e, q))
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [peopleRoots, peopleQuery, peopleNameById])
+  }, [peopleRoots, searchableDeptEmployees, peopleQuery, matchesQuery])
 
   // Flag the department head's card wherever it renders in the People view,
   // so hierarchy (who's the head vs. a peer root report) is unambiguous.

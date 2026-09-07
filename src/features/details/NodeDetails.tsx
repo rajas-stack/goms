@@ -6,6 +6,7 @@ import { NODE_TYPE_MAP, childTypesOf } from '@/lib/node-types'
 import { useWorkspace } from '@/features/workspace/context'
 import { fieldsForType } from '@/features/nodes/metadata-fields'
 import { abbreviateDepartmentName } from '@/features/nodes/department-meta'
+import { parseContactNumbers } from '@/features/nodes/contact-numbers'
 import { DepartmentSection } from './DepartmentSection'
 import { Button } from '@/components/ui/Button'
 import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
@@ -31,8 +32,16 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
   const { data: allEmployees = [] } = useAllEmployees()
   const isOrgLeaf = !!node && node.domain === 'org' && EMPLOYEE_ADDERS.has(node.typeKey)
   const { data: employees = [] } = useEmployeesUnder(node && node.domain === 'org' ? nodeId : null)
+  // Item 2: DepartmentFields.tsx writes the State/District pick and the
+  // multi-number list to metadata (contactStateNodeId/contactDistrictNodeId/
+  // contactNumbers) — resolved and rendered here so it's actually visible
+  // after saving, not just captured on the form.
+  const { data: contactStateNode } = useNode(node?.metadata.contactStateNodeId || null)
+  const { data: contactDistrictNode } = useNode(node?.metadata.contactDistrictNodeId || null)
 
   if (!node) return null
+
+  const contactNumbers = parseContactNumbers(node.metadata.contactNumbers).filter((c) => c.city || c.stdCode || c.number)
   const type = NODE_TYPE_MAP[node.typeKey]
   const childType = childTypesOf(node.typeKey)[0]
   // `childTypesOf` falls back to every type in the domain once a type's own
@@ -184,34 +193,62 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
           </Section>
         )}
 
-        {fields.length > 0 && (
+        {(fields.length > 0 || contactStateNode || contactDistrictNode || contactNumbers.length > 0) && (
           <Section title={isDepartment ? 'Department Contact' : 'Details'}>
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-              {fields.map((f) => (
-                <DetailRow key={f.key} label={f.label} icon={FIELD_ICON[f.type]}>
-                  {f.type === 'url' ? (
-                    <a
-                      href={node.metadata[f.key]}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 break-words text-teal-600 hover:underline"
-                    >
-                      <span className="break-all">{node.metadata[f.key]}</span> <Icon name="ExternalLink" size={12} className="shrink-0" />
-                    </a>
-                  ) : f.type === 'email' ? (
-                    <a href={`mailto:${node.metadata[f.key]}`} className="break-all text-teal-600 hover:underline">
-                      {node.metadata[f.key]}
-                    </a>
-                  ) : f.type === 'phone' ? (
-                    <a href={`tel:${node.metadata[f.key]}`} className="text-teal-600 hover:underline">
-                      {node.metadata[f.key]}
-                    </a>
-                  ) : (
-                    node.metadata[f.key]
-                  )}
-                </DetailRow>
-              ))}
-            </dl>
+            {fields.length > 0 && (
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+                {fields.map((f) => (
+                  <DetailRow key={f.key} label={f.label} icon={FIELD_ICON[f.type]}>
+                    {f.type === 'url' ? (
+                      <a
+                        href={node.metadata[f.key]}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 break-words text-teal-600 hover:underline"
+                      >
+                        <span className="break-all">{node.metadata[f.key]}</span> <Icon name="ExternalLink" size={12} className="shrink-0" />
+                      </a>
+                    ) : f.type === 'email' ? (
+                      <a href={`mailto:${node.metadata[f.key]}`} className="break-all text-teal-600 hover:underline">
+                        {node.metadata[f.key]}
+                      </a>
+                    ) : f.type === 'phone' ? (
+                      <a href={`tel:${node.metadata[f.key]}`} className="text-teal-600 hover:underline">
+                        {node.metadata[f.key]}
+                      </a>
+                    ) : (
+                      node.metadata[f.key]
+                    )}
+                  </DetailRow>
+                ))}
+              </dl>
+            )}
+
+            {(contactStateNode || contactDistrictNode) && (
+              <dl className={cn('grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2', fields.length > 0 && 'mt-3')}>
+                {contactStateNode && <DetailRow label="State" icon="Type">{contactStateNode.name}</DetailRow>}
+                {contactDistrictNode && <DetailRow label="District" icon="Type">{contactDistrictNode.name}</DetailRow>}
+              </dl>
+            )}
+
+            {contactNumbers.length > 0 && (
+              <div className={cn(fields.length > 0 || contactStateNode || contactDistrictNode ? 'mt-4' : undefined)}>
+                <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Contact numbers</p>
+                <ul className="space-y-2">
+                  {contactNumbers.map((c, i) => (
+                    <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-sm text-ink-900">
+                      {c.city && <span className="font-medium">{c.city}</span>}
+                      {c.stdCode && <span className="text-muted">STD {c.stdCode}</span>}
+                      {c.number && (
+                        <a href={`tel:${c.number.replace(/\s+/g, '')}`} className="text-teal-600 hover:underline">
+                          {c.number}
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Section>
         )}
 

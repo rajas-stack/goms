@@ -531,3 +531,104 @@ test.describe('Cross-Module — Ownership Propagation', () => {
     expect(after).toBe(before);
   });
 });
+
+// ============================================================================
+// GAP-ANALYSIS FOLLOW-UP FIXES (2026-09-07) — covers behavior the existing
+// Phase 5/8 tests above don't reach: the read-only DISPLAY side of item 2's
+// contact data, item 4's department-inheritance display, item 7's People
+// CANVAS search (the existing Phase 2.2 test only covers the List view), and
+// item 15's per-entry contact attribution once a department aggregates
+// meetings from more than one contact.
+// ============================================================================
+
+test.describe('Item 2 — Department Contact display (read view)', () => {
+  test('State/District/contact numbers show up on the department page after saving, not just on the form', async ({ page }) => {
+    const deptName = `QA E2E Contact Display Test ${Date.now()}`;
+    const dialog = await createDepartmentUnderState(page, 'Odisha', deptName);
+    await dialog.getByRole('button', { name: '+ Add Contact Number' }).click();
+    await dialog.getByLabel('State').selectOption({ label: 'Odisha' });
+    await dialog.getByLabel('District').selectOption({ label: 'Khordha' });
+    await dialog.getByLabel(/City\/Town 1/).fill('Bhubaneswar');
+    await expect(dialog.getByLabel(/STD code 1/)).toHaveValue('0674');
+    await dialog.getByPlaceholder(/9812345678/).fill('9876543210');
+    await dialog.getByRole('button', { name: 'Create department' }).click();
+
+    await expect(desktopPanel(page).getByRole('heading', { name: `Department of ${deptName}` })).toBeVisible();
+    await expect(desktopPanel(page).getByText('Odisha')).toBeVisible();
+    await expect(desktopPanel(page).getByText('Khordha')).toBeVisible();
+    await expect(desktopPanel(page).getByText('Contact numbers')).toBeVisible();
+    await expect(desktopPanel(page).getByText('Bhubaneswar')).toBeVisible();
+    await expect(desktopPanel(page).getByText('STD 0674')).toBeVisible();
+  });
+});
+
+test.describe('Item 4 — Employee inherits Website/Address from its Department', () => {
+  test('an employee under a department with Website/Address shows the department\'s values, not a blank field', async ({ page }) => {
+    const deptName = `QA E2E Inheritance Test ${Date.now()}`;
+    const dialog = await createDepartmentUnderState(page, 'Odisha', deptName);
+    await fieldByLabel(page, 'Website').getByRole('textbox').fill('https://example-dept.gov.in');
+    await fieldByLabel(page, 'Office address').getByRole('textbox').fill('1 Test Secretariat Road');
+    await dialog.getByRole('button', { name: 'Create department' }).click();
+
+    // The "Add employee" button is a Menu trigger (NodeDetails.tsx), not a
+    // direct dialog opener — first click opens the menu, second click on the
+    // "Add employee" menu item actually opens the form.
+    await desktopPanel(page).getByRole('button', { name: 'Add employee' }).click();
+    await page.getByRole('menuitem', { name: 'Add employee' }).click();
+    const empDialog = page.getByRole('dialog', { name: 'Add employee' });
+    await empDialog.getByLabel('Full name').fill('Inheritance Test Person');
+    await empDialog.getByLabel('Designation').fill('Test Officer');
+    await empDialog.getByRole('button', { name: 'Add employee' }).click();
+
+    await expect(desktopPanel(page).getByText('https://example-dept.gov.in')).toBeVisible();
+    await expect(desktopPanel(page).getByText('1 Test Secretariat Road')).toBeVisible();
+  });
+});
+
+test.describe('Item 7 — People CANVAS search (List view already covered by Phase 2.2)', () => {
+  test('searching a non-root contact\'s name in the canvas People view surfaces them, even though their manager does not match', async ({ page }) => {
+    await page.goto('/state/0', { waitUntil: 'networkidle' });
+    // Tabs.tsx renders plain <button>s, not role="tab".
+    await page.getByRole('button', { name: 'People', exact: true }).click();
+    await page.getByRole('button', { name: 'canvas', exact: true }).click();
+    // DepartmentCombobox.tsx (canvas-only, distinct from the generic
+    // Combobox component pickCombobox() targets) renders its options as
+    // plain buttons in a popover, not role="listbox"/"option" — click to
+    // open, type to filter, click the exact match by name.
+    const deptCombobox = page.getByPlaceholder('Search departments…');
+    await deptCombobox.click();
+    await deptCombobox.fill('QA Test');
+    await page.getByRole('button', { name: 'QA Test', exact: true }).click();
+
+    // Priya Nair reports to Vikram Rao (suite fixture note above) — neither
+    // "priya" nor "nair" appears anywhere in Vikram's own name/designation/
+    // phone/email, so before the fix (root-only filtering) this query
+    // returned nothing at all.
+    await page.getByLabel('Search people').fill('priya');
+    await expect(page.getByRole('button', { name: /Priya Nair/ })).toBeVisible();
+    // Selecting QA Test also populates the sidebar's own DetailsPanel (its
+    // unrelated, unfiltered "Positions" list legitimately shows both
+    // employees) — every VISIBLE "Vikram Rao" button must be inside that
+    // <aside>, i.e. none left over on the canvas itself once the two counts
+    // match (StateWorkspace's CSS-hidden mobile-sheet duplicate is excluded
+    // by `:visible` on both sides).
+    const visibleVikram = page.locator('button:visible', { hasText: 'Vikram Rao' });
+    const visibleVikramInAside = page.locator('aside').locator('button:visible', { hasText: 'Vikram Rao' });
+    await expect(visibleVikramInAside).toHaveCount(await visibleVikram.count());
+  });
+});
+
+test.describe('Item 15 — Department Meetings section names which contact each entry belongs to', () => {
+  test('a meeting entry aggregated on the department page shows the contact\'s name', async ({ page }) => {
+    await openQaTestDepartment(page);
+    await expect(desktopPanel(page).getByText(/Meetings · \d+/)).toBeVisible();
+    // The suite's own seeded "QA Kickoff Meeting" (Phase 8.5, above) belongs
+    // to one of QA Test's two contacts — whichever it is, their name must now
+    // appear next to it, since this page aggregates entries from more than
+    // one contact and used to show no attribution at all.
+    const entry = desktopPanel(page).locator('text=QA Kickoff Meeting').locator('../..');
+    const hasVikram = await entry.getByText('Vikram Rao').count();
+    const hasPriya = await entry.getByText('Priya Nair').count();
+    expect(hasVikram + hasPriya).toBeGreaterThan(0);
+  });
+});

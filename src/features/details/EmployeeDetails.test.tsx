@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import * as api from '@/lib/api'
 import { EmployeeDetails } from './EmployeeDetails'
-import type { Employee, SalesPerson, TimelineEvent } from '@/lib/types'
+import type { Employee, HierNode, SalesPerson, TimelineEvent } from '@/lib/types'
 
 beforeEach(() => {
   // jsdom has no ResizeObserver; FitText (the header name) uses one purely
@@ -55,6 +55,14 @@ function makeEmployee(overrides: Partial<Employee> = {}): Employee {
   }
 }
 
+function makeNode(overrides: Partial<HierNode> & { id: string }): HierNode {
+  return {
+    domain: 'org', typeKey: 'department', parentId: null, stateCode: 5,
+    name: overrides.id, code: null, sortOrder: 0, metadata: {}, status: 'active',
+    ...overrides,
+  }
+}
+
 function makeSalesPerson(overrides: Partial<SalesPerson> = {}): SalesPerson {
   return {
     id: 'sp-1', employeeCode: 'E1', name: 'Sales Owner', officialEmail: 'owner@amnex.com',
@@ -64,13 +72,13 @@ function makeSalesPerson(overrides: Partial<SalesPerson> = {}): SalesPerson {
   } as SalesPerson
 }
 
-function stubApiHooks(opts: { employee: Employee; chain?: Employee[]; reports?: Employee[]; timeline?: TimelineEvent[]; salesPersons?: SalesPerson[] }) {
+function stubApiHooks(opts: { employee: Employee; chain?: Employee[]; reports?: Employee[]; timeline?: TimelineEvent[]; salesPersons?: SalesPerson[]; orgNode?: HierNode | null; trail?: HierNode[] }) {
   vi.spyOn(api, 'useEmployee').mockImplementation((id: string | null) =>
     ({ data: id === opts.employee.id ? opts.employee : null } as unknown as ReturnType<typeof api.useEmployee>))
   vi.spyOn(api, 'useReportingChain').mockReturnValue({ data: opts.chain ?? [] } as unknown as ReturnType<typeof api.useReportingChain>)
   vi.spyOn(api, 'useDirectReports').mockReturnValue({ data: opts.reports ?? [] } as unknown as ReturnType<typeof api.useDirectReports>)
-  vi.spyOn(api, 'useNode').mockReturnValue({ data: null } as unknown as ReturnType<typeof api.useNode>)
-  vi.spyOn(api, 'useBreadcrumb').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useBreadcrumb>)
+  vi.spyOn(api, 'useNode').mockReturnValue({ data: opts.orgNode ?? null } as unknown as ReturnType<typeof api.useNode>)
+  vi.spyOn(api, 'useBreadcrumb').mockReturnValue({ data: opts.trail ?? [] } as unknown as ReturnType<typeof api.useBreadcrumb>)
   vi.spyOn(api, 'useTimeline').mockReturnValue({ data: opts.timeline ?? [] } as unknown as ReturnType<typeof api.useTimeline>)
   vi.spyOn(api, 'useTransfers').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useTransfers>)
   vi.spyOn(api, 'useFollowUps').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useFollowUps>)
@@ -264,5 +272,74 @@ describe('EmployeeDetails — per-entry Edit action (Task 8.4)', () => {
     render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
 
     expect(screen.queryByRole('button', { name: /edit contact created/i })).not.toBeInTheDocument()
+  })
+})
+
+// Item 4: Website/Address are department-owned — the employee form no longer
+// exposes them, and the detail view must inherit the mapped department's
+// values rather than showing a stale/blank employee-level field. Department
+// is the source of truth; a legacy employee-level value only shows for old
+// records whose department has no value of its own (so history isn't
+// silently blanked), and never alongside a department value (no conflicting
+// pair shown at once).
+describe('EmployeeDetails — Website/Address department inheritance (Item 4)', () => {
+  it('shows the mapped department\'s Website and Address, not blank, for an employee with no legacy values', () => {
+    const dept = makeNode({ id: 'dept-1', typeKey: 'department', metadata: { website: 'https://dept.example.gov.in', officeAddress: '1 Secretariat Road' } })
+    const emp = makeEmployee({ orgNodeId: 'dept-1', website: '', address: '' })
+    stubApiHooks({ employee: emp, orgNode: dept, trail: [dept] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.getByText('https://dept.example.gov.in')).toBeInTheDocument()
+    expect(screen.getByText('1 Secretariat Road')).toBeInTheDocument()
+  })
+
+  it('prefers the department\'s values over a stale employee-level value, with no conflicting employee value shown', () => {
+    const dept = makeNode({ id: 'dept-1', typeKey: 'department', metadata: { website: 'https://new-dept.example.gov.in', officeAddress: 'New HQ Address' } })
+    const emp = makeEmployee({ orgNodeId: 'dept-1', website: 'https://old-legacy-site.example.com', address: 'Old legacy address' })
+    stubApiHooks({ employee: emp, orgNode: dept, trail: [dept] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.getByText('https://new-dept.example.gov.in')).toBeInTheDocument()
+    expect(screen.getByText('New HQ Address')).toBeInTheDocument()
+    expect(screen.queryByText('https://old-legacy-site.example.com')).not.toBeInTheDocument()
+    expect(screen.queryByText('Old legacy address')).not.toBeInTheDocument()
+  })
+
+  it('falls back to a historical employee-level value when the department has none (backward compatibility)', () => {
+    const dept = makeNode({ id: 'dept-1', typeKey: 'department', metadata: {} })
+    const emp = makeEmployee({ orgNodeId: 'dept-1', website: 'https://legacy-only.example.com', address: 'Legacy-only address' })
+    stubApiHooks({ employee: emp, orgNode: dept, trail: [dept] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.getByText('https://legacy-only.example.com')).toBeInTheDocument()
+    expect(screen.getByText('Legacy-only address')).toBeInTheDocument()
+  })
+
+  it('resolves the nearest department when the employee is posted under a nested branch/office (Department → Department nesting)', () => {
+    const outerDept = makeNode({ id: 'outer-dept', typeKey: 'department', metadata: { website: 'https://outer.example.gov.in', officeAddress: 'Outer address' } })
+    const innerDept = makeNode({ id: 'inner-dept', typeKey: 'department', parentId: 'outer-dept', metadata: { website: 'https://inner.example.gov.in', officeAddress: 'Inner address' } })
+    const office = makeNode({ id: 'office-1', typeKey: 'office', parentId: 'inner-dept', metadata: {} })
+    const emp = makeEmployee({ orgNodeId: 'office-1', website: '', address: '' })
+    stubApiHooks({ employee: emp, orgNode: office, trail: [outerDept, innerDept, office] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.getByText('https://inner.example.gov.in')).toBeInTheDocument()
+    expect(screen.getByText('Inner address')).toBeInTheDocument()
+    expect(screen.queryByText('https://outer.example.gov.in')).not.toBeInTheDocument()
+  })
+
+  it('shows nothing for Website/Address when neither the department nor the employee has a value', () => {
+    const dept = makeNode({ id: 'dept-1', typeKey: 'department', metadata: {} })
+    const emp = makeEmployee({ orgNodeId: 'dept-1', website: '', address: '' })
+    stubApiHooks({ employee: emp, orgNode: dept, trail: [dept] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.queryByText('Website')).not.toBeInTheDocument()
+    expect(screen.queryByText('Address')).not.toBeInTheDocument()
   })
 })

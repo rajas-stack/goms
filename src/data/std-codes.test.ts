@@ -16,10 +16,16 @@ describe('std-codes', () => {
   })
 
   it('citiesForDistrict returns the seeded entries for a district that has them', () => {
-    expect(citiesForDistrict(386)).toEqual([{ districtLgdCode: 386, city: 'Bhubaneswar', stdCode: '0674' }])
+    const entries = citiesForDistrict(386)
+    expect(entries).toHaveLength(1)
+    expect(entries[0]).toMatchObject({ districtLgdCode: 386, city: 'Bhubaneswar', stdCode: '0674' })
   })
 
-  it('the seed dataset is a small sample, not a full authoritative table', () => {
+  it('the seed dataset is a small, partial, honestly-provenanced sample, not a full authoritative table', () => {
     expect(STD_CODE_ENTRIES.length).toBeGreaterThan(0)
+    for (const entry of STD_CODE_ENTRIES) {
+      expect(entry.source).toBeTruthy()
+      expect(typeof entry.verified).toBe('boolean')
+    }
   })
 })

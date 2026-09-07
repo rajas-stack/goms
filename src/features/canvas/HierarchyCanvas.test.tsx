@@ -55,20 +55,31 @@ const CAROL = makeEmployee({
   id: 'e-carol', name: 'Carol Singh', designation: 'Deputy Director', email: 'carol.singh@gov.in',
   phone: '+91 9000000003', managerId: 'mgr-outside',
 })
+// A genuine NON-root: reports to Bob, who is a root within this department.
+// Used to prove the search scope covers the full subtree, not just root
+// cards — before the fix, Dave could never surface at all: only ROOTS were
+// filtered/rendered, so a query matching a nested subordinate but not their
+// root manager's own searchable fields hid that subordinate entirely, even
+// on an exact name match.
+const DAVE = makeEmployee({
+  id: 'e-dave', name: 'Dave Prasad', designation: 'Field Officer', email: 'dave.prasad@gov.in',
+  phone: '+91 9000000004', managerId: 'e-bob',
+})
 
 function stubHooks() {
   vi.spyOn(api, 'useStateNode').mockReturnValue({ data: { ...DEPARTMENT, id: 'state-5', name: 'Test State' } } as unknown as ReturnType<typeof api.useStateNode>)
   vi.spyOn(api, 'useOrgRoots').mockReturnValue({ data: [DEPARTMENT] } as unknown as ReturnType<typeof api.useOrgRoots>)
-  vi.spyOn(api, 'useEmployeesByState').mockReturnValue({ data: [ALICE, BOB, CAROL, OUTSIDE_MANAGER] } as unknown as ReturnType<typeof api.useEmployeesByState>)
+  vi.spyOn(api, 'useEmployeesByState').mockReturnValue({ data: [ALICE, BOB, CAROL, DAVE, OUTSIDE_MANAGER] } as unknown as ReturnType<typeof api.useEmployeesByState>)
   vi.spyOn(api, 'useNode').mockReturnValue({ data: null } as unknown as ReturnType<typeof api.useNode>)
   vi.spyOn(api, 'useEmployeeMutations').mockReturnValue({
     remove: {}, create: {}, update: {}, addTimelineEvent: {}, setManager: {},
   } as unknown as ReturnType<typeof api.useEmployeeMutations>)
   vi.spyOn(api, 'useBreadcrumb').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useBreadcrumb>)
   vi.spyOn(api, 'useEmployee').mockReturnValue({ data: null } as unknown as ReturnType<typeof api.useEmployee>)
-  vi.spyOn(api, 'useEmployeesUnder').mockReturnValue({ data: [ALICE, BOB, CAROL] } as unknown as ReturnType<typeof api.useEmployeesUnder>)
+  vi.spyOn(api, 'useEmployeesUnder').mockReturnValue({ data: [ALICE, BOB, CAROL, DAVE] } as unknown as ReturnType<typeof api.useEmployeesUnder>)
   // CanvasBranch-level hooks (each rendered root card calls these):
-  vi.spyOn(api, 'useDirectReports').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useDirectReports>)
+  vi.spyOn(api, 'useDirectReports').mockImplementation((employeeId: string | null) =>
+    ({ data: employeeId === 'e-bob' ? [DAVE] : [] } as unknown as ReturnType<typeof api.useDirectReports>))
   vi.spyOn(api, 'useChildren').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useChildren>)
   vi.spyOn(api, 'useEmployeesDirect').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useEmployeesDirect>)
   vi.spyOn(api, 'useNodeMutations').mockReturnValue({
@@ -136,6 +147,19 @@ describe('HierarchyCanvas — People-canvas search (item 7)', () => {
     expect(screen.queryByText('Alice Verma')).not.toBeInTheDocument()
     expect(screen.queryByText('Bob Kumar')).not.toBeInTheDocument()
     expect(screen.getByText('Carol Singh')).toBeInTheDocument()
+  })
+
+  it('surfaces a non-root subordinate that matches the query, even though their manager (the root) does not', async () => {
+    const user = userEvent.setup()
+    render(<HierarchyCanvas domain="people" stateCode={5} />)
+    await screen.findByText('Alice Verma')
+
+    await user.type(screen.getByLabelText('Search people'), 'dave')
+
+    expect(screen.getByText('Dave Prasad')).toBeInTheDocument()
+    expect(screen.queryByText('Alice Verma')).not.toBeInTheDocument()
+    expect(screen.queryByText('Bob Kumar')).not.toBeInTheDocument()
+    expect(screen.queryByText('Carol Singh')).not.toBeInTheDocument()
   })
 
   it('does not render the People search input (or any of its state) in the Organization view', async () => {

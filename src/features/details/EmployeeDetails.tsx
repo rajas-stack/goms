@@ -25,6 +25,7 @@ import { MarkDuplicateDialog } from '@/features/employees/MarkDuplicateDialog'
 import { MergeEmployeesDialog } from '@/features/employees/MergeEmployeesDialog'
 import { findCandidatesFor } from '@/features/employees/duplicate-detection'
 import { AddReporteeMenu } from '@/features/employees/AddReporteeMenu'
+import { resolveDepartment } from '@/features/employees/resolveDepartment'
 import { abbreviateDepartmentName } from '@/features/nodes/department-meta'
 import { employeeAccent } from '@/lib/node-colors'
 import { MEETING_LOG_TYPES, TIMELINE_META, timelineEventLabel } from '@/lib/timeline-meta'
@@ -100,6 +101,17 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
   const vacant = emp.vacant
   const accent = employeeAccent(emp)
   const department = trail.find((t) => t.typeKey === 'department')
+  // Item 4: Website/Address belong to the department, not the employee — the
+  // form no longer collects them (EmployeeFormDialog), so this resolves the
+  // employee's NEAREST department ancestor (same helper/semantics as Item 3's
+  // Company auto-fill, so a nested Department → Department posting inherits
+  // from the department it's actually posted under, not some outer one) and
+  // prefers its metadata over the employee's own (possibly stale) legacy
+  // field — which only still shows for old records whose department has no
+  // value of its own, never alongside a department value.
+  const nearestDepartment = orgNode ? resolveDepartment(orgNode, trail) : null
+  const website = nearestDepartment?.metadata.website || emp.website
+  const officeAddress = nearestDepartment?.metadata.officeAddress || emp.address
   const relationshipOwner = salesPersons.find((p) => p.officialEmail === emp.metadata.relationshipOwner)
 
   async function unflagDuplicate() {
@@ -341,19 +353,19 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
             </DetailRow>
           )}
           {!vacant && emp.company && <DetailRow label="Company" value={emp.company} icon="Building2" />}
-          {!vacant && emp.website && (
+          {!vacant && website && (
             <DetailRow label="Website" icon="Globe">
               <a
-                href={emp.website.startsWith('http') ? emp.website : `https://${emp.website}`}
+                href={website.startsWith('http') ? website : `https://${website}`}
                 target="_blank"
                 rel="noreferrer"
                 className="hover:underline"
               >
-                {emp.website}
+                {website}
               </a>
             </DetailRow>
           )}
-          {!vacant && emp.address && <DetailRow label="Address" value={emp.address} icon="MapPin" />}
+          {!vacant && officeAddress && <DetailRow label="Address" value={officeAddress} icon="MapPin" />}
           {orgNode && <DetailRow label="Posting" value={orgNode.name} icon="Landmark" />}
           {relationshipOwner && (
             <DetailRow label="Relationship Owner / AMNEX Representative" icon="UserCheck">
@@ -570,11 +582,17 @@ const ATTENDANCE_TYPES = new Set(['meeting', 'inPerson'])
  *  can render the exact same entries/markup rather than duplicating this —
  *  `onSetAttended`/`onEdit` are omitted there, which hides both interactive
  *  controls for that read-only view. */
-export function TimelineList({ events, onSetAttended, onEdit, highlightId }: {
+export function TimelineList({ events, onSetAttended, onEdit, highlightId, contactNameById }: {
   events: TimelineEvent[]
   onSetAttended?: (id: string, attended: boolean | undefined) => void
   onEdit?: (event: TimelineEvent) => void
   highlightId?: string | null
+  /** Item 15: passed only by DepartmentSection, whose Meetings block
+   *  aggregates entries across every contact under the department — unlike
+   *  a single employee's own profile (where the contact is implicit), each
+   *  row here needs to say WHICH contact it's about. Omitted (the default)
+   *  on the single-employee page, where showing it would be redundant. */
+  contactNameById?: Map<string, string>
 }) {
   const [pulsing, setPulsing] = useState(false)
   const highlightedRef = useRef<HTMLDivElement>(null)
@@ -625,7 +643,12 @@ export function TimelineList({ events, onSetAttended, onEdit, highlightId }: {
                     </button>
                   )}
                 </div>
-                <div className="text-[11px] text-muted">{e.date}{e.time && ` · ${e.time}`}</div>
+                <div className="text-[11px] text-muted">
+                  {e.date}{e.time && ` · ${e.time}`}
+                  {contactNameById?.get(e.employeeId) && (
+                    <> · <span className="font-medium text-ink-800">{contactNameById.get(e.employeeId)}</span></>
+                  )}
+                </div>
                 {e.note && <p className="mt-0.5 break-words text-[12px] text-ink-700">{e.note}</p>}
                 {e.agenda && (
                   <p className="mt-0.5 break-words text-[12px] text-ink-700">
