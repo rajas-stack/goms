@@ -111,6 +111,14 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
 
   async function submit() {
     if (!name.trim()) return
+    try {
+      await doSubmit()
+    } catch (e) {
+      toast(e instanceof Error ? `Couldn't save: ${e.message}` : "Couldn't save — please try again.")
+    }
+  }
+
+  async function doSubmit() {
     if (mode === 'edit' && node) {
       await update.mutateAsync({ id: node.id, patch: { name: name.trim(), metadata: meta } })
       toast(`Updated ${name.trim()}`)
