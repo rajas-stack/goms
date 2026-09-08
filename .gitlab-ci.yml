@@ -31,8 +31,23 @@ test-api:
     - npm ci
     - npm --workspace apps/api run migrate up
     - npm --workspace apps/api run test
+  # Was a plain main-only gate (no path filtering), so it ran the full
+  # Postgres-backed suite on every push to main, including frontend-only
+  # changes that can't affect the API/DB. Narrowed to only fire when the
+  # push actually touches backend/API/migration code, dependency
+  # manifests that affect it, or this CI file itself -- frontend-only
+  # pushes to main now skip it entirely. Non-main branches were already
+  # excluded by the branch condition and still are (changes: is ANDed
+  # with the if:, not a substitute for it).
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - apps/api/**/*
+        - apps/api/migrations/**/*
+        - apps/api/package.json
+        - package.json
+        - package-lock.json
+        - .gitlab-ci.yml
 
 build-api:
   stage: build
