@@ -12,6 +12,23 @@ import { test, expect, Page } from '@playwright/test';
  *    which has 1 seeded meeting and 0 opportunities.
  *  - /sales/roster: 30 real sales people (e.g. "Jayendrasinh Puwar").
  *
+ * AUTH LIMITATION — read before triaging any failure here: this suite runs
+ * against goms-dev fully signed out (no Firebase session), and the API has
+ * `AUTH_ENFORCEMENT_ENABLED=true`, so every protected write (Create
+ * department, Save changes, Add meeting, Add employee, attendee add/remove,
+ * etc.) is rejected server-side. The client-side symptom is never a clean
+ * error — it's the dialog/button just never completing (a "toBeVisible" on
+ * post-save content timing out, or a click on "Edit"/"Save changes" timing
+ * out because the create dialog never closed). As of 2026-09-08 this is a
+ * known, reproducible split: 32 passed / 8 failed, and all 8 failures are
+ * exactly the write-dependent flows above — not product regressions. Do NOT
+ * "fix" these by weakening assertions, adding optimistic UI checks that pass
+ * without a successful mutation, or touching AUTH_ENFORCEMENT_ENABLED. A
+ * genuine product regression in one of these flows can only be confirmed by
+ * running this suite with a real signed-in Firebase session (not yet wired
+ * into this suite/CI), or by manual click-through against goms-dev/goms-prod
+ * while signed in.
+ *
  * Run with: npx playwright test
  * Run specific test: npx playwright test -g "ownership"
  */
@@ -114,16 +131,23 @@ test.describe('Account Mapping — Ownership Auto-Reflect', () => {
   });
 });
 
-test.describe('Account Mapping — Department State/District/City/STD', () => {
-  test('Phase 5.1–5.2: Department contact picker with State → District → City selection', async ({ page }) => {
+test.describe('Account Mapping — Department State/District/STD (per-row; no City/Town field)', () => {
+  // Item 2, corrected: each contact row picks its own State -> Type ->
+  // (District -> STD -> Number) — there is deliberately no City/Town field
+  // (src/data/std-codes.ts is a lookup aid, never a whitelist); STD/Number
+  // become available immediately once a District is picked, auto-filling
+  // STD only when the district maps to exactly one city in the dataset.
+  test('Item 2: State reveals Type, Type=Landline reveals District', async ({ page }) => {
     const dialog = await createDepartmentUnderState(page, 'Odisha', `QA E2E District Test ${Date.now()}`);
+    await dialog.getByRole('button', { name: '+ Add Contact Number' }).click();
 
-    await dialog.getByLabel('State').selectOption({ label: 'Odisha' });
-    const districtSelect = dialog.getByLabel('District');
+    await dialog.getByLabel('State 1').selectOption({ label: 'Odisha' });
+    await dialog.getByLabel('Type 1').selectOption({ label: 'Landline / EPBX' });
+    const districtSelect = dialog.getByLabel('District 1');
     await expect(districtSelect).toBeEnabled();
-    // The select flips enabled as soon as contactStateNodeId is set (same
-    // render as the state pick resolving), but its <option> list comes from
-    // a separate hierarchy.listChildren query that hasn't necessarily
+    // The select flips enabled as soon as the row's own stateNodeId is set
+    // (same render as the state pick resolving), but its <option> list comes
+    // from a separate hierarchy.listChildren query that hasn't necessarily
     // resolved yet — a plain, non-retrying `.count()` right after
     // toBeEnabled() races that fetch (root-caused 2026-09-03: reproduced
     // 100% locally, confirmed real goms-dev data has 30 real Odisha
@@ -133,26 +157,65 @@ test.describe('Account Mapping — Department State/District/City/STD', () => {
     await expect.poll(() => districtSelect.locator('option').count()).toBeGreaterThan(1); // placeholder + at least one real district
   });
 
-  test('Phase 5.1–5.2: STD-code auto-populates from city selection', async ({ page }) => {
+  test('Item 2: a district with exactly one mapped city auto-fills STD, and STD/Number are immediately usable', async ({ page }) => {
     const dialog = await createDepartmentUnderState(page, 'Odisha', `QA E2E STD Test ${Date.now()}`);
-    // A freshly created department starts with zero contact-number rows
-    // (DepartmentFields.tsx: `contactNumbers` defaults to []) — add one to
-    // get a "City/Town 1"/"STD code 1" row to fill below.
     await dialog.getByRole('button', { name: '+ Add Contact Number' }).click();
 
-    await dialog.getByLabel('State').selectOption({ label: 'Odisha' });
+    await dialog.getByLabel('State 1').selectOption({ label: 'Odisha' });
+    await dialog.getByLabel('Type 1').selectOption({ label: 'Landline / EPBX' });
     // Khordha is the seeded district for the Bhubaneswar → 0674 STD mapping
-    // (src/data/std-codes.ts) — must pick it specifically, not just "any" district.
-    await dialog.getByLabel('District').selectOption({ label: 'Khordha' });
+    // (src/data/std-codes.ts, the only city mapped to Khordha) — must pick
+    // it specifically, not just "any" district.
+    await dialog.getByLabel('District 1').selectOption({ label: 'Khordha' });
 
-    const cityField = dialog.getByLabel(/City\/Town 1/);
-    await cityField.fill('Bhubaneswar');
-
-    const stdField = dialog.getByLabel(/STD code 1/);
+    const stdField = dialog.getByLabel('STD code 1');
     await expect(stdField).toHaveValue('0674');
+    // Number is available in the same instant, no further gating on a city.
+    await dialog.getByPlaceholder('2345678').fill('2345678');
+    await expect(dialog.getByPlaceholder('2345678')).toHaveValue('2345678');
   });
 
-  test('Phase 5.2: Multi-contact numbers on department', async ({ page }) => {
+  test('Item 2: a district with no mapped city at all never blocks STD/Number entry (the reported bug)', async ({ page }) => {
+    const dialog = await createDepartmentUnderState(page, 'Odisha', `QA E2E No-City Test ${Date.now()}`);
+    await dialog.getByRole('button', { name: '+ Add Contact Number' }).click();
+
+    await dialog.getByLabel('State 1').selectOption({ label: 'Odisha' });
+    await dialog.getByLabel('Type 1').selectOption({ label: 'Landline / EPBX' });
+    // Puri has no entry in src/data/std-codes.ts's Odisha rows (only
+    // Khordha/Cuttack/Balasore are seeded) — the real-world case this fix
+    // targets: STD must stay blank and freely editable, Number must stay
+    // enabled, and saving must succeed regardless of missing dataset coverage.
+    await dialog.getByLabel('District 1').selectOption({ label: 'Puri' });
+
+    const stdField = dialog.getByLabel('STD code 1');
+    await expect(stdField).toBeEnabled();
+    await expect(stdField).toHaveValue('');
+    await stdField.fill('06752');
+    await expect(stdField).toHaveValue('06752');
+
+    const numberField = dialog.getByPlaceholder('2345678');
+    await expect(numberField).toBeEnabled();
+    await numberField.fill('2223344');
+
+    await dialog.getByRole('button', { name: 'Create department' }).click();
+    await expect(desktopPanel(page).getByText('STD 06752')).toBeVisible();
+  });
+
+  test('Item 2: Mobile row shows only +91 + 10 digits, never STD/District', async ({ page }) => {
+    const dialog = await createDepartmentUnderState(page, 'Odisha', `QA E2E Mobile Test ${Date.now()}`);
+    await dialog.getByRole('button', { name: '+ Add Contact Number' }).click();
+
+    await dialog.getByLabel('State 1').selectOption({ label: 'Odisha' });
+    await dialog.getByLabel('Type 1').selectOption({ label: 'Mobile' });
+
+    await expect(dialog.getByLabel('District 1')).toHaveCount(0);
+    await expect(dialog.getByLabel('STD code 1')).toHaveCount(0);
+    await expect(dialog.getByText('+91')).toBeVisible();
+    await dialog.getByPlaceholder('9812345678').fill('9876543210');
+    await expect(dialog.getByPlaceholder('9812345678')).toHaveValue('9876543210');
+  });
+
+  test('Phase 5.2: Multi-contact numbers on department, save + reload', async ({ page }) => {
     await openQaTestDepartment(page);
     await page.getByRole('button', { name: 'Edit', exact: true }).click();
 
@@ -161,11 +224,19 @@ test.describe('Account Mapping — Department State/District/City/STD', () => {
     const rows = page.locator('[data-testid^="contact-number-row-"]');
     await expect(rows).toHaveCount(rowsBefore + 1);
 
+    // QA Test lives under Central Ministries (/state/0) — a new row there has
+    // no State field at all (skipGeography) and goes straight to Type, so a
+    // freshly-added blank row has exactly one <select> (Type) — targeting it
+    // by role avoids depending on the row's numbered aria-label text, which
+    // this dept's many accumulated rows (no e2e cleanup step exists) make
+    // slow to settle.
+    const lastRow = rows.last();
+    await lastRow.locator('select').selectOption({ label: 'Mobile' });
+
     // The Number field is a PhoneInput (a compound country-code + digits
     // control) — Field's implicit <label> wrapping only associates with a
     // single native control, so getByLabel doesn't reach it; target its
     // placeholder within the specific row instead.
-    const lastRow = rows.last();
     await lastRow.getByPlaceholder(/9812345678/).fill('9876543210');
     await page.getByRole('button', { name: 'Save changes' }).click();
 
@@ -547,18 +618,17 @@ test.describe('Item 2 — Department Contact display (read view)', () => {
     const deptName = `QA E2E Contact Display Test ${Date.now()}`;
     const dialog = await createDepartmentUnderState(page, 'Odisha', deptName);
     await dialog.getByRole('button', { name: '+ Add Contact Number' }).click();
-    await dialog.getByLabel('State').selectOption({ label: 'Odisha' });
-    await dialog.getByLabel('District').selectOption({ label: 'Khordha' });
-    await dialog.getByLabel(/City\/Town 1/).fill('Bhubaneswar');
-    await expect(dialog.getByLabel(/STD code 1/)).toHaveValue('0674');
-    await dialog.getByPlaceholder(/9812345678/).fill('9876543210');
+    await dialog.getByLabel('State 1').selectOption({ label: 'Odisha' });
+    await dialog.getByLabel('Type 1').selectOption({ label: 'Landline / EPBX' });
+    await dialog.getByLabel('District 1').selectOption({ label: 'Khordha' });
+    await expect(dialog.getByLabel('STD code 1')).toHaveValue('0674');
+    await dialog.getByPlaceholder('2345678').fill('2345678');
     await dialog.getByRole('button', { name: 'Create department' }).click();
 
     await expect(desktopPanel(page).getByRole('heading', { name: `Department of ${deptName}` })).toBeVisible();
     await expect(desktopPanel(page).getByText('Odisha')).toBeVisible();
     await expect(desktopPanel(page).getByText('Khordha')).toBeVisible();
     await expect(desktopPanel(page).getByText('Contact numbers')).toBeVisible();
-    await expect(desktopPanel(page).getByText('Bhubaneswar')).toBeVisible();
     await expect(desktopPanel(page).getByText('STD 0674')).toBeVisible();
   });
 });

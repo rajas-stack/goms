@@ -48,7 +48,7 @@ export function DepartmentFields({ meta, setMeta, onShortNameChange, employees, 
   const chain = resolveSalesChain(meta.salesGeo ?? '', liveSalesRoster(salesPersons, currentPostings))
 
   // --- Contact numbers: each entry owns its own State -> Type ->
-  // (District -> City -> STD -> Number) reveal flow (see ContactNumberRow.tsx)
+  // (District -> STD -> Number) reveal flow (see ContactNumberRow.tsx)
   // — see contact-numbers.ts for why the list itself is JSON-encoded. ---
   const { data: states = [] } = useStates()
   // The department's own jurisdiction, resolved to a node id so a brand-new

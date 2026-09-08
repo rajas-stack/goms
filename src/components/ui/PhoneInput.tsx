@@ -74,7 +74,7 @@ export function PhoneInput({ value, onChange, invalid, mode = 'mobile' }: Props)
         inputMode="numeric"
         maxLength={maxLenFor(mode)}
         placeholder="2345678"
-        aria-label="Local/EPBX number"
+        aria-label="Number"
         className={errorCls}
       />
     )
