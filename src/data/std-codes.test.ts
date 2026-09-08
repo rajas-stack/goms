@@ -25,7 +25,32 @@ describe('std-codes', () => {
     expect(STD_CODE_ENTRIES.length).toBeGreaterThan(0)
     for (const entry of STD_CODE_ENTRIES) {
       expect(entry.source).toBeTruthy()
-      expect(typeof entry.verified).toBe('boolean')
+      expect(['verified', 'cross-walked', 'secondary']).toContain(entry.verificationLevel)
     }
+  })
+
+  it('stdCodeForCity resolves a cross-walked, non-namesake city (Vijayawada -> Krishna district)', () => {
+    expect(stdCodeForCity(547, 'Vijayawada')).toBe('0866')
+  })
+
+  it('citiesForDistrict returns multiple SDCAs for a district with more than one seeded city', () => {
+    const entries = citiesForDistrict(595) // Ernakulam, Kerala
+    expect(entries.map((e) => e.city).sort()).toEqual(['Kochi', 'Muvattupuzha'])
+  })
+
+  it('has no duplicate (districtLgdCode, city) rows', () => {
+    const keys = STD_CODE_ENTRIES.map((e) => `${e.districtLgdCode}::${e.city}`)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('stdCodeForCity resolves the same city under two districts it legitimately spans (Imphal)', () => {
+    expect(stdCodeForCity(277, 'Imphal')).toBe('0385') // Imphal West
+    expect(stdCodeForCity(278, 'Imphal')).toBe('0385') // Imphal East
+  })
+
+  it('Gandhinagar is verified against an official source, not the Antigravity-research value it contradicted', () => {
+    const entry = citiesForDistrict(473).find((e) => e.city === 'Gandhinagar')
+    expect(entry?.stdCode).toBe('079')
+    expect(entry?.verificationLevel).toBe('verified')
   })
 })
