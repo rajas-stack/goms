@@ -1,69 +1,84 @@
 import { Input } from './Field'
 
-const NUMBER_LEN = 10
-// A landline's local part is 6-8 digits after a 2-4 digit STD code (not
-// counting the leading 0, which we treat the same as the +91 prefix — see
-// parsePhone) — so the combined digit string can run from 8 up to 12.
-const LANDLINE_MIN_LEN = 8
-const LANDLINE_MAX_LEN = 12
+const MOBILE_LEN = 10
+// A landline/EPBX local number, entered separately from its STD code (the
+// STD code is its own field elsewhere in the form) — 6-8 digits, matching
+// the local-part length of a real Indian STD-prefixed number.
+const LOCAL_MIN_LEN = 6
+const LOCAL_MAX_LEN = 8
 
-export type PhoneMode = 'mobile' | 'mobileOrLandline'
+export type PhoneMode = 'mobile' | 'landlineLocal'
 
 function maxLenFor(mode: PhoneMode): number {
-  return mode === 'mobileOrLandline' ? LANDLINE_MAX_LEN : NUMBER_LEN
+  return mode === 'landlineLocal' ? LOCAL_MAX_LEN : MOBILE_LEN
 }
 
 const onlyDigits = (s: string) => s.replace(/\D/g, '')
 
 /** Parse any stored phone string down to its bare digits (best-effort).
- *  Handles values already in canonical form, bare numbers, and numbers that
- *  still carry a leading 91 country code — stripped textually first, not by
- *  digit-counting on the fully-digit-stripped string (a length-based guard
- *  can't tell the literal "+91" prefix's digits apart from real number
- *  digits once digits and prefix are already mixed). `mode` is 'mobile' by
- *  default, preserving the original 10-digit-only behavior unchanged. */
+ *  Strips a leading "+91"/"91" textually first (not by digit-counting on the
+ *  fully-digit-stripped string, which can't tell the prefix's digits apart
+ *  from real number digits once mixed) — this also cleans up any legacy
+ *  landline value that was saved back when this field wrongly carried a +91
+ *  prefix alongside an STD code. */
 function parsePhone(value: string, mode: PhoneMode = 'mobile'): string {
   const rest = value.trim().replace(/^\+?91[\s-]?/, '')
   return onlyDigits(rest).slice(0, maxLenFor(mode))
 }
 
-/** Canonical stored form: "+91 9812345678". Empty → empty string. */
+/** Canonical stored form. Mobile: "+91 9812345678" — a real international
+ *  dialing representation. Landline-local: bare digits only ("2345678") —
+ *  never combined with +91, since a domestic STD-code call and a +91
+ *  international mobile call are different dialing contexts; the STD code
+ *  itself lives in a separate field. Empty → empty string either way. */
 export function formatPhone(number: string, mode: PhoneMode = 'mobile'): string {
   const d = onlyDigits(number).slice(0, maxLenFor(mode))
-  return d ? `+91 ${d}` : ''
+  if (!d) return ''
+  return mode === 'landlineLocal' ? d : `+91 ${d}`
 }
 
-/** Valid when empty (optional). In the default 'mobile' mode, valid only at
- *  exactly 10 digits after the +91 prefix — unchanged from before `mode`
- *  existed. In 'mobileOrLandline' mode, a 10-digit mobile is still valid,
- *  and so is an STD-code-prefixed landline (2-4 digit code + 6-8 digit local
- *  number, i.e. 8-12 digits total). */
+/** Valid when empty (optional). 'mobile': exactly 10 digits. 'landlineLocal':
+ *  6-8 digits (the local part only — STD code is validated separately). */
 export function isValidPhone(value: string, mode: PhoneMode = 'mobile'): boolean {
   if (!value.trim()) return true
   const digits = parsePhone(value, mode)
-  if (digits.length === NUMBER_LEN) return true
-  if (mode !== 'mobileOrLandline') return false
-  return digits.length >= LANDLINE_MIN_LEN && digits.length <= LANDLINE_MAX_LEN
+  if (mode === 'landlineLocal') return digits.length >= LOCAL_MIN_LEN && digits.length <= LOCAL_MAX_LEN
+  return digits.length === MOBILE_LEN
 }
 
 interface Props {
   value: string
   onChange: (value: string) => void
   invalid?: boolean
-  /** 'mobile' (default) keeps the original fixed-10-digit field, unchanged —
-   *  every existing caller (e.g. the Employee form's phone field) is
-   *  unaffected. 'mobileOrLandline' widens the single free-text field to
-   *  also accept an STD-code-prefixed landline number. */
+  /** 'mobile' (default): fixed +91 prefix + 10-digit number — unchanged for
+   *  every existing caller (Employee/Node phone fields). 'landlineLocal': no
+   *  +91 badge, just the local number after the STD code (which is its own
+   *  separate field wherever this mode is used). */
   mode?: PhoneMode
 }
 
-/** Indian contact number: a fixed +91 prefix plus a single free-text field.
- *  Emits the combined canonical string. */
+/** Indian contact number. In 'mobile' mode: a fixed +91 prefix plus a
+ *  10-digit field, emitting the combined canonical string. In
+ *  'landlineLocal' mode: a bare local-number field with no country-code
+ *  badge, since STD-code dialing and +91 international dialing are
+ *  different contexts that must never be shown concatenated. */
 export function PhoneInput({ value, onChange, invalid, mode = 'mobile' }: Props) {
   const number = parsePhone(value, mode)
   const errorCls = invalid ? 'border-crimson focus:border-crimson' : ''
-  const placeholder = mode === 'mobileOrLandline' ? '9812345678 or 0674 2345678' : '9812345678'
-  const ariaLabel = mode === 'mobileOrLandline' ? 'Phone number (mobile or STD + landline)' : 'Phone number (10 digits)'
+
+  if (mode === 'landlineLocal') {
+    return (
+      <Input
+        value={number}
+        onChange={(e) => onChange(formatPhone(e.target.value, mode))}
+        inputMode="numeric"
+        maxLength={maxLenFor(mode)}
+        placeholder="2345678"
+        aria-label="Local/EPBX number"
+        className={errorCls}
+      />
+    )
+  }
 
   return (
     <div className="flex items-stretch gap-2">
@@ -75,8 +90,8 @@ export function PhoneInput({ value, onChange, invalid, mode = 'mobile' }: Props)
         onChange={(e) => onChange(formatPhone(e.target.value, mode))}
         inputMode="numeric"
         maxLength={maxLenFor(mode)}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
+        placeholder="9812345678"
+        aria-label="Phone number (10 digits)"
         className={`flex-1 ${errorCls}`}
       />
     </div>

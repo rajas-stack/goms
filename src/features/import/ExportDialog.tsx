@@ -49,7 +49,14 @@ function departmentRows(ctx: Ctx): string[][] {
       d.code ?? '',
       d.metadata.website ?? '',
       parseContactNumbers(d.metadata.contactNumbers)
-        .map((c) => (c.city ? `${c.city}: ${c.number}` : c.number))
+        .map((c) => {
+          // Landline numbers are stored as a bare local number (STD code is
+          // its own field, already carrying its own leading 0, and never
+          // combined with +91 — see PhoneInput.tsx) — put the STD code back
+          // in front for a dialable export value.
+          const numberText = c.type === 'mobile' || !c.stdCode ? c.number : `${c.stdCode} ${c.number}`
+          return c.city ? `${c.city}: ${numberText}` : numberText
+        })
         .filter(Boolean)
         .join('; '),
       d.metadata.departmentEmail ?? '',

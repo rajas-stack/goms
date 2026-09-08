@@ -235,17 +235,31 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
               <div className={cn(fields.length > 0 || contactStateNode || contactDistrictNode ? 'mt-4' : undefined)}>
                 <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Contact numbers</p>
                 <ul className="space-y-2">
-                  {contactNumbers.map((c, i) => (
-                    <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-sm text-ink-900">
-                      {c.city && <span className="font-medium">{c.city}</span>}
-                      {c.stdCode && <span className="text-muted">STD {c.stdCode}</span>}
-                      {c.number && (
-                        <a href={`tel:${c.number.replace(/\s+/g, '')}`} className="text-teal-600 hover:underline">
-                          {c.number}
-                        </a>
-                      )}
-                    </li>
-                  ))}
+                  {contactNumbers.map((c, i) => {
+                    // Landline/EPBX numbers are stored as a bare local number
+                    // (STD code lives in its own field, already carrying its
+                    // own leading 0 — e.g. "0674" — and is never concatenated
+                    // with +91, see PhoneInput.tsx) — the trunk-dialable
+                    // `tel:` form needs the STD code back in front of it,
+                    // which the domestic display text also shows explicitly
+                    // rather than relying on the separate "STD ..." label alone.
+                    const isMobile = c.type === 'mobile'
+                    const displayNumber = isMobile || !c.stdCode ? c.number : `${c.stdCode} ${c.number}`
+                    const telHref = isMobile
+                      ? c.number.replace(/\s+/g, '')
+                      : `${c.stdCode ?? ''}${c.number}`.replace(/\D/g, '')
+                    return (
+                      <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-sm text-ink-900">
+                        {c.city && <span className="font-medium">{c.city}</span>}
+                        {c.stdCode && <span className="text-muted">STD {c.stdCode}</span>}
+                        {c.number && (
+                          <a href={`tel:${telHref}`} className="text-teal-600 hover:underline">
+                            {displayNumber}
+                          </a>
+                        )}
+                      </li>
+                    )
+                  })}
                 </ul>
               </div>
             )}

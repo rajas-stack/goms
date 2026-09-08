@@ -25,25 +25,23 @@ describe('PhoneInput validation', () => {
     })
   })
 
-  describe("mode: 'mobileOrLandline'", () => {
-    it('accepts a valid 10-digit mobile number', () => {
-      expect(isValidPhone('9876543210', 'mobileOrLandline')).toBe(true)
+  describe("mode: 'landlineLocal' — local number only, STD code is a separate field", () => {
+    it('accepts a valid local number at the 6-digit floor', () => {
+      expect(isValidPhone('234567', 'landlineLocal')).toBe(true)
     })
-    it('accepts a valid STD-prefixed landline (e.g. 0674 + 7-digit local = 11 digits)', () => {
-      expect(isValidPhone('06742345678', 'mobileOrLandline')).toBe(true)
+    it('accepts a valid local number at the 8-digit ceiling', () => {
+      expect(isValidPhone('23456789', 'landlineLocal')).toBe(true)
     })
-    it('accepts a short landline at the 8-digit floor (2-digit STD + 6-digit local)', () => {
-      expect(isValidPhone('11234567', 'mobileOrLandline')).toBe(true)
-    })
-    it('rejects malformed input below the 8-digit landline floor', () => {
-      expect(isValidPhone('1234', 'mobileOrLandline')).toBe(false)
-      expect(isValidPhone('1234567', 'mobileOrLandline')).toBe(false)
+    it('rejects below the 6-digit floor', () => {
+      expect(isValidPhone('12345', 'landlineLocal')).toBe(false)
     })
     it('accepts empty (optional field)', () => {
-      expect(isValidPhone('', 'mobileOrLandline')).toBe(true)
+      expect(isValidPhone('', 'landlineLocal')).toBe(true)
     })
-    it('formatPhone allows up to 12 digits in this mode', () => {
-      expect(formatPhone('067423456789', 'mobileOrLandline')).toBe('+91 067423456789')
+    it('formatPhone returns bare digits — never a +91 prefix — and caps at 8 digits', () => {
+      expect(formatPhone('2345678', 'landlineLocal')).toBe('2345678')
+      expect(formatPhone('123456789', 'landlineLocal')).toBe('12345678')
+      expect(formatPhone('', 'landlineLocal')).toBe('')
     })
   })
 })
