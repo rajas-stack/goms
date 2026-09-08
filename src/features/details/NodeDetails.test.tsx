@@ -6,10 +6,10 @@ import { serializeContactNumbers } from '@/features/nodes/contact-numbers'
 import type { HierNode } from '@/lib/types'
 
 // Item 2: the Department Contact section must actually render the
-// State/District/contact-numbers data DepartmentFields.tsx captures — before
-// this fix, NodeDetails only rendered website/departmentEmail/officeAddress
-// and silently dropped everything the State/District/multi-number block
-// wrote to metadata (contactStateNodeId/contactDistrictNodeId/contactNumbers).
+// per-contact-number State/District/city/STD/number data DepartmentFields.tsx
+// captures — before this fix, NodeDetails only rendered website/
+// departmentEmail/officeAddress and silently dropped everything the
+// State/District/multi-number block wrote to metadata.
 vi.mock('@/features/workspace/context', () => ({
   useWorkspace: () => ({ select: vi.fn(), editNode: vi.fn(), moveNode: vi.fn(), deleteNode: vi.fn() }),
 }))
@@ -46,16 +46,16 @@ beforeEach(() => {
   })
 })
 
-describe('NodeDetails — Department Contact: State/District/contact numbers display (Item 2)', () => {
-  it('shows the resolved State and District names alongside the contact numbers', () => {
+describe('NodeDetails — Department Contact: per-row State/District/contact numbers display (Item 2)', () => {
+  it("shows a contact number's own resolved State and District names alongside it", () => {
     const state = makeNode({ id: 'state-1', typeKey: 'state', name: 'Odisha' })
     const district = makeNode({ id: 'dist-1', typeKey: 'district', name: 'Khordha', parentId: 'state-1' })
     const dept = makeNode({
       id: 'dept-1',
       metadata: {
-        contactStateNodeId: 'state-1',
-        contactDistrictNodeId: 'dist-1',
-        contactNumbers: serializeContactNumbers([{ type: 'landline', city: 'Bhubaneswar', stdCode: '0674', number: '2345678' }]),
+        contactNumbers: serializeContactNumbers([
+          { type: 'landline', stateNodeId: 'state-1', districtNodeId: 'dist-1', city: 'Bhubaneswar', stdCode: '0674', number: '2345678' },
+        ]),
       },
     })
     stubHooks({ node: dept, byId: { 'state-1': state, 'dist-1': district } })
@@ -63,7 +63,7 @@ describe('NodeDetails — Department Contact: State/District/contact numbers dis
     render(<NodeDetails nodeId="dept-1" />)
 
     expect(screen.getByText('Odisha')).toBeInTheDocument()
-    expect(screen.getByText('Khordha')).toBeInTheDocument()
+    expect(screen.getByText('Khordha', { exact: false })).toBeInTheDocument()
     expect(screen.getByText('Bhubaneswar')).toBeInTheDocument()
     expect(screen.getByText('STD 0674')).toBeInTheDocument()
     // Domestic display combines the STD code back with the local number
@@ -75,7 +75,9 @@ describe('NodeDetails — Department Contact: State/District/contact numbers dis
     const dept = makeNode({
       id: 'dept-1',
       metadata: {
-        contactNumbers: serializeContactNumbers([{ type: 'mobile', city: '', stdCode: '', number: '+91 9812345678' }]),
+        contactNumbers: serializeContactNumbers([
+          { type: 'mobile', stateNodeId: '', districtNodeId: '', city: '', stdCode: '', number: '+91 9812345678' },
+        ]),
       },
     })
     stubHooks({ node: dept })
@@ -86,21 +88,25 @@ describe('NodeDetails — Department Contact: State/District/contact numbers dis
     expect(screen.queryByText(/^STD /)).not.toBeInTheDocument()
   })
 
-  it('renders every entry when multiple contact numbers were added', () => {
+  it('renders every entry when multiple contact numbers were added, each with its own State/District', () => {
+    const gujarat = makeNode({ id: 'state-gj', typeKey: 'state', name: 'Gujarat' })
+    const odisha = makeNode({ id: 'state-od', typeKey: 'state', name: 'Odisha' })
     const dept = makeNode({
       id: 'dept-1',
       metadata: {
         contactNumbers: serializeContactNumbers([
-          { type: 'landline', city: 'Bhubaneswar', stdCode: '0674', number: '2345678' },
-          { type: 'landline', city: 'Cuttack', stdCode: '0671', number: '2345678' },
+          { type: 'landline', stateNodeId: 'state-gj', districtNodeId: '', city: 'Gandhinagar', stdCode: '079', number: '2345678' },
+          { type: 'landline', stateNodeId: 'state-od', districtNodeId: '', city: 'Cuttack', stdCode: '0671', number: '2345678' },
         ]),
       },
     })
-    stubHooks({ node: dept })
+    stubHooks({ node: dept, byId: { 'state-gj': gujarat, 'state-od': odisha } })
 
     render(<NodeDetails nodeId="dept-1" />)
 
-    expect(screen.getByText('Bhubaneswar')).toBeInTheDocument()
+    expect(screen.getByText('Gujarat')).toBeInTheDocument()
+    expect(screen.getByText('Odisha')).toBeInTheDocument()
+    expect(screen.getByText('Gandhinagar')).toBeInTheDocument()
     expect(screen.getByText('Cuttack')).toBeInTheDocument()
   })
 
@@ -116,12 +122,37 @@ describe('NodeDetails — Department Contact: State/District/contact numbers dis
   it('does not require a State/District to still show contact numbers (e.g. a Central Ministries department)', () => {
     const dept = makeNode({
       id: 'dept-1',
-      metadata: { contactNumbers: serializeContactNumbers([{ type: 'landline', city: 'New Delhi', stdCode: '011', number: '23456789' }]) },
+      metadata: {
+        contactNumbers: serializeContactNumbers([
+          { type: 'landline', stateNodeId: '', districtNodeId: '', city: 'New Delhi', stdCode: '011', number: '23456789' },
+        ]),
+      },
     })
     stubHooks({ node: dept })
 
     render(<NodeDetails nodeId="dept-1" />)
 
     expect(screen.getByText('New Delhi')).toBeInTheDocument()
+  })
+
+  it("an entry saved before per-row geography existed (no stateNodeId/districtNodeId of its own) still resolves the department's old section-level State/District", () => {
+    const state = makeNode({ id: 'state-1', typeKey: 'state', name: 'Odisha' })
+    const district = makeNode({ id: 'dist-1', typeKey: 'district', name: 'Khordha', parentId: 'state-1' })
+    const dept = makeNode({
+      id: 'dept-1',
+      metadata: {
+        contactStateNodeId: 'state-1',
+        contactDistrictNodeId: 'dist-1',
+        // Raw legacy JSON: no `type`/`stateNodeId`/`districtNodeId` keys at all.
+        contactNumbers: '[{"city":"Bhubaneswar","stdCode":"0674","number":"2345678"}]',
+      },
+    })
+    stubHooks({ node: dept, byId: { 'state-1': state, 'dist-1': district } })
+
+    render(<NodeDetails nodeId="dept-1" />)
+
+    expect(screen.getByText('Odisha')).toBeInTheDocument()
+    expect(screen.getByText('Khordha', { exact: false })).toBeInTheDocument()
+    expect(screen.getByText('Bhubaneswar')).toBeInTheDocument()
   })
 })

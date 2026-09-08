@@ -6,7 +6,7 @@ import { NODE_TYPE_MAP, childTypesOf } from '@/lib/node-types'
 import { useWorkspace } from '@/features/workspace/context'
 import { fieldsForType } from '@/features/nodes/metadata-fields'
 import { abbreviateDepartmentName } from '@/features/nodes/department-meta'
-import { parseContactNumbers } from '@/features/nodes/contact-numbers'
+import { parseContactNumbers, type ContactNumberEntry } from '@/features/nodes/contact-numbers'
 import { DepartmentSection } from './DepartmentSection'
 import { Button } from '@/components/ui/Button'
 import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
@@ -32,16 +32,17 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
   const { data: allEmployees = [] } = useAllEmployees()
   const isOrgLeaf = !!node && node.domain === 'org' && EMPLOYEE_ADDERS.has(node.typeKey)
   const { data: employees = [] } = useEmployeesUnder(node && node.domain === 'org' ? nodeId : null)
-  // Item 2: DepartmentFields.tsx writes the State/District pick and the
-  // multi-number list to metadata (contactStateNodeId/contactDistrictNodeId/
-  // contactNumbers) — resolved and rendered here so it's actually visible
-  // after saving, not just captured on the form.
-  const { data: contactStateNode } = useNode(node?.metadata.contactStateNodeId || null)
-  const { data: contactDistrictNode } = useNode(node?.metadata.contactDistrictNodeId || null)
-
   if (!node) return null
 
-  const contactNumbers = parseContactNumbers(node.metadata.contactNumbers).filter((c) => c.city || c.stdCode || c.number)
+  // Item 2: DepartmentFields.tsx writes each contact number's own
+  // State/District/City/STD/Number to metadata.contactNumbers — resolved
+  // and rendered here so it's actually visible after saving, not just
+  // captured on the form. The two legacy args are an older department's
+  // section-level contactStateNodeId/contactDistrictNodeId (predating
+  // per-row geography), used as a fallback for any entry missing its own.
+  const contactNumbers = parseContactNumbers(
+    node.metadata.contactNumbers, node.metadata.contactStateNodeId, node.metadata.contactDistrictNodeId,
+  ).filter((c) => c.city || c.stdCode || c.number)
   const type = NODE_TYPE_MAP[node.typeKey]
   const childType = childTypesOf(node.typeKey)[0]
   // `childTypesOf` falls back to every type in the domain once a type's own
@@ -193,7 +194,7 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
           </Section>
         )}
 
-        {(fields.length > 0 || contactStateNode || contactDistrictNode || contactNumbers.length > 0) && (
+        {(fields.length > 0 || contactNumbers.length > 0) && (
           <Section title={isDepartment ? 'Department Contact' : 'Details'}>
             {fields.length > 0 && (
               <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
@@ -224,42 +225,13 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
               </dl>
             )}
 
-            {(contactStateNode || contactDistrictNode) && (
-              <dl className={cn('grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2', fields.length > 0 && 'mt-3')}>
-                {contactStateNode && <DetailRow label="State" icon="Type">{contactStateNode.name}</DetailRow>}
-                {contactDistrictNode && <DetailRow label="District" icon="Type">{contactDistrictNode.name}</DetailRow>}
-              </dl>
-            )}
-
             {contactNumbers.length > 0 && (
-              <div className={cn(fields.length > 0 || contactStateNode || contactDistrictNode ? 'mt-4' : undefined)}>
+              <div className={cn(fields.length > 0 ? 'mt-4' : undefined)}>
                 <p className="mb-2 text-[11px] uppercase tracking-wide text-muted">Contact numbers</p>
                 <ul className="space-y-2">
-                  {contactNumbers.map((c, i) => {
-                    // Landline/EPBX numbers are stored as a bare local number
-                    // (STD code lives in its own field, already carrying its
-                    // own leading 0 — e.g. "0674" — and is never concatenated
-                    // with +91, see PhoneInput.tsx) — the trunk-dialable
-                    // `tel:` form needs the STD code back in front of it,
-                    // which the domestic display text also shows explicitly
-                    // rather than relying on the separate "STD ..." label alone.
-                    const isMobile = c.type === 'mobile'
-                    const displayNumber = isMobile || !c.stdCode ? c.number : `${c.stdCode} ${c.number}`
-                    const telHref = isMobile
-                      ? c.number.replace(/\s+/g, '')
-                      : `${c.stdCode ?? ''}${c.number}`.replace(/\D/g, '')
-                    return (
-                      <li key={i} className="flex flex-wrap items-baseline gap-x-2 text-sm text-ink-900">
-                        {c.city && <span className="font-medium">{c.city}</span>}
-                        {c.stdCode && <span className="text-muted">STD {c.stdCode}</span>}
-                        {c.number && (
-                          <a href={`tel:${telHref}`} className="text-teal-600 hover:underline">
-                            {displayNumber}
-                          </a>
-                        )}
-                      </li>
-                    )
-                  })}
+                  {contactNumbers.map((c, i) => (
+                    <ContactNumberDisplayItem key={i} entry={c} />
+                  ))}
                 </ul>
               </div>
             )}
@@ -324,6 +296,39 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       <h3 className="mb-2.5 text-[13px] font-semibold text-ink-800">{title}</h3>
       {children}
     </section>
+  )
+}
+
+/** One contact number's read-only row — each entry now owns its own
+ *  State/District (see ContactNumberRow.tsx), so resolving names needs its
+ *  own `useNode` calls per item, not one shared pair for the whole list. */
+function ContactNumberDisplayItem({ entry }: { entry: ContactNumberEntry }) {
+  const { data: stateNode } = useNode(entry.stateNodeId || null)
+  const { data: districtNode } = useNode(entry.districtNodeId || null)
+  // Landline/EPBX numbers are stored as a bare local number (STD code lives
+  // in its own field, already carrying its own leading 0 — e.g. "0674" —
+  // and is never concatenated with +91, see PhoneInput.tsx) — the
+  // trunk-dialable `tel:` form needs the STD code back in front of it,
+  // which the domestic display text also shows explicitly rather than
+  // relying on the separate "STD ..." label alone.
+  const isMobile = entry.type === 'mobile'
+  const displayNumber = isMobile || !entry.stdCode ? entry.number : `${entry.stdCode} ${entry.number}`
+  const telHref = isMobile
+    ? entry.number.replace(/\s+/g, '')
+    : `${entry.stdCode ?? ''}${entry.number}`.replace(/\D/g, '')
+
+  return (
+    <li className="flex flex-wrap items-baseline gap-x-2 text-sm text-ink-900">
+      {stateNode && <span className="text-muted">{stateNode.name}</span>}
+      {districtNode && <span className="text-muted">· {districtNode.name}</span>}
+      {entry.city && <span className="font-medium">{entry.city}</span>}
+      {entry.stdCode && <span className="text-muted">STD {entry.stdCode}</span>}
+      {entry.number && (
+        <a href={`tel:${telHref}`} className="text-teal-600 hover:underline">
+          {displayNumber}
+        </a>
+      )}
+    </li>
   )
 }
 
