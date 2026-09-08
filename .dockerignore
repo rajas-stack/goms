@@ -9,7 +9,7 @@ node_modules
 dist
 android
 public
-src
+/src
 docs
 scripts
 infra
