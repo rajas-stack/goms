@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { classifyRows, resolveTreeReferences, findFuzzyCandidates } from '../engine.js'
+import { classifyRows, resolveTreeReferences, findFuzzyCandidates, caseInsensitiveEnum, cascadeRejectOnRejectedReference } from '../engine.js'
 import type { ImportFieldDiff, ImportRowResult } from '../types.js'
 
 const NODE_TYPES = ['department', 'branch', 'division', 'office', 'unit'] as const
@@ -15,19 +15,18 @@ function blankToNull(v: unknown): unknown {
 }
 
 const orgHierarchyRowSchema = z.object({
-  nodeType: z.preprocess(
-    (v) => (typeof v === 'string' ? v.trim() : v),
-    z.enum(NODE_TYPES, {
-      errorMap: () => ({ message: `Node Type must be one of: ${NODE_TYPES.join(', ')}` }),
-    }),
-  ),
+  // Case-insensitive: an export spelled "Department"/"DEPARTMENT" is
+  // ordinary Excel formatting variance, not a different business value.
+  nodeType: caseInsensitiveEnum(NODE_TYPES, {
+    errorMap: () => ({ message: `Node Type must be one of: ${NODE_TYPES.join(', ')}` }),
+  }),
   name: z.string().min(1, 'Name is required'),
   code: z.string().min(1, 'Code is required').trim(),
   parentCode: z.preprocess(blankToNull, z.string().trim().min(1).nullable()),
   stateCode: z.preprocess(blankToNull, z.number({ invalid_type_error: 'State Code must be a number' }).nullable()),
   status: z.preprocess(
     (v) => (blankToNull(v) === null ? 'active' : v),
-    z.enum(STATUSES, {
+    caseInsensitiveEnum(STATUSES, {
       errorMap: () => ({ message: `Status must be one of: ${STATUSES.join(', ')}` }),
     }),
   ),
@@ -104,7 +103,7 @@ export async function validateOrgHierarchyRows(client: { query: Function }, rawR
   const allCodesInFile = new Set(rawRows.map(rawCode).filter((c) => c !== ''))
   const candidateHaystack = new Set([...existingKeys, ...allCodesInFile])
 
-  return classifyRows<unknown, ExistingOrgNode>({
+  const preview = classifyRows<unknown, ExistingOrgNode>({
     rows: rawRows,
     getBusinessKey: (raw, index) => {
       const parsed = orgHierarchyRowSchema.safeParse(raw)
@@ -147,6 +146,13 @@ export async function validateOrgHierarchyRows(client: { query: Function }, rawR
       return { errors: [] }
     },
   })
+
+  // A row can resolve its Parent Code purely because that code appears
+  // somewhere in this file — resolveTreeReferences doesn't know whether
+  // that parent row will itself survive validation. Cascade the rejection
+  // here so a bad parent row never leaves a "create" child pointing at a
+  // parent that was never actually written (see cascadeRejectOnRejectedReference).
+  return cascadeRejectOnRejectedReference(preview, rawRows, rawParentCode, existingKeys)
 }
 
 export async function commitOrgHierarchyRows(

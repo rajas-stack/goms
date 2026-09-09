@@ -192,11 +192,95 @@ export const HEADER_TO_FIELD: Record<string, string> = {
   'Product Code': 'skuCode', 'Item Code': 'skuCode',
   'Category': 'categoryCode', 'SKU Category': 'categoryCode',
   'Feature': 'featureCode',
-  'Edition': 'editionCode',
+  'Edition': 'editionCode', 'Product Edition': 'editionCode',
   'UOM': 'uomCode', 'Unit of Measure': 'uomCode',
   'Currency': 'currencyCode',
   'Tax Class': 'taxClassCode',
   'Billing Type': 'billingTypeCode',
+  'SKU Name': 'name',
+  'Sellable': 'isSellable',
+  'Parent SKU': 'parentSkuCode',
+  'Component SKU': 'componentSkuCode',
+
+  // Aliases — realistic/business-export header variants seen in real admin
+  // exports (README/QA fixtures) rather than the app's own template. Each
+  // is checked against every other header spelling already in this map
+  // before being added, to confirm it names the same field everywhere it
+  // could plausibly appear — see DOMAIN_HEADER_OVERRIDES just below for the
+  // two spellings that genuinely mean different things per domain and so
+  // can't live in this shared, domain-agnostic map.
+  'Organization Name': 'name',
+  'Parent Org Code': 'parentCode',
+  'Parent Organization Code': 'parentCode',
+  'Employee No': 'employeeCode',
+  'Mobile No': 'mobile',
+  'Current Designation': 'designation',
+  'Tier': 'tierKey',
+  'Office / Location': 'office',
+  'Office / Posting': 'office',
+  'Effective From': 'startDate',
+  'Reason for Change': 'reason',
+  'Change Reason': 'reason',
+  'Tax Code': 'code',
+  'Tax Name': 'name',
+  'Tax Rate %': 'ratePct',
+  'Currency Name': 'name',
+  'Base Currency': 'isBaseCurrency',
+  'Reporting Manager Employee ID': 'managerCode',
+  'Employment Status': 'status',
+  'Joining Date': 'joinedOn',
+  'Band Code': 'code',
+  'SKU Category Code': 'categoryCode',
+  // Not a real schema field on any domain — purely a signal sessionUpload.ts
+  // uses to recognize and decompose a combined, Level-discriminated
+  // Commercial Catalog sheet (Vertical/Product/Module/Feature rows mixed
+  // together) into the four separate sheets commercialMastersCatalog
+  // actually expects. Stripped back out before any row reaches a real
+  // domain schema.
+  'Level': 'catalogLevel',
+  // "Organization Code" defaults to employees' meaning (which org an
+  // employee belongs to) — matching the existing "Org Code"/"Department
+  // Code"/"Office Code" family — overridden below for organizationHierarchy
+  // itself, where the identical words name the node's OWN code.
+  'Organization Code': 'orgNodeCode',
+}
+
+/** Header spellings whose real-world meaning genuinely depends on which
+ *  domain they're read for — unlike every other header in HEADER_TO_FIELD,
+ *  which names the same field no matter which template it appears on. "Org
+ *  Code" already means "which org node an employee belongs to" (orgNodeCode)
+ *  on the Employees sheet; a realistic Organization Hierarchy export uses
+ *  the same words for the node's OWN code. "Work Email" already means a
+ *  sales person's official email (salesRoster); a realistic Employees
+ *  export uses it for the employee's own email. Checked before the global
+ *  map (see resolveHeaderField/headersForField below) — every other header
+ *  is untouched by this table and keeps its single global meaning. */
+export const DOMAIN_HEADER_OVERRIDES: Partial<Record<SpreadsheetDomainKey, Record<string, string>>> = {
+  organizationHierarchy: { 'Org Code': 'code', 'Organization Code': 'code' },
+  employees: { 'Work Email': 'email', 'Official Email': 'email' },
+  // "Currency Code" already names skus' own canonical FK column
+  // referencing which currency a SKU is priced in; a realistic Currencies
+  // export uses the identical words for the currency row's OWN code instead.
+  currencies: { 'Currency Code': 'code' },
+  // "Product Code"/"Module Code" already name skus' own FK columns
+  // referencing which product/module a feature belongs to commercially; a
+  // realistic combined catalog export uses the identical words for each
+  // catalog level's OWN parent-code column instead ("Vertical Code" has no
+  // existing global meaning, but is scoped here too for the same reason —
+  // all three read together as one family).
+  commercialMastersCatalog: { 'Vertical Code': 'parentCode', 'Product Code': 'parentCode', 'Module Code': 'parentCode' },
+}
+
+/** Resolves one header spelling to the field it names for a given domain —
+ *  the domain-scoped override if one exists, else the shared global
+ *  mapping. `domain` is undefined for a sheet that hasn't been assigned a
+ *  domain yet (still 'ambiguous'/'unrecognized', pending the admin's own
+ *  choice in the UI) — those fall back to the global-only meaning, same as
+ *  before this table existed. */
+export function resolveHeaderField(domain: SpreadsheetDomainKey | undefined, header: string): string | undefined {
+  const trimmed = header.trim()
+  const override = domain && DOMAIN_HEADER_OVERRIDES[domain]?.[trimmed]
+  return override || HEADER_TO_FIELD[trimmed]
 }
 
 /** Reverse of HEADER_TO_FIELD: every header spelling (canonical or alias)
@@ -211,6 +295,22 @@ export const FIELD_TO_HEADERS: Record<string, string[]> = Object.entries(HEADER_
   },
   {} as Record<string, string[]>,
 )
+
+/** Every header spelling that resolves to `field` FOR THIS domain
+ *  specifically — the global spellings (FIELD_TO_HEADERS) plus this
+ *  domain's own DOMAIN_HEADER_OVERRIDES entries, if any. Domain detection
+ *  scores each candidate domain against a sheet's headers (domainDetection.ts);
+ *  using this instead of the raw global map lets a domain-scoped override
+ *  spelling (e.g. "Org Code" for organizationHierarchy) count toward THAT
+ *  domain's score without also counting toward every other domain that
+ *  happens to share the same spelling for a different field. */
+export function headersForField(domain: SpreadsheetDomainKey, field: string): string[] {
+  const overrides = DOMAIN_HEADER_OVERRIDES[domain]
+  const overrideHeaders = overrides
+    ? Object.entries(overrides).filter(([, f]) => f === field).map(([h]) => h)
+    : []
+  return [...new Set([...(FIELD_TO_HEADERS[field] ?? []), ...overrideHeaders])]
+}
 
 const BOOLEAN_FIELDS = new Set(['active', 'isBaseCurrency', 'vacant', 'isSellable', 'mandatory', 'allowAutoApproval'])
 
@@ -244,23 +344,92 @@ export function parseCellValue(field: string, raw: unknown): unknown {
   if (NUMERIC_FIELDS.has(field)) {
     if (typeof text === 'number') return text
     if (text === '') return undefined
-    const parsed = Number(text)
+    const parsed = Number(typeof text === 'string' ? stripNumericFormatting(text) : text)
     return Number.isNaN(parsed) ? text : parsed
   }
 
   return text
 }
 
-export function rowsFromSheet(worksheet: XLSX.WorkSheet): ImportRow[] {
-  const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '', raw: false })
-  return raw.map((rawRow) => {
-    const row: ImportRow = {}
-    for (const [header, value] of Object.entries(rawRow)) {
-      const field = HEADER_TO_FIELD[header.trim()]
-      if (!field) continue
-      const parsed = parseCellValue(field, value)
-      if (parsed !== undefined) row[field] = parsed
+/** Strips ONLY unambiguous Excel numeric formatting — thousands-separator
+ *  commas and a leading currency symbol — before parsing, so a normally-
+ *  formatted export ("120,000.00", "₹1,250") isn't rejected on formatting
+ *  alone. Never applied outside a NUMERIC_FIELD, and never invents a value:
+ *  anything that still doesn't parse as a number afterward (a stray percent
+ *  sign, a trailing currency code, actual prose) is returned untouched by
+ *  parseCellValue, exactly as before this existed, so the backend's own
+ *  per-field message explains what's actually wrong. */
+function stripNumericFormatting(text: string): string {
+  return text.replace(/^[₹$€£¤]\s*/, '').replace(/,/g, '')
+}
+
+/** A row needs at least this many cells recognized as known header spellings
+ *  before it's trusted as THE header row, rather than an ordinary data row
+ *  that happens to contain one header-like word (e.g. a Status column's
+ *  own value being the literal string "Status" in some export). Every real
+ *  header row in this app's templates has at least this many columns. */
+const MIN_HEADER_MATCHES = 2
+
+/** Every header spelling this app recognizes anywhere, across every domain
+ *  — canonical names, global aliases, and every domain-scoped override
+ *  spelling — used only to locate WHICH row is the header row, before any
+ *  domain has necessarily been chosen yet. Which FIELD each of those
+ *  spellings resolves to (which is domain-dependent for the two overridden
+ *  spellings) is decided afterward, by resolveHeaderField. */
+function allRecognizedHeaders(): Set<string> {
+  const all = new Set(Object.keys(HEADER_TO_FIELD))
+  for (const overrides of Object.values(DOMAIN_HEADER_OVERRIDES)) {
+    for (const header of Object.keys(overrides ?? {})) all.add(header)
+  }
+  return all
+}
+
+/** Locates the actual column-header row within a sheet that may carry a
+ *  report title, an explanatory note, and/or blank rows above the real
+ *  table — rather than assuming row 1 always is the header, which silently
+ *  turned every row of a realistically-formatted export into unrecognized
+ *  data (see docs/superpowers/analysis for the 2026-09 write-up this fixed).
+ *  Scores every row by how many of its cells are an exact, known header
+ *  spelling and returns the single best-scoring row, provided it clears
+ *  MIN_HEADER_MATCHES. A title/note row scores 0 (it's prose, not a list of
+ *  column names) and a stray reference/legend list placed elsewhere in the
+ *  sheet would need to repeat that many literal header words verbatim to
+ *  outscore the real header — in practice this never happens, so the first
+ *  (and only) row to clear the floor is reliably the real one. Returns
+ *  `null` when no row clears the floor at all — a genuinely unrecognizable
+ *  sheet, exactly the case that already needs to reach the caller as
+ *  "unrecognized"/zero rows rather than guessing. */
+function findHeaderRow(aoa: unknown[][], recognized: Set<string>): { index: number; headers: string[] } | null {
+  let best: { index: number; headers: string[]; score: number } | null = null
+  aoa.forEach((row, index) => {
+    const headers = row.map((cell) => String(cell ?? '').trim())
+    const score = headers.filter((h) => h !== '' && recognized.has(h)).length
+    if (score >= MIN_HEADER_MATCHES && (!best || score > best.score)) {
+      best = { index, headers, score }
     }
+  })
+  return best
+}
+
+/** `domain`, when known (the sheet was auto-detected, or the caller already
+ *  knows which template it's parsing — e.g. parseWorkbook), resolves the
+ *  two domain-scoped override header spellings correctly; omitted for a
+ *  sheet still awaiting the admin's own domain choice, which falls back to
+ *  each header's single global meaning exactly as before this existed. */
+export function rowsFromSheet(worksheet: XLSX.WorkSheet, domain?: SpreadsheetDomainKey): ImportRow[] {
+  const aoa = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, blankrows: false, defval: '', raw: false })
+  const found = findHeaderRow(aoa, allRecognizedHeaders())
+  if (!found) return []
+
+  return aoa.slice(found.index + 1).map((dataRow) => {
+    const row: ImportRow = {}
+    found.headers.forEach((header, colIndex) => {
+      if (header === '') return
+      const field = resolveHeaderField(domain, header)
+      if (!field) return
+      const parsed = parseCellValue(field, dataRow[colIndex])
+      if (parsed !== undefined) row[field] = parsed
+    })
     return row
   })
 }
@@ -276,9 +445,18 @@ export const MULTI_SHEET_KEYS: Partial<Record<SpreadsheetDomainKey, Record<strin
   salesRoster: { 'Sales Persons': 'persons', Postings: 'postings' },
 }
 
+/** The sheet's real column headers, wherever in the sheet they actually
+ *  are — see findHeaderRow. Falls back to the first non-blank row (the old
+ *  behavior) only when no row anywhere recognizes enough known headers to
+ *  qualify; that fallback exists purely so a genuinely unrecognizable sheet
+ *  still reports SOME headers for "why didn't this match anything" purposes
+ *  instead of an empty array indistinguishable from a blank sheet. */
 export function sheetHeaders(worksheet: XLSX.WorkSheet): string[] {
-  const [headerRow] = XLSX.utils.sheet_to_json<string[]>(worksheet, { header: 1, blankrows: false })
-  return (headerRow ?? []).map((h) => String(h).trim())
+  const aoa = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, blankrows: false, defval: '', raw: false })
+  const found = findHeaderRow(aoa, allRecognizedHeaders())
+  if (found) return found.headers.filter((h) => h !== '')
+  const [firstRow] = aoa
+  return (firstRow ?? []).map((h) => String(h ?? '').trim()).filter((h) => h !== '')
 }
 
 export class UnrecognizedWorkbookError extends Error {}
@@ -303,7 +481,7 @@ export function parseWorkbook(domain: SpreadsheetDomainKey, data: ArrayBuffer): 
   // header spelling (canonical or alias) that maps to one of those fields,
   // so a sheet using only alias headers is still correctly recognized.
   const requiredFields = new Set(TEMPLATE_COLUMNS[domain].flatMap((s) => s.columns).map((h) => HEADER_TO_FIELD[h]).filter(Boolean))
-  const expectedHeaders = new Set([...requiredFields].flatMap((f) => FIELD_TO_HEADERS[f] ?? []))
+  const expectedHeaders = new Set([...requiredFields].flatMap((f) => headersForField(domain, f)))
   const foundAnyExpectedHeader = workbook.SheetNames.some((name) =>
     sheetHeaders(workbook.Sheets[name]).some((h) => expectedHeaders.has(h)),
   )
@@ -313,13 +491,13 @@ export function parseWorkbook(domain: SpreadsheetDomainKey, data: ArrayBuffer): 
 
   if (!sheetKeys) {
     const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
-    return firstSheet ? rowsFromSheet(firstSheet).filter((r) => !isBlank(r)) : []
+    return firstSheet ? rowsFromSheet(firstSheet, domain).filter((r) => !isBlank(r)) : []
   }
 
   const result: Record<string, ImportRow[]> = {}
   for (const [sheetTitle, key] of Object.entries(sheetKeys)) {
     const worksheet = workbook.Sheets[sheetTitle]
-    result[key] = worksheet ? rowsFromSheet(worksheet).filter((r) => !isBlank(r)) : []
+    result[key] = worksheet ? rowsFromSheet(worksheet, domain).filter((r) => !isBlank(r)) : []
   }
   return result
 }

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { classifyRows, resolveTreeReferences, findFuzzyCandidates } from '../engine.js'
+import { classifyRows, resolveTreeReferences, findFuzzyCandidates, caseInsensitiveEnum } from '../engine.js'
 import type { ImportFieldDiff, ImportRowResult } from '../types.js'
 
 /** The four sheets of one workbook (spec §"5. Commercial Masters — Catalog
@@ -59,7 +59,7 @@ const featureRowSchema = z.object({
   parentCode: z.string().min(1, 'Parent Code is required').trim(),
   featureStatus: z.preprocess(
     (v) => (v === '' || v === null || v === undefined ? undefined : v),
-    z.enum(['new', 'existing'], { invalid_type_error: 'featureStatus must be "new" or "existing"' }).default('new'),
+    caseInsensitiveEnum(['new', 'existing'], { invalid_type_error: 'featureStatus must be "new" or "existing"' }).default('new'),
   ),
 })
 
@@ -246,7 +246,23 @@ function validParentCodesFor(existingByKey: Map<string, ExistingCatalogRow>, pre
   return codes
 }
 
-export async function validateCatalogRows(client: { query: Function }, rows: CatalogRows): Promise<CatalogPreview> {
+/** A combined, Level-discriminated catalog sheet omits a level entirely
+ *  when it has zero rows for it (sessionUpload.ts's splitCombinedCatalogSheet
+ *  only emits a sub-sheet when it's non-empty) — same for a real multi-sheet
+ *  upload that simply doesn't include all four tabs. The session router's
+ *  input schema allows any subset of keys, so a missing key must default to
+ *  empty here rather than crash on `rows.products` etc. being undefined. */
+function normalizeCatalogRows(rows: Partial<CatalogRows> | undefined): CatalogRows {
+  return {
+    verticals: rows?.verticals ?? [],
+    products: rows?.products ?? [],
+    modules: rows?.modules ?? [],
+    features: rows?.features ?? [],
+  }
+}
+
+export async function validateCatalogRows(client: { query: Function }, rawRows: Partial<CatalogRows> | undefined): Promise<CatalogPreview> {
+  const rows = normalizeCatalogRows(rawRows)
   const existingVerticals = await fetchExisting(client, 'verticals')
   const existingProducts = await fetchExisting(client, 'products')
   const existingModules = await fetchExisting(client, 'modules')
@@ -280,9 +296,10 @@ async function fetchCodeToId(client: { query: Function }, kind: CatalogKind): Pr
 
 export async function commitCatalogRows(
   client: { query: Function },
-  rows: CatalogRows,
+  rawRows: Partial<CatalogRows> | undefined,
   preview: CatalogPreview,
 ): Promise<void> {
+  const rows = normalizeCatalogRows(rawRows)
   // One code->id map per kind, fetched fresh from the database (not from
   // `preview`, which never carries ids for not-yet-created rows) and kept
   // up to date as this function inserts new rows level by level — a child

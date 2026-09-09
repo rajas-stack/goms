@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { classifyRows, resolveTreeReferences, findFuzzyCandidates } from '../engine.js'
+import { classifyRows, resolveTreeReferences, findFuzzyCandidates, caseInsensitiveEnum, cascadeRejectOnRejectedReference } from '../engine.js'
 import type { ImportFieldDiff, ImportRowResult } from '../types.js'
 
 const STATUSES = ['active', 'archived'] as const
@@ -21,7 +21,7 @@ const employeeRowSchema = z.object({
   vacant: z.boolean().optional().default(false),
   status: z.preprocess(
     (v) => (blankToNull(v) === null ? 'active' : v),
-    z.enum(STATUSES, {
+    caseInsensitiveEnum(STATUSES, {
       errorMap: () => ({ message: `Status must be one of: ${STATUSES.join(', ')}` }),
     }),
   ),
@@ -160,7 +160,7 @@ export async function validateEmployeeRows(client: { query: Function }, rawRows:
     if (target && !firstHeadClaimRow.has(target)) firstHeadClaimRow.set(target, index + 1)
   })
 
-  return classifyRows<unknown, ExistingEmployee>({
+  const preview = classifyRows<unknown, ExistingEmployee>({
     rows: rawRows,
     getBusinessKey: (raw, index) => {
       const parsed = employeeRowSchema.safeParse(raw)
@@ -233,6 +233,13 @@ export async function validateEmployeeRows(client: { query: Function }, rawRows:
       return { errors, needsReview, candidates }
     },
   })
+
+  // A row can resolve its Manager Employee Code purely because that code
+  // appears somewhere in this file — resolveTreeReferences doesn't know
+  // whether that manager row will itself survive validation. Cascade the
+  // rejection here so a bad manager row never leaves a "create" report
+  // pointing at a manager that was never actually written.
+  return cascadeRejectOnRejectedReference(preview, rawRows, rawManagerCode, existingEmployeeKeys)
 }
 
 export async function commitEmployeeRows(

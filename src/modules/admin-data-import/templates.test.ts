@@ -66,6 +66,24 @@ describe('parseCellValue', () => {
     expect(parseCellValue('ratePct', 'eighteen')).toBe('eighteen')
   })
 
+  // 2026-09: a realistic price export ("120,000.00") was rejected purely for
+  // using Excel's own default thousands-separator formatting — ordinary
+  // formatting, not a real data error.
+  it('strips thousands-separator commas from a numeric field before parsing', () => {
+    expect(parseCellValue('listPrice', '120,000.00')).toBe(120000)
+    expect(parseCellValue('floorPrice', '1,234,567')).toBe(1234567)
+  })
+
+  it('strips a leading currency symbol from a numeric field before parsing', () => {
+    expect(parseCellValue('listPrice', '₹120,000.00')).toBe(120000)
+    expect(parseCellValue('listPrice', '$1,250')).toBe(1250)
+  })
+
+  it('still leaves genuinely non-numeric text alone even after stripping commas/currency symbols', () => {
+    expect(parseCellValue('ratePct', '18%')).toBe('18%')
+    expect(parseCellValue('listPrice', 'TBD')).toBe('TBD')
+  })
+
   it('passes string fields through, trimmed', () => {
     expect(parseCellValue('name', '  GST 18%  ')).toBe('GST 18%')
   })

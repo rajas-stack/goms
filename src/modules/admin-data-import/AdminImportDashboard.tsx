@@ -44,7 +44,7 @@ export function AdminImportDashboard() {
   const labelByDomain = new Map((domains ?? []).map((d) => [d.domain, d.label]))
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="h-full space-y-4 overflow-y-auto scrollbar-thin p-6">
       <AdminImportBanner />
 
       <div className="flex items-center justify-between gap-3">

@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { classifyRows, findFuzzyCandidates } from '../engine.js'
+import { classifyRows, findFuzzyCandidates, caseInsensitiveEnum } from '../engine.js'
 import type { ImportFieldDiff, ImportRowResult } from '../types.js'
 
 function normalizeCode(code: string): string {
@@ -48,7 +48,7 @@ const skuRowSchema = z.object({
   // a real SKU import, so it must resolve to NULL, not the empty-string
   // literal Postgres' date column would reject.
   activeTill: z.preprocess(blankToNull, z.string().nullable().optional().default(null)),
-  lifecycleStatus: z.enum(LIFECYCLE_STATUSES).optional().default('draft'),
+  lifecycleStatus: caseInsensitiveEnum(LIFECYCLE_STATUSES).optional().default('draft'),
   isSellable: z.boolean().optional().default(true),
   displayOrder: z.number().optional().default(0),
   baseSoftwareCost: numericField('baseSoftwareCost'),

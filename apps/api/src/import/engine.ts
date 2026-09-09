@@ -1,5 +1,25 @@
 import { createHash } from 'node:crypto'
+import { z } from 'zod'
 import type { FuzzyCandidate, ImportDomainKey, ImportFieldDiff, ImportRowResult, ImportSummary } from './types.js'
+
+/** Matches a spreadsheet value against a fixed set of allowed values
+ *  case-insensitively, coercing e.g. "Active"/"ACTIVE" to the canonical
+ *  "active" before the real check — ordinary Excel capitalization variance
+ *  is a formatting accident, not a business decision, and should never by
+ *  itself force a manual edit. A value that doesn't case-insensitively match
+ *  ANY canonical option is passed through unchanged, so z.enum's own error
+ *  still fires and lists the real allowed values — this never widens what's
+ *  actually accepted, only how forgivingly a valid value can be spelled. */
+export function caseInsensitiveEnum<T extends readonly [string, ...string[]]>(
+  values: T,
+  params?: z.RawCreateParams,
+) {
+  const byLower = new Map(values.map((v) => [v.toLowerCase(), v] as const))
+  return z.preprocess(
+    (v) => (typeof v === 'string' ? byLower.get(v.trim().toLowerCase()) ?? v : v),
+    z.enum(values, params),
+  )
+}
 
 /** Bounded so a single request can't hold the whole event loop hostage
  *  parsing/validating an unbounded spreadsheet — matches the "file/row/JSON
@@ -171,4 +191,51 @@ export function resolveTreeReferences<TRow>(opts: {
   }
 
   return { unresolved: Array.from(pending).sort((a, b) => a - b) }
+}
+
+/** Closes a real gap `resolveTreeReferences` leaves open: it only checks
+ *  that a row's named parent/manager CODE appears somewhere (existing DB
+ *  rows, or any row in this same file) — it has no idea whether that
+ *  in-file row will actually survive ITS OWN validation. A row can end up
+ *  classified 'create'/'update' purely because its parent's code exists in
+ *  the file, even though that parent row is itself rejected (bad data,
+ *  invalid enum, whatever) and will never actually be written — then crash
+ *  at commit time (including the throwaway validate-time commit every
+ *  session domain runs) when the parent it was told exists was never
+ *  inserted and has no id to resolve against.
+ *
+ *  Run this as a post-pass after classifyRows, for every domain that uses
+ *  resolveTreeReferences: cascades 'reject' to any row whose reference
+ *  field names another row IN THIS FILE (not an already-existing DB row —
+ *  those did get written, in a prior commit, and are safe to rely on) that
+ *  itself ends up rejected. Repeated to a fixed point, so a multi-level
+ *  chain (grandparent -> parent -> child) cascades all the way down rather
+ *  than only catching the first level. */
+export function cascadeRejectOnRejectedReference<TRow>(
+  preview: ImportRowResult[],
+  rows: TRow[],
+  getReferenceKey: (row: TRow) => string | null,
+  existingKeys: Set<string>,
+): ImportRowResult[] {
+  const results = [...preview]
+  let changed = true
+  while (changed) {
+    changed = false
+    const rejectedFileKeys = new Set(
+      results.filter((r) => r.action === 'reject' && !existingKeys.has(r.businessKey)).map((r) => r.businessKey),
+    )
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i]
+      if (result.action !== 'create' && result.action !== 'update') continue
+      const refKey = getReferenceKey(rows[i])
+      if (refKey && rejectedFileKeys.has(refKey)) {
+        results[i] = {
+          ...result, action: 'reject', diff: undefined,
+          errors: [`References "${refKey}", another row in this file that failed its own validation — fix that row first`],
+        }
+        changed = true
+      }
+    }
+  }
+  return results
 }

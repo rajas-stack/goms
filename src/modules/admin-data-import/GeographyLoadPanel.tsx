@@ -14,7 +14,7 @@ export function GeographyLoadPanel() {
   const reconciliation = data?.reconciliation
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="h-full space-y-4 overflow-y-auto scrollbar-thin p-6">
       <AdminImportBanner />
       <div className="flex items-center justify-between gap-3">
         <h1 className="font-display text-lg font-bold text-ink-900">Geography</h1>

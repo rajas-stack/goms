@@ -1,6 +1,47 @@
 import { describe, it, expect } from 'vitest'
-import { classifyRows, resolveTreeReferences, summarize, computeCommitToken, verifyCommitToken, MAX_IMPORT_ROWS, findFuzzyCandidates, MIN_FUZZY_SIMILARITY } from './engine.js'
+import { classifyRows, resolveTreeReferences, summarize, computeCommitToken, verifyCommitToken, MAX_IMPORT_ROWS, findFuzzyCandidates, MIN_FUZZY_SIMILARITY, caseInsensitiveEnum, cascadeRejectOnRejectedReference } from './engine.js'
 import type { ImportRowResult } from './types.js'
+
+// 2026-09: a realistic export using "Active" (or "ACTIVE") for a status
+// column that only accepted the lowercase literal was rejected purely on
+// capitalization — ordinary Excel formatting variance, not a real business
+// error. This is the shared building block every affected domain schema
+// (organizationHierarchy, employees, salesRoster, skus, commercialMastersCatalog)
+// now uses for its enum-like fields.
+describe('caseInsensitiveEnum', () => {
+  const schema = caseInsensitiveEnum(['active', 'archived'] as const)
+
+  it('accepts the canonical lowercase value unchanged', () => {
+    expect(schema.parse('active')).toBe('active')
+  })
+
+  it('coerces any capitalization to the canonical value', () => {
+    expect(schema.parse('Active')).toBe('active')
+    expect(schema.parse('ACTIVE')).toBe('active')
+    expect(schema.parse('aCtIvE')).toBe('active')
+  })
+
+  it('trims surrounding whitespace before matching', () => {
+    expect(schema.parse('  Active  ')).toBe('active')
+  })
+
+  it('still rejects a value that matches nothing, case-insensitively or otherwise', () => {
+    expect(schema.safeParse('Suspended').success).toBe(false)
+  })
+
+  it('still rejects a non-string value the same way plain z.enum would', () => {
+    expect(schema.safeParse(42).success).toBe(false)
+  })
+
+  it('preserves a custom errorMap for the underlying enum', () => {
+    const withMessage = caseInsensitiveEnum(['active', 'archived'] as const, {
+      errorMap: () => ({ message: 'custom message' }),
+    })
+    const result = withMessage.safeParse('bogus')
+    expect(result.success).toBe(false)
+    if (!result.success) expect(result.error.issues[0].message).toBe('custom message')
+  })
+})
 
 describe('classifyRows', () => {
   type Row = { code: string; name: string }
@@ -198,5 +239,74 @@ describe('resolveTreeReferences', () => {
       existingKeys: new Set(),
     })
     expect(out.unresolved).toEqual([])
+  })
+
+  // 2026-09: resolveTreeReferences only checks that a parent's CODE appears
+  // somewhere (existing DB rows, or any row in this file) — it has no idea
+  // whether that row will itself survive validation. A child row resolving
+  // against a parent whose OWN row gets rejected used to reach
+  // 'create'/'update' anyway, then crash the throwaway validate-time commit
+  // when the never-actually-inserted parent had no id to resolve against.
+  // cascadeRejectOnRejectedReference (below) is the fix, applied as a
+  // post-pass after classifyRows in every domain using this pattern
+  // (organizationHierarchy, employees).
+  it('demonstrates the exact production crash this leaves open: a rejected parent still "resolves" its child', () => {
+    const out = resolveTreeReferences({
+      // Row 0 ("PARENT") is schema-invalid and will be rejected — but it's
+      // still present in the file, so its code counts as "existing" here.
+      rows: [{ code: 'PARENT', parentCode: null }, { code: 'CHILD', parentCode: 'PARENT' }],
+      getOwnKey: (r) => r.code,
+      getParentKey: (r) => r.parentCode,
+      existingKeys: new Set(),
+    })
+    // Nothing is unresolved — CHILD's reference to PARENT looks perfectly
+    // fine from resolveTreeReferences' point of view alone.
+    expect(out.unresolved).toEqual([])
+  })
+})
+
+describe('cascadeRejectOnRejectedReference', () => {
+  it('rejects a row whose reference names another row in this file that itself got rejected', () => {
+    const rows = [{ code: 'PARENT' }, { code: 'CHILD', parentCode: 'PARENT' }]
+    const preview: ImportRowResult[] = [
+      { rowNumber: 1, businessKey: 'PARENT', action: 'reject', errors: ['bad data'] },
+      { rowNumber: 2, businessKey: 'CHILD', action: 'create', errors: [] },
+    ]
+    const out = cascadeRejectOnRejectedReference(preview, rows, (r) => r.parentCode ?? null, new Set())
+    expect(out[0]).toEqual(preview[0]) // the original rejection is untouched
+    expect(out[1].action).toBe('reject')
+    expect(out[1].errors[0]).toContain('PARENT')
+  })
+
+  it('cascades through a multi-level chain to a fixed point (grandparent -> parent -> child)', () => {
+    const rows = [{ code: 'GP' }, { code: 'P', parentCode: 'GP' }, { code: 'C', parentCode: 'P' }]
+    const preview: ImportRowResult[] = [
+      { rowNumber: 1, businessKey: 'GP', action: 'reject', errors: ['bad data'] },
+      { rowNumber: 2, businessKey: 'P', action: 'create', errors: [] },
+      { rowNumber: 3, businessKey: 'C', action: 'create', errors: [] },
+    ]
+    const out = cascadeRejectOnRejectedReference(preview, rows, (r) => r.parentCode ?? null, new Set())
+    expect(out[1].action).toBe('reject') // P cascades from GP
+    expect(out[2].action).toBe('reject') // C cascades from P, which just cascaded
+  })
+
+  it('does NOT reject a row referencing an existing, already-committed DB row of the same key', () => {
+    // A rejected row can share a business key with an existing DB row only
+    // in pathological cases, but existingKeys must still exempt real DB rows
+    // from ever being treated as "failed in this file".
+    const rows = [{ code: 'CHILD', parentCode: 'REAL-DB-ROW' }]
+    const preview: ImportRowResult[] = [{ rowNumber: 1, businessKey: 'CHILD', action: 'create', errors: [] }]
+    const out = cascadeRejectOnRejectedReference(preview, rows, (r) => r.parentCode ?? null, new Set(['REAL-DB-ROW']))
+    expect(out[0].action).toBe('create')
+  })
+
+  it('leaves unrelated create/update rows untouched', () => {
+    const rows = [{ code: 'A' }, { code: 'B' }]
+    const preview: ImportRowResult[] = [
+      { rowNumber: 1, businessKey: 'A', action: 'reject', errors: ['bad'] },
+      { rowNumber: 2, businessKey: 'B', action: 'create', errors: [] },
+    ]
+    const out = cascadeRejectOnRejectedReference(preview, rows, () => null, new Set())
+    expect(out[1].action).toBe('create')
   })
 })

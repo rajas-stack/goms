@@ -1,10 +1,18 @@
 import { z } from 'zod'
 import { SALES_TIERS, tierRank } from '@goms/domain'
-import { classifyRows, resolveTreeReferences, findFuzzyCandidates } from '../engine.js'
+import { classifyRows, resolveTreeReferences, findFuzzyCandidates, caseInsensitiveEnum } from '../engine.js'
 import type { ImportFieldDiff, ImportRowResult } from '../types.js'
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 const TIER_KEYS = new Set(SALES_TIERS.map((t) => t.key))
+// Case-insensitive lookup so an export spelled "RM"/"rm"/"Rm" — ordinary
+// formatting variance — still resolves to the real tier key; a value that
+// doesn't case-insensitively match ANY real tier key is left as-is, so the
+// "not a recognized tier key" rejection below still fires correctly.
+const TIER_KEY_BY_LOWER = new Map(SALES_TIERS.map((t) => [t.key.toLowerCase(), t.key] as const))
+function normalizeTierKey(v: unknown): unknown {
+  return typeof v === 'string' ? TIER_KEY_BY_LOWER.get(v.trim().toLowerCase()) ?? v : v
+}
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase()
@@ -18,7 +26,7 @@ function postingKey(email: string, startDate: string): string {
 // Sales Persons sheet
 // ---------------------------------------------------------------------------
 
-const statusSchema = z.enum(['active', 'onLeave', 'resigned', 'inactive'])
+const statusSchema = caseInsensitiveEnum(['active', 'onLeave', 'resigned', 'inactive'])
 
 const salesPersonRowSchema = z.object({
   officialEmail: z.string().min(1, 'Official Email is required').trim(),
@@ -109,7 +117,7 @@ async function fetchVacantEmployeeEmails(client: { query: Function }): Promise<S
 const salesPostingRowSchema = z.object({
   salesPersonEmail: z.string().min(1, 'Sales Person Email is required').trim(),
   designation: z.string().min(1, 'Designation is required'),
-  tierKey: z.string().min(1, 'Tier Key is required'),
+  tierKey: z.preprocess(normalizeTierKey, z.string().min(1, 'Tier Key is required')),
   managerEmail: z.string().nullable().optional().default(null),
   office: z.string().optional().default(''),
   startDate: z.string().min(1, 'Start Date is required').regex(ISO_DATE_RE, 'Start Date must be a valid date (YYYY-MM-DD)'),
@@ -307,8 +315,12 @@ function validatePostingRows(
 
 export async function validateSalesRosterRows(
   client: { query: Function },
-  input: { persons: unknown[]; postings: unknown[] },
+  rawInput: Partial<{ persons: unknown[]; postings: unknown[] }> | undefined,
 ): Promise<{ persons: ImportRowResult[]; postings: ImportRowResult[] }> {
+  // A workbook uploading only a Sales Persons sheet (no Postings changes at
+  // all) omits the 'postings' key entirely, same as commercialMastersCatalog
+  // omitting a level with zero rows — must default to empty, not crash.
+  const input = { persons: rawInput?.persons ?? [], postings: rawInput?.postings ?? [] }
   const existingPersonsByEmail = await fetchExistingPersons(client)
   const personsPreview = validatePersonRows(input.persons, existingPersonsByEmail)
 
@@ -334,9 +346,10 @@ export async function validateSalesRosterRows(
 
 export async function commitSalesRosterRows(
   client: { query: Function },
-  input: { persons: unknown[]; postings: unknown[] },
+  rawInput: Partial<{ persons: unknown[]; postings: unknown[] }> | undefined,
   preview: { persons: ImportRowResult[]; postings: ImportRowResult[] },
 ): Promise<void> {
+  const input = { persons: rawInput?.persons ?? [], postings: rawInput?.postings ?? [] }
   // 1. Commit the Sales Persons sheet first — Postings' Sales Person Email
   //    and Manager Email both need a real sales_persons.id to write, and a
   //    person created in this very commit must already have one by the
