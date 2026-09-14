@@ -36,6 +36,7 @@ export function Avatar({
       <div
         className={cn(baseClasses, 'bg-amber-100 text-amber-600')}
         data-testid="avatar"
+        aria-hidden="true"
       >
         <Icon name="UserX" size={size === 'xs' ? 12 : size === 'sm' ? 14 : size === 'md' ? 16 : 18} />
       </div>
@@ -58,6 +59,7 @@ export function Avatar({
     <div
       className={cn(baseClasses, 'bg-ink-100 text-ink-700 font-medium')}
       data-testid="avatar"
+      aria-hidden="true"
     >
       {initials(person.name)}
     </div>
