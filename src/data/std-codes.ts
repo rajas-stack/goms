@@ -1481,3 +1481,13 @@ export function citiesForDistrict(districtLgdCode: number): StdCodeEntry[] {
 export function stdCodeForCity(districtLgdCode: number, city: string): string | undefined {
   return STD_CODE_ENTRIES.find((e) => e.districtLgdCode === districtLgdCode && e.city === city)?.stdCode
 }
+
+/** All seeded cities/towns across every district of `state` — the
+ *  city-first search entry point (`ContactNumberRow.tsx`'s "Search city"
+ *  field). Exact match on `state` only, same convention as
+ *  `citiesForDistrict`/`stdCodeForCity` — no fuzzy/partial matching here;
+ *  the Combobox that consumes this does its own substring filtering over
+ *  the returned rows' city names as the user types. */
+export function citiesInState(state: string): StdCodeEntry[] {
+  return STD_CODE_ENTRIES.filter((e) => e.state === state)
+}

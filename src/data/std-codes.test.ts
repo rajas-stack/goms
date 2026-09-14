@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { citiesForDistrict, stdCodeForCity, STD_CODE_ENTRIES } from './std-codes'
+import { citiesForDistrict, citiesInState, stdCodeForCity, STD_CODE_ENTRIES } from './std-codes'
 
 describe('std-codes', () => {
   it('stdCodeForCity returns the correct code for the seeded Bhubaneswar/Odisha example', () => {
@@ -52,5 +52,30 @@ describe('std-codes', () => {
     const entry = citiesForDistrict(473).find((e) => e.city === 'Gandhinagar')
     expect(entry?.stdCode).toBe('079')
     expect(entry?.verificationLevel).toBe('verified')
+  })
+
+  describe('citiesInState', () => {
+    it('returns every seeded entry for a real state, spanning multiple districts', () => {
+      const entries = citiesInState('Odisha')
+      expect(entries.length).toBeGreaterThan(1)
+      expect(entries.every((e) => e.state === 'Odisha')).toBe(true)
+      expect(entries.find((e) => e.city === 'Bhubaneswar')).toMatchObject({ districtLgdCode: 386, stdCode: '0674' })
+    })
+
+    it('returns an empty array (not an error) for a state with no seeded cities', () => {
+      expect(citiesInState('Nowhereland')).toEqual([])
+    })
+
+    it('matches the state name exactly — no partial/fuzzy matching', () => {
+      expect(citiesInState('Odis')).toEqual([])
+      expect(citiesInState('odisha')).toEqual([])
+    })
+
+    it('never mixes another state\'s entries into the result', () => {
+      const odisha = citiesInState('Odisha')
+      const kerala = citiesInState('Kerala')
+      expect(odisha.some((e) => e.city === 'Kochi')).toBe(false)
+      expect(kerala.some((e) => e.city === 'Bhubaneswar')).toBe(false)
+    })
   })
 })

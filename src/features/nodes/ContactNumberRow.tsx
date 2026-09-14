@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
-import { Combobox } from '@/components/ui/Combobox'
+import { Combobox, type ComboboxOption } from '@/components/ui/Combobox'
 import { Icon } from '@/components/ui/Icon'
 import { PhoneInput, isValidPhone } from '@/components/ui/PhoneInput'
-import { citiesForDistrict, stdCodeForCity } from '@/data/std-codes'
+import { citiesForDistrict, citiesInState, stdCodeForCity } from '@/data/std-codes'
 import { useChildren, useNode, useStateNode } from '@/lib/api'
 import type { ContactNumberEntry, ContactNumberType } from './contact-numbers'
 
@@ -95,6 +95,42 @@ export function ContactNumberRow({ index, entry, states, skipGeography, onChange
   })()
   const districtCities = districtLgd != null ? citiesForDistrict(districtLgd) : []
 
+  // City-first search (Approach A): a second, parallel entry point into the
+  // same District/City/STD fields above — for a user who knows the city
+  // ("Bhubaneswar") but not its administrative district ("Khordha"). Scoped
+  // to this row's own State, and further filtered to LGD codes that
+  // actually resolve to a real district node under it, so a dataset row
+  // whose districtLgdCode doesn't match any real district here never
+  // surfaces as a pickable (and unresolvable) option. Grouped by exact city
+  // text: a name that's unambiguous within this state shows plainly; one
+  // that legitimately recurs across two of this state's districts (real,
+  // if rare, in the seeded dataset — e.g. Maharashtra's "Karjat") shows each
+  // candidate labeled by its own district, so picking is still one
+  // unambiguous action rather than a guess.
+  const stateName = states.find((s) => s.code === rowStateCode)?.name
+  const realDistrictLgds = new Set(districts.map((d) => Number(d.code)))
+  const cityOptions: ComboboxOption[] = useMemo(() => {
+    const candidates = (stateName ? citiesInState(stateName) : []).filter((e) => realDistrictLgds.has(e.districtLgdCode))
+    const countByCity = new Map<string, number>()
+    for (const c of candidates) countByCity.set(c.city, (countByCity.get(c.city) ?? 0) + 1)
+    return candidates.map((c) => ({
+      value: `${c.districtLgdCode}::${c.city}`,
+      label: (countByCity.get(c.city) ?? 0) > 1 ? `${c.city} — ${c.district} district` : c.city,
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stateName, districts])
+  const [citySearchValue, setCitySearchValue] = useState('')
+
+  function handleCitySearchSelect(value: string) {
+    const sep = value.indexOf('::')
+    const lgd = Number(value.slice(0, sep))
+    const city = value.slice(sep + 2)
+    const district = districts.find((d) => Number(d.code) === lgd)
+    if (!district) return
+    onChange({ districtNodeId: district.id, city, stdCode: stdCodeForCity(lgd, city) ?? '' })
+    setCitySearchValue('')
+  }
+
   // Typing/picking a city that matches this district's dataset entry
   // auto-fills STD (the whole point of Requirement 1) — an unmatched city
   // (not in the partial dataset) simply leaves STD as-is for hand entry,
@@ -140,6 +176,20 @@ export function ContactNumberRow({ index, entry, states, skipGeography, onChange
                 <option value="landline">Landline / EPBX</option>
                 <option value="mobile">Mobile</option>
               </Select>
+            </Field>
+          </div>
+        )}
+
+        {entry.type === 'landline' && !skipGeography && (
+          <div className="w-52">
+            <Field label={`Search city ${n}`} hint="Optional — resolves District & STD">
+              <Combobox
+                value={citySearchValue}
+                onChange={handleCitySearchSelect}
+                options={cityOptions}
+                placeholder="Search a city…"
+                aria-label={`Search city ${n}`}
+              />
             </Field>
           </div>
         )}

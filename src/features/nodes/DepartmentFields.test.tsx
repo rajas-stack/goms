@@ -46,9 +46,22 @@ function citiesFor(lgd: number) {
   if (lgd === 388) return GANDHINAGAR_CITIES
   return []
 }
+// Odisha-only, test-fixture-only ambiguity: "Cityville" seeded under both
+// Khordha and Puri, with different STD codes — proves the city-search
+// field's district-labeled-candidates behavior without ever adding a
+// synthetic duplicate to the real src/data/std-codes.ts dataset.
+const PURI_CITIES = [
+  { state: 'Odisha', district: 'Puri', districtLgdCode: 387, city: 'Cityville', stdCode: '06752', source: 'test', verificationLevel: 'verified' as const },
+]
+function citiesForState(state: string) {
+  if (state === 'Odisha') return [...KHORDHA_CITIES, ...PURI_CITIES]
+  if (state === 'Gujarat') return GANDHINAGAR_CITIES
+  return []
+}
 vi.mock('@/data/std-codes', () => ({
   citiesForDistrict: (lgd: number) => citiesFor(lgd),
   stdCodeForCity: (lgd: number, city: string) => citiesFor(lgd).find((c) => c.city === city)?.stdCode,
+  citiesInState: (state: string) => citiesForState(state),
 }))
 
 const STATE_NODE_ODISHA: HierNode = {
@@ -307,6 +320,125 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
 
       expect(await screen.findByText('No matches')).toBeInTheDocument()
       expect(screen.getByLabelText('STD code 1')).toHaveValue('')
+    })
+  })
+
+  describe('city-search — primary discovery path (Approach A)', () => {
+    it('"Search city" appears alongside District as soon as Type=Landline is picked, before District has a value', async () => {
+      stubApiHooks()
+      const user = userEvent.setup()
+      render(<Harness jurisdictionStateCode={21} />)
+
+      await addRow(user)
+      await user.selectOptions(screen.getByLabelText('State 1'), 'Odisha')
+      await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
+
+      expect(await screen.findByLabelText('Search city 1')).toBeInTheDocument()
+      expect(screen.getByLabelText('District 1')).toHaveValue('')
+    })
+
+    it('is not rendered for Mobile-type rows', async () => {
+      stubApiHooks()
+      const user = userEvent.setup()
+      render(<Harness jurisdictionStateCode={21} />)
+
+      await addRow(user)
+      await user.selectOptions(screen.getByLabelText('State 1'), 'Odisha')
+      await user.selectOptions(screen.getByLabelText('Type 1'), 'Mobile')
+
+      expect(screen.queryByLabelText('Search city 1')).not.toBeInTheDocument()
+    })
+
+    it('is not rendered for a Central Ministries (skipGeography) row', async () => {
+      stubApiHooks()
+      const user = userEvent.setup()
+      render(<Harness jurisdictionStateCode={0} />)
+
+      await addRow(user)
+      await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
+
+      expect(screen.queryByLabelText('Search city 1')).not.toBeInTheDocument()
+    })
+
+    it('selecting an unambiguous city resolves District, City, and STD together — District stays a normal, visible, editable select', async () => {
+      stubApiHooks()
+      const user = userEvent.setup()
+      render(<Harness jurisdictionStateCode={21} />)
+
+      await addRow(user)
+      await user.selectOptions(screen.getByLabelText('State 1'), 'Odisha')
+      await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
+
+      const citySearch = screen.getByRole('combobox', { name: 'Search city 1' })
+      await user.click(citySearch)
+      await user.click(await screen.findByRole('option', { name: 'Bhubaneswar' }))
+
+      expect(screen.getByLabelText('District 1')).toHaveValue('dist-khordha')
+      expect(screen.getByLabelText('District 1')).not.toBeDisabled()
+      expect(await screen.findByLabelText('City/Town 1')).toHaveValue('Bhubaneswar')
+      expect(screen.getByLabelText('STD code 1')).toHaveValue('0674')
+
+      // District remains fully usable afterward — picking a different one by
+      // hand still re-triggers the existing District->City logic unchanged.
+      await user.selectOptions(screen.getByLabelText('District 1'), 'Puri')
+      expect(screen.getByLabelText('District 1')).toHaveValue('dist-puri')
+    })
+
+    it('an ambiguous city name (recurring across two of this state\'s districts) lists each candidate labeled by district; picking one resolves atomically', async () => {
+      stubApiHooks()
+      const user = userEvent.setup()
+      render(<Harness jurisdictionStateCode={21} />)
+
+      await addRow(user)
+      await user.selectOptions(screen.getByLabelText('State 1'), 'Odisha')
+      await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
+
+      const citySearch = screen.getByRole('combobox', { name: 'Search city 1' })
+      await user.click(citySearch)
+      await user.type(citySearch, 'Cityville')
+
+      const khordhaOption = await screen.findByRole('option', { name: 'Cityville — Khordha district' })
+      expect(screen.getByRole('option', { name: 'Cityville — Puri district' })).toBeInTheDocument()
+
+      await user.click(khordhaOption)
+
+      expect(screen.getByLabelText('District 1')).toHaveValue('dist-khordha')
+      expect(await screen.findByLabelText('City/Town 1')).toHaveValue('Cityville')
+      expect(screen.getByLabelText('STD code 1')).toHaveValue('0999')
+    })
+
+    it('typing an unmatched query into city-search shows "No matches" and leaves District/City/STD untouched', async () => {
+      stubApiHooks()
+      const user = userEvent.setup()
+      render(<Harness jurisdictionStateCode={21} />)
+
+      await addRowThroughDistrict(user, 'Khordha')
+
+      const citySearch = screen.getByRole('combobox', { name: 'Search city 1' })
+      await user.click(citySearch)
+      await user.type(citySearch, 'Some Unlisted Town')
+
+      expect(await screen.findByText('No matches')).toBeInTheDocument()
+      expect(screen.getByLabelText('District 1')).toHaveValue('dist-khordha')
+    })
+
+    it('changing State after a city-search pick still clears District/City/STD/Number downstream, same as the existing District path', async () => {
+      stubApiHooks()
+      const user = userEvent.setup()
+      render(<Harness jurisdictionStateCode={21} />)
+
+      await addRow(user)
+      await user.selectOptions(screen.getByLabelText('State 1'), 'Odisha')
+      await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
+      await user.click(screen.getByRole('combobox', { name: 'Search city 1' }))
+      await user.click(await screen.findByRole('option', { name: 'Bhubaneswar' }))
+      expect(await screen.findByLabelText('STD code 1')).toHaveValue('0674')
+
+      await user.selectOptions(screen.getByLabelText('State 1'), 'Gujarat')
+
+      expect(await screen.findByLabelText('Type 1')).toHaveValue('')
+      expect(screen.queryByLabelText('District 1')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('STD code 1')).not.toBeInTheDocument()
     })
   })
 
