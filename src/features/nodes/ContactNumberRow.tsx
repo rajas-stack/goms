@@ -95,21 +95,25 @@ export function ContactNumberRow({ index, entry, states, skipGeography, onChange
   })()
   const districtCities = districtLgd != null ? citiesForDistrict(districtLgd) : []
 
-  // City-first search (Approach A): a second, parallel entry point into the
-  // same District/City/STD fields above — for a user who knows the city
-  // ("Bhubaneswar") but not its administrative district ("Khordha"). Scoped
-  // to this row's own State, and further filtered to LGD codes that
-  // actually resolve to a real district node under it, so a dataset row
-  // whose districtLgdCode doesn't match any real district here never
-  // surfaces as a pickable (and unresolvable) option. Grouped by exact city
-  // text: a name that's unambiguous within this state shows plainly; one
-  // that legitimately recurs across two of this state's districts (real,
-  // if rare, in the seeded dataset — e.g. Maharashtra's "Karjat") shows each
-  // candidate labeled by its own district, so picking is still one
-  // unambiguous action rather than a guess.
+  // City-first search (Approach A — single-control redesign): when no
+  // District is picked yet, the same City/Town field below doubles as a
+  // state-wide city search instead of a second, separate control — for a
+  // user who knows the city ("Bhubaneswar") but not its administrative
+  // district ("Khordha"). Scoped to this row's own State, and further
+  // filtered to LGD codes that actually resolve to a real district node
+  // under it, so a dataset row whose districtLgdCode doesn't match any real
+  // district here never surfaces as a pickable (and unresolvable) option.
+  // Grouped by exact city text: a name that's unambiguous within this state
+  // shows plainly; one that legitimately recurs across two of this state's
+  // districts (real, if rare, in the seeded dataset — e.g. Maharashtra's
+  // "Karjat") shows each candidate labeled by its own district, so picking
+  // is still one unambiguous action rather than a guess. Once resolved,
+  // `entry.districtNodeId` is set, so the very next render switches this
+  // same field into the district-scoped branch below — no separate "mode"
+  // state to track.
   const stateName = states.find((s) => s.code === rowStateCode)?.name
   const realDistrictLgds = new Set(districts.map((d) => Number(d.code)))
-  const cityOptions: ComboboxOption[] = useMemo(() => {
+  const stateWideCityOptions: ComboboxOption[] = useMemo(() => {
     const candidates = (stateName ? citiesInState(stateName) : []).filter((e) => realDistrictLgds.has(e.districtLgdCode))
     const countByCity = new Map<string, number>()
     for (const c of candidates) countByCity.set(c.city, (countByCity.get(c.city) ?? 0) + 1)
@@ -119,16 +123,14 @@ export function ContactNumberRow({ index, entry, states, skipGeography, onChange
     }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stateName, districts])
-  const [citySearchValue, setCitySearchValue] = useState('')
 
-  function handleCitySearchSelect(value: string) {
+  function handleStateWideCitySelect(value: string) {
     const sep = value.indexOf('::')
     const lgd = Number(value.slice(0, sep))
     const city = value.slice(sep + 2)
     const district = districts.find((d) => Number(d.code) === lgd)
     if (!district) return
     onChange({ districtNodeId: district.id, city, stdCode: stdCodeForCity(lgd, city) ?? '' })
-    setCitySearchValue('')
   }
 
   // Typing/picking a city that matches this district's dataset entry
@@ -181,20 +183,6 @@ export function ContactNumberRow({ index, entry, states, skipGeography, onChange
         )}
 
         {entry.type === 'landline' && !skipGeography && (
-          <div className="w-52">
-            <Field label={`Search city ${n}`} hint="Optional — resolves District & STD">
-              <Combobox
-                value={citySearchValue}
-                onChange={handleCitySearchSelect}
-                options={cityOptions}
-                placeholder="Search a city…"
-                aria-label={`Search city ${n}`}
-              />
-            </Field>
-          </div>
-        )}
-
-        {entry.type === 'landline' && !skipGeography && (
           <div className="w-44">
             <Field label={`District ${n}`}>
               <Select value={entry.districtNodeId} onChange={(e) => handleDistrictSelect(e.target.value)}>
@@ -231,23 +219,40 @@ export function ContactNumberRow({ index, entry, states, skipGeography, onChange
         </div>
       )}
 
-      {entry.type === 'landline' && !skipGeography && entry.districtNodeId && (
+      {entry.type === 'landline' && !skipGeography && (
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-44">
             <Field label={`City/Town ${n}`}>
-              {districtCities.length > 1 ? (
+              {entry.districtNodeId ? (
+                // A District is already picked — exactly today's existing
+                // behavior, scoped to just that district's dataset rows.
+                districtCities.length > 1 ? (
+                  <Combobox
+                    value={entry.city}
+                    onChange={handleCityChange}
+                    options={districtCities.map((c) => ({ value: c.city, label: c.city }))}
+                    placeholder="Select a city…"
+                    aria-label={`City/Town ${n}`}
+                  />
+                ) : (
+                  <Input
+                    value={entry.city}
+                    onChange={(e) => handleCityChange(e.target.value)}
+                    placeholder="e.g. Bhubaneswar"
+                  />
+                )
+              ) : (
+                // No District yet — this same field doubles as the
+                // state-wide city-first search. `entry.city` is guaranteed
+                // '' here (handleDistrictSelect/the State-change effect both
+                // clear it whenever districtNodeId is cleared), so it's safe
+                // to reuse directly as the Combobox's controlled value.
                 <Combobox
                   value={entry.city}
-                  onChange={handleCityChange}
-                  options={districtCities.map((c) => ({ value: c.city, label: c.city }))}
-                  placeholder="Select a city…"
+                  onChange={handleStateWideCitySelect}
+                  options={stateWideCityOptions}
+                  placeholder="Search a city…"
                   aria-label={`City/Town ${n}`}
-                />
-              ) : (
-                <Input
-                  value={entry.city}
-                  onChange={(e) => handleCityChange(e.target.value)}
-                  placeholder="e.g. Bhubaneswar"
                 />
               )}
             </Field>

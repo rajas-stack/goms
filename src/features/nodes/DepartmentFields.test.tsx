@@ -184,7 +184,7 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
       expect(screen.queryByLabelText('District 1')).not.toBeInTheDocument()
     })
 
-    it('picking Type=Mobile reveals only the mobile number field, no District/STD', async () => {
+    it('picking Type=Mobile reveals only the mobile number field, no District/City/STD', async () => {
       stubApiHooks()
       const user = userEvent.setup()
       render(<Harness jurisdictionStateCode={21} />)
@@ -194,11 +194,12 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
       await user.selectOptions(screen.getByLabelText('Type 1'), 'Mobile')
 
       expect(screen.queryByLabelText('District 1')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('City/Town 1')).not.toBeInTheDocument()
       expect(screen.queryByLabelText('STD code 1')).not.toBeInTheDocument()
       expect(screen.getByLabelText('Phone number (10 digits)')).toBeInTheDocument()
     })
 
-    it('picking Type=Landline reveals District next; STD/Number stay hidden until District is picked', async () => {
+    it('picking Type=Landline reveals District, City/Town, STD, and Number together — City/Town starts as a state-wide search, District empty', async () => {
       stubApiHooks()
       const user = userEvent.setup()
       render(<Harness jurisdictionStateCode={21} />)
@@ -207,20 +208,28 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
       await user.selectOptions(screen.getByLabelText('State 1'), 'Odisha')
       await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
 
-      expect(await screen.findByLabelText('District 1')).toBeInTheDocument()
-      expect(screen.queryByLabelText('STD code 1')).not.toBeInTheDocument()
-      expect(screen.queryByLabelText('Number')).not.toBeInTheDocument()
+      expect(await screen.findByLabelText('District 1')).toHaveValue('')
+      const cityField = screen.getByRole('combobox', { name: 'City/Town 1' })
+      expect(cityField).toHaveValue('')
+      expect(screen.getByLabelText('STD code 1')).toHaveValue('')
+      expect(screen.getByLabelText('Number')).toHaveValue('')
     })
 
-    it('picking a District reveals STD and Local number together, no further gating', async () => {
+    it('picking a District switches City/Town from state-wide search into that district\'s own scoped list', async () => {
       stubApiHooks()
       const user = userEvent.setup()
       render(<Harness jurisdictionStateCode={21} />)
 
       await addRowThroughDistrict(user, 'Khordha')
 
-      expect(await screen.findByLabelText('STD code 1')).toBeInTheDocument()
+      expect(screen.getByLabelText('STD code 1')).toBeInTheDocument()
       expect(screen.getByLabelText('Number')).toBeInTheDocument()
+
+      // Now scoped to Khordha only — Gandhinagar's cities must never appear.
+      const cityCombobox = screen.getByRole('combobox', { name: 'City/Town 1' })
+      await user.click(cityCombobox)
+      expect(await screen.findByRole('option', { name: 'Bhubaneswar' })).toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'Gandhinagar City' })).not.toBeInTheDocument()
     })
   })
 
@@ -323,8 +332,8 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
     })
   })
 
-  describe('city-search — primary discovery path (Approach A)', () => {
-    it('"Search city" appears alongside District as soon as Type=Landline is picked, before District has a value', async () => {
+  describe('city-first search via the single City/Town field (Approach A, single-control redesign)', () => {
+    it('before a District is picked, City/Town is a state-wide search — typing alone never mutates District/STD', async () => {
       stubApiHooks()
       const user = userEvent.setup()
       render(<Harness jurisdictionStateCode={21} />)
@@ -333,34 +342,17 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
       await user.selectOptions(screen.getByLabelText('State 1'), 'Odisha')
       await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
 
-      expect(await screen.findByLabelText('Search city 1')).toBeInTheDocument()
+      const cityField = screen.getByRole('combobox', { name: 'City/Town 1' })
+      await user.click(cityField)
+      await user.type(cityField, 'Bhub')
+
+      expect(await screen.findByRole('option', { name: 'Bhubaneswar' })).toBeInTheDocument()
+      // Typing alone — no option clicked yet — must not have resolved anything.
       expect(screen.getByLabelText('District 1')).toHaveValue('')
+      expect(screen.getByLabelText('STD code 1')).toHaveValue('')
     })
 
-    it('is not rendered for Mobile-type rows', async () => {
-      stubApiHooks()
-      const user = userEvent.setup()
-      render(<Harness jurisdictionStateCode={21} />)
-
-      await addRow(user)
-      await user.selectOptions(screen.getByLabelText('State 1'), 'Odisha')
-      await user.selectOptions(screen.getByLabelText('Type 1'), 'Mobile')
-
-      expect(screen.queryByLabelText('Search city 1')).not.toBeInTheDocument()
-    })
-
-    it('is not rendered for a Central Ministries (skipGeography) row', async () => {
-      stubApiHooks()
-      const user = userEvent.setup()
-      render(<Harness jurisdictionStateCode={0} />)
-
-      await addRow(user)
-      await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
-
-      expect(screen.queryByLabelText('Search city 1')).not.toBeInTheDocument()
-    })
-
-    it('selecting an unambiguous city resolves District, City, and STD together — District stays a normal, visible, editable select', async () => {
+    it('selecting an unambiguous city resolves District, City, and STD together, atomically — District stays a normal, visible, editable select', async () => {
       stubApiHooks()
       const user = userEvent.setup()
       render(<Harness jurisdictionStateCode={21} />)
@@ -369,19 +361,21 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
       await user.selectOptions(screen.getByLabelText('State 1'), 'Odisha')
       await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
 
-      const citySearch = screen.getByRole('combobox', { name: 'Search city 1' })
-      await user.click(citySearch)
+      const cityField = screen.getByRole('combobox', { name: 'City/Town 1' })
+      await user.click(cityField)
       await user.click(await screen.findByRole('option', { name: 'Bhubaneswar' }))
 
       expect(screen.getByLabelText('District 1')).toHaveValue('dist-khordha')
       expect(screen.getByLabelText('District 1')).not.toBeDisabled()
-      expect(await screen.findByLabelText('City/Town 1')).toHaveValue('Bhubaneswar')
+      expect(screen.getByRole('combobox', { name: 'City/Town 1' })).toHaveValue('Bhubaneswar')
       expect(screen.getByLabelText('STD code 1')).toHaveValue('0674')
 
       // District remains fully usable afterward — picking a different one by
-      // hand still re-triggers the existing District->City logic unchanged.
+      // hand still re-triggers the existing District->City logic unchanged,
+      // and City/Town flips back into that new district's own scoped mode.
       await user.selectOptions(screen.getByLabelText('District 1'), 'Puri')
       expect(screen.getByLabelText('District 1')).toHaveValue('dist-puri')
+      expect(screen.getByLabelText('City/Town 1')).toHaveValue('')
     })
 
     it('an ambiguous city name (recurring across two of this state\'s districts) lists each candidate labeled by district; picking one resolves atomically', async () => {
@@ -393,36 +387,23 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
       await user.selectOptions(screen.getByLabelText('State 1'), 'Odisha')
       await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
 
-      const citySearch = screen.getByRole('combobox', { name: 'Search city 1' })
-      await user.click(citySearch)
-      await user.type(citySearch, 'Cityville')
+      const cityField = screen.getByRole('combobox', { name: 'City/Town 1' })
+      await user.click(cityField)
+      await user.type(cityField, 'Cityville')
 
       const khordhaOption = await screen.findByRole('option', { name: 'Cityville — Khordha district' })
       expect(screen.getByRole('option', { name: 'Cityville — Puri district' })).toBeInTheDocument()
+      // Still nothing resolved while only candidates are showing.
+      expect(screen.getByLabelText('District 1')).toHaveValue('')
 
       await user.click(khordhaOption)
 
       expect(screen.getByLabelText('District 1')).toHaveValue('dist-khordha')
-      expect(await screen.findByLabelText('City/Town 1')).toHaveValue('Cityville')
+      expect(screen.getByRole('combobox', { name: 'City/Town 1' })).toHaveValue('Cityville')
       expect(screen.getByLabelText('STD code 1')).toHaveValue('0999')
     })
 
-    it('typing an unmatched query into city-search shows "No matches" and leaves District/City/STD untouched', async () => {
-      stubApiHooks()
-      const user = userEvent.setup()
-      render(<Harness jurisdictionStateCode={21} />)
-
-      await addRowThroughDistrict(user, 'Khordha')
-
-      const citySearch = screen.getByRole('combobox', { name: 'Search city 1' })
-      await user.click(citySearch)
-      await user.type(citySearch, 'Some Unlisted Town')
-
-      expect(await screen.findByText('No matches')).toBeInTheDocument()
-      expect(screen.getByLabelText('District 1')).toHaveValue('dist-khordha')
-    })
-
-    it('changing State after a city-search pick still clears District/City/STD/Number downstream, same as the existing District path', async () => {
+    it('typing an unmatched query into the state-wide search shows "No matches" and leaves District/STD untouched', async () => {
       stubApiHooks()
       const user = userEvent.setup()
       render(<Harness jurisdictionStateCode={21} />)
@@ -430,14 +411,33 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
       await addRow(user)
       await user.selectOptions(screen.getByLabelText('State 1'), 'Odisha')
       await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
-      await user.click(screen.getByRole('combobox', { name: 'Search city 1' }))
+
+      const cityField = screen.getByRole('combobox', { name: 'City/Town 1' })
+      await user.click(cityField)
+      await user.type(cityField, 'Some Unlisted Town')
+
+      expect(await screen.findByText('No matches')).toBeInTheDocument()
+      expect(screen.getByLabelText('District 1')).toHaveValue('')
+      expect(screen.getByLabelText('STD code 1')).toHaveValue('')
+    })
+
+    it('changing State after a city-search resolution still clears District/City/STD/Number downstream, same as the existing District path', async () => {
+      stubApiHooks()
+      const user = userEvent.setup()
+      render(<Harness jurisdictionStateCode={21} />)
+
+      await addRow(user)
+      await user.selectOptions(screen.getByLabelText('State 1'), 'Odisha')
+      await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
+      await user.click(screen.getByRole('combobox', { name: 'City/Town 1' }))
       await user.click(await screen.findByRole('option', { name: 'Bhubaneswar' }))
-      expect(await screen.findByLabelText('STD code 1')).toHaveValue('0674')
+      expect(screen.getByLabelText('STD code 1')).toHaveValue('0674')
 
       await user.selectOptions(screen.getByLabelText('State 1'), 'Gujarat')
 
       expect(await screen.findByLabelText('Type 1')).toHaveValue('')
       expect(screen.queryByLabelText('District 1')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('City/Town 1')).not.toBeInTheDocument()
       expect(screen.queryByLabelText('STD code 1')).not.toBeInTheDocument()
     })
   })
@@ -548,7 +548,8 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
       await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
 
       expect(await screen.findByLabelText('District 1')).toHaveValue('')
-      expect(screen.queryByLabelText('STD code 1')).not.toBeInTheDocument()
+      expect(screen.getByRole('combobox', { name: 'City/Town 1' })).toHaveValue('')
+      expect(screen.getByLabelText('STD code 1')).toHaveValue('')
     })
 
     it('a Mobile number validates as exactly 10 digits (unchanged PhoneInput behavior)', async () => {
