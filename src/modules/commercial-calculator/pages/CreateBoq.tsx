@@ -365,13 +365,13 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         <div id="section-details">
         <Collapsible title="BOQ Details" icon="Briefcase">
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
-            <Field label="Opportunity Name" hint="Must be unique across all BOQs.">
+            <Field label="Opportunity Name" hint="Must be unique across all BOQs." required>
               <Input value={opportunityName} onChange={(e) => setOpportunityName(e.target.value)} />
               {opportunityNameClash && (
                 <p className="mt-1 text-[12px] text-rose-700">Already used by {opportunityNameClash.boqNumber}. Choose a different name.</p>
               )}
             </Field>
-            <Field label="Department">
+            <Field label="Department" required>
               <Combobox
                 value={departmentId}
                 onChange={handleDepartmentChange}
@@ -379,7 +379,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                 aria-label="Department"
               />
             </Field>
-            <Field label="Vertical" hint="Drives the SKU picker below.">
+            <Field label="Vertical" hint="Drives the SKU picker below." required>
               <Combobox
                 value={verticalId}
                 onChange={handleVerticalChange}
@@ -473,7 +473,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                 )}
               </div>
             )}
-            <Field label="Sales Person">
+            <Field label="Sales Person" required>
               <Combobox
                 value={salesPersonId}
                 onChange={setSalesPersonId}
@@ -498,6 +498,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
           <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-3">
             <Field
               label="Stakeholder Contact"
+              required
               hint={
                 !departmentId
                   ? 'Select a Department above first.'

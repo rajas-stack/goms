@@ -77,7 +77,7 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
     >
       <div className="space-y-4">
         {draft.restored && <DraftNotice onDiscard={draft.discard} />}
-        <Field label="Opportunity name">
+        <Field label="Opportunity name" required>
           <Input
             value={form.opportunityName}
             onChange={(e) => set('opportunityName', e.target.value)}

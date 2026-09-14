@@ -139,8 +139,8 @@ export function MasterFormDialog({ masterKey, def, open, onClose, editing, onSub
       }
     >
       <div className="flex flex-col gap-4">
-        <Field label="Code"><Input value={String(values.code ?? '')} onChange={(e) => set('code', e.target.value)} /></Field>
-        <Field label="Name"><Input value={String(values.name ?? '')} onChange={(e) => set('name', e.target.value)} /></Field>
+        <Field label="Code" required><Input value={String(values.code ?? '')} onChange={(e) => set('code', e.target.value)} /></Field>
+        <Field label="Name" required><Input value={String(values.name ?? '')} onChange={(e) => set('name', e.target.value)} /></Field>
         <Field label="Description">
           <Textarea value={String(values.description ?? '')} onChange={(e) => set('description', e.target.value)} />
         </Field>
@@ -154,7 +154,7 @@ export function MasterFormDialog({ masterKey, def, open, onClose, editing, onSub
           />
         ))}
         {statusChanging && (
-          <Field label="Reason for status change" hint="Required — recorded in the Audit Log.">
+          <Field label="Reason for status change" hint="Required — recorded in the Audit Log." required>
             <Input value={changeReason} onChange={(e) => setChangeReason(e.target.value)} />
           </Field>
         )}

@@ -3,7 +3,7 @@ import { Field, Input, Select } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { PhoneInput, isValidPhone } from '@/components/ui/PhoneInput'
-import { citiesForDistrict } from '@/data/std-codes'
+import { citiesForDistrict, stdCodeForCity } from '@/data/std-codes'
 import { useChildren, useNode, useStateNode } from '@/lib/api'
 import type { ContactNumberEntry, ContactNumberType } from './contact-numbers'
 
@@ -28,11 +28,13 @@ interface Props {
  *  parent; a subcomponent per row is what actually lets each row hold its
  *  own hook calls legally.
  *
- *  There is deliberately no City/Town field: the STD-code dataset
- *  (`std-codes.ts`) is a lookup aid, not a whitelist of valid cities, so a
- *  district with no (or several) mapped cities never blocks the STD/Local
- *  number fields — STD auto-fills only for the unambiguous one-city case
- *  (see `handleDistrictSelect` below) and stays hand-editable otherwise. */
+ *  City/Town is a free-text field with dataset-backed autocomplete
+ *  (`<datalist>` of `citiesForDistrict(lgd)`), never a restrictive select:
+ *  the STD-code dataset (`std-codes.ts`) is a lookup aid, not a whitelist of
+ *  valid cities, so a district with no (or several) mapped cities never
+ *  blocks City/STD/Local number entry — typing or picking a city that
+ *  matches the dataset auto-fills STD (see `handleCityChange` below), and
+ *  everything stays hand-editable otherwise. */
 export function ContactNumberRow({ index, entry, states, skipGeography, onChange, onRemove }: Props) {
   const n = index + 1
 
@@ -65,17 +67,34 @@ export function ContactNumberRow({ index, entry, states, skipGeography, onChange
   const { data: stateChildren = [] } = useChildren(entry.stateNodeId || null)
   const districts = stateChildren.filter((c) => c.typeKey === 'district')
 
-  // Picking a district still auto-fills STD when the dataset maps exactly
-  // one city to it (nothing to actually choose, so no reason to make the
-  // user look it up/type it by hand) — but never requires a city to exist
-  // in the dataset at all: the STD-code dataset is a lookup aid, not a
+  // Picking a district still auto-fills City/STD when the dataset maps
+  // exactly one city to it (nothing to actually choose, so no reason to make
+  // the user look it up/type it by hand) — but never requires a city to
+  // exist in the dataset at all: the STD-code dataset is a lookup aid, not a
   // whitelist, so any other case (zero or multiple mapped cities) just
-  // leaves STD blank and freely hand-editable rather than blocking anything.
+  // leaves City/STD blank and freely hand-editable rather than blocking
+  // anything.
   function handleDistrictSelect(districtNodeId: string) {
     const district = districts.find((d) => d.id === districtNodeId)
     const lgd = district?.code ? Number(district.code) : null
     const seeded = lgd != null ? citiesForDistrict(lgd) : []
-    onChange({ districtNodeId, stdCode: seeded.length === 1 ? seeded[0].stdCode : '' })
+    const city = seeded.length === 1 ? seeded[0].city : ''
+    onChange({ districtNodeId, city, stdCode: seeded.length === 1 ? seeded[0].stdCode : '' })
+  }
+
+  const districtLgd = (() => {
+    const district = districts.find((d) => d.id === entry.districtNodeId)
+    return district?.code ? Number(district.code) : null
+  })()
+  const districtCities = districtLgd != null ? citiesForDistrict(districtLgd) : []
+
+  // Typing/picking a city that matches this district's dataset entry
+  // auto-fills STD (the whole point of Requirement 1) — an unmatched city
+  // (not in the partial dataset) simply leaves STD as-is for hand entry,
+  // never blocking or guessing.
+  function handleCityChange(city: string) {
+    const matched = districtLgd != null ? stdCodeForCity(districtLgd, city) : undefined
+    onChange(matched ? { city, stdCode: matched } : { city })
   }
 
   // Landline and mobile are different domestic dialing contexts (STD-code
@@ -84,7 +103,7 @@ export function ContactNumberRow({ index, entry, states, skipGeography, onChange
   // new format. State is not cleared: it's asked *before* Type, not
   // downstream of it, so it stays valid across a type change.
   function handleTypeChange(type: ContactNumberType) {
-    onChange({ type, districtNodeId: '', stdCode: '', number: '' })
+    onChange({ type, districtNodeId: '', city: '', stdCode: '', number: '' })
   }
 
   const phoneMode = entry.type === 'mobile' ? 'mobile' : 'landlineLocal'
@@ -157,6 +176,21 @@ export function ContactNumberRow({ index, entry, states, skipGeography, onChange
 
       {entry.type === 'landline' && !skipGeography && entry.districtNodeId && (
         <div className="flex flex-wrap items-end gap-3">
+          <div className="w-44">
+            <Field label={`City/Town ${n}`}>
+              <Input
+                list={`city-options-${index}`}
+                value={entry.city}
+                onChange={(e) => handleCityChange(e.target.value)}
+                placeholder="e.g. Bhubaneswar"
+              />
+              <datalist id={`city-options-${index}`}>
+                {districtCities.map((c) => (
+                  <option key={c.city} value={c.city} />
+                ))}
+              </datalist>
+            </Field>
+          </div>
           <div className="w-28">
             <Field label={`STD code ${n}`}>
               <Input

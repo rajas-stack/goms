@@ -175,7 +175,7 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
             </Select>
           </Field>
         )}
-        <Field label={isDepartment ? 'Full name' : 'Name'}>
+        <Field label={isDepartment ? 'Full name' : 'Name'} required>
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}

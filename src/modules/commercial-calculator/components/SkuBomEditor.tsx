@@ -40,7 +40,7 @@ export function SkuBomEditor({ skuId }: { skuId: string }) {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-line p-3">
-        <Field label="Component SKU">
+        <Field label="Component SKU" required>
           <Select value={componentSkuId} onChange={(e) => setComponentSkuId(e.target.value)}>
             <option value="">Select…</option>
             {componentOptions.map((s) => <option key={s.id} value={s.id}>{s.skuCode} — {s.name}</option>)}

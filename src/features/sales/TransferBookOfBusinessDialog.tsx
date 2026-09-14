@@ -90,7 +90,7 @@ export function TransferBookOfBusinessDialog({ open, person, onClose }: {
           </p>
         )}
 
-        <Field label="Transfer to">
+        <Field label="Transfer to" required>
           <Select value={toSalesPersonId} onChange={(e) => setToSalesPersonId(e.target.value)}>
             <option value="">Select…</option>
             {people.filter((p) => p.id !== person?.id).map((p) => (
@@ -99,7 +99,7 @@ export function TransferBookOfBusinessDialog({ open, person, onClose }: {
           </Select>
         </Field>
 
-        <Field label="Effective date">
+        <Field label="Effective date" required>
           <Input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} />
         </Field>
 

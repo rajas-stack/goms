@@ -118,10 +118,10 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
       }
     >
       <div className="space-y-3">
-        <Field label="Name">
+        <Field label="Name" required>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
         </Field>
-        <Field label="Official email">
+        <Field label="Official email" required>
           <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@amnex.com" />
         </Field>
         <Field label="Mobile">

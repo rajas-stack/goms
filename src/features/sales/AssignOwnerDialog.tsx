@@ -81,7 +81,7 @@ export function AssignOwnerDialog({ open, entityType, entityId, entityLabel, onC
       }
     >
       <div className="space-y-3">
-        <Field label="Sales person">
+        <Field label="Sales person" required>
           <Select value={salesPersonId} onChange={(e) => setSalesPersonId(e.target.value)}>
             <option value="">Select…</option>
             {people.map((p) => (
@@ -98,11 +98,11 @@ export function AssignOwnerDialog({ open, entityType, entityId, entityLabel, onC
         </Field>
 
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Effective from">
+          <Field label="Effective from" required>
             <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
           </Field>
           {role === 'delegate' && (
-            <Field label="Until" hint="A delegation must expire.">
+            <Field label="Until" hint="A delegation must expire." required>
               <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </Field>
           )}

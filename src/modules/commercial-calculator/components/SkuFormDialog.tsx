@@ -156,7 +156,7 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
         <section className="flex flex-col gap-3">
           <h3 className="text-[12px] font-semibold uppercase tracking-wide text-muted">Identity</h3>
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Name"><Input value={values.name} onChange={(e) => set('name', e.target.value)} /></Field>
+            <Field label="Name" required><Input value={values.name} onChange={(e) => set('name', e.target.value)} /></Field>
             <Field label="List Price" hint="Reference price each pricing level's Discount % is computed against.">
               <Input
                 type="number"
@@ -165,13 +165,13 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
                 placeholder="e.g. 50000"
               />
             </Field>
-            <Field label="SKU Category">
+            <Field label="SKU Category" required>
               <Select value={values.categoryId} onChange={(e) => set('categoryId', e.target.value)}>
                 <option value="">Select…</option>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
               </Select>
             </Field>
-            <Field label="Feature" hint="Determines the generated SKU code.">
+            <Field label="Feature" hint="Determines the generated SKU code." required>
               <Select value={values.featureId} onChange={(e) => set('featureId', e.target.value)}>
                 <option value="">Select…</option>
                 {features.map((f) => <option key={f.id} value={f.id}>{f.code} — {f.name}</option>)}
@@ -183,25 +183,25 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
                 {editions.map((e) => <option key={e.id} value={e.id}>{e.code} — {e.name}</option>)}
               </Select>
             </Field>
-            <Field label="Unit of Measure">
+            <Field label="Unit of Measure" required>
               <Select value={values.uomId} onChange={(e) => set('uomId', e.target.value)}>
                 <option value="">Select…</option>
                 {uoms.map((u) => <option key={u.id} value={u.id}>{u.code} — {u.name}</option>)}
               </Select>
             </Field>
-            <Field label="Currency">
+            <Field label="Currency" required>
               <Select value={values.currencyId} onChange={(e) => set('currencyId', e.target.value)}>
                 <option value="">Select…</option>
                 {currencies.map((c) => <option key={c.id} value={c.id}>{c.code} — {c.name}</option>)}
               </Select>
             </Field>
-            <Field label="Tax Class">
+            <Field label="Tax Class" required>
               <Select value={values.taxClassId} onChange={(e) => set('taxClassId', e.target.value)}>
                 <option value="">Select…</option>
                 {taxClasses.map((t) => <option key={t.id} value={t.id}>{t.code} — {t.name}</option>)}
               </Select>
             </Field>
-            <Field label="Billing Type">
+            <Field label="Billing Type" required>
               <Select value={values.billingTypeId} onChange={(e) => set('billingTypeId', e.target.value)}>
                 <option value="">Select…</option>
                 {billingTypes.map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
@@ -232,7 +232,7 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
         />
 
         {touchedSensitiveField && (
-          <Field label="Reason for change" hint="Required for cost, pricing, or lifecycle status edits — recorded in the Audit Log.">
+          <Field label="Reason for change" hint="Required for cost, pricing, or lifecycle status edits — recorded in the Audit Log." required>
             <Input value={changeReason} onChange={(e) => setChangeReason(e.target.value)} />
           </Field>
         )}

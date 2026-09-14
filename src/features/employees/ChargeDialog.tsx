@@ -72,7 +72,7 @@ export function ChargeDialog({ open, employeeId, onClose }: {
               <option value="acting">Acting charge</option>
             </Select>
           </Field>
-          <Field label="Position title">
+          <Field label="Position title" required>
             <Input
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}

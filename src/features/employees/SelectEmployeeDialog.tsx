@@ -74,7 +74,7 @@ export function SelectEmployeeDialog({ open, orgNode, onClose }: {
       }
     >
       <div className="space-y-4">
-        <Field label="Person" hint="Search by name or designation">
+        <Field label="Person" hint="Search by name or designation" required>
           <EmployeePicker candidates={candidates} value={employeeId} onChange={setEmployeeId} placeholder="Search a person…" />
         </Field>
         {employee && (

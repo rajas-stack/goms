@@ -468,7 +468,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {reporteeMode && !form.vacant && (
             <div className="col-span-full">
-              <Field label={reporteeMode === 'manager' ? 'Reporting Manager Name' : 'Junior Name'}>
+              <Field label={reporteeMode === 'manager' ? 'Reporting Manager Name' : 'Junior Name'} required>
                 <ManagerPicker
                   candidates={managerChoices}
                   value={form.selectedPersonId}
@@ -484,12 +484,12 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
               </Field>
             </div>
           )}
-          {!reporteeMode && !form.vacant && <Field label="Full name"><Input value={form.name} onChange={set('name')} autoFocus /></Field>}
-          <Field label={form.vacant ? 'Position title' : 'Designation'}>
+          {!reporteeMode && !form.vacant && <Field label="Full name" required><Input value={form.name} onChange={set('name')} autoFocus /></Field>}
+          <Field label={form.vacant ? 'Position title' : 'Designation'} required>
             <Input value={form.designation} onChange={set('designation')} placeholder="e.g. Deputy Director" autoFocus={form.vacant} />
           </Field>
           {!reporteeMode && !form.vacant && (
-            <Field label="Email">
+            <Field label="Email" required>
               <Input
                 type="email"
                 value={form.email}
@@ -501,7 +501,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
             </Field>
           )}
           {!reporteeMode && !form.vacant && (
-            <Field label="Contact number" hint="+91 · 10-digit number">
+            <Field label="Contact number" hint="+91 · 10-digit number" required>
               <PhoneInput value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} invalid={!phoneValid} />
               {!phoneValid && <span className="mt-1 block text-xs text-crimson">Enter a valid 10-digit number.</span>}
             </Field>

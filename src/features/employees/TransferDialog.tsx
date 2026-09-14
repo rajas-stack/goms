@@ -129,7 +129,7 @@ export function TransferDialog({ open, employee, onClose }: {
               ))}
             </Select>
           </Field>
-          <Field label="New posting">
+          <Field label="New posting" required>
             <Select
               value={form.toOrgNodeId}
               onChange={(e) => setForm((f) => ({ ...f, toOrgNodeId: e.target.value }))}

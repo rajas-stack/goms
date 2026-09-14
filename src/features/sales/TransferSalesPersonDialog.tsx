@@ -80,7 +80,7 @@ export function TransferSalesPersonDialog({ open, person, onClose }: {
             <p className="mt-0.5 text-ink-900">{current.designation}</p>
           </div>
         )}
-        <Field label="New designation">
+        <Field label="New designation" required>
           <Input value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder="e.g. Regional Manager" />
         </Field>
         <Field label="New tier">
@@ -97,7 +97,7 @@ export function TransferSalesPersonDialog({ open, person, onClose }: {
         <Field label="Office" hint="Optional">
           <Input value={office} onChange={(e) => setOffice(e.target.value)} />
         </Field>
-        <Field label="Effective date">
+        <Field label="Effective date" required>
           <Input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} />
         </Field>
         <Field label="Reason">

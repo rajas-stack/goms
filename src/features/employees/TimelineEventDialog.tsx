@@ -250,7 +250,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             <Input type="time" value={form.time} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} />
           </Field>
         </div>
-        <Field label="Title">
+        <Field label="Title" required>
           <Input
             value={form.title}
             onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}

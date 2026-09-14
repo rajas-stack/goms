@@ -258,7 +258,7 @@ export function ImportDialog({ open, onClose, signedInAs, onSignOut }: Props) {
               {states.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
             </Select>
           </Field>
-          <Field label={mode === 'nodes' ? 'Department to import into' : 'Posting to import into'}>
+          <Field label={mode === 'nodes' ? 'Department to import into' : 'Posting to import into'} required>
             <Select value={parentId} onChange={(e) => setParentId(e.target.value)} disabled={stateCode === null}>
               <option value="">
                 {stateCode !== null

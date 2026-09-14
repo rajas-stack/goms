@@ -26,10 +26,23 @@ export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSel
 )
 Select.displayName = 'Select'
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function Field(
+  { label, hint, required, children }: { label: string; hint?: string; required?: boolean; children: ReactNode },
+) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-[13px] font-medium text-ink-800">{label}</span>
+      {/* The asterisk is a CSS pseudo-element, not real text — a real text
+       *  node here would change the label's accessible name (e.g. "Name" ->
+       *  "Name *"), breaking every existing `getByLabelText(/^name$/i)`-style
+       *  test/query across the app for no functional reason. */}
+      <span
+        className={cn(
+          'mb-1.5 block text-[13px] font-medium text-ink-800',
+          required && "after:ml-0.5 after:text-crimson after:content-['*']",
+        )}
+      >
+        {label}
+      </span>
       {children}
       {hint && <span className="mt-1 block text-xs text-muted">{hint}</span>}
     </label>

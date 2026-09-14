@@ -30,14 +30,13 @@ vi.mock('@/features/employees/SalesTeamPicker', () => ({
 // (387) maps to none, to cover the "district with no seeded cities yet"
 // case — the actual bug this suite guards against never blocking the
 // STD/Local number fields.
+const KHORDHA_CITIES = [
+  { state: 'Odisha', district: 'Khordha', districtLgdCode: 386, city: 'Bhubaneswar', stdCode: '0674', source: 'test', verificationLevel: 'verified' as const },
+  { state: 'Odisha', district: 'Khordha', districtLgdCode: 386, city: 'Cityville', stdCode: '0999', source: 'test', verificationLevel: 'verified' as const },
+]
 vi.mock('@/data/std-codes', () => ({
-  citiesForDistrict: (lgd: number) => {
-    if (lgd !== 386) return []
-    return [
-      { state: 'Odisha', district: 'Khordha', districtLgdCode: 386, city: 'Bhubaneswar', stdCode: '0674', source: 'test', verificationLevel: 'verified' },
-      { state: 'Odisha', district: 'Khordha', districtLgdCode: 386, city: 'Cityville', stdCode: '0999', source: 'test', verificationLevel: 'verified' },
-    ]
-  },
+  citiesForDistrict: (lgd: number) => (lgd === 386 ? KHORDHA_CITIES : []),
+  stdCodeForCity: (lgd: number, city: string) => KHORDHA_CITIES.find((c) => c.districtLgdCode === lgd && c.city === city)?.stdCode,
 }))
 
 const STATE_NODE_ODISHA: HierNode = {
@@ -225,6 +224,42 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
       await addRowThroughDistrict(user, 'Khordha')
 
       const stdInput = await screen.findByLabelText('STD code 1')
+      expect(stdInput).toHaveValue('')
+      await user.type(stdInput, '0674')
+      expect(stdInput).toHaveValue('0674')
+    })
+  })
+
+  describe('City/Town selection (stakeholder-reported Bhubaneswar gap)', () => {
+    it('Bhubaneswar is selectable from the City datalist and auto-fills its STD code', async () => {
+      stubApiHooks()
+      const user = userEvent.setup()
+      render(<Harness jurisdictionStateCode={21} />)
+
+      await addRowThroughDistrict(user, 'Khordha')
+
+      const cityInput = await screen.findByLabelText('City/Town 1')
+      const options = within(cityInput.parentElement!.querySelector('datalist')!).getAllByRole('option', { hidden: true })
+      expect(options.map((o) => (o as HTMLOptionElement).value)).toEqual(['Bhubaneswar', 'Cityville'])
+
+      await user.type(cityInput, 'Bhubaneswar')
+
+      expect(cityInput).toHaveValue('Bhubaneswar')
+      expect(screen.getByLabelText('STD code 1')).toHaveValue('0674')
+    })
+
+    it('typing a city not in the dataset leaves STD untouched for hand entry', async () => {
+      stubApiHooks()
+      const user = userEvent.setup()
+      render(<Harness jurisdictionStateCode={21} />)
+
+      await addRowThroughDistrict(user, 'Khordha')
+
+      const cityInput = await screen.findByLabelText('City/Town 1')
+      await user.type(cityInput, 'Some Unlisted Town')
+
+      expect(cityInput).toHaveValue('Some Unlisted Town')
+      const stdInput = screen.getByLabelText('STD code 1')
       expect(stdInput).toHaveValue('')
       await user.type(stdInput, '0674')
       expect(stdInput).toHaveValue('0674')
