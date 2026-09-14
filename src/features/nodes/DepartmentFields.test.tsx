@@ -25,18 +25,30 @@ vi.mock('@/features/employees/SalesTeamPicker', () => ({
 // Deterministic, self-contained STD-code fixture — decoupled from
 // src/data/std-codes.ts's real (partial, ever-expanding) dataset so this
 // suite doesn't depend on what happens to be seeded for any particular real
-// district. Khordha (LGD 386) maps to two cities (so STD can't be
-// auto-picked unambiguously — it stays blank/hand-editable there); Puri
-// (387) maps to none, to cover the "district with no seeded cities yet"
-// case — the actual bug this suite guards against never blocking the
-// STD/Local number fields.
+// district. Khordha (LGD 386) and Gandhinagar (LGD 388) each map to two
+// cities (so STD can't be auto-picked unambiguously — City becomes a
+// restricted Combobox there, per Requirement 1's redesign); the two
+// district's city lists are kept disjoint on purpose, to prove a
+// dataset-backed city never leaks across districts. Puri (387) maps to
+// none, to cover the "district with no seeded cities yet" case — the
+// actual bug this suite guards against never blocking the STD/Local
+// number fields.
 const KHORDHA_CITIES = [
   { state: 'Odisha', district: 'Khordha', districtLgdCode: 386, city: 'Bhubaneswar', stdCode: '0674', source: 'test', verificationLevel: 'verified' as const },
   { state: 'Odisha', district: 'Khordha', districtLgdCode: 386, city: 'Cityville', stdCode: '0999', source: 'test', verificationLevel: 'verified' as const },
 ]
+const GANDHINAGAR_CITIES = [
+  { state: 'Gujarat', district: 'Gandhinagar', districtLgdCode: 388, city: 'Gandhinagar City', stdCode: '079', source: 'test', verificationLevel: 'verified' as const },
+  { state: 'Gujarat', district: 'Gandhinagar', districtLgdCode: 388, city: 'Kalol', stdCode: '02764', source: 'test', verificationLevel: 'verified' as const },
+]
+function citiesFor(lgd: number) {
+  if (lgd === 386) return KHORDHA_CITIES
+  if (lgd === 388) return GANDHINAGAR_CITIES
+  return []
+}
 vi.mock('@/data/std-codes', () => ({
-  citiesForDistrict: (lgd: number) => (lgd === 386 ? KHORDHA_CITIES : []),
-  stdCodeForCity: (lgd: number, city: string) => KHORDHA_CITIES.find((c) => c.districtLgdCode === lgd && c.city === city)?.stdCode,
+  citiesForDistrict: (lgd: number) => citiesFor(lgd),
+  stdCodeForCity: (lgd: number, city: string) => citiesFor(lgd).find((c) => c.city === city)?.stdCode,
 }))
 
 const STATE_NODE_ODISHA: HierNode = {
@@ -47,8 +59,10 @@ const STATE_NODE_GUJARAT: HierNode = {
   id: 'state-gujarat', domain: 'geo', typeKey: 'state', parentId: 'country-1',
   stateCode: 7, name: 'Gujarat', code: null, sortOrder: 0, metadata: {}, status: 'active',
 }
-// Gujarat's own district — has zero seeded cities in the fixture above, used
-// only to prove a State switch actually clears everything downstream.
+// Gujarat's own district — maps to its own disjoint two-city set in the
+// fixture above (Gandhinagar City/Kalol), used both to prove a State switch
+// clears everything downstream, and to prove City combobox options never
+// leak across districts (Khordha's cities must never appear here).
 const DISTRICT_GANDHINAGAR: HierNode = {
   id: 'dist-gandhinagar', domain: 'geo', typeKey: 'district', parentId: 'state-gujarat',
   stateCode: 7, name: 'Gandhinagar', code: '388', sortOrder: 0, metadata: {}, status: 'active',
@@ -198,7 +212,7 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
   })
 
   describe('one-city auto-selection', () => {
-    it('auto-fills STD the instant a single-city District is picked, no lookup needed', async () => {
+    it('auto-fills City and STD the instant a single-city District is picked, no lookup needed — and both stay hand-editable', async () => {
       stubApiHooks()
       // Puri (387) maps to a single city in this test's own override.
       const stdCodes = await import('@/data/std-codes')
@@ -213,56 +227,108 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
       await user.selectOptions(screen.getByLabelText('Type 1'), 'Landline / EPBX')
       await user.selectOptions(screen.getByLabelText('District 1'), 'Puri')
 
-      expect(await screen.findByLabelText('STD code 1')).toHaveValue('06752')
-    })
+      // Unambiguous single-city district: a plain (not a combobox), pre-filled input.
+      const cityInput = await screen.findByLabelText('City/Town 1')
+      expect(cityInput).toHaveValue('Puri Town')
+      expect(screen.getByLabelText('STD code 1')).toHaveValue('06752')
 
-    it('a district mapped to more than one city leaves STD blank (no ambiguous guess) but still editable', async () => {
-      stubApiHooks()
-      const user = userEvent.setup()
-      render(<Harness jurisdictionStateCode={21} />)
-
-      await addRowThroughDistrict(user, 'Khordha')
-
-      const stdInput = await screen.findByLabelText('STD code 1')
-      expect(stdInput).toHaveValue('')
-      await user.type(stdInput, '0674')
-      expect(stdInput).toHaveValue('0674')
+      // Still hand-editable — the dataset is a lookup aid, never a lock.
+      await user.clear(cityInput)
+      await user.type(cityInput, 'Puri Town (renamed)')
+      expect(cityInput).toHaveValue('Puri Town (renamed)')
     })
   })
 
-  describe('City/Town selection (stakeholder-reported Bhubaneswar gap)', () => {
-    it('Bhubaneswar is selectable from the City datalist and auto-fills its STD code', async () => {
+  describe('multi-city district — City becomes a restricted combobox (Requirement 1 redesign)', () => {
+    it('a district mapped to more than one city renders City as a combobox scoped to just that district\'s cities, with STD unset until one is picked', async () => {
       stubApiHooks()
       const user = userEvent.setup()
       render(<Harness jurisdictionStateCode={21} />)
 
       await addRowThroughDistrict(user, 'Khordha')
 
-      const cityInput = await screen.findByLabelText('City/Town 1')
-      const options = within(cityInput.parentElement!.querySelector('datalist')!).getAllByRole('option', { hidden: true })
-      expect(options.map((o) => (o as HTMLOptionElement).value)).toEqual(['Bhubaneswar', 'Cityville'])
+      expect(screen.getByLabelText('STD code 1')).toHaveValue('')
 
-      await user.type(cityInput, 'Bhubaneswar')
+      const cityCombobox = screen.getByRole('combobox', { name: 'City/Town 1' })
+      await user.click(cityCombobox)
+      expect(await screen.findByRole('option', { name: 'Bhubaneswar' })).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: 'Cityville' })).toBeInTheDocument()
+      // Never another district's cities.
+      expect(screen.queryByRole('option', { name: 'Gandhinagar City' })).not.toBeInTheDocument()
+    })
 
-      expect(cityInput).toHaveValue('Bhubaneswar')
+    it('selecting Bhubaneswar (the stakeholder-reported gap) auto-fills its STD code 0674', async () => {
+      stubApiHooks()
+      const user = userEvent.setup()
+      render(<Harness jurisdictionStateCode={21} />)
+
+      await addRowThroughDistrict(user, 'Khordha')
+
+      await user.click(screen.getByRole('combobox', { name: 'City/Town 1' }))
+      await user.click(await screen.findByRole('option', { name: 'Bhubaneswar' }))
+
+      expect(screen.getByRole('combobox', { name: 'City/Town 1' })).toHaveValue('Bhubaneswar')
       expect(screen.getByLabelText('STD code 1')).toHaveValue('0674')
     })
 
-    it('typing a city not in the dataset leaves STD untouched for hand entry', async () => {
+    it('City combobox options never leak across districts — Khordha and Gandhinagar each show only their own dataset cities', async () => {
+      stubApiHooks()
+      const user = userEvent.setup()
+      render(<Harness jurisdictionStateCode={21} />)
+
+      await addRowThroughDistrict(user, 'Khordha')
+      await user.click(screen.getByRole('combobox', { name: 'City/Town 1' }))
+      expect(await screen.findByRole('option', { name: 'Bhubaneswar' })).toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'Gandhinagar City' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'Kalol' })).not.toBeInTheDocument()
+
+      await addRow(user)
+      await user.selectOptions(screen.getByLabelText('State 2'), 'Gujarat')
+      await user.selectOptions(screen.getByLabelText('Type 2'), 'Landline / EPBX')
+      await user.selectOptions(screen.getByLabelText('District 2'), 'Gandhinagar')
+
+      await user.click(screen.getByRole('combobox', { name: 'City/Town 2' }))
+      expect(await screen.findByRole('option', { name: 'Gandhinagar City' })).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: 'Kalol' })).toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'Bhubaneswar' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'Cityville' })).not.toBeInTheDocument()
+    })
+
+    it('typing a city that matches no option never commits it and never sets a wrong STD', async () => {
       stubApiHooks()
       const user = userEvent.setup()
       render(<Harness jurisdictionStateCode={21} />)
 
       await addRowThroughDistrict(user, 'Khordha')
 
-      const cityInput = await screen.findByLabelText('City/Town 1')
-      await user.type(cityInput, 'Some Unlisted Town')
+      const cityCombobox = screen.getByRole('combobox', { name: 'City/Town 1' })
+      await user.click(cityCombobox)
+      await user.type(cityCombobox, 'Some Unlisted Town')
 
+      expect(await screen.findByText('No matches')).toBeInTheDocument()
+      expect(screen.getByLabelText('STD code 1')).toHaveValue('')
+    })
+  })
+
+  describe('zero-city district — City stays fully free-text (Requirement 1: never blocks entry)', () => {
+    it('a district with no seeded cities allows City and STD to both be typed by hand', async () => {
+      stubApiHooks()
+      const user = userEvent.setup()
+      render(<Harness jurisdictionStateCode={21} />)
+
+      await addRowThroughDistrict(user, 'Puri')
+
+      const cityInput = await screen.findByLabelText('City/Town 1')
+      expect(cityInput.tagName).toBe('INPUT')
+      expect(cityInput).not.toHaveAttribute('role', 'combobox')
+
+      await user.type(cityInput, 'Some Unlisted Town')
       expect(cityInput).toHaveValue('Some Unlisted Town')
+
       const stdInput = screen.getByLabelText('STD code 1')
       expect(stdInput).toHaveValue('')
-      await user.type(stdInput, '0674')
-      expect(stdInput).toHaveValue('0674')
+      await user.type(stdInput, '06752')
+      expect(stdInput).toHaveValue('06752')
     })
   })
 

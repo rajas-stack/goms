@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
+import { Combobox } from '@/components/ui/Combobox'
 import { Icon } from '@/components/ui/Icon'
 import { PhoneInput, isValidPhone } from '@/components/ui/PhoneInput'
 import { citiesForDistrict, stdCodeForCity } from '@/data/std-codes'
@@ -28,13 +29,19 @@ interface Props {
  *  parent; a subcomponent per row is what actually lets each row hold its
  *  own hook calls legally.
  *
- *  City/Town is a free-text field with dataset-backed autocomplete
- *  (`<datalist>` of `citiesForDistrict(lgd)`), never a restrictive select:
- *  the STD-code dataset (`std-codes.ts`) is a lookup aid, not a whitelist of
- *  valid cities, so a district with no (or several) mapped cities never
- *  blocks City/STD/Local number entry — typing or picking a city that
- *  matches the dataset auto-fills STD (see `handleCityChange` below), and
- *  everything stays hand-editable otherwise. */
+ *  City/Town's shape depends on how many cities the STD dataset
+ *  (`std-codes.ts`) maps to the selected district — see `handleDistrictSelect`:
+ *    - 0 mapped cities: free-text City input, free-text STD input. Never
+ *      blocks entry — the dataset is a lookup aid, not a whitelist, so a
+ *      district it hasn't reached yet just means hand entry, not an error.
+ *    - 1 mapped city: unambiguous, so City and STD both auto-fill (still
+ *      hand-editable — nothing here is locked, since the partial dataset
+ *      can itself be wrong for a given row).
+ *    - 2+ mapped cities: City becomes a searchable Combobox scoped to
+ *      *this district's own* dataset rows only (never another district's
+ *      same-named city — the option list is always `citiesForDistrict(lgd)`
+ *      for the currently selected district), so picking one is unambiguous
+ *      and always resolves via `stdCodeForCity` to auto-fill STD. */
 export function ContactNumberRow({ index, entry, states, skipGeography, onChange, onRemove }: Props) {
   const n = index + 1
 
@@ -178,17 +185,21 @@ export function ContactNumberRow({ index, entry, states, skipGeography, onChange
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-44">
             <Field label={`City/Town ${n}`}>
-              <Input
-                list={`city-options-${index}`}
-                value={entry.city}
-                onChange={(e) => handleCityChange(e.target.value)}
-                placeholder="e.g. Bhubaneswar"
-              />
-              <datalist id={`city-options-${index}`}>
-                {districtCities.map((c) => (
-                  <option key={c.city} value={c.city} />
-                ))}
-              </datalist>
+              {districtCities.length > 1 ? (
+                <Combobox
+                  value={entry.city}
+                  onChange={handleCityChange}
+                  options={districtCities.map((c) => ({ value: c.city, label: c.city }))}
+                  placeholder="Select a city…"
+                  aria-label={`City/Town ${n}`}
+                />
+              ) : (
+                <Input
+                  value={entry.city}
+                  onChange={(e) => handleCityChange(e.target.value)}
+                  placeholder="e.g. Bhubaneswar"
+                />
+              )}
             </Field>
           </div>
           <div className="w-28">
