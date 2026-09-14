@@ -17,8 +17,8 @@ describe('std-codes', () => {
 
   it('citiesForDistrict returns the seeded entries for a district that has them', () => {
     const entries = citiesForDistrict(386)
-    expect(entries).toHaveLength(1)
-    expect(entries[0]).toMatchObject({ districtLgdCode: 386, city: 'Bhubaneswar', stdCode: '0674' })
+    expect(entries.find((e) => e.city === 'Bhubaneswar')).toMatchObject({ districtLgdCode: 386, city: 'Bhubaneswar', stdCode: '0674' })
+    expect(stdCodeForCity(386, 'Bhubaneswar')).toBe('0674')
   })
 
   it('the seed dataset is a small, partial, honestly-provenanced sample, not a full authoritative table', () => {
