@@ -54,7 +54,7 @@ export function LineApprovalSummary({ line, approvalMatrix, employees, onDecide 
       )}
       {showDecisionControls && (
         <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Field label="Approver">
+          <Field label="Approver" required>
             <Select value={approverId} onChange={(e) => setApproverId(e.target.value)}>
               <option value="">Select…</option>
               {employees!.map((emp) => <option key={emp.id} value={emp.id}>{emp.name} — {emp.designation}</option>)}

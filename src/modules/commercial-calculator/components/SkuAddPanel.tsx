@@ -73,7 +73,7 @@ export function SkuAddPanel({ sku, skusById, currencyCode, bomItems, alreadyInBo
           Generated SKU: <span className="rounded bg-panel px-1.5 py-0.5 font-mono text-[11px] text-ink-700">{sku.skuCode}</span>
           {' '}— {sku.name}
         </p>
-        <Field label="Quantity">
+        <Field label="Quantity" required>
           <Input type="number" value={qtyDraft} onChange={(e) => setQtyDraft(e.target.value)} aria-invalid={!qtyValid} className="w-24" />
         </Field>
         <Button variant="primary" size="sm" onClick={handleAdd} disabled={!qtyValid}>

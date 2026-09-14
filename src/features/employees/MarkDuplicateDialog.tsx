@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Combobox } from '@/components/ui/Combobox'
+import { Field } from '@/components/ui/Field'
 import { useAllEmployees, useEmployeeMutations } from '@/lib/api'
 import { useToast } from '@/components/ui/Toast'
 import type { Employee } from '@/lib/types'
@@ -56,13 +57,14 @@ export function MarkDuplicateDialog({ open, employee, onClose }: {
         </>
       }
     >
-      <Combobox
-        value={selected}
-        onChange={setSelected}
-        options={options}
-        placeholder="Search for the original contact…"
-        aria-label="Original contact"
-      />
+      <Field label="Original contact" required>
+        <Combobox
+          value={selected}
+          onChange={setSelected}
+          options={options}
+          placeholder="Search for the original contact…"
+        />
+      </Field>
     </Dialog>
   )
 }

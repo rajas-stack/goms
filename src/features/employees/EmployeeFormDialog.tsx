@@ -489,7 +489,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
             <Input value={form.designation} onChange={set('designation')} placeholder="e.g. Deputy Director" autoFocus={form.vacant} />
           </Field>
           {!reporteeMode && !form.vacant && (
-            <Field label="Email" required>
+            <Field label="Email">
               <Input
                 type="email"
                 value={form.email}
@@ -501,7 +501,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
             </Field>
           )}
           {!reporteeMode && !form.vacant && (
-            <Field label="Contact number" hint="+91 · 10-digit number" required>
+            <Field label="Contact number" hint="+91 · 10-digit number">
               <PhoneInput value={form.phone} onChange={(v) => setForm((f) => ({ ...f, phone: v }))} invalid={!phoneValid} />
               {!phoneValid && <span className="mt-1 block text-xs text-crimson">Enter a valid 10-digit number.</span>}
             </Field>
