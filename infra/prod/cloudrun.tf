@@ -132,16 +132,54 @@ resource "google_cloud_run_v2_service" "goms_api" {
         name  = "FIREBASE_PROJECT_ID"
         value = "goms-prod"
       }
-      # ADMIN_IMPORT_ENABLED: confirmed unset on the live service as of
-      # 2026-09-04 (a same-day live-exposure incident — this had been set to
-      # "true" out-of-band with no auth gate in front of it — was found and
-      # remediated; see docs/superpowers/analysis/2026-09-03-goms-prod-
-      # final-readiness-audit.md §0). Stays unset here deliberately: no
-      # production-specific Firebase Authentication project/allow-list
-      # exists yet, and enabling Admin Data Import in production is an
-      # explicit, separate, not-yet-approved follow-up decision — not
-      # something this release should carry silently. Do not set this to
-      # "true" without a real auth gate already live in front of it.
+      # ADMIN_IMPORT_ENABLED / ADMIN_IMPORT_ALLOWED_EMAILS: reconciled
+      # 2026-09-15 to match confirmed live state (`gcloud run services
+      # describe goms-api --project=goms-prod`, prod-vs-dev parity audit —
+      # see docs/superpowers/analysis/2026-09-15-goms-prod-admin-import-
+      # parity-reconciliation.md). This comment previously said the flag
+      # "stays unset" as of 2026-09-04; that stopped being true at some
+      # point after that date when it was flipped on, out-of-band via
+      # `gcloud`, without this file ever being updated — Terraform never
+      # declared either env var, so this file was silently describing a
+      # disabled feature while production had it enabled. Nothing about
+      # production was changed to write this comment; it only corrects the
+      # record to match what `gcloud` already showed as live.
+      #
+      # This is NOT the "no real auth gate" exposure the old comment warned
+      # against. `adminImportProcedure` (apps/api/src/trpc.ts) has required
+      # a valid, cryptographically-verified Firebase ID token plus an
+      # allow-list check unconditionally since it was written —
+      # `verifyAdminImportToken` (apps/api/src/auth/verifyAdminImportToken.ts)
+      # calls `verifyFirebaseToken` (apps/api/src/auth/identity.ts), which
+      # verifies the token against *this* project (`FIREBASE_PROJECT_ID`
+      # above, i.e. `goms-prod`'s own Firebase Auth) and requires
+      # `email_verified`, then checks the email against
+      # ADMIN_IMPORT_ALLOWED_EMAILS below. This check does not depend on
+      # AUTH_ENFORCEMENT_ENABLED — it is always active regardless of that
+      # flag's value.
+      #
+      # The production *frontend* does not expose this feature: there is no
+      # `deploy-prod` stage in `.gitlab-ci.yml` (goms-prod Hosting deploys
+      # are manual, out-of-band, same as this API), and no build pushed to
+      # `goms-prod` has ever set `VITE_ADMIN_IMPORT_ENABLED` — confirmed by
+      # fetching the live hosted bundle (`https://goms-prod.web.app`), which
+      # contains no `/admin/data-import` route code at all (contrast
+      # `goms-dev`'s hosted bundle, which does — CI sets that flag only for
+      # the goms-dev build, `.gitlab-ci.yml`). Access to this endpoint is
+      # therefore restricted entirely at the API/auth layer above, not by
+      # omitting a UI button.
+      env {
+        name  = "ADMIN_IMPORT_ENABLED"
+        value = "true"
+      }
+      env {
+        name = "ADMIN_IMPORT_ALLOWED_EMAILS"
+        # Matches infra/dev/cloudrun.tf's list exactly — confirmed live via
+        # `gcloud run services describe` (2026-09-15). Not a secret: a
+        # roster of who may use this feature, not a credential, same
+        # reasoning as infra/dev/cloudrun.tf's identical env var.
+        value = "rajas@amnex.com,rajassaji9@gmail.com,shubham16@amnex.com"
+      }
       env {
         name = "DATABASE_URL"
         value_source {
