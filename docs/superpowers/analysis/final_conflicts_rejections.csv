@@ -1,0 +1,8 @@
+﻿Category,State,District,City/Place,STD,Detail
+District mapping gap / rejected,Punjab,Tarn Taran,Tarntaran,143401,"Value shown in the STD column (143401) is 6 digits and matches the PIN-code pattern, not a valid Punjab STD code (which are 01xxx/0xxx) - page-level data error, excluded as malformed."
+District mapping gap / rejected,Arunachal Pradesh,Changlang,Viyoynagar,NA,"Source explicitly shows ""NA"" for STD - no code to preserve, excluded."
+District mapping gap / rejected,Nagaland,Noklak,Noklak,,"Noklak not present in india-admin.json (recently created Nagaland district, likely carved from Tuensang)"
+District mapping gap / rejected,Nagaland,Noklak,Thonoknyu,,"Noklak not present in india-admin.json (recently created Nagaland district, likely carved from Tuensang)"
+District mapping gap / rejected,Nagaland,Noklak,Panso,,"Noklak not present in india-admin.json (recently created Nagaland district, likely carved from Tuensang)"
+"Conflict vs std-codes.ts (from turn 2 audit, never in any pool)",Andhra Pradesh,Krishna,Vijayawada,08676,Existing GOMS value 0866 retained; workbook value rejected
+"Internal source conflict (from turn 2 audit, never in any pool)",Maharashtra,Pune,Mulshi,020 / 02139,Same source page gave two different codes; both excluded

@@ -1,0 +1,17 @@
+﻿State,District,City/Place,STD (as supplied),Source URL,Reason
+Arunachal Pradesh,Anjaw,Hawai,3804,https://anjaw.nic.in/std-pin-codes/,"STD shown without trunk zero (""3804""); neighbouring Lohit district uses 03804 for the same numbering block - needs source re-check before assuming 03804."
+Arunachal Pradesh,Anjaw,Hayuliang,3804,https://anjaw.nic.in/std-pin-codes/,Same trunk-zero issue as Hawai above.
+Manipur,Churachandpur,Singhat,3873,https://churachandpur.nic.in/std-pin-codes/,"STD shown without trunk zero (""3873""); likely 03873 but not silently corrected."
+Manipur,Churachandpur,Saikot,0385,https://churachandpur.nic.in/std-pin-codes/,"0385 is the Imphal-area code, unusual for a Churachandpur-district locality; possible page error, needs cross-check before accepting."
+Manipur,Imphal East,Imphal,0385,https://imphaleast.nic.in/std-pin-codes/,Likely duplicate of the already-covered Imphal West/East 0385 entry from an earlier batch - needs a dedupe check against the pending set rather than blind re-add.
+Uttar Pradesh,Prayagraj,Prayagraj,0-532,https://prayagraj.nic.in/std-pin-codes/,"Source-extracted value has an unexplained hyphen (""0-532"") not matching normal STD formatting; likely ""0532"" but raw source formatting is ambiguous - needs direct visual confirmation, not silently reformatted."
+Uttar Pradesh,Prayagraj,Phulpur,0-5332,https://prayagraj.nic.in/std-pin-codes/,Same hyphen-formatting ambiguity as Prayagraj above.
+Uttar Pradesh,Prayagraj,Karchhana,0-5333,https://prayagraj.nic.in/std-pin-codes/,Same hyphen-formatting ambiguity as Prayagraj above.
+Uttar Pradesh,Prayagraj,Meja,0-5334,https://prayagraj.nic.in/std-pin-codes/,Same hyphen-formatting ambiguity as Prayagraj above.
+Uttar Pradesh,Prayagraj,Soraon,0-5335,https://prayagraj.nic.in/std-pin-codes/,Same hyphen-formatting ambiguity as Prayagraj above.
+Punjab,Bathinda,Bathinda,164,https://bathinda.nic.in/std-pin-codes/,"STD shown without trunk zero (""164""); well-known correct value is 0164. Not silently corrected."
+Arunachal Pradesh,Changlang,Manmao,3800,https://changlang.nic.in/std-pin-codes/,"STD shown without trunk zero (""3800"") while every other Changlang row on the same page correctly shows ""03800""/""03807""/""03808"" - inconsistent within the same source table, needs re-check."
+Mizoram,Serchhip,East Lungdar,03831,https://serchhip.nic.in/std-pin-codes/,"Uses 03831, which is Champhai district's code, not Serchhip's own 03838 shown for every other row on the same page - inconsistent, needs cross-check (may be a border-area exchange sharing Champhai's SDCA, or a page error)."
+Mizoram,Serchhip,Leng,03831,https://serchhip.nic.in/std-pin-codes/,Same cross-district code inconsistency as East Lungdar above.
+Mizoram,Serchhip,Rullam,03831,https://serchhip.nic.in/std-pin-codes/,Same cross-district code inconsistency as East Lungdar above.
+Mizoram,Serchhip,Sailulak,03831,https://serchhip.nic.in/std-pin-codes/,Same cross-district code inconsistency as East Lungdar above.
