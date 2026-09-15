@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, protectedProcedure, router } from '../trpc.js'
+import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from '@goms/domain'
 
@@ -48,20 +48,20 @@ const columnFor: Record<string, string> = {
 }
 
 export const opportunitiesRouter = router({
-  list: publicProcedure.query(async () => {
+  list: protectedReadProcedure.query(async () => {
     const result = await pool.query(
       `SELECT * FROM opportunities ORDER BY created_at DESC, opportunity_name`,
     )
     return result.rows.map(toOpportunity)
   }),
-  listByDepartment: publicProcedure.input(z.object({ departmentId: z.string().uuid() })).query(async ({ input }) => {
+  listByDepartment: protectedReadProcedure.input(z.object({ departmentId: z.string().uuid() })).query(async ({ input }) => {
     const result = await pool.query(
       `SELECT * FROM opportunities WHERE department_id=$1 ORDER BY opportunity_name`, [input.departmentId],
     )
     return result.rows.map(toOpportunity)
   }),
-  get: publicProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => oneOpportunity(input.id)),
-  listStageChanges: publicProcedure.input(z.object({ opportunityId: z.string().uuid() })).query(async ({ input }) => {
+  get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => oneOpportunity(input.id)),
+  listStageChanges: protectedReadProcedure.input(z.object({ opportunityId: z.string().uuid() })).query(async ({ input }) => {
     const result = await pool.query(
       // `seq` (not `id`, a random UUID) breaks a same-day tie in insertion order.
       `SELECT * FROM opportunity_stage_changes WHERE opportunity_id=$1 ORDER BY changed_at, seq`, [input.opportunityId],

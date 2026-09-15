@@ -377,4 +377,21 @@ describe('hierarchy router', () => {
       })).resolves.toBeDefined()
     })
   })
+
+  describe('stays public under read protection (READ_AUTH_ENFORCEMENT_ENABLED)', () => {
+    afterEach(() => {
+      delete process.env.READ_AUTH_ENFORCEMENT_ENABLED
+    })
+
+    // hierarchy.* is deliberately excluded from the read-protection rollout
+    // (2026-09-15 public-read security audit) — Indian administrative
+    // geography and government department/office names are public-domain
+    // reference data, not the sensitive business data the audit flagged.
+    // This guards against an accidental future conversion.
+    it('remains reachable with no auth even when READ_AUTH_ENFORCEMENT_ENABLED is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.hierarchy.listDepartments()).resolves.toBeDefined()
+    })
+  })
 })

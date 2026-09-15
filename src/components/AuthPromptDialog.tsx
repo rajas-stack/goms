@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { onAuthStateChanged, signInWithPopup, type User } from 'firebase/auth'
+import { useQueryClient } from '@tanstack/react-query'
 import { auth, googleProvider } from '@/lib/firebaseAuth'
 import { subscribeAuthRequired, type AuthPromptReason } from '@/lib/authPrompt'
 import { Button } from '@/components/ui/Button'
@@ -9,6 +10,7 @@ export function AuthPromptDialog() {
   const [reason, setReason] = useState<AuthPromptReason>('unauthorized')
   const [user, setUser] = useState<User | null>(null)
   const [signInError, setSignInError] = useState(false)
+  const queryClient = useQueryClient()
 
   // `auth` is null when Firebase isn't configured for this build (see
   // firebaseAuth.ts) — nothing to subscribe to in that case.
@@ -17,6 +19,20 @@ export function AuthPromptDialog() {
     return onAuthStateChanged(auth, setUser)
   }, [])
   useEffect(() => subscribeAuthRequired((r) => { setReason(r); setOpen(true); setSignInError(false) }), [])
+
+  // Recovers reads that failed while signed out (or signed in with the
+  // wrong account) once a real identity shows up via the SAME
+  // onAuthStateChanged this component already tracks — no second auth
+  // mechanism. Scoped to queries currently sitting in an error state, not a
+  // blanket refetch-everything, so it doesn't re-fetch data that already
+  // loaded fine. A still-unauthorized account just fails the same way again
+  // (identical to today's per-request behavior) rather than looping or
+  // crashing. Without this, a read that 401'd before sign-in stayed stuck in
+  // its error state until the user manually reloaded the page.
+  useEffect(() => {
+    if (!user) return
+    void queryClient.refetchQueries({ predicate: (query) => query.state.status === 'error' })
+  }, [user, queryClient])
 
   // Auto-close on a successful sign-in — but ONLY for 'unauthorized' (the
   // user simply wasn't signed in). For 'forbidden', the user is typically

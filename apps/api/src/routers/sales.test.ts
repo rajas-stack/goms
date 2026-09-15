@@ -257,4 +257,33 @@ describe('sales router', () => {
       })).resolves.toBeDefined()
     })
   })
+
+  describe('read protection (READ_AUTH_ENFORCEMENT_ENABLED)', () => {
+    afterEach(() => {
+      delete process.env.READ_AUTH_ENFORCEMENT_ENABLED
+    })
+
+    it('still allows an unauthenticated read when the flag is unset (deliberate no-op default)', async () => {
+      const caller = appRouter.createCaller({})
+      await expect(caller.sales.listPersons()).resolves.toBeDefined()
+    })
+
+    it('rejects an unauthenticated read once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.sales.listPersons()).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    })
+
+    it('rejects a non-Amnex identity once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@gmail.com'))
+      await expect(caller.sales.listPersons()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+
+    it('allows a verified @amnex.com identity once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+      await expect(caller.sales.listPersons()).resolves.toBeDefined()
+    })
+  })
 })

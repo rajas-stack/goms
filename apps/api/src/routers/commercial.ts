@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, protectedProcedure, router } from '../trpc.js'
+import { publicProcedure, protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isForeignKeyViolation, isUniqueViolation } from '../db-errors.js'
 import {
@@ -474,12 +474,12 @@ const MASTER_KEY_TO_SKU_COLUMN: Partial<Record<CommercialMasterKey, string>> = {
 }
 
 const commercialSkusRouter = router({
-  list: publicProcedure.query(async () => {
+  list: protectedReadProcedure.query(async () => {
     const result = await pool.query('SELECT * FROM commercial_skus ORDER BY display_order')
     return result.rows.map(toSku)
   }),
 
-  get: publicProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+  get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
     const result = await pool.query('SELECT * FROM commercial_skus WHERE id=$1', [input.id])
     return result.rows[0] ? toSku(result.rows[0]) : null
   }),
@@ -936,7 +936,7 @@ const commercialBoqRouter = router({
   // Batches every draft BOQ's line items into one query instead of one
   // query per BOQ (previously: 1 + N round trips for N draft BOQs, on every
   // load of this list — see the function comment on withLiveDraftGrandTotal).
-  list: publicProcedure.query(async () => {
+  list: protectedReadProcedure.query(async () => {
     const result = await pool.query('SELECT * FROM commercial_boqs ORDER BY created_at DESC')
     const draftIds = result.rows.filter((r: any) => r.status === 'draft').map((r: any) => r.id)
     const linesByBoqId = new Map<string, any[]>()
@@ -954,13 +954,13 @@ const commercialBoqRouter = router({
     return withTotals.map(toBoq)
   }),
 
-  get: publicProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+  get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
     const result = await pool.query('SELECT * FROM commercial_boqs WHERE id=$1', [input.id])
     if (!result.rows[0]) return null
     return toBoq(await withLiveDraftGrandTotal(pool, result.rows[0]))
   }),
 
-  listLineItems: publicProcedure.input(z.object({ boqId: z.string().uuid() })).query(async ({ input }) => {
+  listLineItems: protectedReadProcedure.input(z.object({ boqId: z.string().uuid() })).query(async ({ input }) => {
     const boqResult = await pool.query('SELECT * FROM commercial_boqs WHERE id=$1', [input.boqId])
     const linesResult = await pool.query('SELECT * FROM commercial_boq_line_items WHERE boq_id=$1 ORDER BY sort_order', [input.boqId])
     const lines = boqResult.rows[0] ? await withLiveDraftPricing(pool, boqResult.rows[0], linesResult.rows) : linesResult.rows
@@ -969,7 +969,7 @@ const commercialBoqRouter = router({
 
   /** Every BOQ line item across every BOQ — read-only aggregate for the SKU
    *  Catalog's "BOQ Count" column. */
-  listAllLineItems: publicProcedure.query(async () => {
+  listAllLineItems: protectedReadProcedure.query(async () => {
     const result = await pool.query('SELECT * FROM commercial_boq_line_items')
     return result.rows.map(toLineItem)
   }),
@@ -1437,7 +1437,13 @@ const commercialBoqRouter = router({
 })
 
 const commercialAuditLogsRouter = router({
-  list: publicProcedure
+  // Protected (2026-09-15 follow-up to the read-protection rollout):
+  // writeAuditLog is the shared sink for SKU cost/price-field changes and
+  // BOQ customer/pricing-field changes alike (see its call sites above) —
+  // leaving this endpoint public would re-expose the exact data
+  // `commercial.skus`/`commercial.boq` were just protected for, just via
+  // plaintext oldValue/newValue history instead of the live row.
+  list: protectedReadProcedure
     .input(z.object({ entityType: z.string().optional(), entityId: z.string().optional() }).optional())
     .query(async ({ input }) => {
       const conditions: string[] = []

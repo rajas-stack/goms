@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { publicProcedure, protectedProcedure, router } from '../trpc.js'
+import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 
 function toFollowUp(row: any) {
@@ -10,7 +10,7 @@ function toFollowUp(row: any) {
 }
 
 export const followUpsRouter = router({
-  listForEntity: publicProcedure
+  listForEntity: protectedReadProcedure
     .input(z.object({ entityType: z.string(), entityId: z.string().uuid() }))
     .query(async ({ input }) => {
       const result = await pool.query(
@@ -19,7 +19,7 @@ export const followUpsRouter = router({
       )
       return result.rows.map(toFollowUp)
     }),
-  listOpen: publicProcedure.query(async () => {
+  listOpen: protectedReadProcedure.query(async () => {
     const result = await pool.query(`SELECT * FROM follow_ups WHERE status='open' ORDER BY due_date`)
     return result.rows.map(toFollowUp)
   }),

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, protectedProcedure, router } from '../trpc.js'
+import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
 import { buildOwnerMap, effectiveOwner, OWNABLE_ENTITY_MAP, type OwnershipContext } from '@goms/domain'
@@ -36,11 +36,11 @@ async function loadOwnershipContext(): Promise<{ assignments: any[]; ctx: Owners
 }
 
 export const ownershipRouter = router({
-  listAssignments: publicProcedure.query(async () => {
+  listAssignments: protectedReadProcedure.query(async () => {
     const result = await pool.query('SELECT * FROM ownership_assignments ORDER BY start_date DESC')
     return result.rows.map(toAssignment)
   }),
-  listFor: publicProcedure
+  listFor: protectedReadProcedure
     .input(z.object({ entityType: z.string(), entityId: z.string().uuid() }))
     .query(async ({ input }) => {
       const result = await pool.query(
@@ -49,7 +49,7 @@ export const ownershipRouter = router({
       )
       return result.rows.map(toAssignment)
     }),
-  listOwnedBy: publicProcedure
+  listOwnedBy: protectedReadProcedure
     .input(z.object({ salesPersonId: z.string().uuid(), asOf: z.string() }))
     .query(async ({ input }) => {
       const result = await pool.query(
@@ -59,13 +59,13 @@ export const ownershipRouter = router({
       )
       return result.rows.map(toAssignment)
     }),
-  resolveOwner: publicProcedure
+  resolveOwner: protectedReadProcedure
     .input(z.object({ entityType: z.string(), entityId: z.string().uuid(), asOf: z.string() }))
     .query(async ({ input }) => {
       const { assignments, ctx } = await loadOwnershipContext()
       return effectiveOwner(assignments, input.entityType, input.entityId, input.asOf, ctx)
     }),
-  resolveOwners: publicProcedure
+  resolveOwners: protectedReadProcedure
     .input(z.object({ entityType: z.string(), entityIds: z.array(z.string().uuid()), asOf: z.string() }))
     .query(async ({ input }) => {
       const { assignments, ctx } = await loadOwnershipContext()

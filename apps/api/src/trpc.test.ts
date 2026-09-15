@@ -1,17 +1,19 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { router, protectedProcedure, adminProcedure } from './trpc.js'
+import { router, protectedProcedure, protectedReadProcedure, adminProcedure } from './trpc.js'
 import { contextForEmail } from './testHelpers/authTestHelpers.js'
 
 const testRouter = router({
   ping: protectedProcedure.mutation(() => 'pong'),
   pingQuery: protectedProcedure.query(() => 'pong'),
   pingAdmin: adminProcedure.mutation(() => 'admin-pong'),
+  pingProtectedRead: protectedReadProcedure.query(() => 'read-pong'),
 })
 
 function clearEnv() {
   delete process.env.EMERGENCY_READ_ONLY
   delete process.env.AUTH_ENFORCEMENT_ENABLED
   delete process.env.ADMIN_ALLOWED_EMAILS
+  delete process.env.READ_AUTH_ENFORCEMENT_ENABLED
 }
 
 describe('protectedProcedure', () => {
@@ -57,6 +59,49 @@ describe('protectedProcedure', () => {
     process.env.EMERGENCY_READ_ONLY = 'true'
     const caller = testRouter.createCaller(contextForEmail('someone@amnex.com'))
     await expect(caller.ping()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+})
+
+describe('protectedReadProcedure', () => {
+  afterEach(clearEnv)
+
+  it('allows an unauthenticated read through when READ_AUTH_ENFORCEMENT_ENABLED is unset (deliberate no-op default)', async () => {
+    const caller = testRouter.createCaller({})
+    await expect(caller.pingProtectedRead()).resolves.toBe('read-pong')
+  })
+
+  it('still allows an unauthenticated read even when the unrelated AUTH_ENFORCEMENT_ENABLED (mutation) flag is on', async () => {
+    // The two flags are independent by design — sharing one would make
+    // converting a read to this procedure an immediate behavior change in
+    // goms-prod, where AUTH_ENFORCEMENT_ENABLED is already "true" today.
+    process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+    const caller = testRouter.createCaller({})
+    await expect(caller.pingProtectedRead()).resolves.toBe('read-pong')
+  })
+
+  it('is not blocked by EMERGENCY_READ_ONLY — reads keep working, same as protectedProcedure', async () => {
+    process.env.EMERGENCY_READ_ONLY = 'true'
+    process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+    const caller = testRouter.createCaller(contextForEmail('someone@amnex.com'))
+    await expect(caller.pingProtectedRead()).resolves.toBe('read-pong')
+  })
+
+  it('rejects an unauthenticated read once READ_AUTH_ENFORCEMENT_ENABLED is on', async () => {
+    process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+    const caller = testRouter.createCaller({})
+    await expect(caller.pingProtectedRead()).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+  })
+
+  it('rejects a verified non-Amnex Google account once READ_AUTH_ENFORCEMENT_ENABLED is on', async () => {
+    process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+    const caller = testRouter.createCaller(contextForEmail('someone@gmail.com'))
+    await expect(caller.pingProtectedRead()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+
+  it('allows a verified @amnex.com account once READ_AUTH_ENFORCEMENT_ENABLED is on', async () => {
+    process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+    const caller = testRouter.createCaller(contextForEmail('someone@amnex.com'))
+    await expect(caller.pingProtectedRead()).resolves.toBe('read-pong')
   })
 })
 

@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { appRouter } from '../index.js'
 import { pool } from '../db.js'
+import { contextForEmail } from '../testHelpers/authTestHelpers.js'
 
 describe('commercial.boq + commercial.auditLogs routers', () => {
   beforeEach(async () => {
@@ -476,5 +477,67 @@ describe('commercial.boq + commercial.auditLogs routers', () => {
     await makeBoq(caller, dept, salesPerson, { verticalId: masters.vertical.id, currency: currency2.code })
     await expect(caller.commercial.masters.delete({ key: 'currencies', id: currency2.id }))
       .rejects.toThrow(/still referenced by at least one boq/i)
+  })
+
+  describe('boq read protection (READ_AUTH_ENFORCEMENT_ENABLED)', () => {
+    afterEach(() => {
+      delete process.env.READ_AUTH_ENFORCEMENT_ENABLED
+    })
+
+    it('still allows an unauthenticated read when the flag is unset (deliberate no-op default)', async () => {
+      const caller = appRouter.createCaller({})
+      await expect(caller.commercial.boq.list()).resolves.toBeDefined()
+    })
+
+    it('rejects an unauthenticated read once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.commercial.boq.list()).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    })
+
+    it('rejects a non-Amnex identity once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@gmail.com'))
+      await expect(caller.commercial.boq.list()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+
+    it('allows a verified @amnex.com identity once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+      await expect(caller.commercial.boq.list()).resolves.toBeDefined()
+    })
+  })
+
+  describe('auditLogs read protection (READ_AUTH_ENFORCEMENT_ENABLED)', () => {
+    afterEach(() => {
+      delete process.env.READ_AUTH_ENFORCEMENT_ENABLED
+    })
+
+    // auditLogs is a follow-up to the initial read-protection rollout — it
+    // re-exposes the same SKU cost/price and BOQ customer/pricing values as
+    // plaintext oldValue/newValue history (writeAuditLog's call sites
+    // above), so it's held to the same protection as commercial.skus/boq.
+    it('still allows an unauthenticated read when the flag is unset (deliberate no-op default)', async () => {
+      const caller = appRouter.createCaller({})
+      await expect(caller.commercial.auditLogs.list()).resolves.toBeDefined()
+    })
+
+    it('rejects an unauthenticated read once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.commercial.auditLogs.list()).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    })
+
+    it('rejects a non-Amnex identity once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@gmail.com'))
+      await expect(caller.commercial.auditLogs.list()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+
+    it('allows a verified @amnex.com identity once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+      await expect(caller.commercial.auditLogs.list()).resolves.toBeDefined()
+    })
   })
 })

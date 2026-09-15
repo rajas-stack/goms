@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { publicProcedure, router } from '../trpc.js'
+import { protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { performSearch, performRelatedRecords, type HierNode, type SearchData, type SearchResult } from '@goms/domain'
 
@@ -59,13 +59,13 @@ const searchResultSchema = z.object({
 }) satisfies z.ZodType<SearchResult>
 
 export const searchRouter = router({
-  search: publicProcedure
+  search: protectedReadProcedure
     .input(z.object({ query: z.string(), stateCode: z.number().optional() }))
     .query(async ({ input }) => performSearch(input.query, input.stateCode, await loadSearchData())),
-  relatedRecords: publicProcedure
+  relatedRecords: protectedReadProcedure
     .input(searchResultSchema)
     .query(async ({ input }) => performRelatedRecords(input, await loadSearchData())),
-  relationshipAnalytics: publicProcedure.query(async () => {
+  relationshipAnalytics: protectedReadProcedure.query(async () => {
     const today = new Date().toISOString().slice(0, 10)
     const activeResult = await pool.query(`SELECT * FROM employees WHERE status='active'`)
     const active = activeResult.rows

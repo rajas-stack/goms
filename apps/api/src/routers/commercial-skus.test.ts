@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { appRouter } from '../index.js'
 import { pool } from '../db.js'
+import { contextForEmail } from '../testHelpers/authTestHelpers.js'
 
 describe('commercial.skus + commercial.bom routers', () => {
   beforeEach(async () => {
@@ -302,6 +303,35 @@ describe('commercial.skus + commercial.bom routers', () => {
       await expect(caller.commercial.bom.update({ id: '00000000-0000-0000-0000-000000000000', patch: { mandatory: true } }))
         .rejects.toThrow(/no such bom item/i)
       await expect(caller.commercial.bom.delete({ id: '00000000-0000-0000-0000-000000000000' })).resolves.toBeUndefined()
+    })
+  })
+
+  describe('skus read protection (READ_AUTH_ENFORCEMENT_ENABLED)', () => {
+    afterEach(() => {
+      delete process.env.READ_AUTH_ENFORCEMENT_ENABLED
+    })
+
+    it('still allows an unauthenticated read when the flag is unset (deliberate no-op default)', async () => {
+      const caller = appRouter.createCaller({})
+      await expect(caller.commercial.skus.list()).resolves.toBeDefined()
+    })
+
+    it('rejects an unauthenticated read once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.commercial.skus.list()).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    })
+
+    it('rejects a non-Amnex identity once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@gmail.com'))
+      await expect(caller.commercial.skus.list()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+
+    it('allows a verified @amnex.com identity once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+      await expect(caller.commercial.skus.list()).resolves.toBeDefined()
     })
   })
 })

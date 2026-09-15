@@ -58,6 +58,36 @@ export const protectedProcedure = publicProcedure
     return next({ ctx: { ...ctx, user } })
   })
 
+function readAuthEnforced(): boolean {
+  return process.env.READ_AUTH_ENFORCEMENT_ENABLED === 'true'
+}
+
+/** Staged read-protection boundary (2026-09-15 public-read security audit,
+ *  finding: every query in every business router was `publicProcedure`).
+ *  Reuses the exact same authorization check as protectedProcedure —
+ *  verifyFirebaseToken + isAmnexAccount, no new rule — but behind its own
+ *  independent flag rather than AUTH_ENFORCEMENT_ENABLED. That flag is
+ *  already "true" in goms-prod today (for mutations), so a read wired
+ *  through protectedProcedure itself would start enforcing the moment this
+ *  code deploys, with no separate opportunity to stage/verify on goms-dev
+ *  first. READ_AUTH_ENFORCEMENT_ENABLED defaults unset/false, so every read
+ *  converted to this procedure keeps behaving exactly like publicProcedure
+ *  — a deliberate no-op — until this flag is explicitly turned on,
+ *  per-environment, same rollout discipline AUTH_ENFORCEMENT_ENABLED itself
+ *  used. No EMERGENCY_READ_ONLY check here: that kill switch is mutation-only
+ *  by design (decision doc §5, "reads keep working") and stays that way
+ *  regardless of which procedure tier a read is on. */
+export const protectedReadProcedure = publicProcedure.use(async ({ ctx, next }) => {
+  if (!readAuthEnforced()) {
+    return next({ ctx })
+  }
+  const user = await verifyFirebaseToken(ctx.authHeader)
+  if (!isAmnexAccount(user.email)) {
+    throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
+  }
+  return next({ ctx: { ...ctx, user } })
+})
+
 /** Explicit admin allow-list (decision doc §3), generalized from the Admin
  *  Data Import pattern rather than copy-pasted: ADMIN_ALLOWED_EMAILS is a
  *  separate roster from ADMIN_IMPORT_ALLOWED_EMAILS, so granting one admin

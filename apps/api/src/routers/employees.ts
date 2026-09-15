@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, protectedProcedure, router } from '../trpc.js'
+import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { subtreeIds } from './hierarchy.js'
 import { MERGEABLE_FIELDS, type MergeableField } from '@goms/domain'
@@ -141,11 +141,11 @@ const timelineEventColumnFor: Record<string, string> = {
 const timelineJsonColumns = new Set(['attendees'])
 
 const timelineRouter = router({
-  listForEmployee: publicProcedure.input(z.object({ employeeId: z.string().uuid() })).query(async ({ input }) => {
+  listForEmployee: protectedReadProcedure.input(z.object({ employeeId: z.string().uuid() })).query(async ({ input }) => {
     const result = await pool.query(`SELECT * FROM timeline_events WHERE employee_id=$1 ORDER BY date DESC, id DESC`, [input.employeeId])
     return result.rows.map(toTimelineEvent)
   }),
-  listAll: publicProcedure
+  listAll: protectedReadProcedure
     .input(z.object({ types: z.array(timelineEventTypeSchema).optional() }).optional())
     .query(async ({ input }) => {
       const types = input?.types
@@ -201,7 +201,7 @@ const timelineRouter = router({
 })
 
 const transfersRouter = router({
-  listForEmployee: publicProcedure.input(z.object({ employeeId: z.string().uuid() })).query(async ({ input }) => {
+  listForEmployee: protectedReadProcedure.input(z.object({ employeeId: z.string().uuid() })).query(async ({ input }) => {
     const result = await pool.query(`SELECT * FROM transfers WHERE employee_id=$1 ORDER BY effective_date DESC`, [input.employeeId])
     return result.rows.map(toTransfer)
   }),
@@ -258,16 +258,16 @@ const transfersRouter = router({
 })
 
 export const employeesRouter = router({
-  listUnder: publicProcedure.input(z.object({ orgNodeId: z.string().uuid() })).query(async ({ input }) => {
+  listUnder: protectedReadProcedure.input(z.object({ orgNodeId: z.string().uuid() })).query(async ({ input }) => {
     const ids = await subtreeIds(input.orgNodeId)
     const result = await pool.query(`SELECT * FROM employees WHERE org_node_id = ANY($1) AND status='active' ORDER BY name`, [ids])
     return attachCharges(result.rows)
   }),
-  listDirect: publicProcedure.input(z.object({ orgNodeId: z.string().uuid() })).query(async ({ input }) => {
+  listDirect: protectedReadProcedure.input(z.object({ orgNodeId: z.string().uuid() })).query(async ({ input }) => {
     const result = await pool.query(`SELECT * FROM employees WHERE org_node_id=$1 AND status='active' ORDER BY name`, [input.orgNodeId])
     return attachCharges(result.rows)
   }),
-  listByState: publicProcedure.input(z.object({ stateCode: z.number() })).query(async ({ input }) => {
+  listByState: protectedReadProcedure.input(z.object({ stateCode: z.number() })).query(async ({ input }) => {
     const result = await pool.query(
       `SELECT e.* FROM employees e JOIN hierarchy_nodes n ON n.id = e.org_node_id
        WHERE n.domain='org' AND n.state_code=$1 AND e.status='active' ORDER BY e.name`,
@@ -275,8 +275,8 @@ export const employeesRouter = router({
     )
     return attachCharges(result.rows)
   }),
-  listAll: publicProcedure.query(async () => attachCharges((await pool.query(`SELECT * FROM employees WHERE status='active' ORDER BY name`)).rows)),
-  listDepartments: publicProcedure.query(async () => {
+  listAll: protectedReadProcedure.query(async () => attachCharges((await pool.query(`SELECT * FROM employees WHERE status='active' ORDER BY name`)).rows)),
+  listDepartments: protectedReadProcedure.query(async () => {
     const result = await pool.query(
       `WITH RECURSIVE chain AS (
          SELECT id AS start_id, id, parent_id, type_key, name FROM hierarchy_nodes
@@ -293,11 +293,11 @@ export const employeesRouter = router({
     for (const row of result.rows) out[row.employee_id] = { id: row.dept_id, name: row.dept_name }
     return out
   }),
-  get: publicProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => oneEmployee(input.id)),
-  directReports: publicProcedure.input(z.object({ employeeId: z.string().uuid() })).query(async ({ input }) =>
+  get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => oneEmployee(input.id)),
+  directReports: protectedReadProcedure.input(z.object({ employeeId: z.string().uuid() })).query(async ({ input }) =>
     attachCharges((await pool.query(`SELECT * FROM employees WHERE manager_id=$1 AND status='active'`, [input.employeeId])).rows)
   ),
-  reportingChain: publicProcedure.input(z.object({ employeeId: z.string().uuid() })).query(async ({ input }) => {
+  reportingChain: protectedReadProcedure.input(z.object({ employeeId: z.string().uuid() })).query(async ({ input }) => {
     const chain: any[] = []
     let cur = (await pool.query('SELECT * FROM employees WHERE id=$1', [input.employeeId])).rows[0]
     while (cur?.manager_id) {
@@ -551,7 +551,7 @@ export const employeesRouter = router({
         client.release()
       }
     }),
-  listMergeAudit: publicProcedure.query(async () => {
+  listMergeAudit: protectedReadProcedure.query(async () => {
     const result = await pool.query('SELECT * FROM employee_merge_audit ORDER BY merged_at DESC')
     return result.rows.map((row) => ({
       id: row.id, survivorId: row.survivor_id, survivorName: row.survivor_name,

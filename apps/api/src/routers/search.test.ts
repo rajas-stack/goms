@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { appRouter } from '../index.js'
 import { pool } from '../db.js'
+import { contextForEmail } from '../testHelpers/authTestHelpers.js'
 
 describe('search router', () => {
   let stateId: string
@@ -177,5 +178,34 @@ describe('search router', () => {
     expect(stats.transfers).toBe(1)
     expect(stats.highPriority).toBe(1)
     expect(stats.total).toBe(3) // managerId, empId, transferredId (vacant excluded from "people")
+  })
+
+  describe('read protection (READ_AUTH_ENFORCEMENT_ENABLED)', () => {
+    afterEach(() => {
+      delete process.env.READ_AUTH_ENFORCEMENT_ENABLED
+    })
+
+    it('still allows an unauthenticated search when the flag is unset (deliberate no-op default)', async () => {
+      const caller = appRouter.createCaller({})
+      await expect(caller.search.search({ query: 'a' })).resolves.toBeDefined()
+    })
+
+    it('rejects an unauthenticated search once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller({})
+      await expect(caller.search.search({ query: 'a' })).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    })
+
+    it('rejects a non-Amnex identity once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@gmail.com'))
+      await expect(caller.search.search({ query: 'a' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    })
+
+    it('allows a verified @amnex.com identity once the flag is on', async () => {
+      process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true'
+      const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
+      await expect(caller.search.search({ query: 'a' })).resolves.toBeDefined()
+    })
   })
 })

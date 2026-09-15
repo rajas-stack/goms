@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, protectedProcedure, router } from '../trpc.js'
+import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 
 // Maps the DB row (snake_case, TIMESTAMPTZ) onto the frontend's `Customer`
@@ -33,10 +33,10 @@ const patchShape = {
 }
 
 export const customersRouter = router({
-  list: publicProcedure.query(() =>
+  list: protectedReadProcedure.query(() =>
     pool.query('SELECT * FROM customers ORDER BY name').then((r) => r.rows.map(toCustomer))
   ),
-  get: publicProcedure
+  get: protectedReadProcedure
     .input(z.object({ id: z.string().uuid() }))
     .query(async ({ input }) => {
       const result = await pool.query('SELECT * FROM customers WHERE id=$1', [input.id])

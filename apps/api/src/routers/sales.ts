@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, protectedProcedure, router } from '../trpc.js'
+import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isForeignKeyViolation } from '../db-errors.js'
 import { tierRank } from '@goms/domain'
@@ -43,16 +43,16 @@ async function onePerson(id: string) {
 }
 
 export const salesRouter = router({
-  listPersons: publicProcedure.query(async () => {
+  listPersons: protectedReadProcedure.query(async () => {
     const result = await pool.query('SELECT * FROM sales_persons ORDER BY name')
     return result.rows.map(toSalesPerson)
   }),
-  getPerson: publicProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => onePerson(input.id)),
-  listPostings: publicProcedure.input(z.object({ salesPersonId: z.string().uuid() })).query(async ({ input }) => {
+  getPerson: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => onePerson(input.id)),
+  listPostings: protectedReadProcedure.input(z.object({ salesPersonId: z.string().uuid() })).query(async ({ input }) => {
     const result = await pool.query('SELECT * FROM sales_postings WHERE sales_person_id=$1 ORDER BY start_date DESC', [input.salesPersonId])
     return result.rows.map(toSalesPosting)
   }),
-  currentPostings: publicProcedure.query(async () => {
+  currentPostings: protectedReadProcedure.query(async () => {
     const result = await pool.query('SELECT * FROM sales_postings WHERE end_date IS NULL')
     const out: Record<string, any> = {}
     for (const row of result.rows) out[row.sales_person_id] = toSalesPosting(row)
