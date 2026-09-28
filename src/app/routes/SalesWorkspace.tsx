@@ -16,6 +16,7 @@ import { useSalesEditLock } from '@/features/sales/salesEditLock'
 import { SalesEditLockToggle } from '@/features/sales/SalesEditLockToggle'
 import { OwnerBadge } from '@/features/sales/OwnerBadge'
 import { SalesPersonFormDialog } from '@/features/sales/SalesPersonFormDialog'
+import { SalesOrgChartCanvas } from '@/features/sales/SalesOrgChartCanvas'
 import { Button } from '@/components/ui/Button'
 import { tierLabel, tierRank } from '@/data/sales-tiers'
 import { PIPELINE_STAGE_MAP } from '@/data/pipeline-stages'
@@ -371,94 +372,6 @@ export function Ownership() {
   )
 }
 
-/** Manager → direct reports, as a simple indented tree — not the heavyweight
- *  HierarchyCanvas (659 lines fused to Employee/HierNode/stateCode), which
- *  the spec explicitly warns against forking for this. ~40 people doesn't
- *  need drag-to-reparent or pan/zoom for a demo; that machinery is real
- *  Phase 2 scope. */
-export function OrgChartNode({ person, childrenOf, postings, depth, ws }: {
-  person: SalesPerson
-  childrenOf: Map<string, SalesPerson[]>
-  postings: Record<string, SalesPosting>
-  depth: number
-  ws: ReturnType<typeof useWorkspace>
-}) {
-  const kids = childrenOf.get(person.id) ?? []
-  const posting = postings[person.id]
-  const selected = ws.selection?.kind === 'salesPerson' && ws.selection.id === person.id
-
-  return (
-    <div style={{ marginLeft: depth > 0 ? 20 : 0 }}>
-      <button
-        onClick={() => ws.select('salesPerson', person.id)}
-        data-testid={`org-chart-node-${person.id}`}
-        className={cn(
-          'flex w-full items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left',
-          selected ? 'border-ink-900/20 bg-ink-900/[0.04]' : 'border-line bg-white hover:bg-panel',
-        )}
-      >
-        <Avatar person={{ name: person.name, photoUrl: undefined }} size="sm" />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-medium text-ink-900">{person.name}</div>
-          <div className="truncate text-[11px] text-muted">{posting?.designation || '—'}</div>
-        </div>
-        <span className={cn('hidden shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium sm:inline', STATUS_STYLE[person.status])}>
-          {STATUS_LABEL[person.status] ?? person.status}
-        </span>
-        {kids.length > 0 && (
-          <span
-            className="shrink-0 rounded-full bg-panel px-1.5 py-0.5 text-[10px] text-ink-600"
-            title={`${kids.length} direct report${kids.length === 1 ? '' : 's'}`}
-          >
-            {kids.length}
-          </span>
-        )}
-      </button>
-      {kids.length > 0 && (
-        <div className="mt-1.5 flex flex-col gap-1.5 border-l border-line pl-2.5">
-          {kids.map((k) => (
-            <OrgChartNode key={k.id} person={k} childrenOf={childrenOf} postings={postings} depth={depth + 1} ws={ws} />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function OrgChart() {
-  const ws = useWorkspace()
-  const { data: people = [] } = useSalesPersons()
-  const { data: postings = {} } = useCurrentPostings()
-
-  const { roots, childrenOf } = useMemo(() => {
-    const map = new Map<string, SalesPerson[]>()
-    const rootList: SalesPerson[] = []
-    for (const p of people) {
-      const managerId = postings[p.id]?.managerId ?? null
-      if (managerId && people.some((m) => m.id === managerId)) {
-        map.set(managerId, [...(map.get(managerId) ?? []), p])
-      } else {
-        rootList.push(p)
-      }
-    }
-    for (const [, kids] of map) kids.sort((a, b) => a.name.localeCompare(b.name))
-    rootList.sort((a, b) => a.name.localeCompare(b.name))
-    return { roots: rootList, childrenOf: map }
-  }, [people, postings])
-
-  if (people.length === 0) {
-    return <EmptyState icon="Network" message="No sales people yet — add your first one from the Roster tab." />
-  }
-
-  return (
-    <div className="flex h-full flex-col gap-1.5 overflow-y-auto p-3" data-testid="org-chart">
-      {roots.map((p) => (
-        <OrgChartNode key={p.id} person={p} childrenOf={childrenOf} postings={postings} depth={0} ws={ws} />
-      ))}
-    </div>
-  )
-}
-
 function SalesWorkspaceBody() {
   const { section } = useParams()
   const active = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0]
@@ -491,7 +404,7 @@ function SalesWorkspaceBody() {
 
       <div className="flex min-h-0 flex-1">
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-0 min-w-0 flex-1 overflow-hidden">
-          {active.key === 'roster' ? <Roster /> : active.key === 'orgchart' ? <OrgChart /> : <Ownership />}
+          {active.key === 'roster' ? <Roster /> : active.key === 'orgchart' ? <SalesOrgChartCanvas /> : <Ownership />}
         </motion.div>
         <aside className="hidden w-[380px] shrink-0 border-l border-line lg:block">
           <DetailsPanel />

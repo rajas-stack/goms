@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import * as api from '@/lib/api'
-import { Ownership, OrgChartNode, RosterRow } from './SalesWorkspace'
+import { Ownership, RosterRow } from './SalesWorkspace'
 import type { SalesPerson, SalesPosting } from '@/lib/types'
 
 // Task 9.3: Sales Team views standardize on the shared Avatar component,
@@ -42,28 +42,7 @@ describe('RosterRow avatar (Task 9.3)', () => {
   })
 })
 
-describe('OrgChartNode avatar (Task 9.3)', () => {
-  const baseProps = {
-    childrenOf: new Map<string, SalesPerson[]>(),
-    postings: {},
-    depth: 0,
-    ws: { selection: null, select: vi.fn() } as unknown as Parameters<typeof OrgChartNode>[0]['ws'],
-  }
-
-  it('renders the shared Avatar initials fallback, not an ad-hoc initials div', () => {
-    render(<OrgChartNode person={ALICE} {...baseProps} />)
-    const avatar = screen.getByTestId('avatar')
-    expect(avatar).toHaveTextContent('AA')
-    expect(avatar).toHaveClass('rounded-full')
-  })
-
-  it('never renders an <img> for a SalesPerson (no photoUrl field exists)', () => {
-    render(<OrgChartNode person={ALICE} {...baseProps} />)
-    expect(screen.queryByRole('img')).not.toBeInTheDocument()
-  })
-})
-
-// Ownership calls useWorkspace() itself (unlike RosterRow/OrgChartNode, which
+// Ownership calls useWorkspace() itself (unlike RosterRow, which
 // receive `ws` as a prop), so it needs the module mocked — mirrors the
 // approach in WorksEditor.test.tsx.
 vi.mock('@/features/workspace/context', () => ({
