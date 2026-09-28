@@ -7,7 +7,7 @@ import type { SalesPerson, SalesPosting } from '@/lib/types'
 const ALICE: SalesPerson = {
   id: 'sp-alice', employeeCode: 'E1', name: 'Alice Anderson', officialEmail: 'alice@amnex.com',
   personalEmail: '', mobile: '', altMobile: '', joinedOn: null, leftOn: null,
-  status: 'active', notes: '', metadata: {}, createdAt: '', createdBy: null,
+  status: 'active', photoUrl: null, notes: '', metadata: {}, createdAt: '', createdBy: null,
 }
 const POSTING: SalesPosting = {
   id: 'post-1', salesPersonId: 'sp-alice', designation: 'Regional Manager', tierKey: 'rm',
@@ -32,6 +32,12 @@ describe('SalesOrgChartCard', () => {
     const avatar = screen.getByTestId('avatar')
     expect(avatar).toHaveTextContent('AA')
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('renders the photo as an image when photoUrl is set', () => {
+    const withPhoto = { ...ALICE, photoUrl: 'data:image/png;base64,AAA=' }
+    render(<SalesOrgChartCard {...baseProps({ person: withPhoto })} />)
+    expect(screen.getByRole('img')).toHaveAttribute('src', 'data:image/png;base64,AAA=')
   })
 
   it('calls onSelect when clicked', async () => {

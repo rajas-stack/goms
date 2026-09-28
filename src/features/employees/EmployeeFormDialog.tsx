@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { PhoneInput, isValidPhone } from '@/components/ui/PhoneInput'
 import { Icon } from '@/components/ui/Icon'
+import { PhotoUploadField } from '@/components/ui/PhotoUploadField'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
 import { useFormDraft } from '@/lib/useFormDraft'
@@ -84,7 +85,6 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
   // practice) or the trail hasn't loaded yet.
   const { data: postingNodeTrail = [] } = useBreadcrumb(postingNode?.id ?? null)
   const resolvedDepartment = postingNode ? resolveDepartment(postingNode, postingNodeTrail) : null
-  const photoRef = useRef<HTMLInputElement>(null)
 
   const [form, setForm] = useState(EMPTY)
   // Staged only for the create flow — packaged into a VisitingCardItem on
@@ -165,30 +165,6 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
     : (form.vacant ? !!form.designation.trim() : !!form.name.trim() && !!form.designation.trim() && emailValid && phoneValid)
   const wasVacant = !!employee?.vacant
   const fillingVacancy = wasVacant && !form.vacant
-
-  function readImageFileAsDataUrl(file: File, cb: (dataUrl: string) => void) {
-    const reader = new FileReader()
-    reader.onload = () => cb(String(reader.result))
-    reader.readAsDataURL(file)
-  }
-
-  function onPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    readImageFileAsDataUrl(file, (dataUrl) => setForm((f) => ({ ...f, photoUrl: dataUrl })))
-  }
-
-  function onPhotoPaste(e: React.ClipboardEvent<HTMLDivElement>) {
-    const items = e.clipboardData?.items
-    if (!items) return
-    for (const item of items) {
-      if (item.type.startsWith('image/')) {
-        const file = item.getAsFile()
-        if (file) readImageFileAsDataUrl(file, (dataUrl) => setForm((f) => ({ ...f, photoUrl: dataUrl })))
-        return
-      }
-    }
-  }
 
   function onCardFile(e: React.ChangeEvent<HTMLInputElement>, side: 'front' | 'back') {
     const file = e.target.files?.[0]
@@ -438,31 +414,10 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
         )}
 
         {!reporteeMode && !form.vacant && (
-          <Field label="Profile Picture" hint="Upload, or click here and press Ctrl+V to paste an image.">
-            <div className="flex items-center gap-3" tabIndex={0} onPaste={onPhotoPaste} data-testid="profile-photo-dropzone">
-              {form.photoUrl ? (
-                <span className="relative">
-                  <img src={form.photoUrl} alt="" className="h-14 w-14 rounded-xl object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, photoUrl: null }))}
-                    aria-label="Remove profile picture"
-                    className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-white text-muted shadow-sm hover:text-crimson"
-                  >
-                    <Icon name="X" size={11} />
-                  </button>
-                </span>
-              ) : (
-                <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-panel text-muted">
-                  <Icon name="User" size={18} />
-                </span>
-              )}
-              <Button size="sm" onClick={() => photoRef.current?.click()}>
-                <Icon name="Upload" size={13} /> Upload
-              </Button>
-              <input ref={photoRef} type="file" accept="image/*" onChange={onPhotoFile} className="hidden" />
-            </div>
-          </Field>
+          <PhotoUploadField
+            photoUrl={form.photoUrl}
+            onChange={(photoUrl) => setForm((f) => ({ ...f, photoUrl }))}
+          />
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

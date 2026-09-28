@@ -26,7 +26,7 @@ vi.mock('./ManagerPicker', () => ({
 const ALICE: SalesPerson = {
   id: 'sp-alice', employeeCode: 'E1', name: 'Alice', officialEmail: 'alice@amnex.com',
   personalEmail: '', mobile: '', altMobile: '', joinedOn: null, leftOn: null,
-  status: 'active', notes: '', metadata: {}, createdAt: '', createdBy: null,
+  status: 'active', photoUrl: null, notes: '', metadata: {}, createdAt: '', createdBy: null,
 }
 const BOB: SalesPerson = { ...ALICE, id: 'sp-bob', name: 'Bob', officialEmail: 'bob@amnex.com' }
 

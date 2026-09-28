@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import * as api from '@/lib/api'
 import { DepartmentSection } from './DepartmentSection'
-import type { Employee, HierNode, TimelineEvent } from '@/lib/types'
+import type { Employee, HierNode, SalesPerson, TimelineEvent } from '@/lib/types'
 
 // This suite is scoped to Task 8.5's new "Meetings" section — every other
 // piece of DepartmentSection (head, sales ownership, Works pipeline) is
@@ -27,6 +27,15 @@ function makeEmployee(overrides: Partial<Employee> = {}): Employee {
     relationshipStatus: 'new', relationshipQuality: 'neutral', relationshipType: '', introducedBy: '',
     importantContact: false, preferredComm: [], lastInteractionAt: null, followUpDate: null, notes: '',
     charges: [], visitingCards: [], metadata: {}, status: 'active',
+    ...overrides,
+  }
+}
+
+function makeSalesPerson(overrides: Partial<SalesPerson> = {}): SalesPerson {
+  return {
+    id: 'sp-1', employeeCode: '', name: 'Sales Person', officialEmail: 'sales@amnex.com',
+    personalEmail: '', mobile: '', altMobile: '', joinedOn: null, leftOn: null,
+    status: 'active', photoUrl: null, notes: '', metadata: {}, createdAt: '', createdBy: null,
     ...overrides,
   }
 }
@@ -171,5 +180,40 @@ describe('DepartmentSection — department head avatar (Task 9.2)', () => {
     expect(screen.getByText('Head Person')).toBeInTheDocument()
     expect(screen.getAllByTestId('avatar').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+})
+
+// The "AMNEX sales ownership" row (geo/RM/GM chain resolved from
+// node.metadata.salesGeo) looked up its Avatar's photo from the wrong
+// place — hardcoded `photoUrl: undefined` instead of the resolved
+// SalesPerson's own `photoUrl` — while every sibling ownership surface
+// (OwnerBadge, OwnershipBlock, SalesOrgChartCard) already sourced it
+// correctly. This guards that one row specifically.
+describe('DepartmentSection — AMNEX sales ownership avatar', () => {
+  it('renders the resolved owner\'s photo when their SalesPerson record has one', () => {
+    const node = makeNode({ id: 'dept-1', metadata: { salesGeo: 'geo@amnex.com' } })
+    const geoOwner = makeSalesPerson({
+      id: 'sp-geo', name: 'Geo Owner', officialEmail: 'geo@amnex.com',
+      photoUrl: 'data:image/png;base64,AAA=',
+    })
+    stubHooks({})
+    vi.spyOn(api, 'useSalesPersons').mockReturnValue({ data: [geoOwner] } as unknown as ReturnType<typeof api.useSalesPersons>)
+
+    render(<DepartmentSection node={node} employees={[]} />)
+
+    expect(screen.getByText('AMNEX sales ownership')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Geo Owner' })).toHaveAttribute('src', 'data:image/png;base64,AAA=')
+  })
+
+  it('falls back to initials when the resolved owner has no photo', () => {
+    const node = makeNode({ id: 'dept-1', metadata: { salesGeo: 'geo@amnex.com' } })
+    const geoOwner = makeSalesPerson({ id: 'sp-geo', name: 'Geo Owner', officialEmail: 'geo@amnex.com', photoUrl: null })
+    stubHooks({})
+    vi.spyOn(api, 'useSalesPersons').mockReturnValue({ data: [geoOwner] } as unknown as ReturnType<typeof api.useSalesPersons>)
+
+    render(<DepartmentSection node={node} employees={[]} />)
+
+    expect(screen.getByText('AMNEX sales ownership')).toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'Geo Owner' })).not.toBeInTheDocument()
   })
 })

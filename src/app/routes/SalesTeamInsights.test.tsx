@@ -7,7 +7,7 @@ import type { SalesPerson } from '@/lib/types'
 const ALICE: SalesPerson = {
   id: 'a', employeeCode: 'E1', name: 'Alice', officialEmail: 'a@amnex.com', personalEmail: '',
   mobile: '', altMobile: '', joinedOn: null, leftOn: null, status: 'active',
-  notes: '', metadata: {}, createdAt: '', createdBy: null,
+  photoUrl: null, notes: '', metadata: {}, createdAt: '', createdBy: null,
 }
 
 function stub(people: SalesPerson[]) {

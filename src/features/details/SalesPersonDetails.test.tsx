@@ -5,9 +5,8 @@ import { SalesPersonDetails } from './SalesPersonDetails'
 import type { SalesPerson, SalesPosting } from '@/lib/types'
 
 // Task 9.3: the header here is the fourth (and last) Sales Team call site
-// standardizing on the shared Avatar component, initials-only (Decision #5
-// — SalesPerson has no photoUrl field). Sibling call sites (RosterRow, the
-// Ownership "Owned by" chip, OrgChartNode) are covered in
+// standardizing on the shared Avatar component. Sibling call sites
+// (RosterRow, the Ownership "Owned by" chip, OrgChartNode) are covered in
 // src/app/routes/SalesWorkspace.test.tsx.
 
 // None of these dialogs are under test here (this suite is about the header
@@ -30,7 +29,7 @@ vi.mock('@/features/sales/salesEditLock', () => ({
 const ALICE: SalesPerson = {
   id: 'sp-alice', employeeCode: 'E1', name: 'Alice Anderson', officialEmail: 'alice@amnex.com',
   personalEmail: '', mobile: '', altMobile: '', joinedOn: null, leftOn: null,
-  status: 'active', notes: '', metadata: {}, createdAt: '', createdBy: null,
+  status: 'active', photoUrl: null, notes: '', metadata: {}, createdAt: '', createdBy: null,
 }
 
 function stubApiHooks(opts: { postings?: SalesPosting[]; people?: SalesPerson[]; currentPostings?: Record<string, SalesPosting> } = {}) {
@@ -57,10 +56,19 @@ describe('SalesPersonDetails header avatar (Task 9.3)', () => {
     expect(avatar).toHaveClass('rounded-full')
   })
 
-  it('never renders an <img> for a SalesPerson (no photoUrl field exists)', () => {
+  it('falls back to initials when photoUrl is unset', () => {
     stubApiHooks()
     render(<SalesPersonDetails salesPersonId="sp-alice" />)
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('renders the photo as an image when photoUrl is set', () => {
+    stubApiHooks({ people: [{ ...ALICE, photoUrl: 'data:image/png;base64,AAA=' }] })
+    vi.spyOn(api, 'useSalesPerson').mockReturnValue({
+      data: { ...ALICE, photoUrl: 'data:image/png;base64,AAA=' },
+    } as unknown as ReturnType<typeof api.useSalesPerson>)
+    render(<SalesPersonDetails salesPersonId="sp-alice" />)
+    expect(screen.getByRole('img')).toHaveAttribute('src', 'data:image/png;base64,AAA=')
   })
 })
 

@@ -9,7 +9,7 @@ function toSalesPerson(row: any) {
   return {
     id: row.id, employeeCode: row.employee_code, name: row.name, officialEmail: row.official_email,
     personalEmail: row.personal_email, mobile: row.mobile, altMobile: row.alt_mobile,
-    joinedOn: row.joined_on, leftOn: row.left_on, status: row.status, notes: row.notes,
+    joinedOn: row.joined_on, leftOn: row.left_on, status: row.status, photoUrl: row.photo_url, notes: row.notes,
     metadata: row.metadata, createdAt: row.created_at.toISOString(), createdBy: null,
   }
 }
@@ -28,12 +28,13 @@ const personPatchShape = {
   employeeCode: z.string().optional(), name: z.string().min(1).optional(), officialEmail: z.string().optional(),
   personalEmail: z.string().optional(), mobile: z.string().optional(), altMobile: z.string().optional(),
   joinedOn: z.string().nullable().optional(), leftOn: z.string().nullable().optional(),
-  status: statusSchema.optional(), notes: z.string().optional(), metadata: z.record(z.string()).optional(),
+  status: statusSchema.optional(), photoUrl: z.string().nullable().optional(),
+  notes: z.string().optional(), metadata: z.record(z.string()).optional(),
 }
 const personColumnFor: Record<string, string> = {
   employeeCode: 'employee_code', name: 'name', officialEmail: 'official_email', personalEmail: 'personal_email',
   mobile: 'mobile', altMobile: 'alt_mobile', joinedOn: 'joined_on', leftOn: 'left_on',
-  status: 'status', notes: 'notes', metadata: 'metadata',
+  status: 'status', photoUrl: 'photo_url', notes: 'notes', metadata: 'metadata',
 }
 const personJsonColumns = new Set(['metadata'])
 
@@ -62,6 +63,7 @@ export const salesRouter = router({
     .input(z.object({
       name: z.string().min(1), officialEmail: z.string().min(1), personalEmail: z.string().optional(),
       mobile: z.string().optional(), altMobile: z.string().optional(), notes: z.string().optional(),
+      photoUrl: z.string().nullable().optional(),
       designation: z.string().min(1), tierKey: z.string().min(1), managerId: z.string().uuid().nullable().optional(),
     }))
     .mutation(async ({ input }) => {
@@ -71,9 +73,9 @@ export const salesRouter = router({
       try {
         await client.query('BEGIN')
         const personResult = await client.query(
-          `INSERT INTO sales_persons (name, official_email, personal_email, mobile, alt_mobile, notes)
-           VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-          [input.name, input.officialEmail, input.personalEmail ?? '', input.mobile ?? '', input.altMobile ?? '', input.notes ?? ''],
+          `INSERT INTO sales_persons (name, official_email, personal_email, mobile, alt_mobile, photo_url, notes)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+          [input.name, input.officialEmail, input.personalEmail ?? '', input.mobile ?? '', input.altMobile ?? '', input.photoUrl ?? null, input.notes ?? ''],
         )
         const person = personResult.rows[0]
         await client.query(

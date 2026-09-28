@@ -113,7 +113,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   // operates over plain option strings) rather than a hardcoded fallback.
   function avatarForAttendee(name: string): { name: string; photoUrl?: string | null } {
     const person = salesPersons.find((p) => p.name === name)
-    return { name: person?.name ?? name, photoUrl: undefined }
+    return { name: person?.name ?? name, photoUrl: person?.photoUrl }
   }
 
   function handleAttendeesChange(names: string[]) {

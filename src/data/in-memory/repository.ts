@@ -193,6 +193,7 @@ export interface CreateSalesPersonInput {
   personalEmail?: string
   mobile?: string
   altMobile?: string
+  photoUrl?: string | null
   notes?: string
   /** Initial posting — a person is created WITH a posting, never without one;
    *  a posting-less person can't appear correctly in the org chart or reports. */
@@ -1245,6 +1246,7 @@ class InMemoryRepository implements Repository {
       joinedOn: null,
       leftOn: null,
       status: 'active',
+      photoUrl: input.photoUrl ?? null,
       notes: input.notes ?? '',
       metadata: {},
       createdAt: isoToday(),

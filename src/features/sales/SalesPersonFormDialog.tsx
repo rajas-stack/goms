@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { PhotoUploadField } from '@/components/ui/PhotoUploadField'
 import { useToast } from '@/components/ui/Toast'
 import { useCurrentPostings, useSalesPersonMutations, useSalesPersons } from '@/lib/api'
 import { SALES_TIERS } from '@/data/sales-tiers'
@@ -28,6 +29,7 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [mobile, setMobile] = useState('')
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [designation, setDesignation] = useState('')
   const [tierKey, setTierKey] = useState(SALES_TIERS[SALES_TIERS.length - 1].key)
   const [managerId, setManagerId] = useState('')
@@ -52,6 +54,7 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
     setName(editing?.name ?? '')
     setEmail(editing?.officialEmail ?? '')
     setMobile(editing?.mobile ?? '')
+    setPhotoUrl(editing?.photoUrl ?? null)
     setNotes(editing?.notes ?? '')
     setDesignation('')
     setTierKey(SALES_TIERS[SALES_TIERS.length - 1].key)
@@ -73,7 +76,7 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
 
   async function submit() {
     if (editing) {
-      await update.mutateAsync({ id: editing.id, patch: { name, officialEmail: email, mobile, notes } })
+      await update.mutateAsync({ id: editing.id, patch: { name, officialEmail: email, mobile, photoUrl, notes } })
       const postingPatch: { managerId?: string | null; gmOverrideId?: string | null } = {}
       if (rmEmail !== initialRmEmail) {
         postingPatch.managerId = rmEmail ? (people.find((p) => p.officialEmail === rmEmail)?.id ?? null) : null
@@ -87,7 +90,7 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
       toast(`Updated ${name}`)
     } else {
       await create.mutateAsync({
-        name, officialEmail: email, mobile, notes,
+        name, officialEmail: email, mobile, photoUrl, notes,
         designation: designation || tierKeyToDefaultTitle(tierKey),
         tierKey,
         managerId: managerId || null,
@@ -127,6 +130,7 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
         <Field label="Mobile">
           <Input value={mobile} onChange={(e) => setMobile(e.target.value)} />
         </Field>
+        <PhotoUploadField photoUrl={photoUrl} onChange={setPhotoUrl} />
 
         {!editing && (
           <>

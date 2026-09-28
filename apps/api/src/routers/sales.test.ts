@@ -114,6 +114,26 @@ describe('sales router', () => {
     expect(updated!.notes).toBe('VIP account')
   })
 
+  it('creates a sales person with a photoUrl and defaults to null when omitted', async () => {
+    const caller = appRouter.createCaller({})
+    const withPhoto = await caller.sales.create({
+      name: 'Priya Photo', officialEmail: `priya-${Math.random()}@example.com`,
+      designation: 'Account Manager', tierKey: 'accountManager', photoUrl: 'data:image/png;base64,AAA=',
+    })
+    expect(withPhoto.photoUrl).toBe('data:image/png;base64,AAA=')
+    const withoutPhoto = await makePerson({ name: 'No Photo' })
+    expect(withoutPhoto.photoUrl).toBeNull()
+  })
+
+  it('sets and clears a photoUrl via update', async () => {
+    const caller = appRouter.createCaller({})
+    const person = await makePerson()
+    const withPhoto = await caller.sales.update({ id: person.id, patch: { photoUrl: 'data:image/png;base64,BBB=' } })
+    expect(withPhoto!.photoUrl).toBe('data:image/png;base64,BBB=')
+    const cleared = await caller.sales.update({ id: person.id, patch: { photoUrl: null } })
+    expect(cleared!.photoUrl).toBeNull()
+  })
+
   it('sets status without touching postings', async () => {
     const caller = appRouter.createCaller({})
     const person = await makePerson()

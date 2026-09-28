@@ -133,9 +133,8 @@ describe('EmployeeDetails — ChainRow Avatar rollout (Task 9.1)', () => {
 })
 
 // Task 9.2: the legacy "Relationship Owner / AMNEX Representative" row shows
-// an avatar next to the resolved SalesPerson's name — same {name,
-// photoUrl: undefined} pattern as the other ownership call sites, since
-// SalesPerson carries no photo field.
+// an avatar next to the resolved SalesPerson's name — falls back to initials
+// when that SalesPerson has no photoUrl, renders their photo when they do.
 describe('EmployeeDetails — Relationship Owner avatar (Task 9.2)', () => {
   it('shows an avatar next to the resolved Relationship Owner', () => {
     const owner = makeSalesPerson({ id: 'sp-owner', name: 'Rita Owner', officialEmail: 'rita@amnex.com' })
@@ -147,6 +146,18 @@ describe('EmployeeDetails — Relationship Owner avatar (Task 9.2)', () => {
     expect(screen.getByText(/Rita Owner/)).toBeInTheDocument()
     expect(screen.getAllByTestId('avatar').length).toBeGreaterThanOrEqual(1)
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it("renders the Relationship Owner's photo as an image when their SalesPerson record has one", () => {
+    const owner = makeSalesPerson({
+      id: 'sp-owner', name: 'Rita Owner', officialEmail: 'rita@amnex.com', photoUrl: 'data:image/png;base64,AAA=',
+    })
+    const emp = makeEmployee({ metadata: { relationshipOwner: 'rita@amnex.com' } })
+    stubApiHooks({ employee: emp, salesPersons: [owner] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.getByRole('img')).toHaveAttribute('src', 'data:image/png;base64,AAA=')
   })
 })
 
@@ -218,7 +229,9 @@ describe('EmployeeDetails — attendee display, mixed legacy/new shapes (Task 8.
     expect(screen.getByText('Attendees')).toBeInTheDocument()
     expect(screen.getByText('Legacy Name')).toBeInTheDocument()
     expect(screen.getByText('New Snapshot Name')).toBeInTheDocument()
-    // One avatar per attendee, both as initials — no photo field on either shape.
+    // One avatar per attendee, both as initials — the legacy plain-string
+    // shape can never resolve to a SalesPerson record, and this SalesPerson
+    // fixture has no photoUrl set either.
     expect(screen.getAllByTestId('avatar').length).toBeGreaterThanOrEqual(2)
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
   })
@@ -232,6 +245,19 @@ describe('EmployeeDetails — attendee display, mixed legacy/new shapes (Task 8.
 
     expect(screen.getByText('Just A Name')).toBeInTheDocument()
     expect(screen.getAllByTestId('avatar').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it("renders the new-shape attendee's photo when their resolved SalesPerson record has one", () => {
+    const emp = makeEmployee()
+    const event = makeTimelineEvent({
+      attendees: [{ salesPersonId: 'sp-1', name: 'New Snapshot Name' }],
+    })
+    const salesPerson = makeSalesPerson({ id: 'sp-1', name: 'New Snapshot Name', photoUrl: 'data:image/png;base64,AAA=' })
+    stubApiHooks({ employee: emp, timeline: [event], salesPersons: [salesPerson] })
+
+    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+
+    expect(screen.getByRole('img')).toHaveAttribute('src', 'data:image/png;base64,AAA=')
   })
 
   it('renders nothing for an event with no attendees', () => {

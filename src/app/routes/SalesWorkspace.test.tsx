@@ -5,18 +5,18 @@ import * as api from '@/lib/api'
 import { Ownership, RosterRow } from './SalesWorkspace'
 import type { SalesPerson, SalesPosting } from '@/lib/types'
 
-// Task 9.3: Sales Team views standardize on the shared Avatar component,
-// initials-only (Decision #5 — SalesPerson has no photoUrl field). These
-// tests guard the visual-consistency contract at each of the three call
-// sites owned by this file (a fourth lives in SalesPersonDetails.test.tsx):
-// RosterRow, the Ownership "Owned by" filter chip, and OrgChartNode — every
-// one must render through Avatar's initials fallback and never attempt an
-// <img>, since there is no field to source a photo from.
+// Task 9.3: Sales Team views standardize on the shared Avatar component.
+// These tests guard the visual-consistency contract at each of the three
+// call sites owned by this file (a fourth lives in
+// SalesPersonDetails.test.tsx): RosterRow, the Ownership "Owned by" filter
+// chip, and OrgChartNode — every one must render through Avatar, falling
+// back to initials when `photoUrl` is unset and rendering the photo as an
+// <img> when it is set.
 
 const ALICE: SalesPerson = {
   id: 'sp-alice', employeeCode: 'E1', name: 'Alice Anderson', officialEmail: 'alice@amnex.com',
   personalEmail: '', mobile: '', altMobile: '', joinedOn: null, leftOn: null,
-  status: 'active', notes: '', metadata: {}, createdAt: '', createdBy: null,
+  status: 'active', photoUrl: null, notes: '', metadata: {}, createdAt: '', createdBy: null,
 }
 
 function makePosting(overrides: Partial<SalesPosting> = {}): SalesPosting {
@@ -36,9 +36,15 @@ describe('RosterRow avatar (Task 9.3)', () => {
     expect(avatar).toHaveClass('rounded-full')
   })
 
-  it('never renders an <img> for a SalesPerson (no photoUrl field exists)', () => {
+  it('falls back to initials when photoUrl is unset', () => {
     render(<RosterRow person={ALICE} posting={makePosting()} selected={false} onSelect={vi.fn()} />)
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('renders the photo as an image when photoUrl is set', () => {
+    const withPhoto = { ...ALICE, photoUrl: 'data:image/png;base64,AAA=' }
+    render(<RosterRow person={withPhoto} posting={makePosting()} selected={false} onSelect={vi.fn()} />)
+    expect(screen.getByRole('img')).toHaveAttribute('src', 'data:image/png;base64,AAA=')
   })
 })
 
@@ -71,7 +77,7 @@ describe('Ownership "Owned by" filter chip avatar (Task 9.3)', () => {
     expect(avatar).toHaveClass('rounded-full')
   })
 
-  it('never renders an <img> for the filtered owner (no photoUrl field exists)', () => {
+  it('falls back to initials for the filtered owner when photoUrl is unset', () => {
     stubOwnershipApiHooks()
     render(
       <MemoryRouter initialEntries={['/sales/ownership?owner=sp-alice']}>
@@ -79,5 +85,21 @@ describe('Ownership "Owned by" filter chip avatar (Task 9.3)', () => {
       </MemoryRouter>,
     )
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
+  })
+
+  it('renders the filtered owner\'s photo as an image when photoUrl is set', () => {
+    vi.spyOn(api, 'useSalesPersons').mockReturnValue({
+      data: [{ ...ALICE, photoUrl: 'data:image/png;base64,AAA=' }],
+    } as unknown as ReturnType<typeof api.useSalesPersons>)
+    vi.spyOn(api, 'useDepartments').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useDepartments>)
+    vi.spyOn(api, 'useAllEmployees').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useAllEmployees>)
+    vi.spyOn(api, 'useOpportunities').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useOpportunities>)
+    vi.spyOn(api, 'useResolvedOwners').mockReturnValue({ data: {} } as unknown as ReturnType<typeof api.useResolvedOwners>)
+    render(
+      <MemoryRouter initialEntries={['/sales/ownership?owner=sp-alice']}>
+        <Ownership />
+      </MemoryRouter>,
+    )
+    expect(screen.getByRole('img')).toHaveAttribute('src', 'data:image/png;base64,AAA=')
   })
 })

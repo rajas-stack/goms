@@ -48,7 +48,7 @@ export function OwnerBadge({ owner, people, viaLabel, className }: {
           : 'Assigned directly'
       }
     >
-      <Avatar person={{ name, photoUrl: undefined }} size="xs" />
+      <Avatar person={{ name, photoUrl: person?.photoUrl }} size="xs" />
       <Icon name={inherited ? 'CornerLeftDown' : 'UserCheck'} size={12} />
       {name}
       {inherited && viaLabel && <span className="hidden sm:inline">· via {viaLabel}</span>}

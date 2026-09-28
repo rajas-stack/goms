@@ -14,6 +14,7 @@ const person = (overrides: Partial<SalesPerson> = {}): SalesPerson => ({
   joinedOn: null,
   leftOn: null,
   status: 'active',
+  photoUrl: null,
   notes: '',
   metadata: {},
   createdAt: '2020-01-01',

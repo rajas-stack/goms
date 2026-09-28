@@ -28,7 +28,7 @@ export const SalesOrgChartCard = forwardRef<HTMLDivElement, {
       flagged && 'border-dashed border-amber',
     )}
   >
-    <Avatar person={{ name: person.name, photoUrl: undefined }} size="md" />
+    <Avatar person={{ name: person.name, photoUrl: person.photoUrl }} size="md" />
     <div className="min-w-0">
       <div className="truncate text-[13px] font-semibold text-ink-900">{person.name}</div>
       <div className="truncate text-[11px] text-muted">{posting?.designation || '—'}</div>

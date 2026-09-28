@@ -24,7 +24,7 @@ function person(id: string, name: string): SalesPerson {
   return {
     id, employeeCode: id, name, officialEmail: `${id}@amnex.com`, personalEmail: '',
     mobile: '', altMobile: '', joinedOn: null, leftOn: null, status: 'active',
-    notes: '', metadata: {}, createdAt: '', createdBy: null,
+    photoUrl: null, notes: '', metadata: {}, createdAt: '', createdBy: null,
   }
 }
 function posting(personId: string, managerId: string | null): SalesPosting {

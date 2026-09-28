@@ -373,7 +373,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
                 onClick={() => ws.select('salesPerson', relationshipOwner.id)}
                 className="flex cursor-pointer items-center gap-1.5 text-left underline decoration-line decoration-1 underline-offset-2 hover:text-ink-700 hover:decoration-ink-600"
               >
-                <Avatar person={{ name: relationshipOwner.name, photoUrl: undefined }} size="xs" />
+                <Avatar person={{ name: relationshipOwner.name, photoUrl: relationshipOwner.photoUrl }} size="xs" />
                 {relationshipOwner.name} · {currentPostings[relationshipOwner.id]?.designation || 'No current posting'}
               </button>
             </DetailRow>
@@ -680,7 +680,7 @@ export function TimelineList({ events, onSetAttended, onEdit, highlightId, conta
                         const person = spId ? salesPersons.find((p) => p.id === spId) : undefined
                         return (
                           <span key={`${name}-${i}`} className="flex items-center gap-1">
-                            <Avatar person={{ name: person?.name ?? name, photoUrl: undefined }} size="xs" />
+                            <Avatar person={{ name: person?.name ?? name, photoUrl: person?.photoUrl }} size="xs" />
                             {name}
                           </span>
                         )

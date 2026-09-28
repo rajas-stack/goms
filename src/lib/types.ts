@@ -289,6 +289,9 @@ export interface SalesPerson {
   joinedOn: string | null
   leftOn: string | null
   status: SalesPersonStatus
+  /** Data URL (or null) — same "no separate asset store" convention as
+   *  `Employee.photoUrl` and `visitingCards`. */
+  photoUrl: string | null
   /** Plain text, not rich HTML. */
   notes: string
   metadata: Record<string, string>

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import * as api from '@/lib/api'
@@ -21,7 +21,7 @@ vi.mock('@/features/employees/SalesTeamPicker', () => ({
 const ALICE: SalesPerson = {
   id: 'sp-alice', employeeCode: 'E1', name: 'Alice', officialEmail: 'alice@amnex.com',
   personalEmail: '', mobile: '', altMobile: '', joinedOn: null, leftOn: null,
-  status: 'active', notes: '', metadata: {}, createdAt: '', createdBy: null,
+  status: 'active', photoUrl: null, notes: '', metadata: {}, createdAt: '', createdBy: null,
 }
 const BOB: SalesPerson = { ...ALICE, id: 'sp-bob', name: 'Bob', officialEmail: 'bob@amnex.com' }
 const CAROL: SalesPerson = { ...ALICE, id: 'sp-carol', name: 'Carol', officialEmail: 'carol@amnex.com' }
@@ -36,18 +36,19 @@ function makePosting(overrides: Partial<SalesPosting> = {}): SalesPosting {
   }
 }
 
+const createMutateAsync = vi.fn()
 const updateMutateAsync = vi.fn()
 const updatePostingManagerMutateAsync = vi.fn()
 
-function stubApiHooks(opts: { currentPostings?: Record<string, SalesPosting> } = {}) {
+function stubApiHooks(opts: { currentPostings?: Record<string, SalesPosting>; people?: SalesPerson[] } = {}) {
   vi.spyOn(api, 'useSalesPersons').mockReturnValue(
-    { data: [ALICE, BOB, CAROL, REPORT] } as unknown as ReturnType<typeof api.useSalesPersons>,
+    { data: opts.people ?? [ALICE, BOB, CAROL, REPORT] } as unknown as ReturnType<typeof api.useSalesPersons>,
   )
   vi.spyOn(api, 'useCurrentPostings').mockReturnValue(
     { data: opts.currentPostings ?? {} } as unknown as ReturnType<typeof api.useCurrentPostings>,
   )
   vi.spyOn(api, 'useSalesPersonMutations').mockReturnValue({
-    create: { mutateAsync: vi.fn(), isPending: false },
+    create: { mutateAsync: createMutateAsync, isPending: false },
     update: { mutateAsync: updateMutateAsync, isPending: false },
     setStatus: {},
     remove: {},
@@ -68,6 +69,7 @@ function renderDialog(personId: string | null) {
 }
 
 beforeEach(() => {
+  createMutateAsync.mockReset().mockResolvedValue(undefined)
   updateMutateAsync.mockReset().mockResolvedValue(undefined)
   updatePostingManagerMutateAsync.mockReset().mockResolvedValue(undefined)
 })
@@ -282,5 +284,57 @@ describe('SalesPersonFormDialog save path — Org Chart invalidation proof (fix 
     // did change, not just the invalidation signal.
     const updatedPosting = (await repository.currentPostings())[person.id]
     expect(updatedPosting.managerId).toBe(manager.id)
+  })
+})
+
+describe('SalesPersonFormDialog — profile picture', () => {
+  it('pasting an image/png clipboard item into the photo area shows it and includes it in the create payload', async () => {
+    stubApiHooks()
+    renderDialog(null)
+
+    const dataUrl = 'data:image/png;base64,PASTED=='
+    class FakeFileReader {
+      result: string | ArrayBuffer | null = null
+      onload: (() => void) | null = null
+      readAsDataURL() {
+        this.result = dataUrl
+        this.onload?.()
+      }
+    }
+    vi.stubGlobal('FileReader', FakeFileReader as unknown as typeof FileReader)
+
+    const file = new File(['(binary)'], 'pasted.png', { type: 'image/png' })
+    const clipboardData = { items: [{ type: 'image/png', getAsFile: () => file }] }
+    const dropZone = screen.getByText('Profile Picture').closest('label')!.querySelector('div')!
+    act(() => {
+      dropZone.dispatchEvent(Object.assign(new Event('paste', { bubbles: true }), { clipboardData }))
+    })
+    await waitFor(() => expect(screen.getByAltText('')).toHaveAttribute('src', dataUrl))
+
+    const user = userEvent.setup()
+    await user.type(screen.getByPlaceholderText('Full name'), 'New Person')
+    await user.type(screen.getByPlaceholderText('name@amnex.com'), 'new@amnex.com')
+    await user.click(screen.getByRole('button', { name: /^add$/i }))
+
+    await waitFor(() => expect(createMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ photoUrl: dataUrl }),
+    ))
+  })
+
+  it('editing a person with an existing photoUrl shows it, and clicking remove clears the update payload field', async () => {
+    const existingPhoto = 'data:image/png;base64,EXISTING=='
+    stubApiHooks({ people: [ALICE, BOB, CAROL, { ...REPORT, photoUrl: existingPhoto }] })
+    renderDialog('sp-report')
+
+    expect(screen.getByAltText('')).toHaveAttribute('src', existingPhoto)
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Remove profile picture' }))
+    expect(screen.queryByAltText('')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+    await waitFor(() => expect(updateMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ patch: expect.objectContaining({ photoUrl: null }) }),
+    ))
   })
 })

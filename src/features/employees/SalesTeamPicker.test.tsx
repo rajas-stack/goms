@@ -15,7 +15,7 @@ import type { SalesPerson } from '@/lib/types'
 const ALICE: SalesPerson = {
   id: 'sp-alice', employeeCode: '', name: 'Alice', officialEmail: 'alice@amnex.com',
   personalEmail: '', mobile: '', altMobile: '', joinedOn: null, leftOn: null,
-  status: 'active', notes: '', metadata: {}, createdAt: '', createdBy: null,
+  status: 'active', photoUrl: null, notes: '', metadata: {}, createdAt: '', createdBy: null,
 }
 
 function stubApiHooks() {

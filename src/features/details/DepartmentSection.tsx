@@ -104,7 +104,7 @@ export function DepartmentSection({ node, employees }: { node: HierNode; employe
                 <div key={o.key}>
                   <dt className="text-[11px] uppercase tracking-wide text-muted">{o.label}</dt>
                   <dd className="mt-0.5 flex items-center gap-1.5 text-sm text-ink-900">
-                    <Avatar person={{ name: o.member.name, photoUrl: undefined }} size="xs" />
+                    <Avatar person={{ name: o.member.name, photoUrl: person?.photoUrl }} size="xs" />
                     {person ? (
                       <button
                         onClick={() => ws.select('salesPerson', person.id)}
