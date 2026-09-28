@@ -73,4 +73,86 @@ describe('SalesOrgChartCanvas', () => {
     const card = screen.getByTestId('sales-org-chart-card-a')
     expect(within(card).getByText('Alice')).toBeInTheDocument()
   })
+
+  describe('canvas navigation controls (same toolbar as the Organization canvas)', () => {
+    it('renders fit/zoom/reset/expand/collapse/connectors/keyboard-shortcuts controls, matching the shared HierarchyCanvas toolbar', () => {
+      stub([ALICE], {})
+      render(<SalesOrgChartCanvas />)
+      expect(screen.getByRole('button', { name: 'Fit to screen' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Zoom out' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Zoom in' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Reset view' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Expand all' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Collapse all' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Keyboard shortcuts' })).toBeInTheDocument()
+      // Connectors default on, so the toggle's accessible name reads "Hide …".
+      expect(screen.getByRole('button', { name: 'Hide connectors' })).toBeInTheDocument()
+      expect(screen.getByText('100%')).toBeInTheDocument()
+    })
+
+    it('does not offer drag-to-reparent, Organization-only controls, or a delete key', () => {
+      stub([ALICE], {})
+      render(<SalesOrgChartCanvas />)
+      const card = screen.getByTestId('sales-org-chart-card-a')
+      expect(card).not.toHaveAttribute('draggable')
+      expect(screen.queryByLabelText('Search departments…')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Search people')).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /show metadata/i })).not.toBeInTheDocument()
+    })
+
+    it('Zoom in and Zoom out update the displayed zoom percentage', async () => {
+      stub([ALICE], {})
+      render(<SalesOrgChartCanvas />)
+      expect(screen.getByText('100%')).toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Zoom in' }))
+      expect(screen.getByText('118%')).toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Zoom out' }))
+      expect(screen.getByText('100%')).toBeInTheDocument()
+    })
+
+    it('Show/hide connectors toggles the connector overlay without affecting card rendering', async () => {
+      stub([ALICE, BOB], { b: posting('b', 'a'), a: posting('a', null) })
+      render(<SalesOrgChartCanvas />)
+      await userEvent.click(screen.getByTestId('sales-org-chart-toggle-a'))
+      expect(screen.getByTestId('sales-org-chart-card-b')).toBeInTheDocument()
+      expect(screen.getByTestId('sales-org-chart-connectors')).toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Hide connectors' }))
+      expect(screen.queryByTestId('sales-org-chart-connectors')).not.toBeInTheDocument()
+      // Hiding connectors is purely visual — the tree structure is untouched.
+      expect(screen.getByTestId('sales-org-chart-card-a')).toBeInTheDocument()
+      expect(screen.getByTestId('sales-org-chart-card-b')).toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show connectors' }))
+      expect(screen.getByTestId('sales-org-chart-connectors')).toBeInTheDocument()
+    })
+
+    it('the keyboard-shortcuts dialog shows only the shortcuts this canvas actually supports', async () => {
+      stub([ALICE], {})
+      render(<SalesOrgChartCanvas />)
+      await userEvent.click(screen.getByRole('button', { name: 'Keyboard shortcuts' }))
+      expect(screen.getByText('Fit to screen')).toBeInTheDocument()
+      expect(screen.getByText('Expand all')).toBeInTheDocument()
+      expect(screen.getByText('Collapse all')).toBeInTheDocument()
+      // Organization-canvas-only shortcuts (arrow-key nav, delete, search)
+      // must not be advertised here — this canvas doesn't support them.
+      expect(screen.queryByText('Navigate hierarchy')).not.toBeInTheDocument()
+      expect(screen.queryByText('Delete selected')).not.toBeInTheDocument()
+      expect(screen.queryByText('Search')).not.toBeInTheDocument()
+    })
+
+    it('Expand all and Collapse all still work from the new toolbar (unchanged behavior, new location)', async () => {
+      stub([ALICE, BOB], { b: posting('b', 'a'), a: posting('a', null) })
+      render(<SalesOrgChartCanvas />)
+      expect(screen.queryByTestId('sales-org-chart-card-b')).not.toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Expand all' }))
+      expect(screen.getByTestId('sales-org-chart-card-b')).toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Collapse all' }))
+      expect(screen.queryByTestId('sales-org-chart-card-b')).not.toBeInTheDocument()
+    })
+  })
 })

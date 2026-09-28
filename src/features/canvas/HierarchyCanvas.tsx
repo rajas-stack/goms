@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CanvasProvider, useCanvas, elbowPath, type Edge } from './canvasContext'
+import { useCanvasViewport } from './useCanvasViewport'
+import { CanvasControls } from './CanvasControls'
 import { CanvasBranch, type CanvasItem } from './CanvasBranch'
 import { DepartmentCombobox } from './DepartmentCombobox'
 import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog'
@@ -11,7 +13,6 @@ import {
 import { useWorkspace } from '@/features/workspace/context'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Icon } from '@/components/ui/Icon'
-import { Tooltip } from '@/components/ui/Tooltip'
 import { Button } from '@/components/ui/Button'
 import { NODE_TYPE_MAP } from '@/lib/node-types'
 import { cn, isTypingTarget } from '@/lib/utils'
@@ -21,10 +22,6 @@ import type { Domain, Employee } from '@/lib/types'
  *  org containment tree, the geo containment tree, and — reusing the same
  *  connected-card rendering — the people reporting hierarchy. */
 export type CanvasView = Domain | 'people'
-
-const MIN_ZOOM = 0.3
-const MAX_ZOOM = 1.8
-const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
 
 export function HierarchyCanvas({ domain, stateCode }: { domain: CanvasView; stateCode: number }) {
   const [version, setVersion] = useState(0)
@@ -47,23 +44,10 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const [transform, setTransform] = useState({ x: 40, y: 56, scale: 1 })
+  const viewport = useCanvasViewport(viewportRef, contentRef)
+  const { transform, dragging, userInteractedRef } = viewport
   const [edges, setEdges] = useState<Edge[]>([])
-  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
-  const panRafRef = useRef<number | null>(null)
-  const panPointRef = useRef<{ clientX: number; clientY: number } | null>(null)
-  // Two-finger pinch-to-zoom: Pointer Events already deliver a distinct
-  // `pointerId` per touch point, so this just tracks every currently-down
-  // pointer and, once 2 are active, treats their distance/midpoint as a
-  // zoom gesture instead of a pan — mirroring `onWheel`'s ctrl-zoom centering
-  // math (scale ratio applied around a fixed screen point) frame-to-frame
-  // rather than against a single fixed start distance, so a pinch and a
-  // two-finger drag can compose naturally.
-  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map())
-  const pinchRef = useRef<{ dist: number } | null>(null)
   const lastPeopleDeptRef = useRef<string | null>(null)
-  const [dragging, setDragging] = useState(false)
-  const userInteractedRef = useRef(false)
   const activeKeyRef = useRef<string | null>(null)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const [employeeToDelete, setEmployeeToDelete] = useState<string | null>(null)
@@ -191,40 +175,17 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
     setEdges(canvas.computeEdges(contentRef.current))
   }, [canvas])
 
-  const centerView = useCallback(() => {
-    const content = contentRef.current
-    const viewport = viewportRef.current
-    if (!content || !viewport || content.scrollWidth === 0) return false
-    const vw = viewport.clientWidth
-    const cw = content.scrollWidth
-    setTransform({ x: (vw - cw) / 2, y: 56, scale: 1 })
-    return true
-  }, [])
-
-  const fitToScreen = useCallback(() => {
-    const content = contentRef.current
-    const viewport = viewportRef.current
-    if (!content || !viewport || content.scrollWidth === 0 || content.scrollHeight === 0) return false
-    userInteractedRef.current = true
-    const pad = 48
-    const vw = viewport.clientWidth - pad * 2
-    const vh = viewport.clientHeight - pad * 2
-    const cw = content.scrollWidth
-    const ch = content.scrollHeight
-    const scale = clamp(Math.min(vw / cw, vh / ch), MIN_ZOOM, MAX_ZOOM)
-    setTransform({ x: (viewport.clientWidth - cw * scale) / 2, y: pad, scale })
-    return true
-  }, [])
-
   // Center + zoom the viewport on a single card (by canvas key). Used by the
   // Organization-view department search to bring the matched department into
   // view. `userInteractedRef` is flipped so the auto-center effect doesn't
-  // immediately re-center on the whole tree.
+  // immediately re-center on the whole tree. Domain-specific (only the
+  // Organization search jumps to a card by key), so it stays here rather
+  // than in the shared `useCanvasViewport` hook.
   const centerOnCard = useCallback((key: string, scale = 1.1) => {
     const el = canvas.getCard(key)
     const content = contentRef.current
-    const viewport = viewportRef.current
-    if (!el || !content || !viewport) return false
+    const vp = viewportRef.current
+    if (!el || !content || !vp) return false
     let x = 0
     let y = 0
     let node: HTMLElement | null = el
@@ -238,8 +199,9 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
     userInteractedRef.current = true
     const cx = x + el.offsetWidth / 2
     const cy = y + el.offsetHeight / 2
-    setTransform({ scale, x: viewport.clientWidth / 2 - cx * scale, y: viewport.clientHeight / 2 - cy * scale })
+    viewport.setTransform({ scale, x: vp.clientWidth / 2 - cx * scale, y: vp.clientHeight / 2 - cy * scale })
     return true
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvas])
 
   // Organization view: jump to a department found via the search control —
@@ -266,8 +228,9 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
       userInteractedRef.current = false
     }
     if (userInteractedRef.current) return
-    centerView()
-  }, [version, domain, stateCode, selectedDeptId, expandedRootId, centerView])
+    viewport.centerView()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version, domain, stateCode, selectedDeptId, expandedRootId, viewport.centerView])
 
   useLayoutEffect(() => {
     if (!contentRef.current) return
@@ -276,145 +239,8 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
     return () => ro.disconnect()
   }, [recompute])
 
-  function onWheel(e: React.WheelEvent) {
-    e.preventDefault()
-    userInteractedRef.current = true
-    const rect = viewportRef.current!.getBoundingClientRect()
-    if (e.ctrlKey || e.metaKey) {
-      const cx = e.clientX - rect.left
-      const cy = e.clientY - rect.top
-      setTransform((t) => {
-        const next = clamp(t.scale * (1 - e.deltaY * 0.012), MIN_ZOOM, MAX_ZOOM)
-        const ratio = next / t.scale
-        return { scale: next, x: cx - (cx - t.x) * ratio, y: cy - (cy - t.y) * ratio }
-      })
-    } else {
-      setTransform((t) => ({ ...t, x: t.x - e.deltaX, y: t.y - e.deltaY }))
-    }
-  }
-
-  function onPointerDown(e: React.PointerEvent) {
-    if ((e.target as HTMLElement).closest('[data-canvas-card], [data-canvas-ui]')) return
-    userInteractedRef.current = true
-    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
-    if (pointersRef.current.size >= 2) {
-      // A second finger just landed — hand off from single-finger pan (if
-      // one was active) to pinch-zoom. `pinchRef` starts null so the next
-      // move only baselines the start distance rather than jumping the zoom.
-      dragRef.current = null
-      setDragging(false)
-      pinchRef.current = null
-      return
-    }
-    dragRef.current = { startX: e.clientX, startY: e.clientY, originX: transform.x, originY: transform.y }
-    setDragging(true)
-    // Prevents the details sidebar's text from being selected mid-drag, which
-    // otherwise swaps in a text-selection cursor and can leave the pointer
-    // looking "stuck" once the drag crosses back onto the canvas.
-    document.body.classList.add('select-none')
-  }
-  function onPointerMove(e: React.PointerEvent) {
-    if (pointersRef.current.has(e.pointerId)) {
-      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    }
-    if (pointersRef.current.size >= 2) {
-      const [a, b] = Array.from(pointersRef.current.values())
-      const dist = Math.hypot(a.x - b.x, a.y - b.y)
-      const rect = viewportRef.current?.getBoundingClientRect()
-      if (!rect) return
-      const cx = (a.x + b.x) / 2 - rect.left
-      const cy = (a.y + b.y) / 2 - rect.top
-      if (!pinchRef.current) {
-        // First move after the 2nd finger touches down — establish the
-        // baseline distance only, same as a fresh `onPointerDown` origin.
-        pinchRef.current = { dist }
-        return
-      }
-      const factor = dist / pinchRef.current.dist
-      pinchRef.current.dist = dist
-      setTransform((t) => {
-        const next = clamp(t.scale * factor, MIN_ZOOM, MAX_ZOOM)
-        const ratio = next / t.scale
-        return { scale: next, x: cx - (cx - t.x) * ratio, y: cy - (cy - t.y) * ratio }
-      })
-      return
-    }
-    if (!dragRef.current) return
-    panPointRef.current = { clientX: e.clientX, clientY: e.clientY }
-    if (panRafRef.current != null) return
-    panRafRef.current = requestAnimationFrame(() => {
-      panRafRef.current = null
-      const point = panPointRef.current
-      if (!point || !dragRef.current) return
-      const dx = point.clientX - dragRef.current.startX
-      const dy = point.clientY - dragRef.current.startY
-      setTransform((t) => ({ ...t, x: dragRef.current!.originX + dx, y: dragRef.current!.originY + dy }))
-    })
-  }
-  // Shared by pointerup, pointercancel AND lostpointercapture — capture can
-  // be revoked by the browser mid-drag (e.g. a context menu, or crossing into
-  // the details sidebar's own scrollable/focusable content), and without this
-  // the drag state and cursor would be left stuck in "panning" indefinitely.
-  // Deliberately NOT wired to pointerleave: capture is taken on pointerdown,
-  // so pointerup still fires here even once the cursor has panned outside
-  // the viewport's own bounds — ending on pointerleave would make panning
-  // die the instant the cursor drifts past the edge, before the button is
-  // released, and leave `select-none` stuck on <body> since it's the
-  // pointerup/lostpointercapture path (not pointerleave) that was meant to
-  // clear it.
-  //
-  // Also removes the ending pointer from the pinch-tracking map. Lifting one
-  // finger out of a 2-finger pinch does NOT try to seamlessly resume a
-  // single-finger pan — the remaining finger has to be released and pressed
-  // again to start a fresh gesture. That's a deliberate simplification (see
-  // the pinch-tracking comment above `pointersRef`): reconstructing a
-  // no-jump single-finger pan origin from mid-gesture state is real added
-  // complexity for a "mobile UX polish" task, and this still leaves pinch
-  // and pan both fully working, just not chainable without a full release.
-  function endPan(e?: React.PointerEvent) {
-    if (e) pointersRef.current.delete(e.pointerId)
-    else pointersRef.current.clear() // hard fallback (blur/visibilitychange): drop everything
-    if (pointersRef.current.size < 2) pinchRef.current = null
-    if (pointersRef.current.size > 0) return
-    dragRef.current = null
-    setDragging(false)
-    document.body.classList.remove('select-none')
-    if (panRafRef.current != null) {
-      cancelAnimationFrame(panRafRef.current)
-      panRafRef.current = null
-    }
-  }
-
-  // Hard fallback for gestures the browser never delivers a pointerup for
-  // (alt-tab away mid-drag) — without this, `dragging`/the grabbing cursor
-  // and <body>'s select-none lock can stay stuck indefinitely.
-  useEffect(() => {
-    if (!dragging) return
-    const stop = () => endPan()
-    window.addEventListener('blur', stop)
-    document.addEventListener('visibilitychange', stop)
-    return () => {
-      window.removeEventListener('blur', stop)
-      document.removeEventListener('visibilitychange', stop)
-    }
-  }, [dragging])
-
-  function zoomBy(factor: number) {
-    const viewport = viewportRef.current
-    if (!viewport) return
-    userInteractedRef.current = true
-    const cx = viewport.clientWidth / 2
-    const cy = viewport.clientHeight / 2
-    setTransform((t) => {
-      const next = clamp(t.scale * factor, MIN_ZOOM, MAX_ZOOM)
-      const ratio = next / t.scale
-      return { scale: next, x: cx - (cx - t.x) * ratio, y: cy - (cy - t.y) * ratio }
-    })
-  }
   function resetView() {
-    userInteractedRef.current = false
-    centerView()
+    viewport.resetView()
     recompute()
   }
   function expandAll() {
@@ -490,11 +316,11 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
         case '?':
           e.preventDefault(); setShortcutsOpen(true); break
         case 'f': case 'F':
-          e.preventDefault(); fitToScreen(); break
+          e.preventDefault(); viewport.fitToScreen(); break
         case '+': case '=':
-          e.preventDefault(); zoomBy(1 / 0.85); break
+          e.preventDefault(); viewport.zoomBy(1 / 0.85); break
         case '-': case '_':
-          e.preventDefault(); zoomBy(0.85); break
+          e.preventDefault(); viewport.zoomBy(0.85); break
         case '0':
           e.preventDefault(); resetView(); break
         case 'e': case 'E':
@@ -545,12 +371,12 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
         'survey-grid relative h-full w-full touch-none select-none overflow-hidden',
         dragging ? 'cursor-grabbing' : 'cursor-grab',
       )}
-      onWheel={onWheel}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={endPan}
-      onPointerCancel={endPan}
-      onLostPointerCapture={endPan}
+      onWheel={viewport.onWheel}
+      onPointerDown={viewport.onPointerDown}
+      onPointerMove={viewport.onPointerMove}
+      onPointerUp={viewport.endPan}
+      onPointerCancel={viewport.endPan}
+      onLostPointerCapture={viewport.endPan}
     >
       {domain === 'org' && (
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex flex-wrap items-center gap-2 border-b border-line bg-white/90 px-4 py-2.5 text-[12px]">
@@ -648,60 +474,24 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
         )}
       </div>
 
-      <div data-canvas-ui className="pointer-events-none absolute bottom-5 right-5 flex flex-wrap items-center justify-end gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel">
-        <Tooltip label="Fit to screen (F)" className="pointer-events-auto">
-          <button onClick={fitToScreen} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Fit to screen">
-            <Icon name="Maximize" size={14} />
-          </button>
-        </Tooltip>
-        <span className="mx-0.5 h-5 w-px bg-line" />
-        <Tooltip label="Zoom out (−)" className="pointer-events-auto">
-          <button onClick={() => zoomBy(0.85)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Zoom out">
-            <span className="text-base leading-none">−</span>
-          </button>
-        </Tooltip>
-        <span className="pointer-events-auto w-11 text-center font-mono text-[11px] text-muted">{Math.round(transform.scale * 100)}%</span>
-        <Tooltip label="Zoom in (+)" className="pointer-events-auto">
-          <button onClick={() => zoomBy(1 / 0.85)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Zoom in">
-            <span className="text-base leading-none">+</span>
-          </button>
-        </Tooltip>
-        <span className="mx-0.5 h-5 w-px bg-line" />
-        <Tooltip label="Reset view (0)" className="pointer-events-auto">
-          <button onClick={resetView} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Reset view">
-            <Icon name="MoveRight" size={14} className="rotate-[225deg]" />
-          </button>
-        </Tooltip>
-        <span className="mx-0.5 h-5 w-px bg-line" />
-        <Tooltip label="Expand all (E)" className="pointer-events-auto">
-          <button onClick={expandAll} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Expand all">
-            <Icon name="ChevronsDown" size={14} />
-          </button>
-        </Tooltip>
-        <Tooltip label="Collapse all (C)" className="pointer-events-auto">
-          <button onClick={collapseAll} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Collapse all">
-            <Icon name="ChevronsUp" size={14} />
-          </button>
-        </Tooltip>
-        <span className="mx-0.5 h-5 w-px bg-line" />
-        <Tooltip label={canvas.showMetadata ? 'Hide metadata' : 'Show metadata'} className="pointer-events-auto">
-          <button
-            onClick={canvas.toggleShowMetadata}
-            className={cn(
-              'flex h-8 w-8 items-center justify-center rounded-lg hover:bg-panel',
-              canvas.showMetadata ? 'text-ink-900' : 'text-muted hover:text-ink-900',
-            )}
-            aria-label={canvas.showMetadata ? 'Hide metadata on cards' : 'Show metadata on cards'}
-          >
-            <Icon name={canvas.showMetadata ? 'Eye' : 'EyeOff'} size={14} />
-          </button>
-        </Tooltip>
-        <Tooltip label="Keyboard shortcuts (?)" className="pointer-events-auto">
-          <button onClick={() => setShortcutsOpen(true)} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Keyboard shortcuts">
-            <Icon name="Keyboard" size={14} />
-          </button>
-        </Tooltip>
-      </div>
+      <CanvasControls
+        scale={transform.scale}
+        onFit={viewport.fitToScreen}
+        onZoomOut={() => viewport.zoomBy(0.85)}
+        onZoomIn={() => viewport.zoomBy(1 / 0.85)}
+        onReset={resetView}
+        onExpandAll={expandAll}
+        onCollapseAll={collapseAll}
+        middleToggle={{
+          active: canvas.showMetadata,
+          onToggle: canvas.toggleShowMetadata,
+          activeIcon: 'Eye',
+          inactiveIcon: 'EyeOff',
+          activeLabel: 'Hide metadata on cards',
+          inactiveLabel: 'Show metadata on cards',
+        }}
+        onShowShortcuts={() => setShortcutsOpen(true)}
+      />
 
       <KeyboardShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <ConfirmDeleteDialog
