@@ -22,6 +22,7 @@ import { PIPELINE_STAGE_MAP } from '@/data/pipeline-stages'
 import { isoToday } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 import type { SalesPerson, SalesPosting } from '@/lib/types'
+import { STATUS_STYLE, STATUS_LABEL, STATUS_FILTERS } from '@/data/sales-status'
 
 /** The Sales Master workspace. Mirrors StateWorkspace's structure — header row
  *  with a tab strip, a content area, and the shared resizable DetailsPanel —
@@ -34,25 +35,6 @@ const SECTIONS = [
   { key: 'roster', label: 'Roster', phase: 1 },
   { key: 'orgchart', label: 'Org Chart', phase: 2 },
   { key: 'ownership', label: 'Ownership', phase: 3 },
-] as const
-
-const STATUS_STYLE: Record<string, string> = {
-  active: 'bg-emerald-50 text-emerald-700',
-  onLeave: 'bg-amber-50 text-amber-700',
-  resigned: 'bg-ink-900/[0.06] text-ink-600',
-  inactive: 'bg-ink-900/[0.06] text-ink-600',
-}
-
-const STATUS_LABEL: Record<string, string> = {
-  active: 'Active', onLeave: 'On leave', resigned: 'Resigned', inactive: 'Inactive',
-}
-
-const STATUS_FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'active', label: 'Active' },
-  { key: 'onLeave', label: 'On leave' },
-  { key: 'resigned', label: 'Resigned' },
-  { key: 'inactive', label: 'Inactive' },
 ] as const
 
 function SummaryCard({ label, value, icon, href }: { label: string; value: number; icon: string; href: string }) {
