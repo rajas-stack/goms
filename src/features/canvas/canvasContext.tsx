@@ -9,6 +9,11 @@ export interface Edge {
   y2: number
 }
 
+export function elbowPath(e: Edge): string {
+  const midY = (e.y1 + e.y2) / 2
+  return `M ${e.x1} ${e.y1} V ${midY} H ${e.x2} V ${e.y2}`
+}
+
 /** The item currently being dragged on the canvas (drag-and-drop reorg). */
 export type DragPayload =
   | { key: string; kind: 'node'; node: HierNode }

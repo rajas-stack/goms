@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { CanvasProvider, useCanvas, type Edge } from './canvasContext'
+import { CanvasProvider, useCanvas, elbowPath, type Edge } from './canvasContext'
 import { CanvasBranch, type CanvasItem } from './CanvasBranch'
 import { DepartmentCombobox } from './DepartmentCombobox'
 import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog'
@@ -25,11 +25,6 @@ export type CanvasView = Domain | 'people'
 const MIN_ZOOM = 0.3
 const MAX_ZOOM = 1.8
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n))
-
-function elbowPath(e: Edge): string {
-  const midY = (e.y1 + e.y2) / 2
-  return `M ${e.x1} ${e.y1} V ${midY} H ${e.x2} V ${e.y2}`
-}
 
 export function HierarchyCanvas({ domain, stateCode }: { domain: CanvasView; stateCode: number }) {
   const [version, setVersion] = useState(0)
