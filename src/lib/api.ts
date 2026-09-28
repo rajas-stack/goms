@@ -212,6 +212,11 @@ export const useFollowUps = (entityType: string, entityId: string | null) =>
     queryFn: () => repository.listFollowUps(entityType, entityId!),
     enabled: !!entityId,
   })
+/** Every open follow-up across every entity — used by Sales Team Insights'
+ *  "open follow-ups by assignee" metric, not scoped to one entity. */
+export const useOpenFollowUps = () =>
+  useQuery({ queryKey: qk.openFollowUps, queryFn: () => repository.listOpenFollowUps() })
+
 export function useFollowUpMutations() {
   const qc = useQueryClient()
   const invalidate = () => {
