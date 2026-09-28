@@ -197,6 +197,8 @@ Sync is **Bid → Opportunity only**, and only at two points, both applied throu
 
 `decision` and `stage_key` are deliberately two separate fields (matching the Overview tab's separate "Stage" and "Decision" display), but a `decision` change also auto-derives the matching terminal `stage_key` in the same `bids.update` call — `'go'` sets `stage_key='goApproved'`, `'no_go'` sets `stage_key='dropped'` — so the two never visibly disagree (e.g. `decision='go'` while `stage_key` still reads `'qualification'`). This mirrors how `opportunities.update` already auto-derives `closed_on` whenever `stageKey` becomes closed.
 
+**Gate on `decision='go'`:** `bids.update` rejects a patch setting `decision='go'` unless the bid's `stage_key` — the *current* value, or a new value provided in the same patch — is `'submitted'` or later in `BID_STAGES`' order. A "go" decision means the bid was actually submitted and cleared; it cannot be recorded before that happened, so the field stays `'pending'` until then (`BAD_REQUEST`, "cannot mark Go before the bid reaches Submitted" if attempted early). `decision='no_go'` carries **no** such gate — a no-go/drop decision is a legitimate outcome at any stage (e.g. dropping out during Qualification, long before submission), matching how `opportunities.stageKey` can already go directly to `'dropped'` from an early pipeline stage. This gate constrains *when a value is settable*, not the sync rules above — the two Bid→Opportunity sync points at the top of this subsection are otherwise unchanged.
+
 No reverse sync. Once a `bids` row exists for an opportunity, `WorksEditor.tsx`'s stage control for that opportunity becomes **read-only**, with a note pointing at Bid Tracker — one writer per fact, the same principle applied to submission deadlines below.
 
 ### 4.5 `submissionDeadline` — single writable source
@@ -223,9 +225,27 @@ This is exactly the shape `contact` (inherits from `orgNodeId`) and `opportunity
 
 ### 4.7 Non-destructive deletion policy
 
-`bids.opportunity_id` is `ON DELETE RESTRICT` — deleting an opportunity or a department subtree that has *any* bid (even an archived one) fails with a friendly error, never a silent cascade wipe of Bid Tracker history. `bids.status` (`'active'|'archived'`) is the normal "delete" a user performs from the UI: it hides the bid from default Master Grid views while preserving every milestone, corrigendum, protected-value freeze, document, and audit-log row intact and queryable. A true hard delete stays available only when the bid has zero accepted corrigendum changes and zero frozen protected values — otherwise archive is the only option offered.
+`bids.opportunity_id` is `ON DELETE RESTRICT`, **with no exception for archived bids.** Deleting an opportunity or a department subtree that has *any* bid — active or archived — fails with a friendly error, never a silent cascade wipe of Bid Tracker history. This is deliberate and absolute: "archived" means "hidden from default Master Grid views," not "safe to lose referential history for." (This corrects an earlier draft of this spec, which said archiving a bid would unblock deleting its opportunity — §23's acceptance criteria are corrected to match.)
 
 Because RESTRICT applies regardless of archived state, `opportunities.delete` and `hierarchy.deleteNode` — which already translate other RESTRICT violations (`transfers.to_org_node_id`, `commercial_boqs.department_id`) into a friendly `CONFLICT` — get the same treatment added for `bids`.
+
+**Archive is the normal UI deletion action.** `bids.status` (`'active'|'archived'`) is what the "delete" button in Bid Tracker actually does: it hides the bid from default Master Grid views (an "include archived" toggle reveals it again) while leaving every related row — milestones, corrigenda, protected-value freezes, documents, follow-ups, ownership assignments, and audit-log entries — completely untouched and queryable. Archiving is always available, requires no preconditions, and is fully reversible (`unarchive`).
+
+**Hard delete is an exceptional cleanup operation, not a normal action.** It exists only for a bid created by mistake that nothing has touched yet, and is gated accordingly: `bids.delete` is only permitted when **all** of the following hold for that bid — zero `bid_corrigenda` rows (any status), zero `protected_values` rows (frozen or previously-frozen-then-unfrozen — the existence of the row at all means something happened), zero `documents` rows, and zero `follow_ups` rows. `bid_milestones` are not part of the gate (they're auto-seeded on creation, per §6, and carry no independent history worth protecting on their own). Any bid that fails this check can only be archived, never hard-deleted, until whatever record is blocking it is itself dealt with (e.g. the documents are deleted first) — the API returns a `CONFLICT` naming which of the four checks failed, not a generic refusal.
+
+When a hard delete is permitted and performed, exactly this happens, in one transaction:
+
+| Related data | What happens on hard delete |
+|---|---|
+| `bid_milestones` | Deleted via `ON DELETE CASCADE` — the gate doesn't check these, so they're simply gone with the bid. |
+| `bid_corrigenda` / `bid_corrigendum_changes` | Deleted via `ON DELETE CASCADE` — in practice always empty already, since the gate blocks the delete otherwise; the cascade is a structural safety net, not the primary enforcement. |
+| `protected_values` | Gate guarantees zero rows exist; nothing to delete. |
+| `documents` / `document_citations` | Gate guarantees zero rows exist; nothing to delete. (If this ever changed, `documents.delete`'s existing transactional-then-best-effort-GCS-delete behavior, §14, would apply — not a special case here.) |
+| `follow_ups` (`entityType='bid'`) | Gate guarantees zero rows exist; nothing to delete. |
+| `ownership_assignments` (`entityType='bid'`) | **Explicitly deleted** (not just closed with an `end_date`) as part of the same transaction — polymorphic, so nothing cascades it automatically, and unlike archiving, a hard-deleted bid has no ownership history worth preserving as "closed" rather than "gone." |
+| Audit-log rows (`entityType='bid'`, etc.) | **Never deleted, under any circumstance.** These are polymorphic with no FK to `bids`, by the same established convention as `commercial_audit_logs`/`employee_merge_audit` elsewhere in GOMS — "a log of history must survive the entity it describes being long gone." A hard-deleted bid's audit trail remains permanently queryable by its now-orphaned `entity_id`; the Activity History UI renders these rows with an "(this bid was deleted)" label when the entity no longer resolves, rather than hiding them or pretending they don't exist. |
+
+`opportunities.delete`/`hierarchy.deleteNode`'s RESTRICT-to-CONFLICT translation and this hard-delete gate are independent mechanisms answering two different questions — "can I delete the opportunity this bid points at" (never, while the bid row exists at all) and "can I delete the bid itself" (only if it's inert) — and both must be satisfied in sequence to ever remove a bid's `opportunity_id` reference entirely.
 
 ## 5. Entity relationship summary
 
@@ -254,13 +274,13 @@ New routers under `apps/api/src/routers/`, all standard `protectedProcedure`/`pr
 
 | Router | Procedures |
 |---|---|
-| `bids` | `listForGrid` (joined opportunities+bids+ownership+latest-milestone view, filter/sort params matching a saved view's `filter_rules`/`sort`), `get({id})`, `create({opportunityId})` (allocates `bid_code` via `bid_number_sequences`, **and**, in the same transaction, seeds a `bid_milestones` row with `key='submissionDeadline'` from the opportunity's current `submissionDate` — parsed to a `TIMESTAMPTZ` if it's a well-formed date, else left `NULL` — since `opportunities.update` will refuse further `submissionDate` writes the instant this bid row exists, per §4.5, and there must be somewhere for that fact to live going forward), `update({id, patch})` (a `decision` change auto-derives `stage_key` per §4.4), `archive({id})`, `unarchive({id})`, `delete({id})` (guarded per §4.7), `actionQueue.list()` (open `follow_ups` for `entityType='bid'`, joined with bid/opportunity summary columns and a computed attention flag) |
+| `bids` | `listForGrid` (joined opportunities+bids+ownership+latest-milestone view, filter/sort params matching a saved view's `filter_rules`/`sort`), `get({id})`, `create({opportunityId})` (allocates `bid_code` via `bid_number_sequences`, **and**, in the same transaction, seeds a `bid_milestones` row with `key='submissionDeadline'` from the opportunity's current `submissionDate` — parsed to a `TIMESTAMPTZ` if it's a well-formed date, else left `NULL` — since `opportunities.update` will refuse further `submissionDate` writes the instant this bid row exists, per §4.5, and there must be somewhere for that fact to live going forward), `update({id, patch})` (a `decision` change auto-derives `stage_key` per §4.4; `decision='go'` is rejected with `BAD_REQUEST` unless `stage_key` is already `'submitted'`-or-later, per §4.4's gate), `archive({id})`, `unarchive({id})`, `delete({id})` (hard delete — rejected with `CONFLICT` naming the blocking record unless the bid has zero corrigenda/protected-values/documents/follow-ups, per §4.7), `actionQueue.list()` (open `follow_ups` for `entityType='bid'`, joined with bid/opportunity summary columns and a computed attention flag) |
 | `bidMilestones` | `listForBid({bidId})`, `create`, `update`, `delete` — `update`/`create` on `key='submissionDeadline'` writes `opportunities.submission_date` in the same transaction (§4.5) |
 | `bidCorrigenda` | `listForBid({bidId})`, `create({bidId, corrigendumNumber, sourceDocumentId?, changes: [{fieldKey, currentValue, proposedValue}]})`, `reviewChange({changeId, decision, reason?})` — rejects if `fieldKey` is frozen (§11), applies the accepted value to the target milestone/field transactionally, writes an audit-log row |
 | `protectedValues` | `listFor({entityType, entityId})`, `freeze({entityType, entityId, fieldKey})`, `unfreeze({entityType, entityId, fieldKey, reason})` — reason required and non-empty on unfreeze only (§11) |
-| `documents` | `requestUploadUrl({entityType, entityId, filename, contentType, sizeBytes})`, `confirmUpload({uploadId, ...})`, `listFor({entityType, entityId})`, `delete({id})`, `citations.create/list/delete` (§14) |
-| `bidSavedViews` | `list()` (server-side filters to `scope='global' OR ownerEmail=ctx.user.email`), `get({id})`, `create`, `update`, `delete` — every global-view mutation writes an audit-log row (§16) |
-| `auditLogs` (new top-level) | `list({entityType?, entityId?})` — thin wrapper over the same shared function `commercial.auditLogs.list` already calls (§10) |
+| `documents` | `requestUploadUrl({entityType, entityId, filename, contentType, sizeBytes})` (rejects disallowed type/size up front), `confirmUpload({uploadId, ...})` (re-verifies the actual uploaded object's size/content-type against GCS metadata before inserting a row, per §14 — not just the original request), `listFor({entityType, entityId})`, `delete({id})`, `citations.create/list/delete` (§14) |
+| `bidSavedViews` | `list()` (returns `SYSTEM_BID_VIEWS` merged with DB rows server-side filtered to `scope='global' OR ownerEmail=ctx.user.email`, per §9), `get({id})`, `create`, `update`, `delete` (both reject a `SYSTEM_BID_VIEWS` key with `FORBIDDEN`, per §9.2) — every user-created global-view mutation writes an audit-log row (§16) |
+| `auditLogs` (new top-level) | `list({entityType?, entityId?})` — thin wrapper over the same shared function `commercial.auditLogs.list` already calls (§10); a `bid` entity id that no longer resolves (hard-deleted, §4.7) is rendered by the frontend as "(this bid was deleted)," not hidden |
 
 Existing routers, small additive changes:
 
@@ -288,13 +308,45 @@ New dependency: `@tanstack/react-table` (headless/unstyled — fits the bespoke-
 
 Column groups (matching the screenshots and `bids.listForGrid`'s joined shape): Identity (Opportunity ID, Opportunity/Mission, Bid ID, Tender ID, Tender Link), Client (Department/Client, State and City, Sector), Ownership (Bid Owner, Sales Lead/Solution Lead), Decision (Bid Stage, Next Action, Action Owner, Action Due, Attention Flag, Decision), Dates (Next Milestone, Days Remaining, Submission Deadline), Documents (Tender Files count, Latest Corrigendum status), System (Last Updated/Updated By, Data Confidence, Manage actions).
 
-Column visibility state is `@tanstack/react-table`'s built-in `columnVisibility`, persisted into the *active* saved view's `visible_columns` JSONB on change (debounced), not a separate preferences table. Row selection uses `@tanstack/react-table`'s built-in row-selection state; bulk row actions (archive, reassign owner) operate on the selection.
+Column visibility state is `@tanstack/react-table`'s built-in `columnVisibility`, persisted into the *active* saved view's `visible_columns` JSONB on change (debounced), not a separate preferences table — except while the active view is one of the system views (§9.2), which have no underlying row to persist into; there, column changes are session-only until the user explicitly forks the view via "Create Saved View." Row selection uses `@tanstack/react-table`'s built-in row-selection state; bulk row actions (archive, reassign owner) operate on the selection.
 
 ## 9. Saved views
 
-`bid_saved_views` backs both the pill-tab row (All Bids, My Bids, Solutioning, Due Soon, Overdue, Go Approved, Smart Transport Bids, High Value Deals > 20 Cr — every one of these is a row here, none hard-coded) and the "Create Saved View" dialog (Name, Scope: Personal/Global). `filter_rules` is an ordered array of `{ field, operator, value }` triples (matching the "Active Filter Rules — WHERE Stage is Solutioning" UI); the frontend's filter-rule builder is new work — no existing filter-persistence pattern exists anywhere in the repo to extend (confirmed: grepped for `savedView`/`customFilter` repo-wide, zero matches).
+### 9.1 System views vs. user-created views — a real distinction, not a screenshot artifact
 
-**Permissions (§16 below has the full detail):** personal views are visible/editable only by their `owner_email`; global views are visible to everyone, and any authenticated user may create/edit/delete one — GOMS has no role/permission system anywhere today to gate that further, so restricting global-view governance to specific roles is out of scope unless requested as separate follow-on work. Every global-view mutation is written to the audit log.
+The reference screenshots show a pill-tab row mixing two genuinely different kinds of view, and this spec treats them as different from the start rather than seeding all of them as if they were equally "default":
+
+- **Permanent system views** — All Bids, My Bids, Solutioning, Qualification, Due Soon, Overdue, Go Approved. These are generic to any Bid Tracker deployment (they reference `bids.stage_key`/computed attention-flag values that exist regardless of what any particular team bids on), and this spec defines them explicitly, here, as the initial set:
+
+  ```ts
+  // packages/domain/src/bids.ts
+  export const SYSTEM_BID_VIEWS = [
+    { key: 'allBids', name: 'All Bids', filterRules: [] },
+    { key: 'myBids', name: 'My Bids', filterRules: [{ field: 'ownerEmail', operator: 'eq', value: '$currentUser' }] },
+    { key: 'solutioning', name: 'Solutioning', filterRules: [{ field: 'stageKey', operator: 'eq', value: 'solutioning' }] },
+    { key: 'qualification', name: 'Qualification', filterRules: [{ field: 'stageKey', operator: 'eq', value: 'qualification' }] },
+    { key: 'dueSoon', name: 'Due Soon', filterRules: [{ field: 'attentionFlag', operator: 'eq', value: 'dueSoon' }] },
+    { key: 'overdue', name: 'Overdue', filterRules: [{ field: 'attentionFlag', operator: 'eq', value: 'overdue' }] },
+    { key: 'goApproved', name: 'Go Approved', filterRules: [{ field: 'stageKey', operator: 'eq', value: 'goApproved' }] },
+  ] as const
+  ```
+
+  `$currentUser` is a placeholder token `bidSavedViews`/`bids.listForGrid` resolve server-side to `ctx.user.email` at query time — never a literal stored email.
+
+- **Optional example views** — "Smart Transport Bids" and "High Value Deals > 20 Cr" from the screenshots are **not** part of the system set and are **not seeded anywhere**. They're illustrative of the kind of global view a real user creates later (a sector filter, a value-threshold filter) using the ordinary "Create Saved View" dialog — ordinary `bid_saved_views` rows like any other, ordinary `scope='global'`, no special treatment. After implementation, neither exists until someone actually creates them.
+
+### 9.2 Mechanism: system views are a code registry, not database rows
+
+Rather than adding an `is_system` column to `bid_saved_views` and then having to guard every update/delete path against it being flipped or bypassed, `SYSTEM_BID_VIEWS` is never written to the `bid_saved_views` table at all. `bidSavedViews.list()` returns `[...SYSTEM_BID_VIEWS mapped to {..., isSystem: true, scope: 'global'}, ...the DB rows scoped per §9.3]` — merged at read time, always in that fixed order, always present, identically for every user. This makes both requirements structural rather than app-logic-enforced:
+
+- **Visibility**: system views can't be hidden, filtered out, or deleted by anyone, because there's no row to delete — they're compiled into every `list()` response unconditionally.
+- **Immutability**: `bidSavedViews.update`/`delete` take a UUID `id`; none of `SYSTEM_BID_VIEWS`' string keys are ever valid UUIDs a lookup could match, so an attempt to edit or delete one fails naturally as "not found" — the procedures additionally check the id against the known system keys first and return a clearer `FORBIDDEN` ("system views can't be modified") rather than a confusing not-found.
+
+The one interaction this creates: §8 says column-visibility changes persist into the *active* saved view's `visible_columns`. While viewing a system view, that write has nowhere to go (there's no row) — column-visibility changes made while on a system view are session-only and revert on reload, unless the user explicitly uses "Create Saved View" (pre-filled from the current adjusted state) to fork it into a real, editable personal or global view. §8 is updated to say this explicitly.
+
+### 9.3 Permissions
+
+Personal views are visible/editable only by their `owner_email`; global views (both system and user-created) are visible to everyone. Any authenticated user may create/edit/delete a **user-created** global view — GOMS has no role/permission system anywhere today to gate that further, so restricting global-view governance to specific roles is out of scope unless requested as separate follow-on work. Every user-created global-view mutation is written to the audit log; system views generate no audit entries since they're never mutated (§9.2).
 
 ## 10. Detail workspace (Overview tab)
 
@@ -341,7 +393,8 @@ Genuinely new infrastructure — the audit confirmed zero file/blob storage exis
 
 - **Object naming**: `bid-tracker/{entityType}/{entityId}/{documentId}/{sanitizedFilename}` — the `documentId` UUID in the path guarantees no collision even for identical filenames/versions.
 - **Size limit**: 50 MB per file — generous for scanned tender PDFs, rejected client-side and server-side.
-- **Allowed content types**: `application/pdf`, `image/jpeg`, `image/png`, `.docx`, `.xlsx` — everything else (including any executable/script MIME type) is rejected by `documents.requestUploadUrl`.
+- **Allowed content types — exact MIME strings, not extensions**: `application/pdf`, `image/jpeg`, `image/png`, `application/vnd.openxmlformats-officedocument.wordprocessingml.document` (.docx), `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (.xlsx). Everything else (including any executable/script MIME type, and the legacy `.doc`/`.xls` binary formats) is rejected.
+- **Two-layer validation — request metadata is never trusted alone**: `documents.requestUploadUrl` rejects a claimed `contentType`/`sizeBytes` outside the limits above before minting a signed URL, and the V4 signed URL itself pins the exact `Content-Type` header GCS will accept for the `PUT` (a mismatched header is rejected by GCS, not just by the API). But the client's claimed values are still just a claim — `confirmUpload` independently calls GCS to read the **actual** uploaded object's metadata (`size`, `contentType` as GCS itself recorded them) and treats that, not the original request, as authoritative for the `documents` row. If the actual object exceeds 50 MB or its actual content type isn't in the allow-list (e.g. a mismatched or sniffed type slipped past the pinned header), `confirmUpload` deletes the object and rejects the request (`BAD_REQUEST`) instead of inserting a `documents` row — defense in depth against a client that lies about what it's uploading, not just validation of what it says it's uploading.
 - **Signed URL expiry**: upload URL 10 minutes; view/download URL 15 minutes, minted fresh per request — never stored or cached long-term.
 - **Permissions**: the bucket is already fully private (`uniform_bucket_level_access = true`, `public_access_prevention = "enforced"`, confirmed in both `infra/dev/storage.tf` and `infra/prod/storage.tf`); access is exclusively via short-lived signed URLs the backend mints.
 - **Version uniqueness**: `UNIQUE(entity_type, entity_id, filename, version)` — re-uploading the same filename without bumping `version` is rejected (`BAD_REQUEST`).
@@ -438,16 +491,19 @@ Specific scenarios to cover beyond ordinary CRUD, chosen because they're where t
 - `bid_corrigenda.status` is correctly derived at read time from its changes' decisions (§12), including the "last pending change resolved" transition.
 - A corrigendum-change accept on a frozen field is rejected with a clear error, and succeeds immediately after an explicit unfreeze (§13).
 - `commercial.boq.revise`/`.duplicate` carry `opportunity_id` forward correctly (§4.3) — a regression here would silently break the Commercial & Files tab's BOQ linkage.
-- `documents.confirmUpload` correctly moves the object from `_pending/` to its canonical path and rejects a duplicate `(entityType, entityId, filename, version)`.
-- `bidSavedViews.list` correctly scopes to `global OR ownerEmail=self` and never leaks another user's personal view.
+- `documents.confirmUpload` correctly moves the object from `_pending/` to its canonical path, rejects a duplicate `(entityType, entityId, filename, version)`, and rejects (deleting the object) when the actual GCS-reported size/content-type violates the limits even though the original request claimed valid values (§14).
+- `bidSavedViews.list` correctly scopes to `global OR ownerEmail=self`, never leaks another user's personal view, and always includes every `SYSTEM_BID_VIEWS` entry regardless of what's in the database; `update`/`delete` against a system view's key return `FORBIDDEN` (§9).
+- `bids.update` rejects `decision='go'` while `stage_key` is earlier than `'submitted'`, accepts it once `stage_key` is `'submitted'` or later (including in the same patch), and never gates `decision='no_go'` (§4.4).
+- `bids.delete` (hard delete) succeeds only when the bid has zero corrigenda/protected-values/documents/follow-ups, fails with a `CONFLICT` naming the blocker otherwise, and — once permitted — cascades milestones/corrigenda, explicitly deletes ownership assignments, and leaves audit-log rows in place, permanently (§4.7).
+- Archiving a bid never unblocks deleting its opportunity or department — only a successful hard delete of the bid does (§4.7).
 
 ## 23. Acceptance criteria
 
 - A user can create a bid from an existing opportunity, see it in the Master Grid with correct department/state/tender-ID/value/EMD pulled from that opportunity (not re-entered), and open its detail workspace.
 - A user can freeze the submission deadline, then attempt (via a simulated corrigendum) to change it, and the system refuses until the field is explicitly unfrozen with a reason.
-- A user can create a personal saved view and a global saved view; the personal view is invisible to a different user, the global view is visible to everyone and its edits are attributable in the audit log.
-- Deleting an opportunity or department that has an active bid fails with a clear message instead of a raw FK error; archiving the bid first allows the deletion to proceed (once no other blocker remains).
-- A tender file uploaded through the Commercial & Files tab is retrievable via a signed URL, rejected if it exceeds 50 MB or is an unlisted content type, and does not appear anywhere if the upload is never confirmed (verified against the `_pending/` prefix).
+- A user can create a personal saved view and a global saved view; the personal view is invisible to a different user, the global view is visible to everyone and its edits are attributable in the audit log. The seven permanent system views (All Bids/My Bids/Solutioning/Qualification/Due Soon/Overdue/Go Approved) always appear and cannot be edited or deleted by anyone; "Smart Transport Bids" and "High Value Deals > 20 Cr" do not exist until a user explicitly creates them.
+- Deleting an opportunity or department that has any bid — active or archived — fails with a clear message instead of a raw FK error, every time, with no exception for archived bids. The only way to clear that block is a successful hard delete of the bid itself, which is only possible when the bid has no corrigenda, protected-value history, documents, or follow-ups.
+- A tender file uploaded through the Commercial & Files tab is retrievable via a signed URL, rejected if its actual (GCS-verified, not merely claimed) size exceeds 50 MB or its actual content type isn't one of the five allowed MIME types, and does not appear anywhere if the upload is never confirmed (verified against the `_pending/` prefix).
 - The existing `commercial-calculator` Activity History page (`AuditLog.tsx`) continues to function with zero code changes required in that module.
 
 ## 24. Risks and explicit non-goals
