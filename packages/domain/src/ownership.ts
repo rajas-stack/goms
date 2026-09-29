@@ -13,6 +13,10 @@ export interface OwnershipOpportunity {
   id: string
   departmentId: string
 }
+export interface OwnershipBid {
+  id: string
+  opportunityId: string
+}
 
 /** A single ownership/delegation row — the subset of `OwnershipAssignment`
  *  resolution needs. `endDate: null` means "still open". */
@@ -32,6 +36,7 @@ export interface OwnershipContext {
   nodes: OwnershipNode[]
   employees: OwnershipEmployee[]
   opportunities: OwnershipOpportunity[]
+  bids: OwnershipBid[]
 }
 
 export interface OwnableEntityDef {
@@ -91,6 +96,16 @@ const OWNABLE_ENTITIES: OwnableEntityDef[] = [
     inheritFrom: (id, ctx) => {
       const opp = ctx.opportunities.find((o) => o.id === id)
       return opp ? { entityType: 'orgNode', entityId: opp.departmentId } : null
+    },
+  },
+  {
+    key: 'bid',
+    label: 'Bid',
+    icon: 'FileCheck2',
+    resolution: 'exact',
+    inheritFrom: (id, ctx) => {
+      const bid = ctx.bids.find((b) => b.id === id)
+      return bid ? { entityType: 'opportunity', entityId: bid.opportunityId } : null
     },
   },
 ]
