@@ -264,10 +264,14 @@ export const hierarchyRouter = router({
       await client.query('COMMIT')
     } catch (e) {
       await client.query('ROLLBACK')
-      // Deleting a subtree containing a node any `transfers.to_org_node_id`
-      // (RESTRICT) or `commercial_boqs.department_id` (RESTRICT) still
-      // points at is rejected by the DB either way — this only replaces the
-      // raw, unhandled 23503 with a friendly message.
+      // Deleting a subtree containing a node any `transfers.to_org_node_id`,
+      // `commercial_boqs.department_id`, or (via an opportunity in the
+      // subtree) `bids.opportunity_id` (all RESTRICT) still points at is
+      // rejected by the DB either way — this only replaces the raw,
+      // unhandled 23503 with a friendly message. bids.opportunity_id RESTRICTs
+      // regardless of the bid's archived status (spec §4.7) — this generic,
+      // error-code-based catch doesn't need to know that, it just needs the
+      // constraint to exist, which migration 1788400000000 added.
       if (isForeignKeyViolation(e)) {
         throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete this node — it is still referenced elsewhere (e.g. a past transfer or an existing BOQ).' })
       }

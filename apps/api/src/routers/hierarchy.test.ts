@@ -396,4 +396,13 @@ describe('hierarchy router', () => {
       await expect(caller.hierarchy.listDepartments()).resolves.toBeDefined()
     })
   })
+
+  it('refuses to delete a subtree containing an opportunity with a bid — including one already archived, exercised through the cascading deleteNode path, not just a direct opportunities.delete', async () => {
+    const caller = appRouter.createCaller({})
+    const dept = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Blocked Dept' })
+    const opp = await caller.opportunities.create({ departmentId: dept.id, opportunityName: 'Tender' })
+    const bid = await caller.bids.create({ opportunityId: opp.id })
+    await caller.bids.archive({ id: bid.id })
+    await expect(caller.hierarchy.deleteNode({ id: dept.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+  })
 })
