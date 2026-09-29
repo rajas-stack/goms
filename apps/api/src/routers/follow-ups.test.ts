@@ -14,6 +14,8 @@ describe('followUps router', () => {
     // doesn't conflict with rows left behind by opportunities.test.ts or
     // sales.test.ts (2026-08-26 hardening pass).
     await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM bid_milestones')
+    await pool.query('DELETE FROM bids')
     await pool.query('DELETE FROM opportunities')
     await pool.query('DELETE FROM commercial_boq_line_items')
     await pool.query('DELETE FROM commercial_boqs')

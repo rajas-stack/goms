@@ -14,6 +14,8 @@ describe('ownership router', () => {
   beforeEach(async () => {
     await pool.query('DELETE FROM ownership_assignments')
     await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM bid_milestones')
+    await pool.query('DELETE FROM bids')
     await pool.query('DELETE FROM opportunities')
     // commercial_boqs.department_id also FKs (RESTRICT) into hierarchy_nodes
     // — clear it first so this doesn't conflict with rows left behind by

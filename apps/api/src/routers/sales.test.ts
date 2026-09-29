@@ -22,6 +22,8 @@ describe('sales router', () => {
     // into hierarchy_nodes — clear them first, same reasoning as
     // hierarchy.test.ts's own beforeEach.
     await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM bid_milestones')
+    await pool.query('DELETE FROM bids')
     await pool.query('DELETE FROM opportunities')
     await pool.query('DELETE FROM employees')
     await pool.query('DELETE FROM hierarchy_nodes')

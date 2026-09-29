@@ -13,6 +13,8 @@ describe('hierarchy router', () => {
     await pool.query('DELETE FROM commercial_boq_line_items')
     await pool.query('DELETE FROM commercial_boqs')
     await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM bid_milestones')
+    await pool.query('DELETE FROM bids')
     await pool.query('DELETE FROM opportunities')
     await pool.query('DELETE FROM employees')
     await pool.query('DELETE FROM hierarchy_nodes')

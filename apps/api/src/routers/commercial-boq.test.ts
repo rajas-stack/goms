@@ -16,6 +16,8 @@ describe('commercial.boq + commercial.auditLogs routers', () => {
     await pool.query('DELETE FROM sales_postings')
     await pool.query('DELETE FROM sales_persons')
     await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM bid_milestones')
+    await pool.query('DELETE FROM bids')
     await pool.query('DELETE FROM opportunities')
     await pool.query('DELETE FROM employees')
     await pool.query('DELETE FROM hierarchy_nodes')

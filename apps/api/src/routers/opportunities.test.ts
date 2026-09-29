@@ -8,6 +8,8 @@ describe('opportunities router', () => {
 
   beforeEach(async () => {
     await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM bid_milestones')
+    await pool.query('DELETE FROM bids')
     await pool.query('DELETE FROM opportunities')
     // Other test files (sharing this DB, fileParallelism off) may leave
     // employee rows behind, which would otherwise block deleting
