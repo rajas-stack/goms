@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server'
 import { publicProcedure, protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isForeignKeyViolation, isUniqueViolation } from '../db-errors.js'
+import { writeAuditLog, listAuditLogs } from '../lib/auditLog.js'
 import {
   buildSkuCode, MASTER_CHILD_OF, MASTER_EXTRA_FIELDS, MASTER_PARENT_FIELD, findMasterCodeClash,
   SKU_SENSITIVE_FIELDS, type CommercialMasterKey,
@@ -10,23 +11,6 @@ import {
   computeLineTotal, validateLineQuantity, validateLineDiscountPct, resolveApprovalBand, freshLineApprovalState,
   effectiveUnitPrice, isAbsoluteLinePrice, discountPctForSellingPrice, conversionFactorFromRates,
 } from '@goms/domain'
-
-/** Every mutation this router logs goes through this one insert — the same
- *  shape (`CommercialAuditLog`) the frontend's in-memory `writeAuditLogEntry`
- *  produces, so `commercial.auditLogs.list` reads identically regardless of
- *  which backend wrote the row. Generic across every domain, not just BOQ —
- *  `entityType`/`entityId` are plain TEXT, matching `employee_merge_audit`'s
- *  precedent of not FK-constraining a history log to a row that may since
- *  have been deleted. */
-async function writeAuditLog(client: any, entry: {
-  entityType: string; entityId: string; field: string; oldValue: string; newValue: string; reason: string; action: string
-}) {
-  await client.query(
-    `INSERT INTO commercial_audit_logs (entity_type, entity_id, field, old_value, new_value, reason, action)
-     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-    [entry.entityType, entry.entityId, entry.field, entry.oldValue, entry.newValue, entry.reason, entry.action],
-  )
-}
 
 const masterKeySchema = z.enum([
   'verticals', 'products', 'modules', 'features', 'skuCategories', 'unitsOfMeasure',
@@ -722,14 +706,6 @@ function toLineItem(row: any) {
     taxPct: Number(row.tax_pct), approverId: row.approver_id, approvalDate: row.approval_date,
     approvalRemarks: row.approval_remarks, approvalStatus: row.approval_status, lineTotal: Number(row.line_total),
     pricingLevels: row.pricing_levels, activePricingLevel: row.active_pricing_level,
-  }
-}
-
-function toAuditLog(row: any) {
-  return {
-    id: row.id, entityType: row.entity_type, entityId: row.entity_id, field: row.field,
-    oldValue: row.old_value, newValue: row.new_value, reason: row.reason, action: row.action,
-    changedAt: row.changed_at.toISOString(), changedBy: row.changed_by,
   }
 }
 
@@ -1445,15 +1421,7 @@ const commercialAuditLogsRouter = router({
   // plaintext oldValue/newValue history instead of the live row.
   list: protectedReadProcedure
     .input(z.object({ entityType: z.string().optional(), entityId: z.string().optional() }).optional())
-    .query(async ({ input }) => {
-      const conditions: string[] = []
-      const params: any[] = []
-      if (input?.entityType) { params.push(input.entityType); conditions.push(`entity_type=$${params.length}`) }
-      if (input?.entityId) { params.push(input.entityId); conditions.push(`entity_id=$${params.length}`) }
-      const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
-      const result = await pool.query(`SELECT * FROM commercial_audit_logs ${where} ORDER BY changed_at DESC`, params)
-      return result.rows.map(toAuditLog)
-    }),
+    .query(({ input }) => listAuditLogs(input)),
 })
 
 export const commercialRouter = router({
