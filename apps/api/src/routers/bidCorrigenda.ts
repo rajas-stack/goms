@@ -3,6 +3,9 @@ import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
+import { assertFieldsNotProtected } from '../lib/protectedValues.js'
+import { syncSubmissionDeadlineToOpportunity } from './bidMilestones.js'
+import { writeAuditLog } from '../lib/auditLog.js'
 
 export function toChange(row: any) {
   return {
@@ -89,6 +92,58 @@ export const bidCorrigendaRouter = router({
 
         await client.query('COMMIT')
         return toBidCorrigendum(corrigendum, changeRows)
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
+    }),
+
+  reviewChange: protectedProcedure
+    .input(z.object({ changeId: z.string().uuid(), decision: z.enum(['accepted', 'rejected']), reason: z.string().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const change = (await client.query('SELECT * FROM bid_corrigendum_changes WHERE id=$1 FOR UPDATE', [input.changeId])).rows[0]
+        if (!change) throw new TRPCError({ code: 'NOT_FOUND' })
+        const corrigendum = (await client.query('SELECT * FROM bid_corrigenda WHERE id=$1', [change.corrigendum_id])).rows[0]
+
+        if (input.decision === 'accepted') {
+          await assertFieldsNotProtected(client, 'bid', corrigendum.bid_id, [change.field_key])
+          if (change.field_key === 'tenderLink') {
+            await client.query('UPDATE bids SET tender_link=$1, updated_at=now() WHERE id=$2', [change.proposed_value, corrigendum.bid_id])
+          } else {
+            await client.query(
+              `UPDATE bid_milestones SET due_at=$1, updated_at=now(), source='corrigendum' WHERE bid_id=$2 AND key=$3`,
+              [change.proposed_value, corrigendum.bid_id, change.field_key],
+            )
+            if (change.field_key === 'submissionDeadline') {
+              await syncSubmissionDeadlineToOpportunity(client, corrigendum.bid_id, change.proposed_value)
+            }
+          }
+        }
+
+        await client.query(
+          `UPDATE bid_corrigendum_changes SET decision=$1, decided_at=now(), decided_by=$2 WHERE id=$3`,
+          [input.decision, ctx.user?.email ?? null, input.changeId],
+        )
+        await writeAuditLog(client, {
+          entityType: 'bidCorrigendum', entityId: corrigendum.id, field: change.field_key,
+          oldValue: change.current_value, newValue: change.proposed_value, reason: input.reason ?? '',
+          action: input.decision === 'accepted' ? 'corrigendum_accepted' : 'corrigendum_rejected', changedBy: ctx.user?.email,
+        })
+
+        const remaining = await client.query(
+          `SELECT 1 FROM bid_corrigendum_changes WHERE corrigendum_id=$1 AND decision='pending'`, [corrigendum.id],
+        )
+        if (!remaining.rows.length) {
+          await client.query(`UPDATE bid_corrigenda SET reviewed_at=now(), reviewed_by=$1 WHERE id=$2`, [ctx.user?.email ?? null, corrigendum.id])
+        }
+
+        await client.query('COMMIT')
+        return toChange((await pool.query('SELECT * FROM bid_corrigendum_changes WHERE id=$1', [input.changeId])).rows[0])
       } catch (e) {
         await client.query('ROLLBACK')
         throw e
