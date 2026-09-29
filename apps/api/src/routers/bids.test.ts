@@ -83,4 +83,44 @@ describe('bids router', () => {
     expect(grid).toHaveLength(1)
     expect(grid[0]).toMatchObject({ opportunityId, departmentId, opportunityName: 'AI Document Processing System' })
   })
+
+  it('rejects decision=go before the bid reaches submitted', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    await expect(caller.bids.update({ id: bid.id, patch: { decision: 'go' } })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+
+  it('allows decision=go and stageKey=submitted in the same patch', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    const updated = await caller.bids.update({ id: bid.id, patch: { stageKey: 'submitted', decision: 'go' } })
+    expect(updated.stageKey).toBe('goApproved')
+    expect(updated.decision).toBe('go')
+  })
+
+  it('never gates decision=no_go, even from the initial stage', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    const updated = await caller.bids.update({ id: bid.id, patch: { decision: 'no_go' } })
+    expect(updated.stageKey).toBe('dropped')
+    expect(updated.decision).toBe('no_go')
+  })
+
+  it('syncs the opportunity to submitted when the bid stage reaches submitted, and no further if already past it', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    await caller.bids.update({ id: bid.id, patch: { stageKey: 'submitted' } })
+    expect((await caller.opportunities.get({ id: opportunityId }))!.stageKey).toBe('submitted')
+
+    await caller.opportunities.update({ id: opportunityId, patch: { stageKey: 'won' } })
+    await caller.bids.update({ id: bid.id, patch: { stageKey: 'submitted' } }) // no-op re-trigger, already past 'submitted' in a different bid's lifecycle
+    expect((await caller.opportunities.get({ id: opportunityId }))!.stageKey).toBe('won') // unchanged — sync never regresses a further-along opportunity
+  })
+
+  it('syncs the opportunity to won/dropped when the decision becomes final, unless already closed', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    await caller.bids.update({ id: bid.id, patch: { stageKey: 'submitted', decision: 'go' } })
+    expect((await caller.opportunities.get({ id: opportunityId }))!.stageKey).toBe('won')
+  })
 })

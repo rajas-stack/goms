@@ -3,7 +3,8 @@ import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
-import { formatBidCode, DEFAULT_BID_STAGE_KEY } from '@goms/domain'
+import { formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP } from '@goms/domain'
+import { applyStageChange } from './opportunities.js'
 
 export function toBid(row: any) {
   return {
@@ -37,6 +38,10 @@ function parseSubmissionDate(raw: string | null | undefined): string | null {
   if (!raw) return null
   const parsed = new Date(raw)
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+}
+
+const bidColumnFor: Record<string, string> = {
+  stageKey: 'stage_key', decision: 'decision', tenderLink: 'tender_link',
 }
 
 export const bidsRouter = router({
@@ -95,6 +100,67 @@ export const bidsRouter = router({
 
         await client.query('COMMIT')
         return toBid(bidRow)
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
+    }),
+
+  update: protectedProcedure
+    .input(z.object({
+      id: z.string().uuid(),
+      patch: z.object({
+        stageKey: z.string().optional(), decision: z.enum(['pending', 'go', 'no_go']).optional(),
+        tenderLink: z.string().nullable().optional(),
+      }),
+    }))
+    .mutation(async ({ input }) => {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const current = (await client.query('SELECT * FROM bids WHERE id=$1 FOR UPDATE', [input.id])).rows[0]
+        if (!current) throw new TRPCError({ code: 'NOT_FOUND' })
+
+        const patch: Record<string, unknown> = { ...input.patch }
+        const effectiveStageKey = (patch.stageKey as string | undefined) ?? current.stage_key
+        if (patch.decision === 'go' && !isAtOrAfterSubmitted(effectiveStageKey)) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot mark Go before the bid reaches Submitted.' })
+        }
+        // Auto-derive the terminal stage from a final decision (spec §4.4) —
+        // this always wins over any stageKey also present in the same patch,
+        // so the two fields can never visibly disagree.
+        if (patch.decision === 'go') patch.stageKey = 'goApproved'
+        if (patch.decision === 'no_go') patch.stageKey = 'dropped'
+
+        const fields = Object.keys(patch)
+        if (fields.length) {
+          const values = fields.map((f) => patch[f])
+          const setClauses = fields.map((f, i) => `${bidColumnFor[f]}=$${i + 1}`)
+          values.push(input.id)
+          await client.query(`UPDATE bids SET ${setClauses.join(', ')}, updated_at=now() WHERE id=$${values.length}`, values)
+        }
+
+        // Bid -> Opportunity sync (spec §4.4) — exactly these two points, both
+        // through the shared applyStageChange helper, same transaction.
+        const newStageKey = (patch.stageKey as string | undefined) ?? current.stage_key
+        if (newStageKey === 'submitted' && current.stage_key !== 'submitted') {
+          const opp = (await client.query('SELECT stage_key FROM opportunities WHERE id=$1', [current.opportunity_id])).rows[0]
+          if (opp && (PIPELINE_STAGE_MAP[opp.stage_key]?.order ?? 0) < (PIPELINE_STAGE_MAP['submitted']?.order ?? 0)) {
+            await applyStageChange(client, current.opportunity_id, 'submitted', 'Bid submitted (synced from Bid Tracker)')
+          }
+        }
+        if (patch.decision === 'go' || patch.decision === 'no_go') {
+          const opp = (await client.query('SELECT stage_key FROM opportunities WHERE id=$1', [current.opportunity_id])).rows[0]
+          if (opp && !(PIPELINE_STAGE_MAP[opp.stage_key]?.isClosed ?? false)) {
+            const target = patch.decision === 'go' ? 'won' : 'dropped'
+            await applyStageChange(client, current.opportunity_id, target, `Bid decision recorded: ${patch.decision} (synced from Bid Tracker)`)
+          }
+        }
+
+        await client.query('COMMIT')
+        return (await oneBid(input.id))!
       } catch (e) {
         await client.query('ROLLBACK')
         throw e

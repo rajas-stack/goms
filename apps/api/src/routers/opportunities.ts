@@ -29,6 +29,26 @@ async function oneOpportunity(id: string) {
   return result.rows[0] ? toOpportunity(result.rows[0]) : null
 }
 
+/** Shared with bids.ts (spec §4.4's Bid->Opportunity sync) — the ONLY place
+ *  that writes opportunities.stage_key and logs opportunity_stage_changes,
+ *  so there is exactly one stage-transition code path regardless of which
+ *  router triggers it. Must run inside the CALLER's existing transaction
+ *  (same `client`) — never opens its own connection. No-ops if newStageKey
+ *  already matches the current value. */
+export async function applyStageChange(client: any, opportunityId: string, newStageKey: string, note = ''): Promise<void> {
+  const current = (await client.query('SELECT stage_key, closed_on FROM opportunities WHERE id=$1', [opportunityId])).rows[0]
+  if (!current || current.stage_key === newStageKey) return
+  const nowClosed = PIPELINE_STAGE_MAP[newStageKey]?.isClosed ?? false
+  const today = new Date().toISOString().slice(0, 10)
+  const closedOn = nowClosed ? (current.closed_on ?? today) : null
+  await client.query(`UPDATE opportunities SET stage_key=$1, closed_on=$2 WHERE id=$3`, [newStageKey, closedOn, opportunityId])
+  await client.query(
+    `INSERT INTO opportunity_stage_changes (opportunity_id, from_stage_key, to_stage_key, changed_at, note)
+     VALUES ($1,$2,$3,$4,$5)`,
+    [opportunityId, current.stage_key, newStageKey, today, note],
+  )
+}
+
 const patchShape = {
   departmentId: z.string().uuid().optional(), stateCode: z.number().int().nullable().optional(),
   stageKey: z.string().min(1).optional(), closedOn: z.string().nullable().optional(),
@@ -123,7 +143,13 @@ export const opportunitiesRouter = router({
         const current = (await client.query('SELECT * FROM opportunities WHERE id=$1 FOR UPDATE', [input.id])).rows[0]
         if (!current) throw new TRPCError({ code: 'NOT_FOUND' })
 
-        const fields = Object.keys(input.patch)
+        // stageKey is excluded here — applyStageChange (below) is the sole
+        // writer of stage_key (and closed_on), reading `current` from BEFORE
+        // any write in this transaction. Writing stage_key here first would
+        // make applyStageChange's own current-value check see the new value
+        // already applied and silently no-op (loses closed_on + the logged
+        // change).
+        const fields = Object.keys(input.patch).filter((f) => f !== 'stageKey')
         if (fields.length) {
           const values = fields.map((f) => (input.patch as any)[f])
           const setClauses = fields.map((f, i) => `${columnFor[f]}=$${i + 1}`)
@@ -135,15 +161,7 @@ export const opportunitiesRouter = router({
         // log is the only way "what was the pipeline on <date>?" is
         // ever answerable.
         if (input.patch.stageKey !== undefined && input.patch.stageKey !== current.stage_key) {
-          const nowClosed = PIPELINE_STAGE_MAP[input.patch.stageKey]?.isClosed ?? false
-          const today = new Date().toISOString().slice(0, 10)
-          const closedOn = nowClosed ? (current.closed_on ?? today) : null
-          await client.query(`UPDATE opportunities SET closed_on=$1 WHERE id=$2`, [closedOn, input.id])
-          await client.query(
-            `INSERT INTO opportunity_stage_changes (opportunity_id, from_stage_key, to_stage_key, changed_at, note)
-             VALUES ($1,$2,$3,$4,'')`,
-            [input.id, current.stage_key, input.patch.stageKey, today],
-          )
+          await applyStageChange(client, input.id, input.patch.stageKey)
         }
 
         await client.query('COMMIT')
