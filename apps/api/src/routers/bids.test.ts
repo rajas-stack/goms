@@ -112,7 +112,12 @@ describe('bids router', () => {
     await caller.bids.update({ id: bid.id, patch: { stageKey: 'submitted' } })
     expect((await caller.opportunities.get({ id: opportunityId }))!.stageKey).toBe('submitted')
 
-    await caller.opportunities.update({ id: opportunityId, patch: { stageKey: 'won' } })
+    // Simulated directly via SQL, not caller.opportunities.update — once a bid
+    // exists, that procedure now rejects a direct stageKey patch (Task 10's
+    // Global-Constraint guard). This mirrors the ONLY other legitimate way an
+    // opportunity ends up further along than 'submitted': the bid-sync path
+    // itself, exercised elsewhere; here we only need the "already past it" state.
+    await pool.query(`UPDATE opportunities SET stage_key='won' WHERE id=$1`, [opportunityId])
     await caller.bids.update({ id: bid.id, patch: { stageKey: 'submitted' } }) // no-op re-trigger, already past 'submitted' in a different bid's lifecycle
     expect((await caller.opportunities.get({ id: opportunityId }))!.stageKey).toBe('won') // unchanged — sync never regresses a further-along opportunity
   })

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { isForeignKeyViolation } from '../db-errors.js'
 import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from '@goms/domain'
 
 function toOpportunity(row: any) {
@@ -143,6 +144,27 @@ export const opportunitiesRouter = router({
         const current = (await client.query('SELECT * FROM opportunities WHERE id=$1 FOR UPDATE', [input.id])).rows[0]
         if (!current) throw new TRPCError({ code: 'NOT_FOUND' })
 
+        if (input.patch.submissionDate !== undefined || input.patch.stageKey !== undefined) {
+          const hasBid = (await client.query('SELECT 1 FROM bids WHERE opportunity_id=$1', [input.id])).rows[0]
+          if (hasBid) {
+            if (input.patch.submissionDate !== undefined) {
+              throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: 'This opportunity has a bid in Bid Tracker — edit its Submission Deadline milestone there instead.',
+              })
+            }
+            // Global Constraint: opportunities.stage_key has exactly one
+            // direct-write path once a bid exists — none. The only route it
+            // still changes through is bids.update's Bid->Opportunity sync,
+            // which calls applyStageChange directly on its own transaction,
+            // never this procedure — so this guard can never block that sync.
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'This opportunity has a bid in Bid Tracker — its stage is managed there instead.',
+            })
+          }
+        }
+
         // stageKey is excluded here — applyStageChange (below) is the sole
         // writer of stage_key (and closed_on), reading `current` from BEFORE
         // any write in this transaction. Writing stage_key here first would
@@ -173,8 +195,15 @@ export const opportunitiesRouter = router({
         client.release()
       }
     }),
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) =>
-    // opportunity_stage_changes cascades via FK.
-    pool.query('DELETE FROM opportunities WHERE id=$1', [input.id]).then(() => undefined)
-  ),
+  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+    try {
+      // opportunity_stage_changes cascades via FK; bids RESTRICTs (spec §4.7).
+      await pool.query('DELETE FROM opportunities WHERE id=$1', [input.id])
+    } catch (e) {
+      if (isForeignKeyViolation(e)) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete this opportunity — it has a bid in Bid Tracker (active or archived). Delete the bid first.' })
+      }
+      throw e
+    }
+  }),
 })
