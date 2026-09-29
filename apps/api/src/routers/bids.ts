@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
+import { assertFieldsNotProtected } from '../lib/protectedValues.js'
 import { formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP, computeAttentionFlag } from '@goms/domain'
 import { applyStageChange } from './opportunities.js'
 
@@ -162,6 +163,7 @@ export const bidsRouter = router({
 
         const fields = Object.keys(patch)
         if (fields.length) {
+          await assertFieldsNotProtected(client, 'bid', input.id, fields)
           const values = fields.map((f) => patch[f])
           const setClauses = fields.map((f, i) => `${bidColumnFor[f]}=$${i + 1}`)
           values.push(input.id)

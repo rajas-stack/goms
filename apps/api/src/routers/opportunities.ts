@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isForeignKeyViolation } from '../db-errors.js'
+import { assertFieldsNotProtected } from '../lib/protectedValues.js'
 import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from '@goms/domain'
 
 function toOpportunity(row: any) {
@@ -163,6 +164,13 @@ export const opportunitiesRouter = router({
               message: 'This opportunity has a bid in Bid Tracker — its stage is managed there instead.',
             })
           }
+        }
+
+        const protectableOpportunityFields = ['valueAmount', 'emdAmount', 'gemTenderId'] as const
+        const patchedProtectable = Object.keys(input.patch).filter((f) => (protectableOpportunityFields as readonly string[]).includes(f))
+        if (patchedProtectable.length) {
+          const bid = (await client.query('SELECT id FROM bids WHERE opportunity_id=$1', [input.id])).rows[0]
+          if (bid) await assertFieldsNotProtected(client, 'bid', bid.id, patchedProtectable)
         }
 
         // stageKey is excluded here — applyStageChange (below) is the sole

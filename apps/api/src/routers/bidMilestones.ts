@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
+import { assertFieldsNotProtected } from '../lib/protectedValues.js'
 
 function toBidMilestone(row: any) {
   return {
@@ -81,6 +82,7 @@ export const bidMilestonesRouter = router({
         const columnFor: Record<string, string> = { label: 'label', dueAt: 'due_at', venue: 'venue', notes: 'notes', status: 'status' }
         const fields = Object.keys(input.patch)
         if (fields.length) {
+          await assertFieldsNotProtected(client, 'bid', current.bid_id, [current.key])
           const values = fields.map((f) => (input.patch as any)[f])
           const setClauses = fields.map((f, i) => `${columnFor[f]}=$${i + 1}`)
           values.push(input.id)

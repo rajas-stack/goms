@@ -12,11 +12,13 @@ import { searchRouter } from './routers/search.js'
 import { adminImportRouter } from './routers/adminImport.js'
 import { bidsRouter } from './routers/bids.js'
 import { bidMilestonesRouter } from './routers/bidMilestones.js'
+import { protectedValuesRouter } from './routers/protectedValues.js'
 
 export const appRouter = router({
   health: healthRouter, customers: customersRouter, hierarchy: hierarchyRouter,
   employees: employeesRouter, sales: salesRouter, commercial: commercialRouter,
   ownership: ownershipRouter, opportunities: opportunitiesRouter, followUps: followUpsRouter, search: searchRouter,
   adminImport: adminImportRouter, bids: bidsRouter, bidMilestones: bidMilestonesRouter,
+  protectedValues: protectedValuesRouter,
 })
 export type AppRouter = typeof appRouter
