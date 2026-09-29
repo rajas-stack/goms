@@ -25,7 +25,7 @@ async function loadSearchData(): Promise<SearchData> {
     pool.query(`SELECT * FROM employees WHERE status='active'`),
     pool.query('SELECT employee_id FROM transfers'),
     pool.query('SELECT * FROM timeline_events'),
-    pool.query('SELECT * FROM opportunities'),
+    pool.query('SELECT o.*, b.id AS bid_id, b.bid_code, b.tender_link FROM opportunities o LEFT JOIN bids b ON b.opportunity_id = o.id'),
     pool.query('SELECT * FROM sales_persons'),
     pool.query(`SELECT sales_person_id, designation, end_date FROM sales_postings WHERE end_date IS NULL`),
   ])
@@ -44,6 +44,7 @@ async function loadSearchData(): Promise<SearchData> {
     opportunities: opportunities.rows.map((r) => ({
       id: r.id, departmentId: r.department_id, stateCode: r.state_code, opportunityName: r.opportunity_name,
       gemTenderId: r.gem_tender_id, vertical: r.vertical, component: r.component, salesPersonEmail: r.sales_person_email,
+      bidId: r.bid_id, bidCode: r.bid_code, tenderLink: r.tender_link,
     })),
     salesPersons: salesPersons.rows.map((r) => ({ id: r.id, name: r.name, officialEmail: r.official_email })),
     postings: postings.rows.map((r) => ({ salesPersonId: r.sales_person_id, designation: r.designation, endDate: r.end_date })),

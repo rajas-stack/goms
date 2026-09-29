@@ -23,6 +23,9 @@ export interface SearchResult {
    *  HierNode id its `path()` should navigate to instead (e.g. a Work's
    *  owning department). Omitted for results that don't need it. */
   containerId?: string
+  /** Set once a Bid Tracker bid exists for this opportunity — lets the Works
+   *  category route to the bid detail page instead of the department view. */
+  bidId?: string | null
 }
 
 /** Minimal structural shapes search needs — the real frontend types (and a
@@ -49,6 +52,9 @@ export interface SearchOpportunity {
   vertical: string
   component: string[]
   salesPersonEmail: string
+  bidId: string | null
+  bidCode: string | null
+  tenderLink: string | null
 }
 export interface SearchSalesPerson {
   id: string
@@ -351,7 +357,7 @@ function toWorkResult(work: SearchOpportunity, node: HierNode | undefined): Sear
     title: work.opportunityName || 'Untitled opportunity',
     subtitle: `${node?.name ?? 'Unknown department'} · ${work.vertical}`,
     code: null, domain: node?.domain ?? null, stateCode: work.stateCode,
-    containerId: work.departmentId,
+    containerId: work.departmentId, bidId: work.bidId,
   }
 }
 
@@ -362,7 +368,7 @@ const worksCategory: SearchCategoryDef = {
     for (const w of ctx.opportunities) {
       if (!ctx.inScope(w.departmentId)) continue
       const salesName = ctx.salesPersons.find((p) => p.officialEmail === w.salesPersonEmail)?.name ?? ''
-      const hay = `${w.opportunityName} ${w.gemTenderId} ${w.vertical} ${w.component.join(' ')} ${salesName}`.toLowerCase()
+      const hay = `${w.opportunityName} ${w.gemTenderId} ${w.vertical} ${w.component.join(' ')} ${salesName} ${w.bidCode ?? ''} ${w.tenderLink ?? ''}`.toLowerCase()
       if (matches(hay, query)) out.push(toWorkResult(w, ctx.nodeById.get(w.departmentId)))
     }
     return out
@@ -371,9 +377,9 @@ const worksCategory: SearchCategoryDef = {
     const node = result.containerId ? ctx.nodeById.get(result.containerId) : undefined
     return node ? [toNodeResult(node, 'department')] : []
   },
-  path: (result) => (result.containerId && result.stateCode != null
-    ? `/state/${result.stateCode}?sel=${result.containerId}&kind=node`
-    : '/'),
+  path: (result) => (result.bidId
+    ? `/bid-tracker/bid/${result.bidId}`
+    : (result.containerId && result.stateCode != null ? `/state/${result.stateCode}?sel=${result.containerId}&kind=node` : '/')),
 }
 
 function toSalesPersonResult(p: SearchSalesPerson, ctx: BuiltContext): SearchResult {

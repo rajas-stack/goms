@@ -210,4 +210,25 @@ describe('search router', () => {
       await expect(caller.search.search({ query: 'a' })).resolves.toBeDefined()
     })
   })
+
+  it('matches a bid code and routes to the bid detail page once a bid exists, falling back to the department view otherwise', async () => {
+    const caller = appRouter.createCaller({})
+    const oppWithBid = await caller.opportunities.create({ departmentId: deptId, opportunityName: 'Has A Bid' })
+    const bid = await caller.bids.create({ opportunityId: oppWithBid.id })
+    const oppWithoutBid = await caller.opportunities.create({ departmentId: deptId, opportunityName: 'No Bid Yet' })
+
+    const byBidCode = await caller.search.search({ query: bid.bidCode })
+    const found = byBidCode.find((r: any) => r.category === 'work' && r.id === oppWithBid.id)
+    expect(found).toBeDefined()
+
+    const all = await caller.search.search({ query: 'Bid' })
+    const withBid = all.find((r: any) => r.id === oppWithBid.id)
+    const withoutBid = all.find((r: any) => r.id === oppWithoutBid.id)
+    // path() is resolved client-side from category+result fields in this
+    // codebase's existing search UI — assert the field the frontend branches
+    // on instead of a computed path here, matching how `worksCategory.path`
+    // is a pure function called by the frontend, not the backend.
+    expect((withBid as any).bidId).toBe(bid.id)
+    expect((withoutBid as any).bidId).toBeNull()
+  })
 })
