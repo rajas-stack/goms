@@ -25,6 +25,29 @@ function sanitizeFilename(name: string): string {
 // process restart, same lifetime class as the signed URL itself.
 export const pendingUploads = new Map<string, { entityType: string; entityId: string; filename: string; version: string; pendingPath: string; canonicalPath: string }>()
 
+function toCitation(row: any) {
+  return { id: row.id, documentId: row.document_id, pageLabel: row.page_label, quoteText: row.quote_text, fieldRef: row.field_ref, createdAt: row.created_at }
+}
+
+export const documentCitationsRouter = router({
+  list: protectedReadProcedure.input(z.object({ documentId: z.string().uuid() })).query(async ({ input }) => {
+    const result = await pool.query('SELECT * FROM document_citations WHERE document_id=$1 ORDER BY created_at', [input.documentId])
+    return result.rows.map(toCitation)
+  }),
+  create: protectedProcedure
+    .input(z.object({ documentId: z.string().uuid(), pageLabel: z.string().min(1), quoteText: z.string().optional(), fieldRef: z.string().optional() }))
+    .mutation(async ({ input }) => {
+      const result = await pool.query(
+        `INSERT INTO document_citations (document_id, page_label, quote_text, field_ref) VALUES ($1,$2,$3,$4) RETURNING *`,
+        [input.documentId, input.pageLabel, input.quoteText ?? '', input.fieldRef ?? null],
+      )
+      return toCitation(result.rows[0])
+    }),
+  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) =>
+    pool.query('DELETE FROM document_citations WHERE id=$1', [input.id]).then(() => undefined)
+  ),
+})
+
 export const documentsRouter = router({
   requestUploadUrl: protectedProcedure
     .input(z.object({
@@ -88,4 +111,23 @@ export const documentsRouter = router({
       }
       return toDocument(row)
     }),
+
+  listFor: protectedReadProcedure.input(z.object({ entityType: z.string(), entityId: z.string().uuid() })).query(async ({ input }) => {
+    const result = await pool.query('SELECT * FROM documents WHERE entity_type=$1 AND entity_id=$2 ORDER BY uploaded_at DESC', [input.entityType, input.entityId])
+    return result.rows.map(toDocument)
+  }),
+  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+    const doc = (await pool.query('SELECT * FROM documents WHERE id=$1', [input.id])).rows[0]
+    if (!doc) return
+    // document_citations cascades via FK. Row deleted first, inside its own
+    // implicit transaction; GCS delete is best-effort afterward (spec §14) —
+    // a failure here is logged, not thrown, and never blocks the DB delete.
+    await pool.query('DELETE FROM documents WHERE id=$1', [input.id])
+    try {
+      await deleteObject(doc.storage_path)
+    } catch (e) {
+      console.error(`Failed to delete GCS object ${doc.storage_path} for deleted document ${input.id}`, e)
+    }
+  }),
+  citations: documentCitationsRouter,
 })

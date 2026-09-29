@@ -95,4 +95,26 @@ describe('documents router', () => {
     await expect(caller.documents.confirmUpload({ uploadId: second.uploadId })).rejects.toMatchObject({ code: 'CONFLICT' })
     expect(deleteObject).toHaveBeenCalled() // the loser's now-moved-then-rejected object is cleaned up, not left at the canonical path
   })
+
+  it('lists documents for an entity, deletes one (row then best-effort object), and manages citations', async () => {
+    const caller = appRouter.createCaller({})
+    const { uploadId } = await caller.documents.requestUploadUrl({ entityType: 'bid', entityId: bidId, filename: 'Cited.pdf', contentType: 'application/pdf', sizeBytes: 1024 })
+    const doc = await caller.documents.confirmUpload({ uploadId })
+
+    const citation = await caller.documents.citations.create({ documentId: doc.id, pageLabel: 'Pg 3', quoteText: 'Total estimated value of procurement: ₹6.20 Crore' })
+    let citations = await caller.documents.citations.list({ documentId: doc.id })
+    expect(citations).toHaveLength(1)
+
+    let list = await caller.documents.listFor({ entityType: 'bid', entityId: bidId })
+    expect(list.map((d: any) => d.id)).toContain(doc.id)
+
+    await caller.documents.delete({ id: doc.id })
+    list = await caller.documents.listFor({ entityType: 'bid', entityId: bidId })
+    expect(list.map((d: any) => d.id)).not.toContain(doc.id)
+    citations = await caller.documents.citations.list({ documentId: doc.id })
+    expect(citations).toHaveLength(0) // cascaded
+
+    const { deleteObject } = await import('../lib/gcs.js')
+    expect(deleteObject).toHaveBeenCalledWith(doc.storagePath)
+  })
 })
