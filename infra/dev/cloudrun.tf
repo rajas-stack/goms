@@ -159,6 +159,10 @@ resource "google_cloud_run_v2_service" "goms_api" {
         name  = "CORS_ALLOWED_ORIGINS"
         value = "http://localhost:5190"
       }
+      env {
+        name  = "ATTACHMENTS_BUCKET"
+        value = google_storage_bucket.attachments.name
+      }
     }
   }
 }
