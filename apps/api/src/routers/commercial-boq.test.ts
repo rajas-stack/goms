@@ -542,4 +542,23 @@ describe('commercial.boq + commercial.auditLogs routers', () => {
       await expect(caller.commercial.auditLogs.list()).resolves.toBeDefined()
     })
   })
+
+  it('accepts and returns opportunityId on create/update', async () => {
+    const caller = appRouter.createCaller({})
+    const { dept, salesPerson, masters } = await setup(caller)
+    const opp = await caller.opportunities.create({ departmentId: dept.id, opportunityName: 'BOQ-linked tender' })
+    const boq = await makeBoq(caller, dept, salesPerson, { opportunityName: 'BOQ-linked tender', verticalId: masters.vertical.id, opportunityId: opp.id })
+    expect(boq.opportunityId).toBe(opp.id)
+  })
+
+  it('carries opportunityId forward through revise and duplicate', async () => {
+    const caller = appRouter.createCaller({})
+    const { dept, salesPerson, masters } = await setup(caller)
+    const opp = await caller.opportunities.create({ departmentId: dept.id, opportunityName: 'Revisable tender' })
+    const boq = await makeBoq(caller, dept, salesPerson, { opportunityName: 'Revisable tender', verticalId: masters.vertical.id, opportunityId: opp.id })
+    const revised = await caller.commercial.boq.revise({ id: boq.id })
+    expect(revised.opportunityId).toBe(opp.id)
+    const duplicated = await caller.commercial.boq.duplicate({ id: boq.id })
+    expect(duplicated.opportunityId).toBe(opp.id)
+  })
 })

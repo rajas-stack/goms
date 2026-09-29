@@ -696,6 +696,7 @@ function toBoq(row: any) {
     currency: row.currency, grandTotal: Number(row.grand_total),
     createdAt: row.created_at.toISOString(), createdBy: row.created_by,
     lastModifiedAt: row.updated_at.toISOString(), lastModifiedBy: row.last_modified_by,
+    opportunityId: row.opportunity_id,
   }
 }
 
@@ -858,6 +859,7 @@ const boqColumnFor: Record<string, string> = {
   verticalId: 'vertical_id', budgetAmount: 'budget_amount', budgetUnit: 'budget_unit', budgetKnown: 'budget_known',
   emdAmount: 'emd_amount', emdUnit: 'emd_unit', salesPersonId: 'sales_person_id',
   buSalesPersonId: 'bu_sales_person_id', preSalesId: 'pre_sales_id', currency: 'currency',
+  opportunityId: 'opportunity_id',
 }
 
 // opportunityName has no min-length here — the repository layer accepts a
@@ -869,7 +871,7 @@ const boqInputShape = {
   verticalId: z.string().uuid(),
   budgetAmount: z.string(), budgetUnit: z.string(), budgetKnown: z.string(), emdAmount: z.string(), emdUnit: z.string(),
   salesPersonId: z.string().uuid(), buSalesPersonId: z.string().uuid().nullable(), preSalesId: z.string().uuid().nullable(),
-  currency: z.string().min(1),
+  currency: z.string().min(1), opportunityId: z.string().uuid().nullable().optional(),
 }
 
 const boqPatchShape = {
@@ -881,6 +883,7 @@ const boqPatchShape = {
   emdAmount: z.string().optional(), emdUnit: z.string().optional(),
   salesPersonId: z.string().uuid().optional(), buSalesPersonId: z.string().uuid().nullable().optional(),
   preSalesId: z.string().uuid().nullable().optional(), currency: z.string().min(1).optional(),
+  opportunityId: z.string().uuid().nullable().optional(),
 }
 
 // isForeignKeyViolation/isUniqueViolation now live in ../db-errors.js —
@@ -960,14 +963,14 @@ const commercialBoqRouter = router({
         `INSERT INTO commercial_boqs (
            boq_number, opportunity_name, department_id, customer_name, customer_organization, customer_address, customer_contact,
            vertical_id, budget_amount, budget_unit, budget_known, emd_amount, emd_unit,
-           sales_person_id, bu_sales_person_id, pre_sales_id, currency
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+           sales_person_id, bu_sales_person_id, pre_sales_id, currency, opportunity_id
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
          RETURNING *`,
         [
           boqNumber, input.opportunityName, input.departmentId, input.customerName, input.customerOrganization,
           input.customerAddress, input.customerContact, input.verticalId, input.budgetAmount, input.budgetUnit,
           input.budgetKnown, input.emdAmount, input.emdUnit, input.salesPersonId, input.buSalesPersonId,
-          input.preSalesId, input.currency,
+          input.preSalesId, input.currency, input.opportunityId ?? null,
         ],
       )
       const row = insertResult.rows[0]
@@ -1309,14 +1312,14 @@ const commercialBoqRouter = router({
         `INSERT INTO commercial_boqs (
            boq_number, opportunity_name, department_id, customer_name, customer_organization, customer_address, customer_contact,
            vertical_id, budget_amount, budget_unit, budget_known, emd_amount, emd_unit,
-           sales_person_id, bu_sales_person_id, pre_sales_id, status, boq_version, revision_number, parent_boq_id, currency, grand_total
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'draft',$17,0,$18,$19,$20)
+           sales_person_id, bu_sales_person_id, pre_sales_id, status, boq_version, revision_number, parent_boq_id, currency, grand_total, opportunity_id
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'draft',$17,0,$18,$19,$20,$21)
          RETURNING *`,
         [
           original.boq_number, original.opportunity_name, original.department_id, original.customer_name, original.customer_organization,
           original.customer_address, original.customer_contact, original.vertical_id, original.budget_amount, original.budget_unit,
           original.budget_known, original.emd_amount, original.emd_unit, original.sales_person_id, original.bu_sales_person_id,
-          original.pre_sales_id, original.boq_version + 1, original.id, original.currency, original.grand_total,
+          original.pre_sales_id, original.boq_version + 1, original.id, original.currency, original.grand_total, original.opportunity_id,
         ],
       )
       const revised = insertResult.rows[0]
@@ -1353,14 +1356,14 @@ const commercialBoqRouter = router({
         `INSERT INTO commercial_boqs (
            boq_number, opportunity_name, department_id, customer_name, customer_organization, customer_address, customer_contact,
            vertical_id, budget_amount, budget_unit, budget_known, emd_amount, emd_unit,
-           sales_person_id, bu_sales_person_id, pre_sales_id, status, boq_version, revision_number, parent_boq_id, currency, grand_total
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'draft',1,0,NULL,$17,$18)
+           sales_person_id, bu_sales_person_id, pre_sales_id, status, boq_version, revision_number, parent_boq_id, currency, grand_total, opportunity_id
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,'draft',1,0,NULL,$17,$18,$19)
          RETURNING *`,
         [
           boqNumber, original.opportunity_name, original.department_id, original.customer_name, original.customer_organization,
           original.customer_address, original.customer_contact, original.vertical_id, original.budget_amount, original.budget_unit,
           original.budget_known, original.emd_amount, original.emd_unit, original.sales_person_id, original.bu_sales_person_id,
-          original.pre_sales_id, original.currency, original.grand_total,
+          original.pre_sales_id, original.currency, original.grand_total, original.opportunity_id,
         ],
       )
       const duplicate = insertResult.rows[0]
