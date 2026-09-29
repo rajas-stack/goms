@@ -4,7 +4,7 @@ import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
 import { assertFieldsNotProtected } from '../lib/protectedValues.js'
-import { formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP, computeAttentionFlag } from '@goms/domain'
+import { formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP, computeAttentionFlag, applyFilterRules } from '@goms/domain'
 import { applyStageChange } from './opportunities.js'
 
 export function toBid(row: any) {
@@ -75,19 +75,49 @@ export const bidsRouter = router({
   get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => oneBid(input.id)),
 
   listForGrid: protectedReadProcedure
-    .input(z.object({}).optional())
-    .query(async () => {
-      const result = await pool.query(`
-        SELECT b.*, o.department_id, o.state_code, o.opportunity_name, o.gem_tender_id, o.submission_date,
-               o.value_amount, o.value_unit, o.emd_amount, o.emd_unit, o.vertical
-        FROM bids b JOIN opportunities o ON o.id = b.opportunity_id
-        ORDER BY b.created_at DESC
-      `)
-      return result.rows.map((r: any) => ({
-        ...toBid(r), departmentId: r.department_id, stateCode: r.state_code, opportunityName: r.opportunity_name,
-        gemTenderId: r.gem_tender_id, submissionDate: r.submission_date, valueAmount: r.value_amount,
-        valueUnit: r.value_unit, emdAmount: r.emd_amount, emdUnit: r.emd_unit, vertical: r.vertical,
-      }))
+    .input(z.object({ filterRules: z.array(z.object({ field: z.string(), operator: z.literal('eq'), value: z.string() })).optional() }).optional())
+    .query(async ({ input, ctx }) => {
+      const [gridResult, corrigendaPendingResult, ownershipResult] = await Promise.all([
+        pool.query(`
+          SELECT b.*, o.department_id, o.state_code, o.opportunity_name, o.gem_tender_id, o.submission_date,
+                 o.value_amount, o.value_unit, o.emd_amount, o.emd_unit, o.vertical
+          FROM bids b JOIN opportunities o ON o.id = b.opportunity_id
+          ORDER BY b.created_at DESC
+        `),
+        pool.query(`
+          SELECT c.bid_id FROM bid_corrigenda c
+          JOIN bid_corrigendum_changes ch ON ch.corrigendum_id = c.id
+          WHERE ch.decision = 'pending' GROUP BY c.bid_id
+        `),
+        pool.query(`SELECT entity_id, sales_person_id FROM ownership_assignments WHERE entity_type='bid' AND role='owner' AND end_date IS NULL`),
+      ])
+      const pendingCorrigendumBidIds = new Set(corrigendaPendingResult.rows.map((r: any) => r.bid_id))
+      // NOTE: this resolves DIRECT bid-level owner assignments only, not
+      // spec §4.6's full inheritance-from-opportunity chain — sufficient for
+      // grid filtering/display; the bid detail page's Overview tab (Task 31)
+      // uses the full ownership.resolveOwner procedure for the authoritative
+      // single-bid view.
+      const salesPersonIds = [...new Set(ownershipResult.rows.map((r: any) => r.sales_person_id))]
+      const emailsResult = salesPersonIds.length
+        ? await pool.query('SELECT id, official_email FROM sales_persons WHERE id = ANY($1)', [salesPersonIds])
+        : { rows: [] }
+      const emailById = new Map(emailsResult.rows.map((r: any) => [r.id, r.official_email]))
+      const ownerEmailByBidId = new Map(
+        ownershipResult.rows.map((r: any) => [r.entity_id, emailById.get(r.sales_person_id) ?? null]),
+      )
+
+      const today = new Date().toISOString().slice(0, 10)
+      const rows = gridResult.rows.map((r: any) => {
+        const dueAt = r.submission_date && !Number.isNaN(new Date(r.submission_date).getTime()) ? r.submission_date : null
+        return {
+          ...toBid(r), departmentId: r.department_id, stateCode: r.state_code, opportunityName: r.opportunity_name,
+          gemTenderId: r.gem_tender_id, submissionDate: r.submission_date, valueAmount: r.value_amount,
+          valueUnit: r.value_unit, emdAmount: r.emd_amount, emdUnit: r.emd_unit, vertical: r.vertical,
+          ownerEmail: ownerEmailByBidId.get(r.id) ?? null,
+          attentionFlag: computeAttentionFlag({ dueAt, hasPendingCorrigendum: pendingCorrigendumBidIds.has(r.id), today }),
+        }
+      })
+      return applyFilterRules(rows, input?.filterRules ?? [], ctx.user?.email ?? null)
     }),
 
   create: protectedProcedure

@@ -98,3 +98,30 @@ export function computeAttentionFlag(input: {
   if (dueDate <= threshold.toISOString().slice(0, 10)) return 'dueSoon'
   return 'onTrack'
 }
+
+/** Resolves the one supported placeholder token. Anything else passes
+ *  through unchanged. Deterministic even with no signed-in user (spec's
+ *  Review Focus: AUTH_ENFORCEMENT_ENABLED is off by default across this
+ *  codebase) — resolves to null, which then matches nothing rather than
+ *  throwing, so "My Bids" with no signed-in user is simply an empty list,
+ *  not a crash. */
+export function resolveFilterValue(value: string, currentUserEmail: string | null): string | null {
+  return value === '$currentUser' ? currentUserEmail : value
+}
+
+export function applyFilterRules<T extends Record<string, unknown>>(
+  rows: T[],
+  rules: SystemBidViewFilterRule[],
+  currentUserEmail: string | null,
+): T[] {
+  if (!rules.length) return rows
+  return rows.filter((row) => rules.every((rule) => {
+    const target = resolveFilterValue(rule.value, currentUserEmail)
+    // A token that resolves to "no value" (e.g. $currentUser with no
+    // signed-in user) must never match, even a row whose own field is also
+    // null/undefined — otherwise "My Bids" with no signed-in user would
+    // wrongly surface every bid that happens to have no owner assigned.
+    if (target === null) return false
+    return row[rule.field] === target
+  }))
+}

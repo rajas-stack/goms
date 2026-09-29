@@ -204,4 +204,22 @@ describe('bids router', () => {
     const entry = queue.find((q: any) => q.followUpId === overdueFollowUp.id)
     expect(entry).toMatchObject({ bidId: bid.id, opportunityName: 'AI Document Processing System', attentionFlag: 'overdue' })
   })
+
+  it('listForGrid filters by stageKey and never crashes on the myBids ($currentUser) rule with no signed-in user', async () => {
+    const caller = appRouter.createCaller({})
+    await caller.bids.create({ opportunityId })
+    const solutioningOnly = await caller.bids.listForGrid({ filterRules: [{ field: 'stageKey', operator: 'eq', value: 'solutioning' }] })
+    expect(solutioningOnly).toHaveLength(1)
+    const myBids = await caller.bids.listForGrid({ filterRules: [{ field: 'ownerEmail', operator: 'eq', value: '$currentUser' }] })
+    expect(myBids).toEqual([]) // no crash, no signed-in user (AUTH_ENFORCEMENT_ENABLED is off in tests) -> resolves to null -> matches nothing
+  })
+
+  it('listForGrid includes a computed attentionFlag per row', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    const milestone = (await caller.bidMilestones.listForBid({ bidId: bid.id })).find((m: any) => m.key === 'submissionDeadline')!
+    await caller.bidMilestones.update({ id: milestone.id, patch: { dueAt: '2020-01-01T00:00:00.000Z' } })
+    const grid = await caller.bids.listForGrid({})
+    expect(grid.find((r: any) => r.id === bid.id)?.attentionFlag).toBe('overdue')
+  })
 })

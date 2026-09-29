@@ -15,6 +15,7 @@ import { bidMilestonesRouter } from './routers/bidMilestones.js'
 import { protectedValuesRouter } from './routers/protectedValues.js'
 import { bidCorrigendaRouter } from './routers/bidCorrigenda.js'
 import { documentsRouter } from './routers/documents.js'
+import { bidSavedViewsRouter } from './routers/bidSavedViews.js'
 
 export const appRouter = router({
   health: healthRouter, customers: customersRouter, hierarchy: hierarchyRouter,
@@ -22,6 +23,6 @@ export const appRouter = router({
   ownership: ownershipRouter, opportunities: opportunitiesRouter, followUps: followUpsRouter, search: searchRouter,
   adminImport: adminImportRouter, bids: bidsRouter, bidMilestones: bidMilestonesRouter,
   protectedValues: protectedValuesRouter, bidCorrigenda: bidCorrigendaRouter,
-  documents: documentsRouter,
+  documents: documentsRouter, bidSavedViews: bidSavedViewsRouter,
 })
 export type AppRouter = typeof appRouter
