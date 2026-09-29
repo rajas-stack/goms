@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
-import { formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP } from '@goms/domain'
+import { formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP, computeAttentionFlag } from '@goms/domain'
 import { applyStageChange } from './opportunities.js'
 
 export function toBid(row: any) {
@@ -43,6 +43,32 @@ function parseSubmissionDate(raw: string | null | undefined): string | null {
 const bidColumnFor: Record<string, string> = {
   stageKey: 'stage_key', decision: 'decision', tenderLink: 'tender_link',
 }
+
+const bidActionQueueRouter = router({
+  list: protectedReadProcedure.query(async () => {
+    const result = await pool.query(`
+      SELECT f.id AS follow_up_id, f.due_date, f.note, f.assignee_id, f.status,
+             b.id AS bid_id, b.bid_code, b.stage_key,
+             o.opportunity_name,
+             EXISTS (
+               SELECT 1 FROM bid_corrigenda c
+               LEFT JOIN bid_corrigendum_changes ch ON ch.corrigendum_id = c.id
+               WHERE c.bid_id = b.id GROUP BY c.id HAVING bool_or(ch.decision = 'pending' OR ch.decision IS NULL)
+             ) AS has_pending_corrigendum
+      FROM follow_ups f
+      JOIN bids b ON b.id = f.entity_id AND f.entity_type = 'bid'
+      JOIN opportunities o ON o.id = b.opportunity_id
+      WHERE f.status = 'open'
+      ORDER BY f.due_date
+    `)
+    const today = new Date().toISOString().slice(0, 10)
+    return result.rows.map((r: any) => ({
+      followUpId: r.follow_up_id, bidId: r.bid_id, bidCode: r.bid_code, stageKey: r.stage_key,
+      opportunityName: r.opportunity_name, dueDate: r.due_date, note: r.note, assigneeId: r.assignee_id,
+      attentionFlag: computeAttentionFlag({ dueAt: r.due_date, hasPendingCorrigendum: r.has_pending_corrigendum ?? false, today }),
+    }))
+  }),
+})
 
 export const bidsRouter = router({
   get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => oneBid(input.id)),
@@ -214,4 +240,6 @@ export const bidsRouter = router({
       client.release()
     }
   }),
+
+  actionQueue: bidActionQueueRouter,
 })

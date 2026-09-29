@@ -190,4 +190,13 @@ describe('bids router', () => {
     const auditStillThere = await pool.query(`SELECT 1 FROM commercial_audit_logs WHERE entity_type='bid' AND entity_id=$1`, [bid.id])
     expect(auditStillThere.rows).toHaveLength(1)
   })
+
+  it('actionQueue lists open follow-ups for bids, with a computed attention flag', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    const overdueFollowUp = await caller.followUps.create({ entityType: 'bid', entityId: bid.id, dueDate: '2020-01-01', note: 'Old task' })
+    const queue = await caller.bids.actionQueue.list()
+    const entry = queue.find((q: any) => q.followUpId === overdueFollowUp.id)
+    expect(entry).toMatchObject({ bidId: bid.id, opportunityName: 'AI Document Processing System', attentionFlag: 'overdue' })
+  })
 })

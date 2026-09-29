@@ -49,6 +49,19 @@ describe('ownership router', () => {
     expect(res).toMatchObject({ salesPersonId: personA, source: 'inherited', viaEntityType: 'orgNode', viaEntityId: deptId, depth: 1 })
   })
 
+  it('resolves a bid\'s owner by inheriting from its opportunity, and lets a direct assignment override it', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId: oppId })
+    await caller.ownership.assign({ entityType: 'opportunity', entityId: oppId, salesPersonId: personA, startDate: '2026-01-01' })
+
+    const inherited = await caller.ownership.resolveOwner({ entityType: 'bid', entityId: bid.id, asOf: '2026-06-01' })
+    expect(inherited).toMatchObject({ salesPersonId: personA, source: 'inherited' })
+
+    await caller.ownership.assign({ entityType: 'bid', entityId: bid.id, salesPersonId: personB, startDate: '2026-02-01' })
+    const direct = await caller.ownership.resolveOwner({ entityType: 'bid', entityId: bid.id, asOf: '2026-06-01' })
+    expect(direct).toMatchObject({ salesPersonId: personB, source: 'direct' })
+  })
+
   it('resolves a contact from its org node (cross-type fallback)', async () => {
     const caller = appRouter.createCaller({})
     await caller.ownership.assign({ entityType: 'orgNode', entityId: deptId, salesPersonId: personA, startDate: '2025-01-01' })
