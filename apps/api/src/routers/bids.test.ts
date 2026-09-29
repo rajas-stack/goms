@@ -123,4 +123,71 @@ describe('bids router', () => {
     await caller.bids.update({ id: bid.id, patch: { stageKey: 'submitted', decision: 'go' } })
     expect((await caller.opportunities.get({ id: opportunityId }))!.stageKey).toBe('won')
   })
+
+  it('archives and unarchives a bid without touching any related data', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    const archived = await caller.bids.archive({ id: bid.id })
+    expect(archived.status).toBe('archived')
+    expect(archived.archivedAt).not.toBeNull()
+    const milestonesStillThere = await caller.bidMilestones.listForBid({ bidId: bid.id })
+    expect(milestonesStillThere.length).toBeGreaterThan(0)
+    const unarchived = await caller.bids.unarchive({ id: bid.id })
+    expect(unarchived.status).toBe('active')
+    expect(unarchived.archivedAt).toBeNull()
+  })
+
+  it('hard-deletes a bid with no history, cascading its milestones', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    await caller.bids.delete({ id: bid.id })
+    expect(await caller.bids.get({ id: bid.id })).toBeNull()
+    const milestonesGone = await pool.query('SELECT 1 FROM bid_milestones WHERE bid_id=$1', [bid.id])
+    expect(milestonesGone.rows).toHaveLength(0)
+  })
+
+  it('refuses hard delete when the bid has a corrigendum, a protected value, a document, or a follow-up', async () => {
+    const caller = appRouter.createCaller({})
+    const bidWithCorrigendum = await caller.bids.create({ opportunityId })
+    await pool.query(`INSERT INTO bid_corrigenda (bid_id, corrigendum_number) VALUES ($1, 1)`, [bidWithCorrigendum.id])
+    await expect(caller.bids.delete({ id: bidWithCorrigendum.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+
+    const opp2 = await caller.opportunities.create({ departmentId, opportunityName: 'Second' })
+    const bidWithProtectedValue = await caller.bids.create({ opportunityId: opp2.id })
+    await pool.query(
+      `INSERT INTO protected_values (entity_type, entity_id, field_key, frozen) VALUES ('bid', $1, 'submissionDeadline', true)`,
+      [bidWithProtectedValue.id],
+    )
+    await expect(caller.bids.delete({ id: bidWithProtectedValue.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+
+    const opp3 = await caller.opportunities.create({ departmentId, opportunityName: 'Third' })
+    const bidWithDocument = await caller.bids.create({ opportunityId: opp3.id })
+    await pool.query(
+      `INSERT INTO documents (entity_type, entity_id, filename, storage_path, content_type, size_bytes)
+       VALUES ('bid', $1, 'f.pdf', 'bid-tracker/bid/x/y/f.pdf', 'application/pdf', 100)`,
+      [bidWithDocument.id],
+    )
+    await expect(caller.bids.delete({ id: bidWithDocument.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+
+    const opp4 = await caller.opportunities.create({ departmentId, opportunityName: 'Fourth' })
+    const bidWithFollowUp = await caller.bids.create({ opportunityId: opp4.id })
+    await caller.followUps.create({ entityType: 'bid', entityId: bidWithFollowUp.id, dueDate: '2026-12-01' })
+    await expect(caller.bids.delete({ id: bidWithFollowUp.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+  })
+
+  it('explicitly deletes ownership assignments on hard delete, but permanently preserves audit-log rows', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    const salesPerson = await caller.sales.create({ name: 'Test Rep', officialEmail: `rep-${Math.random()}@amnex.com`, designation: 'Account Manager', tierKey: 'accountManager' })
+    await caller.ownership.assign({ entityType: 'bid', entityId: bid.id, salesPersonId: salesPerson.id, startDate: '2026-01-01' })
+    await pool.query(
+      `INSERT INTO commercial_audit_logs (entity_type, entity_id, field, old_value, new_value, action) VALUES ('bid', $1, 'stageKey', 'a', 'b', 'update')`,
+      [bid.id],
+    )
+    await caller.bids.delete({ id: bid.id })
+    const ownershipGone = await pool.query(`SELECT 1 FROM ownership_assignments WHERE entity_type='bid' AND entity_id=$1`, [bid.id])
+    expect(ownershipGone.rows).toHaveLength(0)
+    const auditStillThere = await pool.query(`SELECT 1 FROM commercial_audit_logs WHERE entity_type='bid' AND entity_id=$1`, [bid.id])
+    expect(auditStillThere.rows).toHaveLength(1)
+  })
 })

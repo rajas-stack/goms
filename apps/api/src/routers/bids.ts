@@ -168,4 +168,50 @@ export const bidsRouter = router({
         client.release()
       }
     }),
+
+  archive: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+    await pool.query(`UPDATE bids SET status='archived', archived_at=now(), updated_at=now() WHERE id=$1`, [input.id])
+    return (await oneBid(input.id))!
+  }),
+
+  unarchive: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+    await pool.query(`UPDATE bids SET status='active', archived_at=NULL, updated_at=now() WHERE id=$1`, [input.id])
+    return (await oneBid(input.id))!
+  }),
+
+  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const bid = (await client.query('SELECT id FROM bids WHERE id=$1 FOR UPDATE', [input.id])).rows[0]
+      if (!bid) { await client.query('COMMIT'); return }
+
+      // Spec §4.7's hard-delete gate — checked here, not left to whatever FK
+      // constraints happen to exist, so the error names exactly what's blocking.
+      const [corrigenda, protectedRows, docs, followUps] = await Promise.all([
+        client.query('SELECT 1 FROM bid_corrigenda WHERE bid_id=$1 LIMIT 1', [input.id]),
+        client.query(`SELECT 1 FROM protected_values WHERE entity_type='bid' AND entity_id=$1 LIMIT 1`, [input.id]),
+        client.query(`SELECT 1 FROM documents WHERE entity_type='bid' AND entity_id=$1 LIMIT 1`, [input.id]),
+        client.query(`SELECT 1 FROM follow_ups WHERE entity_type='bid' AND entity_id=$1 LIMIT 1`, [input.id]),
+      ])
+      if (corrigenda.rows.length) throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete — this bid has corrigendum history. Archive it instead.' })
+      if (protectedRows.rows.length) throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete — this bid has protected-value history. Archive it instead.' })
+      if (docs.rows.length) throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete — this bid has uploaded documents. Archive it instead.' })
+      if (followUps.rows.length) throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete — this bid has follow-ups. Archive it instead.' })
+
+      // Polymorphic, no FK — must be deleted explicitly. Audit-log rows are the
+      // one thing deliberately NEVER touched here (spec §4.7): they survive the
+      // entity, same convention as commercial_audit_logs/employee_merge_audit.
+      await client.query(`DELETE FROM ownership_assignments WHERE entity_type='bid' AND entity_id=$1`, [input.id])
+      // bid_milestones and bid_corrigenda cascade via their own FKs; the gate
+      // above already guarantees bid_corrigenda is empty in practice.
+      await client.query('DELETE FROM bids WHERE id=$1', [input.id])
+      await client.query('COMMIT')
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
+  }),
 })
