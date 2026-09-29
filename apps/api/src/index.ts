@@ -10,11 +10,12 @@ import { opportunitiesRouter } from './routers/opportunities.js'
 import { followUpsRouter } from './routers/follow-ups.js'
 import { searchRouter } from './routers/search.js'
 import { adminImportRouter } from './routers/adminImport.js'
+import { bidsRouter } from './routers/bids.js'
 
 export const appRouter = router({
   health: healthRouter, customers: customersRouter, hierarchy: hierarchyRouter,
   employees: employeesRouter, sales: salesRouter, commercial: commercialRouter,
   ownership: ownershipRouter, opportunities: opportunitiesRouter, followUps: followUpsRouter, search: searchRouter,
-  adminImport: adminImportRouter,
+  adminImport: adminImportRouter, bids: bidsRouter,
 })
 export type AppRouter = typeof appRouter
