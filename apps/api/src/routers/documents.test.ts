@@ -58,4 +58,41 @@ describe('documents router', () => {
     expect(result.uploadUrl).toContain('bid-tracker/_pending/')
     expect(result.uploadId).toBeTruthy()
   })
+
+  it('confirms an upload, moving the object and inserting a documents row with GCS-verified metadata', async () => {
+    const caller = appRouter.createCaller({})
+    const { uploadId } = await caller.documents.requestUploadUrl({
+      entityType: 'bid', entityId: bidId, filename: 'Tender.pdf', contentType: 'application/pdf', sizeBytes: 2048,
+    })
+    const doc = await caller.documents.confirmUpload({ uploadId })
+    expect(doc.contentType).toBe('application/pdf') // from the mocked getObjectMetadata, not the original request
+    expect(doc.sizeBytes).toBe(1024) // ditto
+  })
+
+  it('rejects and deletes the object when the actual GCS metadata violates the size/type limit even though the request claimed a valid one', async () => {
+    const { getObjectMetadata, deleteObject } = await import('../lib/gcs.js')
+    vi.mocked(getObjectMetadata).mockResolvedValueOnce({ size: 999_999_999, contentType: 'application/pdf' })
+    const caller = appRouter.createCaller({})
+    const { uploadId } = await caller.documents.requestUploadUrl({
+      entityType: 'bid', entityId: bidId, filename: 'Lied.pdf', contentType: 'application/pdf', sizeBytes: 2048,
+    })
+    await expect(caller.documents.confirmUpload({ uploadId })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    expect(deleteObject).toHaveBeenCalled()
+  })
+
+  it('rejects confirming an unknown/expired uploadId', async () => {
+    const caller = appRouter.createCaller({})
+    await expect(caller.documents.confirmUpload({ uploadId: 'no-such-id' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+
+  it('rejects a second confirm for the same (entityType, entityId, filename, version) — no orphaned object at the canonical path from the loser', async () => {
+    const caller = appRouter.createCaller({})
+    const first = await caller.documents.requestUploadUrl({ entityType: 'bid', entityId: bidId, filename: 'Dup.pdf', contentType: 'application/pdf', sizeBytes: 1024 })
+    await caller.documents.confirmUpload({ uploadId: first.uploadId })
+    const second = await caller.documents.requestUploadUrl({ entityType: 'bid', entityId: bidId, filename: 'Dup.pdf', contentType: 'application/pdf', sizeBytes: 1024 })
+    const { deleteObject } = await import('../lib/gcs.js')
+    vi.mocked(deleteObject).mockClear()
+    await expect(caller.documents.confirmUpload({ uploadId: second.uploadId })).rejects.toMatchObject({ code: 'CONFLICT' })
+    expect(deleteObject).toHaveBeenCalled() // the loser's now-moved-then-rejected object is cleaned up, not left at the canonical path
+  })
 })

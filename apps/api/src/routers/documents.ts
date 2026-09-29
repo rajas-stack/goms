@@ -48,4 +48,44 @@ export const documentsRouter = router({
       const uploadUrl = await getSignedUploadUrl(pendingPath, input.contentType)
       return { uploadId, uploadUrl }
     }),
+
+  confirmUpload: protectedProcedure
+    .input(z.object({ uploadId: z.string() }))
+    .mutation(async ({ input, ctx }) => {
+      const pending = pendingUploads.get(input.uploadId)
+      if (!pending) throw new TRPCError({ code: 'NOT_FOUND', message: 'Unknown or expired upload.' })
+
+      const metadata = await getObjectMetadata(pending.pendingPath)
+      if (!metadata) throw new TRPCError({ code: 'BAD_REQUEST', message: 'The file was never uploaded.' })
+
+      // Verify the ACTUAL object, not the original request (spec §14) —
+      // defense in depth against a client that lied about what it's uploading.
+      if (metadata.size > MAX_DOCUMENT_SIZE_BYTES || !(ALLOWED_DOCUMENT_CONTENT_TYPES as readonly string[]).includes(metadata.contentType)) {
+        await deleteObject(pending.pendingPath)
+        pendingUploads.delete(input.uploadId)
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'The uploaded file does not match an allowed type/size.' })
+      }
+
+      await moveObject(pending.pendingPath, pending.canonicalPath)
+      pendingUploads.delete(input.uploadId)
+
+      let row: any
+      try {
+        row = (await pool.query(
+          `INSERT INTO documents (entity_type, entity_id, filename, storage_path, version, content_type, size_bytes, uploaded_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+          [pending.entityType, pending.entityId, pending.filename, pending.canonicalPath, pending.version, metadata.contentType, metadata.size, ctx.user?.email ?? null],
+        )).rows[0]
+      } catch (e) {
+        if (isUniqueViolation(e)) {
+          // Lost the race to a concurrent confirm for the same
+          // (entityType, entityId, filename, version) — the object we just
+          // moved to the canonical path must not be left there.
+          await deleteObject(pending.canonicalPath)
+          throw new TRPCError({ code: 'CONFLICT', message: 'This exact file and version was already uploaded.' })
+        }
+        throw e
+      }
+      return toDocument(row)
+    }),
 })
