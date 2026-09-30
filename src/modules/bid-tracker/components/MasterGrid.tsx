@@ -21,7 +21,8 @@ import {
   ATTENTION_OPTIONS, CUSTOM_GROUP, GRID_GROUPS, cellValue, ignoredRules, isEmptyCell, isRuleComplete,
   operatorLabel, resolveColumns, resolveVisibleColumns, rowMatchesSearch, type GridColumnMeta,
 } from '../gridColumns'
-import { ColumnsPanel } from './ColumnsPanel'
+import { AddCustomColumnDialog } from './AddCustomColumnDialog'
+import { ManageColumnsPanel } from './ManageColumnsPanel'
 import { EditableCell, type CellDraft } from './EditableCell'
 import { FilterBuilder } from './FilterBuilder'
 
@@ -111,6 +112,7 @@ export function MasterGrid(props: MasterGridProps) {
   const visibleIds = props.onVisibleColumnsChange ? props.visibleColumns : innerVisible
   const setVisibleIds = (next: string[]) => (props.onVisibleColumnsChange ?? setInnerVisible)(next)
 
+  const [addColumnOpen, setAddColumnOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
   const [cellErrors, setCellErrors] = useState<Record<string, string>>({})
@@ -271,8 +273,9 @@ export function MasterGrid(props: MasterGridProps) {
           <FilterBuilder columns={filterable} rules={rules} onChange={setRules} />
         </ToolbarPopover>
         <ToolbarPopover label="Columns" icon="List">
-          <ColumnsPanel all={allColumns} visible={visible} onChange={setVisibleIds} />
+          <ManageColumnsPanel all={allColumns} visible={visible} onVisibleChange={setVisibleIds} onAddColumn={() => setAddColumnOpen(true)} />
         </ToolbarPopover>
+        <Button variant="secondary" size="sm" onClick={() => setAddColumnOpen(true)}><Icon name="Plus" size={14} /> Add column</Button>
         {hasFilters && <Button variant="ghost" size="sm" onClick={() => setRules([])}>Clear all filters</Button>}
         <span className="ml-auto text-[12px] text-muted" aria-live="polite">
           {rows.length === totalCount ? `${totalCount} bids` : `${rows.length} of ${totalCount} bids`}
@@ -423,6 +426,12 @@ export function MasterGrid(props: MasterGridProps) {
           </div>
         )}
       </div>
+      <AddCustomColumnDialog
+        open={addColumnOpen} onClose={() => setAddColumnOpen(false)}
+        // With an explicit column list (a saved view), absence means hidden — so a
+        // brand-new column is appended to it; in the default view it shows itself.
+        onCreated={(field) => { if (visibleIds?.length) setVisibleIds([...visibleIds, `custom:${field.key}`]) }}
+      />
     </div>
   )
 }

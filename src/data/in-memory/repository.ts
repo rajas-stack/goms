@@ -1704,7 +1704,8 @@ class InMemoryRepository implements Repository {
       id: v.key, name: v.name, scope: 'global', ownerEmail: null, isSystem: true,
       filterRules: v.filterRules, sort: [], visibleColumns: [], createdBy: null, createdAt: null, updatedAt: null,
     }))
-    return [...system, ...this.data.bidSavedViews]
+    // Copies for the same reason as listBidCustomFields (in-place updates vs structural sharing).
+    return [...system, ...this.data.bidSavedViews.map((v) => ({ ...v, filterRules: [...v.filterRules], visibleColumns: [...v.visibleColumns] }))]
   }
 
   async createBidSavedView(input: {
@@ -1759,8 +1760,12 @@ class InMemoryRepository implements Repository {
   }
 
   async listBidCustomFields(includeArchived = false) {
+    // Copies, not the live stored objects: other methods mutate them in place,
+    // and react-query's structural sharing would otherwise see "no change" after
+    // a rename/archive and never re-render anything reading this list.
     return this.data.bidCustomFields
       .filter((f) => includeArchived || f.status === 'active')
+      .map((f) => ({ ...f, options: f.options ? [...f.options] : null }))
       .sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt))
   }
 
