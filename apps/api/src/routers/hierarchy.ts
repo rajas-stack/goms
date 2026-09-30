@@ -328,7 +328,11 @@ export const hierarchyRouter = router({
 
   duplicateNode: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
     const ids = await subtreeIds(input.id)
+    // `= ANY` returns rows in arbitrary order, but a child's INSERT needs its parent's clone to
+    // exist first (parent_id FK). subtreeIds walks parent-before-child, so insert in ITS order.
+    const order = new Map(ids.map((id, i) => [id, i]))
     const rows = (await pool.query(`SELECT * FROM hierarchy_nodes WHERE id = ANY($1)`, [ids])).rows
+      .sort((a: any, b: any) => order.get(a.id)! - order.get(b.id)!)
     const idMap = new Map<string, string>()
     for (const r of rows) idMap.set(r.id, crypto.randomUUID())
     const client = await pool.connect()

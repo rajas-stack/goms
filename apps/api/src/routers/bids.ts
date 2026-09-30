@@ -378,12 +378,11 @@ export const bidsRouter = router({
 
       // Spec §4.7's hard-delete gate — checked here, not left to whatever FK
       // constraints happen to exist, so the error names exactly what's blocking.
-      const [corrigenda, protectedRows, docs, followUps] = await Promise.all([
-        client.query('SELECT 1 FROM bid_corrigenda WHERE bid_id=$1 LIMIT 1', [input.id]),
-        client.query(`SELECT 1 FROM protected_values WHERE entity_type='bid' AND entity_id=$1 LIMIT 1`, [input.id]),
-        client.query(`SELECT 1 FROM documents WHERE entity_type='bid' AND entity_id=$1 LIMIT 1`, [input.id]),
-        client.query(`SELECT 1 FROM follow_ups WHERE entity_type='bid' AND entity_id=$1 LIMIT 1`, [input.id]),
-      ])
+      // Sequential: one pg client runs one query at a time (concurrent use is deprecated in pg@8 and an error in pg@9).
+      const corrigenda = await client.query('SELECT 1 FROM bid_corrigenda WHERE bid_id=$1 LIMIT 1', [input.id])
+      const protectedRows = await client.query(`SELECT 1 FROM protected_values WHERE entity_type='bid' AND entity_id=$1 LIMIT 1`, [input.id])
+      const docs = await client.query(`SELECT 1 FROM documents WHERE entity_type='bid' AND entity_id=$1 LIMIT 1`, [input.id])
+      const followUps = await client.query(`SELECT 1 FROM follow_ups WHERE entity_type='bid' AND entity_id=$1 LIMIT 1`, [input.id])
       if (corrigenda.rows.length) throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete — this bid has corrigendum history. Archive it instead.' })
       if (protectedRows.rows.length) throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete — this bid has protected-value history. Archive it instead.' })
       if (docs.rows.length) throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete — this bid has uploaded documents. Archive it instead.' })
