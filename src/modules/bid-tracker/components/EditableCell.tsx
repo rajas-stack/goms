@@ -5,7 +5,9 @@ import { isEmptyCell, type GridColumnMeta } from '../gridColumns'
 
 export type CellDraft = string | number | boolean | null
 
-const input = 'h-7 w-full min-w-[7rem] rounded-md border bg-white px-1.5 text-[13px] text-ink focus-visible:focus-ring'
+// The editor sits exactly on top of the cell, like a spreadsheet's in-cell editor:
+// it covers the cell border with a 2px accent outline and never changes row height.
+const input = 'absolute inset-0 z-20 h-[31px] w-full rounded-none border-2 bg-white px-2 text-[12.5px] text-ink shadow-[0_2px_8px_rgba(15,41,66,0.18)] outline-none'
 
 /** One inline-editable grid cell (Excel-style): click / Enter / F2 to edit,
  *  Enter or blur to commit, Esc to cancel. Only ever rendered for columns the
@@ -26,6 +28,10 @@ export function EditableCell({ col, value, display, externalError, onCommit }: {
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null)
   const cancelled = useRef(false)
+  const displayRef = useRef<HTMLDivElement>(null)
+  // After Enter / Escape / blur-commit the editor unmounts; focus goes back to
+  // the cell so the keyboard user keeps their place (F2 / Enter edits again).
+  const refocus = useRef(false)
   // Enter unmounts the input, which some browsers report as a blur — without
   // this guard that would commit the same edit twice.
   const done = useRef(false)
@@ -39,6 +45,7 @@ export function EditableCell({ col, value, display, externalError, onCommit }: {
 
   useEffect(() => {
     if (editing) inputRef.current?.focus()
+    else if (refocus.current) { refocus.current = false; displayRef.current?.focus() }
   }, [editing])
 
   const start = () => {
@@ -63,6 +70,7 @@ export function EditableCell({ col, value, display, externalError, onCommit }: {
       return
     }
     done.current = true
+    refocus.current = document.activeElement === inputRef.current
     setEditing(false)
     setError(null)
     // No-op edits are not writes (and not audit entries).
@@ -72,6 +80,7 @@ export function EditableCell({ col, value, display, externalError, onCommit }: {
 
   const cancel = () => {
     cancelled.current = true
+    refocus.current = true
     setEditing(false)
     setError(null)
   }
@@ -84,22 +93,25 @@ export function EditableCell({ col, value, display, externalError, onCommit }: {
   if (!editing) {
     return (
       <div
+        ref={displayRef}
         role="button" tabIndex={0} aria-label={`Edit ${col.header}`}
-        title={externalError}
+        title={externalError ?? 'Click to edit'}
+        data-editable-cell
         className={cn(
-          'min-h-[1.5rem] cursor-text rounded px-1 py-0.5 hover:bg-ink-900/[0.05] focus-visible:focus-ring',
-          externalError && 'text-crimson ring-1 ring-crimson/60',
+          'flex h-[31px] w-full min-w-0 cursor-cell items-center gap-1 px-2 outline-none',
+          'hover:shadow-[inset_0_0_0_1px_rgba(91,110,232,0.7)] focus-visible:shadow-[inset_0_0_0_2px_#5B6EE8]',
+          externalError && 'text-crimson shadow-[inset_0_0_0_1px_#B23A48]',
         )}
         onClick={(e) => { e.stopPropagation(); start() }}
         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); e.stopPropagation(); start() } }}
       >
-        {display}
-        {externalError && <span className="ml-2 text-[11px]">{externalError}</span>}
+        <span className="min-w-0 flex-1 truncate">{display}</span>
+        {externalError && <span className="shrink-0 text-[11px]">{externalError}</span>}
       </div>
     )
   }
 
-  const borderClass = error ? 'border-crimson' : 'border-line'
+  const borderClass = error ? 'border-crimson' : 'border-indigo'
   let editor: ReactNode
   if (type === 'select' || type === 'boolean') {
     const options = type === 'boolean'
@@ -132,9 +144,11 @@ export function EditableCell({ col, value, display, externalError, onCommit }: {
   }
 
   return (
-    <div onClick={(e) => e.stopPropagation()}>
+    <div className="relative h-[31px] w-full" onClick={(e) => e.stopPropagation()}>
       {editor}
-      {error && <p role="alert" className="mt-0.5 text-[11px] text-crimson">{error}</p>}
+      {error && (
+        <p role="alert" className="absolute left-0 top-full z-30 mt-0.5 whitespace-nowrap rounded bg-crimson px-1.5 py-0.5 text-[11px] text-white shadow-pop">{error}</p>
+      )}
     </div>
   )
 }

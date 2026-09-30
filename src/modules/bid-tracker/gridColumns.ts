@@ -99,6 +99,22 @@ export const STANDARD_COLUMNS: GridColumnMeta[] = [
   std('manage', 'Manage', 'system', null),
 ]
 
+/** Fixed pixel widths. The grid is a `table-layout: fixed` sheet: with auto
+ *  layout the browser re-measures every column as rows scroll in and out of the
+ *  virtualized window, so columns would jitter sideways while scrolling. */
+const WIDTH_BY_ID: Record<string, number> = {
+  opportunityId: 130, opportunityName: 280, bidCode: 120, gemTenderId: 190, tenderLink: 100,
+  departmentName: 240, stateCode: 130, city: 130, vertical: 140, ownerEmail: 210, solutionLeadEmail: 230,
+  stageKey: 150, nextActionNote: 220, nextActionAssigneeEmail: 210, nextActionDueDate: 120, attentionFlag: 170, decision: 110,
+  nextMilestoneLabel: 180, daysRemaining: 130, submissionDate: 160, documentCount: 110, latestCorrigendumStatus: 170,
+  updatedAt: 150, updatedBy: 170, dataConfidence: 150, manage: 110,
+}
+const WIDTH_BY_TYPE: Record<string, number> = { text: 170, number: 120, date: 130, select: 150, boolean: 110 }
+/** Never narrower than the header needs: label + sort arrow + menu button. */
+const headerWidth = (c: GridColumnMeta) => Math.ceil(c.header.length * 7.4) + 58 + (c.editable ? 16 : 0)
+export const columnWidth = (c: GridColumnMeta): number =>
+  Math.max(WIDTH_BY_ID[c.id] ?? WIDTH_BY_TYPE[c.type ?? 'text'], headerWidth(c))
+
 export const CUSTOM_COLUMN_PREFIX = 'custom:'
 
 export function customColumnMeta(field: BidCustomField): GridColumnMeta {

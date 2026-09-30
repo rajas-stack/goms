@@ -18,6 +18,9 @@ export function TopBar({ onOpenDrawer }: Props) {
   const isHome = location.pathname === '/'
   const isCommercialCalculator = location.pathname.startsWith('/commercial-calculator')
   const isBidTracker = location.pathname.startsWith('/bid-tracker')
+  // Search/Import/Export act on Account Mapping's hierarchy data, so neither
+  // standalone module shows them.
+  const hidesAccountMappingTools = isCommercialCalculator || isBidTracker
   const moduleLabel = isCommercialCalculator ? 'Commercial Calculator' : isBidTracker ? 'Bid Tracker' : 'Accounts Mapping'
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-paper/90 px-3 sm:gap-3 sm:px-5">
@@ -40,9 +43,9 @@ export function TopBar({ onOpenDrawer }: Props) {
         </div>
       )}
       {/* Search/Import/Export operate on Account Mapping's hierarchy data
-          (src/features/import) — hidden in Commercial Calculator, same as
-          SecondaryNav/GlobalFab (AppLayout.tsx's `navExpanded`). */}
-      {!isCommercialCalculator && (
+          (src/features/import) — hidden in Commercial Calculator and Bid
+          Tracker, same as SecondaryNav/GlobalFab (AppLayout.tsx's `navExpanded`). */}
+      {!hidesAccountMappingTools && (
         <>
           <button
             onClick={openSearch}
@@ -73,7 +76,7 @@ export function TopBar({ onOpenDrawer }: Props) {
         </>
       )}
 
-      <div className={cn('flex shrink-0 items-center gap-2', isCommercialCalculator && 'ml-auto')}>
+      <div className={cn('flex shrink-0 items-center gap-2', hidesAccountMappingTools && 'ml-auto')}>
         <AuthStatus />
       </div>
     </header>

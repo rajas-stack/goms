@@ -40,6 +40,13 @@ export function BidTrackerWorkspace() {
   const [createOpen, setCreateOpen] = useState(false)
 
   const activeView: BidSavedView | undefined = views.find((v) => v.id === activeViewId)
+  // A system view has no row to save edits into, so edits on one are
+  // session-only — flag them rather than let them look saved.
+  const normalize = (v: unknown) => JSON.stringify(v ?? [])
+  const modifiedViewId = activeView?.isSystem
+    && (normalize(rules.filter(isRuleComplete)) !== normalize(activeView.filterRules)
+      || normalize(visibleColumns) !== normalize(activeView.visibleColumns?.length ? activeView.visibleColumns : undefined))
+    ? activeView.id : null
   const persistTimer = useRef<ReturnType<typeof setTimeout>>()
   // The latest unsent edit. Switching views or unmounting FLUSHES it rather than
   // cancelling the timer, so a change made just before leaving is never lost.
@@ -87,7 +94,7 @@ export function BidTrackerWorkspace() {
       {section === 'grid' && (
         <SavedViewTabs
           activeViewId={activeViewId} onChange={(id) => selectView(id)}
-          onCreateNew={() => setCreateOpen(true)} onDelete={onDelete}
+          onCreateNew={() => setCreateOpen(true)} onDelete={onDelete} modifiedViewId={modifiedViewId}
         />
       )}
       <div className="min-h-0 flex-1 overflow-hidden">

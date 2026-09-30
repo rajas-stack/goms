@@ -102,6 +102,9 @@ describe('saved views', () => {
     await new Promise((r) => setTimeout(r, 900))
     expect((await repository.listBidSavedViews()).filter((v) => v.isSystem).every((v) => v.visibleColumns.length === 0)).toBe(true)
 
+    // ...and the strip says the change is unsaved, instead of letting it look saved.
+    expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Changes not saved to this view')
+
     // User view: switching restores its own ordered columns; changing them persists.
     await userEvent.click(await screen.findByRole('button', { name: 'Mine' }))
     await waitFor(() => expect(leafHeaders()).toEqual(['Opportunity / Mission', 'Bid ID']))

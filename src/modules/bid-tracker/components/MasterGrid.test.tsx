@@ -301,14 +301,39 @@ describe('MasterGrid', () => {
       expect(screen.getAllByTestId('filter-rule')).toHaveLength(2)
     })
 
-    it('an incomplete rule does not blank the grid', async () => {
+    it('an incomplete rule does not blank the grid, and shows as a draft condition', async () => {
       await seedScores()
       renderGrid()
       await screen.findByText('Alpha')
       await openPopover('Filters')
       await addRule('Score', 'greater than') // no value yet
       expect(rowNames().sort()).toEqual(['Alpha', 'Beta', 'Gamma'])
-      expect(screen.queryByTestId('active-filters')).not.toBeInTheDocument()
+      expect(screen.getByTestId('active-filters')).toHaveTextContent('Score greater than choose a value')
+    })
+
+    it('shows each condition as an editable WHERE chip, and Add condition opens a new one', async () => {
+      await seedScores()
+      renderGrid({ filterRules: [{ field: 'custom:score', operator: 'gt', value: '9' }] })
+      await screen.findByText('Beta')
+      const bar = screen.getByTestId('active-filters')
+      expect(bar).toHaveTextContent('Where')
+      expect(bar).toHaveTextContent('Score greater than 9')
+      await userEvent.click(within(bar).getByRole('button', { name: 'Edit filter Score greater than 9' }))
+      expect(await screen.findByTestId('filter-builder')).toBeInTheDocument()
+      await userEvent.click(within(bar).getByRole('button', { name: /Add condition/ }))
+      // The new, still-empty condition shows as a draft chip and its editor is open.
+      await waitFor(() => expect(screen.getAllByTestId('filter-rule')).toHaveLength(2))
+      expect(within(bar).getAllByRole('button', { name: /^Edit filter/ })).toHaveLength(2)
+    })
+
+    it('"Filter by this column" in a header menu starts a condition on that column', async () => {
+      await seedScores()
+      renderGrid()
+      await screen.findByText('Alpha')
+      await userEvent.click(screen.getByRole('button', { name: 'Note column menu' }))
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Filter by this column' }))
+      const rule = await screen.findByTestId('filter-rule')
+      expect(within(rule).getByRole('combobox', { name: 'Field' })).toHaveValue('custom:note')
     })
 
     it('clears one filter from its chip, and all filters at once', async () => {
@@ -414,6 +439,47 @@ describe('MasterGrid', () => {
       expect(leafs()[leafs().length - 2]).toBe('City')
     })
 
+    it('removes a built-in column from its header menu, and the Columns panel brings it back', async () => {
+      await makeBid('Alpha')
+      renderGrid()
+      await screen.findByText('Alpha')
+      await userEvent.click(screen.getByRole('button', { name: 'Sector column menu' }))
+      await userEvent.click(screen.getByRole('menuitem', { name: /Remove column/ }))
+      expect(screen.queryByRole('button', { name: 'Sort by Sector' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Sort by City' })).toBeInTheDocument() // the rest are untouched
+      await openPopover('Columns')
+      await userEvent.click(screen.getByRole('button', { name: 'Show Sector' }))
+      expect(screen.getByRole('button', { name: 'Sort by Sector' })).toBeInTheDocument()
+    })
+
+    it('removes a custom column from its header menu like any other column', async () => {
+      await makeBid('Alpha')
+      await repository.createBidCustomField({ name: 'Score', dataType: 'number' })
+      renderGrid()
+      await screen.findByRole('button', { name: 'Sort by Score' })
+      await userEvent.click(screen.getByRole('button', { name: 'Score column menu' }))
+      await userEvent.click(screen.getByRole('menuitem', { name: /Remove column/ }))
+      expect(screen.queryByRole('button', { name: 'Sort by Score' })).not.toBeInTheDocument()
+    })
+
+    it('moves a column left and right from its header menu, reporting the new order', async () => {
+      await makeBid('Alpha')
+      const onVisibleColumnsChange = vi.fn()
+      renderGrid({ visibleColumns: ['opportunityName', 'bidCode', 'city'], onVisibleColumnsChange })
+      await screen.findByText('Alpha')
+      await userEvent.click(screen.getByRole('button', { name: 'City column menu' }))
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Move left' }))
+      expect(onVisibleColumnsChange).toHaveBeenCalledWith(['opportunityName', 'city', 'bidCode'])
+    })
+
+    it('never removes the last remaining column (an empty list would mean "show everything")', async () => {
+      await makeBid('Alpha')
+      renderGrid({ visibleColumns: ['bidCode'], onVisibleColumnsChange: () => {} })
+      await screen.findByRole('button', { name: 'Sort by Bid ID' })
+      await userEvent.click(screen.getByRole('button', { name: 'Bid ID column menu' }))
+      expect(screen.getByRole('menuitem', { name: /Remove column/ })).toBeDisabled()
+    })
+
     it('reports ordered visible ids when controlled', async () => {
       await makeBid('Alpha')
       const onVisibleColumnsChange = vi.fn()
@@ -451,6 +517,21 @@ describe('MasterGrid', () => {
     renderGrid()
     expect(await screen.findByTestId('grid-empty')).toHaveTextContent('No bids yet.')
     fireEvent.click(document.body)
+  })
+
+  it('has a Create Bid button that opens the opportunity picker', async () => {
+    await repository.createOpportunity({ departmentId: 'dept-1', opportunityName: 'Unbid Opportunity', submissionDate: '2099-01-15' })
+    renderGrid()
+    await screen.findByTestId('grid-empty')
+    await userEvent.click(screen.getAllByRole('button', { name: /Create Bid/ })[0])
+    expect(await screen.findByRole('dialog', { name: /Create Bid/ })).toBeInTheDocument()
+    expect(await screen.findByText('Unbid Opportunity')).toBeInTheDocument()
+  })
+
+  it('disables Select all when there are no rows to select', async () => {
+    renderGrid()
+    await screen.findByTestId('grid-empty')
+    expect(screen.getByRole('checkbox', { name: 'Select all rows' })).toBeDisabled()
   })
 
   describe('selection and bulk actions', () => {
