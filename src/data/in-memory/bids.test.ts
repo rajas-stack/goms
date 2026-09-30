@@ -51,6 +51,10 @@ describe('InMemoryRepository Bid Tracker', () => {
     expect(m.dueAt).toBe('2099-02-01T00:00:00.000Z')
     expect((await repository.getOpportunity(opp.id))!.submissionDate).toBe('2099-02-01')
     expect((await repository.listBidCorrigenda(bid.id))[0].status).toBe('reviewed')
+    // Resolving the changes does not clear the flag by itself (same as the API)...
+    expect((await repository.getBid(bid.id))!.dataConfidence).toBe('needs_review')
+    // ...a person does, via markBidVerified.
+    await repository.markBidVerified(bid.id)
     expect((await repository.getBid(bid.id))!.dataConfidence).toBe('verified')
   })
 

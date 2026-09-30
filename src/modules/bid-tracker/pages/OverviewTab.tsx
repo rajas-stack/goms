@@ -1,6 +1,8 @@
 import { BID_STAGE_MAP, BID_STAGE_REQUIREMENTS } from '@goms/domain'
+import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
-import { useResolvedOwners, useSalesPersons } from '@/lib/api'
+import { Button } from '@/components/ui/Button'
+import { useBidCorrigenda, useBidMutations, useResolvedOwners, useSalesPersons } from '@/lib/api'
 import { isoToday } from '@/lib/dates'
 import type { Bid, BidMilestone } from '@/lib/types'
 
@@ -29,6 +31,16 @@ export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMile
   const { data: owners } = useResolvedOwners('bid', [bid.id], isoToday())
   const { data: people = [] } = useSalesPersons()
   const owner = owners?.[bid.id]
+  const { markVerified } = useBidMutations()
+  const { data: corrigenda = [] } = useBidCorrigenda(bid.id)
+  const [verifyError, setVerifyError] = useState<string | null>(null)
+  // Mirrors the server gate (bids.markVerified): an undecided corrigendum is what
+  // flagged the bid, so the button does not invite a click that would be refused.
+  const hasPendingCorrigendum = corrigenda.some((c) => c.status === 'pending_review')
+  const verify = async () => {
+    setVerifyError(null)
+    try { await markVerified.mutateAsync(bid.id) } catch (e) { setVerifyError(e instanceof Error ? e.message : 'Could not mark verified.') }
+  }
   const ownerPerson = owner ? people.find((p) => p.id === owner.salesPersonId) : undefined
 
   return (
@@ -43,7 +55,16 @@ export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMile
         <Stat label="Stage">{stage?.label ?? bid.stageKey}</Stat>
         <Stat label="Decision"><span className="capitalize">{bid.decision.replace('_', ' ')}</span></Stat>
         <Stat label="Data Confidence">
-          <Badge tone={bid.dataConfidence === 'verified' ? 'emerald' : 'amber'}>{DATA_CONFIDENCE_LABEL[bid.dataConfidence]}</Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={bid.dataConfidence === 'verified' ? 'emerald' : 'amber'}>{DATA_CONFIDENCE_LABEL[bid.dataConfidence]}</Badge>
+            {bid.dataConfidence === 'needs_review' && (
+              <Button variant="secondary" size="sm" disabled={hasPendingCorrigendum || markVerified.isPending} onClick={verify}>Mark Verified</Button>
+            )}
+          </div>
+          {bid.dataConfidence === 'needs_review' && hasPendingCorrigendum && (
+            <div className="mt-1 text-[12px] text-muted">Resolve the pending corrigendum change before marking verified.</div>
+          )}
+          {verifyError && <div role="alert" className="mt-1 text-[12px] text-crimson">{verifyError}</div>}
         </Stat>
         <Stat label="Bid Owner">
           {ownerPerson ? (

@@ -335,6 +335,35 @@ export const bidsRouter = router({
     return (await oneBid(input.id))!
   }),
 
+  /** Clears a bid's `needs_review` flag. Refused while any corrigendum change is
+   *  still undecided — that change is exactly why the flag was raised, so a click
+   *  must not clear it. The gate is on pending CHANGES, not the flag's value: a bid
+   *  flagged by a bulk import (no corrigendum) verifies with a plain flip. The
+   *  check and the write are ONE statement, so a change added between them
+   *  cannot slip past. */
+  markVerified: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
+    const before = (await pool.query('SELECT data_confidence FROM bids WHERE id=$1', [input.id])).rows[0]
+    if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Bid not found.' })
+    const updated = await pool.query(
+      `UPDATE bids SET data_confidence='verified', updated_at=now()
+       WHERE id=$1 AND NOT EXISTS (
+         SELECT 1 FROM bid_corrigendum_changes ch JOIN bid_corrigenda c ON c.id = ch.corrigendum_id
+         WHERE c.bid_id=$1 AND ch.decision='pending')
+       RETURNING id`,
+      [input.id],
+    )
+    if (!updated.rows.length) {
+      throw new TRPCError({ code: 'CONFLICT', message: 'This bid has a pending corrigendum change — resolve it before marking verified.' })
+    }
+    if (before.data_confidence !== 'verified') {
+      await writeAuditLog(pool, {
+        entityType: 'bid', entityId: input.id, field: 'dataConfidence',
+        oldValue: before.data_confidence, newValue: 'verified', reason: '', action: 'mark_verified', changedBy: ctx.user?.email,
+      })
+    }
+    return (await oneBid(input.id))!
+  }),
+
   unarchive: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
     await pool.query(`UPDATE bids SET status='active', archived_at=NULL, updated_at=now() WHERE id=$1`, [input.id])
     return (await oneBid(input.id))!

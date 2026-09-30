@@ -166,7 +166,8 @@ export function useBidMutations() {
   const archive = useMutation({ mutationFn: (id: string) => repository.archiveBid(id), onSuccess: invalidate })
   const unarchive = useMutation({ mutationFn: (id: string) => repository.unarchiveBid(id), onSuccess: invalidate })
   const remove = useMutation({ mutationFn: (id: string) => repository.deleteBid(id), onSuccess: invalidate })
-  return { create, update, archive, unarchive, remove }
+  const markVerified = useMutation({ mutationFn: (id: string) => repository.markBidVerified(id), onSuccess: invalidate })
+  return { create, update, archive, unarchive, remove, markVerified }
 }
 export const useBidForOpportunity = (opportunityId: string | null) =>
   useQuery({

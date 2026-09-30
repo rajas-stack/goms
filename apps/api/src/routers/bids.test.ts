@@ -231,4 +231,44 @@ describe('bids router', () => {
     const opp2 = await caller.opportunities.create({ departmentId, opportunityName: 'No bid yet' })
     expect(await caller.bids.getForOpportunity({ opportunityId: opp2.id })).toBeNull()
   })
+
+  describe('markVerified', () => {
+    const corrigendumInput = (bidId: string) => ({
+      bidId, corrigendumNumber: 1,
+      changes: [{ fieldKey: 'submissionDeadline', currentValue: '', proposedValue: '2026-10-18T00:00:00.000Z' }],
+    })
+
+    it('is rejected while a corrigendum change is pending, leaving the bid unchanged', async () => {
+      const caller = appRouter.createCaller({})
+      const bid = await caller.bids.create({ opportunityId })
+      await caller.bidCorrigenda.create(corrigendumInput(bid.id))
+      expect((await caller.bids.get({ id: bid.id }))!.dataConfidence).toBe('needs_review')
+      await expect(caller.bids.markVerified({ id: bid.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+      expect((await caller.bids.get({ id: bid.id }))!.dataConfidence).toBe('needs_review')
+    })
+
+    it('succeeds once every change is decided, and audits the needs_review -> verified transition for the signed-in user', async () => {
+      const caller = appRouter.createCaller({ user: { email: 'reviewer@amnex.com' } } as any)
+      const bid = await caller.bids.create({ opportunityId })
+      const corrigendum = await caller.bidCorrigenda.create(corrigendumInput(bid.id))
+      await caller.bidCorrigenda.reviewChange({ changeId: corrigendum.changes[0].id, decision: 'rejected' })
+      expect((await caller.bids.markVerified({ id: bid.id })).dataConfidence).toBe('verified')
+      const logs = await pool.query(`SELECT * FROM commercial_audit_logs WHERE entity_type='bid' AND entity_id=$1 AND action='mark_verified'`, [bid.id])
+      expect(logs.rows).toHaveLength(1)
+      expect(logs.rows[0]).toMatchObject({ old_value: 'needs_review', new_value: 'verified', changed_by: 'reviewer@amnex.com' })
+    })
+
+    it('is a harmless, unaudited no-op on an already-verified bid', async () => {
+      const caller = appRouter.createCaller({})
+      const bid = await caller.bids.create({ opportunityId })
+      expect((await caller.bids.markVerified({ id: bid.id })).dataConfidence).toBe('verified')
+      const logs = await pool.query(`SELECT 1 FROM commercial_audit_logs WHERE entity_id=$1 AND action='mark_verified'`, [bid.id])
+      expect(logs.rows).toHaveLength(0)
+    })
+
+    it('reports NOT_FOUND for an unknown bid', async () => {
+      const caller = appRouter.createCaller({})
+      await expect(caller.bids.markVerified({ id: '00000000-0000-4000-8000-000000000000' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    })
+  })
 })

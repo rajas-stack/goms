@@ -483,6 +483,7 @@ export interface Repository {
   createBid(opportunityId: string): Promise<Bid>
   updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>): Promise<Bid>
   archiveBid(id: string): Promise<Bid>
+  markBidVerified(id: string): Promise<Bid>
   unarchiveBid(id: string): Promise<Bid>
   deleteBid(id: string): Promise<void>
   listBidActionQueue(): Promise<ActionQueueEntry[]>
@@ -1471,6 +1472,20 @@ class InMemoryRepository implements Repository {
     return bid
   }
 
+  async markBidVerified(id: string) {
+    const bid = this.requireBid(id)
+    const corrigendumIds = new Set(this.data.bidCorrigenda.filter((c) => c.bidId === id).map((c) => c.id))
+    if (this.data.bidCorrigendumChanges.some((ch) => corrigendumIds.has(ch.corrigendumId) && ch.decision === 'pending')) {
+      throw new Error('This bid has a pending corrigendum change — resolve it before marking verified.')
+    }
+    if (bid.dataConfidence !== 'verified') {
+      bid.dataConfidence = 'verified'
+      bid.updatedAt = new Date().toISOString()
+      this.auditCustom({ entityType: 'bid', entityId: id, field: 'dataConfidence', oldValue: 'needs_review', newValue: 'verified', action: 'mark_verified' })
+    }
+    return bid
+  }
+
   async unarchiveBid(id: string) {
     const bid = this.requireBid(id)
     bid.status = 'active'
@@ -1649,11 +1664,7 @@ class InMemoryRepository implements Repository {
     if (!stillPending) {
       corrigendum.status = 'reviewed'
       corrigendum.reviewedAt = now
-      const bidCorrigendumIds = new Set(this.data.bidCorrigenda.filter((c) => c.bidId === bid.id).map((c) => c.id))
-      const anyPending = this.data.bidCorrigendumChanges.some(
-        (c) => bidCorrigendumIds.has(c.corrigendumId) && c.decision === 'pending',
-      )
-      if (!anyPending) bid.dataConfidence = 'verified'
+      // Like the API, resolving every change does NOT clear needs_review — a person confirms it via markBidVerified.
     }
     return change
   }
@@ -2609,7 +2620,7 @@ const MUTATOR_KEYS = [
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
   'createBoq', 'updateBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'reorderBoqLineItems', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',
   'createCustomer', 'updateCustomer', 'deleteCustomer',
-  'createBid', 'updateBid', 'archiveBid', 'unarchiveBid', 'deleteBid',
+  'createBid', 'updateBid', 'archiveBid', 'markBidVerified', 'unarchiveBid', 'deleteBid',
   'createBidMilestone', 'updateBidMilestone', 'deleteBidMilestone',
   'createBidCorrigendum', 'reviewCorrigendumChange', 'freezeValue', 'unfreezeValue',
   'requestDocumentUploadUrl', 'confirmDocumentUpload', 'deleteDocument', 'createDocumentCitation',

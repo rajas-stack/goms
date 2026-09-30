@@ -234,6 +234,7 @@ export class RemoteRepository implements Partial<Repository> {
   updateBid = (id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>): Promise<Bid> =>
     this.client.bids.update.mutate({ id, patch }) as unknown as Promise<Bid>
   archiveBid = (id: string): Promise<Bid> => this.client.bids.archive.mutate({ id }) as unknown as Promise<Bid>
+  markBidVerified = (id: string): Promise<Bid> => this.client.bids.markVerified.mutate({ id }) as unknown as Promise<Bid>
   unarchiveBid = (id: string): Promise<Bid> => this.client.bids.unarchive.mutate({ id }) as unknown as Promise<Bid>
   deleteBid = (id: string): Promise<void> => this.client.bids.delete.mutate({ id }) as unknown as Promise<void>
   listBidActionQueue = (): Promise<ActionQueueEntry[]> =>
