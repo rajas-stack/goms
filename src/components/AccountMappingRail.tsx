@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useShell } from '@/app/AppLayout'
 import { Icon } from './ui/Icon'
 import { cn } from '@/lib/utils'
+import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
 
 /** The app's persistent navigation element — a slim left rail with one button
  *  per top-level module (Account Mapping, Commercial Calculator — spec §5).
@@ -16,6 +17,7 @@ export function AccountMappingRail() {
   const location = useLocation()
   const { navExpanded } = useShell()
   const commercialActive = location.pathname.startsWith('/commercial-calculator')
+  const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
 
   return (
     <nav className="hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-line bg-panel py-4 lg:flex lg:w-16">
@@ -41,6 +43,19 @@ export function AccountMappingRail() {
         <Icon name="Calculator" size={18} />
         <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Commercial Calculator</span>
       </button>
+      {isBidTrackerEnabled() && (
+        <button
+          onClick={() => navigate('/bid-tracker')}
+          title="Bid Tracker"
+          className={cn(
+            'flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors lg:w-14',
+            bidTrackerActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600/70 hover:bg-white hover:text-ink-900',
+          )}
+        >
+          <Icon name="Briefcase" size={18} />
+          <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Bid Tracker</span>
+        </button>
+      )}
     </nav>
   )
 }
