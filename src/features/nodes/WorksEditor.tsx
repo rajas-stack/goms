@@ -6,7 +6,7 @@ import { Icon } from '@/components/ui/Icon'
 import { WorkFormDialog } from './WorkFormDialog'
 import { formatBudgetRange, formatWorkValue, workUnitLabel } from './department-meta'
 import { stageLabel } from '@/data/pipeline-stages'
-import { useOpportunityMutations, useOwnershipMutations, useResolvedOwners, useSalesPersons } from '@/lib/api'
+import { useBidForOpportunity, useOpportunityMutations, useOwnershipMutations, useResolvedOwners, useSalesPersons } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
 import { OwnerBadge } from '@/features/sales/OwnerBadge'
 import { AssignOwnerDialog } from '@/features/sales/AssignOwnerDialog'
@@ -35,6 +35,11 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
   const [editing, setEditing] = useState<Opportunity | null>(null)
   const [assignFor, setAssignFor] = useState<Opportunity | null>(null)
   const [removing, setRemoving] = useState<Opportunity | null>(null)
+  // One lookup, for the opportunity being edited — not one per card, and not the
+  // whole Bid Tracker grid. Once a bid exists, stage and submission date belong
+  // to it: the dialog locks them and save() leaves them out of the patch.
+  const { data: editingBid } = useBidForOpportunity(editing?.id ?? null)
+  const managedInBidTracker = !!editingBid
 
   function openCreate() {
     setEditing(null)
@@ -57,7 +62,10 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
   // not suppress a genuine new direct assignment.
   async function save(draft: Omit<Opportunity, 'id' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>) {
     if (editing) {
-      await update.mutateAsync({ id: editing.id, patch: draft })
+      // The API rejects ANY stageKey/submissionDate in the patch for an opportunity
+      // with a bid — even an unchanged one — so they must not be sent at all.
+      const { stageKey: _stage, submissionDate: _submission, closedOn: _closed, ...rest } = draft
+      await update.mutateAsync({ id: editing.id, patch: managedInBidTracker ? rest : draft })
       const currentResolution = owners[editing.id]
       const currentOwnerSalesPersonId = currentResolution?.source === 'direct' ? currentResolution.salesPersonId : undefined
       await assignOwnerFromEmail({
@@ -171,6 +179,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
         open={dialogOpen}
         work={editing}
         draftKey={draftKeyPrefix ? `${draftKeyPrefix}:${editing?.id ?? 'new'}` : null}
+        managedInBidTracker={managedInBidTracker}
         onClose={() => setDialogOpen(false)}
         onSave={save}
       />

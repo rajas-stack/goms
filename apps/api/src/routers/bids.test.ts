@@ -222,4 +222,13 @@ describe('bids router', () => {
     const grid = await caller.bids.listForGrid({})
     expect(grid.find((r: any) => r.id === bid.id)?.attentionFlag).toBe('overdue')
   })
+
+  it('getForOpportunity returns the bid for an opportunity that has one, and null for one that does not', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    expect((await caller.bids.getForOpportunity({ opportunityId }))?.id).toBe(bid.id)
+
+    const opp2 = await caller.opportunities.create({ departmentId, opportunityName: 'No bid yet' })
+    expect(await caller.bids.getForOpportunity({ opportunityId: opp2.id })).toBeNull()
+  })
 })

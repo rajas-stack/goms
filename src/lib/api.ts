@@ -149,6 +149,7 @@ export function useBidMutations() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
     qc.invalidateQueries({ queryKey: ['bid'] })
+    qc.invalidateQueries({ queryKey: ['bidForOpportunity'] })
     qc.invalidateQueries({ queryKey: ['bidActionQueue'] })
     // A bid's stage/decision syncs back to its opportunity (spec §4.4).
     qc.invalidateQueries({ queryKey: ['opportunities'] })
@@ -166,6 +167,12 @@ export function useBidMutations() {
   const remove = useMutation({ mutationFn: (id: string) => repository.deleteBid(id), onSuccess: invalidate })
   return { create, update, archive, unarchive, remove }
 }
+export const useBidForOpportunity = (opportunityId: string | null) =>
+  useQuery({
+    queryKey: ['bidForOpportunity', opportunityId ?? ''],
+    queryFn: async () => (await repository.getBidForOpportunity(opportunityId!)) ?? null,
+    enabled: !!opportunityId,
+  })
 export const useBidActionQueue = () =>
   useQuery({ queryKey: qk.bidActionQueue, queryFn: () => repository.listBidActionQueue() })
 

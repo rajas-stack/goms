@@ -78,6 +78,15 @@ const bidActionQueueRouter = router({
 export const bidsRouter = router({
   get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => oneBid(input.id)),
 
+  // A cheap single-row lookup for legacy-UI guards (WorksEditor): "does this
+  // opportunity have a bid?" must not force the whole grid query.
+  getForOpportunity: protectedReadProcedure
+    .input(z.object({ opportunityId: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const result = await pool.query('SELECT * FROM bids WHERE opportunity_id=$1', [input.opportunityId])
+      return result.rows[0] ? toBid(result.rows[0]) : null
+    }),
+
   listForGrid: protectedReadProcedure
     .input(z.object({ filterRules: z.array(filterRuleSchema).optional() }).optional())
     .query(async ({ input, ctx }) => {

@@ -228,6 +228,8 @@ export class RemoteRepository implements Partial<Repository> {
   listBidsForGrid = (filterRules?: BidSavedView['filterRules']): Promise<BidGridRow[]> =>
     this.client.bids.listForGrid.query({ filterRules }) as unknown as Promise<BidGridRow[]>
   getBid = (id: string): Promise<Bid | null> => this.client.bids.get.query({ id }) as unknown as Promise<Bid | null>
+  getBidForOpportunity = (opportunityId: string): Promise<Bid | null> =>
+    this.client.bids.getForOpportunity.query({ opportunityId }) as unknown as Promise<Bid | null>
   createBid = (opportunityId: string): Promise<Bid> => this.client.bids.create.mutate({ opportunityId }) as unknown as Promise<Bid>
   updateBid = (id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>): Promise<Bid> =>
     this.client.bids.update.mutate({ id, patch }) as unknown as Promise<Bid>

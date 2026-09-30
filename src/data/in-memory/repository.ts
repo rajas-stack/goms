@@ -479,6 +479,7 @@ export interface Repository {
   // --- Bid Tracker ---
   listBidsForGrid(filterRules?: SystemBidViewFilterRule[]): Promise<BidGridRow[]>
   getBid(id: string): Promise<Bid | null>
+  getBidForOpportunity(opportunityId: string): Promise<Bid | null>
   createBid(opportunityId: string): Promise<Bid>
   updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>): Promise<Bid>
   archiveBid(id: string): Promise<Bid>
@@ -1401,6 +1402,10 @@ class InMemoryRepository implements Repository {
 
   async getBid(id: string) {
     return this.data.bids.find((b) => b.id === id) ?? null
+  }
+
+  async getBidForOpportunity(opportunityId: string) {
+    return this.data.bids.find((b) => b.opportunityId === opportunityId) ?? null
   }
 
   async createBid(opportunityId: string) {
@@ -2618,7 +2623,7 @@ const READER_KEYS = [
   'listSkus', 'getSku', 'listBomItemsForSku', 'listAllBomItems', 'listBoqs', 'getBoq', 'listBoqLineItems',
   'listAllBoqLineItems', 'listAuditLogs',
   'listCustomers', 'getCustomer',
-  'listBidsForGrid', 'getBid', 'listBidActionQueue', 'listBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
+  'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
   'listDocuments', 'listDocumentCitations', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
 ] as const
 
