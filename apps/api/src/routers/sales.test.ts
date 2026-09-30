@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { appRouter } from '../index.js'
 import { pool } from '../db.js'
+import { MAX_PHOTO_URL_LENGTH } from '../photoUrl.js'
 import { contextForEmail } from '../testHelpers/authTestHelpers.js'
 
 describe('sales router', () => {
@@ -125,6 +126,17 @@ describe('sales router', () => {
     expect(withPhoto.photoUrl).toBe('data:image/png;base64,AAA=')
     const withoutPhoto = await makePerson({ name: 'No Photo' })
     expect(withoutPhoto.photoUrl).toBeNull()
+  })
+
+  it('rejects an oversized photoUrl on create and on update (the 33 MB listPersons regression)', async () => {
+    const caller = appRouter.createCaller({})
+    const huge = 'data:image/png;base64,' + 'A'.repeat(MAX_PHOTO_URL_LENGTH)
+    await expect(caller.sales.create({
+      name: 'Big Photo', officialEmail: `big-${Math.random()}@example.com`,
+      designation: 'Account Manager', tierKey: 'accountManager', photoUrl: huge,
+    })).rejects.toThrow(/too large/i)
+    const person = await makePerson()
+    await expect(caller.sales.update({ id: person.id, patch: { photoUrl: huge } })).rejects.toThrow(/too large/i)
   })
 
   it('sets and clears a photoUrl via update', async () => {
@@ -277,6 +289,78 @@ describe('sales router', () => {
         name: 'Alex Sales', officialEmail: `alex-${Math.random()}@example.com`,
         designation: 'Account Manager', tierKey: 'accountManager',
       })).resolves.toBeDefined()
+    })
+  })
+
+  describe('updatePostingDates', () => {
+    async function personWithHistory() {
+      const person = await makePerson()
+      // Deterministic history: initial 2024-01-01 → promoted on 2025-07-01 (current, open).
+      await pool.query('UPDATE sales_postings SET start_date=$1 WHERE sales_person_id=$2', ['2024-01-01', person.id])
+      await appRouter.createCaller({}).sales.transfer({
+        salesPersonId: person.id, designation: 'Regional Manager', tierKey: 'rm', effectiveDate: '2025-07-01',
+      })
+      const postings = await appRouter.createCaller({}).sales.listPostings({ salesPersonId: person.id }) // start_date DESC
+      return { person, current: postings[0], previous: postings[1] }
+    }
+
+    it('edits Effective from on a lone current posting', async () => {
+      const caller = appRouter.createCaller({})
+      const person = await makePerson()
+      const [posting] = await caller.sales.listPostings({ salesPersonId: person.id })
+      const updated = await caller.sales.updatePostingDates({ postingId: posting.id, startDate: '2021-04-01' })
+      expect(updated.startDate).toBe('2021-04-01')
+      expect(updated.endDate).toBeNull()
+    })
+
+    it('moving the current posting start moves the previous posting end, keeping history contiguous', async () => {
+      const caller = appRouter.createCaller({})
+      const { person, current } = await personWithHistory()
+      await caller.sales.updatePostingDates({ postingId: current.id, startDate: '2025-09-15' })
+      const [cur, prev] = await caller.sales.listPostings({ salesPersonId: person.id })
+      expect(cur.startDate).toBe('2025-09-15')
+      expect(prev.endDate).toBe('2025-09-15')
+    })
+
+    it('a last day held ends the posting (stored exclusive end = last day + 1) and the person has no current posting', async () => {
+      const caller = appRouter.createCaller({})
+      const { person, current } = await personWithHistory()
+      const ended = await caller.sales.updatePostingDates({ postingId: current.id, lastDayHeld: '2026-03-31' })
+      expect(ended.endDate).toBe('2026-04-01')
+      expect((await caller.sales.currentPostings())[person.id]).toBeUndefined()
+    })
+
+    it('clearing Effective to reopens the latest posting', async () => {
+      const caller = appRouter.createCaller({})
+      const { person, current } = await personWithHistory()
+      await caller.sales.updatePostingDates({ postingId: current.id, lastDayHeld: '2026-03-31' })
+      const reopened = await caller.sales.updatePostingDates({ postingId: current.id, lastDayHeld: null })
+      expect(reopened.endDate).toBeNull()
+      expect((await caller.sales.currentPostings())[person.id]?.id).toBe(current.id)
+    })
+
+    it('rejects bad boundaries with BAD_REQUEST and changes nothing', async () => {
+      const caller = appRouter.createCaller({})
+      const { person, current, previous } = await personWithHistory()
+      await expect(caller.sales.updatePostingDates({ postingId: current.id, lastDayHeld: '2025-06-30' }))
+        .rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringMatching(/on or after Effective from/) })
+      await expect(caller.sales.updatePostingDates({ postingId: current.id, startDate: '2024-01-01' }))
+        .rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      await expect(caller.sales.updatePostingDates({ postingId: previous.id, lastDayHeld: null }))
+        .rejects.toMatchObject({ code: 'BAD_REQUEST', message: expect.stringMatching(/open-ended/) })
+      const [cur, prev] = await caller.sales.listPostings({ salesPersonId: person.id })
+      expect([cur.startDate, cur.endDate, prev.startDate, prev.endDate]).toEqual(['2025-07-01', null, '2024-01-01', '2025-07-01'])
+    })
+
+    it('is a protected mutation (rejects an unauthenticated caller once enforcement is on)', async () => {
+      process.env.AUTH_ENFORCEMENT_ENABLED = 'true'
+      try {
+        await expect(appRouter.createCaller({}).sales.updatePostingDates({
+          postingId: '00000000-0000-4000-8000-000000000000', startDate: '2021-01-01',
+        })).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+      } finally {
+        delete process.env.AUTH_ENFORCEMENT_ENABLED
+      }
     })
   })
 

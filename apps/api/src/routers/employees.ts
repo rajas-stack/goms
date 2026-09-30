@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { photoUrlSchema } from '../photoUrl.js'
 import { subtreeIds } from './hierarchy.js'
 import { MERGEABLE_FIELDS, type MergeableField } from '@goms/domain'
 
@@ -100,7 +101,7 @@ async function departmentNameOf(db: { query: typeof pool.query }, nodeId: string
 const employeePatchShape = {
   name: z.string().min(1).optional(), designation: z.string().min(1).optional(),
   email: z.string().optional(), phone: z.string().optional(), company: z.string().optional(),
-  address: z.string().optional(), website: z.string().optional(), photoUrl: z.string().nullable().optional(),
+  address: z.string().optional(), website: z.string().optional(), photoUrl: photoUrlSchema,
   orgNodeId: z.string().uuid().optional(), managerId: z.string().uuid().nullable().optional(),
   vacant: z.boolean().optional(), connected: z.boolean().optional(),
   relationshipStatus: relationshipStatusSchema.optional(), relationshipQuality: relationshipQualitySchema.optional(),
@@ -311,7 +312,7 @@ export const employeesRouter = router({
   create: protectedProcedure
     .input(z.object({
       name: z.string().min(1), designation: z.string().min(1), email: z.string(), phone: z.string(),
-      photoUrl: z.string().nullable().optional(), company: z.string().optional(), address: z.string().optional(),
+      photoUrl: photoUrlSchema, company: z.string().optional(), address: z.string().optional(),
       website: z.string().optional(), orgNodeId: z.string().uuid(), managerId: z.string().uuid().nullable(),
       vacant: z.boolean().optional(), connected: z.boolean().optional(),
       relationshipStatus: relationshipStatusSchema.optional(), relationshipQuality: relationshipQualitySchema.optional(),

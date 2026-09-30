@@ -118,6 +118,8 @@ export class RemoteRepository implements Partial<Repository> {
   setSalesPersonStatus = (id: string, status: SalesPerson['status']): Promise<void> => this.client.sales.setStatus.mutate({ id, status })
   deleteSalesPerson = (id: string): Promise<void> => this.client.sales.delete.mutate({ id })
   transferSalesPerson = (input: TransferSalesPersonInput): Promise<SalesPosting> => this.client.sales.transfer.mutate(input)
+  updatePostingDates = (postingId: string, edit: { startDate?: string; lastDayHeld?: string | null }): Promise<SalesPosting> =>
+    this.client.sales.updatePostingDates.mutate({ postingId, ...edit })
   updatePostingManager = (
     personId: string, patch: { managerId?: string | null; gmOverrideId?: string | null },
   ): Promise<SalesPosting> =>

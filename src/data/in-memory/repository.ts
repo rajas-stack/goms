@@ -14,7 +14,7 @@ import {
   DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP,
   buildOwnerMap, effectiveOwner, OWNABLE_ENTITY_MAP,
   type OwnerResolution, type OwnershipContext,
-  performSearch, performRelatedRecords, type SearchData,
+  performSearch, performRelatedRecords, type SearchData, planPostingDatesEdit, type PostingDatesEdit,
   DEFAULT_BID_STAGE_KEY, formatBidCode, isAtOrAfterSubmitted, computeAttentionFlag, applyFilterRules,
   SYSTEM_BID_VIEWS, SYSTEM_BID_VIEW_KEYS, type SystemBidViewFilterRule,
   coerceCustomValue, normalizeOptions, slugifyFieldKey,
@@ -354,6 +354,11 @@ export interface Repository {
    *  key to leave it untouched (e.g. changing just `gmOverrideId` without
    *  touching `managerId`). */
   updatePostingManager(personId: string, patch: { managerId?: string | null; gmOverrideId?: string | null }): Promise<SalesPosting>
+  /** Edits a posting's Effective from / Effective to. `lastDayHeld` is the
+   *  last day actually held (inclusive; stored as an exclusive end); `null`
+   *  means Present. Setting one on the open posting ENDS it. Boundary rules —
+   *  contiguity, no overlap — are `planPostingDatesEdit`'s (shared with the API). */
+  updatePostingDates(postingId: string, edit: PostingDatesEdit): Promise<SalesPosting>
   /** Who effectively owns this entity — direct, or inherited from an ancestor. */
   resolveOwner(entityType: string, entityId: string, asOf: string): Promise<OwnerResolution | null>
   /** Batch form. Use this for lists: the per-entity call re-walks the ancestor
@@ -2124,6 +2129,20 @@ class InMemoryRepository implements Repository {
     return posting
   }
 
+  async updatePostingDates(postingId: string, edit: PostingDatesEdit) {
+    const posting = this.data.salesPostings.find((p) => p.id === postingId)
+    if (!posting) throw new Error('That posting no longer exists.')
+    const siblings = this.data.salesPostings.filter((p) => p.salesPersonId === posting.salesPersonId)
+    const plan = planPostingDatesEdit(siblings, postingId, edit)
+    if (plan.previous) {
+      const prev = siblings.find((p) => p.id === plan.previous!.id)!
+      prev.endDate = plan.previous.endDate
+    }
+    posting.startDate = plan.startDate
+    posting.endDate = plan.endDate
+    return posting
+  }
+
   async updateSalesPerson(id: string, patch: Partial<SalesPerson>) {
     const person = this.data.salesPersons.find((p) => p.id === id)
     if (!person) throw new Error(`No such salesperson: ${id}`)
@@ -2629,7 +2648,7 @@ const MUTATOR_KEYS = [
   'createOpportunity', 'updateOpportunity', 'deleteOpportunity',
   'createFollowUp', 'setFollowUpStatus', 'deleteFollowUp',
   'assignOwner', 'endOwnership', 'transferBookOfBusiness',
-  'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson', 'transferSalesPerson', 'updatePostingManager',
+  'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson', 'transferSalesPerson', 'updatePostingManager', 'updatePostingDates',
   'createMaster', 'updateMaster', 'setMasterActive', 'deleteMaster', 'setEditionFeatures',
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
   'createBoq', 'updateBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'reorderBoqLineItems', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',

@@ -76,7 +76,16 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
 
   async function submit() {
     if (editing) {
-      await update.mutateAsync({ id: editing.id, patch: { name, officialEmail: email, mobile, photoUrl, notes } })
+      // photoUrl rides along only when the photo actually changed. It's an
+      // inline data URL, so re-submitting the untouched old value is pointless
+      // payload — and would make any person whose stored photo exceeds the
+      // server's size cap (apps/api/src/photoUrl.ts) impossible to save, even
+      // for an unrelated edit like a phone number.
+      const photoChanged = photoUrl !== (editing.photoUrl ?? null)
+      await update.mutateAsync({
+        id: editing.id,
+        patch: { name, officialEmail: email, mobile, notes, ...(photoChanged ? { photoUrl } : {}) },
+      })
       const postingPatch: { managerId?: string | null; gmOverrideId?: string | null } = {}
       if (rmEmail !== initialRmEmail) {
         postingPatch.managerId = rmEmail ? (people.find((p) => p.officialEmail === rmEmail)?.id ?? null) : null

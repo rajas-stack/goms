@@ -337,4 +337,20 @@ describe('SalesPersonFormDialog — profile picture', () => {
       expect.objectContaining({ patch: expect.objectContaining({ photoUrl: null }) }),
     ))
   })
+
+  it('editing an unrelated field does NOT re-send the untouched existing photoUrl (oversized legacy photos must stay saveable)', async () => {
+    stubApiHooks({ people: [ALICE, BOB, CAROL, { ...REPORT, photoUrl: 'data:image/png;base64,' + 'A'.repeat(800_000) }] })
+    renderDialog('sp-report')
+
+    const user = userEvent.setup()
+    const nameInput = screen.getByPlaceholderText('Full name')
+    await user.clear(nameInput)
+    await user.type(nameInput, 'Renamed Person')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(updateMutateAsync).toHaveBeenCalled())
+    const patch = updateMutateAsync.mock.calls[0][0].patch
+    expect(patch).toEqual(expect.objectContaining({ name: 'Renamed Person' }))
+    expect(patch).not.toHaveProperty('photoUrl')
+  })
 })
