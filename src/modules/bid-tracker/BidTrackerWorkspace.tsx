@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom'
 import { Tabs } from '@/components/ui/Tabs'
+import { MasterGrid } from './components/MasterGrid'
 
 const SECTIONS = [
   { value: 'grid', label: 'Master Grid' },
@@ -20,10 +21,12 @@ export function BidTrackerWorkspace() {
         onChange={(v) => navigate(v === 'grid' ? '/bid-tracker' : `/bid-tracker/${v}`)}
         tabs={SECTIONS.map(({ value, label }) => ({ value, label }))}
       />
-      <div className="flex-1 overflow-auto">
-        {/* Task 28 (grid), Task 35 (actions), Task 36 (history) fill these in;
+      <div className="min-h-0 flex-1 overflow-hidden">
+        {/* Task 29 supplies the active saved view (its filter rules and ordered
+            columns) to the grid; until then the grid holds its own state.
+            Task 35 (actions), Task 36 (history) fill in the other sections;
             milestones content arrives with Task 31. */}
-        {section === 'grid' && <div data-testid="bid-tracker-grid-placeholder" />}
+        {section === 'grid' && <MasterGrid />}
       </div>
     </div>
   )

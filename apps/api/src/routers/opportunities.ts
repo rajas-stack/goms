@@ -93,7 +93,7 @@ export const opportunitiesRouter = router({
   create: protectedProcedure
     .input(z.object({
       departmentId: z.string().uuid(), opportunityName: z.string().min(1),
-      gemTenderId: z.string().optional(), city: z.string().optional(), publishDate: z.string().optional(), submissionDate: z.string().optional(),
+      gemTenderId: z.string().optional(), city: z.string().nullable().optional(), publishDate: z.string().optional(), submissionDate: z.string().optional(),
       vertical: z.string().optional(), component: z.array(z.string()).optional(), quantity: z.string().optional(),
       currency: z.string().optional(), valueAmount: z.string().optional(), valueUnit: z.string().optional(),
       budgetKnown: z.string().optional(), emdAmount: z.string().optional(), emdUnit: z.string().optional(),

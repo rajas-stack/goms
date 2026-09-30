@@ -177,6 +177,7 @@ export interface CreateOpportunityInput {
   departmentId: string
   opportunityName: string
   gemTenderId?: string
+  city?: string | null
   publishDate?: string
   submissionDate?: string
   vertical?: string
@@ -1237,6 +1238,7 @@ class InMemoryRepository implements Repository {
       closedOn: PIPELINE_STAGE_MAP[stageKey]?.isClosed ? isoToday() : null,
       opportunityName: input.opportunityName,
       gemTenderId: input.gemTenderId ?? '',
+      city: input.city ?? null,
       publishDate: input.publishDate ?? '',
       submissionDate: input.submissionDate ?? '',
       vertical: input.vertical ?? '',
@@ -1330,13 +1332,28 @@ class InMemoryRepository implements Repository {
     const rows: BidGridRow[] = this.data.bids.map((bid) => {
       const opp = this.data.opportunities.find((o) => o.id === bid.opportunityId)
       const ownerId = owners.get(bid.id)?.salesPersonId
-      const ownerEmail = ownerId
-        ? this.data.salesPersons.find((p) => p.id === ownerId)?.officialEmail ?? null
-        : null
+      const emailOf = (personId: string | null | undefined) =>
+        personId ? this.data.salesPersons.find((p) => p.id === personId)?.officialEmail ?? null : null
+      const ownerEmail = emailOf(ownerId)
+      const solutionLead = this.data.ownershipAssignments.find(
+        (a) => a.entityType === 'bid' && a.entityId === bid.id && a.role === 'solutionLead' && a.endDate === null,
+      )
+      const bidCorrigenda = this.data.bidCorrigenda.filter((c) => c.bidId === bid.id)
+      const latestCorrigendum = bidCorrigenda.reduce<(typeof bidCorrigenda)[number] | null>(
+        (best, c) => (!best || c.corrigendumNumber > best.corrigendumNumber ? c : best), null,
+      )
+      const nextMilestone = this.data.bidMilestones
+        .filter((m) => m.bidId === bid.id && m.status === 'open')
+        .sort((a, b) => (a.dueAt ?? '9999').localeCompare(b.dueAt ?? '9999'))[0]
+      const nextAction = this.data.followUps
+        .filter((f) => f.entityType === 'bid' && f.entityId === bid.id && f.status === 'open')
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
       return {
         ...bid,
         departmentId: opp?.departmentId ?? '',
+        departmentName: this.data.nodes.find((n) => n.id === opp?.departmentId)?.name ?? null,
         stateCode: opp?.stateCode ?? null,
+        city: opp?.city ?? null,
         opportunityName: opp?.opportunityName ?? '',
         gemTenderId: opp?.gemTenderId ?? '',
         submissionDate: opp?.submissionDate ?? '',
@@ -1346,6 +1363,23 @@ class InMemoryRepository implements Repository {
         emdUnit: opp?.emdUnit ?? '',
         vertical: opp?.vertical ?? '',
         ownerEmail,
+        solutionLeadEmail: emailOf(solutionLead?.salesPersonId),
+        documentCount: this.data.bidDocuments.filter((d) => d.entityType === 'bid' && d.entityId === bid.id).length,
+        latestCorrigendumStatus: latestCorrigendum
+          ? (this.data.bidCorrigendumChanges.some((c) => c.corrigendumId === latestCorrigendum.id && c.decision === 'pending')
+            ? 'pending_review' : 'reviewed')
+          : null,
+        nextMilestoneLabel: nextMilestone?.label ?? null,
+        nextMilestoneDueAt: nextMilestone?.dueAt ?? null,
+        daysRemaining: nextMilestone?.dueAt
+          ? Math.ceil((new Date(nextMilestone.dueAt).getTime() - Date.now()) / 86_400_000)
+          : null,
+        nextActionNote: nextAction?.note ?? null,
+        nextActionDueDate: nextAction?.dueDate ?? null,
+        nextActionAssigneeEmail: emailOf(nextAction?.assigneeId),
+        // The local store has no signed-in user, so no audit row ever carries
+        // an author — there is nothing real to show here.
+        updatedBy: null,
         attentionFlag: this.attentionFor(bid.id),
         customValues: customValuesByBid.get(bid.id) ?? {},
       }

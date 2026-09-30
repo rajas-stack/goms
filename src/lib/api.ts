@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   repository, type AddTimelineInput, type AssignOwnerInput, type CreateEmployeeInput, type CreateFollowUpInput,
   type CreateNodeInput, type CreateOpportunityInput, type CreateSalesPersonInput, type ImportChildRow,
@@ -122,6 +122,8 @@ export function useOpportunityMutations() {
     qc.invalidateQueries({ queryKey: ['opportunitiesByDepartment'] })
     qc.invalidateQueries({ queryKey: ['opportunity'] })
     qc.invalidateQueries({ queryKey: ['opportunityStageChanges'] })
+    // The Bid Tracker Master Grid rows are joined from opportunity fields.
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
   }
   const create = useMutation({ mutationFn: (i: CreateOpportunityInput) => repository.createOpportunity(i), onSuccess: invalidate })
   const update = useMutation({
@@ -134,7 +136,12 @@ export function useOpportunityMutations() {
 
 // --- Bid Tracker ---
 export const useBidsForGrid = (filterRules?: BidSavedView['filterRules']) =>
-  useQuery({ queryKey: qk.bidsForGrid(filterRules), queryFn: () => repository.listBidsForGrid(filterRules) })
+  // keepPreviousData: changing a filter must not blank the grid to a loading
+  // state while the new rows load — the old rows stay until the new ones land.
+  useQuery({
+    queryKey: qk.bidsForGrid(filterRules), queryFn: () => repository.listBidsForGrid(filterRules),
+    placeholderData: keepPreviousData,
+  })
 export const useBid = (id: string | null) =>
   useQuery({ queryKey: qk.bid(id ?? ''), queryFn: async () => (await repository.getBid(id!)) ?? null, enabled: !!id })
 export function useBidMutations() {

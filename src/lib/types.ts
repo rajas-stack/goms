@@ -150,6 +150,9 @@ export interface Opportunity {
   opportunityName: string
   /** GEM bid number or tender ID, whichever applies. */
   gemTenderId: string
+  /** Client city — free text, feeds the Bid Tracker Master Grid's "City"
+   *  column. `null`/absent for opportunities that predate it. */
+  city?: string | null
   /** ISO date (YYYY-MM-DD) the tender/GEM listing was published. */
   publishDate: string
   /** ISO date (YYYY-MM-DD) the bid is due. */
@@ -385,7 +388,9 @@ export interface Bid {
 }
 export interface BidGridRow extends Bid {
   departmentId: string
+  departmentName: string | null
   stateCode: number | null
+  city: string | null
   opportunityName: string
   gemTenderId: string
   submissionDate: string
@@ -395,6 +400,17 @@ export interface BidGridRow extends Bid {
   emdUnit: string
   vertical: string
   ownerEmail: string | null
+  solutionLeadEmail: string | null
+  documentCount: number
+  latestCorrigendumStatus: 'pending_review' | 'reviewed' | null
+  nextMilestoneLabel: string | null
+  nextMilestoneDueAt: string | null
+  daysRemaining: number | null
+  nextActionNote: string | null
+  nextActionDueDate: string | null
+  /** The "Action Owner" column: assignee of the earliest open next action. */
+  nextActionAssigneeEmail: string | null
+  updatedBy: string | null
   attentionFlag: 'dueSoon' | 'overdue' | 'corrigendumPending' | 'onTrack'
   /** Active custom columns only, keyed by field `key`; absent = no value. */
   customValues: Record<string, CustomValue>
