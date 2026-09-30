@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { photoUrlSchema } from '../photoUrl.js'
 import { isForeignKeyViolation } from '../db-errors.js'
 import { tierRank } from '@goms/domain'
 
@@ -28,7 +29,7 @@ const personPatchShape = {
   employeeCode: z.string().optional(), name: z.string().min(1).optional(), officialEmail: z.string().optional(),
   personalEmail: z.string().optional(), mobile: z.string().optional(), altMobile: z.string().optional(),
   joinedOn: z.string().nullable().optional(), leftOn: z.string().nullable().optional(),
-  status: statusSchema.optional(), photoUrl: z.string().nullable().optional(),
+  status: statusSchema.optional(), photoUrl: photoUrlSchema,
   notes: z.string().optional(), metadata: z.record(z.string()).optional(),
 }
 const personColumnFor: Record<string, string> = {
@@ -63,7 +64,7 @@ export const salesRouter = router({
     .input(z.object({
       name: z.string().min(1), officialEmail: z.string().min(1), personalEmail: z.string().optional(),
       mobile: z.string().optional(), altMobile: z.string().optional(), notes: z.string().optional(),
-      photoUrl: z.string().nullable().optional(),
+      photoUrl: photoUrlSchema,
       designation: z.string().min(1), tierKey: z.string().min(1), managerId: z.string().uuid().nullable().optional(),
     }))
     .mutation(async ({ input }) => {

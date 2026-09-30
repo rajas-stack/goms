@@ -1,18 +1,15 @@
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Field } from './Field'
 import { Button } from './Button'
 import { Icon } from './Icon'
-
-function readImageFileAsDataUrl(file: File, cb: (dataUrl: string) => void) {
-  const reader = new FileReader()
-  reader.onload = () => cb(String(reader.result))
-  reader.readAsDataURL(file)
-}
+import { resizeProfilePhoto } from '@/lib/resizeProfilePhoto'
 
 /** Shared upload-or-paste profile-picture control — originally
  *  `EmployeeFormDialog`-only, extracted so `SalesPersonFormDialog` gets the
  *  identical control instead of a second copy. Persists as a data URL (no
- *  separate asset store), same convention as `visitingCards`. */
+ *  separate asset store), same convention as `visitingCards` — which is why
+ *  every image is downscaled (max 512px, JPEG) before it reaches `onChange`:
+ *  the data URL rides along in every list response. */
 export function PhotoUploadField({ photoUrl, onChange, label = 'Profile Picture', hint = 'Upload, or click here and press Ctrl+V to paste an image.' }: {
   photoUrl: string | null
   onChange: (dataUrl: string | null) => void
@@ -20,11 +17,21 @@ export function PhotoUploadField({ photoUrl, onChange, label = 'Profile Picture'
   hint?: string
 }) {
   const photoRef = useRef<HTMLInputElement>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  function readImageFile(file: File) {
+    setError(null)
+    resizeProfilePhoto(file).then(onChange, (err: unknown) => {
+      setError(err instanceof Error ? err.message : 'Could not use that image.')
+    })
+  }
 
   function onPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
+    // Reset so picking the same file again after an error still fires onChange.
+    e.target.value = ''
     if (!file) return
-    readImageFileAsDataUrl(file, onChange)
+    readImageFile(file)
   }
 
   function onPhotoPaste(e: React.ClipboardEvent<HTMLDivElement>) {
@@ -33,7 +40,7 @@ export function PhotoUploadField({ photoUrl, onChange, label = 'Profile Picture'
     for (const item of items) {
       if (item.type.startsWith('image/')) {
         const file = item.getAsFile()
-        if (file) readImageFileAsDataUrl(file, onChange)
+        if (file) readImageFile(file)
         return
       }
     }
@@ -64,6 +71,7 @@ export function PhotoUploadField({ photoUrl, onChange, label = 'Profile Picture'
         </Button>
         <input ref={photoRef} type="file" accept="image/*" onChange={onPhotoFile} className="hidden" />
       </div>
+      {error && <p role="alert" className="mt-1 text-[12px] text-crimson">{error}</p>}
     </Field>
   )
 }

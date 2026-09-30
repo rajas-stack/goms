@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { appRouter } from '../index.js'
 import { pool } from '../db.js'
+import { MAX_PHOTO_URL_LENGTH } from '../photoUrl.js'
 import { contextForEmail } from '../testHelpers/authTestHelpers.js'
 
 describe('employees router', () => {
@@ -41,6 +42,17 @@ describe('employees router', () => {
       vacant: overrides.vacant,
     })
   }
+
+  it('rejects an oversized photoUrl on create and on update', async () => {
+    const caller = appRouter.createCaller({})
+    const huge = 'data:image/png;base64,' + 'A'.repeat(MAX_PHOTO_URL_LENGTH)
+    await expect(caller.employees.create({
+      name: 'Big Photo', designation: 'Officer', email: 'big@example.com', phone: '9999999999',
+      orgNodeId, managerId: null, photoUrl: huge,
+    })).rejects.toThrow(/too large/i)
+    const employee = await makeEmployee()
+    await expect(caller.employees.update({ id: employee.id, patch: { photoUrl: huge } })).rejects.toThrow(/too large/i)
+  })
 
   it('creates an employee and logs a "joined" timeline event', async () => {
     const caller = appRouter.createCaller({})

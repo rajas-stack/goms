@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { appRouter } from '../index.js'
 import { pool } from '../db.js'
+import { MAX_PHOTO_URL_LENGTH } from '../photoUrl.js'
 import { contextForEmail } from '../testHelpers/authTestHelpers.js'
 
 describe('sales router', () => {
@@ -123,6 +124,17 @@ describe('sales router', () => {
     expect(withPhoto.photoUrl).toBe('data:image/png;base64,AAA=')
     const withoutPhoto = await makePerson({ name: 'No Photo' })
     expect(withoutPhoto.photoUrl).toBeNull()
+  })
+
+  it('rejects an oversized photoUrl on create and on update (the 33 MB listPersons regression)', async () => {
+    const caller = appRouter.createCaller({})
+    const huge = 'data:image/png;base64,' + 'A'.repeat(MAX_PHOTO_URL_LENGTH)
+    await expect(caller.sales.create({
+      name: 'Big Photo', officialEmail: `big-${Math.random()}@example.com`,
+      designation: 'Account Manager', tierKey: 'accountManager', photoUrl: huge,
+    })).rejects.toThrow(/too large/i)
+    const person = await makePerson()
+    await expect(caller.sales.update({ id: person.id, patch: { photoUrl: huge } })).rejects.toThrow(/too large/i)
   })
 
   it('sets and clears a photoUrl via update', async () => {
