@@ -20,6 +20,7 @@
 - `SYSTEM_BID_VIEWS` (All Bids/My Bids/Solutioning/Qualification/Due Soon/Overdue/Go Approved) is a **code registry, never a database row** — structurally immutable, not enforced by an `is_system` flag (spec §9.2). "Smart Transport Bids" and "High Value Deals > 20 Cr" are illustrative only and must never be seeded.
 - Documents: exactly five allowed MIME types (`application/pdf`, `image/jpeg`, `image/png`, the DOCX and XLSX Office Open XML types), 50 MB max, and `confirmUpload` must verify the **actual** GCS object metadata — never trust the client's original request claim alone (spec §14).
 - Colocated Vitest + Testing Library; every new API router test is a real-Postgres integration test via `appRouter.createCaller({})` — never mocked, matching every existing `apps/api/src/routers/*.test.ts` (spec §22). `packages/domain` has no standalone test runner configured (`vite.config.ts`'s vitest `include` is `src/**/*.test.ts` only) — new pure domain logic in `packages/domain` is exercised through the `apps/api` router tests that call it, exactly like `PIPELINE_STAGE_MAP` is today, not through a new colocated `.test.ts` file that no config would run.
+- **Custom fields (Phase M2) are an additive layer**: they never alter the seven required column groups, the `bids` table, or any Task 1–26 contract; they are ordinary (not protected-value / corrigendum) fields; and an unknown import heading or an archived column must never silently create, delete, or break anything.
 - No demo/sample bid, milestone, corrigendum, or document data is created anywhere in this plan. Every identifier in the reference screenshots is illustrative only.
 
 ## Review Focus
@@ -3855,9 +3856,185 @@ git commit -m "feat(frontend): register Bid Tracker as the third top-level modul
 
 ---
 
+## Phase M2 — Custom Fields (additive layer under the Master Grid)
+
+> **Added 2026-09-30 by explicit user decision, after Task 26.** The Master Grid gets genuinely user-defined columns: a user creates a column (name, type, options for select), and enters a value per bid, Excel-style. This is an **additive Custom layer** — the seven required column groups, the `bids` table, and every Task 1–26 contract stay as they are. Execute Tasks 27a–27e **after Task 27 and before Task 28**; Tasks 28, 29, 29a and 38 carry the UI/import consequences.
+
+### Decisions (binding for Tasks 27a–27e, 28, 29, 29a, 38)
+
+| Topic | Decision |
+|---|---|
+| Storage | Two real tables — `bid_custom_fields` (definitions) and `bid_custom_field_values` (one row per bid+field) — never JSON on `bids`. |
+| Value representation | Typed columns: `value_text` (text + select), `value_number NUMERIC`, `value_date DATE`, `value_bool BOOLEAN`. A `CHECK` allows at most one to be non-null. A cleared value **deletes the row** (audit records the edit). Indexed per `(field_id, typed column)` so sort/filter is type-correct, not lexical. |
+| Field identity | Stable `id` (UUID) + immutable `key` slug (`custom:<key>` is the grid column id / filter field / import heading). **Rename changes `name` only, never `key`**, so saved views, filters and imports never break on rename. |
+| Data type | `text \| number \| date \| select \| boolean`. **Type is immutable after creation** (changing it under existing values would corrupt them); to "change type", archive and create a new column. |
+| Select options | `options JSONB` array of strings, order = display order, non-empty, unique (case-insensitive). Removing an option **keeps existing values** (shown as-is, flagged "removed option" in the UI); `setValue` validates only against the *current* options. |
+| Lifecycle | `active` / `archived`. **No hard delete once any value row has ever existed** — `delete` is allowed only for a field with zero value rows (FK `ON DELETE RESTRICT` on `field_id` is the backstop). Archive hides the column everywhere; values are retained; unarchive restores. |
+| Ordering | `position INT`, dense per active fields; `reorder(ids)` rewrites positions in one transaction. Custom fields always render in a **Custom** group *after* the seven required groups. |
+| Protected values / corrigenda | Custom fields are ordinary: **not** subject to `assertFieldsNotProtected`, **not** a valid corrigendum `fieldKey`, not frozen. (Dialog-only standard fields stay dialog-only.) |
+| Bid deletion | Value rows are `ON DELETE CASCADE` on `bid_id` — `bids.delete`'s existing gate is unchanged, and custom values alone never block a bid delete. |
+| Filter model | `SystemBidViewFilterRule` (persisted in saved views) gains optional `value2?: string` and `values?: string[]`, and `operator` widens from `'eq'` to `'eq'\|'contains'\|'startsWith'\|'gt'\|'lt'\|'between'\|'before'\|'after'\|'in'`. `'eq'` remains the universal exact-match, so all existing system views and rules keep working untouched. Applies to **standard and custom** columns alike. |
+| Operators per type | text → `contains`/`eq`(equals)/`startsWith` · number → `eq`/`gt`/`lt`/`between` · date → `before`/`after`/`between` · select → `eq`/`in` · boolean → `eq` with `'true'`/`'false'`. Comparison is typed (numbers as numbers, dates as `YYYY-MM-DD`), never lexical on numbers. |
+| Archived/unknown field in a saved view | Rules on an archived or unknown `custom:<key>` field are **skipped** (not "match nothing", not a crash) by both server and client filtering; `visibleColumns`/order entries for it are ignored. The stored view is *not* rewritten, so unarchiving restores it exactly. The grid shows a one-line notice ("N filter(s) ignored — column archived"). |
+| Column order persistence | `bid_saved_views.visible_columns` is defined as an **ordered** array of column ids (standard ids and `custom:<key>`): array order = display order, absence = hidden. No schema change to `bid_saved_views`. |
+| Audit | `writeAuditLog` (Task 5) with `entityType: 'bidCustomField'` (entityId = field id; actions `custom_field_created`, `custom_field_renamed`, `custom_field_archived`, `custom_field_unarchived`, `custom_field_options_changed`, `custom_field_reordered`) and `entityType: 'bidCustomFieldValue'` (entityId = **bid id**, `field` = key, old/new value, action `custom_value_set`/`custom_value_cleared`) so value edits show in that bid's Activity History. |
+| Import | Existing active custom fields can receive values (heading = field name or `custom:<key>`, case-insensitive). An unrecognized heading **never creates a field**; the row set is flagged needs-review with the heading listed. |
+| Export | One column per **active** custom field, heading = field name, after the standard columns. |
+| No new dependency | Everything uses already-approved packages. |
+
+### Task 27a: Migrations 9–10 — `bid_custom_fields`, `bid_custom_field_values`
+
+**Files:**
+- Create: `apps/api/migrations/1789200000000_bid-custom-fields.sql`
+- Create: `apps/api/migrations/1789300000000_bid-custom-field-values.sql`
+
+**Interfaces:**
+- Produces: the two tables below. Additive only (Global Constraints).
+
+- [ ] **Step 1: Write migration 9**
+
+```sql
+-- Up Migration
+
+CREATE TABLE bid_custom_fields (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  key        TEXT NOT NULL UNIQUE CHECK (key ~ '^[a-z][a-z0-9_]{0,47}$'),
+  name       TEXT NOT NULL CHECK (length(btrim(name)) BETWEEN 1 AND 80),
+  data_type  TEXT NOT NULL CHECK (data_type IN ('text','number','date','select','boolean')),
+  options    JSONB,
+  position   INTEGER NOT NULL DEFAULT 0,
+  status     TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','archived')),
+  created_by TEXT,
+  updated_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CHECK ((data_type = 'select') = (options IS NOT NULL))
+);
+-- Names are unique among ACTIVE fields only (case-insensitive) so an archived
+-- column's name can be reused.
+CREATE UNIQUE INDEX bid_custom_fields_active_name_uq ON bid_custom_fields (lower(btrim(name))) WHERE status = 'active';
+CREATE INDEX bid_custom_fields_position_idx ON bid_custom_fields (status, position);
+
+-- Down Migration
+
+DROP TABLE bid_custom_fields;
+```
+
+- [ ] **Step 2: Write migration 10**
+
+```sql
+-- Up Migration
+
+CREATE TABLE bid_custom_field_values (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  bid_id       UUID NOT NULL REFERENCES bids(id) ON DELETE CASCADE,
+  field_id     UUID NOT NULL REFERENCES bid_custom_fields(id) ON DELETE RESTRICT,
+  value_text   TEXT,
+  value_number NUMERIC,
+  value_date   DATE,
+  value_bool   BOOLEAN,
+  updated_by   TEXT,
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (bid_id, field_id),
+  CHECK (num_nonnulls(value_text, value_number, value_date, value_bool) = 1)
+);
+CREATE INDEX bid_cfv_field_text_idx   ON bid_custom_field_values (field_id, value_text)   WHERE value_text   IS NOT NULL;
+CREATE INDEX bid_cfv_field_number_idx ON bid_custom_field_values (field_id, value_number) WHERE value_number IS NOT NULL;
+CREATE INDEX bid_cfv_field_date_idx   ON bid_custom_field_values (field_id, value_date)   WHERE value_date   IS NOT NULL;
+
+-- Down Migration
+
+DROP TABLE bid_custom_field_values;
+```
+
+- [ ] **Step 3: Apply and verify** — run the migrations against the dedicated test DB (`goms-bidtracker-pg`, port 5434), then `\d` both tables; confirm `CHECK` rejects a two-typed-column insert and a `select` field with NULL options, and that the down migrations reverse cleanly (up → down → up).
+- [ ] **Step 4: Add both tables to every existing test file's cleanup** that already deletes `bids` (values cascade from `bids`, but `bid_custom_fields` rows are independent and must be cleared by the new router tests' own `beforeEach`). This is the same cross-file cleanup class of bug fixed at Tasks 3/8 — grep for `DELETE FROM bids` and confirm nothing else needs `DELETE FROM bid_custom_fields`.
+- [ ] **Step 5: Commit** — `feat(api): add bid custom field definition and value tables`
+
+### Task 27b: Domain — custom field helpers and typed filter operators
+
+**Files:**
+- Create: `packages/domain/src/bidCustomFields.ts`
+- Modify: `packages/domain/src/bids.ts` (widen `SystemBidViewFilterRule`; extend `applyFilterRules`)
+- Modify: `packages/domain/src/index.ts` (export)
+
+**Interfaces:**
+- Produces:
+  - `type CustomFieldType = 'text'|'number'|'date'|'select'|'boolean'`, `type CustomValue = string | number | boolean | null`.
+  - `slugifyFieldKey(name: string, taken: Set<string>): string` — lowercase, non-alphanumerics → `_`, must start with a letter (prefix `f_` otherwise), ≤48 chars, dedupes with `_2`, `_3`.
+  - `normalizeOptions(raw: string[]): string[]` — trims, drops blanks, case-insensitive dedupe, throws on empty result.
+  - `coerceCustomValue(type, raw, options?): CustomValue` — `''`/`null` → `null`; number via `Number` (reject NaN/Infinity); date must match `YYYY-MM-DD` and be a real calendar date; boolean accepts `true/false/'true'/'false'`; select must be in `options`; text trimmed, ≤2000 chars. Throws `Error` with a user-facing message on invalid input.
+  - `OPERATORS_BY_TYPE: Record<CustomFieldType, FilterOperator[]>` (the table in the Decisions section) and `STANDARD_BID_FIELD_TYPES: Record<string, CustomFieldType>` for the grid's filterable standard columns (`opportunityName`/`gemTenderId`/`vertical`/`ownerEmail`→text; `stageKey`/`decision`/`attentionFlag`/`dataConfidence`/`status`→select; `submissionDate`→date; `valueAmount`/`emdAmount`→number).
+  - `applyFilterRules(rows, rules, currentUserEmail, fieldTypes?)` — **backward compatible**: existing 3-arg calls behave exactly as today (Task 19's tests must pass unmodified). With `fieldTypes`, each rule's `field` is looked up (`custom:<key>` rows read `row.customValues[key]`); operator semantics per the Decisions table; `$currentUser` still resolves as before; a rule whose field is `custom:<key>` and absent from `fieldTypes` is **skipped**; an operator invalid for the field's type never matches.
+
+- [ ] **Step 1: Write the failing tests** in `apps/api/src/routers/bidCustomFields.test.ts` (domain has no runner — Global Constraints) covering: slug collisions/leading digit; `coerceCustomValue` for each type incl. rejects (`'2026-02-30'`, `'abc'` as number, non-option select); each operator on each type (`between` inclusive both ends; `gt` on `'9'` vs `'10'` is numeric, not lexical); `in` with `values`; unknown-custom-field rule skipped; legacy `eq` rule untouched.
+- [ ] **Step 2: Implement**, run, confirm green (`DATABASE_URL=… npx vitest run apps/api/src/routers/bidCustomFields.test.ts --root apps/api`).
+- [ ] **Step 3: Commit** — `feat(domain): custom field helpers and typed filter operators`
+
+### Task 27c: `bidCustomFields` router — definitions, lifecycle, values, audit
+
+**Files:**
+- Create: `apps/api/src/routers/bidCustomFields.ts`
+- Modify: `apps/api/src/routers/bidCustomFields.test.ts` (router cases, appended to 27b's domain cases)
+- Modify: `apps/api/src/index.ts` (register `bidCustomFields`)
+
+**Interfaces:**
+- Consumes: 27a tables, 27b helpers, `writeAuditLog` (Task 5), `isUniqueViolation`/`isForeignKeyViolation`.
+- Produces (all `protectedProcedure`/`protectedReadProcedure`, transactional with the audit write, `toXxx` row mappers, dates as ISO strings):
+  - `list({ includeArchived?: boolean })` → `BidCustomField[]` ordered by `position, created_at`.
+  - `create({ name, dataType, options? })` → appended at `max(position)+1`; key from `slugifyFieldKey`; select requires `options`; non-select rejects `options`; duplicate active name → `CONFLICT`. Audit `custom_field_created`.
+  - `update({ id, patch: { name?, options? } })` → rename (audit `custom_field_renamed`, old/new name); options replace for select only (audit `custom_field_options_changed`, old/new JSON, plus which were removed); **`dataType` and `key` are not patchable** (absent from the zod shape). Archived fields may still be renamed/edited.
+  - `reorder({ ids })` → `ids` must be exactly the current active field ids once each (else `BAD_REQUEST`); rewrites `position`. Audit `custom_field_reordered`.
+  - `archive({ id })` / `unarchive({ id })` → flips `status`, audit. Unarchive re-checks active-name uniqueness (`CONFLICT` with a clear message if another active field took the name).
+  - `delete({ id })` → only when zero value rows exist, else `CONFLICT` "has values — archive it instead"; also `CONFLICT` translation of the FK backstop.
+  - `setValue({ bidId, fieldId, value })` → loads the field, rejects archived (`BAD_REQUEST`), `coerceCustomValue` (invalid → `BAD_REQUEST` with the message), `INSERT … ON CONFLICT (bid_id, field_id) DO UPDATE` into the correct typed column and nulls the others; `null` → `DELETE`. Audit `custom_value_set`/`custom_value_cleared` with entityId = `bidId`, field = key, old/new. **Does not** call `assertFieldsNotProtected`. Bumps `bids.updated_at`. Unknown bid/field → `NOT_FOUND`.
+  - `valuesForBid({ bidId })` → `Record<key, CustomValue>` for active fields.
+
+- [ ] **Step 1: Write failing router tests** (real Postgres, `appRouter.createCaller({})`): create/list ordering; slug dedupe; duplicate active name `CONFLICT`, reusable after archive; select without options rejected; rename keeps `key`; option removal keeps existing values and `setValue` of the removed option is rejected; reorder validation; archive hides from default `list` but keeps values, unarchive restores; `delete` blocked after any value written, allowed for a never-used field; `setValue` per type round-trips (number as number, date as `YYYY-MM-DD`, boolean), invalid values rejected, `null` clears, second set updates in place (still one row), archived field rejected; audit rows exist with the exact entity types/actions above (and value-edit audit is keyed to the bid id); protected-value freeze on the *bid* does not affect custom `setValue`; deleting a bid cascades its values.
+- [ ] **Step 2: Implement; run the new test file, then the full API suite** (Postgres up: `docker start goms-bidtracker-pg` if needed; the known `hierarchy.duplicateNode` flake is unrelated).
+- [ ] **Step 3: Commit** — `feat(api): bidCustomFields router with archive-not-delete lifecycle and audit`
+
+### Task 27d: Grid, saved views and Activity History integration
+
+**Files:**
+- Modify: `apps/api/src/routers/bids.ts` (`listForGrid`)
+- Modify: `apps/api/src/routers/bidSavedViews.ts` (zod rule shape)
+- Modify: `apps/api/src/routers/auditLogs.ts` (entity-type allow-list, if it has one)
+- Modify: `apps/api/src/routers/bids.test.ts`, `bidSavedViews.test.ts`, `auditLogs.test.ts`
+
+**Interfaces:**
+- `bids.listForGrid` rows gain `customValues: Record<string, CustomValue>` (active fields only, keyed by field `key`; loaded with **one** query over `bid_custom_field_values` joined to active fields — no per-row queries), and its `filterRules` input widens to the new rule shape. Filtering calls `applyFilterRules(rows, rules, email, fieldTypes)` where `fieldTypes = { ...STANDARD_BID_FIELD_TYPES, ...activeCustomTypes('custom:<key>') }`.
+- `bidSavedViews.create/update` accept the widened rule shape (`operator` enum, `value`, optional `value2`, optional `values`); reject an operator not valid for the field's type **only when the field is a known standard field** — unknown/archived custom fields are stored as given (saved views must survive archive). `visibleColumns` stays `string[]` with the ordered-array meaning from the Decisions table; no validation against current custom fields.
+- `auditLogs.list` surfaces `bidCustomField`/`bidCustomFieldValue` entries in the top-level history, and a bid's own history includes its value edits.
+
+- [ ] **Step 1: Write failing tests:** `listForGrid` returns typed `customValues` (number stays a number); `gt`/`between` on a number custom field are numeric; `contains` on text; `in` on select; a rule on an **archived** custom field is skipped and returns the unfiltered set while a rule on a standard field still applies; a saved view created with a custom rule keeps loading after `archive` and works again after `unarchive`; legacy `eq` rules and all Task 19 cases still green.
+- [ ] **Step 2: Implement, run `bids`/`bidSavedViews`/`auditLogs` tests, then the full API suite.**
+- [ ] **Step 3: Commit** — `feat(api): custom field values in the Master Grid query, typed filters, archive-safe saved views`
+
+### Task 27e: Frontend data layer for custom fields
+
+**Files:**
+- Modify: `src/lib/types.ts` (`CustomFieldType`, `BidCustomField`, widen `BidSavedView['filterRules']` element to `{ field; operator; value; value2?; values? }`, `BidGridRow.customValues`)
+- Modify: `src/data/seed.ts` (`bidCustomFields: []`, `bidCustomFieldValues: []`), `src/data/migrations.ts` (`SCHEMA_VERSION` 13→14, `toV14` backfilling both as `[]`), `src/data/migrations.test.ts`, `src/data/backup.test.ts` fixture
+- Modify: `src/data/in-memory/repository.ts` (`Repository` interface + `InMemoryRepository`, `MUTATOR_KEYS`/`READER_KEYS`, `hydrate` defaults; `listBidsForGrid` fills `customValues` and calls the shared typed `applyFilterRules`), `src/data/in-memory/bids.test.ts`
+- Modify: `src/data/remote/repository.ts`
+- Modify: `src/lib/api.ts`
+
+**Interfaces:**
+- Repository methods mirroring 27c 1:1: `listBidCustomFields(includeArchived?)`, `createBidCustomField`, `updateBidCustomField`, `reorderBidCustomFields`, `archiveBidCustomField`, `unarchiveBidCustomField`, `deleteBidCustomField`, `setBidCustomValue(bidId, fieldId, value)`, `listBidCustomValues(bidId)`. In-memory enforces the same rules (immutable type/key, unique active name, no delete once values exist, select validation, archived rejection) using the **same `@goms/domain` helpers**.
+- Hooks: `useBidCustomFields(includeArchived?)`, `useBidCustomFieldMutations()` (create/update/reorder/archive/unarchive/remove, invalidating `['bidCustomFields']` and `['bidsForGrid']`), `useSetBidCustomValue()` (invalidates `['bidsForGrid']` and `['bid', bidId]`; the grid will layer optimistic updates on top in Task 28).
+
+- [ ] **Step 1: Write failing tests** — in-memory create/list/order/rename/archive/delete-gate/setValue typing and clearing; `listBidsForGrid` custom filter incl. archived-skip; `toV14` migration; `npm run build` clean.
+- [ ] **Step 2: Implement; `npm run build` and `npm test` green.**
+- [ ] **Step 3: Commit** — `feat(frontend): custom field data layer (types, migration v14, repositories, hooks)`
+
+---
+
 ## Phase N — Master Grid and saved views
 
 ### Task 28: Install `@tanstack/react-table`, build `MasterGrid.tsx`
+
+> **Amended 2026-09-30 (Custom Fields, Phase M2 — do 27a–27e first).** In addition to everything below, `MasterGrid` must: (1) render the seven required groups unchanged, then a **Custom** group built from `useBidCustomFields()` (active fields, by `position`), each column id `custom:<key>`, cell value from `row.customValues[key]`, with type-aware rendering (number right-aligned, date formatted, boolean as check, select as pill); (2) **inline-edit** freely-editable cells — custom cells and any standard cell the spec marks freely editable — via `useSetBidCustomValue` (text/number: input; date: date input; select: dropdown of current options, plus a "(removed option)" tag for a stored value no longer in options; boolean: toggle) with optimistic update, Enter/blur commits, Esc cancels, and an inline error + rollback on a rejected value; frozen/corrigendum-tracked standard fields remain read-only in the grid and open their existing dialog; (3) **column filtering** through header filter popovers with **type-correct operators** (`OPERATORS_BY_TYPE`), multiple simultaneous filters, a clear-this-filter control on each filtered header, and a **Clear all filters** control, all reading/writing the same `filterRules` array the saved views persist; (4) **quick search** box matching case-insensitively across every visible text/select column (standard and custom); (5) **sorting** typed per column (numbers numerically, dates chronologically, booleans false<true, empty values last); (6) column **visibility and order** (drag or move controls) held as one ordered `visibleColumns` id array — the same array saved views persist; (7) **virtualization** via `@tanstack/react-virtual` including with 30+ custom columns (horizontal and vertical); (8) a graceful **ignored-rule notice** when the active view references an archived/unknown custom column (rules skipped, "N filter(s) ignored — column archived"). Filtering is done client-side with the shared domain `applyFilterRules(rows, rules, email, fieldTypes)` so it matches the server exactly. Column *management* (add/rename/options/reorder/archive) is Task 29a. Tests to add: custom column renders after System group; inline edit round-trips per type and rolls back on invalid; each operator for each type filters correctly; clear-one and clear-all; search hits a custom select value; archived-column rule ignored with notice; ordered `visibleColumns` drives display order.
 
 **Files:**
 - Modify: `package.json` (add `@tanstack/react-table`)
@@ -4022,6 +4199,8 @@ git commit -m "feat(frontend): add the Master Grid, column-grouped and virtualiz
 
 ### Task 29: Saved-view pill row and "Create Saved View" dialog
 
+> **Amended 2026-09-30 (Custom Fields).** The Create Saved View dialog's filter builder is the reference prototype's **"WHERE [field] [operator] [value]"** rule builder: field dropdown lists every filterable standard column *and every active custom column* (custom ones under a "Custom" heading); the operator dropdown is populated from `OPERATORS_BY_TYPE` for the chosen field's type and resets when the field changes; the value control is type-aware (text box / number box / date picker / select dropdown, `between` shows two inputs, `in` shows a multi-select); rules can be added, edited and removed, and several combine with AND. Saved views persist **standard and custom** `visibleColumns` in display order and the custom-related filter rules (Phase M2 Decisions table). Loading a view that references an archived/unknown custom column must not crash or blank the grid: those column ids and rules are ignored (notice shown), the stored view is untouched, and unarchiving restores it. Personal/global scope behavior is unchanged. Tests to add: builder offers only valid operators per type; a saved view round-trips a custom filter + custom column order; a view with an archived-column rule renders with the notice and the rest of its rules still applied.
+
 **Files:**
 - Create: `src/modules/bid-tracker/components/SavedViewTabs.tsx`
 - Create: `src/modules/bid-tracker/components/SavedViewTabs.test.tsx`
@@ -4167,6 +4346,27 @@ Expected: PASS.
 git add src/modules/bid-tracker/components/SavedViewTabs.tsx src/modules/bid-tracker/components/SavedViewTabs.test.tsx src/modules/bid-tracker/components/CreateSavedViewDialog.tsx src/modules/bid-tracker/BidTrackerWorkspace.tsx
 git commit -m "feat(frontend): add the saved-view pill row and Create Saved View dialog"
 ```
+
+---
+
+### Task 29a: Custom column management UI ("Add column", "Manage columns")
+
+> **Added 2026-09-30 (Custom Fields).** Depends on Tasks 27e and 28.
+
+**Files:**
+- Create: `src/modules/bid-tracker/components/AddCustomColumnDialog.tsx` + test
+- Create: `src/modules/bid-tracker/components/ManageColumnsPanel.tsx` + test
+- Modify: `src/modules/bid-tracker/components/MasterGrid.tsx` (toolbar entry points: "+ Add column" at the end of the Custom group header and a "Columns" button)
+
+**Interfaces:**
+- Consumes: `useBidCustomFields`, `useBidCustomFieldMutations` (27e).
+- `AddCustomColumnDialog`: column **name** (required, ≤80, duplicate-active-name error shown inline from the `CONFLICT`), **data type** (text/number/date/select/boolean — with a note that type cannot be changed later), and for select an **options editor** (add, remove, reorder, no blanks/duplicates; at least one). On success the new column appears at the end of the Custom group and is made visible in the active view's session state.
+- `ManageColumnsPanel` (popover from the "Columns" button): lists standard columns (visibility toggle + move) and the Custom group; each custom column supports **rename**, **edit options** (select only; removing an option that has stored values shows a confirmation naming that existing values are kept), **reorder** (persisted via `reorder`), **hide/show** (view-level, not archive), **archive** (confirm dialog: "values are kept; you can restore it") and a separate **Archived columns** section with **Restore** (`unarchive`). There is **no delete** control unless the field has never held a value, in which case a "Delete" appears with a confirm.
+- While the active view is a system view, column changes are session-only (spec §8); on a user view they persist through the debounced `visible_columns` write.
+
+- [ ] **Step 1: Write failing tests** — add flow per type (select requires options), duplicate-name error, rename keeps the column in place and does not break an existing filter on it, option-removal confirmation, reorder persists order into the grid, archive removes the column and its filter chip (notice shown) and restore brings it back, delete offered only for never-used fields.
+- [ ] **Step 2: Implement; `npm run build` and `npm test` green.**
+- [ ] **Step 3: Commit** — `feat(bid-tracker): add/rename/reorder/archive custom columns from the Master Grid`
 
 ---
 
@@ -5020,6 +5220,8 @@ git commit -m "feat(frontend): make WorksEditor's stage/submission-date read-onl
 ```
 
 ### Task 38: Import/export — `bids`/`bidMilestones` domain adapters, `ExportDialog` checkbox
+
+> **Amended 2026-09-30 (Custom Fields).** The `bids` adapter also handles custom columns. **Export:** append one column per *active* custom field after the standard columns, heading = the field's name, values in their natural text form (numbers unformatted, dates `YYYY-MM-DD`, booleans `true`/`false`). **Import:** a heading that matches an *active* custom field by name or `custom:<key>` (case-insensitive, trimmed) is a value column: each cell goes through `coerceCustomValue` (invalid → that row is a validation error naming row, column and reason, never a partial write), an empty cell is "no change" (never a clear), and the writes go through the same typed upsert as `bidCustomFields.setValue` with `custom_value_set` audit entries inside the commit transaction. A heading that matches **no** standard column and **no** active custom field must **never create a field**: it is reported in the validation preview as an *unknown column* (listed by heading, with the count of non-empty cells being ignored) and the import is marked **needs review** — the user can explicitly proceed without those columns, but nothing is auto-created. A heading that matches an *archived* custom field's name is reported the same way (with "archived" noted). Tests to add: export includes active custom columns and excludes archived; import writes typed values to an existing custom field; invalid number/date/select value rejected with row context; unknown heading flagged, no `bid_custom_fields` row created; archived-field heading flagged; blank cell doesn't clear an existing value.
 
 **Files:**
 - Create: `apps/api/src/import/domains/bids.ts`
