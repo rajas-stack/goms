@@ -514,7 +514,9 @@ export interface Repository {
   confirmDocumentUpload(uploadId: string): Promise<BidDocument>
   listDocuments(entityType: string, entityId: string): Promise<BidDocument[]>
   deleteDocument(id: string): Promise<void>
+  getDocumentDownloadUrl(id: string): Promise<string>
   listDocumentCitations(documentId: string): Promise<DocumentCitation[]>
+  deleteDocumentCitation(id: string): Promise<void>
   createDocumentCitation(input: { documentId: string; pageLabel: string; quoteText?: string; fieldRef?: string }): Promise<DocumentCitation>
 
   listBidSavedViews(): Promise<BidSavedView[]>
@@ -1734,6 +1736,18 @@ class InMemoryRepository implements Repository {
     this.data.documentCitations = this.data.documentCitations.filter((c) => c.documentId !== id)
   }
 
+  /** Local mode stores no file bytes, so there is nothing to open: the `local://` URL
+   *  tells the UI to say so instead of opening a dead link. */
+  async getDocumentDownloadUrl(id: string) {
+    const doc = this.data.bidDocuments.find((d) => d.id === id)
+    if (!doc) throw new Error(`No such document: ${id}`)
+    return doc.storagePath
+  }
+
+  async deleteDocumentCitation(id: string) {
+    this.data.documentCitations = this.data.documentCitations.filter((c) => c.id !== id)
+  }
+
   async listDocumentCitations(documentId: string) {
     return this.data.documentCitations.filter((c) => c.documentId === documentId)
   }
@@ -2623,7 +2637,7 @@ const MUTATOR_KEYS = [
   'createBid', 'updateBid', 'archiveBid', 'markBidVerified', 'unarchiveBid', 'deleteBid',
   'createBidMilestone', 'updateBidMilestone', 'deleteBidMilestone',
   'createBidCorrigendum', 'reviewCorrigendumChange', 'freezeValue', 'unfreezeValue',
-  'requestDocumentUploadUrl', 'confirmDocumentUpload', 'deleteDocument', 'createDocumentCitation',
+  'requestDocumentUploadUrl', 'confirmDocumentUpload', 'deleteDocument', 'createDocumentCitation', 'deleteDocumentCitation',
   'createBidSavedView', 'updateBidSavedView', 'deleteBidSavedView',
   'createBidCustomField', 'updateBidCustomField', 'reorderBidCustomFields', 'archiveBidCustomField',
   'unarchiveBidCustomField', 'deleteBidCustomField', 'setBidCustomValue',
@@ -2647,7 +2661,7 @@ const READER_KEYS = [
   'listAllBoqLineItems', 'listAuditLogs',
   'listCustomers', 'getCustomer',
   'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
-  'listDocuments', 'listDocumentCitations', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
+  'listDocuments', 'listDocumentCitations', 'getDocumentDownloadUrl', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the

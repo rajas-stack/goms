@@ -117,4 +117,14 @@ describe('documents router', () => {
     const { deleteObject } = await import('../lib/gcs.js')
     expect(deleteObject).toHaveBeenCalledWith(doc.storagePath)
   })
+
+  it('getDownloadUrl returns a signed URL for an existing document, and NOT_FOUND for an unknown id', async () => {
+    const caller = appRouter.createCaller({})
+    const { uploadId } = await caller.documents.requestUploadUrl({ entityType: 'bid', entityId: bidId, filename: 'Readable.pdf', contentType: 'application/pdf', sizeBytes: 1024 })
+    const doc = await caller.documents.confirmUpload({ uploadId })
+    const { url } = await caller.documents.getDownloadUrl({ id: doc.id })
+    expect(url).toContain('https://signed-download.example/')
+    expect(url).toContain('Readable.pdf')
+    await expect(caller.documents.getDownloadUrl({ id: '00000000-0000-4000-8000-000000000099' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
 })

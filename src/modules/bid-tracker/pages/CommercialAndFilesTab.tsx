@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
-import { useDocumentMutations, useDocuments } from '@/lib/api'
+import { useDocumentCitationMutations, useDocumentCitations, useDocumentMutations, useDocuments } from '@/lib/api'
 import type { BidGridRow } from '@/lib/types'
 
 // Mirrors the API's allow-list (spec §14): rejecting early gives a clear message
@@ -14,6 +14,45 @@ const ALLOWED_TYPES = [
 const MAX_BYTES = 50 * 1024 * 1024
 
 const formatSize = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`)
+const field = 'h-8 rounded-lg border border-line bg-white px-2 text-[13px] text-ink focus-visible:focus-ring'
+
+/** Where in the document a fact comes from (page + optional quote). */
+function DocumentCitationsPanel({ documentId }: { documentId: string }) {
+  const { data: citations = [] } = useDocumentCitations(documentId)
+  const { create, remove } = useDocumentCitationMutations(documentId)
+  const [pageLabel, setPageLabel] = useState('')
+  const [quoteText, setQuoteText] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const run = async (action: () => Promise<unknown>) => {
+    setError(null)
+    try { await action(); return true } catch (e) { setError(e instanceof Error ? e.message : 'Could not save the citation.'); return false }
+  }
+  return (
+    <div className="ml-6 mt-2 space-y-1 text-sm" data-testid="citations-panel">
+      {citations.length === 0 && <div className="text-muted">No citations yet.</div>}
+      {citations.map((c) => (
+        <div key={c.id} className="flex items-center gap-2">
+          <span><strong>{c.pageLabel}</strong>{c.quoteText ? <>: “{c.quoteText}”</> : null}</span>
+          <Button variant="ghost" size="icon" aria-label={`Delete citation ${c.pageLabel}`} onClick={() => run(() => remove.mutateAsync(c.id))}>
+            <Icon name="X" size={12} />
+          </Button>
+        </div>
+      ))}
+      <div className="flex flex-wrap items-center gap-2 pt-1">
+        <input aria-label="Citation page" placeholder="Page (e.g. Pg 3)" className={`${field} w-36`} value={pageLabel} onChange={(e) => setPageLabel(e.target.value)} />
+        <input aria-label="Citation quote" placeholder="Quote (optional)" className={`${field} min-w-[14rem] flex-1`} value={quoteText} onChange={(e) => setQuoteText(e.target.value)} />
+        <Button
+          variant="secondary" size="sm" disabled={!pageLabel.trim() || create.isPending}
+          onClick={async () => { if (await run(() => create.mutateAsync({ pageLabel: pageLabel.trim(), quoteText: quoteText.trim() || undefined }))) { setPageLabel(''); setQuoteText('') } }}
+        >
+          Add Citation
+        </Button>
+      </div>
+      {error && <p role="alert" className="text-[12px] text-crimson">{error}</p>}
+    </div>
+  )
+}
+
 const money = (amount: string, unit: string) => (amount ? `${amount} ${unit}` : '—')
 
 /** Commercial figures from the opportunity (read-only here — value and EMD are
@@ -24,7 +63,8 @@ export function CommercialAndFilesTab({ bidId, opportunity }: {
   opportunity: Pick<BidGridRow, 'valueAmount' | 'valueUnit' | 'emdAmount' | 'emdUnit'>
 }) {
   const { data: documents = [], isLoading } = useDocuments('bid', bidId)
-  const { requestUploadUrl, confirmUpload, remove } = useDocumentMutations('bid', bidId)
+  const { requestUploadUrl, confirmUpload, remove, download } = useDocumentMutations('bid', bidId)
+  const [citationsFor, setCitationsFor] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -49,6 +89,18 @@ export function CommercialAndFilesTab({ bidId, opportunity }: {
     } finally {
       setBusy(false)
       if (inputRef.current) inputRef.current.value = ''
+    }
+  }
+
+  async function handleOpen(id: string) {
+    setError(null)
+    try {
+      const url = await download.mutateAsync(id)
+      // Local (no-backend) mode keeps no file bytes, so there is nothing to open.
+      if (url.startsWith('local://')) { setError('Local mode keeps only document details, not the file itself.'); return }
+      window.open(url, '_blank', 'noopener')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not open the document.')
     }
   }
 
@@ -80,16 +132,27 @@ export function CommercialAndFilesTab({ bidId, opportunity }: {
         {!isLoading && documents.length === 0 && <p className="text-sm text-muted">No documents uploaded yet.</p>}
         <ul className="divide-y divide-line">
           {documents.map((d) => (
-            <li key={d.id} className="flex items-center gap-2 py-2" data-testid="document-row">
+            <li key={d.id} className="py-2" data-testid="document-row">
+             <div className="flex items-center gap-2">
               <Icon name="FileText" size={14} className="text-muted" />
-              <span className="min-w-0 flex-1 truncate text-sm text-ink">{d.filename}</span>
+              <button type="button" className="min-w-0 flex-1 truncate text-left text-sm text-ink underline" aria-label={`Open ${d.filename}`} onClick={() => handleOpen(d.id)}>
+                {d.filename}
+              </button>
               <span className="text-[12px] text-muted">{d.version} · {formatSize(d.sizeBytes)}</span>
+              <Button
+                variant="ghost" size="sm" aria-expanded={citationsFor === d.id}
+                onClick={() => setCitationsFor(citationsFor === d.id ? null : d.id)}
+              >
+                Citations
+              </Button>
               <Button
                 variant="ghost" size="icon" aria-label={`Delete ${d.filename}`}
                 onClick={() => { if (window.confirm(`Delete "${d.filename}"?`)) remove.mutate(d.id) }}
               >
                 <Icon name="Trash2" size={14} />
               </Button>
+             </div>
+             {citationsFor === d.id && <DocumentCitationsPanel documentId={d.id} />}
             </li>
           ))}
         </ul>

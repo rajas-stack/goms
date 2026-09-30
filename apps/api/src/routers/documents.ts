@@ -116,6 +116,12 @@ export const documentsRouter = router({
     const result = await pool.query('SELECT * FROM documents WHERE entity_type=$1 AND entity_id=$2 ORDER BY uploaded_at DESC', [input.entityType, input.entityId])
     return result.rows.map(toDocument)
   }),
+  /** A fresh signed URL per call — a stored one would outlive its expiry. */
+  getDownloadUrl: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+    const doc = (await pool.query('SELECT storage_path FROM documents WHERE id=$1', [input.id])).rows[0]
+    if (!doc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Document not found.' })
+    return { url: await getSignedDownloadUrl(doc.storage_path) }
+  }),
   delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
     const doc = (await pool.query('SELECT * FROM documents WHERE id=$1', [input.id])).rows[0]
     if (!doc) return

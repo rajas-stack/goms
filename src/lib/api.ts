@@ -258,8 +258,30 @@ export function useDocumentMutations(entityType: string, entityId: string) {
     mutationFn: (input: Parameters<typeof repository.requestDocumentUploadUrl>[0]) => repository.requestDocumentUploadUrl(input),
   })
   const confirmUpload = useMutation({ mutationFn: (uploadId: string) => repository.confirmDocumentUpload(uploadId), onSuccess: invalidate })
-  const remove = useMutation({ mutationFn: (id: string) => repository.deleteDocument(id), onSuccess: invalidate })
-  return { requestUploadUrl, confirmUpload, remove }
+  const remove = useMutation({
+    mutationFn: (id: string) => repository.deleteDocument(id),
+    onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['bidsForGrid'] }) },
+  })
+  /** Mints a fresh signed URL on each call (a cached one would expire). */
+  const download = useMutation({ mutationFn: (id: string) => repository.getDocumentDownloadUrl(id) })
+  return { requestUploadUrl, confirmUpload, remove, download }
+}
+
+export const useDocumentCitations = (documentId: string | null) =>
+  useQuery({
+    queryKey: ['documentCitations', documentId ?? ''],
+    queryFn: () => repository.listDocumentCitations(documentId!),
+    enabled: !!documentId,
+  })
+export function useDocumentCitationMutations(documentId: string) {
+  const qc = useQueryClient()
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['documentCitations', documentId] })
+  const create = useMutation({
+    mutationFn: (input: { pageLabel: string; quoteText?: string }) => repository.createDocumentCitation({ documentId, ...input }),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteDocumentCitation(id), onSuccess: invalidate })
+  return { create, remove }
 }
 
 export const useBidSavedViews = () =>

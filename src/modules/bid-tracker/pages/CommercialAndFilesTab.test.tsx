@@ -93,4 +93,52 @@ describe('CommercialAndFilesTab', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Delete old.pdf' }))
     await waitFor(() => expect(screen.queryByText('old.pdf')).not.toBeInTheDocument())
   })
+
+  async function withDocument(filename = 'DRDO_Tender.pdf') {
+    const bid = await makeBid()
+    const { uploadId } = await repository.requestDocumentUploadUrl({
+      entityType: 'bid', entityId: bid.id, filename, contentType: 'application/pdf', sizeBytes: 2048, version: 'v1.0',
+    })
+    const doc = await repository.confirmDocumentUpload(uploadId)
+    return { bid, doc }
+  }
+
+  it('opens a document through a freshly-minted download URL', async () => {
+    const { bid, doc } = await withDocument()
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    const mint = vi.spyOn(repository, 'getDocumentDownloadUrl').mockResolvedValue('https://signed.example/doc.pdf')
+    renderTab(bid.id)
+    await userEvent.click(await screen.findByRole('button', { name: 'Open DRDO_Tender.pdf' }))
+    await waitFor(() => expect(open).toHaveBeenCalledWith('https://signed.example/doc.pdf', '_blank', 'noopener'))
+    expect(mint).toHaveBeenCalledWith(doc.id)
+    open.mockRestore(); mint.mockRestore()
+  })
+
+  it('says so, rather than opening a dead link, in local mode where no file bytes exist', async () => {
+    const { bid } = await withDocument()
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    renderTab(bid.id)
+    await userEvent.click(await screen.findByRole('button', { name: 'Open DRDO_Tender.pdf' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/local mode/i)
+    expect(open).not.toHaveBeenCalled()
+    open.mockRestore()
+  })
+
+  it('adds and deletes a citation on a document', async () => {
+    const { bid, doc } = await withDocument()
+    renderTab(bid.id)
+    await userEvent.click(await screen.findByRole('button', { name: 'Citations' }))
+    const add = await screen.findByRole('button', { name: 'Add Citation' })
+    expect(add).toBeDisabled()
+    await userEvent.type(screen.getByLabelText('Citation page'), 'Pg 3')
+    await userEvent.type(screen.getByLabelText('Citation quote'), 'EMD is refundable')
+    await userEvent.click(add)
+    expect(await screen.findByText('Pg 3')).toBeInTheDocument()
+    expect(screen.getByText(/EMD is refundable/)).toBeInTheDocument()
+    expect(await repository.listDocumentCitations(doc.id)).toHaveLength(1)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete citation Pg 3' }))
+    await waitFor(() => expect(screen.queryByText('Pg 3')).not.toBeInTheDocument())
+    expect(await repository.listDocumentCitations(doc.id)).toHaveLength(0)
+  })
 })

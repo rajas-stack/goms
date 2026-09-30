@@ -281,6 +281,9 @@ export class RemoteRepository implements Partial<Repository> {
   listDocuments = (entityType: string, entityId: string): Promise<BidDocument[]> =>
     this.client.documents.listFor.query({ entityType, entityId }) as unknown as Promise<BidDocument[]>
   deleteDocument = (id: string): Promise<void> => this.client.documents.delete.mutate({ id }) as unknown as Promise<void>
+  getDocumentDownloadUrl = async (id: string): Promise<string> => (await this.client.documents.getDownloadUrl.query({ id })).url
+  deleteDocumentCitation = (id: string): Promise<void> =>
+    this.client.documents.citations.delete.mutate({ id }) as unknown as Promise<void>
   listDocumentCitations = (documentId: string): Promise<DocumentCitation[]> =>
     this.client.documents.citations.list.query({ documentId }) as unknown as Promise<DocumentCitation[]>
   createDocumentCitation = (
