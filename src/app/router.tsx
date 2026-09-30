@@ -17,6 +17,9 @@ const CommercialCalculatorWorkspace = lazy(() =>
 const BidTrackerWorkspace = lazy(() =>
   import('@/modules/bid-tracker/BidTrackerWorkspace').then((m) => ({ default: m.BidTrackerWorkspace })),
 )
+const BidDetailWorkspace = lazy(() =>
+  import('@/modules/bid-tracker/BidDetailWorkspace').then((m) => ({ default: m.BidDetailWorkspace })),
+)
 const AdminImportDashboard = lazy(() =>
   import('@/modules/admin-data-import/AdminImportDashboard').then((m) => ({ default: m.AdminImportDashboard })),
 )
@@ -51,10 +54,10 @@ const adminImportRoutes =
 
 // Bid Tracker is dark-launched behind its own build flag, same convention as
 // the admin-import routes above: absent from the router entirely when off.
-// (`/bid-tracker/bid/:bidId` joins this list with Task 30's detail workspace.)
 const bidTrackerRoutes = isBidTrackerEnabled()
   ? [
       { path: '/bid-tracker', element: <BidTrackerWorkspace /> },
+      { path: '/bid-tracker/bid/:bidId', element: <BidDetailWorkspace /> },
       { path: '/bid-tracker/:section', element: <BidTrackerWorkspace /> },
     ]
   : []

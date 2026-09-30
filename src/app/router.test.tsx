@@ -42,6 +42,7 @@ describe('admin data import routes', () => {
     const onPaths = on.router.routes[0].children?.map((c) => c.path) ?? []
     expect(onPaths).toContain('/bid-tracker')
     expect(onPaths).toContain('/bid-tracker/:section')
+    expect(onPaths).toContain('/bid-tracker/bid/:bidId')
 
     vi.resetModules()
     vi.stubEnv('VITE_BID_TRACKER_ENABLED', '')
