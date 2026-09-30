@@ -44,9 +44,9 @@ const SELECT_COL_WIDTH = 40
 // Spreadsheet surfaces: editable cells are white, read-only cells a cool grey, so
 // "can I type here?" is answered before the pointer gets there. Frozen cells need
 // solid fills (they sit over scrolling content), hence explicit colours.
-const EDITABLE_BG = 'bg-white group-hover/row:bg-[#F3F5FD]'
-const READONLY_BG = 'bg-[#F6F7FA] group-hover/row:bg-[#EEF1F8]'
-const SELECTED_BG = 'bg-[#E7EAFC]'
+const EDITABLE_BG = 'bg-white group-hover/row:bg-[#EEF6FC]'
+const READONLY_BG = 'bg-[#F5F7FA] group-hover/row:bg-[#E9F2FA]'
+const SELECTED_BG = 'bg-[#DCEEFA]'
 
 /** Empty cells become `undefined` so `sortUndefined: 'last'` keeps them at the
  *  bottom in BOTH directions. */
@@ -68,16 +68,24 @@ function compareTyped(type: CustomFieldType | null, a: unknown, b: unknown): num
 
 const helper = createColumnHelper<BidGridRow>()
 
-function ToolbarPopover({ label, icon, badge, children }: {
+function ToolbarPopover({ label, icon, badge, children, open: controlledOpen, onOpenChange }: {
   label: string; icon: string; badge?: number; children: ReactNode
+  /** Optional control from outside (the header menu opens the Columns panel). */
+  open?: boolean; onOpenChange?: (open: boolean) => void
 }) {
-  const [open, setOpen] = useState(false)
+  const [innerOpen, setInnerOpen] = useState(false)
+  const open = controlledOpen ?? innerOpen
+  const setOpen = (next: boolean | ((v: boolean) => boolean)) => {
+    const value = typeof next === 'function' ? next(open) : next
+    setInnerOpen(value)
+    onOpenChange?.(value)
+  }
   const anchorRef = useRef<HTMLDivElement>(null)
   return (
     <div ref={anchorRef} className="relative inline-block">
       <Button variant="secondary" size="sm" className="h-7 px-2.5" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
         <Icon name={icon} size={14} /> {label}
-        {badge ? <span className="rounded-full bg-ink-900 px-1.5 text-[11px] text-paper">{badge}</span> : null}
+        {badge ? <span className="rounded-full bg-goms-navy px-1.5 text-[11px] text-paper">{badge}</span> : null}
       </Button>
       <PopoverPanel open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} maxPanelHeight={480}>
         {({ maxHeight }) => (
@@ -128,6 +136,9 @@ export function MasterGrid(props: MasterGridProps) {
   const [bulkError, setBulkError] = useState<string | null>(null)
   const [cellErrors, setCellErrors] = useState<Record<string, string>>({})
   const [editingRule, setEditingRule] = useState<number | null>(null)
+  // The Columns panel, opened either from the toolbar or from a header's "Manage column…".
+  const [columnsOpen, setColumnsOpen] = useState(false)
+  const [manageColumnId, setManageColumnId] = useState<string | null>(null)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
   // A column just added: scrolled into view and briefly highlighted, so a new
@@ -221,20 +232,9 @@ export function MasterGrid(props: MasterGridProps) {
     setEditingRule(rules.length)
   }
 
-  // --- column layout: remove / move / drag ---------------------------------------
+  // --- column layout: drag a header to reorder. Every other column action (move,
+  // hide, rename, archive) lives in the Columns panel only. ------------------------
   const orderedIds = visible.map((c) => c.id)
-  const removeColumn = (id: string) => {
-    // An empty list means "default view = every column", so the last column stays.
-    if (orderedIds.length > 1) setVisibleIds(orderedIds.filter((v) => v !== id))
-  }
-  const moveColumn = (id: string, delta: -1 | 1) => {
-    const i = orderedIds.indexOf(id)
-    const t = i + delta
-    if (i < 0 || t < 0 || t >= orderedIds.length) return
-    const next = [...orderedIds]
-    ;[next[i], next[t]] = [next[t], next[i]]
-    setVisibleIds(next)
-  }
   const dropColumn = (fromId: string, toId: string) => {
     if (fromId === toId) return
     const from = orderedIds.indexOf(fromId)
@@ -265,7 +265,7 @@ export function MasterGrid(props: MasterGridProps) {
     }
     if (col.id === 'tenderLink') {
       return row.tenderLink
-        ? <a href={row.tenderLink} target="_blank" rel="noreferrer" className="text-indigo-600 underline" onClick={(e) => e.stopPropagation()}>Link</a>
+        ? <a href={row.tenderLink} target="_blank" rel="noreferrer" className="text-goms-navy underline decoration-goms-sky underline-offset-2" onClick={(e) => e.stopPropagation()}>Link</a>
         : dash
     }
     if (col.id === 'stateCode') return v === null || v === undefined ? dash : (stateName.get(v as number) ?? String(v))
@@ -278,7 +278,7 @@ export function MasterGrid(props: MasterGridProps) {
       return label ?? (col.group === 'custom' ? `${String(v)} (removed)` : String(v))
     }
     if (col.type === 'number') return <span className="tabular-nums">{String(v)}</span>
-    if (col.id === 'opportunityName') return <span className="font-medium text-ink-900">{String(v)}</span>
+    if (col.id === 'opportunityName') return <span className="font-medium text-goms-navy">{String(v)}</span>
     return String(v)
   }
 
@@ -379,12 +379,15 @@ export function MasterGrid(props: MasterGridProps) {
         <ToolbarPopover label="Filters" icon="SlidersHorizontal" badge={appliedRules.length}>
           <FilterBuilder columns={filterable} rules={rules} onChange={setRules} />
         </ToolbarPopover>
-        <ToolbarPopover label="Columns" icon="List">
-          <ManageColumnsPanel all={allColumns} visible={visible} onVisibleChange={setVisibleIds} onAddColumn={() => setAddColumnOpen(true)} />
+        <ToolbarPopover
+          label="Columns" icon="List" open={columnsOpen}
+          onOpenChange={(open) => { setColumnsOpen(open); if (!open) setManageColumnId(null) }}
+        >
+          <ManageColumnsPanel all={allColumns} visible={visible} onVisibleChange={setVisibleIds} focusId={manageColumnId} />
         </ToolbarPopover>
         <Button variant="secondary" size="sm" className="h-7 px-2.5" onClick={() => setAddColumnOpen(true)}><Icon name="Plus" size={14} /> Add column</Button>
         {selectedIds.length > 0 && (
-          <div className="flex items-center gap-2 rounded-lg bg-indigo-100 px-2 py-0.5 text-[13px]" data-testid="bulk-toolbar">
+          <div className="flex items-center gap-2 rounded-lg bg-goms-sky/[0.16] px-2 py-0.5 text-[13px] text-goms-navy" data-testid="bulk-toolbar">
             <span className="font-medium">{selectedIds.length} selected</span>
             <Button variant="secondary" size="sm" className="h-6 px-2" onClick={archiveSelected}>Archive Selected</Button>
             <Button variant="secondary" size="sm" className="h-6 px-2" onClick={() => setReassignOpen(true)}>Reassign Owner</Button>
@@ -393,7 +396,7 @@ export function MasterGrid(props: MasterGridProps) {
         {bulkError && <span role="alert" className="text-[12px] text-crimson-600">{bulkError}</span>}
         <div className="ml-auto flex items-center gap-3">
           <span className="hidden items-center gap-2 text-[11.5px] text-muted xl:flex">
-            <span className="rounded border border-line bg-white px-1.5 py-px text-ink">Editable</span>
+            <span className="rounded border border-goms-green bg-white px-1.5 py-px text-ink">Editable</span>
             <span className="rounded border border-line bg-[#F6F7FA] px-1.5 py-px text-ink-600">Read-only</span>
             <span>Click a cell to edit · Enter saves · Esc cancels</span>
           </span>
@@ -426,7 +429,7 @@ export function MasterGrid(props: MasterGridProps) {
             <tr>
               <th
                 scope="col" rowSpan={2} style={{ left: 0 }}
-                className="sticky z-10 border-b-2 border-r border-line border-b-ink-900/30 bg-panel px-0 text-center"
+                className="sticky z-10 border-b-2 border-r border-line border-b-goms-navy/25 border-t-2 border-t-goms-sky bg-[#E4ECF4] px-0 text-center"
               >
                 <div className="flex justify-center">
                   <Checkbox
@@ -438,7 +441,7 @@ export function MasterGrid(props: MasterGridProps) {
               {groupRuns.map((run, i) => (
                 <th
                   key={i} colSpan={run.span} scope="colgroup"
-                  className="h-6 overflow-hidden whitespace-nowrap border-r border-paper/20 bg-ink-900 px-2 text-left text-[11px] font-semibold tracking-wide text-paper"
+                  className="h-6 overflow-hidden whitespace-nowrap border-r border-t-2 border-goms-navy/[0.15] border-t-goms-sky bg-[#E4ECF4] px-2 text-left text-[11px] font-semibold tracking-wide text-goms-navy"
                 >
                   {/* Sticky, so the label stays readable when its group scrolls under the frozen columns. */}
                   {run.start < frozen.left.size
@@ -454,7 +457,6 @@ export function MasterGrid(props: MasterGridProps) {
                   const sorted = h.column.getIsSorted()
                   const filteredCount = rulesByField.get(meta.id) ?? 0
                   const isFrozen = frozen.left.has(meta.id)
-                  const index = orderedIds.indexOf(meta.id)
                   return (
                     <th
                       key={h.id} scope="col" data-col-id={meta.id} style={frozenStyle(meta.id)}
@@ -466,13 +468,13 @@ export function MasterGrid(props: MasterGridProps) {
                       onDrop={(e) => { e.preventDefault(); if (dragId) dropColumn(dragId, meta.id); setDragId(null); setDragOverId(null) }}
                       onDragEnd={() => { setDragId(null); setDragOverId(null) }}
                       className={cn(
-                        'group/th h-8 border-b-2 border-r border-line border-b-ink-900/30 pl-2 pr-1 text-left transition-colors duration-700',
-                        sorted ? 'bg-indigo-100' : 'bg-panel',
-                        flashId === meta.id && 'bg-indigo-100 shadow-[inset_0_-3px_0_#5B6EE8]',
+                        'group/th h-8 border-b-2 border-r border-line border-b-goms-navy/25 pl-2 pr-1 text-left transition-colors duration-700',
+                        sorted ? 'bg-[#D6EAF8] shadow-[inset_0_-3px_0_#4CA7DD]' : 'bg-[#F7FAFC]',
+                        flashId === meta.id && 'bg-goms-green/25 shadow-[inset_0_-3px_0_#74C05C]',
                         isFrozen && 'sticky z-10',
-                        frozen.lastId === meta.id && 'border-r-2 border-r-ink-900/25',
+                        frozen.lastId === meta.id && 'border-r-2 border-r-goms-navy/25',
                         dragId === meta.id && 'opacity-40',
-                        dragOverId === meta.id && 'shadow-[inset_3px_0_0_#5B6EE8]',
+                        dragOverId === meta.id && 'shadow-[inset_3px_0_0_#4CA7DD]',
                       )}
                     >
                       <div className="flex items-center gap-1">
@@ -480,34 +482,31 @@ export function MasterGrid(props: MasterGridProps) {
                           type="button" disabled={!h.column.getCanSort()}
                           onClick={h.column.getToggleSortingHandler()}
                           className={cn(
-                            'flex min-w-0 flex-1 items-center gap-1 text-left text-[12px] font-semibold text-ink-900',
+                            'flex min-w-0 flex-1 items-center gap-1 text-left text-[12px] font-semibold text-goms-navy',
                             h.column.getCanSort() ? 'cursor-pointer' : 'cursor-default',
                           )}
                           aria-label={h.column.getCanSort() ? `Sort by ${meta.header}` : meta.header}
                         >
                           <span className="truncate" title={meta.header}>{flexRender(h.column.columnDef.header, h.getContext())}</span>
-                          {meta.editable && <span title="Editable column" className="shrink-0 text-muted"><Icon name="Pencil" size={10} /></span>}
+                          {meta.editable && <span title="Editable column" className="shrink-0 text-goms-green"><Icon name="Pencil" size={10} /></span>}
                         </button>
                         {filteredCount > 0 && (
-                          <span title="Filtered" className="inline-flex shrink-0 text-indigo-600">
+                          <span title="Filtered" className="inline-flex shrink-0 text-goms-sky">
                             <Icon name="SlidersHorizontal" size={12} />
                             <span className="sr-only">Filtered</span>
                           </span>
                         )}
                         {h.column.getCanSort() && (
                           sorted
-                            ? <span className="shrink-0 text-indigo-600"><Icon name={sorted === 'asc' ? 'ArrowUp' : 'ArrowDown'} size={13} /></span>
+                            ? <span className="shrink-0 text-goms-navy"><Icon name={sorted === 'asc' ? 'ArrowUp' : 'ArrowDown'} size={13} /></span>
                             : <span className="shrink-0 text-muted opacity-0 group-hover/th:opacity-60"><Icon name="ChevronsUpDown" size={12} /></span>
                         )}
                         <ColumnHeaderMenu
                           header={meta.header} sorted={sorted}
                           canSort={h.column.getCanSort()}
-                          canMoveLeft={index > 0} canMoveRight={index < orderedIds.length - 1}
-                          canRemove={orderedIds.length > 1}
                           onSort={(dir) => (dir ? h.column.toggleSorting(dir === 'desc', false) : h.column.clearSorting())}
                           onFilter={meta.type !== null ? () => addRule(meta.id) : null}
-                          onMove={(delta) => moveColumn(meta.id, delta)}
-                          onRemove={() => removeColumn(meta.id)}
+                          onManage={() => { setManageColumnId(meta.id); setColumnsOpen(true) }}
                         />
                       </div>
                     </th>
@@ -559,8 +558,8 @@ export function MasterGrid(props: MasterGridProps) {
                           isSelected && SELECTED_BG,
                           rightAligned(meta) && 'text-right',
                           frozen.left.has(meta.id) && 'sticky z-10',
-                          frozen.lastId === meta.id && 'border-r-2 border-r-ink-900/25',
-                          flashId === meta.id && 'bg-indigo-100',
+                          frozen.lastId === meta.id && 'border-r-2 border-r-goms-navy/25',
+                          flashId === meta.id && 'bg-goms-green/20',
                         )}
                       >
                         {meta.editable ? (

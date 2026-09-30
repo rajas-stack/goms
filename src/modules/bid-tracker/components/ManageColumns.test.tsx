@@ -146,6 +146,19 @@ describe('custom column management', () => {
     expect(await repository.listBidCustomValues(bid.id)).toEqual({ score: 7 })
   })
 
+  it('shows no custom-columns section (heading or hint) until there is a custom column to manage', async () => {
+    await makeBid()
+    renderGrid()
+    await screen.findByText('Alpha')
+    await openColumns()
+    const panel = await screen.findByTestId('manage-columns-panel')
+    expect(within(panel).queryByText(/Custom columns/)).not.toBeInTheDocument()
+    expect(within(panel).queryByText(/None yet/)).not.toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: /Add column/ })).not.toBeInTheDocument()
+    // The one Add column control is the toolbar button.
+    expect(screen.getAllByRole('button', { name: /Add column/ })).toHaveLength(1)
+  })
+
   it('hides and shows a custom column from the same panel', async () => {
     await makeBid()
     await repository.createBidCustomField({ name: 'Score', dataType: 'number' })

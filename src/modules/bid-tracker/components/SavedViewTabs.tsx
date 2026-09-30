@@ -19,7 +19,7 @@ export function SavedViewTabs({ activeViewId, onChange, onCreateNew, onDelete, m
   const { data: views = [], isLoading } = useBidSavedViews()
   if (isLoading) return null
   return (
-    <div className="flex items-center gap-1 overflow-x-auto border-b border-line bg-panel/60 px-3 py-1" data-testid="saved-view-tabs">
+    <div className="flex items-center gap-1 overflow-x-auto border-b border-line bg-[#F1F6FA] px-3 py-1" data-testid="saved-view-tabs">
       <span className="mr-1 shrink-0 text-[12px] font-semibold text-muted">Views</span>
       {views.map((v) => {
         const active = v.id === activeViewId
@@ -29,7 +29,7 @@ export function SavedViewTabs({ activeViewId, onChange, onCreateNew, onDelete, m
             key={v.id}
             className={cn(
               'inline-flex shrink-0 items-center rounded-md text-[13px] transition-colors',
-              active ? 'bg-ink-900 text-paper shadow-sm' : 'text-ink hover:bg-ink-900/[0.07]',
+              active ? 'bg-goms-navy text-paper shadow-sm' : 'text-ink hover:bg-goms-sky/[0.14]',
             )}
           >
             <button

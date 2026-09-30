@@ -4,36 +4,30 @@ import { Icon } from '@/components/ui/Icon'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import { cn } from '@/lib/utils'
 
-function Item({ icon, children, onClick, disabled, danger }: {
-  icon: string; children: ReactNode; onClick: () => void; disabled?: boolean; danger?: boolean
+function Item({ icon, children, onClick, disabled }: {
+  icon: string; children: ReactNode; onClick: () => void; disabled?: boolean
 }) {
   return (
     <button
       type="button" role="menuitem" disabled={disabled} onClick={onClick}
-      className={cn(
-        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-ink-900/[0.06] disabled:pointer-events-none disabled:opacity-40',
-        danger ? 'text-crimson' : 'text-ink',
-      )}
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink hover:bg-goms-sky/[0.14] disabled:pointer-events-none disabled:opacity-40"
     >
       <Icon name={icon} size={14} className="shrink-0" /> {children}
     </button>
   )
 }
 
-/** The per-column menu in a grid header: sort, filter, move and — for every
- *  column, standard or custom — Remove column. Removing only takes the column
- *  out of the current view (its data is untouched); the Columns panel restores it. */
-export function ColumnHeaderMenu({ header, sorted, canSort, canMoveLeft, canMoveRight, canRemove, onSort, onFilter, onMove, onRemove }: {
+/** The per-column menu in a grid header: quick actions for THIS column — sort,
+ *  filter — and "Manage column…", which opens the Columns panel on it. Moving,
+ *  hiding, renaming and archiving live only in that panel, so each action has
+ *  exactly one home. */
+export function ColumnHeaderMenu({ header, sorted, canSort, onSort, onFilter, onManage }: {
   header: string
   sorted: false | 'asc' | 'desc'
   canSort: boolean
-  canMoveLeft: boolean
-  canMoveRight: boolean
-  canRemove: boolean
   onSort: (dir: 'asc' | 'desc' | false) => void
   onFilter: (() => void) | null
-  onMove: (delta: -1 | 1) => void
-  onRemove: () => void
+  onManage: () => void
 }) {
   const [open, setOpen] = useState(false)
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -44,7 +38,7 @@ export function ColumnHeaderMenu({ header, sorted, canSort, canMoveLeft, canMove
         type="button" aria-label={`${header} column menu`} aria-haspopup="menu" aria-expanded={open}
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v) }}
         className={cn(
-          'flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-ink-900/[0.1] hover:text-ink focus-visible:focus-ring',
+          'flex h-5 w-5 items-center justify-center rounded text-muted hover:bg-goms-navy/[0.1] hover:text-goms-navy focus-visible:focus-ring',
           open ? 'opacity-100' : 'opacity-0 group-hover/th:opacity-100 focus-visible:opacity-100',
         )}
       >
@@ -66,13 +60,7 @@ export function ColumnHeaderMenu({ header, sorted, canSort, canMoveLeft, canMove
             )}
             {onFilter && <Item icon="SlidersHorizontal" onClick={run(onFilter)}>Filter by this column</Item>}
             <div className="my-1 h-px bg-line" />
-            <Item icon="ArrowLeft" disabled={!canMoveLeft} onClick={run(() => onMove(-1))}>Move left</Item>
-            <Item icon="ArrowRight" disabled={!canMoveRight} onClick={run(() => onMove(1))}>Move right</Item>
-            <div className="my-1 h-px bg-line" />
-            <Item icon="EyeOff" danger disabled={!canRemove} onClick={run(onRemove)}>Remove column</Item>
-            <p className="px-2 pb-1 pt-0.5 text-[11px] leading-snug text-muted">
-              Only removes it from this view. Bring it back any time from Columns.
-            </p>
+            <Item icon="List" onClick={run(onManage)}>Manage column…</Item>
           </motion.div>
         )}
       </PopoverPanel>

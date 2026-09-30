@@ -439,45 +439,68 @@ describe('MasterGrid', () => {
       expect(leafs()[leafs().length - 2]).toBe('City')
     })
 
-    it('removes a built-in column from its header menu, and the Columns panel brings it back', async () => {
+    it('keeps the header menu to quick actions: no Move or Remove, which live only in the Columns panel', async () => {
       await makeBid('Alpha')
       renderGrid()
       await screen.findByText('Alpha')
       await userEvent.click(screen.getByRole('button', { name: 'Sector column menu' }))
-      await userEvent.click(screen.getByRole('menuitem', { name: /Remove column/ }))
+      const items = screen.getAllByRole('menuitem').map((m) => m.textContent?.trim())
+      expect(items).toEqual(['Sort ascending', 'Sort descending', 'Filter by this column', 'Manage column…'])
+    })
+
+    it('"Manage column…" opens the Columns panel on that column, highlighted — and the panel hides and restores it', async () => {
+      await makeBid('Alpha')
+      renderGrid()
+      await screen.findByText('Alpha')
+      await userEvent.click(screen.getByRole('button', { name: 'Sector column menu' }))
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Manage column…' }))
+      const panel = await screen.findByTestId('columns-panel')
+      const row = within(panel).getAllByTestId('shown-column').find((li) => li.textContent?.startsWith('Sector'))!
+      expect(row).toHaveAttribute('aria-current', 'true')
+      await userEvent.click(within(row).getByRole('button', { name: 'Hide Sector' }))
       expect(screen.queryByRole('button', { name: 'Sort by Sector' })).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Sort by City' })).toBeInTheDocument() // the rest are untouched
-      await openPopover('Columns')
       await userEvent.click(screen.getByRole('button', { name: 'Show Sector' }))
       expect(screen.getByRole('button', { name: 'Sort by Sector' })).toBeInTheDocument()
     })
 
-    it('removes a custom column from its header menu like any other column', async () => {
+    it('highlights a custom column in the panel too, where it can also be renamed and archived', async () => {
       await makeBid('Alpha')
       await repository.createBidCustomField({ name: 'Score', dataType: 'number' })
       renderGrid()
       await screen.findByRole('button', { name: 'Sort by Score' })
       await userEvent.click(screen.getByRole('button', { name: 'Score column menu' }))
-      await userEvent.click(screen.getByRole('menuitem', { name: /Remove column/ }))
-      expect(screen.queryByRole('button', { name: 'Sort by Score' })).not.toBeInTheDocument()
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Manage column…' }))
+      const row = (await screen.findAllByTestId('custom-column-row'))[0]
+      expect(row).toHaveAttribute('aria-current', 'true')
+      expect(within(row).getByRole('button', { name: 'Rename Score' })).toBeInTheDocument()
+      expect(within(row).getByRole('button', { name: 'Archive Score' })).toBeInTheDocument()
     })
 
-    it('moves a column left and right from its header menu, reporting the new order', async () => {
+    it('moves a column from the Columns panel, reporting the new order', async () => {
       await makeBid('Alpha')
       const onVisibleColumnsChange = vi.fn()
       renderGrid({ visibleColumns: ['opportunityName', 'bidCode', 'city'], onVisibleColumnsChange })
       await screen.findByText('Alpha')
-      await userEvent.click(screen.getByRole('button', { name: 'City column menu' }))
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Move left' }))
+      await openPopover('Columns')
+      await userEvent.click(screen.getByRole('button', { name: 'Move City up' }))
       expect(onVisibleColumnsChange).toHaveBeenCalledWith(['opportunityName', 'city', 'bidCode'])
     })
 
-    it('never removes the last remaining column (an empty list would mean "show everything")', async () => {
+    it('never hides the last remaining column (an empty list would mean "show everything")', async () => {
       await makeBid('Alpha')
       renderGrid({ visibleColumns: ['bidCode'], onVisibleColumnsChange: () => {} })
       await screen.findByRole('button', { name: 'Sort by Bid ID' })
-      await userEvent.click(screen.getByRole('button', { name: 'Bid ID column menu' }))
-      expect(screen.getByRole('menuitem', { name: /Remove column/ })).toBeDisabled()
+      await openPopover('Columns')
+      expect(screen.getByRole('button', { name: 'Hide Bid ID' })).toBeDisabled()
+    })
+
+    it('has a single Add column control: the toolbar button, not a second one inside the Columns panel', async () => {
+      await makeBid('Alpha')
+      renderGrid()
+      await screen.findByText('Alpha')
+      await openPopover('Columns')
+      expect(screen.getAllByRole('button', { name: /Add column/ })).toHaveLength(1)
     })
 
     it('reports ordered visible ids when controlled', async () => {

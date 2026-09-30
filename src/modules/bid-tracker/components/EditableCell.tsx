@@ -7,7 +7,7 @@ export type CellDraft = string | number | boolean | null
 
 // The editor sits exactly on top of the cell, like a spreadsheet's in-cell editor:
 // it covers the cell border with a 2px accent outline and never changes row height.
-const input = 'absolute inset-0 z-20 h-[31px] w-full rounded-none border-2 bg-white px-2 text-[12.5px] text-ink shadow-[0_2px_8px_rgba(15,41,66,0.18)] outline-none'
+const input = 'absolute inset-0 z-20 h-[31px] w-full rounded-none border-2 bg-white px-2 text-[12.5px] text-ink shadow-[0_2px_8px_rgba(11,43,73,0.22)] outline-none'
 
 /** One inline-editable grid cell (Excel-style): click / Enter / F2 to edit,
  *  Enter or blur to commit, Esc to cancel. Only ever rendered for columns the
@@ -99,7 +99,7 @@ export function EditableCell({ col, value, display, externalError, onCommit }: {
         data-editable-cell
         className={cn(
           'flex h-[31px] w-full min-w-0 cursor-cell items-center gap-1 px-2 outline-none',
-          'hover:shadow-[inset_0_0_0_1px_rgba(91,110,232,0.7)] focus-visible:shadow-[inset_0_0_0_2px_#5B6EE8]',
+          'hover:shadow-[inset_0_0_0_1px_rgba(76,167,221,0.9)] focus-visible:shadow-[inset_0_0_0_2px_#0B2B49]',
           externalError && 'text-crimson shadow-[inset_0_0_0_1px_#B23A48]',
         )}
         onClick={(e) => { e.stopPropagation(); start() }}
@@ -111,7 +111,7 @@ export function EditableCell({ col, value, display, externalError, onCommit }: {
     )
   }
 
-  const borderClass = error ? 'border-crimson' : 'border-indigo'
+  const borderClass = error ? 'border-crimson' : 'border-goms-navy'
   let editor: ReactNode
   if (type === 'select' || type === 'boolean') {
     const options = type === 'boolean'

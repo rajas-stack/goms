@@ -41,17 +41,17 @@ function Chip({ rule, col, open, columns, rules, onOpen, onClose, onChange, onRe
       ref={anchorRef}
       className={cn(
         'inline-flex h-7 max-w-[26rem] items-center rounded-md border bg-white text-[12.5px]',
-        complete ? 'border-indigo/50' : 'border-dashed border-ink-600/50',
-        open && 'ring-2 ring-indigo/30',
+        complete ? 'border-goms-sky' : 'border-dashed border-goms-navy/40',
+        open && 'ring-2 ring-goms-sky/40',
       )}
     >
       <button
         type="button" onClick={onOpen} aria-expanded={open} aria-label={`Edit filter ${ruleSummary(rule, col)}`}
-        className="flex min-w-0 items-center gap-1.5 rounded-l-md py-0.5 pl-2 pr-1.5 hover:bg-indigo-100/60 focus-visible:focus-ring"
+        className="flex min-w-0 items-center gap-1.5 rounded-l-md py-0.5 pl-2 pr-1.5 hover:bg-goms-sky/[0.12] focus-visible:focus-ring"
       >
-        <span className="font-semibold text-ink">{col?.header ?? rule.field}</span>{' '}
+        <span className="font-semibold text-goms-navy">{col?.header ?? rule.field}</span>{' '}
         <span className="text-muted">{operatorLabel(col?.type ?? null, rule.operator)}</span>{' '}
-        <span className={cn('min-w-0 truncate rounded bg-indigo-100 px-1.5 text-indigo-600', !value && 'bg-transparent italic text-muted')}>
+        <span className={cn('min-w-0 truncate rounded bg-goms-sky/[0.18] px-1.5 text-goms-navy', !value && 'bg-transparent italic text-muted')}>
           {value || 'choose a value'}
         </span>
       </button>
@@ -91,8 +91,8 @@ export function FilterBar({ rules, columns, columnById, ignoredCount, editing, o
   onAdd: () => void
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 border-b border-line bg-indigo-100/30 px-3 py-1.5" data-testid="active-filters">
-      <span className="mr-0.5 text-[12px] font-semibold tracking-wide text-ink-600">Where</span>
+    <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 border-b border-goms-sky/30 bg-goms-sky/[0.08] px-3 py-1.5" data-testid="active-filters">
+      <span className="mr-0.5 text-[12px] font-semibold tracking-wide text-goms-navy">Where</span>
       {rules.map((rule, index) => {
         const col = columnById.get(rule.field)
         // A rule on an archived custom column is ignored (and noted below), not shown as a live condition.

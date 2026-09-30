@@ -68,8 +68,8 @@ export function CreateBidDialog({ open, onClose }: { open: boolean; onClose: () 
               <button
                 type="button" disabled={!!creatingId} onClick={() => void pick(o.id)}
                 className={cn(
-                  'flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-indigo-100/50 focus-visible:bg-indigo-100/50 focus-visible:outline-none disabled:cursor-wait',
-                  creatingId === o.id && 'bg-indigo-100/50',
+                  'flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-goms-sky/10 focus-visible:bg-goms-sky/10 focus-visible:outline-none disabled:cursor-wait',
+                  creatingId === o.id && 'bg-goms-sky/10',
                 )}
               >
                 <span className="min-w-0 flex-1">
@@ -78,7 +78,7 @@ export function CreateBidDialog({ open, onClose }: { open: boolean; onClose: () 
                     {[departmentName.get(o.departmentId), o.gemTenderId, o.city, o.submissionDate && `due ${o.submissionDate}`].filter(Boolean).join('  ·  ')}
                   </span>
                 </span>
-                <span className="shrink-0 text-[12px] font-medium text-indigo-600">{creatingId === o.id ? 'Creating…' : 'Create bid'}</span>
+                <span className="shrink-0 text-[12px] font-medium text-goms-navy">{creatingId === o.id ? 'Creating…' : 'Create bid'}</span>
               </button>
             </li>
           ))}

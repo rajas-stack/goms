@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { useBidCustomFields, useBidCustomFieldMutations } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import type { BidCustomField } from '@/lib/types'
 import type { GridColumnMeta } from '../gridColumns'
 import { ColumnsPanel } from './ColumnsPanel'
@@ -15,11 +16,12 @@ const TYPE_LABEL = { text: 'Text', number: 'Number', date: 'Date', select: 'Sele
  *  below it the management of the user-defined columns — rename, edit options,
  *  default order, archive, restore, and delete (only for a column that has never
  *  held a value; everything else is archive-only, spec §8.1). */
-export function ManageColumnsPanel({ all, visible, onVisibleChange, onAddColumn }: {
+export function ManageColumnsPanel({ all, visible, onVisibleChange, focusId }: {
   all: GridColumnMeta[]
   visible: GridColumnMeta[]
   onVisibleChange: (orderedVisibleIds: string[]) => void
-  onAddColumn: () => void
+  /** Column to scroll to and highlight (opened from its header's "Manage column…"). */
+  focusId?: string | null
 }) {
   const { data: fields = [] } = useBidCustomFields(true)
   const { update, reorder, archive, unarchive, remove } = useBidCustomFieldMutations()
@@ -74,18 +76,22 @@ export function ManageColumnsPanel({ all, visible, onVisibleChange, onAddColumn 
 
   return (
     <div className="flex flex-col divide-y divide-line" data-testid="manage-columns-panel">
-      <ColumnsPanel all={all} visible={visible} onChange={onVisibleChange} />
+      <ColumnsPanel all={all} visible={visible} onChange={onVisibleChange} focusId={focusId} />
 
+      {/* Nothing to manage yet → no section at all (no empty heading or hint);
+          creating the first custom column is the toolbar's Add column button. */}
+      {(active.length > 0 || archived.length > 0 || error) && (
       <div className="flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2 p-3">
-        <div className="flex items-center justify-between">
+        {active.length > 0 && (
           <h3 className="text-[11px] font-semibold uppercase tracking-wide text-muted">Custom columns ({active.length})</h3>
-          <Button variant="ghost" size="sm" onClick={onAddColumn}><Icon name="Plus" size={14} /> Add column</Button>
-        </div>
+        )}
         {error && <p role="alert" className="text-[12px] text-crimson">{error}</p>}
-        {active.length === 0 && <p className="text-[13px] text-muted">None yet. Add one to track your own data per bid.</p>}
         <ul className="flex flex-col gap-1">
           {active.map((f, i) => (
-            <li key={f.id} className="rounded-md px-1 py-0.5 hover:bg-ink-900/[0.04]" data-testid="custom-column-row">
+            <li
+              key={f.id} data-testid="custom-column-row" aria-current={focusId === `custom:${f.key}` ? 'true' : undefined}
+              className={cn('rounded-md px-1 py-0.5 hover:bg-goms-sky/[0.1]', focusId === `custom:${f.key}` && 'bg-goms-sky/20 ring-1 ring-goms-sky')}
+            >
               {renaming?.id === f.id ? (
                 <div className="flex items-center gap-1">
                   <input
@@ -103,8 +109,8 @@ export function ManageColumnsPanel({ all, visible, onVisibleChange, onAddColumn 
                   {f.dataType === 'select' && (
                     <Button variant="ghost" size="icon" aria-label={`Edit options for ${f.name}`} onClick={() => setEditingOptions({ id: f.id, options: f.options ?? [] })}><Icon name="List" size={14} /></Button>
                   )}
-                  <Button variant="ghost" size="icon" aria-label={`Move ${f.name} earlier by default`} disabled={i === 0} onClick={() => void move(i, -1)}><Icon name="ArrowUp" size={14} /></Button>
-                  <Button variant="ghost" size="icon" aria-label={`Move ${f.name} later by default`} disabled={i === active.length - 1} onClick={() => void move(i, 1)}><Icon name="ArrowDown" size={14} /></Button>
+                  <Button variant="ghost" size="icon" aria-label={`Move ${f.name} earlier by default`} title="Earlier in the default column order (new views)" disabled={i === 0} onClick={() => void move(i, -1)}><Icon name="ArrowUp" size={14} /></Button>
+                  <Button variant="ghost" size="icon" aria-label={`Move ${f.name} later by default`} title="Later in the default column order (new views)" disabled={i === active.length - 1} onClick={() => void move(i, 1)}><Icon name="ArrowDown" size={14} /></Button>
                   <Button variant="ghost" size="icon" aria-label={`Archive ${f.name}`} onClick={() => doArchive(f)}><Icon name="Archive" size={14} /></Button>
                   {deleteButton(f)}
                 </div>
@@ -139,6 +145,7 @@ export function ManageColumnsPanel({ all, visible, onVisibleChange, onAddColumn 
           </div>
         )}
       </div>
+      )}
     </div>
   )
 }
