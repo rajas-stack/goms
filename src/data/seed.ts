@@ -1,6 +1,7 @@
 import type {
-  Customer, Employee, ExternalId, FollowUp, HierNode, MergeAuditRecord, Opportunity, OpportunityStageChange,
-  OwnershipAssignment, SalesPerson, SalesPosting, TimelineEvent, Transfer,
+  Bid, BidCorrigendum, BidCorrigendumChange, BidDocument, BidMilestone, BidSavedView,
+  Customer, DocumentCitation, Employee, ExternalId, FollowUp, HierNode, MergeAuditRecord, Opportunity, OpportunityStageChange,
+  OwnershipAssignment, ProtectedValue, SalesPerson, SalesPosting, TimelineEvent, Transfer,
 } from '@/lib/types'
 import adminRaw from './india-admin.json'
 import subdistrictsRaw from './subdistricts.json'
@@ -83,6 +84,20 @@ export interface GormsData {
   commercialCalculator: CommercialCalculatorData
   /** No seed fixture defined yet — starts empty. */
   customers: Customer[]
+
+  /** Added in v13 (Bid Tracker). All start empty — no demo/sample bid data
+   *  is ever seeded (design spec, explicit non-goal). */
+  bids: Bid[]
+  bidMilestones: BidMilestone[]
+  /** Stored without `changes` — joined in at read time from
+   *  `bidCorrigendumChanges`, exactly like `opportunities`/
+   *  `opportunityStageChanges` are two separate flat arrays. */
+  bidCorrigenda: Omit<BidCorrigendum, 'changes'>[]
+  bidCorrigendumChanges: BidCorrigendumChange[]
+  protectedValues: ProtectedValue[]
+  bidDocuments: BidDocument[]
+  documentCitations: DocumentCitation[]
+  bidSavedViews: BidSavedView[]
 }
 
 export function buildSeed(): GormsData {
@@ -297,5 +312,7 @@ export function buildSeed(): GormsData {
     opportunities, opportunityStageChanges, followUps, salesPersons, salesPostings,
     ownershipAssignments, mergeAudit, commercialCalculator,
     customers: [],
+    bids: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
+    protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [],
   }
 }

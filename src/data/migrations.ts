@@ -41,8 +41,12 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *      had `pricingLevels` missing entirely, crashing `SellingPriceSection`
  *      (`pricingLevels.some(...)`) and `withLiveDraftPricing` on any draft
  *      BOQ containing one.
+ *  v13 Bid Tracker's eight new collections (bids, bidMilestones,
+ *      bidCorrigenda, bidCorrigendumChanges, protectedValues, bidDocuments,
+ *      documentCitations, bidSavedViews) — same "new entity, no prior data,
+ *      starts empty" pattern as v10's `customers`.
  */
-export const SCHEMA_VERSION = 12
+export const SCHEMA_VERSION = 13
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -278,6 +282,24 @@ function toV12(data: SnapshotShape): SnapshotShape {
   return { ...data, commercialCalculator: { ...cc, commercialBoqLineItems } }
 }
 
+/** v12 → v13. See `SCHEMA_VERSION` doc comment. Each collection is backfilled
+ *  only if missing/not-an-array — idempotent against a snapshot that somehow
+ *  already has one (shouldn't happen pre-v13, same defensiveness as v10). */
+function toV13(data: SnapshotShape): SnapshotShape {
+  const withDefault = (key: string) => (Array.isArray(data[key]) ? data[key] : [])
+  return {
+    ...data,
+    bids: withDefault('bids'),
+    bidMilestones: withDefault('bidMilestones'),
+    bidCorrigenda: withDefault('bidCorrigenda'),
+    bidCorrigendumChanges: withDefault('bidCorrigendumChanges'),
+    protectedValues: withDefault('protectedValues'),
+    bidDocuments: withDefault('bidDocuments'),
+    documentCitations: withDefault('documentCitations'),
+    bidSavedViews: withDefault('bidSavedViews'),
+  }
+}
+
 /** Keyed by the version each step PRODUCES, so applying every key from
  *  `fromVersion + 1` up to `SCHEMA_VERSION` walks the chain in order. */
 export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> = {
@@ -292,6 +314,7 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   10: toV10,
   11: toV11,
   12: toV12,
+  13: toV13,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

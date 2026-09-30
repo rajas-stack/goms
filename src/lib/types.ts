@@ -367,3 +367,69 @@ export interface OwnershipAssignment {
   createdAt: string
   createdBy: string | null
 }
+
+// --- Bid Tracker ---
+
+export interface Bid {
+  id: string
+  opportunityId: string
+  bidCode: string
+  stageKey: string
+  decision: 'pending' | 'go' | 'no_go'
+  status: 'active' | 'archived'
+  dataConfidence: 'verified' | 'needs_review'
+  tenderLink: string | null
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+export interface BidGridRow extends Bid {
+  departmentId: string
+  stateCode: number | null
+  opportunityName: string
+  gemTenderId: string
+  submissionDate: string
+  valueAmount: string
+  valueUnit: string
+  emdAmount: string
+  emdUnit: string
+  vertical: string
+  ownerEmail: string | null
+  attentionFlag: 'dueSoon' | 'overdue' | 'corrigendumPending' | 'onTrack'
+}
+export interface BidMilestone {
+  id: string; bidId: string; milestoneType: string; key: string; label: string
+  dueAt: string | null; venue: string | null; notes: string | null
+  status: 'open' | 'completed' | 'superseded'; source: 'manual' | 'corrigendum'
+  createdAt: string; updatedAt: string
+}
+export interface BidCorrigendumChange {
+  id: string; corrigendumId: string; fieldKey: string; currentValue: string; proposedValue: string
+  decision: 'pending' | 'accepted' | 'rejected'; decidedAt: string | null; decidedBy: string | null
+}
+export interface BidCorrigendum {
+  id: string; bidId: string; corrigendumNumber: number; sourceDocumentId: string | null
+  detectedAt: string; reviewedAt: string | null; reviewedBy: string | null
+  status: 'pending_review' | 'reviewed'; changes: BidCorrigendumChange[]
+}
+export interface ProtectedValue {
+  id: string; entityType: string; entityId: string; fieldKey: string
+  frozen: boolean; frozenAt: string | null; frozenBy: string | null
+}
+export interface BidDocument {
+  id: string; entityType: string; entityId: string; filename: string; storagePath: string
+  version: string; contentType: string; sizeBytes: number; uploadedBy: string | null; uploadedAt: string
+}
+export interface DocumentCitation {
+  id: string; documentId: string; pageLabel: string; quoteText: string; fieldRef: string | null; createdAt: string
+}
+export interface BidSavedView {
+  id: string; name: string; scope: 'personal' | 'global'; ownerEmail: string | null; isSystem: boolean
+  filterRules: { field: string; operator: 'eq'; value: string }[]
+  sort: unknown[]; visibleColumns: string[]; createdBy: string | null; createdAt: string | null; updatedAt: string | null
+}
+export interface ActionQueueEntry {
+  followUpId: string; bidId: string; bidCode: string; stageKey: string; opportunityName: string
+  dueDate: string; note: string; assigneeId: string | null
+  attentionFlag: 'dueSoon' | 'overdue' | 'corrigendumPending' | 'onTrack'
+}

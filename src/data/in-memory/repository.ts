@@ -1,6 +1,8 @@
 import type {
-  AttendeeRef, Charge, Customer, Domain, Employee, FollowUp, HierNode, MergeAuditRecord, MergeFieldResolution, Opportunity,
-  OpportunityStageChange, OwnershipAssignment, PreferredComm, RelationshipQuality, RelationshipStatus,
+  ActionQueueEntry, AttendeeRef, Bid, BidCorrigendum, BidCorrigendumChange, BidDocument, BidGridRow, BidMilestone,
+  BidSavedView, Charge, Customer, Domain, DocumentCitation, Employee, FollowUp, HierNode, MergeAuditRecord,
+  MergeFieldResolution, Opportunity, OpportunityStageChange, OwnershipAssignment, PreferredComm, ProtectedValue,
+  RelationshipQuality, RelationshipStatus,
   SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
 import { uid } from '@/lib/utils'
@@ -12,6 +14,8 @@ import {
   buildOwnerMap, effectiveOwner, OWNABLE_ENTITY_MAP,
   type OwnerResolution, type OwnershipContext,
   performSearch, performRelatedRecords, type SearchData,
+  DEFAULT_BID_STAGE_KEY, formatBidCode, isAtOrAfterSubmitted, computeAttentionFlag, applyFilterRules,
+  SYSTEM_BID_VIEWS, SYSTEM_BID_VIEW_KEYS, type SystemBidViewFilterRule,
 } from '@goms/domain'
 export { MERGEABLE_FIELDS, type MergeableField }
 import { coversDate } from '@/lib/intervals'
@@ -468,11 +472,74 @@ export interface Repository {
 
   // --- Commercial Calculator: Audit Log (spec §6.6/§15) ----------------------
   listAuditLogs(filter?: { entityType?: string; entityId?: string }): Promise<CommercialAuditLog[]>
+
+  // --- Bid Tracker ---
+  listBidsForGrid(filterRules?: SystemBidViewFilterRule[]): Promise<BidGridRow[]>
+  getBid(id: string): Promise<Bid | null>
+  createBid(opportunityId: string): Promise<Bid>
+  updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>): Promise<Bid>
+  archiveBid(id: string): Promise<Bid>
+  unarchiveBid(id: string): Promise<Bid>
+  deleteBid(id: string): Promise<void>
+  listBidActionQueue(): Promise<ActionQueueEntry[]>
+
+  listBidMilestones(bidId: string): Promise<BidMilestone[]>
+  createBidMilestone(input: {
+    bidId: string; milestoneType: string; key: string; label: string
+    dueAt?: string | null; venue?: string; notes?: string
+  }): Promise<BidMilestone>
+  updateBidMilestone(id: string, patch: Partial<Pick<BidMilestone, 'label' | 'dueAt' | 'venue' | 'notes' | 'status'>>): Promise<BidMilestone>
+  deleteBidMilestone(id: string): Promise<void>
+
+  listBidCorrigenda(bidId: string): Promise<BidCorrigendum[]>
+  createBidCorrigendum(input: {
+    bidId: string; corrigendumNumber: number; sourceDocumentId?: string
+    changes: { fieldKey: string; currentValue: string; proposedValue: string }[]
+  }): Promise<BidCorrigendum>
+  reviewCorrigendumChange(input: { changeId: string; decision: 'accepted' | 'rejected'; reason?: string }): Promise<BidCorrigendumChange>
+
+  listProtectedValues(entityType: string, entityId: string): Promise<ProtectedValue[]>
+  freezeValue(entityType: string, entityId: string, fieldKey: string): Promise<void>
+  unfreezeValue(entityType: string, entityId: string, fieldKey: string, reason: string): Promise<void>
+
+  requestDocumentUploadUrl(input: {
+    entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+  }): Promise<{ uploadId: string; uploadUrl: string }>
+  confirmDocumentUpload(uploadId: string): Promise<BidDocument>
+  listDocuments(entityType: string, entityId: string): Promise<BidDocument[]>
+  deleteDocument(id: string): Promise<void>
+  listDocumentCitations(documentId: string): Promise<DocumentCitation[]>
+  createDocumentCitation(input: { documentId: string; pageLabel: string; quoteText?: string; fieldRef?: string }): Promise<DocumentCitation>
+
+  listBidSavedViews(): Promise<BidSavedView[]>
+  createBidSavedView(input: {
+    name: string; scope: 'personal' | 'global'
+    filterRules?: SystemBidViewFilterRule[]; sort?: unknown[]; visibleColumns?: string[]
+  }): Promise<BidSavedView>
+  updateBidSavedView(id: string, patch: Partial<Pick<BidSavedView, 'name' | 'filterRules' | 'sort' | 'visibleColumns'>>): Promise<BidSavedView>
+  deleteBidSavedView(id: string): Promise<void>
 }
 
 // Re-exported (not redefined) so existing `@/data/repository` import sites
 // keep working while the implementation lives in the date module.
 export { isoToday } from '@/lib/dates'
+
+/** Local-dev-only bid-code sequence — no cross-session durability guarantee
+ *  beyond what IndexedDB already gives the rest of this file (spec §6). */
+let inMemoryBidSeq = 1
+
+/** Upload slots handed out by `requestDocumentUploadUrl`, awaiting confirm. */
+const pendingBidUploads = new Map<string, {
+  entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+}>()
+
+/** Parses opportunities.submissionDate the same way the backend's
+ *  `bids.create` does (spec §4.5) — null for anything that doesn't parse. */
+function parseSubmissionDate(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+}
 
 class InMemoryRepository implements Repository {
   private data: GormsData = buildSeed()
@@ -499,6 +566,14 @@ class InMemoryRepository implements Repository {
       salesPersons: data.salesPersons ?? [],
       salesPostings: data.salesPostings ?? [],
       ownershipAssignments: data.ownershipAssignments ?? [],
+      bids: data.bids ?? [],
+      bidMilestones: data.bidMilestones ?? [],
+      bidCorrigenda: data.bidCorrigenda ?? [],
+      bidCorrigendumChanges: data.bidCorrigendumChanges ?? [],
+      protectedValues: data.protectedValues ?? [],
+      bidDocuments: data.bidDocuments ?? [],
+      documentCitations: data.documentCitations ?? [],
+      bidSavedViews: data.bidSavedViews ?? [],
     }
     // `mergeAudit` postdates some locally persisted snapshots (the static
     // type says it's always there, but a snapshot saved before this field
@@ -1189,6 +1264,407 @@ class InMemoryRepository implements Repository {
     this.data.opportunityStageChanges = this.data.opportunityStageChanges.filter((c) => c.opportunityId !== id)
   }
 
+  // --- Bid Tracker -----------------------------------------------------------
+
+  private attentionFor(bidId: string): BidGridRow['attentionFlag'] {
+    const deadline = this.data.bidMilestones.find(
+      (m) => m.bidId === bidId && m.key === 'submissionDeadline' && m.status === 'open',
+    )
+    const corrigendumIds = new Set(this.data.bidCorrigenda.filter((c) => c.bidId === bidId).map((c) => c.id))
+    const hasPendingCorrigendum = this.data.bidCorrigendumChanges.some(
+      (c) => corrigendumIds.has(c.corrigendumId) && c.decision === 'pending',
+    )
+    return computeAttentionFlag({ dueAt: deadline?.dueAt ?? null, hasPendingCorrigendum, today: isoToday() })
+  }
+
+  private requireBid(id: string): Bid {
+    const bid = this.data.bids.find((b) => b.id === id)
+    if (!bid) throw new Error(`No such bid: ${id}`)
+    return bid
+  }
+
+  private joinCorrigendum(c: Omit<BidCorrigendum, 'changes'>): BidCorrigendum {
+    return { ...c, changes: this.data.bidCorrigendumChanges.filter((ch) => ch.corrigendumId === c.id) }
+  }
+
+  async listBidsForGrid(filterRules: SystemBidViewFilterRule[] = []) {
+    const today = isoToday()
+    const owners = buildOwnerMap(
+      this.data.ownershipAssignments, 'bid', this.data.bids.map((b) => b.id), today, this.ownershipContext(),
+    )
+    const rows: BidGridRow[] = this.data.bids.map((bid) => {
+      const opp = this.data.opportunities.find((o) => o.id === bid.opportunityId)
+      const ownerId = owners.get(bid.id)?.salesPersonId
+      const ownerEmail = ownerId
+        ? this.data.salesPersons.find((p) => p.id === ownerId)?.officialEmail ?? null
+        : null
+      return {
+        ...bid,
+        departmentId: opp?.departmentId ?? '',
+        stateCode: opp?.stateCode ?? null,
+        opportunityName: opp?.opportunityName ?? '',
+        gemTenderId: opp?.gemTenderId ?? '',
+        submissionDate: opp?.submissionDate ?? '',
+        valueAmount: opp?.valueAmount ?? '',
+        valueUnit: opp?.valueUnit ?? '',
+        emdAmount: opp?.emdAmount ?? '',
+        emdUnit: opp?.emdUnit ?? '',
+        vertical: opp?.vertical ?? '',
+        ownerEmail,
+        attentionFlag: this.attentionFor(bid.id),
+      }
+    })
+    // Local dev has no signed-in user, so "$currentUser" never matches.
+    return applyFilterRules(rows as unknown as Record<string, unknown>[], filterRules, null) as unknown as BidGridRow[]
+  }
+
+  async getBid(id: string) {
+    return this.data.bids.find((b) => b.id === id) ?? null
+  }
+
+  async createBid(opportunityId: string) {
+    const opp = this.data.opportunities.find((o) => o.id === opportunityId)
+    if (!opp) throw new Error(`No such opportunity: ${opportunityId}`)
+    if (this.data.bids.some((b) => b.opportunityId === opportunityId)) {
+      throw new Error('This opportunity already has a bid.')
+    }
+    const now = new Date().toISOString()
+    const bid: Bid = {
+      id: uid('bid'),
+      opportunityId,
+      bidCode: formatBidCode(new Date().getFullYear(), inMemoryBidSeq++),
+      stageKey: DEFAULT_BID_STAGE_KEY,
+      decision: 'pending',
+      status: 'active',
+      dataConfidence: 'verified',
+      tenderLink: null,
+      archivedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    this.data.bids.push(bid)
+    this.data.bidMilestones.push({
+      id: uid('bms'), bidId: bid.id, milestoneType: 'submissionDeadline', key: 'submissionDeadline',
+      label: 'Submission Deadline', dueAt: parseSubmissionDate(opp.submissionDate), venue: null, notes: null,
+      status: 'open', source: 'manual', createdAt: now, updatedAt: now,
+    })
+    return bid
+  }
+
+  async updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>) {
+    const bid = this.requireBid(id)
+    const next = { ...patch }
+    const effectiveStageKey = next.stageKey ?? bid.stageKey
+    if (next.decision === 'go' && !isAtOrAfterSubmitted(effectiveStageKey)) {
+      throw new Error('Cannot mark Go before the bid reaches Submitted.')
+    }
+    // A final decision always wins over a stageKey in the same patch, so the
+    // two fields can never visibly disagree (spec §4.4).
+    if (next.decision === 'go') next.stageKey = 'goApproved'
+    if (next.decision === 'no_go') next.stageKey = 'dropped'
+    Object.assign(bid, next, { updatedAt: new Date().toISOString() })
+    return bid
+  }
+
+  async archiveBid(id: string) {
+    const bid = this.requireBid(id)
+    bid.status = 'archived'
+    bid.archivedAt = new Date().toISOString()
+    bid.updatedAt = bid.archivedAt
+    return bid
+  }
+
+  async unarchiveBid(id: string) {
+    const bid = this.requireBid(id)
+    bid.status = 'active'
+    bid.archivedAt = null
+    bid.updatedAt = new Date().toISOString()
+    return bid
+  }
+
+  async deleteBid(id: string) {
+    this.requireBid(id)
+    const referenced =
+      this.data.bidCorrigenda.some((c) => c.bidId === id)
+      || this.data.protectedValues.some((p) => p.entityType === 'bid' && p.entityId === id)
+      || this.data.bidDocuments.some((d) => d.entityType === 'bid' && d.entityId === id)
+      || this.data.followUps.some((f) => f.entityType === 'bid' && f.entityId === id)
+    if (referenced) throw new Error('This bid has corrigenda, protected values, documents or follow-ups — archive it instead.')
+    this.data.bids = this.data.bids.filter((b) => b.id !== id)
+    this.data.bidMilestones = this.data.bidMilestones.filter((m) => m.bidId !== id)
+  }
+
+  async listBidActionQueue() {
+    const today = isoToday()
+    const out: ActionQueueEntry[] = []
+    for (const f of this.data.followUps) {
+      if (f.entityType !== 'bid' || f.status !== 'open') continue
+      const bid = this.data.bids.find((b) => b.id === f.entityId)
+      if (!bid || bid.status !== 'active') continue
+      const opp = this.data.opportunities.find((o) => o.id === bid.opportunityId)
+      out.push({
+        followUpId: f.id, bidId: bid.id, bidCode: bid.bidCode, stageKey: bid.stageKey,
+        opportunityName: opp?.opportunityName ?? '', dueDate: f.dueDate, note: f.note, assigneeId: f.assigneeId,
+        attentionFlag: computeAttentionFlag({
+          dueAt: f.dueDate, hasPendingCorrigendum: this.attentionFor(bid.id) === 'corrigendumPending', today,
+        }),
+      })
+    }
+    return out.sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  }
+
+  async listBidMilestones(bidId: string) {
+    return this.data.bidMilestones
+      .filter((m) => m.bidId === bidId)
+      .sort((a, b) => (a.dueAt ?? '9999').localeCompare(b.dueAt ?? '9999') || a.createdAt.localeCompare(b.createdAt))
+  }
+
+  async createBidMilestone(input: {
+    bidId: string; milestoneType: string; key: string; label: string
+    dueAt?: string | null; venue?: string; notes?: string
+  }) {
+    this.requireBid(input.bidId)
+    if (this.data.bidMilestones.some((m) => m.bidId === input.bidId && m.key === input.key)) {
+      throw new Error(`Milestone "${input.key}" already exists for this bid.`)
+    }
+    const now = new Date().toISOString()
+    const milestone: BidMilestone = {
+      id: uid('bms'), bidId: input.bidId, milestoneType: input.milestoneType, key: input.key, label: input.label,
+      dueAt: input.dueAt ?? null, venue: input.venue ?? null, notes: input.notes ?? null,
+      status: 'open', source: 'manual', createdAt: now, updatedAt: now,
+    }
+    this.data.bidMilestones.push(milestone)
+    return milestone
+  }
+
+  async updateBidMilestone(
+    id: string,
+    patch: Partial<Pick<BidMilestone, 'label' | 'dueAt' | 'venue' | 'notes' | 'status'>>,
+  ) {
+    const m = this.data.bidMilestones.find((x) => x.id === id)
+    if (!m) throw new Error(`No such milestone: ${id}`)
+    Object.assign(m, patch, { updatedAt: new Date().toISOString() })
+    return m
+  }
+
+  async deleteBidMilestone(id: string) {
+    const m = this.data.bidMilestones.find((x) => x.id === id)
+    if (!m) return
+    // A pending corrigendum change still targets this slot — deleting it
+    // would leave the change with nowhere to land.
+    const targeted = this.data.bidCorrigendumChanges.some((ch) => {
+      if (ch.decision !== 'pending' || ch.fieldKey !== m.key) return false
+      return this.data.bidCorrigenda.some((c) => c.id === ch.corrigendumId && c.bidId === m.bidId)
+    })
+    if (targeted) throw new Error('A pending corrigendum still targets this milestone.')
+    this.data.bidMilestones = this.data.bidMilestones.filter((x) => x.id !== id)
+  }
+
+  async listBidCorrigenda(bidId: string) {
+    return this.data.bidCorrigenda
+      .filter((c) => c.bidId === bidId)
+      .sort((a, b) => a.corrigendumNumber - b.corrigendumNumber)
+      .map((c) => this.joinCorrigendum(c))
+  }
+
+  async createBidCorrigendum(input: {
+    bidId: string; corrigendumNumber: number; sourceDocumentId?: string
+    changes: { fieldKey: string; currentValue: string; proposedValue: string }[]
+  }) {
+    const bid = this.requireBid(input.bidId)
+    if (!input.changes.length) throw new Error('A corrigendum needs at least one change.')
+    if (this.data.bidCorrigenda.some((c) => c.bidId === input.bidId && c.corrigendumNumber === input.corrigendumNumber)) {
+      throw new Error(`Corrigendum ${input.corrigendumNumber} already exists for this bid.`)
+    }
+    for (const ch of input.changes) {
+      if (ch.fieldKey === 'tenderLink') continue
+      if (!this.data.bidMilestones.some((m) => m.bidId === input.bidId && m.key === ch.fieldKey)) {
+        throw new Error(`Unknown field "${ch.fieldKey}" — create its milestone slot first.`)
+      }
+    }
+    const corrigendum: Omit<BidCorrigendum, 'changes'> = {
+      id: uid('cor'), bidId: input.bidId, corrigendumNumber: input.corrigendumNumber,
+      sourceDocumentId: input.sourceDocumentId ?? null, detectedAt: new Date().toISOString(),
+      reviewedAt: null, reviewedBy: null, status: 'pending_review',
+    }
+    this.data.bidCorrigenda.push(corrigendum)
+    for (const ch of input.changes) {
+      this.data.bidCorrigendumChanges.push({
+        id: uid('cch'), corrigendumId: corrigendum.id, ...ch, decision: 'pending', decidedAt: null, decidedBy: null,
+      })
+    }
+    bid.dataConfidence = 'needs_review'
+    bid.updatedAt = new Date().toISOString()
+    return this.joinCorrigendum(corrigendum)
+  }
+
+  async reviewCorrigendumChange(input: { changeId: string; decision: 'accepted' | 'rejected'; reason?: string }) {
+    const change = this.data.bidCorrigendumChanges.find((c) => c.id === input.changeId)
+    if (!change) throw new Error(`No such corrigendum change: ${input.changeId}`)
+    const corrigendum = this.data.bidCorrigenda.find((c) => c.id === change.corrigendumId)!
+    const bid = this.requireBid(corrigendum.bidId)
+    const now = new Date().toISOString()
+
+    if (input.decision === 'accepted') {
+      const frozen = this.data.protectedValues.some(
+        (p) => p.entityType === 'bid' && p.entityId === bid.id && p.fieldKey === change.fieldKey && p.frozen,
+      )
+      if (frozen) throw new Error(`"${change.fieldKey}" is frozen — unfreeze it before accepting this change.`)
+      if (change.fieldKey === 'tenderLink') {
+        bid.tenderLink = change.proposedValue
+        bid.updatedAt = now
+      } else {
+        const milestone = this.data.bidMilestones.find((m) => m.bidId === bid.id && m.key === change.fieldKey)
+        if (milestone) {
+          milestone.dueAt = change.proposedValue
+          milestone.source = 'corrigendum'
+          milestone.updatedAt = now
+        }
+        if (change.fieldKey === 'submissionDeadline') {
+          const opp = this.data.opportunities.find((o) => o.id === bid.opportunityId)
+          if (opp) opp.submissionDate = change.proposedValue.slice(0, 10)
+        }
+      }
+    }
+
+    change.decision = input.decision
+    change.decidedAt = now
+    change.decidedBy = null
+
+    const stillPending = this.data.bidCorrigendumChanges.some(
+      (c) => c.corrigendumId === corrigendum.id && c.decision === 'pending',
+    )
+    if (!stillPending) {
+      corrigendum.status = 'reviewed'
+      corrigendum.reviewedAt = now
+      const bidCorrigendumIds = new Set(this.data.bidCorrigenda.filter((c) => c.bidId === bid.id).map((c) => c.id))
+      const anyPending = this.data.bidCorrigendumChanges.some(
+        (c) => bidCorrigendumIds.has(c.corrigendumId) && c.decision === 'pending',
+      )
+      if (!anyPending) bid.dataConfidence = 'verified'
+    }
+    return change
+  }
+
+  async listProtectedValues(entityType: string, entityId: string) {
+    return this.data.protectedValues.filter((p) => p.entityType === entityType && p.entityId === entityId)
+  }
+
+  async freezeValue(entityType: string, entityId: string, fieldKey: string) {
+    const now = new Date().toISOString()
+    const existing = this.data.protectedValues.find(
+      (p) => p.entityType === entityType && p.entityId === entityId && p.fieldKey === fieldKey,
+    )
+    if (existing) {
+      existing.frozen = true
+      existing.frozenAt = now
+      return
+    }
+    this.data.protectedValues.push({
+      id: uid('pv'), entityType, entityId, fieldKey, frozen: true, frozenAt: now, frozenBy: null,
+    })
+  }
+
+  async unfreezeValue(entityType: string, entityId: string, fieldKey: string, reason: string) {
+    if (!reason.trim()) throw new Error('A reason is required to unfreeze a value.')
+    const pv = this.data.protectedValues.find(
+      (p) => p.entityType === entityType && p.entityId === entityId && p.fieldKey === fieldKey,
+    )
+    if (!pv) return
+    pv.frozen = false
+    pv.frozenAt = null
+    pv.frozenBy = null
+  }
+
+  async requestDocumentUploadUrl(input: {
+    entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+  }) {
+    // Local dev has no object storage: the "upload URL" is a placeholder and
+    // the file bytes are never stored — only the metadata row.
+    const uploadId = uid('upl')
+    pendingBidUploads.set(uploadId, input)
+    return { uploadId, uploadUrl: `local://bid-upload/${uploadId}` }
+  }
+
+  async confirmDocumentUpload(uploadId: string) {
+    const pending = pendingBidUploads.get(uploadId)
+    if (!pending) throw new Error(`No such upload: ${uploadId}`)
+    pendingBidUploads.delete(uploadId)
+    const doc: BidDocument = {
+      id: uid('doc'), entityType: pending.entityType, entityId: pending.entityId, filename: pending.filename,
+      storagePath: `local://${pending.entityType}/${pending.entityId}/${pending.filename}`,
+      version: pending.version ?? '1', contentType: pending.contentType, sizeBytes: pending.sizeBytes,
+      uploadedBy: null, uploadedAt: new Date().toISOString(),
+    }
+    this.data.bidDocuments.push(doc)
+    return doc
+  }
+
+  async listDocuments(entityType: string, entityId: string) {
+    return this.data.bidDocuments
+      .filter((d) => d.entityType === entityType && d.entityId === entityId)
+      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))
+  }
+
+  async deleteDocument(id: string) {
+    this.data.bidDocuments = this.data.bidDocuments.filter((d) => d.id !== id)
+    this.data.documentCitations = this.data.documentCitations.filter((c) => c.documentId !== id)
+  }
+
+  async listDocumentCitations(documentId: string) {
+    return this.data.documentCitations.filter((c) => c.documentId === documentId)
+  }
+
+  async createDocumentCitation(input: { documentId: string; pageLabel: string; quoteText?: string; fieldRef?: string }) {
+    if (!this.data.bidDocuments.some((d) => d.id === input.documentId)) {
+      throw new Error(`No such document: ${input.documentId}`)
+    }
+    const citation: DocumentCitation = {
+      id: uid('cit'), documentId: input.documentId, pageLabel: input.pageLabel,
+      quoteText: input.quoteText ?? '', fieldRef: input.fieldRef ?? null, createdAt: new Date().toISOString(),
+    }
+    this.data.documentCitations.push(citation)
+    return citation
+  }
+
+  async listBidSavedViews() {
+    const system: BidSavedView[] = SYSTEM_BID_VIEWS.map((v) => ({
+      id: v.key, name: v.name, scope: 'global', ownerEmail: null, isSystem: true,
+      filterRules: v.filterRules, sort: [], visibleColumns: [], createdBy: null, createdAt: null, updatedAt: null,
+    }))
+    return [...system, ...this.data.bidSavedViews]
+  }
+
+  async createBidSavedView(input: {
+    name: string; scope: 'personal' | 'global'
+    filterRules?: SystemBidViewFilterRule[]; sort?: unknown[]; visibleColumns?: string[]
+  }) {
+    const now = new Date().toISOString()
+    const view: BidSavedView = {
+      id: uid('bsv'), name: input.name, scope: input.scope, ownerEmail: null, isSystem: false,
+      filterRules: input.filterRules ?? [], sort: input.sort ?? [], visibleColumns: input.visibleColumns ?? [],
+      createdBy: null, createdAt: now, updatedAt: now,
+    }
+    this.data.bidSavedViews.push(view)
+    return view
+  }
+
+  async updateBidSavedView(
+    id: string,
+    patch: Partial<Pick<BidSavedView, 'name' | 'filterRules' | 'sort' | 'visibleColumns'>>,
+  ) {
+    if (SYSTEM_BID_VIEW_KEYS.has(id)) throw new Error('System views cannot be edited.')
+    const view = this.data.bidSavedViews.find((v) => v.id === id)
+    if (!view) throw new Error(`No such view: ${id}`)
+    Object.assign(view, patch, { updatedAt: new Date().toISOString() })
+    return view
+  }
+
+  async deleteBidSavedView(id: string) {
+    if (SYSTEM_BID_VIEW_KEYS.has(id)) throw new Error('System views cannot be deleted.')
+    this.data.bidSavedViews = this.data.bidSavedViews.filter((v) => v.id !== id)
+  }
+
   async listSalesPersons() {
     return [...this.data.salesPersons].sort((a, b) => a.name.localeCompare(b.name))
   }
@@ -1215,7 +1691,7 @@ class InMemoryRepository implements Repository {
    *  cached: these arrays are mutated in place by other methods, so a cached
    *  context would silently go stale. */
   private ownershipContext(): OwnershipContext {
-    return { nodes: this.data.nodes, employees: this.data.employees, opportunities: this.data.opportunities }
+    return { nodes: this.data.nodes, employees: this.data.employees, opportunities: this.data.opportunities, bids: this.data.bids }
   }
 
   async listOwnershipAssignments() {
@@ -1660,7 +2136,10 @@ class InMemoryRepository implements Repository {
       employees: this.data.employees.filter((e) => e.status === 'active'),
       transfers: this.data.transfers,
       timeline: this.data.timeline,
-      opportunities: this.data.opportunities,
+      opportunities: this.data.opportunities.map((o) => {
+        const bid = this.data.bids.find((b) => b.opportunityId === o.id)
+        return { ...o, bidId: bid?.id ?? null, bidCode: bid?.bidCode ?? null, tenderLink: bid?.tenderLink ?? null }
+      }),
       salesPersons: this.data.salesPersons,
       postings: this.data.salesPostings,
       today: isoToday(),
@@ -1834,6 +2313,11 @@ const MUTATOR_KEYS = [
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
   'createBoq', 'updateBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'reorderBoqLineItems', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',
   'createCustomer', 'updateCustomer', 'deleteCustomer',
+  'createBid', 'updateBid', 'archiveBid', 'unarchiveBid', 'deleteBid',
+  'createBidMilestone', 'updateBidMilestone', 'deleteBidMilestone',
+  'createBidCorrigendum', 'reviewCorrigendumChange', 'freezeValue', 'unfreezeValue',
+  'requestDocumentUploadUrl', 'confirmDocumentUpload', 'deleteDocument', 'createDocumentCitation',
+  'createBidSavedView', 'updateBidSavedView', 'deleteBidSavedView',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -1853,6 +2337,8 @@ const READER_KEYS = [
   'listSkus', 'getSku', 'listBomItemsForSku', 'listAllBomItems', 'listBoqs', 'getBoq', 'listBoqLineItems',
   'listAllBoqLineItems', 'listAuditLogs',
   'listCustomers', 'getCustomer',
+  'listBidsForGrid', 'getBid', 'listBidActionQueue', 'listBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
+  'listDocuments', 'listDocumentCitations', 'listBidSavedViews',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the

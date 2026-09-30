@@ -132,6 +132,26 @@ describe('migrateSnapshot', () => {
     expect(out!.customers).toEqual([{ id: 'cust_1', name: 'Acme' }])
   })
 
+  it('adds empty Bid Tracker collections when migrating an old snapshot', () => {
+    const out = migrateSnapshot(v1Snapshot(), 1)
+    expect(out).not.toBeNull()
+    expect(out!.bids).toEqual([])
+    expect(out!.bidMilestones).toEqual([])
+    expect(out!.bidCorrigenda).toEqual([])
+    expect(out!.bidCorrigendumChanges).toEqual([])
+    expect(out!.protectedValues).toEqual([])
+    expect(out!.bidDocuments).toEqual([])
+    expect(out!.documentCitations).toEqual([])
+    expect(out!.bidSavedViews).toEqual([])
+  })
+
+  it('does not clobber existing Bid Tracker data if a snapshot already has it', () => {
+    const withBids = { ...v1Snapshot(), bids: [{ id: 'bid_1', bidCode: 'BID-2026-0001' }] }
+    const out = migrateSnapshot(withBids, 12)
+    expect(out).not.toBeNull()
+    expect(out!.bids).toEqual([{ id: 'bid_1', bidCode: 'BID-2026-0001' }])
+  })
+
   it('backfills selectedPricingLevels onto a legacy SKU row that predates the field', () => {
     const legacy = {
       ...v1Snapshot(),
