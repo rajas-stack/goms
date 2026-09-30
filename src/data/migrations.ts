@@ -47,8 +47,11 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *      starts empty" pattern as v10's `customers`.
  *  v14 Bid Tracker custom columns (spec §8.1): `bidCustomFields` and
  *      `bidCustomFieldValues`, both starting empty.
+ *  v15 `bidCustomFields[].hasHeldValue` — the durable "has ever held a value"
+ *      flag that gates hard deletion (spec §8.1). Backfilled from whether the
+ *      column currently has any value rows.
  */
-export const SCHEMA_VERSION = 14
+export const SCHEMA_VERSION = 15
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -302,6 +305,23 @@ function toV13(data: SnapshotShape): SnapshotShape {
   }
 }
 
+/** v14 → v15. See `SCHEMA_VERSION` doc comment. A column that already has
+ *  a flag keeps it; otherwise it is true iff value rows exist today (a column
+ *  whose values were cleared earlier is indistinguishable from a never-used
+ *  one in a local snapshot, and stays deletable — the same limit as the API
+ *  backfill without audit history). */
+function toV15(data: SnapshotShape): SnapshotShape {
+  const fields = asArray(data.bidCustomFields)
+  const withValues = new Set(asArray(data.bidCustomFieldValues).map((v) => v.fieldId))
+  return {
+    ...data,
+    bidCustomFields: fields.map((f) => ({
+      ...f,
+      hasHeldValue: typeof f.hasHeldValue === 'boolean' ? f.hasHeldValue : withValues.has(f.id),
+    })),
+  }
+}
+
 /** v13 → v14. See `SCHEMA_VERSION` doc comment. Idempotent for the same
  *  reason as v13. */
 function toV14(data: SnapshotShape): SnapshotShape {
@@ -329,6 +349,7 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   12: toV12,
   13: toV13,
   14: toV14,
+  15: toV15,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

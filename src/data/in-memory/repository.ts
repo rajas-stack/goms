@@ -1775,7 +1775,7 @@ class InMemoryRepository implements Repository {
     const field: BidCustomField = {
       id: uid('bcf'),
       key: slugifyFieldKey(name, new Set(this.data.bidCustomFields.map((f) => f.key))),
-      name, dataType: input.dataType, options,
+      name, dataType: input.dataType, options, hasHeldValue: false,
       position: this.data.bidCustomFields.reduce((max, f) => Math.max(max, f.position), -1) + 1,
       status: 'active', createdBy: null, updatedBy: null, createdAt: now, updatedAt: now,
     }
@@ -1857,7 +1857,10 @@ class InMemoryRepository implements Repository {
 
   async deleteBidCustomField(id: string) {
     const field = this.requireCustomField(id)
-    if (this.data.bidCustomFieldValues.some((v) => v.fieldId === id)) throw new Error('This column has values — archive it instead.')
+    // Never-held-a-value rule: clearing a value removes its row but not the flag.
+    if (field.hasHeldValue || this.data.bidCustomFieldValues.some((v) => v.fieldId === id)) {
+      throw new Error('This column has values — archive it instead.')
+    }
     this.data.bidCustomFields = this.data.bidCustomFields.filter((f) => f.id !== id)
     this.auditCustom({
       entityType: 'bidCustomField', entityId: id, field: 'name', oldValue: field.name, newValue: '',
@@ -1887,6 +1890,7 @@ class InMemoryRepository implements Repository {
       }
       return { bidId, fieldId, key: field.key, value: null as CustomValue }
     }
+    field.hasHeldValue = true
     const now = new Date().toISOString()
     if (existing) {
       existing.value = value

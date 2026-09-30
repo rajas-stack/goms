@@ -10,7 +10,7 @@ import { auditText, customValueColumns, customValueFromRow, CUSTOM_VALUE_COLUMNS
 function toBidCustomField(row: any) {
   return {
     id: row.id, key: row.key, name: row.name, dataType: row.data_type as CustomFieldType,
-    options: (row.options as string[] | null) ?? null, position: row.position, status: row.status as 'active' | 'archived',
+    options: (row.options as string[] | null) ?? null, hasHeldValue: row.has_held_value as boolean, position: row.position, status: row.status as 'active' | 'archived',
     createdBy: row.created_by, updatedBy: row.updated_by, createdAt: row.created_at, updatedAt: row.updated_at,
   }
 }
@@ -203,15 +203,16 @@ export const bidCustomFieldsRouter = router({
       return toBidCustomField(row)
     })),
 
-  /** Hard delete — only for a column that has never held a value. Anything
-   *  that has must be archived instead (spec §8.1). */
+  /** Hard delete — only for a column that has NEVER held a value (spec §8.1).
+   *  `has_held_value` is set on the first non-null write and never reset, so a
+   *  column whose values were all cleared afterwards is still archive-only. */
   delete: protectedProcedure
     .input(z.object({ id: z.string().uuid() }))
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
       const current = await loadField(client, input.id, true)
       const used = (await client.query('SELECT 1 FROM bid_custom_field_values WHERE field_id=$1 LIMIT 1', [input.id])).rows.length > 0
       const blocked = () => new TRPCError({ code: 'CONFLICT', message: 'This column has values — archive it instead.' })
-      if (used) throw blocked()
+      if (used || current.has_held_value) throw blocked()
       try {
         await client.query('DELETE FROM bid_custom_fields WHERE id=$1', [input.id])
       } catch (e) {
@@ -259,6 +260,8 @@ export const bidCustomFieldsRouter = router({
       }
 
       const c = customValueColumns(dataType, value)
+      // Durable "has ever held a value" — gates hard deletion of the column.
+      await client.query('UPDATE bid_custom_fields SET has_held_value=true WHERE id=$1 AND NOT has_held_value', [input.fieldId])
       await client.query(
         `INSERT INTO bid_custom_field_values (bid_id, field_id, value_text, value_number, value_date, value_bool, updated_by)
          VALUES ($1,$2,$3,$4,$5,$6,$7)

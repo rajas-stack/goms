@@ -456,6 +456,10 @@ export interface BidCustomField {
   id: string; key: string; name: string; dataType: CustomFieldType
   /** Non-null exactly for `select`. */
   options: string[] | null
+  /** True once any non-null value has EVER been written (never reset, even if
+   *  every value is later cleared). Only a column where this is false can be
+   *  hard-deleted; all others are archive-only. */
+  hasHeldValue: boolean
   position: number; status: 'active' | 'archived'
   createdBy: string | null; updatedBy: string | null; createdAt: string; updatedAt: string
 }

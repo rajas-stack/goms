@@ -72,14 +72,21 @@ describe('InMemoryRepository custom columns', () => {
     expect((await repository.listBidsForGrid())[0].customValues).toEqual({ score: 42 })
   })
 
-  it('delete is refused while a value row exists and allowed for an unused column', async () => {
+  it('delete is allowed only for a column that has NEVER held a value — clearing does not make it deletable', async () => {
     const bid = await newBid()
     const kept = await repository.createBidCustomField({ name: 'Kept', dataType: 'text' })
-    const unused = await repository.createBidCustomField({ name: 'Unused', dataType: 'text' })
+    const cleared = await repository.createBidCustomField({ name: 'Cleared', dataType: 'text' })
+    const unused = await repository.createBidCustomField({ name: 'Unused', dataType: 'number' })
+    expect(unused.hasHeldValue).toBe(false)
     await repository.setBidCustomValue(bid.id, kept.id, 'x')
+    await repository.setBidCustomValue(bid.id, cleared.id, 'x')
+    await repository.setBidCustomValue(bid.id, cleared.id, null) // row removed, flag stays
+    await expect(repository.setBidCustomValue(bid.id, unused.id, 'abc')).rejects.toThrow() // invalid write never marks it
     await expect(repository.deleteBidCustomField(kept.id)).rejects.toThrow(/archive it instead/)
+    await expect(repository.deleteBidCustomField(cleared.id)).rejects.toThrow(/archive it instead/)
     await repository.deleteBidCustomField(unused.id)
-    expect((await repository.listBidCustomFields(true)).map((f) => f.id)).toEqual([kept.id])
+    expect((await repository.listBidCustomFields(true)).map((f) => f.id).sort()).toEqual([kept.id, cleared.id].sort())
+    await repository.archiveBidCustomField(cleared.id) // archiving stays available
   })
 
   it('filters the grid with typed operators; a rule on an archived column is skipped', async () => {
@@ -125,7 +132,8 @@ describe('InMemoryRepository custom columns', () => {
     const f = await repository.createBidCustomField({ name: 'Note', dataType: 'text' })
     await repository.setBidCustomValue(bid.id, f.id, 'x')
     await repository.deleteBid(bid.id)
-    await repository.deleteBidCustomField(f.id) // no value rows remain, so this is now allowed
-    expect(await repository.listBidCustomFields(true)).toEqual([])
+    // The bid's value rows are gone, but the column DID hold a value: archive-only.
+    await expect(repository.deleteBidCustomField(f.id)).rejects.toThrow(/archive it instead/)
+    expect((await repository.listBidCustomFields(true)).map((x) => x.id)).toEqual([f.id])
   })
 })

@@ -154,10 +154,20 @@ describe('migrateSnapshot', () => {
     expect(fromV13!.bidCustomFieldValues).toEqual([])
   })
 
+  it('backfills hasHeldValue (v15) from whether a column has value rows, and keeps an existing flag', () => {
+    const snap = {
+      ...v1Snapshot(),
+      bidCustomFields: [{ id: 'used', key: 'a' }, { id: 'unused', key: 'b' }, { id: 'flagged', key: 'c', hasHeldValue: true }],
+      bidCustomFieldValues: [{ bidId: 'x', fieldId: 'used', value: 1 }],
+    }
+    const out = migrateSnapshot(snap, 14)
+    expect((out!.bidCustomFields as any[]).map((f) => [f.id, f.hasHeldValue])).toEqual([['used', true], ['unused', false], ['flagged', true]])
+  })
+
   it('does not clobber existing custom-column data', () => {
     const existing = { ...v1Snapshot(), bidCustomFields: [{ id: 'cf1', key: 'score' }], bidCustomFieldValues: [{ bidId: 'b', fieldId: 'cf1', value: 3 }] }
     const out = migrateSnapshot(existing, 13)
-    expect(out!.bidCustomFields).toEqual([{ id: 'cf1', key: 'score' }])
+    expect(out!.bidCustomFields).toEqual([{ id: 'cf1', key: 'score', hasHeldValue: true }])
     expect(out!.bidCustomFieldValues).toHaveLength(1)
   })
 

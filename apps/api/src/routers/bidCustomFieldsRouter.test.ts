@@ -102,15 +102,31 @@ describe('bidCustomFields router', () => {
     expect((await caller().bidCustomFields.valuesForBid({ bidId })).score).toBe(42)
   })
 
-  it('delete is refused while any value row exists, allowed once none do', async () => {
+  it('delete is allowed only for a column that has NEVER held a value — clearing a value does not make it deletable', async () => {
     const kept = await caller().bidCustomFields.create({ name: 'Kept', dataType: 'text' })
+    expect(kept.hasHeldValue).toBe(false)
     await caller().bidCustomFields.setValue({ bidId, fieldId: kept.id, value: 'still here' })
     await expect(caller().bidCustomFields.delete({ id: kept.id })).rejects.toMatchObject({ code: 'CONFLICT' })
-    expect(await caller().bidCustomFields.list()).toHaveLength(1)
+    expect((await caller().bidCustomFields.list())[0].hasHeldValue).toBe(true)
+
+    // Set, then cleared: the value row is gone, but the column HAS held a value.
+    const cleared = await caller().bidCustomFields.create({ name: 'Cleared', dataType: 'text' })
+    await caller().bidCustomFields.setValue({ bidId, fieldId: cleared.id, value: 'x' })
+    await caller().bidCustomFields.setValue({ bidId, fieldId: cleared.id, value: null })
+    expect((await pool.query('SELECT 1 FROM bid_custom_field_values WHERE field_id=$1', [cleared.id])).rows).toHaveLength(0)
+    await expect(caller().bidCustomFields.delete({ id: cleared.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+    // An invalid write never marks it.
+    const rejected = await caller().bidCustomFields.create({ name: 'Rejected', dataType: 'number' })
+    await expect(caller().bidCustomFields.setValue({ bidId, fieldId: rejected.id, value: 'abc' })).rejects.toBeTruthy()
+    expect((await caller().bidCustomFields.list()).find((f) => f.id === rejected.id)!.hasHeldValue).toBe(false)
+    await caller().bidCustomFields.delete({ id: rejected.id })
+    // Archiving is always available, and it keeps the flag.
+    await caller().bidCustomFields.archive({ id: cleared.id })
+    expect((await caller().bidCustomFields.list({ includeArchived: true })).find((f) => f.id === cleared.id)!.hasHeldValue).toBe(true)
 
     const unused = await caller().bidCustomFields.create({ name: 'Unused', dataType: 'text' })
     await caller().bidCustomFields.delete({ id: unused.id })
-    expect((await caller().bidCustomFields.list({ includeArchived: true })).map((f) => f.id)).toEqual([kept.id])
+    expect((await caller().bidCustomFields.list({ includeArchived: true })).map((f) => f.id).sort()).toEqual([kept.id, cleared.id].sort())
     expect((await audits('bidCustomField')).some((r) => r.action === 'custom_field_deleted')).toBe(true)
   })
 
