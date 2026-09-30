@@ -9,6 +9,8 @@ import { validateEmployeeRows, commitEmployeeRows } from '../domains/employees.j
 import { validateSalesRosterRows, commitSalesRosterRows } from '../domains/salesRoster.js'
 import { validateSkuRows, commitSkuRows } from '../domains/skus.js'
 import { validateBomRows, commitBomRows } from '../domains/bom.js'
+import { validateBidRows, commitBidRows } from '../domains/bids.js'
+import { validateBidMilestoneRows, commitBidMilestoneRows } from '../domains/bidMilestones.js'
 import type { ImportDomainKey, ImportRowResult } from '../types.js'
 
 export const FLAT_SHEET_KEYS: FlatMasterSheetKey[] = ['skuCategories', 'unitsOfMeasure', 'productEditions', 'billingTypes', 'preSales']
@@ -20,6 +22,16 @@ export interface DomainAdapter {
 }
 
 export const ADAPTERS: Partial<Record<ImportDomainKey, DomainAdapter>> = {
+  bids: {
+    validate: (client, rows) => validateBidRows(client, rows),
+    commit: (client, rows, preview) => commitBidRows(client, rows, preview),
+    flatten: (preview) => preview,
+  },
+  bidMilestones: {
+    validate: (client, rows) => validateBidMilestoneRows(client, rows),
+    commit: (client, rows, preview) => commitBidMilestoneRows(client, rows, preview),
+    flatten: (preview) => preview,
+  },
   taxClasses: {
     validate: (client, rows) => validateTaxClassRows(client, rows),
     commit: (client, rows, preview) => commitTaxClassRows(client, rows, preview),

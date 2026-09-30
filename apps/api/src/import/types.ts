@@ -1,7 +1,7 @@
 export type ImportDomainKey =
   | 'taxClasses' | 'commercialMastersFlat' | 'currencies' | 'approvalMatrix'
   | 'commercialMastersCatalog' | 'organizationHierarchy' | 'employees'
-  | 'salesRoster' | 'skus' | 'bom' | 'geography'
+  | 'salesRoster' | 'skus' | 'bom' | 'geography' | 'bids' | 'bidMilestones'
 
 export type ImportAction = 'create' | 'update' | 'unchanged' | 'needs-review' | 'reject'
 
@@ -31,6 +31,9 @@ export interface ImportRowResult {
   excludeReason?: string
   /** Present only when action === 'reject' or 'needs-review'; empty array otherwise. */
   errors: string[]
+  /** Non-blocking notices on an otherwise-actionable row (e.g. an import column
+   *  that matched nothing and was ignored). Never changes `action`. */
+  warnings?: string[]
 }
 
 export interface ImportSummary {

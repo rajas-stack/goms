@@ -218,4 +218,59 @@ describe('session orchestrator', () => {
     const orgCount = await pool.query(`SELECT COUNT(*) FROM hierarchy_nodes WHERE code='IDEMPDEPT'`)
     expect(Number(orgCount.rows[0].count)).toBe(1) // no duplicate row was created
   })
+
+  it('an unresolved (needs-review) bids row blocks the WHOLE domain from committing until explicitly excluded, proving the real orchestrated path', async () => {
+    const dept = (await pool.query(
+      `INSERT INTO hierarchy_nodes (domain, type_key, parent_id, state_code, name, code, sort_order, metadata, status)
+       VALUES ('org','department',NULL,27,'Session Dept','SESSDEPT',0,'{}','active') RETURNING id`,
+    )).rows[0]
+    const opp = (await pool.query(
+      `INSERT INTO opportunities (department_id, state_code, opportunity_name, gem_tender_id) VALUES ($1,27,'Session Tender','DRDO-SESS-001') RETURNING id`,
+      [dept.id],
+    )).rows[0]
+
+    const domains = {
+      bids: [
+        { gemTenderId: 'DRDO-SESS-001', tenderLink: 'https://example.com/good' }, // exact match — resolves cleanly
+        { gemTenderId: 'DRDO-SESS-001X', tenderLink: 'https://example.com/typo' }, // one-character typo — a genuine fuzzy needs-review row
+      ],
+    }
+    const validated = await runSessionValidate(pool, { domains })
+    const bidsPreview = validated.previews.find((p) => p.domain === 'bids')!.preview as any[]
+    expect(bidsPreview[0].action).toBe('create')
+    expect(bidsPreview[1].action).toBe('needs-review')
+
+    // Without excluding the needs-review row the commit is refused outright:
+    // the adapter's commit() is never called and NEITHER row lands.
+    await expect(
+      runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows: [] }, AUTHORIZED_TEST_EMAIL),
+    ).rejects.toThrow(/unresolved or rejected/)
+    const beforeExclusion = await pool.query(`SELECT COUNT(*) FROM bids WHERE opportunity_id=$1`, [opp.id])
+    expect(Number(beforeExclusion.rows[0].count)).toBe(0)
+
+    // Excluding it lets the rest of the domain commit; the excluded row has zero
+    // effect (it never reaches commit(), so no confidence downgrade either).
+    const excludedRows = [{ domain: 'bids' as const, rowNumber: 2, businessKey: 'DRDO-SESS-001X', reason: 'typo in tender ID, no confident match' }]
+    const result = await runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows }, AUTHORIZED_TEST_EMAIL)
+    expect(result.summary.toCreate).toBe(1)
+    const bid = (await pool.query(`SELECT * FROM bids WHERE opportunity_id=$1`, [opp.id])).rows[0]
+    expect(bid.tender_link).toBe('https://example.com/good')
+    expect(bid.data_confidence).toBe('verified')
+  })
+
+  it('an unknown custom-column heading does not block a bids import: the row commits, the column is not created', async () => {
+    await pool.query(
+      `INSERT INTO hierarchy_nodes (domain, type_key, parent_id, state_code, name, code, sort_order, metadata, status)
+       VALUES ('org','department',NULL,27,'Session Dept 2','SESSDEPT2',0,'{}','active')`,
+    )
+    const dept = (await pool.query(`SELECT id FROM hierarchy_nodes WHERE code='SESSDEPT2'`)).rows[0]
+    await pool.query(`INSERT INTO opportunities (department_id, state_code, opportunity_name, gem_tender_id) VALUES ($1,27,'Tender Two','DRDO-SESS-002')`, [dept.id])
+    const domains = { bids: [{ gemTenderId: 'DRDO-SESS-002', tenderLink: 'https://example.com/two', 'Unknown Heading': 'x' }] }
+    const validated = await runSessionValidate(pool, { domains })
+    const preview = validated.previews.find((p) => p.domain === 'bids')!.preview as any[]
+    expect(preview[0].action).toBe('create')
+    expect(preview[0].warnings?.[0]).toMatch(/Unknown column ignored: Unknown Heading/)
+    await runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows: [] }, AUTHORIZED_TEST_EMAIL)
+    expect((await pool.query('SELECT 1 FROM bid_custom_fields')).rows).toHaveLength(0)
+  })
 })
