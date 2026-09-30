@@ -494,6 +494,8 @@ describe('MasterGrid', () => {
         const owners = await repository.resolveOwners('bid', [a.id], new Date().toISOString().slice(0, 10))
         expect(JSON.stringify(owners)).toContain(person.id)
       })
+      // The grid itself must refresh (owner is resolved server-side), not just the ledger.
+      expect(await screen.findByText('rita@amnex.com')).toBeInTheDocument()
     })
   })
 })

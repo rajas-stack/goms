@@ -417,6 +417,8 @@ export function useOwnershipMutations() {
     qc.invalidateQueries({ queryKey: ['ownedBy'] })
     qc.invalidateQueries({ queryKey: ['resolvedOwners'] })
     qc.invalidateQueries({ queryKey: ['ownershipAssignments'] })
+    // The Bid Tracker grid's Bid Owner / Sales Lead columns resolve ownership server-side.
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
   }
   const assign = useMutation({ mutationFn: (i: AssignOwnerInput) => repository.assignOwner(i), onSuccess: invalidate })
   const end = useMutation({

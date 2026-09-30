@@ -16,32 +16,35 @@ import { isoToday } from '@/lib/dates'
 import type { Opportunity } from '@/lib/types'
 import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
 
-/** Starts a bid for an opportunity that has none, then opens it. A bid that
- *  already exists (including one a concurrent create from another tab just made)
- *  shows the server's message inline instead of an unhandled rejection. */
-function CreateBidButton({ opportunityId }: { opportunityId: string }) {
+/** Starts a bid for an opportunity that has none, then opens it. An icon button like
+ *  its neighbours (Edit/Remove): the details panel is narrow, and a text button here
+ *  overflowed the row and pushed those icons off the edge. A failed create (including a
+ *  duplicate from a concurrent tab) reports the server message via `onError`. */
+function CreateBidButton({ opportunityId, onError }: { opportunityId: string; onError: (message: string | null) => void }) {
   const { data: bid, isLoading } = useBidForOpportunity(opportunityId)
   const { create } = useBidMutations()
   const navigate = useNavigate()
-  const [error, setError] = useState<string | null>(null)
   if (isLoading || bid) return null
 
   async function handleCreate(e: React.MouseEvent) {
     e.stopPropagation()
-    setError(null)
+    onError(null)
     try {
       const created = await create.mutateAsync(opportunityId)
       navigate(`/bid-tracker/bid/${created.id}`)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not create the bid.')
+      onError(err instanceof Error ? err.message : 'Could not create the bid.')
     }
   }
 
   return (
-    <span className="flex shrink-0 items-center gap-2">
-      <Button variant="secondary" size="sm" onClick={handleCreate}>Create Bid</Button>
-      {error && <span role="alert" className="text-[12px] text-crimson">{error}</span>}
-    </span>
+    <button
+      type="button" aria-label="Create Bid" title="Create Bid in Bid Tracker" disabled={create.isPending}
+      onClick={handleCreate}
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-ink-900/[0.06] hover:text-ink disabled:opacity-50"
+    >
+      <Icon name="Flag" size={13} />
+    </button>
   )
 }
 
@@ -62,6 +65,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
   const oppIds = opportunities.map((w) => w.id)
   const { data: owners = {} } = useResolvedOwners('opportunity', oppIds, isoToday())
   const [openId, setOpenId] = useState<string | null>(null)
+  const [createBidError, setCreateBidError] = useState<{ id: string; message: string } | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Opportunity | null>(null)
   const [assignFor, setAssignFor] = useState<Opportunity | null>(null)
@@ -154,7 +158,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                       <OwnerBadge owner={owners[w.id]} people={people} />
                     </span>
                   )}
-                  {isBidTrackerEnabled() && <CreateBidButton opportunityId={w.id} />}
+                  {isBidTrackerEnabled() && <CreateBidButton opportunityId={w.id} onError={(message) => setCreateBidError(message ? { id: w.id, message } : null)} />}
                   <button
                     type="button"
                     aria-label="Edit opportunity"
@@ -173,6 +177,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                   </button>
                 </div>
 
+                {createBidError?.id === w.id && <p role="alert" className="border-t border-line px-2.5 py-1.5 text-[12px] text-crimson">{createBidError.message}</p>}
                 {expanded && (
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line px-2.5 py-2.5 text-[13px]">
                     <Detail label="GEM / Tender ID" value={w.gemTenderId} />
