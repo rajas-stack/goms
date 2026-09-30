@@ -21,7 +21,7 @@ import type { OwnerResolution } from '@/data/ownership'
 import type {
   Customer, HierNode, Status, Employee, Charge, TimelineEvent, TimelineEventType, Transfer, MergeAuditRecord,
   SalesPerson, SalesPosting, Opportunity, OpportunityStageChange, OwnershipAssignment, FollowUp, SearchResult,
-  Bid, BidGridRow, BidMilestone, BidCorrigendum, BidCorrigendumChange, ProtectedValue, BidDocument,
+  Bid, BidGridRow, BidMilestone, BidMilestoneWithBid, BidCorrigendum, BidCorrigendumChange, ProtectedValue, BidDocument,
   DocumentCitation, BidSavedView, ActionQueueEntry, BidCustomField, CustomFieldType, CustomValue,
 } from '@/lib/types'
 import type {
@@ -239,6 +239,8 @@ export class RemoteRepository implements Partial<Repository> {
   listBidActionQueue = (): Promise<ActionQueueEntry[]> =>
     this.client.bids.actionQueue.list.query() as unknown as Promise<ActionQueueEntry[]>
 
+  listAllBidMilestones = (): Promise<BidMilestoneWithBid[]> =>
+    this.client.bidMilestones.listAll.query() as unknown as Promise<BidMilestoneWithBid[]>
   listBidMilestones = (bidId: string): Promise<BidMilestone[]> =>
     this.client.bidMilestones.listForBid.query({ bidId }) as unknown as Promise<BidMilestone[]>
   createBidMilestone = (input: {

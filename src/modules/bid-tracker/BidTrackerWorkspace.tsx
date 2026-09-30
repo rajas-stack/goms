@@ -7,6 +7,7 @@ import type { BidSavedView } from '@/lib/types'
 import { isRuleComplete } from './gridColumns'
 import { CreateSavedViewDialog } from './components/CreateSavedViewDialog'
 import { MasterGrid } from './components/MasterGrid'
+import { MilestonesDatesPage } from './pages/MilestonesDatesPage'
 import { ActionQueuePage } from './pages/ActionQueuePage'
 import { ActivityHistoryPage } from './pages/ActivityHistoryPage'
 import { SavedViewTabs } from './components/SavedViewTabs'
@@ -90,13 +91,13 @@ export function BidTrackerWorkspace() {
         />
       )}
       <div className="min-h-0 flex-1 overflow-hidden">
-        {/* Milestones & Dates (a cross-bid page) is built in Task 43. */}
         {section === 'grid' && (
           <MasterGrid
             filterRules={rules} onFilterRulesChange={onRulesChange}
             visibleColumns={visibleColumns} onVisibleColumnsChange={onColumnsChange}
           />
         )}
+        {section === 'milestones' && <MilestonesDatesPage />}
         {section === 'actions' && <ActionQueuePage />}
         {section === 'history' && <ActivityHistoryPage />}
       </div>

@@ -1,6 +1,6 @@
 import type {
   ActionQueueEntry, AttendeeRef, Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue,
-  BidDocument, BidGridRow, BidMilestone, CustomFieldType, CustomValue,
+  BidDocument, BidGridRow, BidMilestone, BidMilestoneWithBid, CustomFieldType, CustomValue,
   BidSavedView, Charge, Customer, Domain, DocumentCitation, Employee, FollowUp, HierNode, MergeAuditRecord,
   MergeFieldResolution, Opportunity, OpportunityStageChange, OwnershipAssignment, PreferredComm, ProtectedValue,
   RelationshipQuality, RelationshipStatus,
@@ -488,6 +488,7 @@ export interface Repository {
   listBidActionQueue(): Promise<ActionQueueEntry[]>
 
   listBidMilestones(bidId: string): Promise<BidMilestone[]>
+  listAllBidMilestones(): Promise<BidMilestoneWithBid[]>
   createBidMilestone(input: {
     bidId: string; milestoneType: string; key: string; label: string
     dueAt?: string | null; venue?: string; notes?: string
@@ -1509,6 +1510,17 @@ class InMemoryRepository implements Repository {
       })
     }
     return out.sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  }
+
+  async listAllBidMilestones(): Promise<BidMilestoneWithBid[]> {
+    const out: BidMilestoneWithBid[] = []
+    for (const m of this.data.bidMilestones) {
+      const bid = this.data.bids.find((b) => b.id === m.bidId)
+      if (!bid || bid.status !== 'active' || m.status === 'superseded') continue
+      const opp = this.data.opportunities.find((o) => o.id === bid.opportunityId)
+      out.push({ ...m, bidCode: bid.bidCode, opportunityName: opp?.opportunityName ?? '' })
+    }
+    return out.sort((a, b) => (a.dueAt ?? '9999').localeCompare(b.dueAt ?? '9999') || a.createdAt.localeCompare(b.createdAt))
   }
 
   async listBidMilestones(bidId: string) {
@@ -2623,7 +2635,7 @@ const READER_KEYS = [
   'listSkus', 'getSku', 'listBomItemsForSku', 'listAllBomItems', 'listBoqs', 'getBoq', 'listBoqLineItems',
   'listAllBoqLineItems', 'listAuditLogs',
   'listCustomers', 'getCustomer',
-  'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
+  'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
   'listDocuments', 'listDocumentCitations', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
 ] as const
 

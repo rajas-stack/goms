@@ -421,6 +421,7 @@ export interface BidMilestone {
   status: 'open' | 'completed' | 'superseded'; source: 'manual' | 'corrigendum'
   createdAt: string; updatedAt: string
 }
+export interface BidMilestoneWithBid extends BidMilestone { bidCode: string; opportunityName: string }
 export interface BidCorrigendumChange {
   id: string; corrigendumId: string; fieldKey: string; currentValue: string; proposedValue: string
   decision: 'pending' | 'accepted' | 'rejected'; decidedAt: string | null; decidedBy: string | null

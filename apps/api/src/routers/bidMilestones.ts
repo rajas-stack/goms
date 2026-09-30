@@ -30,6 +30,21 @@ export const bidMilestonesRouter = router({
     return result.rows.map(toBidMilestone)
   }),
 
+  /** Every live milestone across every non-archived bid, soonest first, joined
+   *  with its bid and opportunity for display (the portfolio-wide Milestones &
+   *  Dates page). Superseded milestones are history, not upcoming dates. */
+  listAll: protectedReadProcedure.query(async () => {
+    const result = await pool.query(`
+      SELECT m.*, b.bid_code, o.opportunity_name
+      FROM bid_milestones m
+      JOIN bids b ON b.id = m.bid_id
+      JOIN opportunities o ON o.id = b.opportunity_id
+      WHERE b.status = 'active' AND m.status <> 'superseded'
+      ORDER BY m.due_at NULLS LAST, m.created_at
+    `)
+    return result.rows.map((r: any) => ({ ...toBidMilestone(r), bidCode: r.bid_code, opportunityName: r.opportunity_name }))
+  }),
+
   create: protectedProcedure
     .input(z.object({
       bidId: z.string().uuid(), milestoneType: z.string().min(1), key: z.string().min(1), label: z.string().min(1),

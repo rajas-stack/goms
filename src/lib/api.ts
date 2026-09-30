@@ -148,6 +148,7 @@ export function useBidMutations() {
   const qc = useQueryClient()
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+    qc.invalidateQueries({ queryKey: ['bidMilestones', 'all'] })
     qc.invalidateQueries({ queryKey: ['bid'] })
     qc.invalidateQueries({ queryKey: ['bidForOpportunity'] })
     qc.invalidateQueries({ queryKey: ['bidActionQueue'] })
@@ -178,10 +179,13 @@ export const useBidActionQueue = () =>
 
 export const useBidMilestones = (bidId: string | null) =>
   useQuery({ queryKey: qk.bidMilestones(bidId ?? ''), queryFn: () => repository.listBidMilestones(bidId!), enabled: !!bidId })
+export const useAllBidMilestones = () =>
+  useQuery({ queryKey: ['bidMilestones', 'all'], queryFn: () => repository.listAllBidMilestones() })
 export function useBidMilestoneMutations(bidId: string) {
   const qc = useQueryClient()
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: qk.bidMilestones(bidId) })
+    qc.invalidateQueries({ queryKey: ['bidMilestones', 'all'] })
     qc.invalidateQueries({ queryKey: ['bid', bidId] })
     qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
   }
@@ -207,6 +211,7 @@ export function useBidCorrigendaMutations(bidId: string) {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: qk.bidCorrigenda(bidId) })
     qc.invalidateQueries({ queryKey: qk.bidMilestones(bidId) })
+    qc.invalidateQueries({ queryKey: ['bidMilestones', 'all'] })
     qc.invalidateQueries({ queryKey: ['bid', bidId] })
     qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
     qc.invalidateQueries({ queryKey: ['opportunity'] })

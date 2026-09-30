@@ -27,6 +27,17 @@ describe('bidMilestones router', () => {
     expect(milestones.map((m: any) => m.key)).toContain('submissionDeadline')
   })
 
+  it('listAll returns live milestones across bids with bid code and opportunity name, and omits archived bids', async () => {
+    const caller = appRouter.createCaller({})
+    const all = await caller.bidMilestones.listAll()
+    const seeded = all.find((m: any) => m.key === 'submissionDeadline' && m.bidId === bidId)
+    expect(seeded).toMatchObject({ opportunityName: 'Tender' })
+    expect(seeded?.bidCode).toBeTruthy()
+
+    await caller.bids.archive({ id: bidId })
+    expect((await caller.bidMilestones.listAll()).some((m: any) => m.bidId === bidId)).toBe(false)
+  })
+
   it('creates a new, independently-keyed milestone (e.g. a pre-bid conference)', async () => {
     const caller = appRouter.createCaller({})
     const created = await caller.bidMilestones.create({
