@@ -5,9 +5,10 @@ import { Tabs } from '@/components/ui/Tabs'
 import { useBid, useBidMilestones, useBidsForGrid } from '@/lib/api'
 import type { BidGridRow } from '@/lib/types'
 import { ATTENTION_OPTIONS } from './gridColumns'
+import { CommercialAndFilesTab } from './pages/CommercialAndFilesTab'
 import { MilestonesTab } from './pages/MilestonesTab'
 import { OverviewTab } from './pages/OverviewTab'
-// Tasks 32/33 add their tabs here, following the OverviewTab pattern.
+// Task 33 adds its tab here, following the OverviewTab pattern.
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
@@ -62,7 +63,13 @@ export function BidDetailWorkspace() {
       <div className="min-h-0 flex-1 overflow-auto">
         {tab === 'overview' && <OverviewTab bid={bid} milestones={milestones} />}
         {tab === 'milestones' && <MilestonesTab bidId={bid.id} />}
-        {/* Tasks 32/33 render the other tabs here. */}
+        {tab === 'commercial' && (
+          <CommercialAndFilesTab
+            bidId={bid.id}
+            opportunity={row ?? { valueAmount: '', valueUnit: 'lakh', emdAmount: '', emdUnit: 'lakh' }}
+          />
+        )}
+        {/* Task 33 renders the Protected Values tab here. */}
       </div>
     </div>
   )
