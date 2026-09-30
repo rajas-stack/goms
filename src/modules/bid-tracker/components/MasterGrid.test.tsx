@@ -435,7 +435,6 @@ describe('MasterGrid', () => {
       expect(rendered).toBeLessThan(80)
       // +1: the leading selection column lives in the first header row (rowSpan 2).
       const columnCount = document.querySelectorAll('thead tr:nth-child(2) th').length + 1
-      const columnCount = document.querySelectorAll('thead tr:nth-child(2) th').length
       const spacers = Array.from(document.querySelectorAll('tbody tr[aria-hidden="true"]'))
       expect(spacers).toHaveLength(2) // above the window, below the window
       for (const spacer of spacers) {
