@@ -5,8 +5,9 @@ import { Tabs } from '@/components/ui/Tabs'
 import { useBid, useBidMilestones, useBidsForGrid } from '@/lib/api'
 import type { BidGridRow } from '@/lib/types'
 import { ATTENTION_OPTIONS } from './gridColumns'
+import { MilestonesTab } from './pages/MilestonesTab'
 import { OverviewTab } from './pages/OverviewTab'
-// Tasks 31/32/33 add their tabs here, following the OverviewTab pattern.
+// Tasks 32/33 add their tabs here, following the OverviewTab pattern.
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
@@ -60,7 +61,8 @@ export function BidDetailWorkspace() {
       <Tabs<Tab> value={tab} onChange={(v) => setParams({ tab: v })} tabs={TABS.map(({ value, label }) => ({ value, label }))} />
       <div className="min-h-0 flex-1 overflow-auto">
         {tab === 'overview' && <OverviewTab bid={bid} milestones={milestones} />}
-        {/* Tasks 31/32/33 render the other tabs here. */}
+        {tab === 'milestones' && <MilestonesTab bidId={bid.id} />}
+        {/* Tasks 32/33 render the other tabs here. */}
       </div>
     </div>
   )
