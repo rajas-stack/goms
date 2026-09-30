@@ -4,8 +4,10 @@ import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
 import { assertFieldsNotProtected } from '../lib/protectedValues.js'
-import { formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP, computeAttentionFlag, applyFilterRules, type CustomFieldType, type CustomValue } from '@goms/domain'
+import { formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP, computeAttentionFlag, applyFilterRules, buildOwnerMap, type CustomFieldType, type CustomValue } from '@goms/domain'
 import { applyStageChange } from './opportunities.js'
+import { loadOwnershipContext } from './ownership.js'
+import { writeAuditLog } from '../lib/auditLog.js'
 import { filterRuleSchema } from '../lib/filterRuleSchema.js'
 import { CUSTOM_VALUE_COLUMNS, customValueFromRow } from '../lib/customFieldValues.js'
 
@@ -79,11 +81,54 @@ export const bidsRouter = router({
   listForGrid: protectedReadProcedure
     .input(z.object({ filterRules: z.array(filterRuleSchema).optional() }).optional())
     .query(async ({ input, ctx }) => {
-      const [gridResult, corrigendaPendingResult, ownershipResult, customFieldsResult, customValuesResult] = await Promise.all([
+      const [gridResult, corrigendaPendingResult, { assignments, ctx: ownershipCtx }, customFieldsResult, customValuesResult] = await Promise.all([
         pool.query(`
-          SELECT b.*, o.department_id, o.state_code, o.opportunity_name, o.gem_tender_id, o.submission_date,
-                 o.value_amount, o.value_unit, o.emd_amount, o.emd_unit, o.vertical
-          FROM bids b JOIN opportunities o ON o.id = b.opportunity_id
+          SELECT b.*, o.department_id, o.state_code, o.city, o.opportunity_name, o.gem_tender_id, o.submission_date,
+                 o.value_amount, o.value_unit, o.emd_amount, o.emd_unit, o.vertical,
+                 dept.name AS department_name,
+                 doc_counts.document_count,
+                 latest_corr.has_pending AS latest_corrigendum_has_pending,
+                 next_milestone.label AS next_milestone_label, next_milestone.due_at AS next_milestone_due_at,
+                 next_action.note AS next_action_note, next_action.due_date AS next_action_due_date,
+                 next_action.assignee_id AS next_action_assignee_id,
+                 last_audit.changed_by AS updated_by,
+                 solution_lead.sales_person_id AS solution_lead_sales_person_id
+          FROM bids b
+          JOIN opportunities o ON o.id = b.opportunity_id
+          LEFT JOIN hierarchy_nodes dept ON dept.id = o.department_id
+          LEFT JOIN LATERAL (
+            SELECT count(*)::int AS document_count FROM documents d WHERE d.entity_type='bid' AND d.entity_id=b.id
+          ) doc_counts ON true
+          LEFT JOIN LATERAL (
+            -- Only the most-recently-numbered corrigendum drives the grid's
+            -- status chip (spec §12) — bool_or over no corrigenda is NULL,
+            -- distinct from a real false.
+            SELECT bool_or(ch.decision = 'pending') AS has_pending
+            FROM bid_corrigenda c
+            JOIN bid_corrigendum_changes ch ON ch.corrigendum_id = c.id
+            WHERE c.bid_id = b.id
+              AND c.corrigendum_number = (SELECT max(c2.corrigendum_number) FROM bid_corrigenda c2 WHERE c2.bid_id = b.id)
+          ) latest_corr ON true
+          LEFT JOIN LATERAL (
+            SELECT label, due_at FROM bid_milestones m
+            WHERE m.bid_id = b.id AND m.status = 'open'
+            ORDER BY m.due_at NULLS LAST LIMIT 1
+          ) next_milestone ON true
+          LEFT JOIN LATERAL (
+            SELECT note, due_date, assignee_id FROM follow_ups f
+            WHERE f.entity_type = 'bid' AND f.entity_id = b.id AND f.status = 'open'
+            ORDER BY f.due_date LIMIT 1
+          ) next_action ON true
+          LEFT JOIN LATERAL (
+            SELECT changed_by FROM commercial_audit_logs a
+            WHERE a.entity_type = 'bid' AND a.entity_id = b.id::text
+            ORDER BY a.changed_at DESC LIMIT 1
+          ) last_audit ON true
+          LEFT JOIN LATERAL (
+            SELECT sales_person_id FROM ownership_assignments oa
+            WHERE oa.entity_type = 'bid' AND oa.entity_id = b.id AND oa.role = 'solutionLead' AND oa.end_date IS NULL
+            LIMIT 1
+          ) solution_lead ON true
           ORDER BY b.created_at DESC
         `),
         pool.query(`
@@ -91,7 +136,7 @@ export const bidsRouter = router({
           JOIN bid_corrigendum_changes ch ON ch.corrigendum_id = c.id
           WHERE ch.decision = 'pending' GROUP BY c.bid_id
         `),
-        pool.query(`SELECT entity_id, sales_person_id FROM ownership_assignments WHERE entity_type='bid' AND role='owner' AND end_date IS NULL`),
+        loadOwnershipContext(),
         // Custom columns (spec §8.1): active definitions, plus every value for
         // them in ONE query (never per row), archived columns excluded.
         pool.query(`SELECT key, data_type FROM bid_custom_fields WHERE status='active'`),
@@ -110,28 +155,45 @@ export const bidsRouter = router({
         customValuesByBid.set(v.bid_id, forBid)
       }
       const pendingCorrigendumBidIds = new Set(corrigendaPendingResult.rows.map((r: any) => r.bid_id))
-      // NOTE: this resolves DIRECT bid-level owner assignments only, not
-      // spec §4.6's full inheritance-from-opportunity chain — sufficient for
-      // grid filtering/display; the bid detail page's Overview tab (Task 31)
-      // uses the full ownership.resolveOwner procedure for the authoritative
-      // single-bid view.
-      const salesPersonIds = [...new Set(ownershipResult.rows.map((r: any) => r.sales_person_id))]
+      // Resolves EVERY row's owner through the same effective-owner /
+      // inheritance chain as ownership.resolveOwner — a bid with no bid-level
+      // assignment still resolves to whoever owns its opportunity, exactly
+      // like the single-bid Overview tab. Solution Lead is a direct-only role
+      // (no inheritance), so the plain LATERAL join above is correct for it.
+      const today = new Date().toISOString().slice(0, 10)
+      const ownerMap = buildOwnerMap(assignments, 'bid', gridResult.rows.map((r: any) => r.id), today, ownershipCtx)
+      const salesPersonIds = [...new Set([
+        ...Array.from(ownerMap.values(), (o) => o.salesPersonId),
+        ...gridResult.rows.map((r: any) => r.solution_lead_sales_person_id).filter(Boolean),
+        // "Action Owner" is the assignee of the same next_action row joined above.
+        ...gridResult.rows.map((r: any) => r.next_action_assignee_id).filter(Boolean),
+      ])]
       const emailsResult = salesPersonIds.length
         ? await pool.query('SELECT id, official_email FROM sales_persons WHERE id = ANY($1)', [salesPersonIds])
         : { rows: [] }
       const emailById = new Map(emailsResult.rows.map((r: any) => [r.id, r.official_email]))
-      const ownerEmailByBidId = new Map(
-        ownershipResult.rows.map((r: any) => [r.entity_id, emailById.get(r.sales_person_id) ?? null]),
-      )
 
-      const today = new Date().toISOString().slice(0, 10)
       const rows = gridResult.rows.map((r: any) => {
         const dueAt = r.submission_date && !Number.isNaN(new Date(r.submission_date).getTime()) ? r.submission_date : null
+        const owner = ownerMap.get(r.id)
+        const nextMilestoneDueAt: string | null = r.next_milestone_due_at ? new Date(r.next_milestone_due_at).toISOString() : null
         return {
-          ...toBid(r), departmentId: r.department_id, stateCode: r.state_code, opportunityName: r.opportunity_name,
+          ...toBid(r), departmentId: r.department_id, departmentName: r.department_name ?? null,
+          stateCode: r.state_code, city: r.city ?? null, opportunityName: r.opportunity_name,
           gemTenderId: r.gem_tender_id, submissionDate: r.submission_date, valueAmount: r.value_amount,
           valueUnit: r.value_unit, emdAmount: r.emd_amount, emdUnit: r.emd_unit, vertical: r.vertical,
-          ownerEmail: ownerEmailByBidId.get(r.id) ?? null,
+          ownerEmail: owner ? (emailById.get(owner.salesPersonId) ?? null) : null,
+          solutionLeadEmail: r.solution_lead_sales_person_id ? (emailById.get(r.solution_lead_sales_person_id) ?? null) : null,
+          documentCount: r.document_count ?? 0,
+          latestCorrigendumStatus: (r.latest_corrigendum_has_pending === null || r.latest_corrigendum_has_pending === undefined)
+            ? null : (r.latest_corrigendum_has_pending ? 'pending_review' : 'reviewed'),
+          nextMilestoneLabel: r.next_milestone_label ?? null,
+          nextMilestoneDueAt,
+          daysRemaining: nextMilestoneDueAt ? Math.ceil((new Date(nextMilestoneDueAt).getTime() - Date.now()) / 86_400_000) : null,
+          nextActionNote: r.next_action_note ?? null,
+          nextActionDueDate: r.next_action_due_date ? (r.next_action_due_date instanceof Date ? r.next_action_due_date.toISOString().slice(0, 10) : String(r.next_action_due_date).slice(0, 10)) : null,
+          nextActionAssigneeEmail: r.next_action_assignee_id ? (emailById.get(r.next_action_assignee_id) ?? null) : null,
+          updatedBy: r.updated_by ?? null,
           attentionFlag: computeAttentionFlag({ dueAt, hasPendingCorrigendum: pendingCorrigendumBidIds.has(r.id), today }),
           customValues: customValuesByBid.get(r.id) ?? ({} as Record<string, CustomValue>),
         }
@@ -192,7 +254,7 @@ export const bidsRouter = router({
         tenderLink: z.string().nullable().optional(),
       }),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
@@ -217,6 +279,19 @@ export const bidsRouter = router({
           const setClauses = fields.map((f, i) => `${bidColumnFor[f]}=$${i + 1}`)
           values.push(input.id)
           await client.query(`UPDATE bids SET ${setClauses.join(', ')}, updated_at=now() WHERE id=$${values.length}`, values)
+          // One audit entry per patched field (including a decision-derived
+          // stageKey, which changed just as really as an explicit one) — the
+          // real source of the grid's `updatedBy` and of Activity History for
+          // ordinary bid edits.
+          for (const field of fields) {
+            const oldValue = current[bidColumnFor[field]]
+            const newValue = (patch as any)[field]
+            await writeAuditLog(client, {
+              entityType: 'bid', entityId: input.id, field,
+              oldValue: oldValue == null ? '' : String(oldValue), newValue: newValue == null ? '' : String(newValue),
+              reason: '', action: 'update', changedBy: ctx.user?.email,
+            })
+          }
         }
 
         // Bid -> Opportunity sync (spec §4.4) — exactly these two points, both

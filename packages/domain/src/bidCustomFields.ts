@@ -45,6 +45,22 @@ export const STANDARD_BID_FIELD_TYPES: Record<string, CustomFieldType> = {
   submissionDate: 'date',
   valueAmount: 'number',
   emdAmount: 'number',
+  opportunityId: 'text',
+  bidCode: 'text',
+  tenderLink: 'text',
+  departmentName: 'text',
+  city: 'text',
+  stateCode: 'number',
+  solutionLeadEmail: 'text',
+  nextActionNote: 'text',
+  nextActionAssigneeEmail: 'text',
+  nextActionDueDate: 'date',
+  nextMilestoneLabel: 'text',
+  daysRemaining: 'number',
+  documentCount: 'number',
+  latestCorrigendumStatus: 'select',
+  updatedBy: 'text',
+  updatedAt: 'date',
 }
 
 export const CUSTOM_FIELD_PREFIX = 'custom:'

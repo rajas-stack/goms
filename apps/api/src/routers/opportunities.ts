@@ -8,7 +8,7 @@ import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from '@goms/domain'
 
 function toOpportunity(row: any) {
   return {
-    id: row.id, departmentId: row.department_id, stateCode: row.state_code,
+    id: row.id, departmentId: row.department_id, stateCode: row.state_code, city: row.city ?? null,
     stageKey: row.stage_key, closedOn: row.closed_on,
     opportunityName: row.opportunity_name, gemTenderId: row.gem_tender_id,
     publishDate: row.publish_date, submissionDate: row.submission_date,
@@ -54,7 +54,7 @@ export async function applyStageChange(client: any, opportunityId: string, newSt
 const patchShape = {
   departmentId: z.string().uuid().optional(), stateCode: z.number().int().nullable().optional(),
   stageKey: z.string().min(1).optional(), closedOn: z.string().nullable().optional(),
-  opportunityName: z.string().optional(), gemTenderId: z.string().optional(),
+  opportunityName: z.string().optional(), gemTenderId: z.string().optional(), city: z.string().nullable().optional(),
   publishDate: z.string().optional(), submissionDate: z.string().optional(),
   vertical: z.string().optional(), component: z.array(z.string()).optional(), quantity: z.string().optional(),
   currency: z.string().optional(), valueAmount: z.string().optional(), valueUnit: z.string().optional(),
@@ -63,7 +63,7 @@ const patchShape = {
 }
 const columnFor: Record<string, string> = {
   departmentId: 'department_id', stateCode: 'state_code', stageKey: 'stage_key', closedOn: 'closed_on',
-  opportunityName: 'opportunity_name', gemTenderId: 'gem_tender_id', publishDate: 'publish_date',
+  opportunityName: 'opportunity_name', gemTenderId: 'gem_tender_id', city: 'city', publishDate: 'publish_date',
   submissionDate: 'submission_date', vertical: 'vertical', component: 'component', quantity: 'quantity',
   currency: 'currency', valueAmount: 'value_amount', valueUnit: 'value_unit', budgetKnown: 'budget_known',
   emdAmount: 'emd_amount', emdUnit: 'emd_unit', salesPersonEmail: 'sales_person_email',
@@ -93,7 +93,7 @@ export const opportunitiesRouter = router({
   create: protectedProcedure
     .input(z.object({
       departmentId: z.string().uuid(), opportunityName: z.string().min(1),
-      gemTenderId: z.string().optional(), publishDate: z.string().optional(), submissionDate: z.string().optional(),
+      gemTenderId: z.string().optional(), city: z.string().optional(), publishDate: z.string().optional(), submissionDate: z.string().optional(),
       vertical: z.string().optional(), component: z.array(z.string()).optional(), quantity: z.string().optional(),
       currency: z.string().optional(), valueAmount: z.string().optional(), valueUnit: z.string().optional(),
       budgetKnown: z.string().optional(), emdAmount: z.string().optional(), emdUnit: z.string().optional(),
@@ -110,15 +110,15 @@ export const opportunitiesRouter = router({
           `INSERT INTO opportunities (
              department_id, state_code, stage_key, closed_on, opportunity_name, gem_tender_id,
              publish_date, submission_date, vertical, component, quantity, currency, value_amount,
-             value_unit, budget_known, emd_amount, emd_unit, sales_person_email
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+             value_unit, budget_known, emd_amount, emd_unit, sales_person_email, city
+           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
            RETURNING *`,
           [
             input.departmentId, dept?.state_code ?? null, stageKey, closedOn, input.opportunityName,
             input.gemTenderId ?? '', input.publishDate ?? '', input.submissionDate ?? '', input.vertical ?? '',
             input.component ?? [], input.quantity ?? '', input.currency ?? 'INR', input.valueAmount ?? '',
             input.valueUnit ?? 'lakh', input.budgetKnown ?? '', input.emdAmount ?? '', input.emdUnit ?? 'lakh',
-            input.salesPersonEmail ?? '',
+            input.salesPersonEmail ?? '', input.city ?? null,
           ],
         )
         const opp = result.rows[0]
