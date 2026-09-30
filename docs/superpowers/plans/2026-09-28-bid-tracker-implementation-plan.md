@@ -22,6 +22,8 @@
 - Colocated Vitest + Testing Library; every new API router test is a real-Postgres integration test via `appRouter.createCaller({})` — never mocked, matching every existing `apps/api/src/routers/*.test.ts` (spec §22). `packages/domain` has no standalone test runner configured (`vite.config.ts`'s vitest `include` is `src/**/*.test.ts` only) — new pure domain logic in `packages/domain` is exercised through the `apps/api` router tests that call it, exactly like `PIPELINE_STAGE_MAP` is today, not through a new colocated `.test.ts` file that no config would run.
 - **Custom fields (Phase M2) are an additive layer**: they never alter the seven required column groups, the `bids` table, or any Task 1–26 contract; they are ordinary (not protected-value / corrigendum) fields; and an unknown import heading or an archived column must never silently create, delete, or break anything.
 - No demo/sample bid, milestone, corrigendum, or document data is created anywhere in this plan. Every identifier in the reference screenshots is illustrative only.
+- **`opportunities.stage_key` has exactly one direct-write path once a bid exists: none.** Once a bid exists for an opportunity, `opportunities.update` rejects any patch that touches `stageKey` (`BAD_REQUEST`), the same way it already rejects a direct `submissionDate` patch (Task 10, extended by this revision). The *only* way that opportunity's stage still changes is the Bid→Opportunity sync inside `bids.update`, which writes it via the shared `applyStageChange(client, ...)` helper directly on its own transaction — never by calling `opportunities.update`'s procedure — so the guard added here can never block the sync it isn't in the same code path as.
+- **Bid ownership resolution is never direct-assignment-only.** Anywhere a bid's owner is read for filtering or display — `bids.listForGrid` (including the `myBids` system view), the Overview tab, the Action Queue — resolution goes through the same `effectiveOwner`/`buildOwnerMap` inheritance chain (`@goms/domain`) used everywhere else in the app, so a bid that inherits its owner from its opportunity (the common case immediately after `bids.create`, before anyone assigns a bid-level owner) is never invisible to "My Bids" just because no one has re-assigned ownership at the bid level yet (Task 9, Task 19).
 
 ## Review Focus
 
@@ -30,6 +32,9 @@
 - **A corrigendum change whose `fieldKey` doesn't correspond to a real `bid_milestones.key` or the one supported `bids` column** — must reject clearly (`BAD_REQUEST`) rather than silently no-op or let a raw SQL error bubble up. This plan rejects it earlier and more strongly than a literal reading of the spec implies: `bidCorrigenda.create` validates every `fieldKey` up front (Task 14), so an unknown key never reaches `reviewChange` (Task 15) at all — failing at creation is strictly better than failing at review, since it can never leave a corrigendum row on record referencing a field that will always fail to apply. (Task 14)
 - **Two concurrent `documents.confirmUpload` calls for the same `(entityType, entityId, filename, version)`** — the second must fail with a friendly conflict (the `UNIQUE` constraint's violation translated, not a raw `23505`), and must not leave an orphaned GCS object at the canonical path from the loser. (Task 17)
 - **A saved view's `filter_rules` referencing `$currentUser` when no `ctx.user` exists** (auth enforcement off, the default) — `bidSavedViews.list`/`bids.listForGrid` must resolve this to *some* deterministic, non-crashing behavior rather than a null-pointer, since most of this codebase runs with `AUTH_ENFORCEMENT_ENABLED=false` today. (Task 19)
+- **`bidSavedViews.get` on another user's personal view** — must enforce the exact same `scope='global' OR ownerEmail=self` rule `list()` already does, not just return whatever row matches the id; a `get`-only leak would defeat `list()`'s filtering entirely for anyone willing to guess or discover an id. (Task 19)
+- **A `bidCorrigenda.create` whose `sourceDocumentId` points at a real `documents` row that belongs to a *different* bid** — must reject (`BAD_REQUEST`), not silently attach another bid's document as this corrigendum's source; the two entities aren't otherwise linked once the id is on hand. (Task 14)
+- **Deleting a `bid_milestones` row that a pending (undecided) corrigendum change still targets by `key`** — must fail clearly rather than let `bidCorrigenda.reviewChange`'s later `accept` on that change silently match zero rows and report success. (Task 12)
 
 ---
 
@@ -412,8 +417,8 @@ Expected: all four migrations report `Migrating up` with no error.
 Run: `psql "$DATABASE_URL" -c "\d bids" -c "\d bid_milestones" -c "\d documents" -c "\d bid_corrigenda" -c "\d bid_corrigendum_changes"`
 Expected: every table exists with the columns above.
 
-Run: `npm run migrate down -- 4` then `npm run migrate up`
-Expected: down-migration cleanly drops all four in reverse order with no orphaned-dependency error (this specifically verifies the `documents`-before-`bid_corrigenda` ordering fix — dropping in reverse order must not hit a "cannot drop documents because bid_corrigenda depends on it" error), and re-applying up succeeds again identically.
+Run: `npm run migrate down -- 1788400000000_bid-number-sequences-and-bids` then `npm run migrate up`
+Expected: this targets the round-trip by the first migration's own name/timestamp, not a bare count — `node-pg-migrate` treats a non-numeric `down`/`up` argument as "the migration to stop at," so this rolls back exactly the four migrations this task added (down to and including `1788400000000_bid-number-sequences-and-bids`) regardless of how many migrations exist before or after them in the repo at execution time. A bare `down -- 4` is a **count**, not a target — on a branch where migrations landed out of band (a rebase, a concurrently-merged unrelated migration) it would roll back whatever the last four migrations happen to be, which is not necessarily these four. The named-target form can't do that: it always stops at the migration named, however many others come after it. Confirm no orphaned-dependency error (this specifically verifies the `documents`-before-`bid_corrigenda` ordering fix — dropping in reverse order must not hit a "cannot drop documents because bid_corrigenda depends on it" error), and confirm re-applying up succeeds again identically.
 
 - [ ] **Step 6: Commit**
 
@@ -530,8 +535,8 @@ Expected: all four apply cleanly.
 Run: `psql "$DATABASE_URL" -c "\d protected_values" -c "\d bid_saved_views" -c "\d commercial_boqs" -c "\di ownership_assignments_one_open_solution_lead"`
 Expected: `commercial_boqs`'s column list now includes `opportunity_id`; the other three objects exist as specified.
 
-Run: `npm run migrate down -- 4` then `npm run migrate up`
-Expected: clean round-trip, no errors.
+Run: `npm run migrate down -- 1788800000000_protected-values` then `npm run migrate up`
+Expected: clean round-trip, no errors — named-target rollback per Task 3's Step 5 note, so this can never roll back a migration outside this task's own four.
 
 - [ ] **Step 6: Run the full existing test suite once, to catch any regression from the new `commercial_boqs` column before building on top of it**
 
@@ -943,8 +948,10 @@ git commit -m "feat(api): add bids router — create (with milestone seeding), g
 - Modify: `apps/api/src/routers/opportunities.ts:117-157` (extract `applyStageChange`, export it, refactor `update` to call it)
 
 **Interfaces:**
-- Consumes: `bidStageOrder`, `isAtOrAfterSubmitted` from `@goms/domain`; `PIPELINE_STAGE_MAP` from `@goms/domain` (already imported in `opportunities.ts`).
+- Consumes: `bidStageOrder`, `isAtOrAfterSubmitted` from `@goms/domain`; `PIPELINE_STAGE_MAP` from `@goms/domain` (already imported in `opportunities.ts`); `writeAuditLog` from `../lib/auditLog.js` (Task 5).
 - Produces: `applyStageChange(client, opportunityId, newStageKey, note?): Promise<void>` exported from `opportunities.ts`, reused by `bids.update`. `bidsRouter.update`.
+
+`bids.update` is the single most common way a bid's own fields change, and until this task it wrote nothing to the shared audit log — the Master Grid's `updatedBy` column (Task 19) and the Activity History page (Task 36) would otherwise have no real bid-field edits to show, only the handful of adjacent mutations (`protectedValues.freeze`, corrigendum review) that already call `writeAuditLog`. This task logs one entry per patched field, alongside the existing stage-sync/decision-gate logic already here.
 
 - [ ] **Step 1: Extract the shared stage-change helper in `opportunities.ts` first, with a regression test**
 
@@ -1029,7 +1036,22 @@ Append to `apps/api/src/routers/bids.test.ts`:
     await caller.bids.update({ id: bid.id, patch: { stageKey: 'submitted', decision: 'go' } })
     expect((await caller.opportunities.get({ id: opportunityId }))!.stageKey).toBe('won')
   })
+
+  it('writes an audit-log entry per patched field, attributed to the signed-in user', async () => {
+    const caller = appRouter.createCaller({ user: { email: 'editor@amnex.com' } } as any)
+    const bid = await caller.bids.create({ opportunityId })
+    await caller.bids.update({ id: bid.id, patch: { tenderLink: 'https://example.com', decision: 'no_go' } })
+    const logs = await listAuditLogs({ entityType: 'bid', entityId: bid.id })
+    expect(logs.find((l) => l.field === 'tenderLink')).toMatchObject({ oldValue: '', newValue: 'https://example.com', changedBy: 'editor@amnex.com' })
+    // decision='no_go' auto-derives stageKey='dropped' (this task's own gate,
+    // above) — that derived field change is logged too, not just the field
+    // the caller explicitly passed in the patch.
+    expect(logs.find((l) => l.field === 'stageKey')).toMatchObject({ oldValue: 'solutioning', newValue: 'dropped' })
+    expect(logs.find((l) => l.field === 'decision')).toMatchObject({ oldValue: 'pending', newValue: 'no_go' })
+  })
 ```
+
+Add the import at the top of `bids.test.ts`: `import { listAuditLogs } from '../lib/auditLog.js'`.
 
 - [ ] **Step 3: Run to verify failure**
 
@@ -1043,6 +1065,7 @@ Add to `apps/api/src/routers/bids.ts` (new imports: `isAtOrAfterSubmitted` from 
 ```ts
 import { formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP } from '@goms/domain'
 import { applyStageChange } from './opportunities.js'
+import { writeAuditLog } from '../lib/auditLog.js'
 ```
 
 ```ts
@@ -1058,7 +1081,7 @@ const bidColumnFor: Record<string, string> = {
         tenderLink: z.string().nullable().optional(),
       }),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
@@ -1082,6 +1105,21 @@ const bidColumnFor: Record<string, string> = {
           const setClauses = fields.map((f, i) => `${bidColumnFor[f]}=$${i + 1}`)
           values.push(input.id)
           await client.query(`UPDATE bids SET ${setClauses.join(', ')}, updated_at=now() WHERE id=$${values.length}`, values)
+          // One audit-log entry per patched field (including a decision-
+          // derived stageKey, which changed just as really as an explicitly
+          // patched one) — this is the Master Grid's `updatedBy` column's
+          // (Task 19) and Activity History's (Task 36) real source for
+          // ordinary bid edits; without this, only the handful of adjacent
+          // mutations that already call writeAuditLog would ever show up.
+          for (const field of fields) {
+            const oldValue = current[bidColumnFor[field]]
+            const newValue = (patch as any)[field]
+            await writeAuditLog(client, {
+              entityType: 'bid', entityId: input.id, field,
+              oldValue: oldValue == null ? '' : String(oldValue), newValue: newValue == null ? '' : String(newValue),
+              reason: '', action: 'update', changedBy: ctx.user?.email,
+            })
+          }
         }
 
         // Bid -> Opportunity sync (spec §4.4) — exactly these two points, both
@@ -1286,10 +1324,10 @@ git commit -m "feat(api): add bids.archive/unarchive and a gated, non-destructiv
 
 - [ ] **Step 1: Fix the compile break from Task 2**
 
-In `apps/api/src/routers/ownership.ts`, extend `loadOwnershipContext` (lines 21-36):
+In `apps/api/src/routers/ownership.ts`, extend `loadOwnershipContext` (lines 21-36) AND export it — Task 19 imports it directly rather than re-deriving a second, narrower ownership query, since only the full context (all assignments, not just `entity_type='bid'` ones) lets `buildOwnerMap` walk a bid's inheritance chain up through its opportunity correctly:
 
 ```ts
-async function loadOwnershipContext(): Promise<{ assignments: any[]; ctx: OwnershipContext }> {
+export async function loadOwnershipContext(): Promise<{ assignments: any[]; ctx: OwnershipContext }> {
   const [assignmentsResult, nodesResult, employeesResult, opportunitiesResult, bidsResult] = await Promise.all([
     pool.query('SELECT * FROM ownership_assignments'),
     pool.query('SELECT id, parent_id AS "parentId" FROM hierarchy_nodes'),
@@ -1403,15 +1441,17 @@ git commit -m "feat(api): wire bid ownership inheritance and add bids.actionQueu
 
 ## Phase E — Guards on existing routers
 
-### Task 10: `opportunities.ts` — submissionDate write guard, delete → CONFLICT translation
+### Task 10: `opportunities.ts` — submissionDate/stageKey write guards, delete → CONFLICT translation
 
 **Files:**
-- Modify: `apps/api/src/routers/opportunities.ts` (guard in `update`, translate in `delete`)
+- Modify: `apps/api/src/routers/opportunities.ts` (guards in `update`, translate in `delete`)
 - Modify: `apps/api/src/routers/opportunities.test.ts` (add cases)
 
 **Interfaces:**
 - Consumes: `isForeignKeyViolation` from `../db-errors.js`.
 - Produces: nothing new exported — behavior-only change to two existing procedures.
+
+Note on scope: this task adds **two** independent guards to `update` — the existing `submissionDate` guard (spec §4.5) and a new `stageKey` guard (spec §4.4/§4.6, tightened by this revision — see this plan's Global Constraints). Both share the same shape: once a bid exists for the opportunity, a direct edit to that one field through `opportunities.update` is rejected. Neither guard touches `bids.update`'s own internal sync (Task 7's `applyStageChange` call) — that call runs on `bids.ts`'s own transaction and never goes through `opportunities.update`'s procedure at all, so it is structurally unaffected by a guard living inside that procedure's body.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1440,12 +1480,33 @@ Append to `apps/api/src/routers/opportunities.test.ts`:
     await caller.bids.archive({ id: bid.id })
     await expect(caller.opportunities.delete({ id: opp.id })).rejects.toMatchObject({ code: 'CONFLICT' })
   })
+
+  it('rejects a direct stageKey patch once a bid exists, but allows it before one exists', async () => {
+    const caller = appRouter.createCaller({})
+    const opp = await caller.opportunities.create({ departmentId, opportunityName: 'Deal' })
+    await caller.opportunities.update({ id: opp.id, patch: { stageKey: 'qualifying' } }) // still allowed, no bid yet
+    await caller.bids.create({ opportunityId: opp.id })
+    await expect(
+      caller.opportunities.update({ id: opp.id, patch: { stageKey: 'won' } })
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+
+  it('does not block the bid-tracker sync itself — bids.update can still move the linked opportunity to submitted/won/dropped', async () => {
+    const caller = appRouter.createCaller({})
+    const opp = await caller.opportunities.create({ departmentId, opportunityName: 'Deal' })
+    const bid = await caller.bids.create({ opportunityId: opp.id })
+    // This goes through bids.update, never opportunities.update — the guard
+    // added by this task lives entirely inside the latter's procedure body
+    // and this call never reaches it.
+    await caller.bids.update({ id: bid.id, patch: { stageKey: 'submitted', decision: 'go' } })
+    expect((await caller.opportunities.get({ id: opp.id }))!.stageKey).toBe('won')
+  })
 ```
 
 - [ ] **Step 2: Run to verify failure**
 
 Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- opportunities.test.ts`
-Expected: FAIL — `submissionDate` patch currently succeeds unconditionally, and `delete` currently either succeeds (if nothing blocks it yet) or throws a raw, untranslated error rather than `CONFLICT`.
+Expected: FAIL — `submissionDate` and `stageKey` patches currently succeed unconditionally once a bid exists, and `delete` currently either succeeds (if nothing blocks it yet) or throws a raw, untranslated error rather than `CONFLICT`. (The third test, proving `bids.update`'s own sync is unaffected, should already pass once Task 7 is in place — it's here as a regression pin, not a new behavior.)
 
 - [ ] **Step 3: Implement the guard and the translation**
 
@@ -1454,12 +1515,24 @@ In `apps/api/src/routers/opportunities.ts`, add the import: `import { isForeignK
 Inside `update`'s mutation body, immediately after loading `current` (right after the `if (!current) throw new TRPCError(...)` line):
 
 ```ts
-        if (input.patch.submissionDate !== undefined) {
+        if (input.patch.submissionDate !== undefined || input.patch.stageKey !== undefined) {
           const hasBid = (await client.query('SELECT 1 FROM bids WHERE opportunity_id=$1', [input.id])).rows[0]
-          if (hasBid) {
+          if (hasBid && input.patch.submissionDate !== undefined) {
             throw new TRPCError({
               code: 'BAD_REQUEST',
               message: 'This opportunity has a bid in Bid Tracker — edit its Submission Deadline milestone there instead.',
+            })
+          }
+          if (hasBid && input.patch.stageKey !== undefined) {
+            // Spec §4.4/§4.6 (tightened by this revision — see Global
+            // Constraints): once a bid exists, this opportunity's stage has
+            // exactly one writer, bids.update's internal sync (Task 7),
+            // which calls applyStageChange directly on its own transaction
+            // and never through this procedure — so this guard can never
+            // block that path, only a direct edit attempted here.
+            throw new TRPCError({
+              code: 'BAD_REQUEST',
+              message: 'This opportunity has a bid in Bid Tracker — its stage is managed from the bid, not edited here directly.',
             })
           }
         }
@@ -1565,7 +1638,8 @@ git commit -m "test(api): prove hierarchy.deleteNode already translates a bid-bl
 - Modify: `apps/api/src/index.ts` (register `bidMilestones: bidMilestonesRouter`)
 
 **Interfaces:**
-- Produces: `toBidMilestone(row)`, `bidMilestonesRouter.listForBid/create/update/delete`. This closes out the two pending Task 6 tests (`bids.test.ts`'s milestone-seeding cases).
+- Consumes: `writeAuditLog` from `../lib/auditLog.js` (Task 5).
+- Produces: `toBidMilestone(row)`, `bidMilestonesRouter.listForBid/create/update/delete`. This closes out the two pending Task 6 tests (`bids.test.ts`'s milestone-seeding cases). `create`/`update`/`delete` each write one audit-log entry (Activity History, Task 36) under `entityType: 'bid'` (a milestone has no independent identity in the shared audit table — it's always logged against the bid it belongs to, field-prefixed `milestone:<key>` so it's distinguishable from the bid's own field edits, Task 7).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1628,8 +1702,50 @@ describe('bidMilestones router', () => {
     const remaining = await caller.bidMilestones.listForBid({ bidId })
     expect(remaining.find((m: any) => m.id === created.id)).toBeUndefined()
   })
+
+  it('refuses to delete a milestone that a pending corrigendum change still targets by key', async () => {
+    // Set up the pending-corrigendum-change state directly via SQL — this
+    // task's own tables already exist (Task 3), and the bidCorrigenda router
+    // itself doesn't land until Task 14; the same forward-tables-not-router
+    // approach Task 8's delete-guard tests already use for corrigenda/
+    // protected-values/documents rows, so this test is fully green here, not
+    // pending on a later task.
+    const caller = appRouter.createCaller({})
+    const created = await caller.bidMilestones.create({ bidId, milestoneType: 'queryDeadline', key: 'query1', label: 'Query 1 Deadline' })
+    const corrigendum = (await pool.query(
+      `INSERT INTO bid_corrigenda (bid_id, corrigendum_number) VALUES ($1, 1) RETURNING id`, [bidId],
+    )).rows[0]
+    const change = (await pool.query(
+      `INSERT INTO bid_corrigendum_changes (corrigendum_id, field_key, proposed_value) VALUES ($1, 'query1', '2026-11-01T00:00:00.000Z') RETURNING id`,
+      [corrigendum.id],
+    )).rows[0]
+
+    // This plan's Review Focus: without this guard, bidCorrigenda.reviewChange's
+    // later `accept` on this change would UPDATE ... WHERE key='query1' against
+    // zero rows and silently report success, having applied nothing.
+    await expect(caller.bidMilestones.delete({ id: created.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+
+    // Once every change targeting this key is resolved (not pending), delete
+    // is allowed again — the guard tracks live risk, not the milestone's history.
+    await pool.query(`UPDATE bid_corrigendum_changes SET decision='rejected', decided_at=now() WHERE id=$1`, [change.id])
+    await expect(caller.bidMilestones.delete({ id: created.id })).resolves.toBeUndefined()
+  })
+
+  it('writes an audit-log entry for create, update, and delete, each against the bid, not a standalone milestone entity', async () => {
+    const caller = appRouter.createCaller({ user: { email: 'editor@amnex.com' } } as any)
+    const created = await caller.bidMilestones.create({ bidId, milestoneType: 'queryDeadline', key: 'query2', label: 'Query 2 Deadline' })
+    await caller.bidMilestones.update({ id: created.id, patch: { venue: 'Delhi' } })
+    await caller.bidMilestones.delete({ id: created.id })
+
+    const logs = await listAuditLogs({ entityType: 'bid', entityId: bidId })
+    expect(logs.find((l) => l.action === 'milestone_created' && l.field === 'milestone:query2')).toBeDefined()
+    expect(logs.find((l) => l.action === 'milestone_updated' && l.field === 'milestone:query2:venue')).toMatchObject({ newValue: 'Delhi', changedBy: 'editor@amnex.com' })
+    expect(logs.find((l) => l.action === 'milestone_deleted' && l.field === 'milestone:query2')).toMatchObject({ oldValue: 'Query 2 Deadline' })
+  })
 })
 ```
+
+Add the import at the top of this test file: `import { listAuditLogs } from '../lib/auditLog.js'`.
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -1645,6 +1761,7 @@ import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
+import { writeAuditLog } from '../lib/auditLog.js'
 
 function toBidMilestone(row: any) {
   return {
@@ -1676,7 +1793,7 @@ export const bidMilestonesRouter = router({
       bidId: z.string().uuid(), milestoneType: z.string().min(1), key: z.string().min(1), label: z.string().min(1),
       dueAt: z.string().nullable().optional(), venue: z.string().optional(), notes: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
@@ -1694,6 +1811,10 @@ export const bidMilestonesRouter = router({
         if (input.key === 'submissionDeadline') {
           await syncSubmissionDeadlineToOpportunity(client, input.bidId, input.dueAt ?? null)
         }
+        await writeAuditLog(client, {
+          entityType: 'bid', entityId: input.bidId, field: `milestone:${input.key}`,
+          oldValue: '', newValue: input.label, reason: '', action: 'milestone_created', changedBy: ctx.user?.email,
+        })
         await client.query('COMMIT')
         return toBidMilestone(row)
       } catch (e) {
@@ -1713,7 +1834,7 @@ export const bidMilestonesRouter = router({
         status: z.enum(['open', 'completed', 'superseded']).optional(),
       }),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
@@ -1727,6 +1848,15 @@ export const bidMilestonesRouter = router({
           const setClauses = fields.map((f, i) => `${columnFor[f]}=$${i + 1}`)
           values.push(input.id)
           await client.query(`UPDATE bid_milestones SET ${setClauses.join(', ')}, updated_at=now() WHERE id=$${values.length}`, values)
+          for (const field of fields) {
+            const oldValue = current[columnFor[field]]
+            const newValue = (input.patch as any)[field]
+            await writeAuditLog(client, {
+              entityType: 'bid', entityId: current.bid_id, field: `milestone:${current.key}:${field}`,
+              oldValue: oldValue == null ? '' : String(oldValue), newValue: newValue == null ? '' : String(newValue),
+              reason: '', action: 'milestone_updated', changedBy: ctx.user?.email,
+            })
+          }
         }
         if (current.key === 'submissionDeadline' && input.patch.dueAt !== undefined) {
           await syncSubmissionDeadlineToOpportunity(client, current.bid_id, input.patch.dueAt)
@@ -1742,9 +1872,39 @@ export const bidMilestonesRouter = router({
       }
     }),
 
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) =>
-    pool.query('DELETE FROM bid_milestones WHERE id=$1', [input.id]).then(() => undefined)
-  ),
+  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const milestone = (await client.query('SELECT bid_id, key, label FROM bid_milestones WHERE id=$1 FOR UPDATE', [input.id])).rows[0]
+      if (!milestone) { await client.query('COMMIT'); return }
+      // Refuse when a pending (undecided) corrigendum change still targets this
+      // milestone's key (this plan's Review Focus) — otherwise
+      // bidCorrigenda.reviewChange's later `accept` on that change would
+      // UPDATE ... WHERE bid_id=$1 AND key=$2 against zero rows and silently
+      // report success, having applied nothing.
+      const pendingChange = await client.query(
+        `SELECT 1 FROM bid_corrigendum_changes ch
+         JOIN bid_corrigenda c ON c.id = ch.corrigendum_id
+         WHERE c.bid_id=$1 AND ch.field_key=$2 AND ch.decision='pending' LIMIT 1`,
+        [milestone.bid_id, milestone.key],
+      )
+      if (pendingChange.rows.length) {
+        throw new TRPCError({ code: 'CONFLICT', message: 'A pending corrigendum change still targets this milestone — resolve it first.' })
+      }
+      await client.query('DELETE FROM bid_milestones WHERE id=$1', [input.id])
+      await writeAuditLog(client, {
+        entityType: 'bid', entityId: milestone.bid_id, field: `milestone:${milestone.key}`,
+        oldValue: milestone.label, newValue: '', reason: '', action: 'milestone_deleted', changedBy: ctx.user?.email,
+      })
+      await client.query('COMMIT')
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
+  }),
 })
 ```
 
@@ -2081,6 +2241,38 @@ describe('bidCorrigenda router', () => {
     ).resolves.toMatchObject({ corrigendumNumber: 2 })
   })
 
+  it('rejects a sourceDocumentId that belongs to a different bid', async () => {
+    const caller = appRouter.createCaller({})
+    const opp2 = await caller.opportunities.create({ departmentId: (await pool.query('SELECT department_id FROM opportunities WHERE id=$1', [opportunityId])).rows[0].department_id, opportunityName: 'Other tender' })
+    const otherBid = await caller.bids.create({ opportunityId: opp2.id })
+    const foreignDoc = (await pool.query(
+      `INSERT INTO documents (entity_type, entity_id, filename, storage_path, content_type, size_bytes)
+       VALUES ('bid', $1, 'corrigendum.pdf', 'bid-tracker/bid/x/y/corrigendum.pdf', 'application/pdf', 100) RETURNING id`,
+      [otherBid.id],
+    )).rows[0]
+    await expect(
+      caller.bidCorrigenda.create({
+        bidId, corrigendumNumber: 1, sourceDocumentId: foreignDoc.id,
+        changes: [{ fieldKey: 'submissionDeadline', currentValue: '', proposedValue: '2026-10-18' }],
+      })
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+
+  it('accepts a sourceDocumentId that genuinely belongs to this bid', async () => {
+    const caller = appRouter.createCaller({})
+    const ownDoc = (await pool.query(
+      `INSERT INTO documents (entity_type, entity_id, filename, storage_path, content_type, size_bytes)
+       VALUES ('bid', $1, 'corrigendum.pdf', 'bid-tracker/bid/x/y/corrigendum.pdf', 'application/pdf', 100) RETURNING id`,
+      [bidId],
+    )).rows[0]
+    await expect(
+      caller.bidCorrigenda.create({
+        bidId, corrigendumNumber: 1, sourceDocumentId: ownDoc.id,
+        changes: [{ fieldKey: 'submissionDeadline', currentValue: '', proposedValue: '2026-10-18' }],
+      })
+    ).resolves.toMatchObject({ sourceDocumentId: ownDoc.id })
+  })
+
   it('rejects a duplicate corrigendumNumber for the same bid', async () => {
     const caller = appRouter.createCaller({})
     await caller.bidCorrigenda.create({ bidId, corrigendumNumber: 1, changes: [{ fieldKey: 'submissionDeadline', currentValue: '', proposedValue: '2026-10-18' }] })
@@ -2152,6 +2344,19 @@ export const bidCorrigendaRouter = router({
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
+        // sourceDocumentId, if given, must belong to THIS bid (this plan's
+        // Review Focus) — the two entities aren't otherwise linked once the
+        // id is on hand, so nothing else would catch a document id copy-
+        // pasted from a different bid's Commercial & Files tab.
+        if (input.sourceDocumentId) {
+          const doc = await client.query(
+            `SELECT 1 FROM documents WHERE id=$1 AND entity_type='bid' AND entity_id=$2`,
+            [input.sourceDocumentId, input.bidId],
+          )
+          if (!doc.rows.length) {
+            throw new TRPCError({ code: 'BAD_REQUEST', message: 'sourceDocumentId does not belong to this bid.' })
+          }
+        }
         // Every field_key must already be a milestone slot on this bid, or
         // the one supported bids column — reject clearly at creation time
         // rather than letting an unrecognized key silently do nothing later
@@ -2609,7 +2814,7 @@ git commit -m "feat(api): add GCS wrapper and documents.requestUploadUrl with up
 - Modify: `apps/api/src/routers/documents.test.ts` (add cases)
 
 **Interfaces:**
-- Consumes: `getObjectMetadata`, `moveObject`, `deleteObject` from `../lib/gcs.js` (mocked in tests, per Task 16's `vi.mock`).
+- Consumes: `getObjectMetadata`, `moveObject`, `deleteObject` from `../lib/gcs.js` (mocked in tests, per Task 16's `vi.mock`); `writeAuditLog` from `../lib/auditLog.js` (Task 5).
 - Produces: `documentsRouter.confirmUpload`.
 
 - [ ] **Step 1: Write the failing tests, including the concurrency case from this plan's Review Focus**
@@ -2651,6 +2856,31 @@ git commit -m "feat(api): add GCS wrapper and documents.requestUploadUrl with up
     await expect(caller.documents.confirmUpload({ uploadId: second.uploadId })).rejects.toMatchObject({ code: 'CONFLICT' })
     expect(deleteObject).toHaveBeenCalled() // the loser's now-moved-then-rejected object is cleaned up, not left at the canonical path
   })
+
+  it('cleans up the moved object when the INSERT fails for a reason other than the unique-violation race — no canonical orphan survives ANY post-move DB failure, not just the one anticipated case', async () => {
+    // A non-unique-violation failure after the GCS move (e.g. a transient
+    // connection drop, a constraint this plan didn't anticipate) must not
+    // leave an object at the canonical path with no documents row pointing
+    // at it — that orphan would then be invisible to documents.listFor/
+    // delete forever, since there's no id anyone still holds to find it by.
+    const { deleteObject } = await import('../lib/gcs.js')
+    const caller = appRouter.createCaller({})
+    const { uploadId } = await caller.documents.requestUploadUrl({
+      entityType: 'bid', entityId: bidId, filename: 'BrokenInsert.pdf', contentType: 'application/pdf', sizeBytes: 1024,
+    })
+    // confirmUpload's implementation makes exactly one pool.query call (the
+    // INSERT) after getObjectMetadata/moveObject — reject just that call
+    // with a generic Error (not a `23505`), proving the cleanup path isn't
+    // gated on `isUniqueViolation` recognizing the failure.
+    const { pool: mockPool } = await import('../db.js')
+    const spy = vi.spyOn(mockPool, 'query').mockRejectedValueOnce(new Error('simulated transient failure, unrelated to any unique constraint'))
+    try {
+      await expect(caller.documents.confirmUpload({ uploadId })).rejects.toThrow('simulated transient failure')
+      expect(deleteObject).toHaveBeenCalled() // the canonical-path object from the failed insert's move is cleaned up too, same as the unique-violation case above
+    } finally {
+      spy.mockRestore()
+    }
+  })
 ```
 
 - [ ] **Step 2: Run to verify failure**
@@ -2691,20 +2921,48 @@ Add to `apps/api/src/routers/documents.ts`, inside the `router({...})` object:
           [pending.entityType, pending.entityId, pending.filename, pending.canonicalPath, pending.version, metadata.contentType, metadata.size, ctx.user?.email ?? null],
         )).rows[0]
       } catch (e) {
+        // The object was already moved to the canonical path above — ANY
+        // failure writing its documents row, not just the anticipated
+        // unique-violation race, must not leave a canonical orphan with no
+        // row pointing at it (this plan's Review Focus: that orphan would be
+        // invisible to documents.listFor/delete forever, since no id
+        // survives the failed insert for anyone to find it by). Delete
+        // first, unconditionally, then decide which error to surface.
+        await deleteObject(pending.canonicalPath)
         if (isUniqueViolation(e)) {
           // Lost the race to a concurrent confirm for the same
-          // (entityType, entityId, filename, version) — the object we just
-          // moved to the canonical path must not be left there.
-          await deleteObject(pending.canonicalPath)
+          // (entityType, entityId, filename, version).
           throw new TRPCError({ code: 'CONFLICT', message: 'This exact file and version was already uploaded.' })
         }
         throw e
       }
+      // Activity History (Task 36) needs a real "a document was uploaded"
+      // event — logged against the owning entity (`entityType`/`entityId`
+      // may be 'bid' or something else the same generic uploader serves),
+      // same shared table every other Bid Tracker mutation writes to.
+      await writeAuditLog(pool, {
+        entityType: pending.entityType, entityId: pending.entityId, field: `document:${pending.filename}`,
+        oldValue: '', newValue: pending.version, reason: '', action: 'document_uploaded', changedBy: ctx.user?.email,
+      })
       return toDocument(row)
     }),
 ```
 
-- [ ] **Step 4: Run to verify pass**
+(Add the import `import { writeAuditLog } from '../lib/auditLog.js'` to this file if not already present. The audit write here uses `pool` directly, not `client` — it happens after the document row is already durably committed via `pool.query`'s own implicit transaction, so there's no shared transaction to join; a failure here would be a rare, silent gap, but is no worse than every other `pool`-direct write already accepted elsewhere in this router, e.g. `requestUploadUrl` itself has no transactional guarantee either.)
+
+- [ ] **Step 4: Write the failing audit-log test, then verify all pass**
+
+```ts
+  it('logs a document_uploaded audit entry against the owning entity', async () => {
+    const caller = appRouter.createCaller({ user: { email: 'editor@amnex.com' } } as any)
+    const { uploadId } = await caller.documents.requestUploadUrl({ entityType: 'bid', entityId: bidId, filename: 'Audited.pdf', contentType: 'application/pdf', sizeBytes: 1024 })
+    await caller.documents.confirmUpload({ uploadId })
+    const logs = await listAuditLogs({ entityType: 'bid', entityId: bidId })
+    expect(logs.find((l) => l.action === 'document_uploaded' && l.field === 'document:Audited.pdf')).toMatchObject({ changedBy: 'editor@amnex.com' })
+  })
+```
+
+Add the import at the top of `documents.test.ts`: `import { listAuditLogs } from '../lib/auditLog.js'`.
 
 Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- documents.test.ts`
 Expected: PASS.
@@ -2713,7 +2971,7 @@ Expected: PASS.
 
 ```bash
 git add apps/api/src/routers/documents.ts apps/api/src/routers/documents.test.ts
-git commit -m "feat(api): add documents.confirmUpload, verifying the actual GCS object over the original request claim"
+git commit -m "feat(api): add documents.confirmUpload, verifying the actual GCS object over the original request claim, and audit-logging the upload"
 ```
 
 ### Task 18: `documents.listFor`/`delete`, and the `citations` sub-router
@@ -2723,6 +2981,7 @@ git commit -m "feat(api): add documents.confirmUpload, verifying the actual GCS 
 - Modify: `apps/api/src/routers/documents.test.ts` (add cases)
 
 **Interfaces:**
+- Consumes: `writeAuditLog` from `../lib/auditLog.js` (Task 5).
 - Produces: `documentsRouter.listFor/delete`, `documentsRouter.citations.create/list/delete`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -2749,7 +3008,18 @@ git commit -m "feat(api): add documents.confirmUpload, verifying the actual GCS 
     const { deleteObject } = await import('../lib/gcs.js')
     expect(deleteObject).toHaveBeenCalledWith(doc.storagePath)
   })
+
+  it('logs a document_deleted audit entry against the owning entity', async () => {
+    const caller = appRouter.createCaller({ user: { email: 'editor@amnex.com' } } as any)
+    const { uploadId } = await caller.documents.requestUploadUrl({ entityType: 'bid', entityId: bidId, filename: 'ToDelete.pdf', contentType: 'application/pdf', sizeBytes: 1024 })
+    const doc = await caller.documents.confirmUpload({ uploadId })
+    await caller.documents.delete({ id: doc.id })
+    const logs = await listAuditLogs({ entityType: 'bid', entityId: bidId })
+    expect(logs.find((l) => l.action === 'document_deleted' && l.field === 'document:ToDelete.pdf')).toMatchObject({ changedBy: 'editor@amnex.com' })
+  })
 ```
+
+Add the import at the top of `documents.test.ts` (if Task 17 didn't already add it): `import { listAuditLogs } from '../lib/auditLog.js'`.
 
 - [ ] **Step 2: Run to verify failure**
 
@@ -2792,13 +3062,17 @@ Add to `documentsRouter`'s object: `listFor`, `delete`, and `citations: document
     const result = await pool.query('SELECT * FROM documents WHERE entity_type=$1 AND entity_id=$2 ORDER BY uploaded_at DESC', [input.entityType, input.entityId])
     return result.rows.map(toDocument)
   }),
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
     const doc = (await pool.query('SELECT * FROM documents WHERE id=$1', [input.id])).rows[0]
     if (!doc) return
     // document_citations cascades via FK. Row deleted first, inside its own
     // implicit transaction; GCS delete is best-effort afterward (spec §14) —
     // a failure here is logged, not thrown, and never blocks the DB delete.
     await pool.query('DELETE FROM documents WHERE id=$1', [input.id])
+    await writeAuditLog(pool, {
+      entityType: doc.entity_type, entityId: doc.entity_id, field: `document:${doc.filename}`,
+      oldValue: doc.version, newValue: '', reason: '', action: 'document_deleted', changedBy: ctx.user?.email,
+    })
     try {
       await deleteObject(doc.storage_path)
     } catch (e) {
@@ -2829,16 +3103,43 @@ git commit -m "feat(api): add documents.listFor/delete and the citations sub-rou
 **Files:**
 - Create: `apps/api/src/routers/bidSavedViews.ts`
 - Create: `apps/api/src/routers/bidSavedViews.test.ts`
+- Create: `apps/api/migrations/1789200000000_opportunities-city.sql`
 - Modify: `apps/api/src/index.ts` (register `bidSavedViews: bidSavedViewsRouter`)
 - Modify: `packages/domain/src/bids.ts` (add `applyFilterRules`, `resolveFilterValue`)
-- Modify: `apps/api/src/routers/bids.ts` (`listForGrid` gains `ownerEmail`, `attentionFlag`, and a `filterRules` input param)
+- Modify: `apps/api/src/routers/bids.ts` (`listForGrid` gains `ownerEmail`, `attentionFlag`, `city`, `nextActionAssigneeEmail`, and a `filterRules` input param)
 - Modify: `apps/api/src/routers/bids.test.ts` (add cases)
+- Modify: `apps/api/src/routers/opportunities.ts` (`city` becomes a patchable field, mirroring `gemTenderId`'s existing entry — the Master Grid's "Client City" column (Task 28) would otherwise be permanently null with no write path at all)
+- Modify: `apps/api/src/routers/opportunities.test.ts` (one case for the new patchable field)
+- Modify: `src/lib/types.ts` (add `city: string | null` to the existing `Opportunity` interface)
 
 **Interfaces:**
-- Produces: `resolveFilterValue(value, currentUserEmail): string | null` (resolves the `'$currentUser'` token), `applyFilterRules<T>(rows: T[], rules: SystemBidViewFilterRule[], currentUserEmail: string | null): T[]`, `bidSavedViewsRouter.list/get/create/update/delete`.
-- Consumes: `ownership.resolveOwners`-equivalent logic (reuses `loadOwnershipContext`/`buildOwnerMap` from `ownership.ts`, imported directly rather than duplicated).
+- Produces: `resolveFilterValue(value, currentUserEmail): string | null` (resolves the `'$currentUser'` token), `applyFilterRules<T>(rows: T[], rules: SystemBidViewFilterRule[], currentUserEmail: string | null): T[]`, `bidSavedViewsRouter.list/get/create/update/delete`, `opportunities.city` (nullable `TEXT` column, patchable like every other opportunity field).
+- Consumes: `loadOwnershipContext` (exported by Task 9) and `buildOwnerMap`/`effectiveOwner` (`@goms/domain`) — `listForGrid` resolves every row's owner through the SAME inheritance-aware resolution the rest of the app uses, not a direct-assignment-only shortcut (this plan's Global Constraints). An earlier draft of this task resolved ownership via a narrow direct-only query scoped to `entity_type='bid'`; that was wrong (a bid with no bid-level assignment yet — the common case right after `bids.create`, before anyone re-assigns ownership at the bid level — would silently disappear from "My Bids" even though `ownership.resolveOwner` correctly reports its inherited owner) and this task's implementation below does not do that.
 
-- [ ] **Step 1: Add the pure filter-matching helper to the domain package**
+- [ ] **Step 1: Add the `opportunities.city` migration and its write path**
+
+The design spec's Master Grid Client column group (§8) is "Department/Client, State and City, Sector" — this codebase has no city concept anywhere today (confirmed: no `city` column on `opportunities`/`hierarchy_nodes`/any other table, no `city` field on any existing type). A grid column with no possible data source isn't a real column, so this step adds the smallest column that gives it one — additive only, per this plan's Global Constraints.
+
+```sql
+-- apps/api/migrations/1789200000000_opportunities-city.sql
+
+-- Up Migration
+
+-- Master Grid's "Client City" column (spec §8) — no existing table tracks
+-- city anywhere in GOMS (only state, via hierarchy_nodes' 'geo' domain).
+-- Nullable, free-text, no new geo hierarchy level introduced.
+ALTER TABLE opportunities ADD COLUMN city TEXT;
+
+-- Down Migration
+
+ALTER TABLE opportunities DROP COLUMN city;
+```
+
+Run: `npm run migrate up`, then confirm with `psql "$DATABASE_URL" -c "\d opportunities"` that `city` appears, nullable, no default.
+
+In `apps/api/src/routers/opportunities.ts`, add `city` to the same three places `gemTenderId` already appears (its existing dynamic patch mechanism, per Task 13's note on this file's `columnFor` map): the `create` input schema (`city: z.string().optional()`), the `update` input schema's `patch` object (`city: z.string().optional()`), and the `columnFor`/`toOpportunity` mapping (`city: 'city'` in `columnFor`, `city: row.city` in the row mapper). Add one test to `opportunities.test.ts` proving `city` round-trips through `create`/`update`/`get`, following this file's existing per-field pattern (e.g. however it already tests `gemTenderId`).
+
+- [ ] **Step 2: Add the pure filter-matching helper to the domain package**
 
 Append to `packages/domain/src/bids.ts`:
 
@@ -2866,7 +3167,7 @@ export function applyFilterRules<T extends Record<string, unknown>>(
 }
 ```
 
-- [ ] **Step 2: Write the failing tests for the domain helper's edge case, and for `listForGrid`/`bidSavedViews`**
+- [ ] **Step 3: Write the failing tests for the domain helper's edge case, and for `listForGrid`/`bidSavedViews`**
 
 Add to `apps/api/src/routers/bids.test.ts` (this is where it's exercised — no standalone domain test file, per this plan's Global Constraints):
 
@@ -2887,6 +3188,56 @@ Add to `apps/api/src/routers/bids.test.ts` (this is where it's exercised — no 
     await caller.bidMilestones.update({ id: milestone.id, patch: { dueAt: '2020-01-01T00:00:00.000Z' } })
     const grid = await caller.bids.listForGrid({})
     expect(grid.find((r: any) => r.id === bid.id)?.attentionFlag).toBe('overdue')
+  })
+
+  it('listForGrid resolves ownerEmail through inheritance from the opportunity, and an explicit bid-level assignment overrides it — including for the myBids filter', async () => {
+    const caller = appRouter.createCaller({ user: { email: 'inherited-owner@amnex.com' } } as any)
+    const bid = await caller.bids.create({ opportunityId })
+    const inheritedOwner = await caller.sales.create({ name: 'Inherited Owner', officialEmail: 'inherited-owner@amnex.com', tierKey: 'accountManager', startDate: '2026-01-01' })
+    await caller.ownership.assign({ entityType: 'opportunity', entityId: opportunityId, salesPersonId: inheritedOwner.id, startDate: '2026-01-01' })
+
+    // No bid-level assignment exists yet — the grid must still resolve the
+    // inherited owner, not treat the bid as ownerless (this plan's Global
+    // Constraints: no direct-only shortcut).
+    let grid = await caller.bids.listForGrid({})
+    expect(grid.find((r: any) => r.id === bid.id)?.ownerEmail).toBe('inherited-owner@amnex.com')
+    let myBids = await caller.bids.listForGrid({ filterRules: [{ field: 'ownerEmail', operator: 'eq', value: '$currentUser' }] })
+    expect(myBids.map((r: any) => r.id)).toContain(bid.id)
+
+    // A direct bid-level assignment overrides the inherited one.
+    const directOwner = await caller.sales.create({ name: 'Direct Owner', officialEmail: 'direct-owner@amnex.com', tierKey: 'accountManager', startDate: '2026-01-01' })
+    await caller.ownership.assign({ entityType: 'bid', entityId: bid.id, salesPersonId: directOwner.id, startDate: '2026-02-01' })
+    grid = await caller.bids.listForGrid({})
+    expect(grid.find((r: any) => r.id === bid.id)?.ownerEmail).toBe('direct-owner@amnex.com')
+    myBids = await caller.bids.listForGrid({ filterRules: [{ field: 'ownerEmail', operator: 'eq', value: '$currentUser' }] })
+    expect(myBids.map((r: any) => r.id)).not.toContain(bid.id) // the signed-in user's own inherited claim is now shadowed by the direct override
+  })
+
+  it('listForGrid surfaces documents/corrigendum/next-milestone/next-action/action-owner/city/updated-by columns from their respective tables', async () => {
+    const caller = appRouter.createCaller({ user: { email: 'editor@amnex.com' } } as any)
+    const bid = await caller.bids.create({ opportunityId })
+    await caller.opportunities.update({ id: opportunityId, patch: { city: 'New Delhi' } })
+    await pool.query(
+      `INSERT INTO documents (entity_type, entity_id, filename, storage_path, content_type, size_bytes) VALUES ('bid', $1, 'a.pdf', 'x/a.pdf', 'application/pdf', 10)`,
+      [bid.id],
+    )
+    const actionOwner = await caller.sales.create({ name: 'Action Owner', officialEmail: 'action-owner@amnex.com', tierKey: 'accountManager', startDate: '2026-01-01' })
+    await caller.followUps.create({ entityType: 'bid', entityId: bid.id, dueDate: '2026-12-01', note: 'Confirm EMD instrument', assigneeId: actionOwner.id })
+    // bids.update (Task 7, now audit-logged per this plan's Activity History
+    // requirement) is what actually populates updated_by here — a real
+    // source, not a workaround via an adjacent mutation.
+    await caller.bids.update({ id: bid.id, patch: { tenderLink: 'https://example.com' } })
+
+    const grid = await caller.bids.listForGrid({})
+    const row = grid.find((r: any) => r.id === bid.id)!
+    expect(row.city).toBe('New Delhi')
+    expect(row.documentCount).toBe(1)
+    expect(row.latestCorrigendumStatus).toBeNull() // no corrigendum exists yet
+    expect(row.nextMilestoneLabel).toBe('Submission Deadline') // the seeded submissionDeadline milestone
+    expect(row.nextActionNote).toBe('Confirm EMD instrument')
+    expect(row.nextActionDueDate).toContain('2026-12-01')
+    expect(row.nextActionAssigneeEmail).toBe('action-owner@amnex.com')
+    expect(row.updatedBy).toBe('editor@amnex.com')
   })
 ```
 
@@ -2935,27 +3286,100 @@ describe('bidSavedViews router', () => {
     await expect(caller.bidSavedViews.update({ id: 'allBids', patch: { name: 'Renamed' } })).rejects.toMatchObject({ code: 'FORBIDDEN' })
     await expect(caller.bidSavedViews.delete({ id: 'allBids' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
   })
+
+  it('get() enforces the exact same personal/global visibility rule as list() — one user cannot fetch another user\'s personal view by id', async () => {
+    const asAlice = appRouter.createCaller({ user: { email: 'alice2@amnex.com' } } as any)
+    const asBob = appRouter.createCaller({ user: { email: 'bob2@amnex.com' } } as any)
+    const created = await asAlice.bidSavedViews.create({ name: 'Alice Only', scope: 'personal', filterRules: [] })
+    await expect(asAlice.bidSavedViews.get({ id: created.id })).resolves.toMatchObject({ id: created.id })
+    await expect(asBob.bidSavedViews.get({ id: created.id })).resolves.toBeNull()
+
+    const global = await asAlice.bidSavedViews.create({ name: 'Shared', scope: 'global', filterRules: [] })
+    await expect(asBob.bidSavedViews.get({ id: global.id })).resolves.toMatchObject({ id: global.id })
+  })
+
+  it('a global saved-view mutation is fully audited or fully rolled back — never silently swallowed', async () => {
+    const caller = appRouter.createCaller({ user: { email: 'auditor@amnex.com' } } as any)
+    const created = await caller.bidSavedViews.create({ name: 'Audited View', scope: 'global', filterRules: [] })
+    // listAuditLogs (Task 5) reads the same shared commercial_audit_logs
+    // table directly — no forward dependency on Task 20's top-level router.
+    const logs = await listAuditLogs({ entityType: 'bidSavedView', entityId: created.id })
+    expect(logs.length).toBeGreaterThan(0)
+  })
 })
 ```
 
-- [ ] **Step 3: Run to verify failure**
+Add the import at the top of this test file: `import { listAuditLogs } from '../lib/auditLog.js'`.
+
+- [ ] **Step 4: Run to verify failure**
 
 Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- bids.test.ts bidSavedViews.test.ts`
 Expected: FAIL on both files.
 
-- [ ] **Step 4: Extend `bids.listForGrid`**
+- [ ] **Step 5: Extend `bids.listForGrid`**
 
-Replace `bids.ts`'s `listForGrid` procedure (new imports: `applyFilterRules`, `resolveFilterValue`, `computeAttentionFlag` from `@goms/domain`; `loadOwnershipContext` is `ownership.ts`'s own unexported helper — instead of importing it, duplicate the two small queries needed here, matching this codebase's convention of small per-router `toXxx`/prefetch duplication over cross-router imports of unexported helpers):
+Replace `bids.ts`'s `listForGrid` procedure (new imports: `applyFilterRules`, `resolveFilterValue`, `computeAttentionFlag` from `@goms/domain`; `buildOwnerMap` from `@goms/domain`; `loadOwnershipContext` from `./ownership.js` — Task 9 exports it precisely so this task can reuse the one real ownership-resolution algorithm instead of reimplementing a narrower, direct-only version of it):
+
+```ts
+import { loadOwnershipContext } from './ownership.js'
+import { buildOwnerMap } from '@goms/domain'
+```
+
+This task's query is also where every Master Grid column group from spec §8 gets its data (Task 28 builds no new joins of its own — every column it renders comes from this one row shape): Identity/Client/Dates/System were already covered by Task 6's original query; this replacement adds Documents (`documentCount`), a derived `latestCorrigendumStatus`, Ownership's `solutionLeadEmail` (alongside the already-present `ownerEmail`), and Decision's `nextActionNote`/`nextActionDueDate` plus Dates' `nextMilestoneLabel`/`nextMilestoneDueAt`/`daysRemaining` and System's `updatedBy`:
 
 ```ts
   listForGrid: protectedReadProcedure
     .input(z.object({ filterRules: z.array(z.object({ field: z.string(), operator: z.literal('eq'), value: z.string() })).optional() }).optional())
     .query(async ({ input, ctx }) => {
-      const [gridResult, corrigendaPendingResult, ownershipResult] = await Promise.all([
+      const [gridResult, corrigendaPendingResult, { assignments, ctx: ownershipCtx }] = await Promise.all([
         pool.query(`
-          SELECT b.*, o.department_id, o.state_code, o.opportunity_name, o.gem_tender_id, o.submission_date,
-                 o.value_amount, o.value_unit, o.emd_amount, o.emd_unit, o.vertical
-          FROM bids b JOIN opportunities o ON o.id = b.opportunity_id
+          SELECT b.*, o.department_id, o.state_code, o.city, o.opportunity_name, o.gem_tender_id, o.submission_date,
+                 o.value_amount, o.value_unit, o.emd_amount, o.emd_unit, o.vertical,
+                 dept.name AS department_name,
+                 doc_counts.document_count,
+                 latest_corr.has_pending AS latest_corrigendum_has_pending,
+                 next_milestone.label AS next_milestone_label, next_milestone.due_at AS next_milestone_due_at,
+                 next_action.note AS next_action_note, next_action.due_date AS next_action_due_date,
+                 next_action.assignee_id AS next_action_assignee_id,
+                 last_audit.changed_by AS updated_by,
+                 solution_lead.sales_person_id AS solution_lead_sales_person_id
+          FROM bids b
+          JOIN opportunities o ON o.id = b.opportunity_id
+          LEFT JOIN hierarchy_nodes dept ON dept.id = o.department_id
+          LEFT JOIN LATERAL (
+            SELECT count(*)::int AS document_count FROM documents d WHERE d.entity_type='bid' AND d.entity_id=b.id
+          ) doc_counts ON true
+          LEFT JOIN LATERAL (
+            -- Only the most-recently-numbered corrigendum drives the grid's
+            -- status chip (spec §12's derived-status logic, applied to
+            -- "the latest one" for a one-cell summary) — bool_or over an
+            -- empty/no-corrigenda set is NULL, distinct from a real false.
+            SELECT bool_or(ch.decision = 'pending') AS has_pending
+            FROM bid_corrigenda c
+            JOIN bid_corrigendum_changes ch ON ch.corrigendum_id = c.id
+            WHERE c.bid_id = b.id
+              AND c.corrigendum_number = (SELECT max(c2.corrigendum_number) FROM bid_corrigenda c2 WHERE c2.bid_id = b.id)
+          ) latest_corr ON true
+          LEFT JOIN LATERAL (
+            SELECT label, due_at FROM bid_milestones m
+            WHERE m.bid_id = b.id AND m.status = 'open'
+            ORDER BY m.due_at NULLS LAST LIMIT 1
+          ) next_milestone ON true
+          LEFT JOIN LATERAL (
+            SELECT note, due_date, assignee_id FROM follow_ups f
+            WHERE f.entity_type = 'bid' AND f.entity_id = b.id AND f.status = 'open'
+            ORDER BY f.due_date LIMIT 1
+          ) next_action ON true
+          LEFT JOIN LATERAL (
+            SELECT changed_by FROM commercial_audit_logs a
+            WHERE a.entity_type = 'bid' AND a.entity_id = b.id
+            ORDER BY a.changed_at DESC LIMIT 1
+          ) last_audit ON true
+          LEFT JOIN LATERAL (
+            SELECT sales_person_id FROM ownership_assignments oa
+            WHERE oa.entity_type = 'bid' AND oa.entity_id = b.id AND oa.role = 'solutionLead' AND oa.end_date IS NULL
+            LIMIT 1
+          ) solution_lead ON true
           ORDER BY b.created_at DESC
         `),
         pool.query(`
@@ -2963,27 +3387,55 @@ Replace `bids.ts`'s `listForGrid` procedure (new imports: `applyFilterRules`, `r
           JOIN bid_corrigendum_changes ch ON ch.corrigendum_id = c.id
           WHERE ch.decision = 'pending' GROUP BY c.bid_id
         `),
-        pool.query(`SELECT entity_id, sales_person_id FROM ownership_assignments WHERE entity_type='bid' AND role='owner' AND end_date IS NULL`),
+        loadOwnershipContext(),
       ])
       const pendingCorrigendumBidIds = new Set(corrigendaPendingResult.rows.map((r: any) => r.bid_id))
-      const ownerBySalesPersonEmailNeeded = ownershipResult.rows // salesPersonId only — email resolution below
-      const salesPersonIds = [...new Set(ownerBySalesPersonEmailNeeded.map((r: any) => r.sales_person_id))]
+
+      // Resolves EVERY row's owner through the same effective-owner/
+      // inheritance chain as ownership.resolveOwner (this plan's Global
+      // Constraints) — a bid with no bid-level assignment of its own still
+      // resolves to whoever owns its opportunity, exactly like the single-bid
+      // Overview tab already does; there is exactly one resolution algorithm
+      // in the codebase, used everywhere ownership is read. Solution Lead is
+      // NOT resolved this way — it's a direct-only role (migration
+      // 1789100000000, Task 4) with no inheritance semantics of its own, so
+      // the plain LATERAL join above is sufficient and correct as-is.
+      const today = new Date().toISOString().slice(0, 10)
+      const bidIds = gridResult.rows.map((r: any) => r.id)
+      const ownerMap = buildOwnerMap(assignments, 'bid', bidIds, today, ownershipCtx)
+      const salesPersonIds = [...new Set([
+        ...Array.from(ownerMap.values(), (o) => o.salesPersonId),
+        ...gridResult.rows.map((r: any) => r.solution_lead_sales_person_id).filter(Boolean),
+        // "Action Owner" (spec §8's Decision group) resolves the SAME
+        // next_action row already joined above, not a second query — it's
+        // just one more id fed into this single batched email lookup.
+        ...gridResult.rows.map((r: any) => r.next_action_assignee_id).filter(Boolean),
+      ])]
       const emailsResult = salesPersonIds.length
         ? await pool.query('SELECT id, official_email FROM sales_persons WHERE id = ANY($1)', [salesPersonIds])
         : { rows: [] }
       const emailById = new Map(emailsResult.rows.map((r: any) => [r.id, r.official_email]))
-      const ownerEmailByBidId = new Map(
-        ownershipResult.rows.map((r: any) => [r.entity_id, emailById.get(r.sales_person_id) ?? null]),
-      )
 
-      const today = new Date().toISOString().slice(0, 10)
       const rows = gridResult.rows.map((r: any) => {
         const dueAt = r.submission_date && !Number.isNaN(new Date(r.submission_date).getTime()) ? r.submission_date : null
+        const owner = ownerMap.get(r.id)
+        const nextMilestoneDueAt: string | null = r.next_milestone_due_at ?? null
         return {
-          ...toBid(r), departmentId: r.department_id, stateCode: r.state_code, opportunityName: r.opportunity_name,
+          ...toBid(r), departmentId: r.department_id, departmentName: r.department_name ?? null,
+          stateCode: r.state_code, city: r.city ?? null, opportunityName: r.opportunity_name,
           gemTenderId: r.gem_tender_id, submissionDate: r.submission_date, valueAmount: r.value_amount,
           valueUnit: r.value_unit, emdAmount: r.emd_amount, emdUnit: r.emd_unit, vertical: r.vertical,
-          ownerEmail: ownerEmailByBidId.get(r.id) ?? null,
+          ownerEmail: owner ? (emailById.get(owner.salesPersonId) ?? null) : null,
+          solutionLeadEmail: r.solution_lead_sales_person_id ? (emailById.get(r.solution_lead_sales_person_id) ?? null) : null,
+          documentCount: r.document_count ?? 0,
+          latestCorrigendumStatus: r.latest_corrigendum_has_pending === null ? null : (r.latest_corrigendum_has_pending ? 'pending_review' : 'reviewed'),
+          nextMilestoneLabel: r.next_milestone_label ?? null,
+          nextMilestoneDueAt,
+          daysRemaining: nextMilestoneDueAt ? Math.ceil((new Date(nextMilestoneDueAt).getTime() - Date.now()) / 86_400_000) : null,
+          nextActionNote: r.next_action_note ?? null,
+          nextActionDueDate: r.next_action_due_date ?? null,
+          nextActionAssigneeEmail: r.next_action_assignee_id ? (emailById.get(r.next_action_assignee_id) ?? null) : null,
+          updatedBy: r.updated_by ?? null,
           attentionFlag: computeAttentionFlag({ dueAt, hasPendingCorrigendum: pendingCorrigendumBidIds.has(r.id), today }),
         }
       })
@@ -2991,9 +3443,9 @@ Replace `bids.ts`'s `listForGrid` procedure (new imports: `applyFilterRules`, `r
     }),
 ```
 
-(Note: this does not resolve *inherited* bid ownership — spec §4.6's inheritance-from-opportunity — only *direct* bid-level owner assignments. Direct-only is sufficient for grid filtering/display; the bid detail page's Overview tab (Task 31) uses the full `ownership.resolveOwner` procedure, which does resolve inheritance, for the authoritative single-bid view. Note this distinction in a code comment at the query above rather than silently picking one without saying so.)
+(`packages/domain/src/ownership.ts`'s `OwnableEntityDef.key === 'bid'` entry, added in Task 2, is what makes `buildOwnerMap(assignments, 'bid', ...)` walk `inheritFrom` up to the bid's opportunity when no direct bid-level assignment exists — this task supplies no new resolution logic of its own for the owner, only the plumbing to call the existing one for every grid row at once.)
 
-- [ ] **Step 5: Implement `bidSavedViews` router**
+- [ ] **Step 6: Implement `bidSavedViews` router**
 
 ```ts
 // apps/api/src/routers/bidSavedViews.ts
@@ -3030,8 +3482,14 @@ export const bidSavedViewsRouter = router({
     return [...systemViews, ...dbResult.rows.map(toSavedView)]
   }),
 
-  get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
-    const result = await pool.query('SELECT * FROM bid_saved_views WHERE id=$1', [input.id])
+  // Same personal/global visibility rule as list() — a fetch-by-id must
+  // never leak a personal view to a different user just because they know
+  // (or guessed) its id (this plan's Review Focus).
+  get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input, ctx }) => {
+    const email = ctx.user?.email ?? null
+    const result = email
+      ? await pool.query('SELECT * FROM bid_saved_views WHERE id=$1 AND (scope=$2 OR owner_email=$3)', [input.id, 'global', email])
+      : await pool.query('SELECT * FROM bid_saved_views WHERE id=$1 AND scope=$2', [input.id, 'global'])
     return result.rows[0] ? toSavedView(result.rows[0]) : null
   }),
 
@@ -3042,21 +3500,33 @@ export const bidSavedViewsRouter = router({
       if (input.scope === 'personal' && !ownerEmail) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'A personal view requires a signed-in user.' })
       }
-      const result = await pool.query(
-        `INSERT INTO bid_saved_views (name, scope, owner_email, filter_rules, sort, visible_columns, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [input.name, input.scope, ownerEmail, JSON.stringify(input.filterRules ?? []), JSON.stringify(input.sort ?? []), JSON.stringify(input.visibleColumns ?? []), ctx.user?.email ?? null],
-      )
-      if (input.scope === 'global') {
-        // `pool` itself satisfies writeAuditLog's minimal `{query}` shape —
-        // no transaction needed for a single best-effort log write, so no
-        // client to acquire/release here.
-        await writeAuditLog(pool, {
-          entityType: 'bidSavedView', entityId: result.rows[0].id, field: 'name', oldValue: '', newValue: input.name,
-          reason: '', action: 'create', changedBy: ctx.user?.email,
-        }).catch(() => undefined) // best-effort logging, never blocks the create itself
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const result = await client.query(
+          `INSERT INTO bid_saved_views (name, scope, owner_email, filter_rules, sort, visible_columns, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+          [input.name, input.scope, ownerEmail, JSON.stringify(input.filterRules ?? []), JSON.stringify(input.sort ?? []), JSON.stringify(input.visibleColumns ?? []), ctx.user?.email ?? null],
+        )
+        if (input.scope === 'global') {
+          // Same transaction as the INSERT above (this plan's Review Focus:
+          // a global view's audit trail is guaranteed, never a best-effort
+          // side call a failure can silently drop) — if the audit write
+          // fails, the whole create rolls back rather than leaving an
+          // unaudited global view on record.
+          await writeAuditLog(client, {
+            entityType: 'bidSavedView', entityId: result.rows[0].id, field: 'name', oldValue: '', newValue: input.name,
+            reason: '', action: 'create', changedBy: ctx.user?.email,
+          })
+        }
+        await client.query('COMMIT')
+        return toSavedView(result.rows[0])
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
       }
-      return toSavedView(result.rows[0])
     }),
 
   update: protectedProcedure
@@ -3067,47 +3537,75 @@ export const bidSavedViewsRouter = router({
       }
       const columnFor: Record<string, string> = { name: 'name', filterRules: 'filter_rules', sort: 'sort', visibleColumns: 'visible_columns' }
       const jsonFields = new Set(['filterRules', 'sort', 'visibleColumns'])
-      const fields = Object.keys(input.patch)
-      if (fields.length) {
-        const values = fields.map((f) => (jsonFields.has(f) ? JSON.stringify((input.patch as any)[f]) : (input.patch as any)[f]))
-        const setClauses = fields.map((f, i) => `${columnFor[f]}=$${i + 1}`)
-        values.push(input.id)
-        await pool.query(`UPDATE bid_saved_views SET ${setClauses.join(', ')}, updated_at=now() WHERE id=$${values.length}`, values)
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const fields = Object.keys(input.patch)
+        if (fields.length) {
+          const values = fields.map((f) => (jsonFields.has(f) ? JSON.stringify((input.patch as any)[f]) : (input.patch as any)[f]))
+          const setClauses = fields.map((f, i) => `${columnFor[f]}=$${i + 1}`)
+          values.push(input.id)
+          await client.query(`UPDATE bid_saved_views SET ${setClauses.join(', ')}, updated_at=now() WHERE id=$${values.length}`, values)
+        }
+        const result = await client.query('SELECT * FROM bid_saved_views WHERE id=$1', [input.id])
+        if (!result.rows[0]) throw new TRPCError({ code: 'NOT_FOUND' })
+        // Global-only, same as create/delete — a personal view's own edits
+        // are the owner's private data, not a shared audit concern (spec
+        // §9.3: "every user-created global-view mutation" is audited).
+        if (result.rows[0].scope === 'global') {
+          await writeAuditLog(client, {
+            entityType: 'bidSavedView', entityId: input.id, field: 'patch', oldValue: '', newValue: JSON.stringify(input.patch),
+            reason: '', action: 'update', changedBy: ctx.user?.email,
+          })
+        }
+        await client.query('COMMIT')
+        return toSavedView(result.rows[0])
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
       }
-      const result = await pool.query('SELECT * FROM bid_saved_views WHERE id=$1', [input.id])
-      if (!result.rows[0]) throw new TRPCError({ code: 'NOT_FOUND' })
-      await writeAuditLog(pool, {
-        entityType: 'bidSavedView', entityId: input.id, field: 'patch', oldValue: '', newValue: JSON.stringify(input.patch),
-        reason: '', action: 'update', changedBy: ctx.user?.email,
-      }).catch(() => undefined)
-      return toSavedView(result.rows[0])
     }),
 
   delete: protectedProcedure.input(z.object({ id: z.string() })).mutation(async ({ input, ctx }) => {
     if (SYSTEM_BID_VIEW_KEYS.has(input.id)) {
       throw new TRPCError({ code: 'FORBIDDEN', message: 'System views cannot be deleted.' })
     }
-    await pool.query('DELETE FROM bid_saved_views WHERE id=$1', [input.id])
-    await writeAuditLog(pool, {
-      entityType: 'bidSavedView', entityId: input.id, field: 'name', oldValue: '', newValue: '',
-      reason: '', action: 'delete', changedBy: ctx.user?.email,
-    }).catch(() => undefined)
+    const client = await pool.connect()
+    try {
+      await client.query('BEGIN')
+      const existing = (await client.query('SELECT scope FROM bid_saved_views WHERE id=$1', [input.id])).rows[0]
+      await client.query('DELETE FROM bid_saved_views WHERE id=$1', [input.id])
+      if (existing?.scope === 'global') {
+        await writeAuditLog(client, {
+          entityType: 'bidSavedView', entityId: input.id, field: 'name', oldValue: '', newValue: '',
+          reason: '', action: 'delete', changedBy: ctx.user?.email,
+        })
+      }
+      await client.query('COMMIT')
+    } catch (e) {
+      await client.query('ROLLBACK')
+      throw e
+    } finally {
+      client.release()
+    }
   }),
 })
 ```
 
 Register it in `apps/api/src/index.ts`.
 
-- [ ] **Step 6: Run to verify pass**
+- [ ] **Step 7: Run to verify pass**
 
-Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- bids.test.ts bidSavedViews.test.ts`
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- bids.test.ts bidSavedViews.test.ts opportunities.test.ts`
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add packages/domain/src/bids.ts apps/api/src/routers/bids.ts apps/api/src/routers/bids.test.ts apps/api/src/routers/bidSavedViews.ts apps/api/src/routers/bidSavedViews.test.ts apps/api/src/index.ts
-git commit -m "feat(api): add bidSavedViews (system-view merge) and filterRules support on bids.listForGrid"
+git add apps/api/migrations/1789200000000_opportunities-city.sql packages/domain/src/bids.ts apps/api/src/routers/bids.ts apps/api/src/routers/bids.test.ts apps/api/src/routers/bidSavedViews.ts apps/api/src/routers/bidSavedViews.test.ts apps/api/src/routers/opportunities.ts apps/api/src/routers/opportunities.test.ts src/lib/types.ts apps/api/src/index.ts
+git commit -m "feat(api): add bidSavedViews (system-view merge), filterRules support on bids.listForGrid, and opportunities.city"
 ```
 
 ---
@@ -3448,7 +3946,9 @@ export interface Bid {
 }
 export interface BidGridRow extends Bid {
   departmentId: string
+  departmentName: string | null
   stateCode: number | null
+  city: string | null
   opportunityName: string
   gemTenderId: string
   submissionDate: string
@@ -3458,6 +3958,16 @@ export interface BidGridRow extends Bid {
   emdUnit: string
   vertical: string
   ownerEmail: string | null
+  solutionLeadEmail: string | null
+  documentCount: number
+  latestCorrigendumStatus: 'pending_review' | 'reviewed' | null
+  nextMilestoneLabel: string | null
+  nextMilestoneDueAt: string | null
+  daysRemaining: number | null
+  nextActionNote: string | null
+  nextActionDueDate: string | null
+  nextActionAssigneeEmail: string | null
+  updatedBy: string | null
   attentionFlag: 'dueSoon' | 'overdue' | 'corrigendumPending' | 'onTrack'
 }
 export interface BidMilestone {
@@ -3510,7 +4020,7 @@ Add a `// --- Bid Tracker ---` section to the `InMemoryRepository` class, follow
 - `createBid(opportunityId)`: mirror `createOpportunity`'s shape — generate an id via `uid()`, a `bidCode` via a simple in-memory year-scoped counter (a module-level `let inMemoryBidSeq = 1` is sufficient here — this is local-dev-only data with no cross-session durability guarantee beyond what IndexedDB already gives the rest of this file), default `stageKey: 'solutioning'`, `decision: 'pending'`, `status: 'active'`, `dataConfidence: 'verified'`, and ALSO push a seeded `bid_milestones`-equivalent row (`key: 'submissionDeadline'`) into `bidMilestones`, mirroring the backend's `bids.create` behavior exactly (parse the opportunity's current `submissionDate` the same way — `new Date(x)`, `null` if `isNaN`).
 - `updateBid(id, patch)`: mirror `updateOpportunity`'s patch-merge pattern; apply the same `decision='go'` gate (reuse `isAtOrAfterSubmitted` from `@goms/domain`, already installed as a workspace dependency) and the same `decision`→`stageKey` auto-derivation as the backend (Task 7) — duplicated here deliberately, since `InMemoryRepository` has no shared transaction boundary with `apps/api` to reuse code across; this is the same "duplicate the business rule once, in JS, on both sides" trade-off `PIPELINE_STAGE_MAP`'s closed-stage derivation already accepts today (`InMemoryRepository`'s `updateOpportunity` re-derives `closedOn` itself rather than calling the backend).
 - `deleteBid(id)`: apply the identical hard-delete gate (check `bidCorrigenda`/`protectedValues`/`bidDocuments`/`followUps` arrays for any row referencing this bid id, refuse if any exist — throw a plain `Error` with the same message text the backend uses, since this file's existing error-throwing convention for its other `delete*` methods is a plain thrown `Error`, not a typed result).
-- Every other method: plain array CRUD, following `listOpportunities`/`createFollowUp`/etc.'s exact existing style in this same file.
+- `listBidsForGrid(filterRules?)`: joins the in-memory `bids`/`opportunities`/`bidMilestones`/`documents`/`bidCorrigenda`/`bidCorrigendumChanges`/`followUps` arrays to fill every `BidGridRow` field — `departmentName` from the matching `hierarchyNodes` entry, `city` straight from the matching `opportunities` row's own `city` field, `documentCount` from a `.filter().length` over `bidDocuments`, `latestCorrigendumStatus` from the highest-`corrigendumNumber` entry in `bidCorrigenda` for that bid (`null` if none), `nextMilestoneLabel`/`nextMilestoneDueAt`/`daysRemaining` from the earliest open `bidMilestones` row sorted by `dueAt` (nulls last), `nextActionNote`/`nextActionDueDate`/`nextActionAssigneeEmail` from the earliest open `followUps` row for `entityType: 'bid'` (resolve `assigneeId` to an email via the same `salesPersons` array lookup `ownerEmail` already uses), `ownerEmail`/`solutionLeadEmail` via this file's own existing ownership-resolution helper (the same one `resolveOwner`-equivalent local logic already uses for opportunities — reuse it, do not hand-roll a second one), `updatedBy` as `null` always (this file has no local audit-log store to derive it from, and that's an acceptable, honest local-dev gap, not a bug to paper over with a fabricated value). Every other method: plain array CRUD, following `listOpportunities`/`createFollowUp`/etc.'s exact existing style in this same file.
 
 - [ ] **Step 4: Verify the app still builds and existing frontend tests still pass**
 
@@ -3793,8 +4303,12 @@ export function BidTrackerWorkspace() {
         tabs={SECTIONS.map(({ value, label }) => ({ value, label }))}
       />
       <div className="flex-1 overflow-auto">
-        {/* Task 28 (grid), Task 35 (actions), Task 36 (history) fill these in;
-           milestones content arrives with Task 31. */}
+        {/* Task 28 (grid), Task 35 (actions), Task 36 (history) fill these in.
+           This top-level 'milestones' section is the workspace-wide
+           Milestones & Dates page (Task 43) — distinct from the per-bid
+           Milestones tab inside BidDetailWorkspace (Task 31); do not point
+           this section at Task 31's tab, they render different data (every
+           bid's milestones across the whole grid vs. one bid's own). */}
         {section === 'grid' && <div data-testid="bid-tracker-grid-placeholder" />}
       </div>
     </div>
@@ -4044,7 +4558,9 @@ DROP TABLE bid_custom_field_values;
 
 **Interfaces:**
 - Consumes: `useBidsForGrid`, `BidGridRow` (Tasks 24, 26).
-- Produces: `<MasterGrid columnVisibility, onColumnVisibilityChange, filterRules, sort>` — column-grouped, virtualized, sortable.
+- Produces: `<MasterGrid columnVisibility, onColumnVisibilityChange, filterRules, sort>` — column-grouped, virtualized, sortable, horizontally scrollable.
+
+Scope note: this task builds the grid itself — every spec §8 column group, correct virtualization, sorting, and horizontal scroll — using the columns already available on `BidGridRow` (Task 24/19). Two pieces of §8 build on TOP of this file rather than inside this task, so each has its own reviewable deliverable: **Customize Columns UI, row selection, and bulk row actions** (Task 41) and the **ad-hoc filter UI** (Task 42) — both modify `MasterGrid.tsx` further, after it exists.
 
 - [ ] **Step 1: Install the dependency**
 
@@ -4091,13 +4607,14 @@ Expected: FAIL — component doesn't exist.
 
 ```tsx
 // src/modules/bid-tracker/components/MasterGrid.tsx
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useReactTable, getCoreRowModel, getSortedRowModel, flexRender, createColumnHelper, type SortingState, type VisibilityState } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/Badge'
-import { useBidsForGrid } from '@/lib/api'
+import { Button } from '@/components/ui/Button'
+import { useBidsForGrid, useBidMutations } from '@/lib/api'
 import type { BidGridRow } from '@/lib/types'
 
 const ATTENTION_LABEL: Record<BidGridRow['attentionFlag'], string> = {
@@ -4106,28 +4623,76 @@ const ATTENTION_LABEL: Record<BidGridRow['attentionFlag'], string> = {
 const ATTENTION_TONE: Record<BidGridRow['attentionFlag'], 'amber' | 'crimson' | 'blue' | 'emerald'> = {
   dueSoon: 'amber', overdue: 'crimson', corrigendumPending: 'blue', onTrack: 'emerald',
 }
+const CORRIGENDUM_LABEL: Record<string, string> = { pending_review: 'Pending Review', reviewed: 'Reviewed' }
 
+// Every column group from spec §8, sourced entirely from BidGridRow (Task
+// 19/24) — this task adds no new backend fields, only renders what's already
+// there. Task 41 adds the Customize Columns UI that toggles these via
+// `columnVisibility`/`onColumnVisibilityChange`, already wired below. "Manage"
+// (System group) is the one column with a side effect — a per-row Archive/
+// Unarchive toggle — so it takes `archive`/`unarchive` from `useBidMutations`
+// directly rather than deriving from row data; `MasterGrid` passes them in via
+// closure (see `manageColumn` below), not a second definition of the columns
+// array per render.
 const col = createColumnHelper<BidGridRow>()
-const COLUMNS = [
-  col.group({ id: 'identity', header: 'Identity', columns: [
-    col.accessor('bidCode', { header: 'Bid ID' }),
-    col.accessor('opportunityName', { header: 'Opportunity / Mission' }),
-    col.accessor('gemTenderId', { header: 'Tender ID' }),
-  ]}),
-  col.group({ id: 'dates', header: 'Dates', columns: [
-    col.accessor('submissionDate', { header: 'Submission Deadline' }),
-  ]}),
-  col.group({ id: 'decision', header: 'Decision', columns: [
-    col.accessor('stageKey', { header: 'Bid Stage' }),
-    col.accessor('attentionFlag', {
-      header: 'Attention',
-      cell: (info) => <Badge tone={ATTENTION_TONE[info.getValue()]}>{ATTENTION_LABEL[info.getValue()]}</Badge>,
-    }),
-  ]}),
-  col.group({ id: 'system', header: 'System', columns: [
-    col.accessor('dataConfidence', { header: 'Data Confidence' }),
-  ]}),
-]
+function buildColumns(onToggleArchive: (row: BidGridRow) => void) {
+  return [
+    col.group({ id: 'identity', header: 'Identity', columns: [
+      col.accessor('opportunityId', { header: 'Opportunity ID' }),
+      col.accessor('opportunityName', { header: 'Opportunity / Mission' }),
+      col.accessor('bidCode', { header: 'Bid ID' }),
+      col.accessor('gemTenderId', { header: 'Tender ID' }),
+      col.accessor('tenderLink', { header: 'Tender Link', cell: (info) => info.getValue() ? <a href={info.getValue()!} target="_blank" rel="noreferrer" className="underline">Link</a> : '—' }),
+    ]}),
+    col.group({ id: 'client', header: 'Client', columns: [
+      col.accessor('departmentName', { header: 'Department / Client', cell: (info) => info.getValue() ?? '—' }),
+      col.accessor('stateCode', { header: 'State' }),
+      col.accessor('city', { header: 'City', cell: (info) => info.getValue() ?? '—' }),
+      col.accessor('vertical', { header: 'Sector' }),
+    ]}),
+    col.group({ id: 'ownership', header: 'Ownership', columns: [
+      col.accessor('ownerEmail', { header: 'Bid Owner', cell: (info) => info.getValue() ?? '—' }),
+      col.accessor('solutionLeadEmail', { header: 'Sales Lead / Solution Lead', cell: (info) => info.getValue() ?? '—' }),
+    ]}),
+    col.group({ id: 'decision', header: 'Decision', columns: [
+      col.accessor('stageKey', { header: 'Bid Stage' }),
+      col.accessor('nextActionNote', { header: 'Next Action', cell: (info) => info.getValue() ?? '—' }),
+      col.accessor('nextActionAssigneeEmail', { header: 'Action Owner', cell: (info) => info.getValue() ?? '—' }),
+      col.accessor('nextActionDueDate', { header: 'Action Due', cell: (info) => info.getValue() ?? '—' }),
+      col.accessor('attentionFlag', {
+        header: 'Attention',
+        cell: (info) => <Badge tone={ATTENTION_TONE[info.getValue()]}>{ATTENTION_LABEL[info.getValue()]}</Badge>,
+      }),
+      col.accessor('decision', { header: 'Decision', cell: (info) => info.getValue().replace('_', ' ') }),
+    ]}),
+    col.group({ id: 'dates', header: 'Dates', columns: [
+      col.accessor('nextMilestoneLabel', { header: 'Next Milestone', cell: (info) => info.getValue() ?? '—' }),
+      col.accessor('daysRemaining', { header: 'Days Remaining', cell: (info) => info.getValue() ?? '—' }),
+      col.accessor('submissionDate', { header: 'Submission Deadline' }),
+    ]}),
+    col.group({ id: 'documents', header: 'Documents', columns: [
+      col.accessor('documentCount', { header: 'Tender Files' }),
+      col.accessor('latestCorrigendumStatus', { header: 'Latest Corrigendum', cell: (info) => { const v = info.getValue(); return v ? CORRIGENDUM_LABEL[v] : '—' } }),
+    ]}),
+    col.group({ id: 'system', header: 'System', columns: [
+      col.accessor('updatedAt', { header: 'Last Updated' }),
+      col.accessor('updatedBy', { header: 'Updated By', cell: (info) => info.getValue() ?? '—' }),
+      col.accessor('dataConfidence', { header: 'Data Confidence' }),
+      col.display({
+        id: 'manage',
+        header: 'Manage',
+        cell: ({ row }) => (
+          <Button
+            variant="ghost" size="sm"
+            onClick={(e) => { e.stopPropagation(); onToggleArchive(row.original) }}
+          >
+            {row.original.status === 'archived' ? 'Unarchive' : 'Archive'}
+          </Button>
+        ),
+      }),
+    ]}),
+  ]
+}
 
 export function MasterGrid({
   filterRules, columnVisibility, onColumnVisibilityChange,
@@ -4137,27 +4702,38 @@ export function MasterGrid({
   onColumnVisibilityChange?: (v: VisibilityState) => void
 }) {
   const { data: rows = [], isLoading } = useBidsForGrid(filterRules)
+  const { archive, unarchive } = useBidMutations()
   const [sorting, setSorting] = useState<SortingState>([])
   const navigate = useNavigate()
+  const columns = buildColumns((row) => (row.status === 'archived' ? unarchive : archive).mutateAsync(row.id))
   const table = useReactTable({
-    data: rows, columns: COLUMNS, state: { sorting, columnVisibility: columnVisibility ?? {} },
+    data: rows, columns, state: { sorting, columnVisibility: columnVisibility ?? {} },
     onSortingChange: setSorting, onColumnVisibilityChange: onColumnVisibilityChange as any,
     getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel(),
   })
   const parentRef = useRef<HTMLDivElement>(null)
   const { rows: tableRows } = table.getRowModel()
   const virtualizer = useVirtualizer({ count: tableRows.length, getScrollElement: () => parentRef.current, estimateSize: () => 44 })
+  const visibleColumnCount = table.getVisibleLeafColumns().length
 
   if (isLoading) return <div className="p-4 text-sm text-muted">Loading bids…</div>
 
+  // The grid has ~23 leaf columns across 7 groups (spec §8) — wider than any
+  // viewport, so it MUST scroll horizontally rather than compress every
+  // column unreadably. `overflow-x-auto` here, plus `min-w-max` on the
+  // table so it never shrinks below its natural content width, is the fix;
+  // `parentRef` (the vertical/virtualization scroll container) and the
+  // horizontal scroll container are deliberately the same element — a
+  // second nested scroller would desync the virtualizer's scroll-offset
+  // math from what the user is actually scrolling.
   return (
     <div ref={parentRef} className="h-full overflow-auto">
-      <table className="w-full text-sm">
+      <table className="min-w-max w-full text-sm">
         <thead>
           {table.getHeaderGroups().map((hg) => (
             <tr key={hg.id}>
               {hg.headers.map((h) => (
-                <th key={h.id} className="cursor-pointer select-none px-3 py-2 text-left" onClick={h.column.getToggleSortingHandler()}>
+                <th key={h.id} className="cursor-pointer select-none whitespace-nowrap px-3 py-2 text-left" onClick={h.column.getToggleSortingHandler()}>
                   {flexRender(h.column.columnDef.header, h.getContext())}
                   {{ asc: ' ↑', desc: ' ↓' }[h.column.getIsSorted() as string] ?? ''}
                 </th>
@@ -4165,17 +4741,47 @@ export function MasterGrid({
             </tr>
           ))}
         </thead>
-        <tbody style={{ height: virtualizer.getTotalSize() }}>
+        <tbody>
+          {/*
+            Virtualization correctness: a virtualized <tbody> must NOT stretch
+            itself to `getTotalSize()` and then render only the visible rows —
+            without something occupying the *skipped* rows' space, every
+            rendered row collapses to the top of the body and the scrollbar's
+            travel no longer matches what's on screen (the exact bug this
+            revision fixes). The standard fix for a native <table> — since a
+            <tr> can't be `position: absolute` inside <tbody> the way a
+            virtualized <div> list can — is two padding rows, EACH holding a
+            single `<td colSpan={visibleColumnCount}>` rather than being a
+            bare `<tr>` with no cell: an HTML table's row height comes from
+            its cells, not the `<tr>` element itself, so a childless `<tr>`
+            with an inline height is not guaranteed to render at that height
+            in every browser's table layout algorithm — the `<td>` is what
+            actually reserves the space. One sized to the space above the
+            first rendered row, one sized to the space below the last
+            rendered row, together keep the real scroll height correct
+            without any row needing manual positioning.
+          */}
+          {tableRows.length > 0 && virtualizer.getVirtualItems().length > 0 && (
+            <tr aria-hidden="true"><td colSpan={visibleColumnCount} style={{ height: virtualizer.getVirtualItems()[0].start, padding: 0, border: 0 }} /></tr>
+          )}
           {virtualizer.getVirtualItems().map((vi) => {
             const row = tableRows[vi.index]
             return (
               <tr key={row.id} className="cursor-pointer hover:bg-surface-hover" onClick={() => navigate(`/bid-tracker/bid/${row.original.id}`)}>
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-3 py-2">{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
+                  <td key={cell.id} className="whitespace-nowrap px-3 py-2">{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>
                 ))}
               </tr>
             )
           })}
+          {tableRows.length > 0 && virtualizer.getVirtualItems().length > 0 && (
+            <tr aria-hidden="true">
+              <td
+                colSpan={visibleColumnCount}
+                style={{ height: virtualizer.getTotalSize() - virtualizer.getVirtualItems()[virtualizer.getVirtualItems().length - 1].end, padding: 0, border: 0 }}
+              />
+            </tr>
+          )}
         </tbody>
       </table>
     </div>
@@ -4185,12 +4791,59 @@ export function MasterGrid({
 
 Wire it into `BidTrackerWorkspace.tsx`'s `grid` section, replacing the `data-testid="bid-tracker-grid-placeholder"` div with `<MasterGrid filterRules={activeView?.filterRules ?? []} />` (Task 29 supplies `activeView`).
 
-- [ ] **Step 5: Run to verify pass**
+- [ ] **Step 5: Write the failing column-completeness test, then confirm it passes against Step 4's implementation**
+
+```tsx
+// Add to src/modules/bid-tracker/components/MasterGrid.test.tsx
+it('renders every spec §8 column group and its required leaf columns', () => {
+  vi.spyOn(api, 'useBidsForGrid').mockReturnValue({
+    data: [{
+      id: 'b1', bidCode: 'BID-2026-0001', opportunityId: 'o1', opportunityName: 'AI Document Processing System',
+      gemTenderId: 'DRDO-SAG-2026-T881', stageKey: 'qualification', decision: 'pending', status: 'active',
+      dataConfidence: 'verified', attentionFlag: 'dueSoon', departmentId: 'd1', departmentName: 'DRDO', stateCode: 7,
+      city: 'New Delhi', submissionDate: '2026-10-10', valueAmount: '6.2', valueUnit: 'crore', emdAmount: '12.4', emdUnit: 'lakh',
+      vertical: 'Defence', ownerEmail: null, solutionLeadEmail: null, documentCount: 0, latestCorrigendumStatus: null,
+      nextMilestoneLabel: null, nextMilestoneDueAt: null, daysRemaining: null, nextActionNote: null, nextActionDueDate: null,
+      nextActionAssigneeEmail: null, updatedBy: null, tenderLink: null, archivedAt: null, createdAt: '', updatedAt: '',
+    }],
+    isLoading: false,
+  } as any)
+  vi.spyOn(api, 'useBidMutations').mockReturnValue({ create: {}, update: {}, archive: { mutateAsync: vi.fn() }, unarchive: { mutateAsync: vi.fn() }, remove: {} } as any)
+  const qc = new QueryClient()
+  render(<QueryClientProvider client={qc}><MasterGrid filterRules={[]} /></QueryClientProvider>)
+
+  // Every group header from spec §8, in the header row.
+  for (const group of ['Identity', 'Client', 'Ownership', 'Decision', 'Dates', 'Documents', 'System']) {
+    expect(screen.getByText(group)).toBeInTheDocument()
+  }
+  // Every leaf column spec §8 names, including the three this revision adds.
+  for (const leaf of [
+    'Opportunity ID', 'Bid ID', 'Tender ID', 'Tender Link',
+    'Department / Client', 'State', 'City', 'Sector',
+    'Bid Owner', 'Sales Lead / Solution Lead',
+    'Bid Stage', 'Next Action', 'Action Owner', 'Action Due', 'Attention', 'Decision',
+    'Next Milestone', 'Days Remaining', 'Submission Deadline',
+    'Tender Files', 'Latest Corrigendum',
+    'Last Updated', 'Updated By', 'Data Confidence', 'Manage',
+  ]) {
+    expect(screen.getByText(leaf)).toBeInTheDocument()
+  }
+})
+```
+
+Run: `npm test -- MasterGrid.test.tsx`
+Expected: PASS immediately — Step 4's implementation already renders every one of these; this test is the guard against a future edit silently dropping one.
+
+- [ ] **Step 6: Run to verify pass**
 
 Run: `npm test -- MasterGrid.test.tsx`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Verify virtualization and horizontal scroll manually in a real browser — jsdom fakes every element's size as zero, so `@tanstack/react-virtual`'s actual scroll-offset math (the exact thing this task fixes) cannot be meaningfully asserted by a jsdom-based test**
+
+Use the `run` skill to start the dev server with a handful of bids seeded (create 30+ via `bids.create` against a local backend, or via `InMemoryRepository` in a no-backend dev session) and open `/bid-tracker`. Confirm: scrolling the grid vertically moves rows smoothly with no blank gap or rows bunched at the top (the bug a missing top/bottom padding row causes); the scrollbar's size/position roughly matches the row count (not stuck at "still near the top" after scrolling most of the way down); and scrolling horizontally reveals the columns past the visible width without the table compressing itself to fit.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add package.json package-lock.json src/modules/bid-tracker/components/MasterGrid.tsx src/modules/bid-tracker/components/MasterGrid.test.tsx src/modules/bid-tracker/BidTrackerWorkspace.tsx
@@ -5093,8 +5746,10 @@ git commit -m "feat(frontend): add the Action Queue page"
 - Modify: `src/modules/bid-tracker/BidTrackerWorkspace.tsx` (render it for `section === 'history'`)
 
 **Interfaces:**
-- Consumes: `useAuditLogs` — this codebase's existing hook, already reading from `commercial.auditLogs.list`/now the shared store; Task 20 exposed the equivalent data via a new top-level `auditLogs.list` procedure, but the **existing** `useAuditLogs`/`repository.listAuditLogs` hook (used today by `commercial-calculator`'s own `AuditLog.tsx`) already reads the identical, now-shared table — reuse it as-is with an `entityType` filter of `'bid'`/`'bidMilestone'`/`'bidCorrigendum'`/`'bidSavedView'`, rather than adding a second, parallel hook that duplicates it.
-- Produces: `<ActivityHistoryPage>`.
+- Consumes: `useAuditLogs` — this codebase's existing hook, but it lives in `src/modules/commercial-calculator/api.ts` (alongside its own `CommercialAuditLog` type in `src/modules/commercial-calculator/types.ts`), NOT `@/lib/api` — confirmed by reading both files directly rather than assumed; an earlier draft of this task imported it from the wrong module, which would have failed to compile. `useAuditLogs` already reads from `commercial.auditLogs.list`/now the shared store via `repository.listAuditLogs`; Task 20 exposed the equivalent data via a new top-level `auditLogs.list` procedure, but this existing hook (used today by `commercial-calculator`'s own `AuditLog.tsx`) already reads the identical, now-shared table — reuse it as-is with an `entityType` filter of `'bid'`/`'bidMilestone'`/`'bidCorrigendum'`/`'bidSavedView'`, rather than adding a second, parallel hook that duplicates it. `useOwnershipAssignments` — this codebase's existing hook (`src/lib/api.ts`), listing every `ownership_assignments` row across every entity type; filtered here to `entityType: 'bid'`.
+- Produces: `<ActivityHistoryPage>`, `toActivityEntry` (a small local mapper unifying an audit-log row and an ownership-assignment row into one renderable shape, so they can be merged into a single, correctly time-sorted feed rather than two side-by-side lists).
+
+This task concretely merges TWO sources into one feed, not just the audit log — a bid's field edits (Tasks 7/12/13/15/17/18/45 all write to `commercial_audit_logs`) tell only half of what happened to it; the other half is who owned it and when (`ownership_assignments`, written by `ownership.assign`/`ownership.end` — pre-existing, cross-module functionality this plan doesn't modify, only reads from here). Both are fetched, mapped to one shared `ActivityEntry` shape, concatenated, and sorted by timestamp — "read separately" is not an option this task leaves open; the merge happens in this component, once, and is exactly what the test below pins.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -5104,17 +5759,35 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ActivityHistoryPage } from './ActivityHistoryPage'
 import * as api from '@/lib/api'
+import * as commercialApi from '@/modules/commercial-calculator/api'
 
 describe('ActivityHistoryPage', () => {
-  it('renders each log entry, and labels one whose entity no longer resolves as deleted', () => {
-    vi.spyOn(api, 'useAuditLogs').mockReturnValue({ data: [
+  it('merges audit-log field edits and ownership-assignment history into one feed, sorted newest first, and labels one whose bid no longer resolves as deleted', () => {
+    vi.spyOn(commercialApi, 'useAuditLogs').mockReturnValue({ data: [
       { id: 'l1', entityType: 'bid', entityId: 'still-exists', field: 'stageKey', oldValue: 'solutioning', newValue: 'qualification', reason: '', action: 'update', changedAt: '2026-09-01T00:00:00.000Z', changedBy: 'sarah@amnex.com' },
       { id: 'l2', entityType: 'bid', entityId: 'hard-deleted', field: 'stageKey', oldValue: 'a', newValue: 'b', reason: '', action: 'update', changedAt: '2026-09-02T00:00:00.000Z', changedBy: 'sarah@amnex.com' },
     ], isLoading: false } as any)
+    vi.spyOn(api, 'useOwnershipAssignments').mockReturnValue({ data: [
+      { id: 'a1', entityType: 'bid', entityId: 'still-exists', salesPersonId: 'sp1', role: 'owner', startDate: '2026-09-03', endDate: null, reason: 'initial', batchId: null, note: '', createdAt: '2026-09-03T00:00:00.000Z', createdBy: null },
+      { id: 'a2', entityType: 'opportunity', entityId: 'some-opp', salesPersonId: 'sp2', role: 'owner', startDate: '2026-09-01', endDate: null, reason: 'initial', batchId: null, note: '', createdAt: '2026-09-01T00:00:00.000Z', createdBy: null },
+    ], isLoading: false } as any)
     vi.spyOn(api, 'useBid').mockImplementation((id: any) => ({ data: id === 'still-exists' ? { id } : null, isLoading: false } as any))
     render(<ActivityHistoryPage />)
+
+    // Ownership history is genuinely rendered, not just fetched and ignored.
+    expect(screen.getByText(/owner assigned/i)).toBeInTheDocument()
+    // The opportunity-level assignment (a2) is excluded — this page is Bid
+    // Tracker's own history, not every ownership_assignments row in the app.
+    expect(screen.queryByText(/sp2/)).not.toBeInTheDocument()
     expect(screen.getByText(/stageKey: solutioning → qualification/)).toBeInTheDocument()
     expect(screen.getAllByText(/this bid was deleted/i).length).toBeGreaterThan(0)
+
+    // Sorted newest-first across BOTH sources together, not one list then
+    // the other: a1 (2026-09-03) precedes l2 (2026-09-02) precedes l1 (2026-09-01).
+    const rows = screen.getAllByTestId('activity-entry')
+    expect(rows[0]).toHaveTextContent(/owner assigned/i)
+    expect(rows[1]).toHaveTextContent('hard-deleted')
+    expect(rows[2]).toHaveTextContent('still-exists')
   })
 })
 ```
@@ -5123,32 +5796,70 @@ describe('ActivityHistoryPage', () => {
 
 ```tsx
 // src/modules/bid-tracker/pages/ActivityHistoryPage.tsx
-import { useAuditLogs, useBid } from '@/lib/api'
+import { useOwnershipAssignments, useBid } from '@/lib/api'
+import { useAuditLogs } from '@/modules/commercial-calculator/api'
+import type { OwnershipAssignment } from '@/lib/types'
+import type { CommercialAuditLog } from '@/modules/commercial-calculator/types'
 
 const BID_ENTITY_TYPES = ['bid', 'bidMilestone', 'bidCorrigendum', 'bidSavedView'] as const
 
-function LogRow({ log }: { log: ReturnType<typeof useAuditLogs>['data'] extends (infer R)[] | undefined ? R : never }) {
-  // Only 'bid' entries have a resolvable bid to check (spec §4.7 — a
-  // hard-deleted bid's audit rows persist forever with a now-dangling id).
-  const { data: bid } = useBid(log.entityType === 'bid' ? log.entityId : null)
-  const deleted = log.entityType === 'bid' && bid === null
+interface ActivityEntry {
+  id: string
+  changedAt: string
+  changedBy: string | null
+  description: string
+  bidId: string | null
+}
+
+function toAuditEntry(log: CommercialAuditLog): ActivityEntry {
+  return {
+    id: `audit:${log.id}`, changedAt: log.changedAt, changedBy: log.changedBy,
+    description: `${log.field}: ${log.oldValue} → ${log.newValue}`,
+    bidId: log.entityType === 'bid' ? log.entityId : null,
+  }
+}
+
+function toOwnershipEntry(a: OwnershipAssignment): ActivityEntry {
+  const span = a.endDate ? `${a.startDate} → ${a.endDate}` : `from ${a.startDate}, still open`
+  return {
+    id: `ownership:${a.id}`, changedAt: a.createdAt, changedBy: a.createdBy,
+    description: `Owner assigned (${a.role}): salesPersonId ${a.salesPersonId} (${span})`,
+    bidId: a.entityId,
+  }
+}
+
+function ActivityRow({ entry }: { entry: ActivityEntry }) {
+  // Only entries with a resolvable bid id can even be checked (spec §4.7 —
+  // a hard-deleted bid's audit/ownership rows persist forever with a now-
+  // dangling id); an entry from a non-bid source has nothing to check.
+  const { data: bid } = useBid(entry.bidId)
+  const deleted = !!entry.bidId && bid === null
   return (
-    <div className="border-b py-2 text-sm">
-      <div>{log.field}: {log.oldValue} → {log.newValue} {deleted && <span className="italic text-muted">(this bid was deleted)</span>}</div>
-      <div className="text-xs text-muted">{log.changedBy} · {new Date(log.changedAt).toLocaleString()}</div>
+    <div data-testid="activity-entry" className="border-b py-2 text-sm">
+      <div>{entry.description} {deleted && <span className="italic text-muted">(this bid was deleted)</span>}</div>
+      <div className="text-xs text-muted">{entry.changedBy ?? '—'} · {new Date(entry.changedAt).toLocaleString()}</div>
     </div>
   )
 }
 
 export function ActivityHistoryPage() {
-  const { data: logs = [], isLoading } = useAuditLogs({ entityType: undefined })
-  if (isLoading) return null
-  const bidLogs = logs.filter((l) => (BID_ENTITY_TYPES as readonly string[]).includes(l.entityType))
-  return <div className="p-4">{bidLogs.map((l) => <LogRow key={l.id} log={l} />)}</div>
+  const { data: logs = [], isLoading: logsLoading } = useAuditLogs({ entityType: undefined })
+  const { data: assignments = [], isLoading: assignmentsLoading } = useOwnershipAssignments()
+  if (logsLoading || assignmentsLoading) return null
+
+  const bidLogEntries = logs
+    .filter((l) => (BID_ENTITY_TYPES as readonly string[]).includes(l.entityType))
+    .map(toAuditEntry)
+  const bidOwnershipEntries = assignments
+    .filter((a) => a.entityType === 'bid')
+    .map(toOwnershipEntry)
+
+  const merged = [...bidLogEntries, ...bidOwnershipEntries].sort((a, b) => (a.changedAt < b.changedAt ? 1 : -1))
+  return <div className="p-4">{merged.map((entry) => <ActivityRow key={entry.id} entry={entry} />)}</div>
 }
 ```
 
-(Note: `useAuditLogs` filters client-side across the four Bid Tracker entity types here, rather than four separate calls — if this hook doesn't already support an unfiltered/multi-type call, adjust to call it once per entity type and merge, but do not add a second backend endpoint; Task 20's `auditLogs.list` and the existing `commercial.auditLogs.list` both already support an optional, single `entityType`.)
+(Note: `useAuditLogs` filters client-side across the four Bid Tracker entity types here, rather than four separate calls — if this hook doesn't already support an unfiltered/multi-type call, adjust to call it once per entity type and merge, but do not add a second backend endpoint; Task 20's `auditLogs.list` and the existing `commercial.auditLogs.list` both already support an optional, single `entityType`. `OwnershipAssignment.createdBy` is `null` on every row today, per `ownership.ts`'s existing `toAssignment` mapper — that's a pre-existing gap in the ownership feature this plan doesn't touch, not something introduced here; the `?? '—'` above is what makes that visible honestly instead of hiding it.)
 
 Wire into `BidTrackerWorkspace.tsx`: `{section === 'history' && <ActivityHistoryPage />}`.
 
@@ -5161,23 +5872,107 @@ Expected: PASS.
 
 ```bash
 git add src/modules/bid-tracker/pages/ActivityHistoryPage.tsx src/modules/bid-tracker/pages/ActivityHistoryPage.test.tsx src/modules/bid-tracker/BidTrackerWorkspace.tsx
-git commit -m "feat(frontend): add the Activity History page, labeling entries whose bid no longer exists"
+git commit -m "feat(frontend): add the Activity History page, merging audit-log and ownership-assignment history into one feed"
 ```
 
 ---
 
 ## Phase Q — Legacy UI guard, import/export, deployment wiring
 
-### Task 37: `WorksEditor.tsx` — read-only stage/submission date once a bid exists
+### Task 37: `bids.getForOpportunity` read procedure, repository method, and hook
+
+**Files:**
+- Modify: `apps/api/src/routers/bids.ts` (add `getForOpportunity`)
+- Modify: `apps/api/src/routers/bids.test.ts` (add cases)
+- Modify: `src/data/in-memory/repository.ts` (add `getBidForOpportunity` to the `Repository` interface and `InMemoryRepository`)
+- Modify: `src/data/remote/repository.ts` (implement `getBidForOpportunity` on `RemoteRepository`)
+- Modify: `src/lib/api.ts` (add `useBidForOpportunity`)
+
+**Interfaces:**
+- Produces: `bidsRouter.getForOpportunity`, `Repository.getBidForOpportunity(opportunityId): Promise<Bid | null>`, `useBidForOpportunity(opportunityId: string | null)`.
+- Consumed by: Task 38 (`WorksEditor.tsx`'s read-only guard), replacing an earlier, rejected draft of that task that reused `useBidsForGrid()`'s full-list fetch for a single-row lookup — `WorksEditor` renders regardless of whether the Bid Tracker module is even enabled (`VITE_BID_TRACKER_ENABLED`) or whether the signed-in user has any reason to see the grid at all, so it should not force a fetch of every bid in the system (with every joined column from Task 19's now much wider `listForGrid` query) just to answer "does opportunity X have one bid, yes or no."
+
+- [ ] **Step 1: Write the failing backend test**
+
+Append to `apps/api/src/routers/bids.test.ts`:
+
+```ts
+  it('getForOpportunity returns the bid for an opportunity that has one, and null for one that does not', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    expect((await caller.bids.getForOpportunity({ opportunityId }))?.id).toBe(bid.id)
+
+    const opp2 = await caller.opportunities.create({ departmentId, opportunityName: 'No bid yet' })
+    expect(await caller.bids.getForOpportunity({ opportunityId: opp2.id })).toBeNull()
+  })
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- bids.test.ts`
+Expected: FAIL — `getForOpportunity` doesn't exist yet.
+
+- [ ] **Step 3: Implement the procedure**
+
+Add to `bidsRouter`'s object, alongside `get`:
+
+```ts
+  getForOpportunity: protectedReadProcedure
+    .input(z.object({ opportunityId: z.string().uuid() }))
+    .query(async ({ input }) => {
+      const result = await pool.query('SELECT * FROM bids WHERE opportunity_id=$1', [input.opportunityId])
+      return result.rows[0] ? toBid(result.rows[0]) : null
+    }),
+```
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- bids.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Add the repository method and hook**
+
+In `src/data/in-memory/repository.ts`'s `Repository` interface and `InMemoryRepository` class, add `getBidForOpportunity(opportunityId: string): Promise<Bid | null>` — a plain `.find()` over the in-memory `bids` array by `opportunityId`, following this file's existing single-row lookup style (e.g. `getOpportunity`).
+
+In `src/data/remote/repository.ts`'s `RemoteRepository` class, add:
+
+```ts
+  getBidForOpportunity = (opportunityId: string): Promise<Bid | null> => this.client.bids.getForOpportunity.query({ opportunityId })
+```
+
+In `src/lib/api.ts`, add (near the other Bid Tracker hooks, Task 26):
+
+```ts
+export const useBidForOpportunity = (opportunityId: string | null) =>
+  useQuery({
+    queryKey: ['bidForOpportunity', opportunityId ?? ''],
+    queryFn: async () => (await repository.getBidForOpportunity(opportunityId!)) ?? null,
+    enabled: !!opportunityId,
+  })
+```
+
+- [ ] **Step 6: Verify the build**
+
+Run: `npm run build`
+Expected: no TypeScript errors — `InMemoryRepository` and `RemoteRepository` both satisfy the extended `Repository` interface.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add apps/api/src/routers/bids.ts apps/api/src/routers/bids.test.ts src/data/in-memory/repository.ts src/data/remote/repository.ts src/lib/api.ts
+git commit -m "feat: add bids.getForOpportunity — a single-bid-by-opportunity lookup for legacy-UI guards"
+```
+
+### Task 38: `WorksEditor.tsx` — read-only stage/submission date once a bid exists
 
 **Files:**
 - Modify: `src/features/nodes/WorksEditor.tsx`
 - Modify: `src/features/nodes/WorksEditor.test.tsx` (create if it doesn't already exist, following this component's existing test conventions if one exists elsewhere in `src/features/nodes/`)
 
 **Interfaces:**
-- Consumes: a new `useBidByOpportunity(opportunityId)`-style lookup — simplest as a small filter over `useBidsForGrid()`'s already-fetched data, or a dedicated `bids.getForOpportunity` procedure if a per-row lookup proves cleaner; prefer reusing `listForGrid`'s data (already fetched for the Bid Tracker module) over adding a new backend procedure whose only caller is this one legacy-UI guard.
+- Consumes: `useBidForOpportunity` (Task 37) — one lookup per rendered opportunity row, not the whole-grid `useBidsForGrid()` fetch an earlier draft of this task used.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing tests, covering both the bid-present and bid-absent cases**
 
 ```tsx
 // src/features/nodes/WorksEditor.test.tsx (add to the existing file, or create it following this directory's conventions if this is the first test here)
@@ -5188,9 +5983,17 @@ import * as api from '@/lib/api'
 
 describe('WorksEditor — Bid Tracker guard', () => {
   it('disables the stage control and shows a note once a bid exists for the opportunity', () => {
-    vi.spyOn(api, 'useBidsForGrid').mockReturnValue({ data: [{ id: 'b1', opportunityId: 'o1' }], isLoading: false } as any)
+    vi.spyOn(api, 'useBidForOpportunity').mockReturnValue({ data: { id: 'b1', opportunityId: 'o1' }, isLoading: false } as any)
     render(<WorksEditor opportunities={[{ id: 'o1', opportunityName: 'Tender', stageKey: 'pipeline' } as any]} />)
     expect(screen.getByText(/managed in Bid Tracker/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/stage/i)).toBeDisabled()
+  })
+
+  it('leaves the stage control editable, and shows no note, when the opportunity has no bid', () => {
+    vi.spyOn(api, 'useBidForOpportunity').mockReturnValue({ data: null, isLoading: false } as any)
+    render(<WorksEditor opportunities={[{ id: 'o2', opportunityName: 'No Bid Tender', stageKey: 'pipeline' } as any]} />)
+    expect(screen.queryByText(/managed in Bid Tracker/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/stage/i)).toBeEnabled()
   })
 })
 ```
@@ -5198,11 +6001,11 @@ describe('WorksEditor — Bid Tracker guard', () => {
 - [ ] **Step 2: Run to verify failure**
 
 Run: `npm test -- WorksEditor.test.tsx`
-Expected: FAIL — no such guard exists yet (the stage control is currently always editable).
+Expected: FAIL — no such guard exists yet (the stage control is currently always editable, and `useBidForOpportunity` isn't called from this component).
 
 - [ ] **Step 3: Implement**
 
-In `src/features/nodes/WorksEditor.tsx`, add `const { data: bids = [] } = useBidsForGrid()` (import `useBidsForGrid` from `@/lib/api`) and, for each rendered opportunity row, compute `const hasBid = bids.some((b) => b.opportunityId === opportunity.id)`. Where the stage dropdown/select and the submission-date field are currently rendered editable, wrap both in the existing conditional-disable pattern this component already uses elsewhere (e.g. however it disables fields during an in-flight save) — `disabled={hasBid}` — and render a short note beneath them when `hasBid` is true: `"Managed in Bid Tracker — open the bid to edit."` (a plain text note is sufficient; do not build a link/navigation affordance here unless the existing component already has a pattern for linking elsewhere, in which case follow it).
+In `src/features/nodes/WorksEditor.tsx`, for each rendered opportunity row call `const { data: bid } = useBidForOpportunity(opportunity.id)` (import `useBidForOpportunity` from `@/lib/api`) and compute `const hasBid = !!bid`. Where the stage dropdown/select and the submission-date field are currently rendered editable, wrap both in the existing conditional-disable pattern this component already uses elsewhere (e.g. however it disables fields during an in-flight save) — `disabled={hasBid}` — and render a short note beneath them when `hasBid` is true: `"Managed in Bid Tracker — open the bid to edit."` (a plain text note is sufficient; do not build a link/navigation affordance here unless the existing component already has a pattern for linking elsewhere, in which case follow it). If `WorksEditor` renders one row per opportunity in a loop, calling a query hook once per row is exactly this component's existing pattern for any other per-row data it already fetches this way — follow that, don't hoist it into a single batched call unless the component already does that for something else.
 
 - [ ] **Step 4: Run to verify pass**
 
@@ -5219,21 +6022,34 @@ git add src/features/nodes/WorksEditor.tsx src/features/nodes/WorksEditor.test.t
 git commit -m "feat(frontend): make WorksEditor's stage/submission-date read-only once a bid exists"
 ```
 
-### Task 38: Import/export — `bids`/`bidMilestones` domain adapters, `ExportDialog` checkbox
+### Task 39: Import/export — `bids`/`bidMilestones` domain adapters, session-level orchestration, `ExportDialog` checkbox
 
 > **Amended 2026-09-30 (Custom Fields).** The `bids` adapter also handles custom columns. **Export:** append one column per *active* custom field after the standard columns, heading = the field's name, values in their natural text form (numbers unformatted, dates `YYYY-MM-DD`, booleans `true`/`false`). **Import:** a heading that matches an *active* custom field by name or `custom:<key>` (case-insensitive, trimmed) is a value column: each cell goes through `coerceCustomValue` (invalid → that row is a validation error naming row, column and reason, never a partial write), an empty cell is "no change" (never a clear), and the writes go through the same typed upsert as `bidCustomFields.setValue` with `custom_value_set` audit entries inside the commit transaction. A heading that matches **no** standard column and **no** active custom field must **never create a field**: it is reported in the validation preview as an *unknown column* (listed by heading, with the count of non-empty cells being ignored) and the import is marked **needs review** — the user can explicitly proceed without those columns, but nothing is auto-created. A heading that matches an *archived* custom field's name is reported the same way (with "archived" noted). Tests to add: export includes active custom columns and excludes archived; import writes typed values to an existing custom field; invalid number/date/select value rejected with row context; unknown heading flagged, no `bid_custom_fields` row created; archived-field heading flagged; blank cell doesn't clear an existing value.
 
 **Files:**
 - Create: `apps/api/src/import/domains/bids.ts`
 - Create: `apps/api/src/import/domains/bids.test.ts`
-- Modify: `apps/api/src/import/session/adapters.ts` (register the new domain)
+- Create: `apps/api/src/import/domains/bidMilestones.ts`
+- Create: `apps/api/src/import/domains/bidMilestones.test.ts`
+- Modify: `apps/api/src/import/session/adapters.ts` (register both new domains)
+- Modify: `apps/api/src/import/session/dependencyGraph.ts` (add `bids: []`, `bidMilestones: ['bids']` — `DOMAIN_DEPENDENCIES` is a full `Record`, not `Partial`, so this is required for the file to type-check at all once `ImportDomainKey` gains these two keys, not an optional refinement)
+- Modify: `apps/api/src/import/session/orchestrator.test.ts` (one session-level integration test, plus its `beforeEach` cleanup)
+- Modify: `apps/api/src/import/types.ts` (add `'bids'` and `'bidMilestones'` to `ImportDomainKey`)
 - Modify: `src/features/import/ExportDialog.tsx` (add a "Bids" checkbox to the existing dataset list)
 
 **Interfaces:**
-- Consumes: `classifyRows`, `findFuzzyCandidates` from `../engine.js` (existing).
-- Produces: `validateBidRows`, `commitBidRows` matching the exact `{validate, commit, flatten}` shape every other entry in `ADAPTERS` already uses.
+- Consumes: `classifyRows`, `findFuzzyCandidates` from `../engine.js` (existing); `assertFieldsNotProtected` from `../../lib/protectedValues.js` (Task 13); `runSessionValidate`/`runSessionCommit` from `./orchestrator.js` (existing, exercised by this task's new test, not modified by it).
+- Produces: `validateBidRows`/`commitBidRows` and `validateBidMilestoneRows`/`commitBidMilestoneRows`, each matching the exact `{validate, commit, flatten}` shape every other entry in `ADAPTERS` already uses. The design spec's import section names both `bids` and `bidMilestones` as domains — an earlier draft of this task built only the former.
 
-- [ ] **Step 1: Write the failing test**
+A bid row is identified by its opportunity's **GeM Tender ID**, not a raw `opportunityId` — a human filling in a spreadsheet doesn't have opportunity UUIDs to type, and typing a real-world identifier (that can be mistyped) is exactly the case `classifyRows`'s `needsReview`/`findFuzzyCandidates` path exists for (mirrored here from `salesRoster.ts`'s exact same "resolve a human-typed identifier, fuzzy-suggest on a near-miss" pattern — this plan's own Review Focus: an earlier draft of this task tested only "a second row for an opportunity that already has a bid" as its "needs-review" case, which is a straightforward conflict, not a genuine fuzzy match, and never actually exercised `findFuzzyCandidates` at all). A milestone row is identified the same way, composed with its own `key` (`gemTenderId::key`), since a milestone only makes sense once a bid already exists to attach it to.
+
+Scope note on the two test files here: `bids.test.ts`/`bidMilestones.test.ts` call `validateXRows`/`commitXRows` **directly** — this is the same low-level adapter-contract test every existing domain in `apps/api/src/import/domains/` already has (`currencies.test.ts`, `salesRoster.test.ts`, etc.), and it's what lets `commitBidRows`'s needs-review handling (downgrading a fuzzy candidate's existing bid) be exercised in isolation. It is **not** how a real import actually reaches `commit()` — `runSessionCommit` (`orchestrator.ts`, unmodified by this plan) refuses to call ANY domain's `commit()` at all while that domain still has an unresolved needs-review/reject row anywhere in it; a needs-review row only stops blocking once the caller explicitly excludes it, at which point it's removed from what `commit()` ever sees. This task's new orchestrator-level test (Step 6) is what actually proves the real, end-to-end path — the direct-call tests alone were insufficient evidence for the Review Focus's fuzzy-match claim, since they never exercised `runSessionCommit`'s blocking behavior at all.
+
+- [ ] **Step 1: Add `'bids'` and `'bidMilestones'` to the domain key union**
+
+In `apps/api/src/import/types.ts`, add `'bids'` and `'bidMilestones'` to the `ImportDomainKey` union (alongside `'geography'`, etc.) — every other file in this task assumes they're already valid keys.
+
+- [ ] **Step 2: Write the failing tests**
 
 ```ts
 // apps/api/src/import/domains/bids.test.ts
@@ -5246,6 +6062,7 @@ describe('bids import domain', () => {
   let opportunityId: string
 
   beforeEach(async () => {
+    await pool.query('DELETE FROM protected_values')
     await pool.query('DELETE FROM bid_milestones')
     await pool.query('DELETE FROM bids')
     await pool.query('DELETE FROM opportunity_stage_changes')
@@ -5253,81 +6070,179 @@ describe('bids import domain', () => {
     await pool.query('DELETE FROM hierarchy_nodes')
     const caller = appRouter.createCaller({})
     const dept = (await caller.hierarchy.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Dept' })).id
-    opportunityId = (await caller.opportunities.create({ departmentId: dept, opportunityName: 'Imported Tender' })).id
+    opportunityId = (await caller.opportunities.create({ departmentId: dept, opportunityName: 'Imported Tender', gemTenderId: 'DRDO-SAG-2026-T881' })).id
   })
 
-  it('classifies a new bid row as create, and a bid whose opportunity already has one as needs-review', async () => {
+  it('classifies a row with an exact GeM Tender ID match as create, then a later row for the same tender ID as update', async () => {
     const client = await pool.connect()
     try {
-      const preview = await validateBidRows(client, [{ opportunityId, tenderLink: 'https://example.com' }])
+      const preview = await validateBidRows(client, [{ gemTenderId: 'DRDO-SAG-2026-T881', tenderLink: 'https://example.com' }])
       expect(preview[0].action).toBe('create')
+      await commitBidRows(client, [{ gemTenderId: 'DRDO-SAG-2026-T881', tenderLink: 'https://example.com' }], preview)
 
-      await commitBidRows(client, [{ opportunityId, tenderLink: 'https://example.com' }], preview)
-      const secondPreview = await validateBidRows(client, [{ opportunityId, tenderLink: 'https://example.com/v2' }])
-      expect(secondPreview[0].action).toBe('needs-review') // this opportunity already has a bid — a second row for it is ambiguous, not a silent duplicate-create
+      const secondPreview = await validateBidRows(client, [{ gemTenderId: 'DRDO-SAG-2026-T881', tenderLink: 'https://example.com/v2' }])
+      expect(secondPreview[0].action).toBe('update')
     } finally {
       client.release()
     }
   })
 
-  it('sets data_confidence to needs_review on commit when any committed row was needs-review', async () => {
+  it('rejects a GeM Tender ID that matches no opportunity and has no plausible near-miss', async () => {
     const client = await pool.connect()
     try {
-      const preview = await validateBidRows(client, [{ opportunityId, tenderLink: 'https://example.com' }])
-      await commitBidRows(client, [{ opportunityId, tenderLink: 'https://example.com' }], preview)
+      const preview = await validateBidRows(client, [{ gemTenderId: 'TOTALLY-UNRELATED-000', tenderLink: '' }])
+      expect(preview[0].action).toBe('reject')
+    } finally {
+      client.release()
+    }
+  })
+
+  it('classifies a near-miss (typo) GeM Tender ID as needs-review with a real fuzzy candidate, and a bulk commit downgrades that candidate\'s EXISTING bid to needs_review without applying the unresolved row', async () => {
+    const client = await pool.connect()
+    try {
+      const existingBid = await appRouter.createCaller({}).bids.create({ opportunityId })
+      // One extra trailing character — a genuine near-miss, not a
+      // straightforward duplicate-key conflict.
+      const rows = [{ gemTenderId: 'DRDO-SAG-2026-T881X', tenderLink: 'https://example.com/corrigendum' }]
+
+      const preview = await validateBidRows(client, rows)
+      expect(preview[0].action).toBe('needs-review')
+      expect(preview[0].candidates?.[0]?.key).toBe('DRDO-SAG-2026-T881')
+
+      await commitBidRows(client, rows, preview)
+      const bid = (await pool.query('SELECT * FROM bids WHERE id=$1', [existingBid.id])).rows[0]
+      expect(bid.data_confidence).toBe('needs_review') // flagged for a human to check
+      expect(bid.tender_link).toBeNull() // the unresolved row's own value was never auto-applied
+    } finally {
+      client.release()
+    }
+  })
+
+  it('sets data_confidence to verified on a clean create — the negative case for the fuzzy test above', async () => {
+    const client = await pool.connect()
+    try {
+      const preview = await validateBidRows(client, [{ gemTenderId: 'DRDO-SAG-2026-T881', tenderLink: 'https://example.com' }])
+      await commitBidRows(client, [{ gemTenderId: 'DRDO-SAG-2026-T881', tenderLink: 'https://example.com' }], preview)
     } finally {
       client.release()
     }
     const bid = (await pool.query('SELECT * FROM bids WHERE opportunity_id=$1', [opportunityId])).rows[0]
-    expect(bid.data_confidence).toBe('verified') // this row was a clean create, not fuzzy-matched — sanity check the negative case
+    expect(bid.data_confidence).toBe('verified')
+  })
+
+  it('refuses to overwrite a frozen tenderLink on commit — the import path uses the same protected-value guard as every direct edit', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    await caller.protectedValues.freeze({ entityType: 'bid', entityId: bid.id, fieldKey: 'tenderLink' })
+    const client = await pool.connect()
+    try {
+      const rows = [{ gemTenderId: 'DRDO-SAG-2026-T881', tenderLink: 'https://example.com/new' }]
+      const preview = await validateBidRows(client, rows)
+      expect(preview[0].action).toBe('update')
+      await expect(commitBidRows(client, rows, preview)).rejects.toMatchObject({ code: 'CONFLICT' })
+    } finally {
+      client.release()
+    }
   })
 })
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [ ] **Step 3: Run to verify failure**
 
-Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- bids.test.ts` (the import-domain one, at `src/import/domains/bids.test.ts` — disambiguate from `src/routers/bids.test.ts` by full path if the test runner needs it)
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- src/import/domains/bids.test.ts` (disambiguate from `src/routers/bids.test.ts` by full path)
 Expected: FAIL — module doesn't exist.
 
-- [ ] **Step 3: Implement, following `apps/api/src/import/domains/`'s existing per-domain module shape (open one of the smaller existing files, e.g. `currencies.ts`, and mirror its exact `validate*Rows(client, rows)`/`commit*Rows(client, rows, preview)` export signature and its use of `classifyRows`/`getBusinessKey`/`diffFields` from `../engine.js` — do not invent a different shape for this one domain)**
+- [ ] **Step 4: Implement, following `apps/api/src/import/domains/salesRoster.ts`'s exact pattern for resolving a human-typed identifier with a fuzzy-suggestion fallback (`classifyRows`'s real signature is `{rows, getBusinessKey, existingByKey: Map, diffFields, validateRow}` — not a 3-positional-argument call; copy `currencies.ts`'s or `salesRoster.ts`'s call shape directly, do not invent a different one)**
 
 ```ts
 // apps/api/src/import/domains/bids.ts
-import { classifyRows } from '../engine.js'
+import { z } from 'zod'
+import { classifyRows, findFuzzyCandidates } from '../engine.js'
+import { assertFieldsNotProtected } from '../../lib/protectedValues.js'
+import type { ImportFieldDiff, ImportRowResult } from '../types.js'
 
-export interface BidImportRow {
-  opportunityId: string
-  tenderLink?: string
+const bidRowSchema = z.object({
+  gemTenderId: z.string().min(1, 'GeM Tender ID is required').trim(),
+  tenderLink: z.string().optional().default(''),
+})
+export type BidImportRow = z.infer<typeof bidRowSchema>
+
+/** Every opportunity with a GeM Tender ID, whether or not it has a bid yet —
+ *  this is what a row's tenderId must resolve against (exactly or fuzzily)
+ *  to be actionable at all. */
+async function fetchOpportunityIdsByTenderId(client: { query: Function }): Promise<Map<string, string>> {
+  const result = await client.query(`SELECT id, gem_tender_id FROM opportunities WHERE gem_tender_id IS NOT NULL AND gem_tender_id <> ''`)
+  return new Map(result.rows.map((r: any) => [String(r.gem_tender_id).trim(), r.id]))
 }
 
-export async function validateBidRows(client: any, rows: BidImportRow[]) {
-  const existing = (await client.query('SELECT opportunity_id, tender_link FROM bids')).rows
-  return classifyRows(rows, existing, {
-    getBusinessKey: (row: BidImportRow) => row.opportunityId,
-    getExistingKey: (row: any) => row.opportunity_id,
-    diffFields: (row: BidImportRow, existingRow: any) => {
-      const diffs = []
-      if (existingRow && row.tenderLink !== existingRow.tender_link) {
-        diffs.push({ field: 'tenderLink', oldValue: existingRow.tender_link ?? '', newValue: row.tenderLink ?? '' })
+/** Only opportunities that already have a bid — this is classifyRows'
+ *  `existingByKey`, which decides create vs. update vs. unchanged. An
+ *  opportunity present in `fetchOpportunityIdsByTenderId` but absent here is
+ *  exactly the "create" case: a real opportunity, no bid yet. */
+async function fetchExistingBidsByTenderId(client: { query: Function }): Promise<Map<string, { tenderLink: string }>> {
+  const result = await client.query(`
+    SELECT o.gem_tender_id, b.tender_link
+    FROM bids b JOIN opportunities o ON o.id = b.opportunity_id
+    WHERE o.gem_tender_id IS NOT NULL AND o.gem_tender_id <> ''
+  `)
+  return new Map(result.rows.map((r: any) => [String(r.gem_tender_id).trim(), { tenderLink: r.tender_link ?? '' }]))
+}
+
+export async function validateBidRows(client: { query: Function }, rawRows: unknown[]): Promise<ImportRowResult[]> {
+  const opportunityIdByTenderId = await fetchOpportunityIdsByTenderId(client)
+  const existingBidsByTenderId = await fetchExistingBidsByTenderId(client)
+  const knownTenderIds = Array.from(opportunityIdByTenderId.keys())
+
+  return classifyRows<unknown, { tenderLink: string }>({
+    rows: rawRows,
+    getBusinessKey: (raw, index) => {
+      const parsed = bidRowSchema.safeParse(raw)
+      return parsed.success ? parsed.data.gemTenderId : `__row_${index}__`
+    },
+    existingByKey: existingBidsByTenderId,
+    diffFields: (raw, existing) => {
+      const row = bidRowSchema.parse(raw)
+      const diffs: ImportFieldDiff[] = []
+      if (row.tenderLink && row.tenderLink !== existing.tenderLink) {
+        diffs.push({ field: 'tenderLink', oldValue: existing.tenderLink, newValue: row.tenderLink })
       }
       return diffs
+    },
+    validateRow: (raw) => {
+      const parsed = bidRowSchema.safeParse(raw)
+      if (!parsed.success) return { errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) }
+      const key = parsed.data.gemTenderId
+      if (opportunityIdByTenderId.has(key)) return { errors: [] }
+      const suggestions = findFuzzyCandidates(key, knownTenderIds)
+      if (suggestions.length > 0) {
+        return {
+          errors: [`No opportunity found with GeM Tender ID "${key}" — did you mean one of the suggested tender IDs?`],
+          needsReview: true,
+          candidates: suggestions,
+        }
+      }
+      return { errors: [`No opportunity found with GeM Tender ID "${key}" — create the opportunity first.`] }
     },
   })
 }
 
-export async function commitBidRows(client: any, rows: BidImportRow[], preview: any[]) {
-  let anyNeedsReview = false
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i]
-    const action = preview[i].action
-    if (action === 'reject' || action === 'needs-review') { anyNeedsReview = true; continue }
-    if (action === 'create') {
+export async function commitBidRows(client: { query: Function }, rawRows: unknown[], preview: ImportRowResult[]): Promise<void> {
+  const opportunityIdByTenderId = await fetchOpportunityIdsByTenderId(client)
+
+  for (let i = 0; i < rawRows.length; i++) {
+    const result = preview[i]
+    if (!result || (result.action !== 'create' && result.action !== 'update')) continue
+    const row = bidRowSchema.parse(rawRows[i])
+    const opportunityId = opportunityIdByTenderId.get(row.gemTenderId)
+    if (!opportunityId) continue // validateBidRows already guarantees a create/update row resolves; defensive only
+
+    if (result.action === 'create') {
+      const opp = (await client.query('SELECT submission_date FROM opportunities WHERE id=$1', [opportunityId])).rows[0]
       const bidCode = await allocateBidCodeForImport(client)
       const bidRow = (await client.query(
         `INSERT INTO bids (opportunity_id, bid_code, tender_link) VALUES ($1,$2,$3) RETURNING id`,
-        [row.opportunityId, bidCode, row.tenderLink ?? null],
+        [opportunityId, bidCode, row.tenderLink || null],
       )).rows[0]
-      const opp = (await client.query('SELECT submission_date FROM opportunities WHERE id=$1', [row.opportunityId])).rows[0]
       const parsed = opp?.submission_date ? new Date(opp.submission_date) : null
       const dueAt = parsed && !Number.isNaN(parsed.getTime()) ? parsed.toISOString() : null
       await client.query(
@@ -5335,19 +6250,36 @@ export async function commitBidRows(client: any, rows: BidImportRow[], preview: 
          VALUES ($1,'submissionDeadline','submissionDeadline','Submission Deadline',$2,'manual')`,
         [bidRow.id, dueAt],
       )
-    } else if (action === 'update') {
-      await client.query('UPDATE bids SET tender_link=$1, updated_at=now() WHERE opportunity_id=$2', [row.tenderLink ?? null, row.opportunityId])
+    } else {
+      const bid = (await client.query('SELECT id FROM bids WHERE opportunity_id=$1', [opportunityId])).rows[0]
+      // Spec §13 — the import commit path is a direct-edit path like any
+      // other; a frozen tenderLink must reject it exactly the same way
+      // bids.update does, not silently overwrite it (this plan's Review Focus).
+      await assertFieldsNotProtected(client, 'bid', bid.id, ['tenderLink'])
+      await client.query('UPDATE bids SET tender_link=$1, updated_at=now() WHERE id=$2', [row.tenderLink || null, bid.id])
     }
   }
-  if (anyNeedsReview) {
-    // Spec §17 — a bulk import commit with any fuzzy-matched/needs-review row
-    // downgrades confidence for every bid this commit touched.
-    const opportunityIds = rows.map((r) => r.opportunityId)
-    await client.query(`UPDATE bids SET data_confidence='needs_review' WHERE opportunity_id = ANY($1)`, [opportunityIds])
+
+  // Spec §17 — a needs-review row (a fuzzy-matched GeM Tender ID) is never
+  // auto-applied, but the EXISTING bid its top candidate most likely refers
+  // to is flagged for a human to re-check, rather than silently doing
+  // nothing with a row that was clearly ABOUT one of the system's bids.
+  const needsReviewOpportunityIds = new Set<string>()
+  for (const result of preview) {
+    if (result.action !== 'needs-review') continue
+    const topCandidateKey = result.candidates?.[0]?.key
+    const opportunityId = topCandidateKey ? opportunityIdByTenderId.get(topCandidateKey) : undefined
+    if (opportunityId) needsReviewOpportunityIds.add(opportunityId)
+  }
+  if (needsReviewOpportunityIds.size) {
+    await client.query(
+      `UPDATE bids SET data_confidence='needs_review', updated_at=now() WHERE opportunity_id = ANY($1)`,
+      [Array.from(needsReviewOpportunityIds)],
+    )
   }
 }
 
-async function allocateBidCodeForImport(client: any): Promise<string> {
+async function allocateBidCodeForImport(client: { query: Function }): Promise<string> {
   const { formatBidCode } = await import('@goms/domain')
   const year = new Date().getFullYear()
   const result = await client.query(
@@ -5360,25 +6292,305 @@ async function allocateBidCodeForImport(client: any): Promise<string> {
 }
 ```
 
-Register `bids: { validate: validateBidRows, commit: commitBidRows, flatten: (rows: BidImportRow[]) => rows }` in `apps/api/src/import/session/adapters.ts`'s `ADAPTERS` object, matching every existing entry's exact shape.
+- [ ] **Step 5: Wire `bids` into the dependency graph and `ADAPTERS`, then run to verify pass**
 
-- [ ] **Step 4: Run to verify pass**
+In `apps/api/src/import/session/dependencyGraph.ts`, add `bids: [],` to `DOMAIN_DEPENDENCIES` (it has no in-scope cross-domain dependency — its own resolution query reads `opportunities` directly, which isn't itself one of this map's keys).
+
+Register `bids: { validate: validateBidRows, commit: commitBidRows, flatten: (preview: ImportRowResult[]) => preview }` in `apps/api/src/import/session/adapters.ts`'s `ADAPTERS` object, matching every existing entry's exact shape (the `flatten` parameter is the adapter's own preview array, already flat for this single-array domain — not the raw input rows, despite an earlier draft of this task naming the parameter `rows`).
+
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- src/import/domains/bids.test.ts`
+Expected: PASS.
+
+- [ ] **Step 6: Write the failing `bidMilestones` import-domain tests**
+
+The design spec's import section names two Bid Tracker domains, `bids` and `bidMilestones` — this step builds the second, following the exact same human-identifier/fuzzy-suggestion shape as Step 4, keyed on `gemTenderId::key` (a milestone only exists once a bid does, and `(bid_id, key)` — not the tender ID alone — is what's actually unique, per migration 1788500000000).
+
+```ts
+// apps/api/src/import/domains/bidMilestones.test.ts
+import { describe, it, expect, beforeEach } from 'vitest'
+import { pool } from '../../db.js'
+import { appRouter } from '../../index.js'
+import { validateBidMilestoneRows, commitBidMilestoneRows } from './bidMilestones.js'
+
+describe('bidMilestones import domain', () => {
+  let opportunityId: string
+  let bidId: string
+
+  beforeEach(async () => {
+    await pool.query('DELETE FROM protected_values')
+    await pool.query('DELETE FROM bid_milestones')
+    await pool.query('DELETE FROM bids')
+    await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM opportunities')
+    await pool.query('DELETE FROM hierarchy_nodes')
+    const caller = appRouter.createCaller({})
+    const dept = (await caller.hierarchy.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Dept' })).id
+    opportunityId = (await caller.opportunities.create({ departmentId: dept, opportunityName: 'Imported Tender', gemTenderId: 'DRDO-SAG-2026-T900' })).id
+    bidId = (await caller.bids.create({ opportunityId })).id
+  })
+
+  it('creates a new, independently-keyed milestone for a resolvable tender ID', async () => {
+    const client = await pool.connect()
+    try {
+      const rows = [{ gemTenderId: 'DRDO-SAG-2026-T900', milestoneType: 'preBidConference', key: 'preBidConference', label: 'Pre-Bid Conference', dueAt: '2026-10-01T14:30:00.000Z', venue: 'Delhi', notes: '' }]
+      const preview = await validateBidMilestoneRows(client, rows)
+      expect(preview[0].action).toBe('create')
+      await commitBidMilestoneRows(client, rows, preview)
+      const milestone = (await pool.query(`SELECT * FROM bid_milestones WHERE bid_id=$1 AND key='preBidConference'`, [bidId])).rows[0]
+      expect(milestone.venue).toBe('Delhi')
+    } finally {
+      client.release()
+    }
+  })
+
+  it('rejects a tender ID with no bid yet, even if the opportunity exists', async () => {
+    const client = await pool.connect()
+    try {
+      await appRouter.createCaller({}).opportunities.create({
+        departmentId: (await pool.query('SELECT department_id FROM opportunities WHERE id=$1', [opportunityId])).rows[0].department_id,
+        opportunityName: 'No bid yet', gemTenderId: 'DRDO-SAG-2026-T901',
+      })
+      const preview = await validateBidMilestoneRows(client, [{ gemTenderId: 'DRDO-SAG-2026-T901', milestoneType: 'queryDeadline', key: 'query1', label: 'Query 1', dueAt: '', venue: '', notes: '' }])
+      expect(preview[0].action).toBe('reject')
+    } finally {
+      client.release()
+    }
+  })
+
+  it('classifies a near-miss tender ID as needs-review with a real fuzzy candidate', async () => {
+    const client = await pool.connect()
+    try {
+      const preview = await validateBidMilestoneRows(client, [{ gemTenderId: 'DRDO-SAG-2026-T900X', milestoneType: 'queryDeadline', key: 'query1', label: 'Query 1', dueAt: '', venue: '', notes: '' }])
+      expect(preview[0].action).toBe('needs-review')
+      expect(preview[0].candidates?.[0]?.key).toBe('DRDO-SAG-2026-T900')
+    } finally {
+      client.release()
+    }
+  })
+
+  it('refuses to overwrite a frozen milestone on commit — the same protected-value guard as bidMilestones.update', async () => {
+    const caller = appRouter.createCaller({})
+    await caller.bidMilestones.create({ bidId, milestoneType: 'queryDeadline', key: 'query1', label: 'Query 1' })
+    await caller.protectedValues.freeze({ entityType: 'bid', entityId: bidId, fieldKey: 'query1' })
+    const client = await pool.connect()
+    try {
+      const rows = [{ gemTenderId: 'DRDO-SAG-2026-T900', milestoneType: 'queryDeadline', key: 'query1', label: 'Query 1 (renamed)', dueAt: '', venue: '', notes: '' }]
+      const preview = await validateBidMilestoneRows(client, rows)
+      expect(preview[0].action).toBe('update')
+      await expect(commitBidMilestoneRows(client, rows, preview)).rejects.toMatchObject({ code: 'CONFLICT' })
+    } finally {
+      client.release()
+    }
+  })
+})
+```
+
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- src/import/domains/bidMilestones.test.ts`
+Expected: FAIL — module doesn't exist.
+
+- [ ] **Step 7: Implement `bidMilestones.ts`, then wire it into the dependency graph and `ADAPTERS`**
+
+```ts
+// apps/api/src/import/domains/bidMilestones.ts
+import { z } from 'zod'
+import { classifyRows, findFuzzyCandidates } from '../engine.js'
+import { assertFieldsNotProtected } from '../../lib/protectedValues.js'
+import type { ImportFieldDiff, ImportRowResult } from '../types.js'
+
+const bidMilestoneRowSchema = z.object({
+  gemTenderId: z.string().min(1, 'GeM Tender ID is required').trim(),
+  milestoneType: z.string().min(1, 'Milestone Type is required'),
+  key: z.string().min(1, 'Key is required'),
+  label: z.string().min(1, 'Label is required'),
+  dueAt: z.string().optional().default(''),
+  venue: z.string().optional().default(''),
+  notes: z.string().optional().default(''),
+})
+export type BidMilestoneImportRow = z.infer<typeof bidMilestoneRowSchema>
+
+/** Every tender ID that already HAS a bid — a milestone can only attach to a
+ *  real bid, not a bare opportunity (bid_milestones.bid_id is NOT NULL,
+ *  migration 1788500000000), so this is the resolution set for both the
+ *  exact-match check and the fuzzy-suggestion fallback. An opportunity with
+ *  no bid yet is a `reject`, not a `needs-review` — nothing about the tender
+ *  ID is ambiguous, there's simply nothing valid to attach the milestone to. */
+async function fetchBidIdsByTenderId(client: { query: Function }): Promise<Map<string, string>> {
+  const result = await client.query(`
+    SELECT o.gem_tender_id, b.id AS bid_id
+    FROM bids b JOIN opportunities o ON o.id = b.opportunity_id
+    WHERE o.gem_tender_id IS NOT NULL AND o.gem_tender_id <> ''
+  `)
+  return new Map(result.rows.map((r: any) => [String(r.gem_tender_id).trim(), r.bid_id]))
+}
+
+/** Existing milestones, keyed the same composite way this adapter's own
+ *  getBusinessKey does — `${gemTenderId}::${key}` — since (bid_id, key) is
+ *  the real uniqueness constraint, not the tender ID alone. */
+async function fetchExistingMilestonesByKey(client: { query: Function }): Promise<Map<string, { label: string; dueAt: string; venue: string; notes: string }>> {
+  const result = await client.query(`
+    SELECT o.gem_tender_id, m.key, m.label, m.due_at, m.venue, m.notes
+    FROM bid_milestones m
+    JOIN bids b ON b.id = m.bid_id
+    JOIN opportunities o ON o.id = b.opportunity_id
+    WHERE o.gem_tender_id IS NOT NULL AND o.gem_tender_id <> ''
+  `)
+  return new Map(result.rows.map((r: any) => [
+    `${String(r.gem_tender_id).trim()}::${r.key}`,
+    { label: r.label, dueAt: r.due_at ? new Date(r.due_at).toISOString() : '', venue: r.venue ?? '', notes: r.notes ?? '' },
+  ]))
+}
+
+export async function validateBidMilestoneRows(client: { query: Function }, rawRows: unknown[]): Promise<ImportRowResult[]> {
+  const bidIdByTenderId = await fetchBidIdsByTenderId(client)
+  const existingByKey = await fetchExistingMilestonesByKey(client)
+  const knownTenderIds = Array.from(bidIdByTenderId.keys())
+
+  return classifyRows<unknown, { label: string; dueAt: string; venue: string; notes: string }>({
+    rows: rawRows,
+    getBusinessKey: (raw, index) => {
+      const parsed = bidMilestoneRowSchema.safeParse(raw)
+      return parsed.success ? `${parsed.data.gemTenderId}::${parsed.data.key}` : `__row_${index}__`
+    },
+    existingByKey,
+    diffFields: (raw, existing) => {
+      const row = bidMilestoneRowSchema.parse(raw)
+      const diffs: ImportFieldDiff[] = []
+      if (row.label !== existing.label) diffs.push({ field: 'label', oldValue: existing.label, newValue: row.label })
+      if (row.dueAt !== existing.dueAt) diffs.push({ field: 'dueAt', oldValue: existing.dueAt, newValue: row.dueAt })
+      if (row.venue !== existing.venue) diffs.push({ field: 'venue', oldValue: existing.venue, newValue: row.venue })
+      if (row.notes !== existing.notes) diffs.push({ field: 'notes', oldValue: existing.notes, newValue: row.notes })
+      return diffs
+    },
+    validateRow: (raw) => {
+      const parsed = bidMilestoneRowSchema.safeParse(raw)
+      if (!parsed.success) return { errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) }
+      const key = parsed.data.gemTenderId
+      if (bidIdByTenderId.has(key)) return { errors: [] }
+      const suggestions = findFuzzyCandidates(key, knownTenderIds)
+      if (suggestions.length > 0) {
+        return {
+          errors: [`No bid found for GeM Tender ID "${key}" — did you mean one of the suggested tender IDs?`],
+          needsReview: true,
+          candidates: suggestions,
+        }
+      }
+      return { errors: [`No bid found for GeM Tender ID "${key}" — the opportunity must have a bid in Bid Tracker before its milestones can be imported.`] }
+    },
+  })
+}
+
+export async function commitBidMilestoneRows(client: { query: Function }, rawRows: unknown[], preview: ImportRowResult[]): Promise<void> {
+  const bidIdByTenderId = await fetchBidIdsByTenderId(client)
+
+  for (let i = 0; i < rawRows.length; i++) {
+    const result = preview[i]
+    if (!result || (result.action !== 'create' && result.action !== 'update')) continue
+    const row = bidMilestoneRowSchema.parse(rawRows[i])
+    const bidId = bidIdByTenderId.get(row.gemTenderId)
+    if (!bidId) continue // validateBidMilestoneRows already guarantees a create/update row resolves; defensive only
+
+    const dueAt = row.dueAt || null
+    if (result.action === 'create') {
+      await client.query(
+        `INSERT INTO bid_milestones (bid_id, milestone_type, key, label, due_at, venue, notes)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [bidId, row.milestoneType, row.key, row.label, dueAt, row.venue || null, row.notes || null],
+      )
+    } else {
+      // Same protected-value guard every direct-edit path uses (spec §13) —
+      // the import commit path is a direct edit like any other, not exempt.
+      await assertFieldsNotProtected(client, 'bid', bidId, [row.key])
+      await client.query(
+        `UPDATE bid_milestones SET label=$1, due_at=$2, venue=$3, notes=$4, updated_at=now() WHERE bid_id=$5 AND key=$6`,
+        [row.label, dueAt, row.venue || null, row.notes || null, bidId, row.key],
+      )
+    }
+    if (row.key === 'submissionDeadline') {
+      await client.query('UPDATE opportunities SET submission_date=$1 WHERE id=(SELECT opportunity_id FROM bids WHERE id=$2)', [dueAt ?? '', bidId])
+    }
+  }
+}
+```
+
+In `apps/api/src/import/session/dependencyGraph.ts`, add `bidMilestones: ['bids'],` to `DOMAIN_DEPENDENCIES` — a milestone row's resolution depends on a bid already existing, whether committed in an earlier session or created earlier in the SAME session (matching `employees: ['organizationHierarchy']`'s existing precedent for an in-session same-batch dependency).
+
+Register `bidMilestones: { validate: validateBidMilestoneRows, commit: commitBidMilestoneRows, flatten: (preview: ImportRowResult[]) => preview }` in `ADAPTERS`.
+
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- src/import/domains/bidMilestones.test.ts`
+Expected: PASS.
+
+- [ ] **Step 8: Write the failing session-level integration test — proving the real orchestrator, not just the direct-call adapter tests, handles a needs-review row as intended**
+
+Append to `apps/api/src/import/session/orchestrator.test.ts`. First extend its existing `beforeEach` with two more cleanup lines (`bid_milestones` and `bids`), alongside its existing `opportunity_stage_changes`/`opportunities` lines — this file's tests didn't touch Bid Tracker tables before this task.
+
+```ts
+  it('an unresolved (needs-review) bids row blocks the WHOLE domain from committing until explicitly excluded — proving the adapter\'s own needs-review handling is reached only through the real orchestrated path, not just a direct unit-test call', async () => {
+    const dept = (await pool.query(
+      `INSERT INTO hierarchy_nodes (domain, type_key, parent_id, state_code, name, code, sort_order, metadata, status)
+       VALUES ('org','department',NULL,27,'Session Dept','SESSDEPT',0,'{}','active') RETURNING id`,
+    )).rows[0]
+    const opp = (await pool.query(
+      `INSERT INTO opportunities (department_id, state_code, opportunity_name, gem_tender_id) VALUES ($1,27,'Session Tender','DRDO-SESS-001') RETURNING id`,
+      [dept.id],
+    )).rows[0]
+
+    const domains = {
+      bids: [
+        { gemTenderId: 'DRDO-SESS-001', tenderLink: 'https://example.com/good' }, // exact match — resolves cleanly
+        { gemTenderId: 'DRDO-SESS-001X', tenderLink: 'https://example.com/typo' }, // one-character typo — a genuine fuzzy needs-review row
+      ],
+    }
+    const validated = await runSessionValidate(pool, { domains })
+    const bidsPreview = validated.previews.find((p) => p.domain === 'bids')!.preview as any[]
+    expect(bidsPreview[0].action).toBe('create')
+    expect(bidsPreview[1].action).toBe('needs-review')
+
+    // Committing without excluding the needs-review row is refused outright
+    // — the adapter's commit() is never even called for this domain at all
+    // (runSessionCommit's blocking check is shared by every domain, not
+    // bids-specific), and NEITHER row lands, not just the bad one.
+    await expect(
+      runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows: [] }, AUTHORIZED_TEST_EMAIL),
+    ).rejects.toThrow(/unresolved or rejected/)
+    const beforeExclusion = await pool.query(`SELECT COUNT(*) FROM bids WHERE opportunity_id=$1`, [opp.id])
+    expect(Number(beforeExclusion.rows[0].count)).toBe(0)
+
+    // Explicitly excluding the needs-review row lets the rest of the domain
+    // commit — and the excluded row itself has ZERO effect once excluded,
+    // including on the "downgrade the fuzzy candidate's existing bid"
+    // behavior `bids.test.ts`'s direct-call test exercises: that behavior
+    // lives inside `commitBidRows`, which is never invoked with this row
+    // still present on this path, by design.
+    const excludedRows = [{ domain: 'bids' as const, rowNumber: 2, businessKey: 'DRDO-SESS-001X', reason: "typo'd tender ID, no confident match" }]
+    const result = await runSessionCommit(pool, { domains, sessionCommitToken: validated.sessionCommitToken, excludedRows }, AUTHORIZED_TEST_EMAIL)
+    expect(result.summary.toCreate).toBe(1)
+    const bid = (await pool.query(`SELECT * FROM bids WHERE opportunity_id=$1`, [opp.id])).rows[0]
+    expect(bid).toBeDefined()
+    expect(bid.tender_link).toBe('https://example.com/good') // only the clean row's value landed
+    expect(bid.data_confidence).toBe('verified') // NOT downgraded — the excluded row never reached commit() to trigger that
+  })
+```
+
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- session/orchestrator.test.ts`
+Expected: FAIL until Steps 5/7's `dependencyGraph.ts`/`adapters.ts` wiring exists, then PASS.
+
+- [ ] **Step 9: Run the whole backend suite**
 
 Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test`
-Expected: the whole `apps/api` suite passes, including the new import-domain test and the existing `session/dependencyGraph.test.ts`/`sessionUpload.test.ts` (confirm the new `bids` entry doesn't break topological ordering — it has no dependency on any other import domain, so it should sort freely).
+Expected: the whole `apps/api` suite passes, including both new import-domain test files and the existing `session/dependencyGraph.test.ts`/`sessionUpload.test.ts` (confirm the new `bids`/`bidMilestones` entries sort correctly — `bidMilestones` after `bids`, per the dependency just added).
 
-- [ ] **Step 5: Add the Export checkbox**
+- [ ] **Step 10: Add the Export checkbox**
 
 In `src/features/import/ExportDialog.tsx`, add a "Bids" entry to the existing dataset checkbox list, following its exact existing pattern for e.g. "Opportunities" — wire it to call `repository.listBidsForGrid()` and serialize via the same `workbookToCsv`-adjacent CSV-writing helper this file already uses for its other datasets.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
-git add apps/api/src/import/domains/bids.ts apps/api/src/import/domains/bids.test.ts apps/api/src/import/session/adapters.ts src/features/import/ExportDialog.tsx
-git commit -m "feat: add bids to the admin-import pipeline and the CSV export dialog"
+git add apps/api/src/import/domains/bids.ts apps/api/src/import/domains/bids.test.ts apps/api/src/import/domains/bidMilestones.ts apps/api/src/import/domains/bidMilestones.test.ts apps/api/src/import/session/adapters.ts apps/api/src/import/session/dependencyGraph.ts apps/api/src/import/session/orchestrator.test.ts apps/api/src/import/types.ts src/features/import/ExportDialog.tsx
+git commit -m "feat: add bids/bidMilestones to the admin-import pipeline, prove needs-review handling through the real session orchestrator, and add the CSV export dialog checkbox"
 ```
 
-### Task 39: CI — `VITE_BID_TRACKER_ENABLED` in `deploy-dev`
+### Task 40: CI — `VITE_BID_TRACKER_ENABLED` in `deploy-dev`
 
 **Files:**
 - Modify: `.gitlab-ci.yml`
@@ -5407,5 +6619,1275 @@ Expected: parses without error — this is a pure text-line addition inside an e
 git add .gitlab-ci.yml
 git commit -m "ci: enable Bid Tracker on the goms-dev build"
 ```
+
+---
+
+## Phase R — Master Grid: the rest of spec §8, and the two workspace-level surfaces spec §7/§15 name but no earlier task builds
+
+Every task in this phase modifies a file an earlier task already created — nothing here is a new module. Each is independently reviewable and testable on its own, and none blocks any earlier task (they only extend what those tasks already shipped), which is why they're appended here rather than renumbered into the middle of the plan.
+
+### Task 41: Master Grid — Customize Columns UI, row selection, and bulk actions
+
+**Files:**
+- Modify: `src/modules/bid-tracker/components/MasterGrid.tsx` (row selection, bulk-action toolbar, Customize Columns trigger)
+- Modify: `src/modules/bid-tracker/components/MasterGrid.test.tsx` (add cases)
+- Create: `src/modules/bid-tracker/useColumnVisibilityPersistence.ts` (debounced, latest-state persistence of column visibility into the active saved view)
+- Create: `src/modules/bid-tracker/useColumnVisibilityPersistence.test.ts`
+- Modify: `src/modules/bid-tracker/BidTrackerWorkspace.tsx` (wire the hook in; persist column-visibility changes into the active saved view, except while it's a system view — spec §8/§9.2)
+
+**Interfaces:**
+- Consumes: `useBidMutations` (`archive`/`unarchive`, already destructured in `MasterGrid` by Task 28), `useOwnershipMutations` (`assign` — this codebase's existing ownership-assignment hook, already used by Account Mapping; reused as-is, not duplicated), `useSalesPersons`, `useBidSavedViewMutations` (`update`) — Tasks 24-26 and this codebase's pre-existing ownership hooks.
+- Produces: `MasterGrid` gains built-in row selection and a bulk-action toolbar; no new prop surface beyond what Task 28 already defined (`columnVisibility`/`onColumnVisibilityChange` already existed as unused plumbing — this task is what finally exercises them). `useColumnVisibilityPersistence(activeView, updateSavedView)`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```tsx
+// Add to src/modules/bid-tracker/components/MasterGrid.test.tsx
+import userEvent from '@testing-library/user-event'
+import * as archiveApi from '@/lib/api'
+
+const TWO_ROWS = [
+  { id: 'b1', bidCode: 'BID-2026-0001', opportunityId: 'o1', opportunityName: 'AI Document Processing System', gemTenderId: 'T-1', stageKey: 'qualification', decision: 'pending', status: 'active', dataConfidence: 'verified', attentionFlag: 'dueSoon', departmentId: 'd1', departmentName: 'DRDO', stateCode: 7, submissionDate: '2026-10-10', valueAmount: '6.2', valueUnit: 'crore', emdAmount: '12.4', emdUnit: 'lakh', vertical: 'Defence', ownerEmail: null, solutionLeadEmail: null, documentCount: 0, latestCorrigendumStatus: null, nextMilestoneLabel: null, nextMilestoneDueAt: null, daysRemaining: null, nextActionNote: null, nextActionDueDate: null, updatedBy: null, tenderLink: null, archivedAt: null, createdAt: '', updatedAt: '' },
+  { id: 'b2', bidCode: 'BID-2026-0002', opportunityId: 'o2', opportunityName: 'Traffic Signal Modernization', gemTenderId: 'T-2', stageKey: 'solutioning', decision: 'pending', status: 'active', dataConfidence: 'verified', attentionFlag: 'onTrack', departmentId: 'd2', departmentName: 'MoRTH', stateCode: 9, submissionDate: '2026-11-01', valueAmount: '3.1', valueUnit: 'crore', emdAmount: '6.0', emdUnit: 'lakh', vertical: 'Transport', ownerEmail: null, solutionLeadEmail: null, documentCount: 0, latestCorrigendumStatus: null, nextMilestoneLabel: null, nextMilestoneDueAt: null, daysRemaining: null, nextActionNote: null, nextActionDueDate: null, updatedBy: null, tenderLink: null, archivedAt: null, createdAt: '', updatedAt: '' },
+]
+
+describe('MasterGrid — selection, bulk actions, Customize Columns', () => {
+  it('selecting rows reveals a bulk-action toolbar, and Archive Selected calls the archive mutation once per selected row', async () => {
+    vi.spyOn(archiveApi, 'useBidsForGrid').mockReturnValue({ data: TWO_ROWS, isLoading: false } as any)
+    const archiveMutate = vi.fn().mockResolvedValue(undefined)
+    vi.spyOn(archiveApi, 'useBidMutations').mockReturnValue({
+      create: {}, update: {}, archive: { mutateAsync: archiveMutate }, unarchive: {}, remove: {},
+    } as any)
+    vi.spyOn(archiveApi, 'useOwnershipMutations').mockReturnValue({ assign: { mutateAsync: vi.fn() }, end: {}, transferBookOfBusiness: {} } as any)
+    vi.spyOn(archiveApi, 'useSalesPersons').mockReturnValue({ data: [], isLoading: false } as any)
+    const qc = new QueryClient()
+    render(<QueryClientProvider client={qc}><MasterGrid filterRules={[]} /></QueryClientProvider>)
+
+    expect(screen.queryByRole('button', { name: /archive selected/i })).not.toBeInTheDocument()
+    await userEvent.click(screen.getAllByRole('checkbox', { name: /select row/i })[0])
+    expect(screen.getByText(/1 selected/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /archive selected/i }))
+    expect(archiveMutate).toHaveBeenCalledWith('b1')
+    expect(archiveMutate).toHaveBeenCalledTimes(1)
+  })
+
+  it('Customize Columns toggles a column\'s visibility', async () => {
+    vi.spyOn(archiveApi, 'useBidsForGrid').mockReturnValue({ data: TWO_ROWS, isLoading: false } as any)
+    vi.spyOn(archiveApi, 'useBidMutations').mockReturnValue({ create: {}, update: {}, archive: {}, unarchive: {}, remove: {} } as any)
+    vi.spyOn(archiveApi, 'useOwnershipMutations').mockReturnValue({ assign: {}, end: {}, transferBookOfBusiness: {} } as any)
+    vi.spyOn(archiveApi, 'useSalesPersons').mockReturnValue({ data: [], isLoading: false } as any)
+    const onColumnVisibilityChange = vi.fn()
+    const qc = new QueryClient()
+    render(<QueryClientProvider client={qc}><MasterGrid filterRules={[]} columnVisibility={{}} onColumnVisibilityChange={onColumnVisibilityChange} /></QueryClientProvider>)
+
+    await userEvent.click(screen.getByRole('button', { name: /customize columns/i }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Sector' }))
+    expect(onColumnVisibilityChange).toHaveBeenCalled()
+  })
+})
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `npm test -- MasterGrid.test.tsx`
+Expected: FAIL — no selection checkboxes, no bulk-action toolbar, no Customize Columns button exist yet.
+
+- [ ] **Step 3: Implement**
+
+Task 28's `buildColumns(onToggleArchive)` (`src/modules/bid-tracker/components/MasterGrid.tsx`) already takes a callback and returns the array fresh per call — add a leading selection column there, prepended to its returned array, not a second, parallel column list:
+
+```tsx
+const SELECT_COLUMN = col.display({
+  id: 'select',
+  header: ({ table }) => (
+    <Checkbox aria-label="Select all rows" checked={table.getIsAllRowsSelected()} onChange={table.getToggleAllRowsSelectedHandler()} />
+  ),
+  cell: ({ row }) => (
+    <Checkbox aria-label="Select row" checked={row.getIsSelected()} onChange={row.getToggleSelectedHandler()} onClick={(e: React.MouseEvent) => e.stopPropagation()} />
+  ),
+})
+
+function buildColumns(onToggleArchive: (row: BidGridRow) => void) {
+  return [
+    SELECT_COLUMN,
+    col.group({ id: 'identity', header: 'Identity', columns: [/* unchanged from Task 28 */] }),
+    // ...every other group from Task 28, unchanged
+  ]
+}
+```
+
+(add the import `import { Checkbox } from '@/components/ui/Checkbox'`).
+
+In the `MasterGrid` component — `archive` is already destructured from `useBidMutations()` by Task 28 (alongside `unarchive`, for the per-row Manage column), so this step only adds `useOwnershipMutations`/`useSalesPersons` and the selection/reassign state:
+
+```tsx
+import { useState } from 'react'
+import { Menu, MenuItem } from '@/components/ui/Menu'
+import { Dialog } from '@/components/ui/Dialog'
+import { Combobox } from '@/components/ui/Combobox'
+import { useOwnershipMutations, useSalesPersons } from '@/lib/api'
+import type { RowSelectionState } from '@tanstack/react-table'
+
+// ...inside MasterGrid(), alongside the existing `sorting` state and Task
+// 28's `const { archive, unarchive } = useBidMutations()`:
+const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
+const [reassignOpen, setReassignOpen] = useState(false)
+const { assign } = useOwnershipMutations()
+const { data: salesPersons = [] } = useSalesPersons()
+
+const columns = buildColumns((row) => (row.status === 'archived' ? unarchive : archive).mutateAsync(row.id)) // unchanged call from Task 28
+const table = useReactTable({
+  data: rows, columns,
+  state: { sorting, columnVisibility: columnVisibility ?? {}, rowSelection },
+  onSortingChange: setSorting, onColumnVisibilityChange: onColumnVisibilityChange as any,
+  onRowSelectionChange: setRowSelection,
+  getRowId: (row) => row.id, enableRowSelection: true,
+  getCoreRowModel: getCoreRowModel(), getSortedRowModel: getSortedRowModel(),
+})
+const selectedIds = Object.keys(rowSelection)
+
+async function archiveSelected() {
+  for (const id of selectedIds) await archive.mutateAsync(id)
+  setRowSelection({})
+}
+async function reassignSelected(salesPersonId: string) {
+  const today = new Date().toISOString().slice(0, 10)
+  for (const id of selectedIds) {
+    await assign.mutateAsync({ entityType: 'bid', entityId: id, salesPersonId, startDate: today })
+  }
+  setRowSelection({})
+  setReassignOpen(false)
+}
+```
+
+Render the toolbar above the `<table>` (inside the same returned JSX, before it) and the Customize Columns trigger beside it:
+
+```tsx
+<div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+  <Menu trigger={({ toggle }) => <Button variant="secondary" size="sm" onClick={toggle}>Customize Columns</Button>}>
+    {table.getAllLeafColumns().filter((c) => c.id !== 'select').map((c) => (
+      <label key={c.id} className="flex items-center gap-2 px-2 py-1 text-sm">
+        <Checkbox aria-label={String(flexRender(c.columnDef.header, {} as any) ?? c.id)} checked={c.getIsVisible()} onChange={c.getToggleVisibilityHandler()} />
+        {typeof c.columnDef.header === 'string' ? c.columnDef.header : c.id}
+      </label>
+    ))}
+  </Menu>
+  {selectedIds.length > 0 && (
+    <div className="flex items-center gap-2 text-sm">
+      <span>{selectedIds.length} selected</span>
+      <Button variant="secondary" size="sm" onClick={archiveSelected}>Archive Selected</Button>
+      <Button variant="secondary" size="sm" onClick={() => setReassignOpen(true)}>Reassign Owner</Button>
+    </div>
+  )}
+</div>
+{reassignOpen && (
+  <Dialog onClose={() => setReassignOpen(false)} title={`Reassign Owner for ${selectedIds.length} Bid${selectedIds.length === 1 ? '' : 's'}`}>
+    <Combobox
+      aria-label="New owner"
+      value=""
+      onChange={reassignSelected}
+      options={salesPersons.map((p: any) => ({ value: p.id, label: p.name }))}
+      placeholder="Choose a sales person…"
+    />
+  </Dialog>
+)}
+```
+
+(The Customize Columns checkbox `aria-label` derives from the column's own `header` string, which is why every leaf column in Task 28's `buildColumns` uses a plain string header rather than a function, except `manage` (no `header` string needed for a display column with a fixed label already passed as its `header` prop directly) — confirm this still holds after Task 28's edits before relying on it here.)
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `npm test -- MasterGrid.test.tsx`
+Expected: PASS.
+
+- [ ] **Step 5: Wire column-visibility persistence into the active saved view — debounced, latest-state, and flushed before it can go stale**
+
+`BidSavedView.visibleColumns` (Task 24) is a plain `string[]` column, not a `Record<string, boolean>` — this task defines its contents as **the list of hidden leaf column ids** (an empty array means every column is visible, the default), and converts to/from `@tanstack/react-table`'s `VisibilityState` at the boundary. Debouncing is **mandatory**, not a later enhancement (spec §8) — a bare, non-debounced write-per-toggle is not an acceptable interim state, because it also isn't correct in the failure mode this task's Review Focus calls out: switching saved views (or unmounting) with a debounce timer still pending must not silently drop the last change, so a naive `setTimeout` alone is insufficient without an explicit flush on that transition.
+
+This logic is extracted into its own hook, `useColumnVisibilityPersistence`, specifically so it has an independent unit test that doesn't require rendering the whole `BidTrackerWorkspace` tree with every one of its other hooks mocked:
+
+```ts
+// src/modules/bid-tracker/useColumnVisibilityPersistence.ts
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { VisibilityState } from '@tanstack/react-table'
+import type { BidSavedView } from '@/lib/types'
+
+const DEBOUNCE_MS = 400
+
+/** Converts {@link BidSavedView.visibleColumns} (a plain hidden-column-id
+ *  array) to/from @tanstack/react-table's VisibilityState, and persists
+ *  changes back into the active saved view — debounced, and always carrying
+ *  the LATEST state, never a stale intermediate one. System views (spec
+ *  §9.2) have no row to persist into: changes made while one is active stay
+ *  session-only and revert on reload, per spec §8. */
+export function useColumnVisibilityPersistence(
+  activeView: BidSavedView | undefined,
+  updateSavedView: { mutate: (a: { id: string; patch: { visibleColumns: string[] } }) => void },
+) {
+  const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
+  const pendingRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; viewId: string | null; hiddenIds: string[] | null }>({
+    timer: null, viewId: null, hiddenIds: null,
+  })
+
+  const flushPendingWrite = useCallback(() => {
+    const pending = pendingRef.current
+    if (pending.timer) clearTimeout(pending.timer)
+    pending.timer = null
+    if (pending.viewId && pending.hiddenIds) {
+      updateSavedView.mutate({ id: pending.viewId, patch: { visibleColumns: pending.hiddenIds } })
+    }
+    pending.viewId = null
+    pending.hiddenIds = null
+  }, [updateSavedView])
+
+  useEffect(() => {
+    const hiddenIds = activeView?.visibleColumns ?? []
+    setColumnVisibility(Object.fromEntries(hiddenIds.map((id) => [id, false])))
+    // Flush BEFORE leaving this view (a view switch or unmount) — otherwise
+    // a rapid toggle immediately followed by switching views drops the last
+    // change silently instead of ever reaching the server (this task's
+    // Review Focus: "rapid visibility changes cannot leave the saved view
+    // with stale state").
+    return () => flushPendingWrite()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeView?.id])
+
+  const handleColumnVisibilityChange = useCallback((updater: any) => {
+    setColumnVisibility((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      if (activeView && !activeView.isSystem) {
+        const hiddenIds = Object.keys(next).filter((k) => next[k] === false)
+        // Debounced, latest-state write: every call within the window
+        // replaces the pending payload and resets the timer, so a burst of
+        // rapid toggles produces exactly one network call carrying the
+        // FINAL state — never one call per toggle, and never a write that
+        // fires with a payload older than the user's last action.
+        pendingRef.current.viewId = activeView.id
+        pendingRef.current.hiddenIds = hiddenIds
+        if (pendingRef.current.timer) clearTimeout(pendingRef.current.timer)
+        pendingRef.current.timer = setTimeout(flushPendingWrite, DEBOUNCE_MS)
+      }
+      return next
+    })
+  }, [activeView, flushPendingWrite])
+
+  return { columnVisibility, handleColumnVisibilityChange }
+}
+```
+
+- [ ] **Step 6: Write the failing regression test proving rapid changes cannot leave stale state**
+
+```ts
+// src/modules/bid-tracker/useColumnVisibilityPersistence.test.ts
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { renderHook, act } from '@testing-library/react'
+import { useColumnVisibilityPersistence } from './useColumnVisibilityPersistence'
+
+const GLOBAL_VIEW = { id: 'v1', name: 'My View', scope: 'global', ownerEmail: null, isSystem: false, filterRules: [], sort: [], visibleColumns: [], createdBy: null, createdAt: null, updatedAt: null } as const
+
+describe('useColumnVisibilityPersistence', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('a burst of rapid toggles debounces into exactly one write, carrying the FINAL state', () => {
+    const mutate = vi.fn()
+    const { result } = renderHook(() => useColumnVisibilityPersistence(GLOBAL_VIEW as any, { mutate }))
+
+    act(() => { result.current.handleColumnVisibilityChange({ colA: false }) })
+    act(() => { vi.advanceTimersByTime(100) }) // still inside the debounce window
+    act(() => { result.current.handleColumnVisibilityChange({ colA: false, colB: false }) })
+    act(() => { vi.advanceTimersByTime(100) })
+    act(() => { result.current.handleColumnVisibilityChange({ colA: false, colB: false, colC: false }) })
+
+    expect(mutate).not.toHaveBeenCalled() // nothing fires until the debounce window elapses
+    act(() => { vi.advanceTimersByTime(400) })
+    expect(mutate).toHaveBeenCalledTimes(1) // exactly one write for the whole burst
+    expect(mutate).toHaveBeenCalledWith({ id: 'v1', patch: { visibleColumns: ['colA', 'colB', 'colC'] } }) // the LAST state, not the first or an intermediate one
+  })
+
+  it('switching the active view before the debounce fires flushes the pending write immediately — it is never silently dropped', () => {
+    const mutate = vi.fn()
+    const { result, rerender } = renderHook(
+      ({ view }) => useColumnVisibilityPersistence(view as any, { mutate }),
+      { initialProps: { view: GLOBAL_VIEW } },
+    )
+    act(() => { result.current.handleColumnVisibilityChange({ colA: false }) })
+    expect(mutate).not.toHaveBeenCalled() // still pending, well inside the 400ms window
+
+    const otherView = { ...GLOBAL_VIEW, id: 'v2' }
+    rerender({ view: otherView as any })
+
+    // The switch itself must have flushed the FIRST view's pending write —
+    // it does not wait for the (now-irrelevant, cancelled) original timer.
+    expect(mutate).toHaveBeenCalledTimes(1)
+    expect(mutate).toHaveBeenCalledWith({ id: 'v1', patch: { visibleColumns: ['colA'] } })
+  })
+
+  it('a system view never persists — column changes are session-only', () => {
+    const mutate = vi.fn()
+    const systemView = { ...GLOBAL_VIEW, id: 'allBids', isSystem: true }
+    const { result } = renderHook(() => useColumnVisibilityPersistence(systemView as any, { mutate }))
+    act(() => { result.current.handleColumnVisibilityChange({ colA: false }) })
+    act(() => { vi.advanceTimersByTime(1000) })
+    expect(mutate).not.toHaveBeenCalled()
+  })
+})
+```
+
+Run: `npm test -- useColumnVisibilityPersistence.test.ts`
+Expected: FAIL until Step 5's hook exists, then PASS once it does — write the hook first if running this before Step 5, or treat Steps 5-6 as one red/green pair (this plan already writes several hook-plus-test pairs in this order elsewhere, e.g. Task 24/26).
+
+- [ ] **Step 7: Wire the hook into `BidTrackerWorkspace.tsx`**
+
+In `BidTrackerWorkspace.tsx` (already holding `activeViewId`/`activeView` since Task 29):
+
+```tsx
+import { useColumnVisibilityPersistence } from './useColumnVisibilityPersistence'
+
+// ...
+const { update: updateSavedView } = useBidSavedViewMutations()
+const { columnVisibility, handleColumnVisibilityChange } = useColumnVisibilityPersistence(activeView, updateSavedView)
+```
+
+Pass `columnVisibility={columnVisibility}` and `onColumnVisibilityChange={handleColumnVisibilityChange}` into `<MasterGrid>`.
+
+- [ ] **Step 8: Run the full frontend suite for regressions**
+
+Run: `npm test`
+Expected: no regression in `BidTrackerWorkspace.test.tsx`, `SavedViewTabs.test.tsx`, or any other Bid Tracker frontend test.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add src/modules/bid-tracker/components/MasterGrid.tsx src/modules/bid-tracker/components/MasterGrid.test.tsx src/modules/bid-tracker/useColumnVisibilityPersistence.ts src/modules/bid-tracker/useColumnVisibilityPersistence.test.ts src/modules/bid-tracker/BidTrackerWorkspace.tsx
+git commit -m "feat(frontend): add Customize Columns, row selection, bulk archive/reassign, and debounced column-visibility persistence to the Master Grid"
+```
+
+### Task 42: Master Grid — ad-hoc filter UI
+
+**Files:**
+- Create: `src/modules/bid-tracker/components/FilterBar.tsx`
+- Create: `src/modules/bid-tracker/components/FilterBar.test.tsx`
+- Modify: `src/modules/bid-tracker/BidTrackerWorkspace.tsx` (hold ad-hoc filter state, merge it with the active saved view's `filterRules` before passing into `MasterGrid`)
+
+**Interfaces:**
+- Consumes: `BidGridRow` field names as the filterable-field list; the same `{field, operator: 'eq', value}` shape `bids.listForGrid`/`SystemBidView` already use (Task 1, Task 19) — no new filter grammar.
+- Produces: `<FilterBar rules, onChange>` — an "Add Filter" control that appends `{field, operator:'eq', value}` rows, each removable.
+
+Scope note: this is a plain-equality filter builder over the same `{field, operator: 'eq', value}` rules the rest of Bid Tracker already uses (saved views, `applyFilterRules` — Task 19) — it does not add a new operator vocabulary. A richer filter grammar (contains/range/multi-select) is out of scope here and would be its own follow-on if requested.
+
+- [ ] **Step 1: Write the failing test**
+
+```tsx
+// src/modules/bid-tracker/components/FilterBar.test.tsx
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { FilterBar } from './FilterBar'
+
+describe('FilterBar', () => {
+  it('adds a field/value filter rule and calls onChange with it, then removes it', async () => {
+    const onChange = vi.fn()
+    const { rerender } = render(<FilterBar rules={[]} onChange={onChange} />)
+    await userEvent.click(screen.getByRole('button', { name: /add filter/i }))
+    await userEvent.click(screen.getByRole('option', { name: /bid stage/i }))
+    await userEvent.type(screen.getByPlaceholderText(/value/i), 'qualification')
+    await userEvent.keyboard('{Enter}')
+    expect(onChange).toHaveBeenCalledWith([{ field: 'stageKey', operator: 'eq', value: 'qualification' }])
+
+    rerender(<FilterBar rules={[{ field: 'stageKey', operator: 'eq', value: 'qualification' }]} onChange={onChange} />)
+    await userEvent.click(screen.getByRole('button', { name: /remove filter/i }))
+    expect(onChange).toHaveBeenCalledWith([])
+  })
+})
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `npm test -- FilterBar.test.tsx`
+Expected: FAIL — component doesn't exist.
+
+- [ ] **Step 3: Implement**
+
+```tsx
+// src/modules/bid-tracker/components/FilterBar.tsx
+import { useState } from 'react'
+import { Combobox } from '@/components/ui/Combobox'
+import { Button } from '@/components/ui/Button'
+import type { BidSavedView } from '@/lib/types'
+
+type FilterRule = BidSavedView['filterRules'][number]
+
+// Field list mirrors buildColumns' leaf accessors (Task 28) that are
+// meaningful to filter on — a plain-text/count column like tenderLink or
+// documentCount isn't, so it's left out rather than offered and silently
+// matching nothing for a non-enum value.
+const FILTERABLE_FIELDS: { value: string; label: string }[] = [
+  { value: 'stageKey', label: 'Bid Stage' },
+  { value: 'decision', label: 'Decision' },
+  { value: 'attentionFlag', label: 'Attention' },
+  { value: 'dataConfidence', label: 'Data Confidence' },
+  { value: 'ownerEmail', label: 'Bid Owner Email' },
+  { value: 'vertical', label: 'Sector' },
+  { value: 'departmentId', label: 'Department ID' },
+]
+
+export function FilterBar({ rules, onChange }: { rules: FilterRule[]; onChange: (rules: FilterRule[]) => void }) {
+  const [draftField, setDraftField] = useState('')
+  const [draftValue, setDraftValue] = useState('')
+  const [adding, setAdding] = useState(false)
+
+  function commitDraft() {
+    if (!draftField || !draftValue.trim()) return
+    onChange([...rules, { field: draftField, operator: 'eq', value: draftValue.trim() }])
+    setDraftField('')
+    setDraftValue('')
+    setAdding(false)
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2 text-sm">
+      {rules.map((rule, i) => {
+        const label = FILTERABLE_FIELDS.find((f) => f.value === rule.field)?.label ?? rule.field
+        return (
+          <span key={`${rule.field}-${i}`} className="flex items-center gap-1 rounded-full bg-surface px-3 py-1">
+            {label}: {rule.value}
+            <button aria-label="Remove filter" onClick={() => onChange(rules.filter((_, j) => j !== i))}>×</button>
+          </span>
+        )
+      })}
+      {adding ? (
+        <div className="flex items-center gap-2">
+          <Combobox aria-label="Filter field" value={draftField} onChange={setDraftField} options={FILTERABLE_FIELDS} placeholder="Field…" />
+          <input
+            placeholder="Value…"
+            value={draftValue}
+            onChange={(e) => setDraftValue(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && commitDraft()}
+          />
+        </div>
+      ) : (
+        <Button variant="ghost" size="sm" onClick={() => setAdding(true)}>+ Add Filter</Button>
+      )}
+    </div>
+  )
+}
+```
+
+Wire into `BidTrackerWorkspace.tsx`: hold `const [adHocFilterRules, setAdHocFilterRules] = useState<FilterRule[]>([])`, render `<FilterBar rules={adHocFilterRules} onChange={setAdHocFilterRules} />` above `<MasterGrid>`, and pass `filterRules={[...(activeView?.filterRules ?? []), ...adHocFilterRules]}` into it — an ad-hoc filter narrows whatever the active saved view already shows, it doesn't replace it (matching how the reference screenshots layer a search/filter bar on top of an already-selected pill-tab).
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `npm test -- FilterBar.test.tsx`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/modules/bid-tracker/components/FilterBar.tsx src/modules/bid-tracker/components/FilterBar.test.tsx src/modules/bid-tracker/BidTrackerWorkspace.tsx
+git commit -m "feat(frontend): add an ad-hoc equality filter bar above the Master Grid"
+```
+
+### Task 43: Top-level Milestones & Dates workspace page
+
+**Files:**
+- Create: `src/modules/bid-tracker/pages/MilestonesDatesPage.tsx`
+- Create: `src/modules/bid-tracker/pages/MilestonesDatesPage.test.tsx`
+- Modify: `src/modules/bid-tracker/BidTrackerWorkspace.tsx` (render it for `section === 'milestones'`)
+- Modify: `apps/api/src/routers/bidMilestones.ts` (add `listAll`)
+- Modify: `apps/api/src/routers/bidMilestones.test.ts` (add a case)
+- Modify: `src/data/in-memory/repository.ts`, `src/data/remote/repository.ts`, `src/lib/api.ts` (`listAllBidMilestones`/`useAllBidMilestones`)
+
+**Interfaces:**
+- Produces: `bidMilestonesRouter.listAll` (every milestone across every bid, joined with its bid/opportunity for display — distinct from `listForBid`, which Task 12 already built and the per-bid Milestones tab, Task 31, still uses unmodified), `<MilestonesDatesPage>`.
+
+This is the workspace-wide view spec §7 lists as one of `BidTrackerWorkspace.tsx`'s four tabs (`SECTIONS`, Task 27) — every upcoming milestone across every active bid, sorted by date, so a user can see "what's due across the whole portfolio this week" without opening bids one at a time. It is **not** the same surface as Task 31's `MilestonesTab`, which shows one bid's own milestones inside its detail workspace; that tab is unchanged by this task.
+
+- [ ] **Step 1: Write the failing backend test**
+
+Append to `apps/api/src/routers/bidMilestones.test.ts`:
+
+```ts
+  it('listAll returns every milestone across every bid, joined with its bid code and opportunity name', async () => {
+    const caller = appRouter.createCaller({})
+    const all = await caller.bidMilestones.listAll()
+    const seeded = all.find((m: any) => m.key === 'submissionDeadline' && m.bidId === bidId)
+    expect(seeded).toMatchObject({ opportunityName: 'Tender' })
+  })
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- bidMilestones.test.ts`
+Expected: FAIL — `listAll` doesn't exist.
+
+- [ ] **Step 3: Implement the procedure**
+
+Add to `bidMilestonesRouter`'s object:
+
+```ts
+  listAll: protectedReadProcedure.query(async () => {
+    const result = await pool.query(`
+      SELECT m.*, b.bid_code, o.opportunity_name
+      FROM bid_milestones m
+      JOIN bids b ON b.id = m.bid_id
+      JOIN opportunities o ON o.id = b.opportunity_id
+      ORDER BY m.due_at NULLS LAST
+    `)
+    return result.rows.map((r: any) => ({ ...toBidMilestone(r), bidCode: r.bid_code, opportunityName: r.opportunity_name }))
+  }),
+```
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- bidMilestones.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Add the repository method and hook**
+
+`src/data/in-memory/repository.ts`: add `listAllBidMilestones(): Promise<(BidMilestone & { bidCode: string; opportunityName: string })[]>` — join the in-memory `bidMilestones`/`bids`/`opportunities` arrays, same style as the rest of this file.
+
+`src/data/remote/repository.ts`: `listAllBidMilestones = (): Promise<...> => this.client.bidMilestones.listAll.query()`.
+
+`src/lib/api.ts`: `export const useAllBidMilestones = () => useQuery({ queryKey: ['allBidMilestones'], queryFn: () => repository.listAllBidMilestones() })`.
+
+- [ ] **Step 6: Write the failing frontend test**
+
+```tsx
+// src/modules/bid-tracker/pages/MilestonesDatesPage.test.tsx
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import { MilestonesDatesPage } from './MilestonesDatesPage'
+import * as api from '@/lib/api'
+
+describe('MilestonesDatesPage', () => {
+  it('lists every milestone across every bid, with its opportunity name and due date, sorted soonest-first', () => {
+    vi.spyOn(api, 'useAllBidMilestones').mockReturnValue({
+      data: [
+        { id: 'm1', bidId: 'b1', bidCode: 'BID-2026-0001', opportunityName: 'Later Tender', milestoneType: 'submissionDeadline', key: 'submissionDeadline', label: 'Submission Deadline', dueAt: '2026-12-01T00:00:00.000Z', venue: null, notes: null, status: 'open', source: 'manual', createdAt: '', updatedAt: '' },
+        { id: 'm2', bidId: 'b2', bidCode: 'BID-2026-0002', opportunityName: 'Sooner Tender', milestoneType: 'preBidConference', key: 'preBidConference', label: 'Pre-Bid Conference', dueAt: '2026-10-05T00:00:00.000Z', venue: 'Delhi', notes: null, status: 'open', source: 'manual', createdAt: '', updatedAt: '' },
+      ],
+      isLoading: false,
+    } as any)
+    render(<MemoryRouter><MilestonesDatesPage /></MemoryRouter>)
+    const rows = screen.getAllByRole('row')
+    // header row + 2 data rows, Sooner Tender's row before Later Tender's
+    expect(rows[1]).toHaveTextContent('Sooner Tender')
+    expect(rows[2]).toHaveTextContent('Later Tender')
+  })
+})
+```
+
+- [ ] **Step 7: Run to verify failure, then implement**
+
+Run: `npm test -- MilestonesDatesPage.test.tsx`
+Expected: FAIL — component doesn't exist.
+
+```tsx
+// src/modules/bid-tracker/pages/MilestonesDatesPage.tsx
+import { useNavigate } from 'react-router-dom'
+import { useAllBidMilestones } from '@/lib/api'
+
+export function MilestonesDatesPage() {
+  const { data: milestones = [], isLoading } = useAllBidMilestones()
+  const navigate = useNavigate()
+  if (isLoading) return null
+  const sorted = [...milestones].sort((a, b) => (a.dueAt ?? '9999').localeCompare(b.dueAt ?? '9999'))
+  return (
+    <table className="w-full text-sm">
+      <thead><tr><th>Opportunity</th><th>Milestone</th><th>Due</th><th>Venue</th></tr></thead>
+      <tbody>
+        {sorted.map((m) => (
+          <tr key={m.id} className="cursor-pointer border-b hover:bg-surface-hover" onClick={() => navigate(`/bid-tracker/bid/${m.bidId}?tab=milestones`)}>
+            <td>{m.opportunityName} <span className="text-xs text-muted">{m.bidCode}</span></td>
+            <td>{m.label}</td>
+            <td>{m.dueAt ? new Date(m.dueAt).toLocaleDateString() : '—'}</td>
+            <td>{m.venue ?? '—'}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+```
+
+Wire into `BidTrackerWorkspace.tsx`: `{section === 'milestones' && <MilestonesDatesPage />}` — this is the same top-level `SECTIONS` entry Task 27 registered and left as a comment pointing here.
+
+- [ ] **Step 8: Run to verify pass**
+
+Run: `npm test -- MilestonesDatesPage.test.tsx`
+Expected: PASS.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add apps/api/src/routers/bidMilestones.ts apps/api/src/routers/bidMilestones.test.ts src/data/in-memory/repository.ts src/data/remote/repository.ts src/lib/api.ts src/modules/bid-tracker/pages/MilestonesDatesPage.tsx src/modules/bid-tracker/pages/MilestonesDatesPage.test.tsx src/modules/bid-tracker/BidTrackerWorkspace.tsx
+git commit -m "feat: add the top-level Milestones & Dates workspace page, distinct from the per-bid Milestones tab"
+```
+
+### Task 44: Create Bid UI — starting a bid from an existing Opportunity
+
+**Files:**
+- Modify: `src/features/nodes/WorksEditor.tsx` (a "Create Bid in Bid Tracker" entry point, shown only when `!hasBid`)
+- Modify: `src/features/nodes/WorksEditor.test.tsx` (add cases)
+
+**Interfaces:**
+- Consumes: `useBidForOpportunity` (Task 37 — already renders per opportunity row after Task 38), `useBidMutations` (`create`, Task 26).
+- Produces: nothing new exported — a button and its click handler on an existing component.
+
+`bids.create` (Task 6) already rejects a second bid for the same opportunity with a friendly `CONFLICT`, and already seeds the `submissionDeadline` milestone from the opportunity's current `submissionDate` in the same transaction — this task is the frontend entry point that calls it from where a user is actually looking at an opportunity that doesn't have one yet, plus surfacing that `CONFLICT` legibly instead of an unhandled rejection.
+
+- [ ] **Step 1: Write the failing tests**
+
+```tsx
+// Add to src/features/nodes/WorksEditor.test.tsx
+import userEvent from '@testing-library/user-event'
+
+describe('WorksEditor — Create Bid entry point', () => {
+  it('shows a Create Bid button when the opportunity has no bid, and navigates to the new bid on success', async () => {
+    vi.spyOn(api, 'useBidForOpportunity').mockReturnValue({ data: null, isLoading: false } as any)
+    const createMutateAsync = vi.fn().mockResolvedValue({ id: 'new-bid-1', opportunityId: 'o1' })
+    vi.spyOn(api, 'useBidMutations').mockReturnValue({
+      create: { mutateAsync: createMutateAsync }, update: {}, archive: {}, unarchive: {}, remove: {},
+    } as any)
+    const navigate = vi.fn()
+    vi.spyOn(require('react-router-dom'), 'useNavigate').mockReturnValue(navigate)
+    render(<WorksEditor opportunities={[{ id: 'o1', opportunityName: 'Tender', stageKey: 'pipeline' } as any]} />)
+    await userEvent.click(screen.getByRole('button', { name: /create bid/i }))
+    expect(createMutateAsync).toHaveBeenCalledWith('o1')
+    expect(navigate).toHaveBeenCalledWith('/bid-tracker/bid/new-bid-1')
+  })
+
+  it('hides the Create Bid button once a bid already exists', () => {
+    vi.spyOn(api, 'useBidForOpportunity').mockReturnValue({ data: { id: 'b1', opportunityId: 'o1' }, isLoading: false } as any)
+    vi.spyOn(api, 'useBidMutations').mockReturnValue({ create: { mutateAsync: vi.fn() }, update: {}, archive: {}, unarchive: {}, remove: {} } as any)
+    render(<WorksEditor opportunities={[{ id: 'o1', opportunityName: 'Tender', stageKey: 'pipeline' } as any]} />)
+    expect(screen.queryByRole('button', { name: /create bid/i })).not.toBeInTheDocument()
+  })
+
+  it('shows a friendly message, not a crash, when a duplicate-bid race loses to another tab', async () => {
+    vi.spyOn(api, 'useBidForOpportunity').mockReturnValue({ data: null, isLoading: false } as any)
+    const createMutateAsync = vi.fn().mockRejectedValue({ data: { code: 'CONFLICT' }, message: 'This opportunity already has a bid.' })
+    vi.spyOn(api, 'useBidMutations').mockReturnValue({ create: { mutateAsync: createMutateAsync }, update: {}, archive: {}, unarchive: {}, remove: {} } as any)
+    render(<WorksEditor opportunities={[{ id: 'o1', opportunityName: 'Tender', stageKey: 'pipeline' } as any]} />)
+    await userEvent.click(screen.getByRole('button', { name: /create bid/i }))
+    expect(await screen.findByText(/already has a bid/i)).toBeInTheDocument()
+  })
+})
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `npm test -- WorksEditor.test.tsx`
+Expected: FAIL — no Create Bid button exists yet.
+
+- [ ] **Step 3: Implement**
+
+In `src/features/nodes/WorksEditor.tsx`, alongside the `hasBid`/`disabled` guard Task 38 added, for each opportunity row without a bid render a button:
+
+```tsx
+const { create: createBid } = useBidMutations()
+const navigate = useNavigate()
+const [createBidError, setCreateBidError] = useState<string | null>(null)
+
+async function handleCreateBid(opportunityId: string) {
+  setCreateBidError(null)
+  try {
+    const bid = await createBid.mutateAsync(opportunityId)
+    navigate(`/bid-tracker/bid/${bid.id}`)
+  } catch (e: any) {
+    // bids.create's CONFLICT (a bid already exists — e.g. a concurrent
+    // create from another tab won the race) surfaces here as a normal
+    // tRPC error; show its message rather than letting it become an
+    // unhandled rejection or a generic error boundary.
+    setCreateBidError(e?.message ?? 'Could not create the bid.')
+  }
+}
+```
+
+```tsx
+{!hasBid && (
+  <>
+    <Button variant="secondary" size="sm" onClick={() => handleCreateBid(opportunity.id)}>Create Bid</Button>
+    {createBidError && <p className="text-sm text-red-600">{createBidError}</p>}
+  </>
+)}
+```
+
+(Import `useNavigate` from `react-router-dom`, `useState` from `react`, `Button` from `@/components/ui/Button` if not already imported in this file.)
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `npm test -- WorksEditor.test.tsx`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/features/nodes/WorksEditor.tsx src/features/nodes/WorksEditor.test.tsx
+git commit -m "feat(frontend): add a Create Bid entry point to WorksEditor, with duplicate-bid handling"
+```
+
+### Task 45: Data Confidence — "Mark Verified" API and UI
+
+**Files:**
+- Modify: `apps/api/src/routers/bids.ts` (add `markVerified`)
+- Modify: `apps/api/src/routers/bids.test.ts` (add cases)
+- Modify: `src/data/in-memory/repository.ts`, `src/data/remote/repository.ts` (`markBidVerified`)
+- Modify: `src/lib/api.ts` (`useBidMutations` gains `markVerified`)
+- Modify: `src/modules/bid-tracker/pages/OverviewTab.tsx` (a Data Confidence row with a "Mark Verified" button when `dataConfidence === 'needs_review'`)
+- Modify: `src/modules/bid-tracker/pages/OverviewTab.test.tsx` (create if it doesn't exist yet, or add a case)
+
+**Interfaces:**
+- Consumes: `writeAuditLog` from `../lib/auditLog.js`, `listAuditLogs` in the test file — both already imported into `bids.ts`/`bids.test.ts` by Task 7, nothing new to add there.
+- Produces: `bidsRouter.markVerified`, `Repository.markBidVerified(id): Promise<Bid>`, `useBidMutations().markVerified`.
+
+`bids.data_confidence` (migration 1788400000000, Task 3) is written to `'needs_review'` in exactly two places — `bidCorrigenda.create` (Task 14) and a bulk import commit that touched a fuzzy-matched row (Task 39) — but nothing in the plan up to this point ever writes it back to `'verified'`. Without this task, a bid that's been flagged stays flagged forever, with no way for a human who's actually checked it to clear the flag — the screenshots' "Mark Verified" affordance has no backing API or UI anywhere else in this plan.
+
+`markVerified` is **not** a plain, unconditional flip — a bid with any still-`pending` `bid_corrigendum_changes` row cannot be marked verified server-side, not just discouraged in the UI: `bidCorrigenda.create` (Task 14) sets `needs_review` precisely because an unresolved change exists, and letting a click clear that flag while the change is still sitting there unresolved would silently contradict the one thing `data_confidence` is supposed to signal. The gate is on *pending changes*, not on the bid's `dataConfidence` value itself — a bid downgraded by Task 39's bulk-import path (no corrigendum involved at all) still verifies with a plain flip once nothing else blocks it.
+
+- [ ] **Step 1: Write the failing backend tests**
+
+Append to `apps/api/src/routers/bids.test.ts`:
+
+```ts
+  it('rejects markVerified while a corrigendum change is still pending', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    await caller.bidCorrigenda.create({
+      bidId: bid.id, corrigendumNumber: 1,
+      changes: [{ fieldKey: 'submissionDeadline', currentValue: '', proposedValue: '2026-10-18' }],
+    })
+    expect((await caller.bids.get({ id: bid.id }))!.dataConfidence).toBe('needs_review')
+    await expect(caller.bids.markVerified({ id: bid.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+    expect((await caller.bids.get({ id: bid.id }))!.dataConfidence).toBe('needs_review') // unchanged — the rejected call had zero effect
+  })
+
+  it('markVerified succeeds once every corrigendum change on the bid is resolved (accepted or rejected)', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    const corrigendum = await caller.bidCorrigenda.create({
+      bidId: bid.id, corrigendumNumber: 1,
+      changes: [{ fieldKey: 'submissionDeadline', currentValue: '', proposedValue: '2026-10-18T00:00:00.000Z' }],
+    })
+    await expect(caller.bids.markVerified({ id: bid.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+
+    await caller.bidCorrigenda.reviewChange({ changeId: corrigendum.changes[0].id, decision: 'accepted' })
+    const verified = await caller.bids.markVerified({ id: bid.id })
+    expect(verified.dataConfidence).toBe('verified')
+  })
+
+  it('markVerified is a harmless no-op on an already-verified bid with no pending corrigenda', async () => {
+    const caller = appRouter.createCaller({})
+    const bid = await caller.bids.create({ opportunityId })
+    const result = await caller.bids.markVerified({ id: bid.id })
+    expect(result.dataConfidence).toBe('verified')
+  })
+
+  it('logs a mark_verified audit entry recording the actual needs_review -> verified transition, attributed to the signed-in user', async () => {
+    const caller = appRouter.createCaller({ user: { email: 'reviewer@amnex.com' } } as any)
+    const bid = await caller.bids.create({ opportunityId })
+    const corrigendum = await caller.bidCorrigenda.create({
+      bidId: bid.id, corrigendumNumber: 1,
+      changes: [{ fieldKey: 'submissionDeadline', currentValue: '', proposedValue: '2026-10-18T00:00:00.000Z' }],
+    })
+    await caller.bidCorrigenda.reviewChange({ changeId: corrigendum.changes[0].id, decision: 'accepted' })
+    await caller.bids.markVerified({ id: bid.id })
+    const logs = await listAuditLogs({ entityType: 'bid', entityId: bid.id })
+    expect(logs.find((l) => l.action === 'mark_verified')).toMatchObject({ oldValue: 'needs_review', newValue: 'verified', changedBy: 'reviewer@amnex.com' })
+  })
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- bids.test.ts`
+Expected: FAIL — `markVerified` doesn't exist. (This test file uses `caller.bidCorrigenda.create`/`.reviewChange`, already available since Tasks 14/15 run before this one.)
+
+- [ ] **Step 3: Implement**
+
+Add to `bidsRouter`'s object, alongside `archive`/`unarchive`:
+
+```ts
+  markVerified: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
+    // A pending (undecided) corrigendum change is exactly what set
+    // data_confidence to needs_review in the first place (Task 14) — a
+    // click here cannot silently clear that signal while the thing that
+    // caused it is still unresolved. This checks pending CHANGES, not the
+    // bid's current dataConfidence value: a bid downgraded by the bulk-
+    // import path (Task 39, no corrigendum involved) has no pending changes
+    // to block it and verifies with a plain flip below.
+    const pending = await pool.query(
+      `SELECT 1 FROM bid_corrigendum_changes ch
+       JOIN bid_corrigenda c ON c.id = ch.corrigendum_id
+       WHERE c.bid_id=$1 AND ch.decision='pending' LIMIT 1`,
+      [input.id],
+    )
+    if (pending.rows.length) {
+      throw new TRPCError({ code: 'CONFLICT', message: 'This bid has a pending corrigendum change — resolve it before marking verified.' })
+    }
+    const before = (await pool.query('SELECT data_confidence FROM bids WHERE id=$1', [input.id])).rows[0]
+    await pool.query(`UPDATE bids SET data_confidence='verified', updated_at=now() WHERE id=$1`, [input.id])
+    // Activity History (Task 36) needs this to show up as a real event, not
+    // just an unlogged flip nobody can see happened later.
+    await writeAuditLog(pool, {
+      entityType: 'bid', entityId: input.id, field: 'dataConfidence',
+      oldValue: before?.data_confidence ?? '', newValue: 'verified', reason: '', action: 'mark_verified', changedBy: ctx.user?.email,
+    })
+    return (await oneBid(input.id))!
+  }),
+```
+
+(This does not go through `protectedValues` — data confidence is a status flag, not one of the protectable facts spec §13 lists; its own gate is the pending-corrigendum check above, not the freeze mechanism.)
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- bids.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Add the repository method and hook, enforcing the identical pending-corrigendum gate**
+
+`src/data/in-memory/repository.ts`: `markBidVerified(id: string): Promise<Bid>` — check the in-memory `bidCorrigenda`/`bidCorrigendumChanges` arrays for any `decision === 'pending'` change belonging to a corrigendum on this bid; if any exists, throw a plain `Error` (this file's existing error-throwing convention for a rejected mutation — matching `deleteBid`'s own gate), with the same message text the backend uses. Otherwise set `dataConfidence: 'verified'` on the matching in-memory `bids` row.
+
+`src/data/remote/repository.ts`: `markBidVerified = (id: string): Promise<Bid> => this.client.bids.markVerified.mutate({ id })`.
+
+In `src/lib/api.ts`'s `useBidMutations()`, add: `const markVerified = useMutation({ mutationFn: (id: string) => repository.markBidVerified(id), onSuccess: invalidate })` and include it in the returned object: `return { create, update, archive, unarchive, remove, markVerified }`.
+
+- [ ] **Step 6: Write the failing frontend test, then implement — the button reflects the same pending-corrigendum rule, not just the backend**
+
+```tsx
+// src/modules/bid-tracker/pages/OverviewTab.test.tsx
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { OverviewTab } from './OverviewTab'
+import * as api from '@/lib/api'
+
+const NEEDS_REVIEW_BID = { id: 'b1', opportunityId: 'o1', bidCode: 'BID-2026-0001', stageKey: 'qualification', decision: 'pending', status: 'active', dataConfidence: 'needs_review', tenderLink: null, archivedAt: null, createdAt: '', updatedAt: '' }
+
+describe('OverviewTab — Data Confidence', () => {
+  it('shows an enabled Mark Verified button for a needs_review bid with no pending corrigenda, and calls the mutation on click', async () => {
+    const markVerified = vi.fn().mockResolvedValue(undefined)
+    vi.spyOn(api, 'useBidMutations').mockReturnValue({ create: {}, update: {}, archive: {}, unarchive: {}, remove: {}, markVerified: { mutateAsync: markVerified } } as any)
+    vi.spyOn(api, 'useBidCorrigenda').mockReturnValue({ data: [{ id: 'cor1', bidId: 'b1', status: 'reviewed', corrigendumNumber: 1, sourceDocumentId: null, detectedAt: '', reviewedAt: '', reviewedBy: null, changes: [] }], isLoading: false } as any)
+    render(<OverviewTab bid={NEEDS_REVIEW_BID as any} milestones={[]} />)
+    expect(screen.getByText(/needs review/i)).toBeInTheDocument()
+    const button = screen.getByRole('button', { name: /mark verified/i })
+    expect(button).toBeEnabled()
+    await userEvent.click(button)
+    expect(markVerified).toHaveBeenCalledWith('b1')
+  })
+
+  it('disables Mark Verified, with an explanatory note, while a corrigendum is still pending review', () => {
+    vi.spyOn(api, 'useBidMutations').mockReturnValue({ create: {}, update: {}, archive: {}, unarchive: {}, remove: {}, markVerified: { mutateAsync: vi.fn() } } as any)
+    vi.spyOn(api, 'useBidCorrigenda').mockReturnValue({ data: [{ id: 'cor1', bidId: 'b1', status: 'pending_review', corrigendumNumber: 1, sourceDocumentId: null, detectedAt: '', reviewedAt: null, reviewedBy: null, changes: [] }], isLoading: false } as any)
+    render(<OverviewTab bid={NEEDS_REVIEW_BID as any} milestones={[]} />)
+    const button = screen.getByRole('button', { name: /mark verified/i })
+    expect(button).toBeDisabled()
+    expect(screen.getByText(/resolve.*pending corrigendum/i)).toBeInTheDocument()
+  })
+
+  it('shows no Mark Verified button for an already-verified bid', () => {
+    vi.spyOn(api, 'useBidMutations').mockReturnValue({ create: {}, update: {}, archive: {}, unarchive: {}, remove: {}, markVerified: { mutateAsync: vi.fn() } } as any)
+    vi.spyOn(api, 'useBidCorrigenda').mockReturnValue({ data: [], isLoading: false } as any)
+    render(<OverviewTab
+      bid={{ ...NEEDS_REVIEW_BID, dataConfidence: 'verified' } as any}
+      milestones={[]}
+    />)
+    expect(screen.queryByRole('button', { name: /mark verified/i })).not.toBeInTheDocument()
+  })
+})
+```
+
+In `src/modules/bid-tracker/pages/OverviewTab.tsx`, add a Data Confidence row (import `useBidMutations`, `useBidCorrigenda` from `@/lib/api`):
+
+```tsx
+const { markVerified } = useBidMutations()
+const { data: corrigenda = [] } = useBidCorrigenda(bid.id)
+const hasPendingCorrigendum = corrigenda.some((c) => c.status === 'pending_review')
+```
+
+```tsx
+<div className="flex items-center justify-between border-t pt-4">
+  <div>
+    <div className="text-xs uppercase text-muted">Data Confidence</div>
+    <div className="capitalize">{bid.dataConfidence.replace('_', ' ')}</div>
+    {bid.dataConfidence === 'needs_review' && hasPendingCorrigendum && (
+      <div className="text-xs text-muted">Resolve the pending corrigendum change before marking verified.</div>
+    )}
+  </div>
+  {bid.dataConfidence === 'needs_review' && (
+    <Button variant="secondary" size="sm" disabled={hasPendingCorrigendum} onClick={() => markVerified.mutateAsync(bid.id)}>Mark Verified</Button>
+  )}
+</div>
+```
+
+(Import `Button` from `@/components/ui/Button`. `hasPendingCorrigendum` mirrors `bidsRouter.markVerified`'s own server-side check exactly — a bid's `bidCorrigenda` are already fetched here to compute it, so this is UI-only defense: the backend gate (Step 3) is still what actually prevents it, this is just so the button doesn't invite a click that's certain to be rejected.)
+
+- [ ] **Step 7: Run to verify pass**
+
+Run: `npm test -- OverviewTab.test.tsx`
+Expected: PASS.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add apps/api/src/routers/bids.ts apps/api/src/routers/bids.test.ts src/data/in-memory/repository.ts src/data/remote/repository.ts src/lib/api.ts src/modules/bid-tracker/pages/OverviewTab.tsx src/modules/bid-tracker/pages/OverviewTab.test.tsx
+git commit -m "feat: add bids.markVerified — gated on pending corrigendum changes, both server-side and in the Overview tab's UI"
+```
+
+---
+
+### Task 46: Next Action creation and editing from a bid's Overview tab
+
+**Files:**
+- Modify: `src/modules/bid-tracker/pages/OverviewTab.tsx` (a Next Action section: create, mark done, delete)
+- Modify: `src/modules/bid-tracker/pages/OverviewTab.test.tsx` (add cases)
+
+**Interfaces:**
+- Consumes: `useFollowUps`, `useFollowUpMutations` (this codebase's existing follow-up hooks — already generic over `entityType`/`entityId`, reused as-is with `entityType: 'bid'`, not duplicated).
+
+Task 9's `actionQueue.list` already reads `follow_ups` rows for `entityType='bid'`, and Task 35's Action Queue page already lists them — but nothing in the plan up to this point lets a user actually create one from inside Bid Tracker. This task is that entry point, scoped to what `useFollowUpMutations` already supports (create, mark done via `setFollowUpStatus`, delete) — it does not add a generic "edit note/due date" backend procedure that doesn't exist today; changing a Next Action's own text/date is delete-and-recreate, the same as this hook offers every other entity type in the app.
+
+- [ ] **Step 1: Write the failing tests**
+
+```tsx
+// Add to src/modules/bid-tracker/pages/OverviewTab.test.tsx
+describe('OverviewTab — Next Action', () => {
+  it('creates a Next Action for the bid', async () => {
+    const create = vi.fn().mockResolvedValue(undefined)
+    vi.spyOn(api, 'useFollowUps').mockReturnValue({ data: [], isLoading: false } as any)
+    vi.spyOn(api, 'useFollowUpMutations').mockReturnValue({ create: { mutateAsync: create }, setStatus: { mutateAsync: vi.fn() }, remove: { mutateAsync: vi.fn() } } as any)
+    render(<OverviewTab
+      bid={{ id: 'b1', opportunityId: 'o1', bidCode: 'BID-2026-0001', stageKey: 'qualification', decision: 'pending', status: 'active', dataConfidence: 'verified', tenderLink: null, archivedAt: null, createdAt: '', updatedAt: '' }}
+      milestones={[]}
+    />)
+    await userEvent.type(screen.getByPlaceholderText(/next action/i), 'Confirm EMD instrument')
+    await userEvent.type(screen.getByLabelText(/due date/i), '2026-12-01')
+    await userEvent.click(screen.getByRole('button', { name: /add next action/i }))
+    expect(create).toHaveBeenCalledWith({ entityType: 'bid', entityId: 'b1', note: 'Confirm EMD instrument', dueDate: '2026-12-01' })
+  })
+
+  it('marks an open Next Action done', async () => {
+    const setStatus = vi.fn().mockResolvedValue(undefined)
+    vi.spyOn(api, 'useFollowUps').mockReturnValue({ data: [{ id: 'f1', entityType: 'bid', entityId: 'b1', assigneeId: null, dueDate: '2026-12-01', status: 'open', note: 'Confirm EMD instrument', createdAt: '', createdBy: null }], isLoading: false } as any)
+    vi.spyOn(api, 'useFollowUpMutations').mockReturnValue({ create: { mutateAsync: vi.fn() }, setStatus: { mutateAsync: setStatus }, remove: { mutateAsync: vi.fn() } } as any)
+    render(<OverviewTab
+      bid={{ id: 'b1', opportunityId: 'o1', bidCode: 'BID-2026-0001', stageKey: 'qualification', decision: 'pending', status: 'active', dataConfidence: 'verified', tenderLink: null, archivedAt: null, createdAt: '', updatedAt: '' }}
+      milestones={[]}
+    />)
+    expect(screen.getByText('Confirm EMD instrument')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /mark done/i }))
+    expect(setStatus).toHaveBeenCalledWith({ id: 'f1', status: 'done' })
+  })
+})
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `npm test -- OverviewTab.test.tsx`
+Expected: FAIL — no Next Action section exists yet.
+
+- [ ] **Step 3: Implement**
+
+In `src/modules/bid-tracker/pages/OverviewTab.tsx` (import `useFollowUps`, `useFollowUpMutations` from `@/lib/api`, `useState` from `react`):
+
+```tsx
+const { data: followUps = [] } = useFollowUps('bid', bid.id)
+const { create: createFollowUp, setStatus, remove: removeFollowUp } = useFollowUpMutations()
+const [note, setNote] = useState('')
+const [dueDate, setDueDate] = useState('')
+const openFollowUps = followUps.filter((f) => f.status === 'open')
+```
+
+```tsx
+<div className="border-t pt-4">
+  <div className="text-xs uppercase text-muted">Next Action</div>
+  {openFollowUps.map((f) => (
+    <div key={f.id} className="flex items-center justify-between py-2">
+      <span>{f.note} — due {f.dueDate}</span>
+      <div className="flex gap-2">
+        <Button variant="secondary" size="sm" onClick={() => setStatus.mutateAsync({ id: f.id, status: 'done' })}>Mark Done</Button>
+        <Button variant="ghost" size="sm" onClick={() => removeFollowUp.mutateAsync(f.id)}>Delete</Button>
+      </div>
+    </div>
+  ))}
+  <div className="flex items-center gap-2 pt-2">
+    <input placeholder="Next action…" value={note} onChange={(e) => setNote(e.target.value)} />
+    <label className="flex items-center gap-1 text-sm">
+      Due Date
+      <input type="date" aria-label="Due Date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+    </label>
+    <Button
+      variant="primary" size="sm" disabled={!note.trim() || !dueDate}
+      onClick={async () => { await createFollowUp.mutateAsync({ entityType: 'bid', entityId: bid.id, note: note.trim(), dueDate }); setNote(''); setDueDate('') }}
+    >
+      Add Next Action
+    </Button>
+  </div>
+</div>
+```
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `npm test -- OverviewTab.test.tsx`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/modules/bid-tracker/pages/OverviewTab.tsx src/modules/bid-tracker/pages/OverviewTab.test.tsx
+git commit -m "feat(frontend): add Next Action creation and completion to the bid Overview tab"
+```
+
+### Task 47: Document view/download and citation management UI
+
+**Files:**
+- Modify: `apps/api/src/routers/documents.ts` (add `getDownloadUrl`)
+- Modify: `apps/api/src/routers/documents.test.ts` (add a case)
+- Modify: `src/data/in-memory/repository.ts`, `src/data/remote/repository.ts`, `src/lib/api.ts` (`getDocumentDownloadUrl`/`useDocumentDownloadUrl` mutation)
+- Modify: `src/modules/bid-tracker/pages/CommercialAndFilesTab.tsx` (a download link per document, and a citations list/add/delete panel)
+- Modify: `src/modules/bid-tracker/pages/CommercialAndFilesTab.test.tsx` (add cases)
+
+**Interfaces:**
+- Produces: `documentsRouter.getDownloadUrl`, `Repository.getDocumentDownloadUrl(id): Promise<string>`.
+- Consumes: `useDocuments`, `useDocumentMutations`, `documents.citations.list/create/delete` (Tasks 18, 26) — the backend citation endpoints already exist; this task is their first frontend consumer.
+
+Task 32 built upload and a bare filename list; nothing lets a user actually open a document again or manage its citations, both of which spec §14/§12 name explicitly. `documents.confirmUpload`'s `storagePath` (already returned on every `BidDocument`) is exactly what a fresh signed download URL needs — this task adds the one missing read procedure to mint it on demand (a stored/cached URL would go stale past its expiry, so it's fetched fresh on each click, not persisted).
+
+- [ ] **Step 1: Write the failing backend test**
+
+Append to `apps/api/src/routers/documents.test.ts`:
+
+```ts
+  it('getDownloadUrl returns a signed URL for an existing document, and 404s for an unknown id', async () => {
+    const caller = appRouter.createCaller({})
+    const { uploadId } = await caller.documents.requestUploadUrl({ entityType: 'bid', entityId: bidId, filename: 'Readable.pdf', contentType: 'application/pdf', sizeBytes: 1024 })
+    const doc = await caller.documents.confirmUpload({ uploadId })
+    const { url } = await caller.documents.getDownloadUrl({ id: doc.id })
+    expect(url).toContain('https://signed-download.example/')
+    await expect(caller.documents.getDownloadUrl({ id: '00000000-0000-0000-0000-000000000099' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- documents.test.ts`
+Expected: FAIL — `getDownloadUrl` doesn't exist.
+
+- [ ] **Step 3: Implement**
+
+Add to `documentsRouter`'s object (uses `getSignedDownloadUrl`, already imported in this file per Task 16):
+
+```ts
+  getDownloadUrl: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+    const doc = (await pool.query('SELECT storage_path FROM documents WHERE id=$1', [input.id])).rows[0]
+    if (!doc) throw new TRPCError({ code: 'NOT_FOUND' })
+    return { url: await getSignedDownloadUrl(doc.storage_path) }
+  }),
+```
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `DATABASE_URL=postgresql://postgres:test@localhost:5432/goms_dev npm --workspace apps/api run test -- documents.test.ts`
+Expected: PASS.
+
+- [ ] **Step 5: Add the repository method, hook, and frontend UI**
+
+`src/data/in-memory/repository.ts`: `getDocumentDownloadUrl(id: string): Promise<string>` — since local dev never has a real GCS object, return a `data:`/`blob:`-free placeholder that's still a legitimate string (e.g. reconstruct nothing and just return the document's own `storagePath` as-is) so the link renders without crashing; note in a comment that clicking it won't fetch a real file locally, matching how this file already handles other GCS-only behavior it can't reproduce offline.
+
+`src/data/remote/repository.ts`: `getDocumentDownloadUrl = async (id: string): Promise<string> => (await this.client.documents.getDownloadUrl.query({ id })).url`.
+
+`src/lib/api.ts`, inside `useDocumentMutations`: add `const download = useMutation({ mutationFn: (id: string) => repository.getDocumentDownloadUrl(id) })` and return it alongside `requestUploadUrl`/`confirmUpload`/`remove`.
+
+In `src/modules/bid-tracker/pages/CommercialAndFilesTab.tsx`, replace the bare filename list with a download link and a citations panel per document:
+
+```tsx
+const { download } = useDocumentMutations('bid', bidId)
+const [openCitationsFor, setOpenCitationsFor] = useState<string | null>(null)
+
+async function handleOpen(id: string) {
+  const url = await download.mutateAsync(id)
+  window.open(url, '_blank', 'noopener')
+}
+```
+
+```tsx
+{!isLoading && documents.map((d) => (
+  <div key={d.id} className="border-b py-2">
+    <button className="underline" onClick={() => handleOpen(d.id)}>{d.filename}</button>
+    <span className="text-xs text-muted"> {d.version}</span>
+    <button className="ml-2 text-xs underline" onClick={() => setOpenCitationsFor(openCitationsFor === d.id ? null : d.id)}>
+      Citations
+    </button>
+    {openCitationsFor === d.id && <DocumentCitationsPanel documentId={d.id} />}
+  </div>
+))}
+```
+
+```tsx
+// Small, colocated in the same file — not worth its own module for one caller.
+function DocumentCitationsPanel({ documentId }: { documentId: string }) {
+  const { data: citations = [] } = useQuery({ queryKey: ['documentCitations', documentId], queryFn: () => repository.listDocumentCitations(documentId) })
+  const qc = useQueryClient()
+  const [pageLabel, setPageLabel] = useState('')
+  const [quoteText, setQuoteText] = useState('')
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['documentCitations', documentId] })
+  const create = useMutation({ mutationFn: () => repository.createDocumentCitation({ documentId, pageLabel, quoteText }), onSuccess: invalidate })
+
+  return (
+    <div className="ml-4 mt-2 space-y-1 text-sm">
+      {citations.map((c: any) => <div key={c.id}>{c.pageLabel}: "{c.quoteText}"</div>)}
+      <div className="flex gap-2">
+        <input placeholder="Page (e.g. Pg 3)" value={pageLabel} onChange={(e) => setPageLabel(e.target.value)} />
+        <input placeholder="Quote" value={quoteText} onChange={(e) => setQuoteText(e.target.value)} />
+        <Button variant="ghost" size="sm" disabled={!pageLabel.trim()} onClick={async () => { await create.mutateAsync(); setPageLabel(''); setQuoteText('') }}>Add Citation</Button>
+      </div>
+    </div>
+  )
+}
+```
+
+(Import `useQuery`, `useMutation`, `useQueryClient` from `@tanstack/react-query` and `repository` from `@/data/repository` — following this codebase's existing direct-repository-call convention for a one-off query that doesn't yet have its own named hook in `api.ts`, exactly like `useDocumentMutations` itself does internally.)
+
+- [ ] **Step 6: Run to verify pass**
+
+Run: `npm test -- CommercialAndFilesTab.test.tsx`
+Expected: PASS (extend this file's existing test with a case clicking a filename and asserting `download.mutateAsync`/`window.open` fired, following Task 32's existing test's mock-setup style).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add apps/api/src/routers/documents.ts apps/api/src/routers/documents.test.ts src/data/in-memory/repository.ts src/data/remote/repository.ts src/lib/api.ts src/modules/bid-tracker/pages/CommercialAndFilesTab.tsx src/modules/bid-tracker/pages/CommercialAndFilesTab.test.tsx
+git commit -m "feat: add document download and citation management to the Commercial & Files tab"
+```
+
+### Task 48: Corrigendum creation UI — the human side of "detection/ingestion"
+
+**Files:**
+- Create: `src/modules/bid-tracker/components/CreateCorrigendumDialog.tsx`
+- Create: `src/modules/bid-tracker/components/CreateCorrigendumDialog.test.tsx`
+- Modify: `src/modules/bid-tracker/pages/MilestonesTab.tsx` (an "Add Corrigendum" entry point that opens the dialog)
+
+**Interfaces:**
+- Consumes: `useDocuments` (to pick an already-uploaded source document, Task 47), `useBidMilestones` (to pick which milestone/field a change targets), `useBidCorrigendaMutations` (Task 26) — its `create` mutation is defined there but has no caller anywhere in the plan until this task; Task 34 is that hook's only other consumer, and only of its `reviewChange` half.
+- Produces: `<CreateCorrigendumDialog bidId, onClose>`.
+
+Scope note: this codebase has no OCR/document-parsing pipeline anywhere (confirmed — no existing router or lib touches PDF text extraction), so automatic detection of what changed inside an uploaded corrigendum PDF is out of scope for this plan; that would be new infrastructure, not a UI gap. What's missing, and what this task builds, is the **human-driven** half of the workflow spec §12 actually describes end to end: a reviewer opens the corrigendum PDF (Task 47's download link), reads what changed, and records it here — picking the source document, the milestone/field it amends, and typing the current/proposed values — which is exactly what `bidCorrigenda.create` (Task 14) already accepts. Every "corrigendum" in this plan up to this task existed only as a direct `caller.bidCorrigenda.create(...)` call from a test; this is its first real entry point.
+
+- [ ] **Step 1: Write the failing test**
+
+```tsx
+// src/modules/bid-tracker/components/CreateCorrigendumDialog.test.tsx
+import { describe, it, expect, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { CreateCorrigendumDialog } from './CreateCorrigendumDialog'
+import * as api from '@/lib/api'
+
+describe('CreateCorrigendumDialog', () => {
+  it('creates a corrigendum with one change, referencing the selected source document', async () => {
+    vi.spyOn(api, 'useDocuments').mockReturnValue({ data: [{ id: 'd1', filename: 'Corrigendum-2.pdf', entityType: 'bid', entityId: 'b1', storagePath: 'x', version: 'v1.0', contentType: 'application/pdf', sizeBytes: 100, uploadedBy: null, uploadedAt: '' }], isLoading: false } as any)
+    vi.spyOn(api, 'useBidMilestones').mockReturnValue({ data: [{ id: 'm1', bidId: 'b1', milestoneType: 'submissionDeadline', key: 'submissionDeadline', label: 'Submission Deadline', dueAt: '2026-10-15T00:00:00.000Z', venue: null, notes: null, status: 'open', source: 'manual', createdAt: '', updatedAt: '' }], isLoading: false } as any)
+    const create = vi.fn().mockResolvedValue(undefined)
+    vi.spyOn(api, 'useBidCorrigendaMutations').mockReturnValue({ create: { mutateAsync: create }, reviewChange: { mutateAsync: vi.fn() } } as any)
+    render(<CreateCorrigendumDialog bidId="b1" onClose={vi.fn()} />)
+
+    await userEvent.type(screen.getByLabelText(/corrigendum number/i), '2')
+    await userEvent.selectOptions(screen.getByLabelText(/source document/i), 'd1')
+    await userEvent.selectOptions(screen.getByLabelText(/field/i), 'submissionDeadline')
+    await userEvent.type(screen.getByPlaceholderText(/current value/i), '15 Oct 2026')
+    await userEvent.type(screen.getByPlaceholderText(/proposed value/i), '18 Oct 2026')
+    await userEvent.click(screen.getByRole('button', { name: /create corrigendum/i }))
+
+    expect(create).toHaveBeenCalledWith({
+      bidId: 'b1', corrigendumNumber: 2, sourceDocumentId: 'd1',
+      changes: [{ fieldKey: 'submissionDeadline', currentValue: '15 Oct 2026', proposedValue: '18 Oct 2026' }],
+    })
+  })
+})
+```
+
+- [ ] **Step 2: Run to verify failure**
+
+Run: `npm test -- CreateCorrigendumDialog.test.tsx`
+Expected: FAIL — component doesn't exist.
+
+- [ ] **Step 3: Implement**
+
+```tsx
+// src/modules/bid-tracker/components/CreateCorrigendumDialog.tsx
+import { useState } from 'react'
+import { Dialog } from '@/components/ui/Dialog'
+import { Field } from '@/components/ui/Field'
+import { Button } from '@/components/ui/Button'
+import { useDocuments, useBidMilestones, useBidCorrigendaMutations } from '@/lib/api'
+
+export function CreateCorrigendumDialog({ bidId, onClose }: { bidId: string; onClose: () => void }) {
+  const { data: documents = [] } = useDocuments('bid', bidId)
+  const { data: milestones = [] } = useBidMilestones(bidId)
+  const { create } = useBidCorrigendaMutations(bidId)
+  const [corrigendumNumber, setCorrigendumNumber] = useState('')
+  const [sourceDocumentId, setSourceDocumentId] = useState('')
+  const [fieldKey, setFieldKey] = useState('')
+  const [currentValue, setCurrentValue] = useState('')
+  const [proposedValue, setProposedValue] = useState('')
+
+  const canSubmit = corrigendumNumber.trim() && fieldKey && proposedValue.trim()
+
+  async function handleCreate() {
+    await create.mutateAsync({
+      bidId, corrigendumNumber: Number(corrigendumNumber), sourceDocumentId: sourceDocumentId || undefined,
+      changes: [{ fieldKey, currentValue, proposedValue }],
+    })
+    onClose()
+  }
+
+  return (
+    <Dialog onClose={onClose} title="Add Corrigendum">
+      <Field label="Corrigendum Number">
+        <input aria-label="Corrigendum Number" value={corrigendumNumber} onChange={(e) => setCorrigendumNumber(e.target.value)} />
+      </Field>
+      <Field label="Source Document">
+        <select aria-label="Source Document" value={sourceDocumentId} onChange={(e) => setSourceDocumentId(e.target.value)}>
+          <option value="">— None —</option>
+          {documents.map((d) => <option key={d.id} value={d.id}>{d.filename}</option>)}
+        </select>
+      </Field>
+      <Field label="Field">
+        <select aria-label="Field" value={fieldKey} onChange={(e) => setFieldKey(e.target.value)}>
+          <option value="">Choose a field…</option>
+          <option value="tenderLink">Tender Link</option>
+          {milestones.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
+        </select>
+      </Field>
+      <div className="flex gap-2">
+        <input placeholder="Current Value" value={currentValue} onChange={(e) => setCurrentValue(e.target.value)} />
+        <input placeholder="Proposed Value" value={proposedValue} onChange={(e) => setProposedValue(e.target.value)} />
+      </div>
+      <div className="flex justify-end gap-2">
+        <Button variant="secondary" onClick={onClose}>Cancel</Button>
+        <Button variant="primary" disabled={!canSubmit} onClick={handleCreate}>Create Corrigendum</Button>
+      </div>
+    </Dialog>
+  )
+}
+```
+
+Wire an "Add Corrigendum" button into `MilestonesTab.tsx` (Task 31) that opens this dialog, following the same `useState`-controlled-dialog pattern `BidTrackerWorkspace.tsx` already uses for `CreateSavedViewDialog` (Task 29).
+
+- [ ] **Step 4: Run to verify pass**
+
+Run: `npm test -- CreateCorrigendumDialog.test.tsx`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/modules/bid-tracker/components/CreateCorrigendumDialog.tsx src/modules/bid-tracker/components/CreateCorrigendumDialog.test.tsx src/modules/bid-tracker/pages/MilestonesTab.tsx
+git commit -m "feat(frontend): add the Create Corrigendum dialog — the human-driven half of the corrigendum workflow"
+```
+
+---
 
 **This closes the plan.** Do not run `deploy-dev` or `deploy-prod` as part of implementing this plan — those are manual, explicitly-triggered CI jobs (per the existing pipeline's own design, confirmed in the design spec's §21.3-21.4), and actually deploying is outside this plan's scope per its Global Constraints.
