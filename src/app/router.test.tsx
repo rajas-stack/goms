@@ -18,7 +18,9 @@ describe('admin data import routes', () => {
     const paths = router.routes[0].children?.map((c) => c.path)
     expect(paths).toContain('/admin/data-import')
     expect(paths).toContain('/admin/data-import/session')
-  })
+    // The first import of ./router in this file pays the whole module graph's
+    // cold-transform cost (~4.5s), right at vitest's 5s default.
+  }, 30_000)
 
   it('omits /admin/data-import routes when VITE_ADMIN_IMPORT_ENABLED is unset (default)', async () => {
     vi.stubEnv('VITE_ADMIN_IMPORT_ENABLED', '')
