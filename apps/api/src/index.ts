@@ -16,6 +16,7 @@ import { protectedValuesRouter } from './routers/protectedValues.js'
 import { bidCorrigendaRouter } from './routers/bidCorrigenda.js'
 import { documentsRouter } from './routers/documents.js'
 import { bidSavedViewsRouter } from './routers/bidSavedViews.js'
+import { bidCustomFieldsRouter } from './routers/bidCustomFields.js'
 import { auditLogsRouter } from './routers/auditLogs.js'
 
 export const appRouter = router({
@@ -25,5 +26,6 @@ export const appRouter = router({
   adminImport: adminImportRouter, bids: bidsRouter, bidMilestones: bidMilestonesRouter,
   protectedValues: protectedValuesRouter, bidCorrigenda: bidCorrigendaRouter,
   documents: documentsRouter, bidSavedViews: bidSavedViewsRouter, auditLogs: auditLogsRouter,
+  bidCustomFields: bidCustomFieldsRouter,
 })
 export type AppRouter = typeof appRouter

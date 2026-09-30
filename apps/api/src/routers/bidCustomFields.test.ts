@@ -1,4 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { appRouter } from '../index.js'
+import { pool } from '../db.js'
 import {
   applyFilterRules, coerceCustomValue, normalizeOptions, slugifyFieldKey, OPERATORS_BY_TYPE,
   type CustomFieldType, type SystemBidViewFilterRule,
