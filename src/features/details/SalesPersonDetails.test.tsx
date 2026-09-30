@@ -17,6 +17,7 @@ import type { SalesPerson, SalesPosting } from '@/lib/types'
 vi.mock('@/features/sales/SalesPersonFormDialog', () => ({ SalesPersonFormDialog: () => null }))
 vi.mock('@/features/sales/TransferSalesPersonDialog', () => ({ TransferSalesPersonDialog: () => null }))
 vi.mock('@/features/sales/TransferBookOfBusinessDialog', () => ({ TransferBookOfBusinessDialog: () => null }))
+vi.mock('@/features/sales/EditPostingDatesDialog', () => ({ EditPostingDatesDialog: () => null }))
 
 vi.mock('@/features/workspace/context', () => ({
   useWorkspace: () => ({ selection: null, select: vi.fn(), clearSelection: vi.fn() }),
@@ -114,5 +115,34 @@ describe('SalesPersonDetails — GM / Higher Reporting Manager row (item 1)', ()
     // Derived would be Carol; the override picks Alice herself instead.
     expect(screen.queryAllByText('Carol GM')).toHaveLength(0)
     expect(screen.getAllByText(/^Alice Anderson$/).length).toBeGreaterThan(0)
+  })
+})
+
+// Posting section: dates are editable (behind the edit lock, like every other
+// edit here), including for an ENDED posting so it can be corrected/reopened.
+describe('SalesPersonDetails — Edit dates action', () => {
+  const posting = (o: Partial<SalesPosting> = {}): SalesPosting => ({
+    id: 'post-1', salesPersonId: 'sp-alice', designation: 'Account Manager', tierKey: 'accountManager',
+    managerId: null, gmOverrideId: null, office: '', startDate: '2024-01-01', endDate: null, changeType: 'initial',
+    reason: '', createdAt: '', createdBy: null, ...o,
+  })
+
+  it('offers Edit dates on the Posting section, disabled while editing is locked', () => {
+    stubApiHooks({ postings: [posting()] })
+    render(<SalesPersonDetails salesPersonId="sp-alice" />)
+    expect(screen.getByRole('button', { name: /edit dates/i })).toBeDisabled()
+  })
+
+  it('still offers Edit dates when the only posting has ended, and says when it ended', () => {
+    stubApiHooks({ postings: [posting({ endDate: '2026-04-01' })] })
+    render(<SalesPersonDetails salesPersonId="sp-alice" />)
+    expect(screen.getByRole('button', { name: /edit dates/i })).toBeInTheDocument()
+    expect(screen.getByText(/no current posting\. the latest posting ended 2026-03-31/i)).toBeInTheDocument()
+  })
+
+  it('does not offer Edit dates when the person has no postings at all', () => {
+    stubApiHooks({ postings: [] })
+    render(<SalesPersonDetails salesPersonId="sp-alice" />)
+    expect(screen.queryByRole('button', { name: /edit dates/i })).not.toBeInTheDocument()
   })
 })

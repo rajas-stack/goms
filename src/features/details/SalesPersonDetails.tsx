@@ -20,6 +20,7 @@ import { displayEndDate } from '@/lib/intervals'
 import { isoToday } from '@/lib/dates'
 import { cn } from '@/lib/utils'
 import { SalesPersonFormDialog } from '@/features/sales/SalesPersonFormDialog'
+import { EditPostingDatesDialog } from '@/features/sales/EditPostingDatesDialog'
 import { TransferBookOfBusinessDialog } from '@/features/sales/TransferBookOfBusinessDialog'
 import { TransferSalesPersonDialog } from '@/features/sales/TransferSalesPersonDialog'
 import type { SalesPerson } from '@/lib/types'
@@ -75,6 +76,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   const { setStatus, remove } = useSalesPersonMutations()
   const [editOpen, setEditOpen] = useState(false)
   const [postingTransferOpen, setPostingTransferOpen] = useState(false)
+  const [datesOpen, setDatesOpen] = useState(false)
   const [bobTransferOpen, setBobTransferOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const { unlocked } = useSalesEditLock()
@@ -84,6 +86,11 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   }
 
   const current = postings.find((p) => p.endDate === null)
+  // The posting whose dates the "Edit dates" action targets: the current one,
+  // or — once it has been ended — the most recent one, so an ended posting can
+  // be corrected or reopened instead of stranding the person with no way back.
+  const latest = [...postings].sort((a, b) => b.startDate.localeCompare(a.startDate))[0]
+  const editable = current ?? latest
   const manager = current?.managerId ? people.find((p) => p.id === current.managerId) : undefined
   // Item 1: GM/Higher Reporting Manager — an explicit override on the
   // current posting wins, otherwise it's derived by walking one level
@@ -257,9 +264,20 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
       </div>
 
       <div className="border-t border-line px-4 py-3">
-        <h3 className="mb-2 text-[13px] font-semibold text-ink-900">Posting</h3>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="text-[13px] font-semibold text-ink-900">Posting</h3>
+          {editable && (
+            <Tooltip label={unlocked ? 'Edit effective dates' : 'Unlock editing to change dates'}>
+              <Button size="sm" variant="ghost" disabled={!unlocked} onClick={() => setDatesOpen(true)}>
+                <Icon name="CalendarClock" size={14} /> Edit dates
+              </Button>
+            </Tooltip>
+          )}
+        </div>
         {!current ? (
-          <p className="text-sm text-muted">No current posting.</p>
+          <p className="text-sm text-muted">
+            No current posting.{latest && ` The latest posting ended ${displayEndDate(latest.endDate) ?? ''}.`}
+          </p>
         ) : (
           <dl className="mb-2 rounded-lg border border-line bg-panel/30 px-2.5">
             <Row label="Designation" value={current.designation || '—'} icon="IdCard" />
@@ -337,6 +355,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
       </div>
 
       <SalesPersonFormDialog open={editOpen} personId={person.id} onClose={() => setEditOpen(false)} />
+      <EditPostingDatesDialog open={datesOpen} person={person} posting={editable ?? null} onClose={() => setDatesOpen(false)} />
       <TransferSalesPersonDialog open={postingTransferOpen} person={person} onClose={() => setPostingTransferOpen(false)} />
       <TransferBookOfBusinessDialog open={bobTransferOpen} person={person} onClose={() => setBobTransferOpen(false)} />
       <ConfirmDeleteDialog

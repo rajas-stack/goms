@@ -159,7 +159,14 @@ export function useSalesPersonMutations() {
     },
     onSuccess: invalidate,
   })
-  return { create, update, setStatus, remove, transfer, updatePostingManager }
+  const updatePostingDates = useMutation({
+    mutationFn: (a: { postingId: string; startDate?: string; lastDayHeld?: string | null }) => {
+      const { postingId, ...edit } = a
+      return repository.updatePostingDates(postingId, edit)
+    },
+    onSuccess: invalidate,
+  })
+  return { create, update, setStatus, remove, transfer, updatePostingManager, updatePostingDates }
 }
 
 export const useOwnershipAssignments = () =>

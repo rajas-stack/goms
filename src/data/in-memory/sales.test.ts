@@ -89,3 +89,56 @@ describe('InMemoryRepository.updatePostingManager', () => {
     expect(updated.gmOverrideId).toBeNull()
   })
 })
+
+// Mirrors apps/api's `updatePostingDates` — both delegate the boundary rules
+// to @goms/domain's planPostingDatesEdit, so this only proves the in-memory
+// repository applies the plan the same way (incl. moving the previous
+// posting's end to keep history contiguous).
+describe('InMemoryRepository.updatePostingDates', () => {
+  beforeEach(async () => {
+    await resetLocalData()
+  })
+
+  async function personWithHistory() {
+    const person = await repository.createSalesPerson({
+      name: 'Dates Person', officialEmail: 'dates@example.com', designation: 'Account Manager', tierKey: 'accountManager',
+    })
+    const [initial] = await repository.listSalesPostings(person.id)
+    await repository.updatePostingDates(initial.id, { startDate: '2024-01-01' })
+    await repository.transferSalesPerson({
+      salesPersonId: person.id, designation: 'Regional Manager', tierKey: 'rm', effectiveDate: '2025-07-01',
+    })
+    const postings = await repository.listSalesPostings(person.id)
+    return {
+      person,
+      current: postings.find((p) => p.endDate === null)!,
+      previous: postings.find((p) => p.endDate !== null)!,
+    }
+  }
+
+  it('moving the current start moves the previous end so history stays contiguous', async () => {
+    const { person, current, previous } = await personWithHistory()
+    await repository.updatePostingDates(current.id, { startDate: '2025-09-15' })
+    const postings = await repository.listSalesPostings(person.id)
+    expect(postings.find((p) => p.id === current.id)!.startDate).toBe('2025-09-15')
+    expect(postings.find((p) => p.id === previous.id)!.endDate).toBe('2025-09-15')
+  })
+
+  it('a last day held ends the posting (exclusive end = last day + 1) and clearing it reopens', async () => {
+    const { person, current } = await personWithHistory()
+    const ended = await repository.updatePostingDates(current.id, { lastDayHeld: '2026-03-31' })
+    expect(ended.endDate).toBe('2026-04-01')
+    expect((await repository.currentPostings())[person.id]).toBeUndefined()
+    const reopened = await repository.updatePostingDates(current.id, { lastDayHeld: null })
+    expect(reopened.endDate).toBeNull()
+  })
+
+  it('rejects bad boundaries and leaves both postings unchanged', async () => {
+    const { person, current, previous } = await personWithHistory()
+    await expect(repository.updatePostingDates(current.id, { lastDayHeld: '2025-06-30' })).rejects.toThrow(/on or after Effective from/)
+    await expect(repository.updatePostingDates(previous.id, { lastDayHeld: null })).rejects.toThrow(/open-ended/)
+    const postings = await repository.listSalesPostings(person.id)
+    expect(postings.find((p) => p.id === current.id)).toMatchObject({ startDate: '2025-07-01', endDate: null })
+    expect(postings.find((p) => p.id === previous.id)).toMatchObject({ startDate: '2024-01-01', endDate: '2025-07-01' })
+  })
+})

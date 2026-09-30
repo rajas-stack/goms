@@ -4,7 +4,7 @@ import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { photoUrlSchema } from '../photoUrl.js'
 import { isForeignKeyViolation } from '../db-errors.js'
-import { tierRank } from '@goms/domain'
+import { PostingDatesError, planPostingDatesEdit, tierRank } from '@goms/domain'
 
 function toSalesPerson(row: any) {
   return {
@@ -151,6 +151,56 @@ export const salesRouter = router({
         )
         await client.query('COMMIT')
         return toSalesPosting(postingResult.rows[0])
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
+    }),
+  /** Edits a posting's Effective from / Effective to (sent as the LAST DAY
+   *  HELD; null = Present). The boundary rules — contiguity with the previous
+   *  posting, no overlap, no open-ended posting when a later one exists —
+   *  live in @goms/domain's planPostingDatesEdit, shared with the in-memory
+   *  repository. Setting a last day on the open posting ENDS it: the person
+   *  then has no current posting until a Change posting / transfer. */
+  updatePostingDates: protectedProcedure
+    .input(z.object({
+      postingId: z.string().uuid(),
+      startDate: z.string().optional(),
+      lastDayHeld: z.string().nullable().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const all = await client.query(
+          `SELECT * FROM sales_postings
+            WHERE sales_person_id = (SELECT sales_person_id FROM sales_postings WHERE id=$1)
+            ORDER BY start_date FOR UPDATE`,
+          [input.postingId],
+        )
+        if (!all.rows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'That posting no longer exists.' })
+        let plan
+        try {
+          plan = planPostingDatesEdit(
+            all.rows.map((r) => ({ id: r.id, startDate: r.start_date, endDate: r.end_date })),
+            input.postingId,
+            { startDate: input.startDate, lastDayHeld: input.lastDayHeld },
+          )
+        } catch (e) {
+          if (e instanceof PostingDatesError) throw new TRPCError({ code: 'BAD_REQUEST', message: e.message })
+          throw e
+        }
+        if (plan.previous) {
+          await client.query('UPDATE sales_postings SET end_date=$1 WHERE id=$2', [plan.previous.endDate, plan.previous.id])
+        }
+        const updated = await client.query(
+          'UPDATE sales_postings SET start_date=$1, end_date=$2 WHERE id=$3 RETURNING *',
+          [plan.startDate, plan.endDate, input.postingId],
+        )
+        await client.query('COMMIT')
+        return toSalesPosting(updated.rows[0])
       } catch (e) {
         await client.query('ROLLBACK')
         throw e
