@@ -8,6 +8,16 @@ resource "google_storage_bucket" "attachments" {
   # force_destroy left unset/false in dev to match the eventual prod
   # posture and catch accidental early deletes (see plan Task 4.1 rollback note).
 
+  # Bid Tracker uploads are a direct browser PUT to a signed URL, which is a
+  # cross-origin request to storage.googleapis.com — without this the browser
+  # blocks it at preflight even though the signed URL itself is valid.
+  cors {
+    origin          = ["https://goms-dev.web.app", "https://goms-dev.firebaseapp.com", "http://localhost:5190"]
+    method          = ["PUT", "GET", "HEAD"]
+    response_header = ["Content-Type"]
+    max_age_seconds = 3600
+  }
+
   # Bid Tracker (spec §14, §21.1): uploads land first under
   # bid-tracker/_pending/{uploadId}/... and are moved to their canonical path
   # by documents.confirmUpload. Anything left in _pending/ — an abandoned or

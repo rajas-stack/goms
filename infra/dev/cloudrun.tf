@@ -31,6 +31,16 @@ resource "google_storage_bucket_iam_member" "runtime_bucket_access" {
   member = "serviceAccount:${google_service_account.goms_api_runtime.email}"
 }
 
+# Bid Tracker documents: the API mints V4 signed URLs with Cloud Run's
+# credentials, which signs through the IAM Credentials API
+# (iam.serviceAccounts.signBlob) — the runtime account needs that on ITSELF.
+# roles/storage.objectAdmin above lets it touch objects but not sign.
+resource "google_service_account_iam_member" "runtime_self_sign" {
+  service_account_id = google_service_account.goms_api_runtime.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.goms_api_runtime.email}"
+}
+
 # The image tag below must exist in Artifact Registry before this resource
 # can apply — plan Task 6.4 Step 1 is a one-time manual `docker push` (needs
 # live gcloud/docker credentials); after Phase 10 lands, CI overwrites this
