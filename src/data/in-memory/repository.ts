@@ -1444,6 +1444,15 @@ class InMemoryRepository implements Repository {
     if (next.decision === 'go') next.stageKey = 'goApproved'
     if (next.decision === 'no_go') next.stageKey = 'dropped'
     this.assertNotProtected(id, Object.keys(next))
+    // One audit entry per patched field (like the API), so Activity History has
+    // real bid edits to show in local mode too.
+    for (const field of Object.keys(next) as (keyof typeof next)[]) {
+      const before = bid[field] == null ? '' : String(bid[field])
+      const after = next[field] == null ? '' : String(next[field])
+      if (before !== after) {
+        this.auditCustom({ entityType: 'bid', entityId: id, field, oldValue: before, newValue: after, action: 'update' })
+      }
+    }
     Object.assign(bid, next, { updatedAt: new Date().toISOString() })
     return bid
   }

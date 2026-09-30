@@ -7,6 +7,8 @@ import type { BidSavedView } from '@/lib/types'
 import { isRuleComplete } from './gridColumns'
 import { CreateSavedViewDialog } from './components/CreateSavedViewDialog'
 import { MasterGrid } from './components/MasterGrid'
+import { ActionQueuePage } from './pages/ActionQueuePage'
+import { ActivityHistoryPage } from './pages/ActivityHistoryPage'
 import { SavedViewTabs } from './components/SavedViewTabs'
 
 const SECTIONS = [
@@ -78,14 +80,15 @@ export function BidTrackerWorkspace() {
         />
       )}
       <div className="min-h-0 flex-1 overflow-hidden">
-        {/* Task 35 (actions), Task 36 (history) fill in the other sections;
-            milestones content arrives with Task 31. */}
+        {/* Milestones & Dates (a cross-bid page) is built in Task 43. */}
         {section === 'grid' && (
           <MasterGrid
             filterRules={rules} onFilterRulesChange={onRulesChange}
             visibleColumns={visibleColumns} onVisibleColumnsChange={onColumnsChange}
           />
         )}
+        {section === 'actions' && <ActionQueuePage />}
+        {section === 'history' && <ActivityHistoryPage />}
       </div>
       <CreateSavedViewDialog
         open={createOpen} onClose={() => setCreateOpen(false)}
