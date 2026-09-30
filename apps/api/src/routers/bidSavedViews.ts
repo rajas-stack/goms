@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { writeAuditLog } from '../lib/auditLog.js'
+import { savedViewRuleSchema } from '../lib/filterRuleSchema.js'
 import { SYSTEM_BID_VIEWS, SYSTEM_BID_VIEW_KEYS } from '@goms/domain'
 
 function toSavedView(row: any) {
@@ -13,9 +14,13 @@ function toSavedView(row: any) {
   }
 }
 
+// `visibleColumns` is an ORDERED list of column ids (standard ids and
+// `custom:<key>`): array order is display order, absence means hidden
+// (spec §8.1). It is deliberately not validated against the CURRENT custom
+// columns, so a view survives one of its columns being archived.
 const patchShape = z.object({
-  name: z.string().min(1).optional(), filterRules: z.array(z.any()).optional(),
-  sort: z.array(z.any()).optional(), visibleColumns: z.array(z.any()).optional(),
+  name: z.string().min(1).optional(), filterRules: z.array(savedViewRuleSchema).optional(),
+  sort: z.array(z.any()).optional(), visibleColumns: z.array(z.string()).optional(),
 })
 
 export const bidSavedViewsRouter = router({
@@ -44,7 +49,7 @@ export const bidSavedViewsRouter = router({
   }),
 
   create: protectedProcedure
-    .input(z.object({ name: z.string().min(1), scope: z.enum(['personal', 'global']), filterRules: z.array(z.any()).optional(), sort: z.array(z.any()).optional(), visibleColumns: z.array(z.any()).optional() }))
+    .input(z.object({ name: z.string().min(1), scope: z.enum(['personal', 'global']), filterRules: z.array(savedViewRuleSchema).optional(), sort: z.array(z.any()).optional(), visibleColumns: z.array(z.string()).optional() }))
     .mutation(async ({ input, ctx }) => {
       const ownerEmail = input.scope === 'personal' ? (ctx.user?.email ?? null) : null
       if (input.scope === 'personal' && !ownerEmail) {

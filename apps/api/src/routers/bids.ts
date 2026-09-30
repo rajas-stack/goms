@@ -4,8 +4,10 @@ import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
 import { assertFieldsNotProtected } from '../lib/protectedValues.js'
-import { formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP, computeAttentionFlag, applyFilterRules } from '@goms/domain'
+import { formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP, computeAttentionFlag, applyFilterRules, type CustomFieldType, type CustomValue } from '@goms/domain'
 import { applyStageChange } from './opportunities.js'
+import { filterRuleSchema } from '../lib/filterRuleSchema.js'
+import { CUSTOM_VALUE_COLUMNS, customValueFromRow } from '../lib/customFieldValues.js'
 
 export function toBid(row: any) {
   return {
@@ -75,9 +77,9 @@ export const bidsRouter = router({
   get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => oneBid(input.id)),
 
   listForGrid: protectedReadProcedure
-    .input(z.object({ filterRules: z.array(z.object({ field: z.string(), operator: z.literal('eq'), value: z.string() })).optional() }).optional())
+    .input(z.object({ filterRules: z.array(filterRuleSchema).optional() }).optional())
     .query(async ({ input, ctx }) => {
-      const [gridResult, corrigendaPendingResult, ownershipResult] = await Promise.all([
+      const [gridResult, corrigendaPendingResult, ownershipResult, customFieldsResult, customValuesResult] = await Promise.all([
         pool.query(`
           SELECT b.*, o.department_id, o.state_code, o.opportunity_name, o.gem_tender_id, o.submission_date,
                  o.value_amount, o.value_unit, o.emd_amount, o.emd_unit, o.vertical
@@ -90,7 +92,23 @@ export const bidsRouter = router({
           WHERE ch.decision = 'pending' GROUP BY c.bid_id
         `),
         pool.query(`SELECT entity_id, sales_person_id FROM ownership_assignments WHERE entity_type='bid' AND role='owner' AND end_date IS NULL`),
+        // Custom columns (spec §8.1): active definitions, plus every value for
+        // them in ONE query (never per row), archived columns excluded.
+        pool.query(`SELECT key, data_type FROM bid_custom_fields WHERE status='active'`),
+        pool.query(
+          `SELECT v.bid_id, f.key, f.data_type, ${CUSTOM_VALUE_COLUMNS}
+           FROM bid_custom_field_values v JOIN bid_custom_fields f ON f.id = v.field_id
+           WHERE f.status='active'`,
+        ),
       ])
+      const customFieldTypes: Record<string, CustomFieldType> = {}
+      for (const f of customFieldsResult.rows) customFieldTypes[`custom:${f.key}`] = f.data_type
+      const customValuesByBid = new Map<string, Record<string, CustomValue>>()
+      for (const v of customValuesResult.rows) {
+        const forBid = customValuesByBid.get(v.bid_id) ?? {}
+        forBid[v.key] = customValueFromRow(v.data_type, v)
+        customValuesByBid.set(v.bid_id, forBid)
+      }
       const pendingCorrigendumBidIds = new Set(corrigendaPendingResult.rows.map((r: any) => r.bid_id))
       // NOTE: this resolves DIRECT bid-level owner assignments only, not
       // spec §4.6's full inheritance-from-opportunity chain — sufficient for
@@ -115,9 +133,10 @@ export const bidsRouter = router({
           valueUnit: r.value_unit, emdAmount: r.emd_amount, emdUnit: r.emd_unit, vertical: r.vertical,
           ownerEmail: ownerEmailByBidId.get(r.id) ?? null,
           attentionFlag: computeAttentionFlag({ dueAt, hasPendingCorrigendum: pendingCorrigendumBidIds.has(r.id), today }),
+          customValues: customValuesByBid.get(r.id) ?? ({} as Record<string, CustomValue>),
         }
       })
-      return applyFilterRules(rows, input?.filterRules ?? [], ctx.user?.email ?? null)
+      return applyFilterRules(rows, input?.filterRules ?? [], ctx.user?.email ?? null, customFieldTypes)
     }),
 
   create: protectedProcedure
