@@ -1,5 +1,6 @@
 import type {
-  ActionQueueEntry, AttendeeRef, Bid, BidCorrigendum, BidCorrigendumChange, BidDocument, BidGridRow, BidMilestone,
+  ActionQueueEntry, AttendeeRef, Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue,
+  BidDocument, BidGridRow, BidMilestone, CustomFieldType, CustomValue,
   BidSavedView, Charge, Customer, Domain, DocumentCitation, Employee, FollowUp, HierNode, MergeAuditRecord,
   MergeFieldResolution, Opportunity, OpportunityStageChange, OwnershipAssignment, PreferredComm, ProtectedValue,
   RelationshipQuality, RelationshipStatus,
@@ -16,6 +17,7 @@ import {
   performSearch, performRelatedRecords, type SearchData,
   DEFAULT_BID_STAGE_KEY, formatBidCode, isAtOrAfterSubmitted, computeAttentionFlag, applyFilterRules,
   SYSTEM_BID_VIEWS, SYSTEM_BID_VIEW_KEYS, type SystemBidViewFilterRule,
+  coerceCustomValue, normalizeOptions, slugifyFieldKey,
 } from '@goms/domain'
 export { MERGEABLE_FIELDS, type MergeableField }
 import { coversDate } from '@/lib/intervals'
@@ -29,7 +31,7 @@ import {
   listBomItemsForSkuLogic, listEditionFeaturesLogic,
   listMasterLogic, listSkusLogic, removeBoqLineItemLogic, reorderBoqLineItemsLogic, reviseBoqLogic, setEditionFeaturesLogic,
   setMasterActiveLogic, updateBoqLineItemLogic, updateBoqLogic, updateBoqStatusLogic, updateBomItemLogic, updateMasterLogic,
-  updateSkuLogic,
+  updateSkuLogic, writeAuditLogEntry,
 } from '@/modules/commercial-calculator/repository-logic'
 import type {
   BoqStatus, CommercialAuditLog, CommercialBoq, CommercialBoqLineItem, CommercialBomItem, CommercialSku,
@@ -518,6 +520,23 @@ export interface Repository {
   }): Promise<BidSavedView>
   updateBidSavedView(id: string, patch: Partial<Pick<BidSavedView, 'name' | 'filterRules' | 'sort' | 'visibleColumns'>>): Promise<BidSavedView>
   deleteBidSavedView(id: string): Promise<void>
+
+  // --- Bid Tracker: custom columns (spec §8.1) ---
+  listBidCustomFields(includeArchived?: boolean): Promise<BidCustomField[]>
+  createBidCustomField(input: { name: string; dataType: CustomFieldType; options?: string[] }): Promise<BidCustomField>
+  /** `key` and `dataType` are deliberately not patchable. */
+  updateBidCustomField(id: string, patch: { name?: string; options?: string[] }): Promise<BidCustomField>
+  /** `ids` must be exactly the current active column ids, each once. */
+  reorderBidCustomFields(ids: string[]): Promise<BidCustomField[]>
+  archiveBidCustomField(id: string): Promise<BidCustomField>
+  unarchiveBidCustomField(id: string): Promise<BidCustomField>
+  /** Throws while any value row exists — archive instead. */
+  deleteBidCustomField(id: string): Promise<void>
+  /** `null`/blank clears (removes the value row). */
+  setBidCustomValue(
+    bidId: string, fieldId: string, value: string | number | boolean | null,
+  ): Promise<{ bidId: string; fieldId: string; key: string; value: CustomValue }>
+  listBidCustomValues(bidId: string): Promise<Record<string, CustomValue>>
 }
 
 // Re-exported (not redefined) so existing `@/data/repository` import sites
@@ -574,6 +593,8 @@ class InMemoryRepository implements Repository {
       bidDocuments: data.bidDocuments ?? [],
       documentCitations: data.documentCitations ?? [],
       bidSavedViews: data.bidSavedViews ?? [],
+      bidCustomFields: data.bidCustomFields ?? [],
+      bidCustomFieldValues: data.bidCustomFieldValues ?? [],
     }
     // `mergeAudit` postdates some locally persisted snapshots (the static
     // type says it's always there, but a snapshot saved before this field
@@ -1292,6 +1313,20 @@ class InMemoryRepository implements Repository {
     const owners = buildOwnerMap(
       this.data.ownershipAssignments, 'bid', this.data.bids.map((b) => b.id), today, this.ownershipContext(),
     )
+    // Active custom columns only — an archived column's values are retained
+    // but never surface in the grid or in filtering (spec §8.1).
+    const activeFields = this.data.bidCustomFields.filter((f) => f.status === 'active')
+    const activeFieldById = new Map(activeFields.map((f) => [f.id, f]))
+    const fieldTypes: Record<string, CustomFieldType> = {}
+    for (const f of activeFields) fieldTypes[`custom:${f.key}`] = f.dataType
+    const customValuesByBid = new Map<string, Record<string, CustomValue>>()
+    for (const v of this.data.bidCustomFieldValues) {
+      const field = activeFieldById.get(v.fieldId)
+      if (!field) continue
+      const forBid = customValuesByBid.get(v.bidId) ?? {}
+      forBid[field.key] = v.value
+      customValuesByBid.set(v.bidId, forBid)
+    }
     const rows: BidGridRow[] = this.data.bids.map((bid) => {
       const opp = this.data.opportunities.find((o) => o.id === bid.opportunityId)
       const ownerId = owners.get(bid.id)?.salesPersonId
@@ -1312,10 +1347,11 @@ class InMemoryRepository implements Repository {
         vertical: opp?.vertical ?? '',
         ownerEmail,
         attentionFlag: this.attentionFor(bid.id),
+        customValues: customValuesByBid.get(bid.id) ?? {},
       }
     })
     // Local dev has no signed-in user, so "$currentUser" never matches.
-    return applyFilterRules(rows as unknown as Record<string, unknown>[], filterRules, null) as unknown as BidGridRow[]
+    return applyFilterRules(rows as unknown as Record<string, unknown>[], filterRules, null, fieldTypes) as unknown as BidGridRow[]
   }
 
   async getBid(id: string) {
@@ -1392,6 +1428,8 @@ class InMemoryRepository implements Repository {
     if (referenced) throw new Error('This bid has corrigenda, protected values, documents or follow-ups — archive it instead.')
     this.data.bids = this.data.bids.filter((b) => b.id !== id)
     this.data.bidMilestones = this.data.bidMilestones.filter((m) => m.bidId !== id)
+    // Mirrors the backend's ON DELETE CASCADE on bid_custom_field_values.
+    this.data.bidCustomFieldValues = this.data.bidCustomFieldValues.filter((v) => v.bidId !== id)
   }
 
   async listBidActionQueue() {
@@ -1663,6 +1701,181 @@ class InMemoryRepository implements Repository {
   async deleteBidSavedView(id: string) {
     if (SYSTEM_BID_VIEW_KEYS.has(id)) throw new Error('System views cannot be deleted.')
     this.data.bidSavedViews = this.data.bidSavedViews.filter((v) => v.id !== id)
+  }
+
+  // --- Bid Tracker: custom columns (spec §8.1) — same rules as the backend's
+  // bidCustomFields router, using the same @goms/domain helpers. ------------
+
+  private auditCustom(entry: { entityType: string; entityId: string; field: string; oldValue: string; newValue: string; action: string; reason?: string }) {
+    writeAuditLogEntry(this.data.commercialCalculator, { reason: '', changedBy: null, ...entry })
+  }
+
+  private requireCustomField(id: string): BidCustomField {
+    const field = this.data.bidCustomFields.find((f) => f.id === id)
+    if (!field) throw new Error('No such custom column.')
+    return field
+  }
+
+  private assertActiveNameFree(name: string, exceptId?: string) {
+    const folded = name.trim().toLowerCase()
+    const clash = this.data.bidCustomFields.some(
+      (f) => f.status === 'active' && f.id !== exceptId && f.name.trim().toLowerCase() === folded,
+    )
+    if (clash) throw new Error(`A column named "${name.trim()}" already exists.`)
+  }
+
+  async listBidCustomFields(includeArchived = false) {
+    return this.data.bidCustomFields
+      .filter((f) => includeArchived || f.status === 'active')
+      .sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt))
+  }
+
+  async createBidCustomField(input: { name: string; dataType: CustomFieldType; options?: string[] }) {
+    const name = input.name.trim()
+    if (!name || name.length > 80) throw new Error('A column name must be 1–80 characters.')
+    let options: string[] | null = null
+    if (input.dataType === 'select') options = normalizeOptions(input.options ?? [])
+    else if (input.options !== undefined) throw new Error('Only a select column has options.')
+    this.assertActiveNameFree(name)
+    const now = new Date().toISOString()
+    const field: BidCustomField = {
+      id: uid('bcf'),
+      key: slugifyFieldKey(name, new Set(this.data.bidCustomFields.map((f) => f.key))),
+      name, dataType: input.dataType, options,
+      position: this.data.bidCustomFields.reduce((max, f) => Math.max(max, f.position), -1) + 1,
+      status: 'active', createdBy: null, updatedBy: null, createdAt: now, updatedAt: now,
+    }
+    this.data.bidCustomFields.push(field)
+    this.auditCustom({ entityType: 'bidCustomField', entityId: field.id, field: 'name', oldValue: '', newValue: name, action: 'custom_field_created' })
+    return field
+  }
+
+  async updateBidCustomField(id: string, patch: { name?: string; options?: string[] }) {
+    const field = this.requireCustomField(id)
+    const now = new Date().toISOString()
+    if (patch.name !== undefined && patch.name.trim() !== field.name) {
+      const name = patch.name.trim()
+      if (!name || name.length > 80) throw new Error('A column name must be 1–80 characters.')
+      if (field.status === 'active') this.assertActiveNameFree(name, id)
+      this.auditCustom({ entityType: 'bidCustomField', entityId: id, field: 'name', oldValue: field.name, newValue: name, action: 'custom_field_renamed' })
+      field.name = name
+      field.updatedAt = now
+    }
+    if (patch.options !== undefined) {
+      if (field.dataType !== 'select') throw new Error('Only a select column has options.')
+      const next = normalizeOptions(patch.options)
+      const prev = field.options ?? []
+      if (JSON.stringify(prev) !== JSON.stringify(next)) {
+        const removed = prev.filter((o) => !next.includes(o))
+        this.auditCustom({
+          entityType: 'bidCustomField', entityId: id, field: 'options', oldValue: JSON.stringify(prev), newValue: JSON.stringify(next),
+          reason: removed.length ? `Removed: ${removed.join(', ')} (existing values kept)` : '', action: 'custom_field_options_changed',
+        })
+        field.options = next
+        field.updatedAt = now
+      }
+    }
+    return field
+  }
+
+  async reorderBidCustomFields(ids: string[]) {
+    const active = this.data.bidCustomFields.filter((f) => f.status === 'active')
+    const activeIds = new Set(active.map((f) => f.id))
+    if (ids.length !== activeIds.size || new Set(ids).size !== ids.length || !ids.every((id) => activeIds.has(id))) {
+      throw new Error('ids must be exactly the current active columns, each once.')
+    }
+    for (const [index, id] of ids.entries()) {
+      const field = this.requireCustomField(id)
+      if (field.position === index) continue
+      this.auditCustom({
+        entityType: 'bidCustomField', entityId: id, field: 'position', oldValue: String(field.position), newValue: String(index),
+        action: 'custom_field_reordered',
+      })
+      field.position = index
+      field.updatedAt = new Date().toISOString()
+    }
+    return this.listBidCustomFields()
+  }
+
+  async archiveBidCustomField(id: string) {
+    const field = this.requireCustomField(id)
+    if (field.status === 'archived') return field
+    field.status = 'archived'
+    field.updatedAt = new Date().toISOString()
+    this.auditCustom({
+      entityType: 'bidCustomField', entityId: id, field: 'status', oldValue: 'active', newValue: 'archived',
+      reason: 'Values are kept', action: 'custom_field_archived',
+    })
+    return field
+  }
+
+  async unarchiveBidCustomField(id: string) {
+    const field = this.requireCustomField(id)
+    if (field.status === 'active') return field
+    if (this.data.bidCustomFields.some((f) => f.status === 'active' && f.name.trim().toLowerCase() === field.name.trim().toLowerCase())) {
+      throw new Error(`Another active column is already named "${field.name}" — rename one of them first.`)
+    }
+    field.status = 'active'
+    field.updatedAt = new Date().toISOString()
+    this.auditCustom({ entityType: 'bidCustomField', entityId: id, field: 'status', oldValue: 'archived', newValue: 'active', action: 'custom_field_unarchived' })
+    return field
+  }
+
+  async deleteBidCustomField(id: string) {
+    const field = this.requireCustomField(id)
+    if (this.data.bidCustomFieldValues.some((v) => v.fieldId === id)) throw new Error('This column has values — archive it instead.')
+    this.data.bidCustomFields = this.data.bidCustomFields.filter((f) => f.id !== id)
+    this.auditCustom({
+      entityType: 'bidCustomField', entityId: id, field: 'name', oldValue: field.name, newValue: '',
+      reason: 'Never held a value', action: 'custom_field_deleted',
+    })
+  }
+
+  async setBidCustomValue(bidId: string, fieldId: string, raw: string | number | boolean | null) {
+    const field = this.requireCustomField(fieldId)
+    if (field.status === 'archived') throw new Error('This column is archived.')
+    this.requireBid(bidId)
+    const value = coerceCustomValue(field.dataType, raw, field.options)
+    const existing = this.data.bidCustomFieldValues.find((v) => v.bidId === bidId && v.fieldId === fieldId)
+    const oldValue: CustomValue = existing?.value ?? null
+    const text = (v: CustomValue) => (v === null ? '' : String(v))
+    // entityId is the BID so the edit shows in that bid's Activity History.
+    const audit = (action: string) => this.auditCustom({
+      entityType: 'bidCustomFieldValue', entityId: bidId, field: field.key, oldValue: text(oldValue), newValue: text(value), action,
+    })
+    const touch = () => { this.requireBid(bidId).updatedAt = new Date().toISOString() }
+
+    if (value === null) {
+      if (existing) {
+        this.data.bidCustomFieldValues = this.data.bidCustomFieldValues.filter((v) => v !== existing)
+        audit('custom_value_cleared')
+        touch()
+      }
+      return { bidId, fieldId, key: field.key, value: null as CustomValue }
+    }
+    const now = new Date().toISOString()
+    if (existing) {
+      existing.value = value
+      existing.updatedAt = now
+    } else {
+      const row: BidCustomFieldValue = { bidId, fieldId, value, updatedAt: now }
+      this.data.bidCustomFieldValues.push(row)
+    }
+    if (oldValue !== value) {
+      audit('custom_value_set')
+      touch()
+    }
+    return { bidId, fieldId, key: field.key, value }
+  }
+
+  async listBidCustomValues(bidId: string) {
+    const out: Record<string, CustomValue> = {}
+    for (const v of this.data.bidCustomFieldValues) {
+      if (v.bidId !== bidId) continue
+      const field = this.data.bidCustomFields.find((f) => f.id === v.fieldId)
+      if (field?.status === 'active') out[field.key] = v.value
+    }
+    return out
   }
 
   async listSalesPersons() {
@@ -2318,6 +2531,8 @@ const MUTATOR_KEYS = [
   'createBidCorrigendum', 'reviewCorrigendumChange', 'freezeValue', 'unfreezeValue',
   'requestDocumentUploadUrl', 'confirmDocumentUpload', 'deleteDocument', 'createDocumentCitation',
   'createBidSavedView', 'updateBidSavedView', 'deleteBidSavedView',
+  'createBidCustomField', 'updateBidCustomField', 'reorderBidCustomFields', 'archiveBidCustomField',
+  'unarchiveBidCustomField', 'deleteBidCustomField', 'setBidCustomValue',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -2338,7 +2553,7 @@ const READER_KEYS = [
   'listAllBoqLineItems', 'listAuditLogs',
   'listCustomers', 'getCustomer',
   'listBidsForGrid', 'getBid', 'listBidActionQueue', 'listBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
-  'listDocuments', 'listDocumentCitations', 'listBidSavedViews',
+  'listDocuments', 'listDocumentCitations', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the

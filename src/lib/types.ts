@@ -2,8 +2,8 @@
 // apps/api's hierarchy router) — re-imported and re-exported here so every
 // existing import path (`@/lib/types`) keeps working unchanged, including
 // this file's own later use of Domain/Status below.
-import type { Domain, Status, NodeType, HierNode } from '@goms/domain'
-export type { Domain, Status, NodeType, HierNode }
+import type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue, TypedFilterRule } from '@goms/domain'
+export type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue }
 
 export type RelationshipStatus = 'engaged' | 'developing' | 'dormant' | 'new'
 /** Five-point relationship quality scale. */
@@ -396,6 +396,8 @@ export interface BidGridRow extends Bid {
   vertical: string
   ownerEmail: string | null
   attentionFlag: 'dueSoon' | 'overdue' | 'corrigendumPending' | 'onTrack'
+  /** Active custom columns only, keyed by field `key`; absent = no value. */
+  customValues: Record<string, CustomValue>
 }
 export interface BidMilestone {
   id: string; bidId: string; milestoneType: string; key: string; label: string
@@ -425,8 +427,25 @@ export interface DocumentCitation {
 }
 export interface BidSavedView {
   id: string; name: string; scope: 'personal' | 'global'; ownerEmail: string | null; isSystem: boolean
-  filterRules: { field: string; operator: 'eq'; value: string }[]
+  /** Type-aware rules (spec §8.1). `eq` is valid for every column type. */
+  filterRules: TypedFilterRule[]
+  /** ORDERED column ids (standard ids and `custom:<key>`): array order is
+   *  display order, absence means hidden. Never assumed to name only current
+   *  columns — a custom column may have been archived since. */
   sort: unknown[]; visibleColumns: string[]; createdBy: string | null; createdAt: string | null; updatedAt: string | null
+}
+/** A user-defined Master Grid column (spec §8.1). `key` and `dataType` are
+ *  immutable after creation; `custom:<key>` is the grid column id. */
+export interface BidCustomField {
+  id: string; key: string; name: string; dataType: CustomFieldType
+  /** Non-null exactly for `select`. */
+  options: string[] | null
+  position: number; status: 'active' | 'archived'
+  createdBy: string | null; updatedBy: string | null; createdAt: string; updatedAt: string
+}
+/** Local-store row: one per (bid, field); a cleared value has no row. */
+export interface BidCustomFieldValue {
+  bidId: string; fieldId: string; value: Exclude<CustomValue, null>; updatedAt: string
 }
 export interface ActionQueueEntry {
   followUpId: string; bidId: string; bidCode: string; stageKey: string; opportunityName: string

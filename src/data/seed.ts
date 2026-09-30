@@ -1,5 +1,5 @@
 import type {
-  Bid, BidCorrigendum, BidCorrigendumChange, BidDocument, BidMilestone, BidSavedView,
+  Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue, BidDocument, BidMilestone, BidSavedView,
   Customer, DocumentCitation, Employee, ExternalId, FollowUp, HierNode, MergeAuditRecord, Opportunity, OpportunityStageChange,
   OwnershipAssignment, ProtectedValue, SalesPerson, SalesPosting, TimelineEvent, Transfer,
 } from '@/lib/types'
@@ -98,6 +98,9 @@ export interface GormsData {
   bidDocuments: BidDocument[]
   documentCitations: DocumentCitation[]
   bidSavedViews: BidSavedView[]
+  /** Added in v14 (Bid Tracker custom columns, spec §8.1). Start empty. */
+  bidCustomFields: BidCustomField[]
+  bidCustomFieldValues: BidCustomFieldValue[]
 }
 
 export function buildSeed(): GormsData {
@@ -314,5 +317,6 @@ export function buildSeed(): GormsData {
     customers: [],
     bids: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
     protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [],
+    bidCustomFields: [], bidCustomFieldValues: [],
   }
 }

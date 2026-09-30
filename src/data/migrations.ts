@@ -45,8 +45,10 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *      bidCorrigenda, bidCorrigendumChanges, protectedValues, bidDocuments,
  *      documentCitations, bidSavedViews) — same "new entity, no prior data,
  *      starts empty" pattern as v10's `customers`.
+ *  v14 Bid Tracker custom columns (spec §8.1): `bidCustomFields` and
+ *      `bidCustomFieldValues`, both starting empty.
  */
-export const SCHEMA_VERSION = 13
+export const SCHEMA_VERSION = 14
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -300,6 +302,17 @@ function toV13(data: SnapshotShape): SnapshotShape {
   }
 }
 
+/** v13 → v14. See `SCHEMA_VERSION` doc comment. Idempotent for the same
+ *  reason as v13. */
+function toV14(data: SnapshotShape): SnapshotShape {
+  const withDefault = (key: string) => (Array.isArray(data[key]) ? data[key] : [])
+  return {
+    ...data,
+    bidCustomFields: withDefault('bidCustomFields'),
+    bidCustomFieldValues: withDefault('bidCustomFieldValues'),
+  }
+}
+
 /** Keyed by the version each step PRODUCES, so applying every key from
  *  `fromVersion + 1` up to `SCHEMA_VERSION` walks the chain in order. */
 export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> = {
@@ -315,6 +328,7 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   11: toV11,
   12: toV12,
   13: toV13,
+  14: toV14,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

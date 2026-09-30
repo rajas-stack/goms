@@ -10,6 +10,7 @@ function minimalGormsData(): GormsData {
     ownershipAssignments: [], mergeAudit: [], customers: [],
     bids: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
     protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [],
+    bidCustomFields: [], bidCustomFieldValues: [],
     commercialCalculator: {} as GormsData['commercialCalculator'],
   }
 }

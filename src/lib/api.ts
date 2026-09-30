@@ -45,6 +45,8 @@ const qk = {
   documents: (t: string, id: string) => ['documents', t, id] as const,
   bidSavedViews: ['bidSavedViews'] as const,
   bidActionQueue: ['bidActionQueue'] as const,
+  bidCustomFields: (includeArchived?: boolean) => ['bidCustomFields', includeArchived ?? false] as const,
+  bidCustomValues: (bidId: string) => ['bidCustomValues', bidId] as const,
 }
 
 export const useStates = () => useQuery({ queryKey: qk.states, queryFn: () => repository.listStates() })
@@ -256,6 +258,49 @@ export function useBidSavedViewMutations() {
   })
   const remove = useMutation({ mutationFn: (id: string) => repository.deleteBidSavedView(id), onSuccess: invalidate })
   return { create, update, remove }
+}
+
+// --- Bid Tracker: custom columns (spec §8.1) ---
+export const useBidCustomFields = (includeArchived = false) =>
+  useQuery({ queryKey: qk.bidCustomFields(includeArchived), queryFn: () => repository.listBidCustomFields(includeArchived) })
+export const useBidCustomValues = (bidId: string | null) =>
+  useQuery({ queryKey: qk.bidCustomValues(bidId ?? ''), queryFn: () => repository.listBidCustomValues(bidId!), enabled: !!bidId })
+export function useBidCustomFieldMutations() {
+  const qc = useQueryClient()
+  // Any definition change (rename, options, order, archive) changes what the
+  // grid shows and how saved views resolve, so the grid refetches too.
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['bidCustomFields'] })
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+    qc.invalidateQueries({ queryKey: ['bidCustomValues'] })
+  }
+  const create = useMutation({
+    mutationFn: (input: Parameters<typeof repository.createBidCustomField>[0]) => repository.createBidCustomField(input),
+    onSuccess: invalidate,
+  })
+  const update = useMutation({
+    mutationFn: (a: { id: string; patch: { name?: string; options?: string[] } }) => repository.updateBidCustomField(a.id, a.patch),
+    onSuccess: invalidate,
+  })
+  const reorder = useMutation({ mutationFn: (ids: string[]) => repository.reorderBidCustomFields(ids), onSuccess: invalidate })
+  const archive = useMutation({ mutationFn: (id: string) => repository.archiveBidCustomField(id), onSuccess: invalidate })
+  const unarchive = useMutation({ mutationFn: (id: string) => repository.unarchiveBidCustomField(id), onSuccess: invalidate })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteBidCustomField(id), onSuccess: invalidate })
+  return { create, update, reorder, archive, unarchive, remove }
+}
+/** Sets/clears one custom cell. The grid layers optimistic updates on top in
+ *  Task 28; this hook only invalidates on success. */
+export function useSetBidCustomValue() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (a: { bidId: string; fieldId: string; value: string | number | boolean | null }) =>
+      repository.setBidCustomValue(a.bidId, a.fieldId, a.value),
+    onSuccess: (_result, a) => {
+      qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+      qc.invalidateQueries({ queryKey: qk.bidCustomValues(a.bidId) })
+      qc.invalidateQueries({ queryKey: ['bid', a.bidId] })
+    },
+  })
 }
 
 export const useSalesPersons = () =>

@@ -22,7 +22,7 @@ import type {
   Customer, HierNode, Status, Employee, Charge, TimelineEvent, TimelineEventType, Transfer, MergeAuditRecord,
   SalesPerson, SalesPosting, Opportunity, OpportunityStageChange, OwnershipAssignment, FollowUp, SearchResult,
   Bid, BidGridRow, BidMilestone, BidCorrigendum, BidCorrigendumChange, ProtectedValue, BidDocument,
-  DocumentCitation, BidSavedView, ActionQueueEntry,
+  DocumentCitation, BidSavedView, ActionQueueEntry, BidCustomField, CustomFieldType, CustomValue,
 } from '@/lib/types'
 import type {
   CommercialBomItem, CommercialSku, CreateBomItemInput, CreateSkuInput,
@@ -294,4 +294,26 @@ export class RemoteRepository implements Partial<Repository> {
   ): Promise<BidSavedView> => this.client.bidSavedViews.update.mutate({ id, patch }) as unknown as Promise<BidSavedView>
   deleteBidSavedView = (id: string): Promise<void> =>
     this.client.bidSavedViews.delete.mutate({ id }) as unknown as Promise<void>
+
+  // --- Bid Tracker: custom columns (spec §8.1) ---
+  listBidCustomFields = (includeArchived?: boolean): Promise<BidCustomField[]> =>
+    this.client.bidCustomFields.list.query({ includeArchived }) as unknown as Promise<BidCustomField[]>
+  createBidCustomField = (input: { name: string; dataType: CustomFieldType; options?: string[] }): Promise<BidCustomField> =>
+    this.client.bidCustomFields.create.mutate(input) as unknown as Promise<BidCustomField>
+  updateBidCustomField = (id: string, patch: { name?: string; options?: string[] }): Promise<BidCustomField> =>
+    this.client.bidCustomFields.update.mutate({ id, patch }) as unknown as Promise<BidCustomField>
+  reorderBidCustomFields = (ids: string[]): Promise<BidCustomField[]> =>
+    this.client.bidCustomFields.reorder.mutate({ ids }) as unknown as Promise<BidCustomField[]>
+  archiveBidCustomField = (id: string): Promise<BidCustomField> =>
+    this.client.bidCustomFields.archive.mutate({ id }) as unknown as Promise<BidCustomField>
+  unarchiveBidCustomField = (id: string): Promise<BidCustomField> =>
+    this.client.bidCustomFields.unarchive.mutate({ id }) as unknown as Promise<BidCustomField>
+  deleteBidCustomField = (id: string): Promise<void> =>
+    this.client.bidCustomFields.delete.mutate({ id }) as unknown as Promise<void>
+  setBidCustomValue = (
+    bidId: string, fieldId: string, value: string | number | boolean | null,
+  ): Promise<{ bidId: string; fieldId: string; key: string; value: CustomValue }> =>
+    this.client.bidCustomFields.setValue.mutate({ bidId, fieldId, value }) as unknown as Promise<{ bidId: string; fieldId: string; key: string; value: CustomValue }>
+  listBidCustomValues = (bidId: string): Promise<Record<string, CustomValue>> =>
+    this.client.bidCustomFields.valuesForBid.query({ bidId }) as unknown as Promise<Record<string, CustomValue>>
 }
