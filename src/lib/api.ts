@@ -424,6 +424,9 @@ export function useFollowUpMutations() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['followUps'] })
     qc.invalidateQueries({ queryKey: ['openFollowUps'] })
+    // A bid's Next Action feeds the Master Grid's action columns and the Action Queue.
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+    qc.invalidateQueries({ queryKey: ['bidActionQueue'] })
   }
   const create = useMutation({ mutationFn: (i: CreateFollowUpInput) => repository.createFollowUp(i), onSuccess: invalidate })
   const setStatus = useMutation({

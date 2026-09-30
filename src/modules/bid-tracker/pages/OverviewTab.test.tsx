@@ -51,3 +51,42 @@ describe('OverviewTab — Data Confidence', () => {
     await waitFor(async () => expect((await repository.getBid(bid.id))!.dataConfidence).toBe('verified'))
   })
 })
+
+describe('OverviewTab — Next Action', () => {
+  beforeEach(async () => { await resetLocalData() })
+
+  it('creates a Next Action for the bid, which then shows as open and clears the inputs', async () => {
+    const bid = await makeBid()
+    renderTab(bid)
+    const add = screen.getByRole('button', { name: /add next action/i })
+    expect(add).toBeDisabled()
+    await userEvent.type(screen.getByPlaceholderText(/next action/i), 'Confirm EMD instrument')
+    await userEvent.type(screen.getByLabelText(/due date/i), '2099-12-01')
+    await userEvent.click(add)
+    expect(await screen.findByText('Confirm EMD instrument')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/next action/i)).toHaveValue('')
+    const stored = await repository.listFollowUps('bid', bid.id)
+    expect(stored).toHaveLength(1)
+    expect(stored[0]).toMatchObject({ note: 'Confirm EMD instrument', dueDate: '2099-12-01', status: 'open' })
+  })
+
+  it('marks an open Next Action done, removing it from the open list', async () => {
+    const bid = await makeBid()
+    await repository.createFollowUp({ entityType: 'bid', entityId: bid.id, dueDate: '2099-12-01', note: 'Confirm EMD instrument' })
+    renderTab(bid)
+    await screen.findByText('Confirm EMD instrument')
+    await userEvent.click(screen.getByRole('button', { name: /mark done/i }))
+    await waitFor(() => expect(screen.queryByText('Confirm EMD instrument')).not.toBeInTheDocument())
+    expect((await repository.listFollowUps('bid', bid.id))[0].status).toBe('done')
+  })
+
+  it('deletes a Next Action', async () => {
+    const bid = await makeBid()
+    await repository.createFollowUp({ entityType: 'bid', entityId: bid.id, dueDate: '2099-12-01', note: 'Drop me' })
+    renderTab(bid)
+    await screen.findByText('Drop me')
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+    await waitFor(() => expect(screen.queryByText('Drop me')).not.toBeInTheDocument())
+    expect(await repository.listFollowUps('bid', bid.id)).toHaveLength(0)
+  })
+})

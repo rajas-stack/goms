@@ -2,7 +2,7 @@ import { BID_STAGE_MAP, BID_STAGE_REQUIREMENTS } from '@goms/domain'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { useBidCorrigenda, useBidMutations, useResolvedOwners, useSalesPersons } from '@/lib/api'
+import { useBidCorrigenda, useBidMutations, useFollowUpMutations, useFollowUps, useResolvedOwners, useSalesPersons } from '@/lib/api'
 import { isoToday } from '@/lib/dates'
 import type { Bid, BidMilestone } from '@/lib/types'
 
@@ -40,6 +40,16 @@ export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMile
   const verify = async () => {
     setVerifyError(null)
     try { await markVerified.mutateAsync(bid.id) } catch (e) { setVerifyError(e instanceof Error ? e.message : 'Could not mark verified.') }
+  }
+  const { data: followUps = [] } = useFollowUps('bid', bid.id)
+  const { create: createFollowUp, setStatus, remove: removeFollowUp } = useFollowUpMutations()
+  const [note, setNote] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const [actionError, setActionError] = useState<string | null>(null)
+  const openFollowUps = followUps.filter((f) => f.status === 'open').sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  const runAction = async (action: () => Promise<unknown>) => {
+    setActionError(null)
+    try { await action(); return true } catch (e) { setActionError(e instanceof Error ? e.message : 'Could not save the next action.'); return false }
   }
   const ownerPerson = owner ? people.find((p) => p.id === owner.salesPersonId) : undefined
 
@@ -82,6 +92,43 @@ export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMile
             ? <a href={bid.tenderLink} target="_blank" rel="noreferrer" className="underline">Open tender</a>
             : <span className="text-muted">—</span>}
         </Stat>
+      </div>
+
+      <div className="border-t border-line pt-4">
+        <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">Next Action</div>
+        {openFollowUps.length === 0 && <div className="py-2 text-sm text-muted">No open next action.</div>}
+        {openFollowUps.map((f) => (
+          <div key={f.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+            <span>{f.note || 'Untitled action'} <span className="text-muted">— due {f.dueDate}</span></span>
+            <span className="flex shrink-0 gap-2">
+              <Button variant="secondary" size="sm" onClick={() => runAction(() => setStatus.mutateAsync({ id: f.id, status: 'done' }))}>Mark Done</Button>
+              <Button variant="ghost" size="sm" onClick={() => runAction(() => removeFollowUp.mutateAsync(f.id))}>Delete</Button>
+            </span>
+          </div>
+        ))}
+        <div className="flex flex-wrap items-center gap-2 pt-2">
+          <input
+            placeholder="Next action…" value={note} onChange={(e) => setNote(e.target.value)}
+            className="h-8 min-w-[16rem] flex-1 rounded-lg border border-line bg-white px-2 text-[13px] text-ink focus-visible:focus-ring"
+          />
+          <label className="flex items-center gap-1 text-[13px] text-muted">
+            Due Date
+            <input
+              type="date" aria-label="Due Date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+              className="h-8 rounded-lg border border-line bg-white px-2 text-[13px] text-ink focus-visible:focus-ring"
+            />
+          </label>
+          <Button
+            variant="primary" size="sm" disabled={!note.trim() || !dueDate || createFollowUp.isPending}
+            onClick={async () => {
+              const ok = await runAction(() => createFollowUp.mutateAsync({ entityType: 'bid', entityId: bid.id, note: note.trim(), dueDate }))
+              if (ok) { setNote(''); setDueDate('') }
+            }}
+          >
+            Add Next Action
+          </Button>
+        </div>
+        {actionError && <div role="alert" className="pt-1 text-[12px] text-crimson">{actionError}</div>}
       </div>
     </div>
   )
