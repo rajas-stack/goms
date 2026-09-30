@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import * as XLSX from 'xlsx'
-import { TEMPLATE_COLUMNS, HEADER_TO_FIELD, SPREADSHEET_DOMAIN_KEYS, parseCellValue, parseWorkbook, UnrecognizedWorkbookError } from './templates'
+import { TEMPLATE_COLUMNS, HEADER_TO_FIELD, SPREADSHEET_DOMAIN_KEYS, parseCellValue, rowsFromSheet, parseWorkbook, UnrecognizedWorkbookError } from './templates'
 
 function workbookBuffer(sheets: { sheet: string; rows: unknown[][] }[]): ArrayBuffer {
   const workbook = XLSX.utils.book_new()
@@ -155,5 +155,13 @@ describe('parseWorkbook', () => {
 
   it('includes a Pre-Sales sheet in the commercialMastersFlat template', () => {
     expect(TEMPLATE_COLUMNS.commercialMastersFlat.map((s) => s.sheet)).toContain('Pre-Sales')
+  })
+})
+
+describe('bids sheet custom-column headings', () => {
+  it('keeps an unrecognised heading on the bids domain but drops it elsewhere', () => {
+    const ws = XLSX.utils.aoa_to_sheet([['GeM Tender ID', 'Tender Link', 'Region'], ['GEM/1', 'http://x', 'North']])
+    expect(rowsFromSheet(ws, 'bids')[0]).toMatchObject({ gemTenderId: 'GEM/1', Region: 'North' })
+    expect(rowsFromSheet(ws, 'bidMilestones')[0]).not.toHaveProperty('Region')
   })
 })
