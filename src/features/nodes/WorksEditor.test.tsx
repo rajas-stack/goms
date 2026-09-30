@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as api from '@/lib/api'
@@ -9,6 +9,12 @@ import type { Opportunity, SalesPerson } from '@/lib/types'
 // of that is under test here (this suite is about WorksEditor's save()
 // wiring to the ownership ledger), so it's replaced with the minimal shape
 // WorksEditor reads — mirrors HierarchyCanvas.test.tsx's approach.
+const navigateMock = vi.fn()
+vi.mock('react-router-dom', async (orig) => ({
+  ...(await orig<typeof import('react-router-dom')>()),
+  useNavigate: () => navigateMock,
+}))
+
 vi.mock('@/features/workspace/context', () => ({
   useWorkspace: () => ({ select: vi.fn() }),
 }))
@@ -188,5 +194,47 @@ describe('WorksEditor — Bid Tracker guard', () => {
     expect(screen.getByTestId('work-form-dialog')).toHaveAttribute('data-managed', 'false')
     await user.click(screen.getByRole('button', { name: 'Save (unchanged)' }))
     expect(updateMutateAsync.mock.calls[0][0].patch).toMatchObject({ stageKey: 'qualified', submissionDate: '2026-10-10' })
+  })
+})
+
+describe('WorksEditor — Create Bid entry point', () => {
+  const bidMutations = (mutateAsync: ReturnType<typeof vi.fn>) =>
+    vi.spyOn(api, 'useBidMutations').mockReturnValue({ create: { mutateAsync } } as unknown as ReturnType<typeof api.useBidMutations>)
+
+  beforeEach(() => { vi.stubEnv('VITE_BID_TRACKER_ENABLED', 'true'); navigateMock.mockClear() })
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('creates a bid for an opportunity without one and opens it', async () => {
+    stubApiHooks()
+    const create = vi.fn().mockResolvedValue({ id: 'new-bid-1', opportunityId: 'opp-1' })
+    bidMutations(create)
+    render(<WorksEditor departmentId="dept-1" opportunities={[makeOpportunity()]} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Create Bid' }))
+    expect(create).toHaveBeenCalledWith('opp-1')
+    expect(navigateMock).toHaveBeenCalledWith('/bid-tracker/bid/new-bid-1')
+  })
+
+  it('hides the button once the opportunity has a bid', () => {
+    stubApiHooks({ bid: { id: 'b1', opportunityId: 'opp-1' } })
+    bidMutations(vi.fn())
+    render(<WorksEditor departmentId="dept-1" opportunities={[makeOpportunity()]} />)
+    expect(screen.queryByRole('button', { name: 'Create Bid' })).not.toBeInTheDocument()
+  })
+
+  it('hides the button entirely when Bid Tracker is not enabled', () => {
+    vi.stubEnv('VITE_BID_TRACKER_ENABLED', 'false')
+    stubApiHooks()
+    bidMutations(vi.fn())
+    render(<WorksEditor departmentId="dept-1" opportunities={[makeOpportunity()]} />)
+    expect(screen.queryByRole('button', { name: 'Create Bid' })).not.toBeInTheDocument()
+  })
+
+  it('shows the server message, without navigating, when the create is rejected (duplicate bid)', async () => {
+    stubApiHooks()
+    bidMutations(vi.fn().mockRejectedValue(new Error('This opportunity already has a bid.')))
+    render(<WorksEditor departmentId="dept-1" opportunities={[makeOpportunity()]} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Create Bid' }))
+    expect(await screen.findByText(/already has a bid/i)).toBeInTheDocument()
+    expect(navigateMock).not.toHaveBeenCalled()
   })
 })

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
@@ -6,13 +7,43 @@ import { Icon } from '@/components/ui/Icon'
 import { WorkFormDialog } from './WorkFormDialog'
 import { formatBudgetRange, formatWorkValue, workUnitLabel } from './department-meta'
 import { stageLabel } from '@/data/pipeline-stages'
-import { useBidForOpportunity, useOpportunityMutations, useOwnershipMutations, useResolvedOwners, useSalesPersons } from '@/lib/api'
+import { useBidForOpportunity, useBidMutations, useOpportunityMutations, useOwnershipMutations, useResolvedOwners, useSalesPersons } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
 import { OwnerBadge } from '@/features/sales/OwnerBadge'
 import { AssignOwnerDialog } from '@/features/sales/AssignOwnerDialog'
 import { assignOwnerFromEmail } from '@/lib/assignOwnerFromEmail'
 import { isoToday } from '@/lib/dates'
 import type { Opportunity } from '@/lib/types'
+import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
+
+/** Starts a bid for an opportunity that has none, then opens it. A bid that
+ *  already exists (including one a concurrent create from another tab just made)
+ *  shows the server's message inline instead of an unhandled rejection. */
+function CreateBidButton({ opportunityId }: { opportunityId: string }) {
+  const { data: bid, isLoading } = useBidForOpportunity(opportunityId)
+  const { create } = useBidMutations()
+  const navigate = useNavigate()
+  const [error, setError] = useState<string | null>(null)
+  if (isLoading || bid) return null
+
+  async function handleCreate(e: React.MouseEvent) {
+    e.stopPropagation()
+    setError(null)
+    try {
+      const created = await create.mutateAsync(opportunityId)
+      navigate(`/bid-tracker/bid/${created.id}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not create the bid.')
+    }
+  }
+
+  return (
+    <span className="flex shrink-0 items-center gap-2">
+      <Button variant="secondary" size="sm" onClick={handleCreate}>Create Bid</Button>
+      {error && <span role="alert" className="text-[12px] text-crimson">{error}</span>}
+    </span>
+  )
+}
 
 /** A department's opportunity pipeline, shown as collapsible cards plus the
  *  "Create Opportunity" button that opens WorkFormDialog. Opportunities are
@@ -123,6 +154,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                       <OwnerBadge owner={owners[w.id]} people={people} />
                     </span>
                   )}
+                  {isBidTrackerEnabled() && <CreateBidButton opportunityId={w.id} />}
                   <button
                     type="button"
                     aria-label="Edit opportunity"
