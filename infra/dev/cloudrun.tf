@@ -99,7 +99,7 @@ resource "google_cloud_run_v2_service" "goms_api" {
       # future Terraform apply would silently roll goms-dev back to an older
       # image as a side effect. Pin to whatever is actually live at apply
       # time, same as this file's other identical fixes.
-      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:7e1927204ccb881cc9a1cbc91c1bd55d3e715344"
+      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:10518c25e9ca212acd7fb89f548e4b52355cced6"
       env {
         name = "DATABASE_URL"
         value_source {
@@ -169,6 +169,13 @@ resource "google_cloud_run_v2_service" "goms_api" {
         name  = "CORS_ALLOWED_ORIGINS"
         value = "http://localhost:5190"
       }
+      # Live since an out-of-band `gcloud run services update` (manual-read-auth
+      # deploy): omitted here, a plain apply would have silently turned read
+      # authentication OFF. Reconciled 2026-09-30 alongside the Bid Tracker deploy.
+      env {
+        name  = "READ_AUTH_ENFORCEMENT_ENABLED"
+        value = "true"
+      }
       env {
         name  = "ATTACHMENTS_BUCKET"
         value = google_storage_bucket.attachments.name
@@ -211,7 +218,7 @@ resource "google_cloud_run_v2_job" "goms_migrate" {
         # auth-enabled build (2026-09-01) after running this job to apply
         # the actor_email migration via `gcloud run jobs update --image`
         # (out-of-band from Terraform, then reconciled here).
-        image   = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:943b362b28dc9439fa0ed01aae49531cc9f2e1eb"
+        image   = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:10518c25e9ca212acd7fb89f548e4b52355cced6"
         command = ["node"]
         args    = ["node_modules/node-pg-migrate/bin/node-pg-migrate.js", "up"]
         env {
