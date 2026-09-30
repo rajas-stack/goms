@@ -6,7 +6,8 @@ import {
   type TransferSalesPersonInput,
 } from '@/data/repository'
 import type {
-  Charge, Employee, FollowUp, HierNode, Opportunity, SalesPerson, SearchResult, Status, TimelineEvent, TimelineEventType,
+  Bid, BidMilestone, BidSavedView, Charge, Employee, FollowUp, HierNode, Opportunity, SalesPerson, SearchResult, Status,
+  TimelineEvent, TimelineEventType,
 } from './types'
 
 const qk = {
@@ -36,6 +37,14 @@ const qk = {
   ownedBy: (id: string, asOf: string) => ['ownedBy', id, asOf] as const,
   resolvedOwners: (t: string, asOf: string, ids: string[]) => ['resolvedOwners', t, asOf, ids] as const,
   openFollowUps: ['openFollowUps'] as const,
+  bidsForGrid: (filterRules?: unknown) => ['bidsForGrid', filterRules ?? null] as const,
+  bid: (id: string) => ['bid', id] as const,
+  bidMilestones: (bidId: string) => ['bidMilestones', bidId] as const,
+  bidCorrigenda: (bidId: string) => ['bidCorrigenda', bidId] as const,
+  protectedValues: (t: string, id: string) => ['protectedValues', t, id] as const,
+  documents: (t: string, id: string) => ['documents', t, id] as const,
+  bidSavedViews: ['bidSavedViews'] as const,
+  bidActionQueue: ['bidActionQueue'] as const,
 }
 
 export const useStates = () => useQuery({ queryKey: qk.states, queryFn: () => repository.listStates() })
@@ -118,6 +127,134 @@ export function useOpportunityMutations() {
     onSuccess: invalidate,
   })
   const remove = useMutation({ mutationFn: (id: string) => repository.deleteOpportunity(id), onSuccess: invalidate })
+  return { create, update, remove }
+}
+
+// --- Bid Tracker ---
+export const useBidsForGrid = (filterRules?: BidSavedView['filterRules']) =>
+  useQuery({ queryKey: qk.bidsForGrid(filterRules), queryFn: () => repository.listBidsForGrid(filterRules) })
+export const useBid = (id: string | null) =>
+  useQuery({ queryKey: qk.bid(id ?? ''), queryFn: async () => (await repository.getBid(id!)) ?? null, enabled: !!id })
+export function useBidMutations() {
+  const qc = useQueryClient()
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+    qc.invalidateQueries({ queryKey: ['bid'] })
+    qc.invalidateQueries({ queryKey: ['bidActionQueue'] })
+    // A bid's stage/decision syncs back to its opportunity (spec §4.4).
+    qc.invalidateQueries({ queryKey: ['opportunities'] })
+    qc.invalidateQueries({ queryKey: ['opportunity'] })
+    qc.invalidateQueries({ queryKey: ['opportunityStageChanges'] })
+  }
+  const create = useMutation({ mutationFn: (opportunityId: string) => repository.createBid(opportunityId), onSuccess: invalidate })
+  const update = useMutation({
+    mutationFn: (a: { id: string; patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>> }) =>
+      repository.updateBid(a.id, a.patch),
+    onSuccess: invalidate,
+  })
+  const archive = useMutation({ mutationFn: (id: string) => repository.archiveBid(id), onSuccess: invalidate })
+  const unarchive = useMutation({ mutationFn: (id: string) => repository.unarchiveBid(id), onSuccess: invalidate })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteBid(id), onSuccess: invalidate })
+  return { create, update, archive, unarchive, remove }
+}
+export const useBidActionQueue = () =>
+  useQuery({ queryKey: qk.bidActionQueue, queryFn: () => repository.listBidActionQueue() })
+
+export const useBidMilestones = (bidId: string | null) =>
+  useQuery({ queryKey: qk.bidMilestones(bidId ?? ''), queryFn: () => repository.listBidMilestones(bidId!), enabled: !!bidId })
+export function useBidMilestoneMutations(bidId: string) {
+  const qc = useQueryClient()
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: qk.bidMilestones(bidId) })
+    qc.invalidateQueries({ queryKey: ['bid', bidId] })
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+  }
+  const create = useMutation({
+    mutationFn: (input: Parameters<typeof repository.createBidMilestone>[0]) => repository.createBidMilestone(input),
+    onSuccess: invalidate,
+  })
+  const update = useMutation({
+    mutationFn: (a: { id: string; patch: Partial<Pick<BidMilestone, 'label' | 'dueAt' | 'venue' | 'notes' | 'status'>> }) =>
+      repository.updateBidMilestone(a.id, a.patch),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteBidMilestone(id), onSuccess: invalidate })
+  return { create, update, remove }
+}
+
+export const useBidCorrigenda = (bidId: string | null) =>
+  useQuery({ queryKey: qk.bidCorrigenda(bidId ?? ''), queryFn: () => repository.listBidCorrigenda(bidId!), enabled: !!bidId })
+export function useBidCorrigendaMutations(bidId: string) {
+  const qc = useQueryClient()
+  // Reviewing a change can move a milestone, the bid's tender link/confidence,
+  // and the opportunity's submission date, so all of those go stale together.
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: qk.bidCorrigenda(bidId) })
+    qc.invalidateQueries({ queryKey: qk.bidMilestones(bidId) })
+    qc.invalidateQueries({ queryKey: ['bid', bidId] })
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+    qc.invalidateQueries({ queryKey: ['opportunity'] })
+  }
+  const create = useMutation({
+    mutationFn: (input: Parameters<typeof repository.createBidCorrigendum>[0]) => repository.createBidCorrigendum(input),
+    onSuccess: invalidate,
+  })
+  const reviewChange = useMutation({
+    mutationFn: (input: Parameters<typeof repository.reviewCorrigendumChange>[0]) => repository.reviewCorrigendumChange(input),
+    onSuccess: invalidate,
+  })
+  return { create, reviewChange }
+}
+
+export const useProtectedValues = (entityType: string, entityId: string | null) =>
+  useQuery({
+    queryKey: qk.protectedValues(entityType, entityId ?? ''),
+    queryFn: () => repository.listProtectedValues(entityType, entityId!),
+    enabled: !!entityId,
+  })
+export function useProtectedValueMutations(entityType: string, entityId: string) {
+  const qc = useQueryClient()
+  const invalidate = () => qc.invalidateQueries({ queryKey: qk.protectedValues(entityType, entityId) })
+  const freeze = useMutation({ mutationFn: (fieldKey: string) => repository.freezeValue(entityType, entityId, fieldKey), onSuccess: invalidate })
+  const unfreeze = useMutation({
+    mutationFn: (a: { fieldKey: string; reason: string }) => repository.unfreezeValue(entityType, entityId, a.fieldKey, a.reason),
+    onSuccess: invalidate,
+  })
+  return { freeze, unfreeze }
+}
+
+export const useDocuments = (entityType: string, entityId: string | null) =>
+  useQuery({
+    queryKey: qk.documents(entityType, entityId ?? ''),
+    queryFn: () => repository.listDocuments(entityType, entityId!),
+    enabled: !!entityId,
+  })
+export function useDocumentMutations(entityType: string, entityId: string) {
+  const qc = useQueryClient()
+  const invalidate = () => qc.invalidateQueries({ queryKey: qk.documents(entityType, entityId) })
+  const requestUploadUrl = useMutation({
+    mutationFn: (input: Parameters<typeof repository.requestDocumentUploadUrl>[0]) => repository.requestDocumentUploadUrl(input),
+  })
+  const confirmUpload = useMutation({ mutationFn: (uploadId: string) => repository.confirmDocumentUpload(uploadId), onSuccess: invalidate })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteDocument(id), onSuccess: invalidate })
+  return { requestUploadUrl, confirmUpload, remove }
+}
+
+export const useBidSavedViews = () =>
+  useQuery({ queryKey: qk.bidSavedViews, queryFn: () => repository.listBidSavedViews() })
+export function useBidSavedViewMutations() {
+  const qc = useQueryClient()
+  const invalidate = () => qc.invalidateQueries({ queryKey: qk.bidSavedViews })
+  const create = useMutation({
+    mutationFn: (input: Parameters<typeof repository.createBidSavedView>[0]) => repository.createBidSavedView(input),
+    onSuccess: invalidate,
+  })
+  const update = useMutation({
+    mutationFn: (a: { id: string; patch: Partial<Pick<BidSavedView, 'name' | 'filterRules' | 'sort' | 'visibleColumns'>> }) =>
+      repository.updateBidSavedView(a.id, a.patch),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteBidSavedView(id), onSuccess: invalidate })
   return { create, update, remove }
 }
 
