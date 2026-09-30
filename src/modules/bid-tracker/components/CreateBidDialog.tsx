@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Dialog } from '@/components/ui/Dialog'
 import { Icon } from '@/components/ui/Icon'
@@ -13,6 +13,16 @@ const MAX_SHOWN = 50
  *  the same `bids.create` mutation as the Create Bid button on an opportunity
  *  card (same validation, same duplicate check), then opens the new bid. */
 export function CreateBidDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Dialog open={open} onClose={onClose} title="Create Bid" description="Pick the opportunity this bid is for. Each opportunity can have one bid." size="lg">
+      {/* The picker (and its three list queries) mounts only while the dialog is open,
+          so a closed dialog costs the grid nothing. Its state also resets on every open. */}
+      <CreateBidPicker onClose={onClose} />
+    </Dialog>
+  )
+}
+
+function CreateBidPicker({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
   const { data: opportunities = [], isLoading } = useOpportunities()
   const { data: bids = [] } = useBidsForGrid()
@@ -21,8 +31,6 @@ export function CreateBidDialog({ open, onClose }: { open: boolean; onClose: () 
   const [query, setQuery] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [creatingId, setCreatingId] = useState<string | null>(null)
-
-  useEffect(() => { if (open) { setQuery(''); setError(null); setCreatingId(null) } }, [open])
 
   const departmentName = useMemo(() => new Map(departments.map((d) => [d.id, d.name])), [departments])
   const available = useMemo(() => {
@@ -51,7 +59,6 @@ export function CreateBidDialog({ open, onClose }: { open: boolean; onClose: () 
   }
 
   return (
-    <Dialog open={open} onClose={onClose} title="Create Bid" description="Pick the opportunity this bid is for. Each opportunity can have one bid." size="lg">
       <div className="flex flex-col gap-3">
         <div className="relative">
           <Icon name="Search" size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" />
@@ -95,6 +102,5 @@ export function CreateBidDialog({ open, onClose }: { open: boolean; onClose: () 
           <p className="text-[12px] text-muted">Showing {MAX_SHOWN} of {matches.length}. Search to narrow the list.</p>
         )}
       </div>
-    </Dialog>
   )
 }
