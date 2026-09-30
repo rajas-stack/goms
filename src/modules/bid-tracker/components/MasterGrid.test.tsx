@@ -433,7 +433,8 @@ describe('MasterGrid', () => {
       const rendered = screen.getAllByTestId('bid-row').length
       expect(rendered).toBeGreaterThan(0)
       expect(rendered).toBeLessThan(80)
-
+      // +1: the leading selection column lives in the first header row (rowSpan 2).
+      const columnCount = document.querySelectorAll('thead tr:nth-child(2) th').length + 1
       const columnCount = document.querySelectorAll('thead tr:nth-child(2) th').length
       const spacers = Array.from(document.querySelectorAll('tbody tr[aria-hidden="true"]'))
       expect(spacers).toHaveLength(2) // above the window, below the window
@@ -451,5 +452,49 @@ describe('MasterGrid', () => {
     renderGrid()
     expect(await screen.findByTestId('grid-empty')).toHaveTextContent('No bids yet.')
     fireEvent.click(document.body)
+  })
+
+  describe('selection and bulk actions', () => {
+    it('shows the bulk toolbar only when rows are selected, and Archive Selected archives exactly those rows', async () => {
+      const a = await makeBid('Alpha')
+      await makeBid('Beta')
+      renderGrid()
+      await screen.findByText('Alpha')
+      expect(screen.queryByRole('button', { name: /archive selected/i })).not.toBeInTheDocument()
+      const row = screen.getByText('Alpha').closest('tr')!
+      await userEvent.click(within(row).getByRole('checkbox', { name: 'Select row' }))
+      expect(screen.getByText('1 selected')).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: /archive selected/i }))
+      await waitFor(async () => {
+        const grid = await repository.listBidsForGrid()
+        expect(grid.find((r) => r.id === a.id)?.status).toBe('archived')
+        expect(grid.filter((r) => r.status === 'archived')).toHaveLength(1)
+      })
+      await waitFor(() => expect(screen.queryByText('1 selected')).not.toBeInTheDocument())
+    })
+
+    it('Select all selects every visible row', async () => {
+      await makeBid('Alpha')
+      await makeBid('Beta')
+      renderGrid()
+      await screen.findByText('Alpha')
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows' }))
+      expect(screen.getByText('2 selected')).toBeInTheDocument()
+    })
+
+    it('Reassign Owner assigns the chosen sales person to every selected bid', async () => {
+      const a = await makeBid('Alpha')
+      const person = await repository.createSalesPerson({ name: 'Rita Rao', officialEmail: 'rita@amnex.com', designation: 'RM', tierKey: 'rm' })
+      renderGrid()
+      await screen.findByText('Alpha')
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select row' }))
+      await userEvent.click(screen.getByRole('button', { name: /reassign owner/i }))
+      await userEvent.click(await screen.findByRole('combobox'))
+      await userEvent.click(await screen.findByText('Rita Rao'))
+      await waitFor(async () => {
+        const owners = await repository.resolveOwners('bid', [a.id], new Date().toISOString().slice(0, 10))
+        expect(JSON.stringify(owners)).toContain(person.id)
+      })
+    })
   })
 })

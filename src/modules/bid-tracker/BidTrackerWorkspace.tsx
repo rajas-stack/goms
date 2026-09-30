@@ -40,10 +40,20 @@ export function BidTrackerWorkspace() {
 
   const activeView: BidSavedView | undefined = views.find((v) => v.id === activeViewId)
   const persistTimer = useRef<ReturnType<typeof setTimeout>>()
-  useEffect(() => () => clearTimeout(persistTimer.current), [])
+  // The latest unsent edit. Switching views or unmounting FLUSHES it rather than
+  // cancelling the timer, so a change made just before leaving is never lost.
+  const pending = useRef<{ id: string; patch: { filterRules: TypedFilterRule[]; visibleColumns: string[] } } | null>(null)
+  const flushPending = () => {
+    clearTimeout(persistTimer.current)
+    if (pending.current) update.mutate(pending.current)
+    pending.current = null
+  }
+  const flushRef = useRef(flushPending)
+  flushRef.current = flushPending
+  useEffect(() => () => flushRef.current(), [])
 
   const selectView = (id: string, from: BidSavedView[] = views) => {
-    clearTimeout(persistTimer.current)
+    flushPending()
     const view = from.find((v) => v.id === id)
     setActiveViewId(id)
     setRules(view?.filterRules ?? [])
@@ -53,9 +63,8 @@ export function BidTrackerWorkspace() {
   const persist = (nextRules: TypedFilterRule[], nextColumns: string[] | undefined) => {
     if (!activeView || activeView.isSystem) return
     clearTimeout(persistTimer.current)
-    persistTimer.current = setTimeout(() => {
-      update.mutate({ id: activeView.id, patch: { filterRules: nextRules.filter(isRuleComplete), visibleColumns: nextColumns ?? [] } })
-    }, SAVE_DEBOUNCE_MS)
+    pending.current = { id: activeView.id, patch: { filterRules: nextRules.filter(isRuleComplete), visibleColumns: nextColumns ?? [] } }
+    persistTimer.current = setTimeout(flushPending, SAVE_DEBOUNCE_MS)
   }
 
   const onRulesChange = (next: TypedFilterRule[]) => { setRules(next); persist(next, visibleColumns) }
@@ -63,6 +72,7 @@ export function BidTrackerWorkspace() {
 
   const onDelete = (id: string) => {
     if (!window.confirm('Delete this saved view?')) return
+    if (pending.current?.id === id) { clearTimeout(persistTimer.current); pending.current = null } // nothing to save into a deleted view
     remove.mutate(id, { onSuccess: () => selectView(DEFAULT_VIEW_ID) })
   }
 

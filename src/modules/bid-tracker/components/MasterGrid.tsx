@@ -10,10 +10,14 @@ import { type CustomFieldType, type CustomValue, type TypedFilterRule } from '@g
 import { motion } from 'framer-motion'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { Checkbox } from '@/components/ui/Checkbox'
+import { Combobox } from '@/components/ui/Combobox'
+import { Dialog } from '@/components/ui/Dialog'
 import { Icon } from '@/components/ui/Icon'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import {
-  useBidCustomFields, useBidMutations, useBidsForGrid, useOpportunityMutations, useSetBidCustomValue, useStates,
+  useBidCustomFields, useBidMutations, useBidsForGrid, useOpportunityMutations, useOwnershipMutations, useSalesPersons,
+  useSetBidCustomValue, useStates,
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { BidGridRow } from '@/lib/types'
@@ -115,6 +119,9 @@ export function MasterGrid(props: MasterGridProps) {
   const [addColumnOpen, setAddColumnOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [reassignOpen, setReassignOpen] = useState(false)
+  const [bulkError, setBulkError] = useState<string | null>(null)
   const [cellErrors, setCellErrors] = useState<Record<string, string>>({})
 
   // --- data -------------------------------------------------------------------
@@ -123,6 +130,8 @@ export function MasterGrid(props: MasterGridProps) {
   const { data: customFields = [] } = useBidCustomFields()
   const { data: states = [] } = useStates()
   const { archive, unarchive } = useBidMutations()
+  const { assign } = useOwnershipMutations()
+  const { data: salesPersons = [] } = useSalesPersons()
   const setCustomValue = useSetBidCustomValue()
   const { update: updateOpportunity } = useOpportunityMutations()
   const stateName = useMemo(() => new Map(states.map((s) => [s.code, s.name])), [states])
@@ -137,6 +146,37 @@ export function MasterGrid(props: MasterGridProps) {
     () => (fetched ?? []).filter((r) => rowMatchesSearch(r, visible, search)),
     [fetched, visible, search],
   )
+
+  // --- selection & bulk actions -----------------------------------------------
+  // Selection is by bid id and only ever counts rows still on screen, so a
+  // filter or search change cannot leave an invisible row selected.
+  const visibleIdSet = useMemo(() => new Set(rows.map((r) => r.id)), [rows])
+  const selectedIds = useMemo(() => [...selected].filter((id) => visibleIdSet.has(id)), [selected, visibleIdSet])
+  const allSelected = rows.length > 0 && selectedIds.length === rows.length
+  const toggleRow = (id: string) => setSelected((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const toggleAll = () => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.id)))
+  const runBulk = async (action: (id: string) => Promise<unknown>) => {
+    setBulkError(null)
+    const failed: string[] = []
+    for (const id of selectedIds) {
+      try { await action(id) } catch { failed.push(id) }
+    }
+    // Keep only the failures selected, so the user can see and retry them.
+    setSelected(new Set(failed))
+    if (failed.length) setBulkError(`${failed.length} of ${selectedIds.length} could not be updated.`)
+    return failed.length === 0
+  }
+  const archiveSelected = () => runBulk((id) => archive.mutateAsync(id))
+  const reassignSelected = async (salesPersonId: string) => {
+    if (!salesPersonId) return
+    const today = new Date().toISOString().slice(0, 10)
+    const ok = await runBulk((id) => assign.mutateAsync({ entityType: 'bid', entityId: id, salesPersonId, startDate: today }))
+    if (ok) setReassignOpen(false)
+  }
 
   // --- inline edit: optimistic, with rollback + inline error -------------------
   const commitCell = async (row: BidGridRow, col: GridColumnMeta, value: CellDraft) => {
@@ -232,7 +272,7 @@ export function MasterGrid(props: MasterGridProps) {
     initialRect: { width: 1200, height: 800 },
   })
   const virtualItems = virtualizer.getVirtualItems()
-  const visibleColumnCount = table.getVisibleLeafColumns().length
+  const visibleColumnCount = table.getVisibleLeafColumns().length + 1 // + selection column
 
   // Group header cells: consecutive visible columns of the same group merge
   // into one colSpan cell. Reordering can split a group into several runs.
@@ -277,6 +317,14 @@ export function MasterGrid(props: MasterGridProps) {
         </ToolbarPopover>
         <Button variant="secondary" size="sm" onClick={() => setAddColumnOpen(true)}><Icon name="Plus" size={14} /> Add column</Button>
         {hasFilters && <Button variant="ghost" size="sm" onClick={() => setRules([])}>Clear all filters</Button>}
+        {selectedIds.length > 0 && (
+          <div className="flex items-center gap-2 rounded-lg bg-ink-900/[0.06] px-2 py-1 text-[13px]" data-testid="bulk-toolbar">
+            <span>{selectedIds.length} selected</span>
+            <Button variant="secondary" size="sm" onClick={archiveSelected}>Archive Selected</Button>
+            <Button variant="secondary" size="sm" onClick={() => setReassignOpen(true)}>Reassign Owner</Button>
+          </div>
+        )}
+        {bulkError && <span role="alert" className="text-[12px] text-crimson-600">{bulkError}</span>}
         <span className="ml-auto text-[12px] text-muted" aria-live="polite">
           {rows.length === totalCount ? `${totalCount} bids` : `${rows.length} of ${totalCount} bids`}
         </span>
@@ -314,6 +362,9 @@ export function MasterGrid(props: MasterGridProps) {
         <table className="w-full min-w-max border-separate border-spacing-0 text-sm">
           <thead className="sticky top-0 z-10 bg-paper">
             <tr>
+              <th scope="col" rowSpan={2} className="w-10 border-b border-line bg-paper px-3">
+                <Checkbox aria-label="Select all rows" checked={allSelected} indeterminate={selectedIds.length > 0 && !allSelected} onChange={toggleAll} />
+              </th>
               {groupRuns.map((run, i) => (
                 <th
                   key={i} colSpan={run.span} scope="colgroup"
@@ -381,6 +432,9 @@ export function MasterGrid(props: MasterGridProps) {
                   className={cn('cursor-pointer hover:bg-ink-900/[0.03]', row.original.status === 'archived' && 'opacity-60')}
                   onClick={() => navigate(`/bid-tracker/bid/${row.original.id}`)}
                 >
+                  <td className="h-11 w-10 border-b border-line px-3 py-1" onClick={(e) => e.stopPropagation()}>
+                    <Checkbox aria-label="Select row" checked={selected.has(row.original.id)} onChange={() => toggleRow(row.original.id)} />
+                  </td>
                   {row.getVisibleCells().map((cell) => {
                     const meta = cell.column.columnDef.meta as GridColumnMeta
                     const display = renderCell(row.original, meta)
@@ -432,6 +486,15 @@ export function MasterGrid(props: MasterGridProps) {
         // brand-new column is appended to it; in the default view it shows itself.
         onCreated={(field) => { if (visibleIds?.length) setVisibleIds([...visibleIds, `custom:${field.key}`]) }}
       />
+      <Dialog
+        open={reassignOpen} onClose={() => setReassignOpen(false)}
+        title={`Reassign owner for ${selectedIds.length} bid${selectedIds.length === 1 ? '' : 's'}`}
+      >
+        <Combobox
+          value="" onChange={reassignSelected} placeholder="Choose a sales person…"
+          options={salesPersons.map((p) => ({ value: p.id, label: p.name }))}
+        />
+      </Dialog>
     </div>
   )
 }
