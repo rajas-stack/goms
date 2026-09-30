@@ -3,8 +3,9 @@ import { slugifyFieldKey } from '@goms/domain'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
-import { useBidMilestoneMutations, useBidMilestones } from '@/lib/api'
+import { useBidCorrigenda, useBidMilestoneMutations, useBidMilestones } from '@/lib/api'
 import type { BidMilestone } from '@/lib/types'
+import { CorrigendumReviewDialog } from '../components/CorrigendumReviewDialog'
 
 const field = 'h-8 w-full rounded-lg border border-line bg-white px-2 text-[13px] text-ink focus-visible:focus-ring'
 
@@ -51,6 +52,9 @@ export function MilestonesTab({ bidId }: { bidId: string }) {
   const [editing, setEditing] = useState<{ id: string; draft: Draft } | null>(null)
   const [adding, setAdding] = useState<Draft | null>(null)
   const [error, setError] = useState<{ id: string; message: string } | null>(null)
+  const { data: corrigenda = [] } = useBidCorrigenda(bidId)
+  const [reviewing, setReviewing] = useState<string | null>(null)
+  const pending = corrigenda.filter((c) => c.status === 'pending_review')
 
   const run = async (id: string, action: () => Promise<unknown>) => {
     setError(null)
@@ -83,6 +87,12 @@ export function MilestonesTab({ bidId }: { bidId: string }) {
   if (isLoading) return null
   return (
     <div className="space-y-3 p-4" data-testid="milestones-tab">
+      {pending.map((c) => (
+        <div key={c.id} role="note" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-ink">
+          <span>Corrigendum {c.corrigendumNumber} has {c.changes.filter((ch) => ch.decision === 'pending').length} change(s) awaiting review.</span>
+          <Button variant="secondary" size="sm" onClick={() => setReviewing(c.id)}>Review Corrigendum {c.corrigendumNumber}</Button>
+        </div>
+      ))}
       {sorted.length === 0 && <p className="text-sm text-muted">No milestones yet.</p>}
       {sorted.map((m) => {
         const isEditing = editing?.id === m.id
@@ -147,6 +157,7 @@ export function MilestonesTab({ bidId }: { bidId: string }) {
       ) : (
         <Button variant="secondary" size="sm" onClick={() => { setError(null); setAdding(draftOf()) }}><Icon name="Plus" size={14} /> Add milestone</Button>
       )}
+      {reviewing && <CorrigendumReviewDialog bidId={bidId} corrigendumId={reviewing} onClose={() => setReviewing(null)} />}
     </div>
   )
 }
