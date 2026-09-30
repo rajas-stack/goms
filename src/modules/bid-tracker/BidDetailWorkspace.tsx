@@ -8,7 +8,7 @@ import { ATTENTION_OPTIONS } from './gridColumns'
 import { CommercialAndFilesTab } from './pages/CommercialAndFilesTab'
 import { MilestonesTab } from './pages/MilestonesTab'
 import { OverviewTab } from './pages/OverviewTab'
-// Task 33 adds its tab here, following the OverviewTab pattern.
+import { ProtectedValuesTab } from './pages/ProtectedValuesTab'
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
@@ -69,7 +69,7 @@ export function BidDetailWorkspace() {
             opportunity={row ?? { valueAmount: '', valueUnit: 'lakh', emdAmount: '', emdUnit: 'lakh' }}
           />
         )}
-        {/* Task 33 renders the Protected Values tab here. */}
+        {tab === 'protected' && <ProtectedValuesTab bidId={bid.id} />}
       </div>
     </div>
   )

@@ -1267,6 +1267,8 @@ class InMemoryRepository implements Repository {
 
   async updateOpportunity(id: string, patch: Partial<Opportunity>) {
     const opp = this.data.opportunities.find((o) => o.id === id)!
+    const bidOfOpp = this.data.bids.find((b) => b.opportunityId === id)
+    if (bidOfOpp) this.assertNotProtected(bidOfOpp.id, (['valueAmount', 'emdAmount', 'gemTenderId'] as const).filter((f) => f in patch))
     const previousStage = opp.stageKey
     Object.assign(opp, patch)
     // A stage change is a logged event, not a silent field write — this log
@@ -1298,6 +1300,15 @@ class InMemoryRepository implements Repository {
       (c) => corrigendumIds.has(c.corrigendumId) && c.decision === 'pending',
     )
     return computeAttentionFlag({ dueAt: deadline?.dueAt ?? null, hasPendingCorrigendum, today: isoToday() })
+  }
+
+  /** Mirrors the API's assertFieldsNotProtected (spec §13): a frozen field on a
+   *  bid rejects direct edits until it is unfrozen. */
+  private assertNotProtected(bidId: string, fieldKeys: string[]) {
+    const frozen = this.data.protectedValues.find(
+      (p) => p.entityType === 'bid' && p.entityId === bidId && p.frozen && fieldKeys.includes(p.fieldKey),
+    )
+    if (frozen) throw new Error(`"${frozen.fieldKey}" is protected — unfreeze it first.`)
   }
 
   private requireBid(id: string): Bid {
@@ -1432,6 +1443,7 @@ class InMemoryRepository implements Repository {
     // two fields can never visibly disagree (spec §4.4).
     if (next.decision === 'go') next.stageKey = 'goApproved'
     if (next.decision === 'no_go') next.stageKey = 'dropped'
+    this.assertNotProtected(id, Object.keys(next))
     Object.assign(bid, next, { updatedAt: new Date().toISOString() })
     return bid
   }
@@ -1515,6 +1527,8 @@ class InMemoryRepository implements Repository {
   ) {
     const m = this.data.bidMilestones.find((x) => x.id === id)
     if (!m) throw new Error(`No such milestone: ${id}`)
+    // Only a change to the milestone's DATE touches the protected fact; status/notes edits don't.
+    if (patch.dueAt !== undefined && patch.dueAt !== m.dueAt) this.assertNotProtected(m.bidId, [m.key])
     Object.assign(m, patch, { updatedAt: new Date().toISOString() })
     return m
   }
