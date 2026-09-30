@@ -6,6 +6,7 @@ import { Icon } from '@/components/ui/Icon'
 import { useBidCorrigenda, useBidMilestoneMutations, useBidMilestones } from '@/lib/api'
 import type { BidMilestone } from '@/lib/types'
 import { CorrigendumReviewDialog } from '../components/CorrigendumReviewDialog'
+import { CreateCorrigendumDialog } from '../components/CreateCorrigendumDialog'
 
 const field = 'h-8 w-full rounded-lg border border-line bg-white px-2 text-[13px] text-ink focus-visible:focus-ring'
 
@@ -54,6 +55,7 @@ export function MilestonesTab({ bidId }: { bidId: string }) {
   const [error, setError] = useState<{ id: string; message: string } | null>(null)
   const { data: corrigenda = [] } = useBidCorrigenda(bidId)
   const [reviewing, setReviewing] = useState<string | null>(null)
+  const [addingCorrigendum, setAddingCorrigendum] = useState(false)
   const pending = corrigenda.filter((c) => c.status === 'pending_review')
 
   const run = async (id: string, action: () => Promise<unknown>) => {
@@ -157,6 +159,10 @@ export function MilestonesTab({ bidId }: { bidId: string }) {
       ) : (
         <Button variant="secondary" size="sm" onClick={() => { setError(null); setAdding(draftOf()) }}><Icon name="Plus" size={14} /> Add milestone</Button>
       )}
+      <div className="border-t border-line pt-3">
+        <Button variant="secondary" size="sm" onClick={() => setAddingCorrigendum(true)}><Icon name="FileText" size={14} /> Add Corrigendum</Button>
+      </div>
+      {addingCorrigendum && <CreateCorrigendumDialog bidId={bidId} onClose={() => setAddingCorrigendum(false)} />}
       {reviewing && <CorrigendumReviewDialog bidId={bidId} corrigendumId={reviewing} onClose={() => setReviewing(null)} />}
     </div>
   )
