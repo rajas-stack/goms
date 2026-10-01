@@ -8,7 +8,7 @@ import { SYSTEM_BID_VIEWS, SYSTEM_BID_VIEW_KEYS } from '@goms/domain'
 
 function toSavedView(row: any) {
   return {
-    id: row.id, name: row.name, scope: row.scope, ownerEmail: row.owner_email, isSystem: false,
+    id: row.id, name: row.name, scope: row.scope, ownerEmail: row.owner_email, isSystem: false, sheet: row.sheet as string,
     filterRules: row.filter_rules, sort: row.sort, visibleColumns: row.visible_columns,
     createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
   }
@@ -26,7 +26,7 @@ const patchShape = z.object({
 export const bidSavedViewsRouter = router({
   list: protectedReadProcedure.query(async ({ ctx }) => {
     const systemViews = SYSTEM_BID_VIEWS.map((v) => ({
-      id: v.key, key: v.key, name: v.name, scope: 'global' as const, ownerEmail: null, isSystem: true,
+      id: v.key, key: v.key, name: v.name, scope: 'global' as const, ownerEmail: null, isSystem: true, sheet: 'all',
       filterRules: v.filterRules, sort: [], visibleColumns: [], createdBy: null, createdAt: null, updatedAt: null,
     }))
     const email = ctx.user?.email ?? null
@@ -49,16 +49,16 @@ export const bidSavedViewsRouter = router({
   }),
 
   create: protectedProcedure
-    .input(z.object({ name: z.string().min(1), scope: z.enum(['personal', 'global']), filterRules: z.array(savedViewRuleSchema).optional(), sort: z.array(z.any()).optional(), visibleColumns: z.array(z.string()).optional() }))
+    .input(z.object({ name: z.string().min(1), scope: z.enum(['personal', 'global']), sheet: z.string().min(1).max(40).optional(), filterRules: z.array(savedViewRuleSchema).optional(), sort: z.array(z.any()).optional(), visibleColumns: z.array(z.string()).optional() }))
     .mutation(async ({ input, ctx }) => {
       const ownerEmail = input.scope === 'personal' ? (ctx.user?.email ?? null) : null
       if (input.scope === 'personal' && !ownerEmail) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'A personal view requires a signed-in user.' })
       }
       const result = await pool.query(
-        `INSERT INTO bid_saved_views (name, scope, owner_email, filter_rules, sort, visible_columns, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [input.name, input.scope, ownerEmail, JSON.stringify(input.filterRules ?? []), JSON.stringify(input.sort ?? []), JSON.stringify(input.visibleColumns ?? []), ctx.user?.email ?? null],
+        `INSERT INTO bid_saved_views (name, scope, owner_email, filter_rules, sort, visible_columns, created_by, sheet)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+        [input.name, input.scope, ownerEmail, JSON.stringify(input.filterRules ?? []), JSON.stringify(input.sort ?? []), JSON.stringify(input.visibleColumns ?? []), ctx.user?.email ?? null, input.sheet ?? 'bidTracker'],
       )
       if (input.scope === 'global') {
         // `pool` itself satisfies writeAuditLog's minimal `{query}` shape —

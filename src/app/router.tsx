@@ -14,8 +14,8 @@ const SalesWorkspace = lazy(() => import('./routes/SalesWorkspace').then((m) => 
 const CommercialCalculatorWorkspace = lazy(() =>
   import('@/modules/commercial-calculator/CommercialCalculatorWorkspace').then((m) => ({ default: m.CommercialCalculatorWorkspace })),
 )
-const BidTrackerWorkspace = lazy(() =>
-  import('@/modules/bid-tracker/BidTrackerWorkspace').then((m) => ({ default: m.BidTrackerWorkspace })),
+const OpportunityWorkspace = lazy(() =>
+  import('@/modules/bid-tracker/OpportunityWorkspace').then((m) => ({ default: m.OpportunityWorkspace })),
 )
 const BidDetailWorkspace = lazy(() =>
   import('@/modules/bid-tracker/BidDetailWorkspace').then((m) => ({ default: m.BidDetailWorkspace })),
@@ -56,9 +56,13 @@ const adminImportRoutes =
 // the admin-import routes above: absent from the router entirely when off.
 const bidTrackerRoutes = isBidTrackerEnabled()
   ? [
-      { path: '/bid-tracker', element: <BidTrackerWorkspace /> },
+      { path: '/bid-tracker', element: <OpportunityWorkspace tab="bid-tracker" /> },
       { path: '/bid-tracker/bid/:bidId', element: <BidDetailWorkspace /> },
-      { path: '/bid-tracker/:section', element: <BidTrackerWorkspace /> },
+      { path: '/bid-tracker/pipeline', element: <OpportunityWorkspace tab="pipeline" /> },
+      { path: '/bid-tracker/pipeline/:tab', element: <OpportunityWorkspace tab="pipeline" /> },
+      { path: '/bid-tracker/campaign', element: <OpportunityWorkspace tab="campaign" /> },
+      { path: '/bid-tracker/master', element: <OpportunityWorkspace tab="master" /> },
+      { path: '/bid-tracker/:section', element: <OpportunityWorkspace tab="bid-tracker" /> },
     ]
   : []
 

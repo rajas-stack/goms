@@ -9,14 +9,16 @@ import { cn } from '@/lib/utils'
  *  workspace: switching loads its filters, column visibility and column order.
  *  Changes made on a system view can't be saved into it, so the strip says so
  *  (`modifiedViewId`) and offers to keep them as a new view. */
-export function SavedViewTabs({ activeViewId, onChange, onCreateNew, onDelete, modifiedViewId }: {
+export function SavedViewTabs({ sheet, activeViewId, onChange, onCreateNew, onDelete, modifiedViewId }: {
+  /** The Opportunity sheet whose views are listed (default: Bid Tracker). */
+  sheet?: string
   activeViewId: string
   onChange: (id: string) => void
   onCreateNew: () => void
   onDelete?: (id: string) => void
   modifiedViewId?: string | null
 }) {
-  const { data: views = [], isLoading } = useBidSavedViews()
+  const { data: views = [], isLoading } = useBidSavedViews(sheet)
   if (isLoading) return null
   return (
     <div className="flex items-center gap-1 overflow-x-auto border-b border-line bg-[#F1F6FA] px-3 py-1" data-testid="saved-view-tabs">

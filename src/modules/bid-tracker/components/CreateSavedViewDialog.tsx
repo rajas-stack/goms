@@ -17,9 +17,11 @@ const SCOPES: { value: 'personal' | 'global'; title: string; hint: string }[] = 
 
 /** Saves the grid's current setup as a view: its filters (editable here, in the
  *  same WHERE/operator/value builder as the grid), and its ordered column list. */
-export function CreateSavedViewDialog({ open, onClose, initialFilterRules, visibleColumns, onCreated }: {
+export function CreateSavedViewDialog({ open, onClose, sheet, initialFilterRules, visibleColumns, onCreated }: {
   open: boolean
   onClose: () => void
+  /** The Opportunity sheet the new view belongs to (default: Bid Tracker). */
+  sheet?: string
   initialFilterRules: FilterNode[]
   /** Ordered visible column ids; empty/undefined = default (all). */
   visibleColumns?: string[]
@@ -44,7 +46,7 @@ export function CreateSavedViewDialog({ open, onClose, initialFilterRules, visib
     setError(null)
     try {
       const view = await create.mutateAsync({
-        name: name.trim(), scope, filterRules: pruneFilterNodes(rules, isRuleComplete), visibleColumns: visibleColumns ?? [],
+        name: name.trim(), scope, sheet, filterRules: pruneFilterNodes(rules, isRuleComplete), visibleColumns: visibleColumns ?? [],
       })
       onCreated?.(view)
       onClose()

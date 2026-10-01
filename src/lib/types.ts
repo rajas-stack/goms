@@ -445,6 +445,8 @@ export interface DocumentCitation {
 }
 export interface BidSavedView {
   id: string; name: string; scope: 'personal' | 'global'; ownerEmail: string | null; isSystem: boolean
+  /** The Opportunity sheet this view belongs to ('all' = a system view, shown on every sheet). */
+  sheet: string
   /** Type-aware rules (spec §8.1). `eq` is valid for every column type. */
   filterRules: FilterNode[]
   /** ORDERED column ids (standard ids and `custom:<key>`): array order is

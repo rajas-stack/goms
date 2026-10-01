@@ -59,16 +59,16 @@ const FROZEN_SHADOW = '3px 0 5px -2px rgba(11,43,73,0.28)'
 /** Frozen columns may take at most this share of the visible width, so the
  *  scrolling part of the sheet never disappears (matters most on a phone). */
 const MAX_FROZEN_SHARE = 0.6
-const FROZEN_STORAGE_KEY = 'goms:bidGrid:frozenColumns'
+const frozenKey = (sheet: string) => (sheet === 'bidTracker' ? 'goms:bidGrid:frozenColumns' : 'goms:bidGrid:frozenColumns:' + sheet)
 
-const loadFrozen = (): string[] => {
+const loadFrozen = (sheet: string): string[] => {
   try {
-    const raw = JSON.parse(localStorage.getItem(FROZEN_STORAGE_KEY) ?? '[]')
+    const raw = JSON.parse(localStorage.getItem(frozenKey(sheet)) ?? '[]')
     return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : []
   } catch { return [] }
 }
-const saveFrozen = (ids: string[]) => {
-  try { localStorage.setItem(FROZEN_STORAGE_KEY, JSON.stringify(ids)) } catch { /* private mode: freeze just won't persist */ }
+const saveFrozen = (sheet: string, ids: string[]) => {
+  try { localStorage.setItem(frozenKey(sheet), JSON.stringify(ids)) } catch { /* private mode: freeze just won't persist */ }
 }
 
 const helper = createColumnHelper<BidGridRow>()
@@ -121,6 +121,8 @@ function ToolbarPopover({ label, icon, badge, children, open: controlledOpen, on
 }
 
 export interface MasterGridProps {
+  /** Which Opportunity sheet this is: frozen columns are remembered per sheet. */
+  sheet?: string
   /** Filter rules. Controlled when `onFilterRulesChange` is given (a saved view
    *  owns them); otherwise the grid keeps its own, seeded from this. */
   filterRules?: FilterNode[]
@@ -175,7 +177,7 @@ export function MasterGrid(props: MasterGridProps) {
   unlockedRef.current = unlocked
 
   // Frozen (pinned) columns: chosen per column from its header menu, remembered in this browser.
-  const [frozenIds, setFrozenIds] = useState<string[]>(loadFrozen)
+  const [frozenIds, setFrozenIds] = useState<string[]>(() => loadFrozen(props.sheet ?? 'bidTracker'))
 
   // --- data -------------------------------------------------------------------
   const appliedRules = useMemo(() => pruneFilterNodes(rules, isRuleComplete), [rules])
@@ -311,7 +313,7 @@ export function MasterGrid(props: MasterGridProps) {
   const toggleFreeze = (id: string) => {
     setFrozenIds((cur) => {
       const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
-      saveFrozen(next)
+      saveFrozen(props.sheet ?? 'bidTracker', next)
       return next
     })
   }

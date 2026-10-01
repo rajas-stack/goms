@@ -530,7 +530,7 @@ export interface Repository {
 
   listBidSavedViews(): Promise<BidSavedView[]>
   createBidSavedView(input: {
-    name: string; scope: 'personal' | 'global'
+    name: string; scope: 'personal' | 'global'; sheet?: string
     filterRules?: SystemBidViewFilterRule[]; sort?: unknown[]; visibleColumns?: string[]
   }): Promise<BidSavedView>
   updateBidSavedView(id: string, patch: Partial<Pick<BidSavedView, 'name' | 'filterRules' | 'sort' | 'visibleColumns'>>): Promise<BidSavedView>
@@ -1857,7 +1857,7 @@ class InMemoryRepository implements Repository {
 
   async listBidSavedViews() {
     const system: BidSavedView[] = SYSTEM_BID_VIEWS.map((v) => ({
-      id: v.key, name: v.name, scope: 'global', ownerEmail: null, isSystem: true,
+      id: v.key, name: v.name, scope: 'global', ownerEmail: null, isSystem: true, sheet: 'all',
       filterRules: v.filterRules, sort: [], visibleColumns: [], createdBy: null, createdAt: null, updatedAt: null,
     }))
     // Copies for the same reason as listBidCustomFields (in-place updates vs structural sharing).
@@ -1865,12 +1865,12 @@ class InMemoryRepository implements Repository {
   }
 
   async createBidSavedView(input: {
-    name: string; scope: 'personal' | 'global'
+    name: string; scope: 'personal' | 'global'; sheet?: string
     filterRules?: SystemBidViewFilterRule[]; sort?: unknown[]; visibleColumns?: string[]
   }) {
     const now = new Date().toISOString()
     const view: BidSavedView = {
-      id: uid('bsv'), name: input.name, scope: input.scope, ownerEmail: null, isSystem: false,
+      id: uid('bsv'), name: input.name, scope: input.scope, ownerEmail: null, isSystem: false, sheet: input.sheet ?? 'bidTracker',
       filterRules: input.filterRules ?? [], sort: input.sort ?? [], visibleColumns: input.visibleColumns ?? [],
       createdBy: null, createdAt: now, updatedAt: now,
     }

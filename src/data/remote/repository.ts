@@ -300,7 +300,7 @@ export class RemoteRepository implements Partial<Repository> {
   listBidSavedViews = (): Promise<BidSavedView[]> =>
     this.client.bidSavedViews.list.query() as unknown as Promise<BidSavedView[]>
   createBidSavedView = (input: {
-    name: string; scope: 'personal' | 'global'
+    name: string; scope: 'personal' | 'global'; sheet?: string
     filterRules?: BidSavedView['filterRules']; sort?: unknown[]; visibleColumns?: string[]
   }): Promise<BidSavedView> => this.client.bidSavedViews.create.mutate(input) as unknown as Promise<BidSavedView>
   updateBidSavedView = (

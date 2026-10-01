@@ -19,13 +19,13 @@ describe('AccountMappingRail — Bid Tracker entry', () => {
   it('hides the Bid Tracker button while the build flag is off', () => {
     vi.stubEnv('VITE_BID_TRACKER_ENABLED', '')
     renderRail()
-    expect(screen.queryByTitle('Bid Tracker')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Opportunity')).not.toBeInTheDocument()
   })
 
   it('shows the Bid Tracker button when the flag is on, and marks it active on its routes', () => {
     vi.stubEnv('VITE_BID_TRACKER_ENABLED', 'true')
     renderRail('/bid-tracker/actions')
-    const button = screen.getByTitle('Bid Tracker')
+    const button = screen.getByTitle('Opportunity')
     expect(button.className).toContain('shadow-sm')
     expect(screen.getByTitle('Account Mapping').className).not.toContain('shadow-sm')
   })

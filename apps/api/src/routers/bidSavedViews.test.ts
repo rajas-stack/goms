@@ -51,4 +51,15 @@ describe('bidSavedViews router', () => {
     const bobGet = await asBob.bidSavedViews.get({ id: view.id })
     expect(bobGet).toBeNull()
   })
+
+  it('a view belongs to one Opportunity sheet (default Bid Tracker); system views are on every sheet', async () => {
+    const caller = appRouter.createCaller({ user: { email: 'alice@amnex.com' } } as any)
+    const tracker = await caller.bidSavedViews.create({ name: 'Tracker view', scope: 'personal' })
+    const funnel = await caller.bidSavedViews.create({ name: 'Funnel view', scope: 'personal', sheet: 'pipeline-funnel' })
+    expect(tracker.sheet).toBe('bidTracker')
+    expect(funnel.sheet).toBe('pipeline-funnel')
+    const list = await caller.bidSavedViews.list()
+    expect(list.find((v: any) => v.id === funnel.id)?.sheet).toBe('pipeline-funnel')
+    expect(list.filter((v: any) => v.isSystem).every((v: any) => v.sheet === 'all')).toBe(true)
+  })
 })

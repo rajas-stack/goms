@@ -306,8 +306,12 @@ export function useDocumentCitationMutations(documentId: string) {
   return { create, remove }
 }
 
-export const useBidSavedViews = () =>
-  useQuery({ queryKey: qk.bidSavedViews, queryFn: () => repository.listBidSavedViews() })
+/** Saved views for one Opportunity sheet: the system views (on every sheet) plus that sheet's own. */
+export const useBidSavedViews = (sheet = 'bidTracker') =>
+  useQuery({
+    queryKey: qk.bidSavedViews, queryFn: () => repository.listBidSavedViews(),
+    select: (views) => views.filter((v) => v.isSystem || (v.sheet ?? 'bidTracker') === sheet),
+  })
 export function useBidSavedViewMutations() {
   const qc = useQueryClient()
   const invalidate = () => qc.invalidateQueries({ queryKey: qk.bidSavedViews })

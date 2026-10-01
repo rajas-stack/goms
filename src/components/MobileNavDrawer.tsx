@@ -112,7 +112,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                   )}
                 >
                   <Icon name="Briefcase" size={17} />
-                  Bid Tracker
+                  Opportunity
                 </button>
               )}
             </motion.div>
