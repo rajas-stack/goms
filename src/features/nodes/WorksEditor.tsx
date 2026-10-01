@@ -133,12 +133,13 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                   data-testid={`opportunity-row-${w.id}`}
                   onClick={() => setOpenId(expanded ? null : w.id)}
                   onKeyDown={(e) => { if (e.key === 'Enter') setOpenId(expanded ? null : w.id) }}
-                  className="flex items-center gap-2 px-2.5 py-2 text-left"
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-2.5 py-2 text-left"
                 >
                   <motion.span animate={{ rotate: expanded ? 90 : 0 }} transition={{ duration: 0.15 }} className="shrink-0 text-muted">
                     <Icon name="ChevronRight" size={14} />
                   </motion.span>
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{w.opportunityName || 'Untitled opportunity'}</span>
+                  {/* The work name is never cut off: it takes the room it needs and wraps, pushing the chips to the next line. */}
+                  <span className="min-w-[10rem] flex-1 basis-[12rem] break-words text-sm font-medium text-ink-900">{w.opportunityName || 'Untitled opportunity'}</span>
                   <span className="shrink-0 rounded-full bg-panel px-2 py-0.5 text-[11px] font-medium text-ink-700">
                     {stageLabel(w.stageKey)}
                   </span>
@@ -151,11 +152,11 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                       onClick={(e) => { e.stopPropagation(); ws.select('salesPerson', owners[w.id].salesPersonId) }}
                       className="shrink-0"
                     >
-                      <OwnerBadge owner={owners[w.id]} people={people} className="cursor-pointer" />
+                      <OwnerBadge owner={owners[w.id]} people={people} className="cursor-pointer !px-1.5 !text-[11px]" />
                     </button>
                   ) : (
                     <span className="shrink-0">
-                      <OwnerBadge owner={owners[w.id]} people={people} />
+                      <OwnerBadge owner={owners[w.id]} people={people} className="!px-1.5 !text-[11px]" />
                     </span>
                   )}
                   {isBidTrackerEnabled() && <CreateBidButton opportunityId={w.id} onError={(message) => setCreateBidError(message ? { id: w.id, message } : null)} />}
