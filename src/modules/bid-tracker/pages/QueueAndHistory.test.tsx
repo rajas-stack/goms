@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -83,8 +83,13 @@ describe('ActivityHistoryPage', () => {
     const rows = screen.getAllByTestId('activity-entry')
     expect(rows).toHaveLength(2)
     const texts = rows.map((r) => r.textContent ?? '')
-    expect(texts.some((t) => /owner assigned \(owner\): Asha Rao/i.test(t))).toBe(true)
-    expect(texts.some((t) => t.includes('stageKey: solutioning → qualification'))).toBe(true)
+    expect(texts.some((t) => /Owner assigned: Asha Rao/.test(t))).toBe(true)
+    // Human labels, never the raw field name; old → new values; the bid it belongs to.
+    const stage = rows.find((r) => /Stage changed/.test(r.textContent ?? ''))!
+    expect(stage).toHaveTextContent('Solutioning')
+    expect(stage).toHaveTextContent('Qualification')
+    expect(stage).toHaveTextContent(bid.bidCode)
+    expect(stage.textContent).not.toMatch(/stageKey/)
     expect(screen.getAllByRole('link', { name: 'Open bid' }).length).toBeGreaterThan(0)
   })
 
@@ -93,8 +98,8 @@ describe('ActivityHistoryPage', () => {
     const f = await repository.createBidCustomField({ name: 'Score', dataType: 'number' })
     await repository.setBidCustomValue(bid.id, f.id, 7)
     wrap(<ActivityHistoryPage />)
-    expect(await screen.findByText(/score: — → 7/)).toBeInTheDocument()
-    expect(screen.getByText(/name: — → Score/)).toBeInTheDocument()
+    expect(await screen.findByText('Score set')).toBeInTheDocument()
+    expect(screen.getByText('Column “Score” added')).toBeInTheDocument()
   })
 
   it('labels entries whose bid was hard-deleted, and has an empty state', async () => {
@@ -109,5 +114,72 @@ describe('ActivityHistoryPage', () => {
   it('shows an empty state with no activity', async () => {
     wrap(<ActivityHistoryPage />)
     expect(await screen.findByTestId('history-empty')).toBeInTheDocument()
+  })
+
+  it('opens the affected bid from an entry', async () => {
+    const bid = await makeBid()
+    await repository.updateBid(bid.id, { stageKey: 'qualification' })
+    wrap(<ActivityHistoryPage />)
+    await userEvent.click(await screen.findByRole('link', { name: 'Open bid' }))
+    expect(await screen.findByText('bid detail page')).toBeInTheDocument()
+  })
+
+  it('shows who, when, and the readable value change for a custom column edit', async () => {
+    const bid = await makeBid()
+    const f = await repository.createBidCustomField({ name: 'Budget', dataType: 'currency' })
+    await repository.setBidCustomValue(bid.id, f.id, 500000)
+    await repository.setBidCustomValue(bid.id, f.id, 750000)
+    wrap(<ActivityHistoryPage />)
+    await screen.findAllByTestId('activity-entry')
+    const entry = screen.getAllByTestId('activity-entry').find((e) => /Budget changed/.test(e.textContent ?? ''))!
+    expect(entry).toHaveTextContent('₹5,00,000')
+    expect(entry).toHaveTextContent('₹7,50,000')
+    expect(within(entry).getByText(/^\d{2} \w{3} \d{4}, \d{2}:\d{2}$/)).toBeInTheDocument()
+    expect(entry).toHaveTextContent(/by /)
+  })
+
+  it('folds quick consecutive edits to one bid into one entry', async () => {
+    const bid = await makeBid()
+    const a = await repository.createBidCustomField({ name: 'Note', dataType: 'text' })
+    const b = await repository.createBidCustomField({ name: 'Region', dataType: 'text' })
+    await repository.setBidCustomValue(bid.id, a.id, 'x')
+    await repository.setBidCustomValue(bid.id, b.id, 'y')
+    wrap(<ActivityHistoryPage />)
+    expect(await screen.findByText(/made 2 changes/)).toBeInTheDocument()
+  })
+
+  it('filters by bid, activity type and search, and can clear them', async () => {
+    const one = await makeBid('Alpha Mission')
+    const two = await makeBid('Beta Mission')
+    await repository.updateBid(one.id, { stageKey: 'qualification' })
+    ;(await repository.getBid(two.id))!.dataConfidence = 'needs_review' // as a corrigendum would leave it
+    await repository.markBidVerified(two.id)
+    wrap(<ActivityHistoryPage />)
+    await screen.findAllByTestId('activity-entry')
+    const total = screen.getAllByTestId('activity-entry').length
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Bid' }), screen.getByRole('option', { name: new RegExp(two.bidCode) }))
+    expect(screen.getAllByTestId('activity-entry').every((e) => e.textContent?.includes(two.bidCode))).toBe(true)
+    await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+    expect(screen.getAllByTestId('activity-entry')).toHaveLength(total)
+
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Activity type' }), 'Verification')
+    expect(screen.getAllByTestId('activity-entry')).toHaveLength(1)
+    expect(screen.getByText('Bid verified')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
+
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search activity' }), 'qualification')
+    expect(screen.getAllByTestId('activity-entry')).toHaveLength(1)
+    await userEvent.type(screen.getByRole('searchbox', { name: 'Search activity' }), ' zzz')
+    expect(screen.getByTestId('history-no-match')).toBeInTheDocument()
+  })
+
+  it('filters by date range', async () => {
+    const bid = await makeBid()
+    await repository.updateBid(bid.id, { stageKey: 'qualification' })
+    wrap(<ActivityHistoryPage />)
+    await screen.findAllByTestId('activity-entry')
+    fireEvent.change(screen.getByLabelText('From date'), { target: { value: '2099-01-01' } })
+    expect(screen.getByTestId('history-no-match')).toBeInTheDocument()
   })
 })

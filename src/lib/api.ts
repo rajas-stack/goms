@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { DepartmentChoice, NewBidOpportunity } from '@goms/domain'
 import {
   repository, type AddTimelineInput, type AssignOwnerInput, type CreateEmployeeInput, type CreateFollowUpInput,
@@ -216,6 +216,17 @@ export function useBidMilestoneMutations(bidId: string) {
 
 export const useBidCorrigenda = (bidId: string | null) =>
   useQuery({ queryKey: qk.bidCorrigenda(bidId ?? ''), queryFn: () => repository.listBidCorrigenda(bidId!), enabled: !!bidId })
+/** corrigendum id → bid id for the given bids (their corrigenda load through the same
+ *  cache as each bid's own page). Lets the Activity History link a corrigendum
+ *  audit row, which is keyed to the corrigendum, back to its bid. */
+export function useCorrigendumBidMap(bidIds: string[]): Map<string, string> {
+  const results = useQueries({
+    queries: bidIds.map((id) => ({ queryKey: qk.bidCorrigenda(id), queryFn: () => repository.listBidCorrigenda(id) })),
+  })
+  const map = new Map<string, string>()
+  results.forEach((r, i) => { for (const c of r.data ?? []) map.set(c.id, bidIds[i]) })
+  return map
+}
 export function useBidCorrigendaMutations(bidId: string) {
   const qc = useQueryClient()
   // Reviewing a change can move a milestone, the bid's tender link/confidence,
