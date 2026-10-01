@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import * as api from '@/lib/api'
@@ -121,6 +121,9 @@ describe('Meetings — toolbar', () => {
     await user.click(screen.getByRole('combobox', { name: 'Filter by state' }))
     expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Gujarat', 'Maharashtra'])
     await user.keyboard('{Escape}')
+    // The State popover animates out after Escape; until it has left the DOM its options would be
+    // read as the next dropdown's. Wait for it, so each assertion sees only its own control's options.
+    await waitFor(() => expect(screen.queryAllByRole('option')).toHaveLength(0))
     await user.click(screen.getByRole('combobox', { name: 'Filter by region' }))
     expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual([
       'Rohit Tiku (North)', 'Sunil Kumar Sharma (West)',
