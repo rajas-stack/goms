@@ -18,16 +18,21 @@ function Item({ icon, children, onClick, disabled }: {
 }
 
 /** The per-column menu in a grid header: quick actions for THIS column — sort,
- *  filter — and "Manage column…", which opens the Columns panel on it. Moving,
+ *  filter, freeze — and "Manage column…", which opens the Columns panel on it. Moving,
  *  hiding, renaming and archiving live only in that panel, so each action has
  *  exactly one home. */
-export function ColumnHeaderMenu({ header, sorted, canSort, onSort, onFilter, onManage }: {
+export function ColumnHeaderMenu({ header, sorted, canSort, onSort, onFilter, onManage, frozen, freezeBlockedReason, onToggleFreeze }: {
   header: string
   sorted: false | 'asc' | 'desc'
   canSort: boolean
   onSort: (dir: 'asc' | 'desc' | false) => void
   onFilter: (() => void) | null
   onManage: () => void
+  /** Frozen columns stay put while the sheet scrolls sideways. Null = not freezable (the actions column). */
+  frozen: boolean
+  /** Set when freezing is unavailable right now (no room left), with why. */
+  freezeBlockedReason?: string | null
+  onToggleFreeze: (() => void) | null
 }) {
   const [open, setOpen] = useState(false)
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -59,6 +64,15 @@ export function ColumnHeaderMenu({ header, sorted, canSort, onSort, onFilter, on
               </>
             )}
             {onFilter && <Item icon="SlidersHorizontal" onClick={run(onFilter)}>Filter by this column</Item>}
+            {onToggleFreeze && (
+              <Item
+                icon={frozen ? "PinOff" : "Pin"} disabled={!frozen && !!freezeBlockedReason}
+                onClick={run(onToggleFreeze)}
+              >
+                {frozen ? "Unfreeze column" : "Freeze column"}
+              </Item>
+            )}
+            {!frozen && freezeBlockedReason && <p className="px-2 pb-1 text-[11px] text-muted">{freezeBlockedReason}</p>}
             <div className="my-1 h-px bg-line" />
             <Item icon="List" onClick={run(onManage)}>Manage column…</Item>
           </motion.div>

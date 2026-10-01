@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import type { TypedFilterRule } from '@goms/domain'
+import { pruneFilterNodes, type FilterNode } from '@goms/domain'
 import { Tabs } from '@/components/ui/Tabs'
 import { useBidSavedViewMutations, useBidSavedViews } from '@/lib/api'
 import type { BidSavedView } from '@/lib/types'
@@ -35,7 +35,7 @@ export function BidTrackerWorkspace() {
   // it changes only this copy — and, for a USER view, is persisted back (spec
   // §8). System views have no row to persist into, so edits there are
   // session-only until the user forks via "Create Saved View".
-  const [rules, setRules] = useState<TypedFilterRule[]>([])
+  const [rules, setRules] = useState<FilterNode[]>([])
   const [visibleColumns, setVisibleColumns] = useState<string[] | undefined>(undefined)
   const [createOpen, setCreateOpen] = useState(false)
 
@@ -44,13 +44,13 @@ export function BidTrackerWorkspace() {
   // session-only — flag them rather than let them look saved.
   const normalize = (v: unknown) => JSON.stringify(v ?? [])
   const modifiedViewId = activeView?.isSystem
-    && (normalize(rules.filter(isRuleComplete)) !== normalize(activeView.filterRules)
+    && (normalize(pruneFilterNodes(rules, isRuleComplete)) !== normalize(activeView.filterRules)
       || normalize(visibleColumns) !== normalize(activeView.visibleColumns?.length ? activeView.visibleColumns : undefined))
     ? activeView.id : null
   const persistTimer = useRef<ReturnType<typeof setTimeout>>()
   // The latest unsent edit. Switching views or unmounting FLUSHES it rather than
   // cancelling the timer, so a change made just before leaving is never lost.
-  const pending = useRef<{ id: string; patch: { filterRules: TypedFilterRule[]; visibleColumns: string[] } } | null>(null)
+  const pending = useRef<{ id: string; patch: { filterRules: FilterNode[]; visibleColumns: string[] } } | null>(null)
   const flushPending = () => {
     clearTimeout(persistTimer.current)
     if (pending.current) update.mutate(pending.current)
@@ -68,14 +68,14 @@ export function BidTrackerWorkspace() {
     setVisibleColumns(view?.visibleColumns?.length ? view.visibleColumns : undefined)
   }
 
-  const persist = (nextRules: TypedFilterRule[], nextColumns: string[] | undefined) => {
+  const persist = (nextRules: FilterNode[], nextColumns: string[] | undefined) => {
     if (!activeView || activeView.isSystem) return
     clearTimeout(persistTimer.current)
-    pending.current = { id: activeView.id, patch: { filterRules: nextRules.filter(isRuleComplete), visibleColumns: nextColumns ?? [] } }
+    pending.current = { id: activeView.id, patch: { filterRules: pruneFilterNodes(nextRules, isRuleComplete), visibleColumns: nextColumns ?? [] } }
     persistTimer.current = setTimeout(flushPending, SAVE_DEBOUNCE_MS)
   }
 
-  const onRulesChange = (next: TypedFilterRule[]) => { setRules(next); persist(next, visibleColumns) }
+  const onRulesChange = (next: FilterNode[]) => { setRules(next); persist(next, visibleColumns) }
   const onColumnsChange = (next: string[]) => { setVisibleColumns(next); persist(rules, next) }
 
   const onDelete = (id: string) => {

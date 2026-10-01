@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CUSTOM_FIELD_TYPES, type CustomFieldType } from '@goms/domain'
+import { hasOptions, type CustomFieldType } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, Input, Select } from '@/components/ui/Field'
@@ -7,9 +7,25 @@ import { useBidCustomFieldMutations } from '@/lib/api'
 import type { BidCustomField } from '@/lib/types'
 import { OptionsEditor } from './OptionsEditor'
 
-const TYPE_LABEL: Record<CustomFieldType, string> = {
-  text: 'Text', number: 'Number', date: 'Date', select: 'Select (dropdown)', boolean: 'Yes / No',
-}
+/** Grouped for the picker: basics first, then structured types, then the types
+ *  that point at an existing GOMS record (stored as a reference, never a copy). */
+const TYPE_GROUPS: { label: string; types: { type: CustomFieldType; label: string; hint?: string }[] }[] = [
+  { label: 'Basic', types: [
+    { type: 'text', label: 'Text' }, { type: 'number', label: 'Number' }, { type: 'date', label: 'Date' },
+    { type: 'boolean', label: 'Yes / No' }, { type: 'select', label: 'Select (dropdown)' }, { type: 'multiselect', label: 'Multi-select', hint: 'Pick several options from a fixed list.' },
+  ] },
+  { label: 'Structured', types: [
+    { type: 'currency', label: 'Amount (₹)', hint: 'A rupee amount, shown as ₹5,00,000.' },
+    { type: 'url', label: 'URL', hint: 'A web address that opens in a new tab.' },
+    { type: 'email', label: 'Email' }, { type: 'phone', label: 'Phone' },
+  ] },
+  { label: 'Linked to GOMS records', types: [
+    { type: 'person', label: 'Sales person', hint: 'Choose from the Sales Team — stored as a link, so a rename carries through.' },
+    { type: 'department', label: 'Department', hint: 'Choose from Account Mapping departments.' },
+    { type: 'state', label: 'State', hint: 'Choose a state or UT.' },
+  ] },
+]
+const TYPE_HINT = new Map(TYPE_GROUPS.flatMap((g) => g.types.map((t) => [t.type, t.hint] as const)))
 
 /** Creates a user-defined column. The data type is fixed once created (changing
  *  it under existing values would corrupt them) — the dialog says so. */
@@ -32,7 +48,7 @@ export function AddCustomColumnDialog({ open, onClose, onCreated }: {
     setError(null)
     try {
       const field = await create.mutateAsync({
-        name: name.trim(), dataType, ...(dataType === 'select' ? { options } : {}),
+        name: name.trim(), dataType, ...(hasOptions(dataType) ? { options } : {}),
       })
       onCreated?.(field)
       onClose()
@@ -56,12 +72,16 @@ export function AddCustomColumnDialog({ open, onClose, onCreated }: {
         <Field label="Column name" required>
           <Input value={name} maxLength={80} autoFocus onChange={(e) => setName(e.target.value)} placeholder="e.g. Client Contact, Win Probability" />
         </Field>
-        <Field label="Data type" hint="The type cannot be changed later.">
+        <Field label="Data type" hint={`${TYPE_HINT.get(dataType) ?? ''} The type cannot be changed later.`.trim()}>
           <Select value={dataType} onChange={(e) => setDataType(e.target.value as CustomFieldType)}>
-            {CUSTOM_FIELD_TYPES.map((t) => <option key={t} value={t}>{TYPE_LABEL[t]}</option>)}
+            {TYPE_GROUPS.map((g) => (
+              <optgroup key={g.label} label={g.label}>
+                {g.types.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}
+              </optgroup>
+            ))}
           </Select>
         </Field>
-        {dataType === 'select' && (
+        {hasOptions(dataType) && (
           <Field label="Options" required hint="Blank and duplicate options are dropped.">
             <OptionsEditor value={options} onChange={setOptions} />
           </Field>

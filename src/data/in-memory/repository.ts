@@ -15,7 +15,7 @@ import {
   buildOwnerMap, effectiveOwner, OWNABLE_ENTITY_MAP,
   type OwnerResolution, type OwnershipContext,
   performSearch, performRelatedRecords, type SearchData, planPostingDatesEdit, type PostingDatesEdit,
-  DEFAULT_BID_STAGE_KEY, formatBidCode, isAtOrAfterSubmitted, computeAttentionFlag, applyFilterRules,
+  ENTITY_FIELD_TYPES, hasOptions, DEFAULT_BID_STAGE_KEY, formatBidCode, isAtOrAfterSubmitted, computeAttentionFlag, applyFilterRules,
   SYSTEM_BID_VIEWS, SYSTEM_BID_VIEW_KEYS, type SystemBidViewFilterRule,
   coerceCustomValue, normalizeOptions, slugifyFieldKey,
   DEPARTMENT_REQUIRED_MESSAGE, type DepartmentChoice, type NewBidOpportunity,
@@ -1284,7 +1284,20 @@ class InMemoryRepository implements Repository {
     const bidOfOpp = this.data.bids.find((b) => b.opportunityId === id)
     if (bidOfOpp) this.assertNotProtected(bidOfOpp.id, (['valueAmount', 'emdAmount', 'gemTenderId'] as const).filter((f) => f in patch))
     const previousStage = opp.stageKey
+    const before = { opportunityName: opp.opportunityName, city: opp.city, vertical: opp.vertical }
     Object.assign(opp, patch)
+    // Inline grid edits are part of the bid's history (mirrors opportunities.update).
+    if (bidOfOpp) {
+      let changed = false
+      for (const f of ['opportunityName', 'city', 'vertical'] as const) {
+        if (!(f in patch)) continue
+        const was = String(before[f] ?? ''); const now = String(opp[f] ?? '')
+        if (was === now) continue
+        changed = true
+        this.auditCustom({ entityType: 'bid', entityId: bidOfOpp.id, field: f, oldValue: was, newValue: now, action: 'update' })
+      }
+      if (changed) bidOfOpp.updatedAt = new Date().toISOString()
+    }
     // A stage change is a logged event, not a silent field write — this log
     // is the only way "what was the pipeline on <date>?" is ever answerable.
     if (patch.stageKey !== undefined && patch.stageKey !== previousStage) {
@@ -1916,8 +1929,8 @@ class InMemoryRepository implements Repository {
     const name = input.name.trim()
     if (!name || name.length > 80) throw new Error('A column name must be 1–80 characters.')
     let options: string[] | null = null
-    if (input.dataType === 'select') options = normalizeOptions(input.options ?? [])
-    else if (input.options !== undefined) throw new Error('Only a select column has options.')
+    if (hasOptions(input.dataType)) options = normalizeOptions(input.options ?? [])
+    else if (input.options !== undefined) throw new Error('Only a select or multi-select column has options.')
     this.assertActiveNameFree(name)
     const now = new Date().toISOString()
     const field: BidCustomField = {
@@ -1944,7 +1957,7 @@ class InMemoryRepository implements Repository {
       field.updatedAt = now
     }
     if (patch.options !== undefined) {
-      if (field.dataType !== 'select') throw new Error('Only a select column has options.')
+      if (!hasOptions(field.dataType)) throw new Error('Only a select or multi-select column has options.')
       const next = normalizeOptions(patch.options)
       const prev = field.options ?? []
       if (JSON.stringify(prev) !== JSON.stringify(next)) {
@@ -2021,9 +2034,11 @@ class InMemoryRepository implements Repository {
     if (field.status === 'archived') throw new Error('This column is archived.')
     this.requireBid(bidId)
     const value = coerceCustomValue(field.dataType, raw, field.options)
+    this.assertEntityExists(field.dataType, value)
     const existing = this.data.bidCustomFieldValues.find((v) => v.bidId === bidId && v.fieldId === fieldId)
     const oldValue: CustomValue = existing?.value ?? null
-    const text = (v: CustomValue) => (v === null ? '' : String(v))
+    // An entity column logs the entity's name, not the stored id/code.
+    const text = (v: CustomValue) => (v === null ? '' : this.entityName(field.dataType, v) ?? String(v))
     // entityId is the BID so the edit shows in that bid's Activity History.
     const audit = (action: string) => this.auditCustom({
       entityType: 'bidCustomFieldValue', entityId: bidId, field: field.key, oldValue: text(oldValue), newValue: text(value), action,
@@ -2052,6 +2067,19 @@ class InMemoryRepository implements Repository {
       touch()
     }
     return { bidId, fieldId, key: field.key, value }
+  }
+
+  private entityName(type: CustomFieldType, value: CustomValue): string | null {
+    if (value === null) return null
+    if (type === 'person') return this.data.salesPersons.find((p) => p.id === value)?.name ?? null
+    if (type === 'department') return this.data.nodes.find((n) => n.domain === 'org' && n.typeKey === 'department' && n.id === value)?.name ?? null
+    if (type === 'state') return this.data.nodes.find((n) => n.typeKey === 'state' && n.stateCode === Number(value))?.name ?? null
+    return null
+  }
+
+  private assertEntityExists(type: CustomFieldType, value: CustomValue) {
+    if (value === null || !ENTITY_FIELD_TYPES.includes(type)) return
+    if (this.entityName(type, value) === null) throw new Error(`That ${type} does not exist.`)
   }
 
   async listBidCustomValues(bidId: string) {

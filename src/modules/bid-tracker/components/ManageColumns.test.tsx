@@ -55,6 +55,7 @@ describe('custom column management', () => {
     await addColumnViaDialog('Client Contact')
     await screen.findByRole('button', { name: 'Sort by Client Contact' })
     expect(groupHeaders()[groupHeaders().length - 1]).toBe('Custom')
+    await userEvent.click(screen.getByRole('button', { name: /editing locked/ })) // the grid opens locked
     await userEvent.click(screen.getByRole('button', { name: 'Edit Client Contact' }))
     await userEvent.type(screen.getByRole('textbox', { name: 'Client Contact' }), 'Ravi{Enter}')
     await waitFor(async () => expect((await repository.listBidCustomValues(bid.id)).client_contact).toBe('Ravi'))

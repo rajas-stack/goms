@@ -2,7 +2,7 @@
 // apps/api's hierarchy router) — re-imported and re-exported here so every
 // existing import path (`@/lib/types`) keeps working unchanged, including
 // this file's own later use of Domain/Status below.
-import type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue, TypedFilterRule } from '@goms/domain'
+import type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue, FilterNode } from '@goms/domain'
 export type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue }
 
 export type RelationshipStatus = 'engaged' | 'developing' | 'dormant' | 'new'
@@ -446,7 +446,7 @@ export interface DocumentCitation {
 export interface BidSavedView {
   id: string; name: string; scope: 'personal' | 'global'; ownerEmail: string | null; isSystem: boolean
   /** Type-aware rules (spec §8.1). `eq` is valid for every column type. */
-  filterRules: TypedFilterRule[]
+  filterRules: FilterNode[]
   /** ORDERED column ids (standard ids and `custom:<key>`): array order is
    *  display order, absence means hidden. Never assumed to name only current
    *  columns — a custom column may have been archived since. */

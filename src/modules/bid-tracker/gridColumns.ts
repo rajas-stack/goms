@@ -3,7 +3,10 @@
 // dynamically from the custom-field definitions. Every column — standard or
 // custom — is described by the same `GridColumnMeta`, so sorting, filtering,
 // search, visibility/order and saved views all work off one shape.
-import { BID_STAGES, type CustomFieldType, type TypedFilterRule } from '@goms/domain'
+import {
+  BID_STAGES, ENTITY_FIELD_TYPES, flattenRules, parseMultiValue,
+  type CustomFieldType, type FilterNode, type TypedFilterRule,
+} from '@goms/domain'
 import type { BidCustomField, BidGridRow } from '@/lib/types'
 
 export type GridGroupId = 'identity' | 'client' | 'ownership' | 'decision' | 'dates' | 'documents' | 'system' | 'custom'
@@ -32,13 +35,20 @@ export interface GridColumnMeta {
   group: GridGroupId
   /** null = not a data column (Manage): not sortable/filterable/searchable. */
   type: CustomFieldType | null
-  /** Fixed choices for a `select` column (standard enums, or a custom field's options). */
+  /** Fixed choices for a `select` / `multiselect` column (standard enums, or a
+   *  custom field's options). Entity types (person, department, state) take
+   *  theirs from the live records — see `optionsOf`. */
   options?: ColumnOption[]
-  /** Inline-editable in the grid. `opportunity` = a plain Opportunity attribute
-   *  patched via updateOpportunity; `custom` = a custom-field value. Everything
-   *  else is read-only here — dialog-controlled (protected/corrigendum-tracked,
-   *  or governed by a workflow such as stage/decision). */
+  /** Inline-editable in the grid (while it is unlocked). `opportunity` = a plain
+   *  Opportunity attribute patched via updateOpportunity; `custom` = a
+   *  custom-field value. Everything else is read-only here. */
   editable?: 'opportunity' | 'custom'
+  /** Why a standard column is NOT inline-editable (shown as its tooltip). Every
+   *  standard column is either `editable` or carries a `readOnlyReason` — the
+   *  explicit editable matrix, guarded by a test. */
+  readOnlyReason?: string
+  /** A cell may not be saved empty (Opportunity / Mission). */
+  required?: boolean
   /** The custom-field definition, for `custom:` columns. */
   custom?: BidCustomField
 }
@@ -61,42 +71,49 @@ const CORRIGENDUM_OPTIONS: ColumnOption[] = [
 const std = (id: string, header: string, group: GridGroupId, type: CustomFieldType | null, extra: Partial<GridColumnMeta> = {}): GridColumnMeta =>
   ({ id, header, group, type, ...extra })
 
-/** Every standard leaf column named by spec §8, in display order. */
-export const STANDARD_COLUMNS: GridColumnMeta[] = [
-  std('opportunityId', 'Opportunity ID', 'identity', 'text'),
-  std('opportunityName', 'Opportunity / Mission', 'identity', 'text'),
-  std('bidCode', 'Bid ID', 'identity', 'text'),
-  std('gemTenderId', 'Tender ID', 'identity', 'text'),
-  std('tenderLink', 'Tender Link', 'identity', 'text'),
+const PROTECTED = "Protected value — changed through the bid's Protected Values / corrigendum flow"
+const FROM_DEPARTMENT = "Comes from the opportunity's department — change it in Account Mapping"
+const FROM_FOLLOW_UP = "Comes from the bid's open follow-up — edit it in the bid"
 
-  std('departmentName', 'Department / Client', 'client', 'text'),
-  std('stateCode', 'State', 'client', 'number'),
-  // City and Sector are plain Opportunity attributes: not protected, not
-  // corrigendum-tracked, no workflow — the standard columns safe to edit inline.
+/** Every standard leaf column named by spec §8, in display order — and its
+ *  place in the editable matrix. EDITABLE: plain Opportunity attributes (not
+ *  protected, not corrigendum-tracked, no workflow) and every custom column.
+ *  READ-ONLY (with the reason): ids and generated/system fields, protected or
+ *  corrigendum-controlled values, workflow-controlled fields (stage, decision,
+ *  ownership) and anything whose source of truth is another entity. */
+export const STANDARD_COLUMNS: GridColumnMeta[] = [
+  std('opportunityId', 'Opportunity ID', 'identity', 'text', { readOnlyReason: 'Generated identifier' }),
+  std('opportunityName', 'Opportunity / Mission', 'identity', 'text', { editable: 'opportunity', required: true }),
+  std('bidCode', 'Bid ID', 'identity', 'text', { readOnlyReason: 'Generated identifier' }),
+  std('gemTenderId', 'Tender ID', 'identity', 'text', { readOnlyReason: PROTECTED }),
+  std('tenderLink', 'Tender Link', 'identity', 'text', { readOnlyReason: PROTECTED }),
+
+  std('departmentName', 'Department / Client', 'client', 'text', { readOnlyReason: FROM_DEPARTMENT }),
+  std('stateCode', 'State', 'client', 'state', { readOnlyReason: FROM_DEPARTMENT }),
   std('city', 'City', 'client', 'text', { editable: 'opportunity' }),
   std('vertical', 'Sector', 'client', 'text', { editable: 'opportunity' }),
 
-  std('ownerEmail', 'Bid Owner', 'ownership', 'text'),
-  std('solutionLeadEmail', 'Sales Lead / Solution Lead', 'ownership', 'text'),
+  std('ownerEmail', 'Bid Owner', 'ownership', 'text', { readOnlyReason: 'Ownership is assigned with Reassign Owner (keeps the ownership history)' }),
+  std('solutionLeadEmail', 'Sales Lead / Solution Lead', 'ownership', 'text', { readOnlyReason: "Ownership is assigned in the bid's Overview (keeps the ownership history)" }),
 
-  std('stageKey', 'Bid Stage', 'decision', 'select', { options: stageOptions }),
-  std('nextActionNote', 'Next Action', 'decision', 'text'),
-  std('nextActionAssigneeEmail', 'Action Owner', 'decision', 'text'),
-  std('nextActionDueDate', 'Action Due', 'decision', 'date'),
-  std('attentionFlag', 'Attention', 'decision', 'select', { options: ATTENTION_OPTIONS }),
-  std('decision', 'Decision', 'decision', 'select', { options: DECISION_OPTIONS }),
+  std('stageKey', 'Bid Stage', 'decision', 'select', { options: stageOptions, readOnlyReason: "Workflow-controlled — moves with the bid's stage actions" }),
+  std('nextActionNote', 'Next Action', 'decision', 'text', { readOnlyReason: FROM_FOLLOW_UP }),
+  std('nextActionAssigneeEmail', 'Action Owner', 'decision', 'text', { readOnlyReason: FROM_FOLLOW_UP }),
+  std('nextActionDueDate', 'Action Due', 'decision', 'date', { readOnlyReason: FROM_FOLLOW_UP }),
+  std('attentionFlag', 'Attention', 'decision', 'select', { options: ATTENTION_OPTIONS, readOnlyReason: 'Calculated from the deadline and corrigenda' }),
+  std('decision', 'Decision', 'decision', 'select', { options: DECISION_OPTIONS, readOnlyReason: 'Workflow-controlled — Go / No-Go is decided in the bid' }),
 
-  std('nextMilestoneLabel', 'Next Milestone', 'dates', 'text'),
-  std('daysRemaining', 'Days Remaining', 'dates', 'number'),
-  std('submissionDate', 'Submission Deadline', 'dates', 'date'),
+  std('nextMilestoneLabel', 'Next Milestone', 'dates', 'text', { readOnlyReason: "Comes from the bid's milestones — edit them in the bid" }),
+  std('daysRemaining', 'Days Remaining', 'dates', 'number', { readOnlyReason: 'Calculated from the next milestone' }),
+  std('submissionDate', 'Submission Deadline', 'dates', 'date', { readOnlyReason: 'Protected deadline — edit the Submission Deadline milestone in the bid' }),
 
-  std('documentCount', 'Tender Files', 'documents', 'number'),
-  std('latestCorrigendumStatus', 'Latest Corrigendum', 'documents', 'select', { options: CORRIGENDUM_OPTIONS }),
+  std('documentCount', 'Tender Files', 'documents', 'number', { readOnlyReason: "Calculated from the bid's files" }),
+  std('latestCorrigendumStatus', 'Latest Corrigendum', 'documents', 'select', { options: CORRIGENDUM_OPTIONS, readOnlyReason: 'Corrigendum-controlled — reviewed in the bid' }),
 
-  std('updatedAt', 'Last Updated', 'system', 'date'),
-  std('updatedBy', 'Updated By', 'system', 'text'),
-  std('dataConfidence', 'Data Confidence', 'system', 'select', { options: CONFIDENCE_OPTIONS }),
-  std('manage', 'Manage', 'system', null),
+  std('updatedAt', 'Last Updated', 'system', 'date', { readOnlyReason: 'System field' }),
+  std('updatedBy', 'Updated By', 'system', 'text', { readOnlyReason: 'System field' }),
+  std('dataConfidence', 'Data Confidence', 'system', 'select', { options: CONFIDENCE_OPTIONS, readOnlyReason: 'Set by verification in the bid' }),
+  std('manage', 'Manage', 'system', null, { readOnlyReason: 'Row action' }),
 ]
 
 /** Fixed pixel widths. The grid is a `table-layout: fixed` sheet: with auto
@@ -109,7 +126,10 @@ const WIDTH_BY_ID: Record<string, number> = {
   nextMilestoneLabel: 180, daysRemaining: 130, submissionDate: 160, documentCount: 110, latestCorrigendumStatus: 170,
   updatedAt: 150, updatedBy: 170, dataConfidence: 150, manage: 110,
 }
-const WIDTH_BY_TYPE: Record<string, number> = { text: 170, number: 120, date: 130, select: 150, boolean: 110 }
+const WIDTH_BY_TYPE: Record<string, number> = {
+  text: 170, number: 120, date: 130, select: 150, boolean: 110,
+  currency: 140, url: 200, email: 210, phone: 150, person: 180, department: 230, state: 140, multiselect: 220,
+}
 /** Never narrower than the header needs: label + sort arrow + menu button. */
 const headerWidth = (c: GridColumnMeta) => Math.ceil(c.header.length * 7.4) + 58 + (c.editable ? 16 : 0)
 export const columnWidth = (c: GridColumnMeta): number =>
@@ -156,6 +176,50 @@ export function resolveVisibleColumns(all: GridColumnMeta[], visibleColumns: str
   return out
 }
 
+// --- entity-backed columns ----------------------------------------------------
+
+/** The live records behind person / department / state columns. A cell stores
+ *  the record's id (state: its code); the NAME is looked up here, never copied. */
+export interface EntityLookups { persons: ColumnOption[]; departments: ColumnOption[]; states: ColumnOption[] }
+export const NO_LOOKUPS: EntityLookups = { persons: [], departments: [], states: [] }
+
+export function buildLookups(input: {
+  persons: { id: string; name: string }[]
+  departments: { id: string; name: string; stateCode: number | null }[]
+  states: { code: number; name: string }[]
+}): EntityLookups {
+  const stateName = new Map(input.states.map((s) => [s.code, s.name]))
+  // Department names repeat across states, so a duplicate carries its state.
+  const nameCount = new Map<string, number>()
+  for (const d of input.departments) nameCount.set(d.name, (nameCount.get(d.name) ?? 0) + 1)
+  return {
+    persons: input.persons.map((p) => ({ value: p.id, label: p.name })).sort((a, b) => a.label.localeCompare(b.label)),
+    departments: input.departments.map((d) => ({
+      value: d.id,
+      label: (nameCount.get(d.name) ?? 0) > 1 && d.stateCode !== null && stateName.has(d.stateCode) ? `${d.name} (${stateName.get(d.stateCode)})` : d.name,
+    })).sort((a, b) => a.label.localeCompare(b.label)),
+    states: input.states.map((s) => ({ value: String(s.code), label: s.name })).sort((a, b) => a.label.localeCompare(b.label)),
+  }
+}
+
+/** The pick-list for a column: fixed options, or the live records for an entity type. */
+export function optionsOf(col: Pick<GridColumnMeta, 'type' | 'options'> | undefined, lookups: EntityLookups = NO_LOOKUPS): ColumnOption[] {
+  switch (col?.type) {
+    case 'person': return lookups.persons
+    case 'department': return lookups.departments
+    case 'state': return lookups.states
+    default: return col?.options ?? []
+  }
+}
+
+/** Short names for a column's data type (badges, pickers). */
+export const CUSTOM_TYPE_LABEL: Record<CustomFieldType, string> = {
+  text: 'Text', number: 'Number', date: 'Date', select: 'Select', boolean: 'Yes/No', currency: 'Amount', url: 'URL', email: 'Email',
+  phone: 'Phone', person: 'Sales person', department: 'Department', state: 'State', multiselect: 'Multi-select',
+}
+
+export const isEntityType = (type: CustomFieldType | null) => !!type && ENTITY_FIELD_TYPES.includes(type)
+
 export const isEmptyCell = (v: unknown) => v === null || v === undefined || v === ''
 
 export function cellValue(row: BidGridRow, col: GridColumnMeta): unknown {
@@ -163,23 +227,66 @@ export function cellValue(row: BidGridRow, col: GridColumnMeta): unknown {
   return (row as unknown as Record<string, unknown>)[col.id]
 }
 
-/** Human text for a cell, used by quick search (and as the readable form of
- *  an enum value). Empty cells are ''. */
-export function cellText(row: BidGridRow, col: GridColumnMeta): string {
-  const v = cellValue(row, col)
+export const formatCurrency = (n: number) =>
+  new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n)
+
+/** One value as plain text, by type: what search matches, what sorting orders
+ *  by for entity types, and what an export writes. Empty = ''. */
+export function formatValueText(col: Pick<GridColumnMeta, 'type' | 'options'>, v: unknown, lookups: EntityLookups = NO_LOOKUPS): string {
   if (isEmptyCell(v)) return ''
-  if (col.type === 'boolean') return v ? 'Yes' : 'No'
-  const option = col.options?.find((o) => o.value === v)
-  return option ? `${option.label} ${String(v)}` : String(v)
+  switch (col.type) {
+    case 'boolean': return v ? 'Yes' : 'No'
+    case 'currency': return Number.isFinite(Number(v)) ? formatCurrency(Number(v)) : String(v)
+    case 'multiselect': return parseMultiValue(v).join(', ')
+    case 'person': case 'department': case 'state':
+      return optionsOf(col, lookups).find((o) => o.value === String(v))?.label ?? String(v)
+    default: return String(v)
+  }
 }
 
-/** Quick search: a row matches when ANY visible text/select column contains
- *  the query (case-insensitive). Other types are not searched. */
-export function rowMatchesSearch(row: BidGridRow, columns: GridColumnMeta[], query: string): boolean {
+/** Human text for a cell, used by quick search (and as the readable form of
+ *  an enum value). Empty cells are ''. */
+export function cellText(row: BidGridRow, col: GridColumnMeta, lookups: EntityLookups = NO_LOOKUPS): string {
+  const v = cellValue(row, col)
+  if (isEmptyCell(v)) return ''
+  if (col.type === 'select') {
+    const option = col.options?.find((o) => o.value === v)
+    if (option) return `${option.label} ${String(v)}`
+  }
+  return formatValueText(col, v, lookups)
+}
+
+const SEARCHABLE: ReadonlySet<string> = new Set(['text', 'select', 'url', 'email', 'phone', 'person', 'department', 'state', 'multiselect'])
+
+/** Quick search: a row matches when ANY visible text-like column contains the
+ *  query (case-insensitive). Numbers, amounts, dates and booleans are not searched. */
+export function rowMatchesSearch(row: BidGridRow, columns: GridColumnMeta[], query: string, lookups: EntityLookups = NO_LOOKUPS): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
-  return columns.some((c) => (c.type === 'text' || c.type === 'select') && cellText(row, c).toLowerCase().includes(q))
+  return columns.some((c) => !!c.type && SEARCHABLE.has(c.type) && cellText(row, c, lookups).toLowerCase().includes(q))
 }
+
+/** The value a column sorts by. Entity types sort by NAME (not id), a
+ *  multi-select by its joined labels. */
+export function sortKeyOf(row: BidGridRow, col: GridColumnMeta, lookups: EntityLookups = NO_LOOKUPS): unknown {
+  const v = cellValue(row, col)
+  if (isEmptyCell(v)) return undefined
+  if (isEntityType(col.type) || col.type === 'multiselect') return formatValueText(col, v, lookups)
+  return v
+}
+
+/** Typed comparison: numbers/amounts numerically, dates chronologically,
+ *  booleans false<true, everything else case-insensitive natural order. */
+export function compareTyped(type: CustomFieldType | null, a: unknown, b: unknown): number {
+  switch (type) {
+    case 'number': case 'currency': return Number(a) - Number(b)
+    case 'date': return String(a).slice(0, 10).localeCompare(String(b).slice(0, 10))
+    case 'boolean': return Number(Boolean(a)) - Number(Boolean(b))
+    default: return String(a).localeCompare(String(b), undefined, { sensitivity: 'base', numeric: true })
+  }
+}
+
+// --- filters ----------------------------------------------------------------
 
 /** A rule is applied only once it has everything its operator needs; a
  *  half-built rule in the filter editor must not blank the grid. */
@@ -191,15 +298,18 @@ export function isRuleComplete(rule: TypedFilterRule): boolean {
 
 /** Rules that reference a custom column that is archived or unknown are
  *  ignored (not dropped) — surfaced as a notice, restored on unarchive. */
-export function ignoredRules(rules: TypedFilterRule[], columns: GridColumnMeta[]): TypedFilterRule[] {
+export function ignoredRules(rules: FilterNode[], columns: GridColumnMeta[]): TypedFilterRule[] {
   const known = new Set(columns.map((c) => c.id))
-  return rules.filter((r) => r.field.startsWith(CUSTOM_COLUMN_PREFIX) && !known.has(r.field))
+  return flattenRules(rules).filter((r) => r.field.startsWith(CUSTOM_COLUMN_PREFIX) && !known.has(r.field))
 }
 
 export const OPERATOR_LABEL: Record<string, string> = {
   eq: 'equals', contains: 'contains', startsWith: 'starts with', gt: 'greater than', lt: 'less than',
   between: 'between', before: 'before', after: 'after', in: 'is one of',
 }
-/** Boolean columns read "is" rather than "equals". */
-export const operatorLabel = (type: CustomFieldType | null, operator: string) =>
-  type === 'boolean' && operator === 'eq' ? 'is' : OPERATOR_LABEL[operator] ?? operator
+/** Boolean and entity columns read "is" rather than "equals"; multi-select reads "includes". */
+export function operatorLabel(type: CustomFieldType | null, operator: string): string {
+  if (type === 'multiselect') return operator === 'in' ? 'includes any of' : operator === 'eq' ? 'includes' : OPERATOR_LABEL[operator] ?? operator
+  if (operator === 'eq' && (type === 'boolean' || isEntityType(type))) return 'is'
+  return OPERATOR_LABEL[operator] ?? operator
+}

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { OPERATORS_BY_TYPE } from '@goms/domain'
 import type { BidCustomField, BidGridRow } from '@/lib/types'
 import {
-  CUSTOM_GROUP, GRID_GROUPS, STANDARD_COLUMNS, customColumnMeta, ignoredRules, isRuleComplete, resolveColumns,
-  resolveVisibleColumns, rowMatchesSearch,
+  CUSTOM_GROUP, GRID_GROUPS, STANDARD_COLUMNS, buildLookups, compareTyped, customColumnMeta, formatValueText, ignoredRules,
+  isRuleComplete, operatorLabel, optionsOf, resolveColumns, resolveVisibleColumns, rowMatchesSearch, sortKeyOf,
 } from './gridColumns'
 
 const field = (over: Partial<BidCustomField> & Pick<BidCustomField, 'key' | 'name' | 'dataType'>): BidCustomField => ({
@@ -47,7 +47,28 @@ describe('grid column registry — completeness', () => {
   })
 
   it('only plain opportunity attributes are inline-editable among the standard columns', () => {
-    expect(STANDARD_COLUMNS.filter((c) => c.editable).map((c) => c.id)).toEqual(['city', 'vertical'])
+    expect(STANDARD_COLUMNS.filter((c) => c.editable).map((c) => c.id)).toEqual(['opportunityName', 'city', 'vertical'])
+  })
+
+  // The explicit editable matrix: no standard column is left unclassified.
+  it('classifies every standard column as editable or read-only-with-a-reason', () => {
+    for (const c of STANDARD_COLUMNS) {
+      if (c.editable) expect(c.readOnlyReason, c.id).toBeUndefined()
+      else expect(c.readOnlyReason, c.id).toBeTruthy()
+    }
+  })
+
+  it('keeps ids, protected, workflow, ownership and derived columns read-only', () => {
+    const readOnly = (id: string) => !STANDARD_COLUMNS.find((c) => c.id === id)!.editable
+    for (const id of [
+      'opportunityId', 'bidCode', 'gemTenderId', 'tenderLink', 'submissionDate', 'stageKey', 'decision', 'ownerEmail',
+      'solutionLeadEmail', 'departmentName', 'stateCode', 'nextActionNote', 'nextMilestoneLabel', 'daysRemaining',
+      'documentCount', 'latestCorrigendumStatus', 'updatedAt', 'updatedBy', 'dataConfidence', 'attentionFlag', 'manage',
+    ]) expect(readOnly(id), id).toBe(true)
+  })
+
+  it('makes the Opportunity / Mission name required when edited', () => {
+    expect(STANDARD_COLUMNS.find((c) => c.id === 'opportunityName')).toMatchObject({ editable: 'opportunity', required: true })
   })
 })
 
@@ -113,5 +134,57 @@ describe('filter rules and search helpers', () => {
     expect(rowMatchesSearch(row, cols, '999')).toBe(false) // numbers are not searched
     expect(rowMatchesSearch(row, cols.filter((c) => c.id === 'opportunityName'), 'fast')).toBe(false) // hidden column
     expect(rowMatchesSearch(row, cols, '   ')).toBe(true)
+  })
+})
+
+describe('typed columns — entity lookups, display, sort, search', () => {
+  const lookups = buildLookups({
+    persons: [{ id: 'p-1', name: 'Shubham' }, { id: 'p-2', name: 'Asha Rao' }],
+    departments: [
+      { id: 'd-1', name: 'Health', stateCode: 24 }, { id: 'd-2', name: 'Health', stateCode: 27 }, { id: 'd-3', name: 'MeitY', stateCode: 0 },
+    ],
+    states: [{ code: 24, name: 'Gujarat' }, { code: 27, name: 'Maharashtra' }],
+  })
+  const col = (dataType: BidCustomField['dataType'], options?: string[]) => customColumnMeta(field({ key: 'x', name: 'X', dataType, options: options ?? null }))
+  const row = (v: unknown) => ({ customValues: { x: v } }) as unknown as BidGridRow
+
+  it('lists people and departments by name; a repeated department name carries its state', () => {
+    expect(lookups.persons.map((o) => o.label)).toEqual(['Asha Rao', 'Shubham'])
+    expect(lookups.departments.map((o) => o.label)).toEqual(['Health (Gujarat)', 'Health (Maharashtra)', 'MeitY'])
+    expect(optionsOf(col('state'), lookups).map((o) => o.label)).toEqual(['Gujarat', 'Maharashtra'])
+  })
+
+  it('shows entity cells by name, never the stored id', () => {
+    expect(formatValueText(col('person'), 'p-1', lookups)).toBe('Shubham')
+    expect(formatValueText(col('state'), 27, lookups)).toBe('Maharashtra')
+    expect(formatValueText(col('department'), 'd-9', lookups)).toBe('d-9') // unknown record: id, not blank
+  })
+
+  it('formats amounts in rupees and multi-selects as a list', () => {
+    expect(formatValueText(col('currency'), 500000)).toBe('₹5,00,000')
+    expect(formatValueText(col('multiselect', ['A', 'B']), '["A","B"]')).toBe('A, B')
+    expect(formatValueText(col('boolean'), true)).toBe('Yes')
+  })
+
+  it('sorts entity columns by NAME and amounts numerically', () => {
+    expect(sortKeyOf(row('p-1'), col('person'), lookups)).toBe('Shubham')
+    expect(sortKeyOf(row(undefined), col('person'), lookups)).toBeUndefined()
+    expect(compareTyped('currency', 9, 100)).toBeLessThan(0)
+    expect(compareTyped('person', 'Asha Rao', 'Shubham')).toBeLessThan(0)
+  })
+
+  it('quick search matches entity names, multi-selects and emails — not amounts', () => {
+    expect(rowMatchesSearch(row('p-2'), [col('person')], 'asha', lookups)).toBe(true)
+    expect(rowMatchesSearch(row('["West","North"]'), [col('multiselect', ['West', 'North'])], 'north', lookups)).toBe(true)
+    expect(rowMatchesSearch(row('a@b.co'), [col('email')], 'b.co', lookups)).toBe(true)
+    expect(rowMatchesSearch(row(500000), [col('currency')], '500000', lookups)).toBe(false)
+  })
+
+  it('operator wording: entities read "is", multi-select reads "includes"', () => {
+    expect(operatorLabel('state', 'eq')).toBe('is')
+    expect(operatorLabel('person', 'in')).toBe('is one of')
+    expect(operatorLabel('multiselect', 'eq')).toBe('includes')
+    expect(operatorLabel('multiselect', 'in')).toBe('includes any of')
+    expect(operatorLabel('select', 'eq')).toBe('equals')
   })
 })

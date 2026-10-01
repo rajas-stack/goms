@@ -26,6 +26,8 @@ function renderGrid(props: MasterGridProps = {}) {
 
 const rowNames = () => screen.queryAllByTestId('bid-row').map((r) => within(r).queryByText(/^(Alpha|Beta|Gamma|Delta|Epsilon)$/)?.textContent)
 const groupHeaders = () => Array.from(document.querySelectorAll('th[scope=colgroup]')).map((th) => th.textContent)
+// The grid opens LOCKED; unlocking is what turns editable cells into editors.
+const unlock = async () => userEvent.click(await screen.findByRole('button', { name: /editing locked/ }))
 const openPopover = async (name: string) => userEvent.click(screen.getByRole('button', { name: new RegExp(name) }))
 
 const STANDARD_GROUPS = ['Identity', 'Client', 'Ownership', 'Decision', 'Dates', 'Documents', 'System']
@@ -130,6 +132,7 @@ describe('MasterGrid', () => {
       const bid = await makeBid('Alpha')
       const score = await repository.createBidCustomField({ name: 'Score', dataType: 'number' })
       renderGrid()
+      await unlock()
       await screen.findByText('Alpha')
       await userEvent.click(await screen.findByRole('button', { name: 'Edit Score' }))
       await userEvent.type(screen.getByRole('spinbutton', { name: 'Score' }), '42{Enter}')
@@ -142,6 +145,7 @@ describe('MasterGrid', () => {
       const bid = await makeBid('Alpha')
       await repository.createBidCustomField({ name: 'Note', dataType: 'text' })
       renderGrid()
+      await unlock()
       await screen.findByText('Alpha')
       await userEvent.click(await screen.findByRole('button', { name: 'Edit Note' }))
       await userEvent.type(screen.getByRole('textbox', { name: 'Note' }), 'draft{Escape}')
@@ -154,6 +158,7 @@ describe('MasterGrid', () => {
       const note = await repository.createBidCustomField({ name: 'Note', dataType: 'text' })
       await repository.setBidCustomValue(bid.id, note.id, 'hello')
       renderGrid()
+      await unlock()
       await userEvent.click(await screen.findByRole('button', { name: 'Edit Note' }))
       const box = screen.getByRole('textbox', { name: 'Note' })
       await userEvent.clear(box)
@@ -167,6 +172,7 @@ describe('MasterGrid', () => {
       await repository.setBidCustomValue(bid.id, tier.id, 'Silver')
       await repository.updateBidCustomField(tier.id, { options: ['Gold'] })
       renderGrid()
+      await unlock()
       await screen.findByText('Silver (removed)')
       await userEvent.click(screen.getByRole('button', { name: 'Edit Tier' }))
       const select = screen.getByRole('combobox', { name: 'Tier' })
@@ -180,6 +186,7 @@ describe('MasterGrid', () => {
       await repository.createBidCustomField({ name: 'Note', dataType: 'text' })
       vi.spyOn(repository, 'setBidCustomValue').mockRejectedValueOnce(new Error('Server said no'))
       renderGrid()
+      await unlock()
       await userEvent.click(await screen.findByRole('button', { name: 'Edit Note' }))
       await userEvent.type(screen.getByRole('textbox', { name: 'Note' }), 'oops{Enter}')
       expect(await screen.findByText('Server said no')).toBeInTheDocument()
@@ -189,6 +196,7 @@ describe('MasterGrid', () => {
     it('edits City (a plain opportunity attribute) inline', async () => {
       const bid = await makeBid('Alpha')
       renderGrid()
+      await unlock()
       await screen.findByText('Alpha')
       await userEvent.click(screen.getByRole('button', { name: 'Edit City' }))
       await userEvent.type(screen.getByRole('textbox', { name: 'City' }), 'Pune{Enter}')
@@ -199,8 +207,9 @@ describe('MasterGrid', () => {
     it('leaves protected, corrigendum-tracked and workflow-governed columns read-only', async () => {
       await makeBid('Alpha')
       renderGrid()
+      await unlock()
       await screen.findByText('Alpha')
-      for (const header of ['Tender ID', 'Tender Link', 'Submission Deadline', 'Bid Stage', 'Decision', 'Bid Owner', 'Opportunity / Mission']) {
+      for (const header of ['Tender ID', 'Tender Link', 'Submission Deadline', 'Bid Stage', 'Decision', 'Bid Owner', 'Department / Client', 'State', 'Next Action']) {
         expect(screen.queryByRole('button', { name: `Edit ${header}` })).not.toBeInTheDocument()
       }
     })
@@ -390,7 +399,6 @@ describe('MasterGrid', () => {
       expect(rowNames()).toEqual(['Alpha'])
       await userEvent.clear(box); await userEvent.type(box, 'zzz')
       expect(screen.getByTestId('grid-empty')).toHaveTextContent('No bids match')
-      expect(screen.getByText('0 of 2 bids')).toBeInTheDocument()
     })
 
     it('does not search hidden columns', async () => {
@@ -445,7 +453,7 @@ describe('MasterGrid', () => {
       await screen.findByText('Alpha')
       await userEvent.click(screen.getByRole('button', { name: 'Sector column menu' }))
       const items = screen.getAllByRole('menuitem').map((m) => m.textContent?.trim())
-      expect(items).toEqual(['Sort ascending', 'Sort descending', 'Filter by this column', 'Manage column…'])
+      expect(items).toEqual(['Sort ascending', 'Sort descending', 'Filter by this column', 'Freeze column', 'Manage column…'])
     })
 
     it('"Manage column…" opens the Columns panel on that column, highlighted — and the panel hides and restores it', async () => {

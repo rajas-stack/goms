@@ -5,12 +5,12 @@ import { Icon } from '@/components/ui/Icon'
 import { useBidCustomFields, useBidCustomFieldMutations } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { BidCustomField } from '@/lib/types'
-import type { GridColumnMeta } from '../gridColumns'
+import { hasOptions } from '@goms/domain'
+import { CUSTOM_TYPE_LABEL, type GridColumnMeta } from '../gridColumns'
 import { ColumnsPanel } from './ColumnsPanel'
 import { OptionsEditor } from './OptionsEditor'
 
 const box = 'h-8 min-w-0 flex-1 rounded-lg border border-line bg-white px-2 text-[13px] text-ink focus-visible:focus-ring'
-const TYPE_LABEL = { text: 'Text', number: 'Number', date: 'Date', select: 'Select', boolean: 'Yes/No' } as const
 
 /** The Columns popover: visibility + order for every column (ColumnsPanel), and
  *  below it the management of the user-defined columns — rename, edit options,
@@ -104,9 +104,9 @@ export function ManageColumnsPanel({ all, visible, onVisibleChange, focusId }: {
                 </div>
               ) : (
                 <div className="flex items-center gap-1">
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{f.name} <Badge tone="gray">{TYPE_LABEL[f.dataType]}</Badge></span>
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{f.name} <Badge tone="gray">{CUSTOM_TYPE_LABEL[f.dataType]}</Badge></span>
                   <Button variant="ghost" size="icon" aria-label={`Rename ${f.name}`} onClick={() => setRenaming({ id: f.id, name: f.name })}><Icon name="Pencil" size={14} /></Button>
-                  {f.dataType === 'select' && (
+                  {hasOptions(f.dataType) && (
                     <Button variant="ghost" size="icon" aria-label={`Edit options for ${f.name}`} onClick={() => setEditingOptions({ id: f.id, options: f.options ?? [] })}><Icon name="List" size={14} /></Button>
                   )}
                   <Button variant="ghost" size="icon" aria-label={`Move ${f.name} earlier by default`} title="Earlier in the default column order (new views)" disabled={i === 0} onClick={() => void move(i, -1)}><Icon name="ArrowUp" size={14} /></Button>

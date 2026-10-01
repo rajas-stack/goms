@@ -6,7 +6,10 @@ import {
   type ColumnDef, type Row, type SortingState,
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { OPERATORS_BY_TYPE, type CustomFieldType, type CustomValue, type TypedFilterRule } from '@goms/domain'
+import {
+  OPERATORS_BY_TYPE, flattenRules, parseMultiValue, pruneFilterNodes,
+  type CustomValue, type FilterNode,
+} from '@goms/domain'
 import { motion } from 'framer-motion'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -14,64 +17,70 @@ import { Checkbox } from '@/components/ui/Checkbox'
 import { Combobox } from '@/components/ui/Combobox'
 import { Dialog } from '@/components/ui/Dialog'
 import { Icon } from '@/components/ui/Icon'
+import { LockSwitch } from '@/components/ui/LockSwitch'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import {
   useBidCustomFields, useBidMutations, useBidsForGrid, useOpportunityMutations, useOwnershipMutations, useSalesPersons,
-  useSetBidCustomValue, useStates,
+  useSetBidCustomValue,
 } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { BidGridRow } from '@/lib/types'
 import {
-  ATTENTION_OPTIONS, CUSTOM_GROUP, GRID_GROUPS, cellValue, columnWidth, ignoredRules, isEmptyCell, isRuleComplete,
-  resolveColumns, resolveVisibleColumns, rowMatchesSearch, type GridColumnMeta,
+  ATTENTION_OPTIONS, CUSTOM_GROUP, GRID_GROUPS, cellValue, columnWidth, compareTyped, formatCurrency, formatValueText,
+  ignoredRules, isEmptyCell, isRuleComplete, resolveColumns, resolveVisibleColumns, rowMatchesSearch, sortKeyOf,
+  type GridColumnMeta,
 } from '../gridColumns'
+import { fromRoot, toRoot } from '../filterTree'
+import { useEntityLookups } from '../useEntityLookups'
 import { AddCustomColumnDialog } from './AddCustomColumnDialog'
 import { ColumnHeaderMenu } from './ColumnHeaderMenu'
 import { CreateBidDialog } from './CreateBidDialog'
 import { FilterBar } from './FilterBar'
 import { ManageColumnsPanel } from './ManageColumnsPanel'
-import { EditableCell, type CellDraft } from './EditableCell'
+import { EditableCell, type CellDraft, type PendingEdits } from './EditableCell'
 import { FilterBuilder } from './FilterBuilder'
 
 const ATTENTION_TONE: Record<BidGridRow['attentionFlag'], BadgeTone> = {
   dueSoon: 'amber', overdue: 'crimson', corrigendumPending: 'blue', onTrack: 'emerald',
 }
-// State is typed `number` (its code, for filtering) but displays a name.
-const rightAligned = (col: GridColumnMeta) => col.type === 'number' && col.id !== 'stateCode'
+const rightAligned = (col: GridColumnMeta) => col.type === 'number' || col.type === 'currency'
 
 const ROW_HEIGHT = 32
 const SELECT_COL_WIDTH = 40
-// Spreadsheet surfaces: editable cells are white, read-only cells a cool grey, so
-// "can I type here?" is answered before the pointer gets there. Frozen cells need
-// solid fills (they sit over scrolling content), hence explicit colours.
+// Spreadsheet surfaces. While the grid is UNLOCKED, editable cells are white and
+// read-only cells a cool grey, so "can I type here?" is answered before the
+// pointer gets there; while LOCKED every cell is the plain white surface (there
+// is nothing to type into). Frozen cells need solid fills (they sit over
+// scrolling content), hence explicit colours.
 const EDITABLE_BG = 'bg-white group-hover/row:bg-[#EEF6FC]'
 const READONLY_BG = 'bg-[#F5F7FA] group-hover/row:bg-[#E9F2FA]'
 const SELECTED_BG = 'bg-[#DCEEFA]'
+const FROZEN_SHADOW = '3px 0 5px -2px rgba(11,43,73,0.28)'
+/** Frozen columns may take at most this share of the visible width, so the
+ *  scrolling part of the sheet never disappears (matters most on a phone). */
+const MAX_FROZEN_SHARE = 0.6
+const FROZEN_STORAGE_KEY = 'goms:bidGrid:frozenColumns'
 
-/** Empty cells become `undefined` so `sortUndefined: 'last'` keeps them at the
- *  bottom in BOTH directions. */
-const sortValue = (row: BidGridRow, col: GridColumnMeta) => {
-  const v = cellValue(row, col)
-  return isEmptyCell(v) ? undefined : v
+const loadFrozen = (): string[] => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FROZEN_STORAGE_KEY) ?? '[]')
+    return Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : []
+  } catch { return [] }
 }
-
-/** Typed comparison: numbers numerically, dates chronologically, booleans
- *  false<true, everything else case-insensitive natural order. */
-function compareTyped(type: CustomFieldType | null, a: unknown, b: unknown): number {
-  switch (type) {
-    case 'number': return Number(a) - Number(b)
-    case 'date': return String(a).slice(0, 10).localeCompare(String(b).slice(0, 10))
-    case 'boolean': return Number(Boolean(a)) - Number(Boolean(b))
-    default: return String(a).localeCompare(String(b), undefined, { sensitivity: 'base', numeric: true })
-  }
+const saveFrozen = (ids: string[]) => {
+  try { localStorage.setItem(FROZEN_STORAGE_KEY, JSON.stringify(ids)) } catch { /* private mode: freeze just won't persist */ }
 }
 
 const helper = createColumnHelper<BidGridRow>()
 
-function ToolbarPopover({ label, icon, badge, children, open: controlledOpen, onOpenChange }: {
+/** A web address without its scheme and trailing slash, for a narrow cell. */
+const shortUrl = (url: string) => url.replace(/^https?:\/\//i, '').replace(/\/$/, '')
+
+function ToolbarPopover({ label, icon, badge, children, open: controlledOpen, onOpenChange, align }: {
   label: string; icon: string; badge?: number; children: ReactNode
   /** Optional control from outside (the header menu opens the Columns panel). */
   open?: boolean; onOpenChange?: (open: boolean) => void
+  align?: 'start' | 'end'
 }) {
   const [innerOpen, setInnerOpen] = useState(false)
   const open = controlledOpen ?? innerOpen
@@ -87,7 +96,7 @@ function ToolbarPopover({ label, icon, badge, children, open: controlledOpen, on
         <Icon name={icon} size={14} /> {label}
         {badge ? <span className="rounded-full bg-goms-navy px-1.5 text-[11px] text-paper">{badge}</span> : null}
       </Button>
-      <PopoverPanel open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} maxPanelHeight={480}>
+      <PopoverPanel open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} maxPanelHeight={480} align={align}>
         {({ maxHeight }) => (
           <motion.div
             data-canvas-ui
@@ -106,8 +115,8 @@ function ToolbarPopover({ label, icon, badge, children, open: controlledOpen, on
 export interface MasterGridProps {
   /** Filter rules. Controlled when `onFilterRulesChange` is given (a saved view
    *  owns them); otherwise the grid keeps its own, seeded from this. */
-  filterRules?: TypedFilterRule[]
-  onFilterRulesChange?: (rules: TypedFilterRule[]) => void
+  filterRules?: FilterNode[]
+  onFilterRulesChange?: (rules: FilterNode[]) => void
   /** ORDERED visible column ids — the array saved views persist (order =
    *  display order, absence = hidden). Same controlled/uncontrolled rule.
    *  Undefined/empty = default: every column, canonical order. */
@@ -120,9 +129,9 @@ export function MasterGrid(props: MasterGridProps) {
   const qc = useQueryClient()
 
   // --- controlled-or-internal state -----------------------------------------
-  const [innerRules, setInnerRules] = useState<TypedFilterRule[]>(props.filterRules ?? [])
+  const [innerRules, setInnerRules] = useState<FilterNode[]>(props.filterRules ?? [])
   const rules = props.onFilterRulesChange ? (props.filterRules ?? []) : innerRules
-  const setRules = (next: TypedFilterRule[]) => (props.onFilterRulesChange ?? setInnerRules)(next)
+  const setRules = (next: FilterNode[]) => (props.onFilterRulesChange ?? setInnerRules)(next)
   const [innerVisible, setInnerVisible] = useState<string[] | undefined>(props.visibleColumns)
   const visibleIds = props.onVisibleColumnsChange ? props.visibleColumns : innerVisible
   const setVisibleIds = (next: string[]) => (props.onVisibleColumnsChange ?? setInnerVisible)(next)
@@ -135,7 +144,8 @@ export function MasterGrid(props: MasterGridProps) {
   const [reassignOpen, setReassignOpen] = useState(false)
   const [bulkError, setBulkError] = useState<string | null>(null)
   const [cellErrors, setCellErrors] = useState<Record<string, string>>({})
-  const [editingRule, setEditingRule] = useState<number | null>(null)
+  // Where the open filter editor is: `"2"` (a top-level condition) or `"1.0"` (inside group 1).
+  const [editingRule, setEditingRule] = useState<string | null>(null)
   // The Columns panel, opened either from the toolbar or from a header's "Manage column…".
   const [columnsOpen, setColumnsOpen] = useState(false)
   const [manageColumnId, setManageColumnId] = useState<string | null>(null)
@@ -146,17 +156,29 @@ export function MasterGrid(props: MasterGridProps) {
   const [flashId, setFlashId] = useState<string | null>(null)
   const scrollToId = useRef<string | null>(null)
 
+  // Lock / Unlock: the grid always opens LOCKED. Unlocked, editable cells take
+  // inline edits; a cell edit that is not saved yet blocks locking until it is
+  // saved or explicitly discarded.
+  const [unlocked, setUnlocked] = useState(false)
+  const [lockPromptOpen, setLockPromptOpen] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const pendingEdits: PendingEdits = useRef(new Map())
+  const unlockedRef = useRef(unlocked)
+  unlockedRef.current = unlocked
+
+  // Frozen (pinned) columns: chosen per column from its header menu, remembered in this browser.
+  const [frozenIds, setFrozenIds] = useState<string[]>(loadFrozen)
+
   // --- data -------------------------------------------------------------------
-  const appliedRules = useMemo(() => rules.filter(isRuleComplete), [rules])
+  const appliedRules = useMemo(() => pruneFilterNodes(rules, isRuleComplete), [rules])
   const { data: fetched, isLoading } = useBidsForGrid(appliedRules)
   const { data: customFields = [] } = useBidCustomFields()
-  const { data: states = [] } = useStates()
+  const lookups = useEntityLookups()
   const { archive, unarchive } = useBidMutations()
   const { assign } = useOwnershipMutations()
   const { data: salesPersons = [] } = useSalesPersons()
   const setCustomValue = useSetBidCustomValue()
   const { update: updateOpportunity } = useOpportunityMutations()
-  const stateName = useMemo(() => new Map(states.map((s) => [s.code, s.name])), [states])
 
   const allColumns = useMemo(() => resolveColumns(customFields), [customFields])
   const visible = useMemo(() => resolveVisibleColumns(allColumns, visibleIds), [allColumns, visibleIds])
@@ -164,9 +186,18 @@ export function MasterGrid(props: MasterGridProps) {
   const filterable = useMemo(() => allColumns.filter((c) => c.type !== null), [allColumns])
   const columnById = useMemo(() => new Map(allColumns.map((c) => [c.id, c])), [allColumns])
 
+  // Frozen columns lead the sheet (in their normal relative order), the rest follow —
+  // that is what keeps stacked sticky offsets correct however the freezes were
+  // chosen. Unfreezing puts a column straight back where the saved view has it.
+  const frozenSet = useMemo(() => new Set(frozenIds), [frozenIds])
+  const displayCols = useMemo(
+    () => [...visible.filter((c) => frozenSet.has(c.id)), ...visible.filter((c) => !frozenSet.has(c.id))],
+    [visible, frozenSet],
+  )
+
   const rows = useMemo(
-    () => (fetched ?? []).filter((r) => rowMatchesSearch(r, visible, search)),
-    [fetched, visible, search],
+    () => (fetched ?? []).filter((r) => rowMatchesSearch(r, visible, search, lookups)),
+    [fetched, visible, search, lookups],
   )
 
   // --- selection & bulk actions -----------------------------------------------
@@ -200,9 +231,27 @@ export function MasterGrid(props: MasterGridProps) {
     if (ok) setReassignOpen(false)
   }
 
+  // --- lock / unlock --------------------------------------------------------------
+  const requestToggleLock = () => {
+    if (!unlocked) { setUnlocked(true); return }
+    // Clicking the switch has already blurred any open editor, which saves a valid
+    // edit. What is still pending here is an edit that cannot be saved as typed.
+    if (pendingEdits.current.size > 0) { setLockPromptOpen(true); return }
+    setSaveError(null)
+    setUnlocked(false)
+  }
+  const discardAndLock = () => {
+    for (const { discard } of [...pendingEdits.current.values()]) discard()
+    pendingEdits.current.clear()
+    setLockPromptOpen(false)
+    setUnlocked(false)
+  }
+
   // --- inline edit: optimistic, with rollback + inline error -------------------
   const commitCell = async (row: BidGridRow, col: GridColumnMeta, value: CellDraft) => {
     const errorKey = `${row.id}:${col.id}`
+    // Of the editable opportunity attributes only City is nullable; clearing the others stores ''.
+    const opportunityValue = value === null && col.id !== 'city' ? '' : value
     setCellErrors((e) => { const { [errorKey]: _drop, ...rest } = e; return rest })
     const snapshot = qc.getQueriesData<BidGridRow[]>({ queryKey: ['bidsForGrid'] })
     const patchRow = (r: BidGridRow): BidGridRow => {
@@ -212,15 +261,18 @@ export function MasterGrid(props: MasterGridProps) {
         else customValues[col.custom.key] = value as CustomValue
         return { ...r, customValues }
       }
-      return { ...r, [col.id]: value } as BidGridRow
+      return { ...r, [col.id]: opportunityValue } as BidGridRow
     }
     qc.setQueriesData<BidGridRow[]>({ queryKey: ['bidsForGrid'] }, (old) => old?.map((r) => (r.id === row.id ? patchRow(r) : r)))
     try {
       if (col.custom) await setCustomValue.mutateAsync({ bidId: row.id, fieldId: col.custom.id, value })
-      else await updateOpportunity.mutateAsync({ id: row.opportunityId, patch: { [col.id]: value } })
+      else await updateOpportunity.mutateAsync({ id: row.opportunityId, patch: { [col.id]: opportunityValue } })
     } catch (e) {
       for (const [key, data] of snapshot) qc.setQueryData(key, data)
-      setCellErrors((errs) => ({ ...errs, [errorKey]: e instanceof Error ? e.message : 'Could not save.' }))
+      const message = e instanceof Error ? e.message : 'Could not save.'
+      setCellErrors((errs) => ({ ...errs, [errorKey]: message }))
+      // Locked since the edit began: the cell can no longer show the problem, so say it here.
+      if (!unlockedRef.current) setSaveError(`${col.header} on ${row.bidCode} was not saved: ${message}`)
     }
   }
 
@@ -228,8 +280,10 @@ export function MasterGrid(props: MasterGridProps) {
   const addRule = (fieldId?: string) => {
     const col = (fieldId ? filterable.find((c) => c.id === fieldId) : undefined) ?? filterable[0]
     if (!col?.type) return
-    setRules([...rules, { field: col.id, operator: OPERATORS_BY_TYPE[col.type][0], value: '' }])
-    setEditingRule(rules.length)
+    const root = toRoot(rules)
+    const items: FilterNode[] = [...root.items, { field: col.id, operator: OPERATORS_BY_TYPE[col.type][0], value: '' }]
+    setRules(fromRoot({ ...root, items }))
+    setEditingRule(String(items.length - 1))
   }
 
   // --- column layout: drag a header to reorder. Every other column action (move,
@@ -245,10 +299,21 @@ export function MasterGrid(props: MasterGridProps) {
     setVisibleIds(next)
   }
 
+  // --- freeze ---------------------------------------------------------------------
+  const toggleFreeze = (id: string) => {
+    setFrozenIds((cur) => {
+      const next = cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
+      saveFrozen(next)
+      return next
+    })
+  }
+
   // --- cells ----------------------------------------------------------------------
-  const renderCell = (row: BidGridRow, col: GridColumnMeta): ReactNode => {
+  /** `links: false` while a cell is editable-and-unlocked: a link would swallow the click that should start the edit. */
+  const renderCell = (row: BidGridRow, col: GridColumnMeta, links = true): ReactNode => {
     const v = cellValue(row, col)
     const dash = <span className="text-muted">—</span>
+    const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
     if (col.id === 'manage') {
       return (
         <Button
@@ -265,25 +330,54 @@ export function MasterGrid(props: MasterGridProps) {
     }
     if (col.id === 'tenderLink') {
       return row.tenderLink
-        ? <a href={row.tenderLink} target="_blank" rel="noreferrer" className="text-goms-navy underline decoration-goms-sky underline-offset-2" onClick={(e) => e.stopPropagation()}>Link</a>
+        ? <a href={row.tenderLink} target="_blank" rel="noreferrer" className="text-goms-navy underline decoration-goms-sky underline-offset-2" onClick={stop}>Link</a>
         : dash
     }
-    if (col.id === 'stateCode') return v === null || v === undefined ? dash : (stateName.get(v as number) ?? String(v))
     if (col.id === 'updatedAt' && typeof v === 'string') return <span className="tabular-nums">{v.slice(0, 16).replace('T', ' ')}</span>
     if (col.id === 'decision') return <span className="capitalize">{String(v).replace('_', ' ')}</span>
     if (isEmptyCell(v)) return dash
-    if (col.type === 'boolean') return v ? <Icon name="Check" size={14} className="text-emerald-600" /> : <span className="text-muted">No</span>
-    if (col.type === 'select') {
-      const label = col.options?.find((o) => o.value === v)?.label
-      return label ?? (col.group === 'custom' ? `${String(v)} (removed)` : String(v))
+    switch (col.type) {
+      case 'boolean': return v ? <Icon name="Check" size={14} className="text-emerald-600" /> : <span className="text-muted">No</span>
+      case 'select': {
+        const label = col.options?.find((o) => o.value === v)?.label
+        return label ?? (col.group === 'custom' ? `${String(v)} (removed)` : String(v))
+      }
+      case 'number': return <span className="tabular-nums">{String(v)}</span>
+      case 'currency': return <span className="tabular-nums">{Number.isFinite(Number(v)) ? formatCurrency(Number(v)) : String(v)}</span>
+      case 'url':
+        if (!links) return shortUrl(String(v))
+        return (
+          <a
+            href={String(v)} target="_blank" rel="noreferrer" onClick={stop} title={String(v)}
+            className="text-goms-navy underline decoration-goms-sky underline-offset-2"
+          >
+            {shortUrl(String(v))}
+          </a>
+        )
+      case 'email':
+        if (!links) return String(v)
+        return <a href={`mailto:${String(v)}`} onClick={stop} className="text-goms-navy underline decoration-goms-sky underline-offset-2">{String(v)}</a>
+      case 'phone':
+        if (!links) return String(v)
+        return <a href={`tel:${String(v)}`} onClick={stop} className="tabular-nums text-goms-navy underline decoration-goms-sky underline-offset-2">{String(v)}</a>
+      case 'person': case 'department': case 'state': return formatValueText(col, v, lookups)
+      case 'multiselect': {
+        const labels = parseMultiValue(v)
+        return (
+          <span className="flex items-center gap-1" title={labels.join(', ')}>
+            {labels.slice(0, 2).map((l) => <span key={l} className="truncate rounded bg-goms-sky/[0.18] px-1.5 text-[11.5px] text-goms-navy">{l}</span>)}
+            {labels.length > 2 && <span className="text-[11.5px] text-muted">+{labels.length - 2}</span>}
+          </span>
+        )
+      }
+      default:
+        if (col.id === 'opportunityName') return <span className="font-medium text-goms-navy">{String(v)}</span>
+        return String(v)
     }
-    if (col.type === 'number') return <span className="tabular-nums">{String(v)}</span>
-    if (col.id === 'opportunityName') return <span className="font-medium text-goms-navy">{String(v)}</span>
-    return String(v)
   }
 
   const columns = useMemo<ColumnDef<BidGridRow, unknown>[]>(
-    () => visible.map((meta) => helper.accessor((r) => sortValue(r, meta), {
+    () => displayCols.map((meta) => helper.accessor((r) => sortKeyOf(r, meta, lookups), {
       id: meta.id,
       header: meta.header,
       enableSorting: meta.type !== null,
@@ -294,7 +388,7 @@ export function MasterGrid(props: MasterGridProps) {
       sortingFn: (a: Row<BidGridRow>, b: Row<BidGridRow>, id: string) => compareTyped(meta.type, a.getValue(id), b.getValue(id)),
       meta,
     }) as ColumnDef<BidGridRow, unknown>),
-    [visible],
+    [displayCols, lookups],
   )
 
   const table = useReactTable({
@@ -316,35 +410,38 @@ export function MasterGrid(props: MasterGridProps) {
   const virtualItems = virtualizer.getVirtualItems()
   const visibleColumnCount = table.getVisibleLeafColumns().length + 1 // + selection column
 
-  // Group header cells: consecutive visible columns of the same group merge
-  // into one colSpan cell. Reordering can split a group into several runs.
-  const groupRuns = useMemo(() => {
-    const runs: { group: string; label: string; span: number; start: number }[] = []
-    for (const [start, c] of visible.entries()) {
-      const last = runs[runs.length - 1]
-      if (last && last.group === c.group) { last.span += 1; continue }
-      const label = c.group === 'custom' ? CUSTOM_GROUP.label : GRID_GROUPS.find((g) => g.id === c.group)!.label
-      runs.push({ group: c.group, label, span: 1, start })
-    }
-    return runs
-  }, [visible])
-
-  // Frozen panes: the selection column always, plus the leading column(s) up to
-  // and including Opportunity / Mission when it is one of the first two — so the
-  // row's name stays on screen while the wide sheet scrolls sideways.
+  // Frozen panes: the selection column always, plus every column the user froze,
+  // stacked left to right in display order.
   const frozen = useMemo(() => {
-    const nameAt = visible.findIndex((c) => c.id === 'opportunityName')
-    const count = nameAt >= 0 && nameAt <= 1 ? nameAt + 1 : 1
     const left = new Map<string, number>()
     let offset = SELECT_COL_WIDTH
-    visible.slice(0, count).forEach((c) => { left.set(c.id, offset); offset += columnWidth(c) })
-    return { left, lastId: visible[count - 1]?.id, width: offset }
-  }, [visible])
-  const tableWidth = SELECT_COL_WIDTH + visible.reduce((sum, c) => sum + columnWidth(c), 0)
+    for (const c of displayCols) {
+      if (!frozenSet.has(c.id)) continue
+      left.set(c.id, offset)
+      offset += columnWidth(c)
+    }
+    return { left, lastId: [...left.keys()].pop(), width: offset }
+  }, [displayCols, frozenSet])
+  const tableWidth = SELECT_COL_WIDTH + displayCols.reduce((sum, c) => sum + columnWidth(c), 0)
+
+  // Group header cells: consecutive visible columns of the same group merge
+  // into one colSpan cell. Reordering — or freezing — can split a group into
+  // several runs; frozen and scrolling columns never share a run.
+  const groupRuns = useMemo(() => {
+    const runs: { group: string; label: string; span: number; frozen: boolean; left?: number }[] = []
+    for (const c of displayCols) {
+      const isFrozen = frozen.left.has(c.id)
+      const last = runs[runs.length - 1]
+      if (last && last.group === c.group && last.frozen === isFrozen) { last.span += 1; continue }
+      const label = c.group === 'custom' ? CUSTOM_GROUP.label : GRID_GROUPS.find((g) => g.id === c.group)!.label
+      runs.push({ group: c.group, label, span: 1, frozen: isFrozen, left: frozen.left.get(c.id) })
+    }
+    return runs
+  }, [displayCols, frozen])
 
   const rulesByField = useMemo(() => {
     const m = new Map<string, number>()
-    for (const r of appliedRules) m.set(r.field, (m.get(r.field) ?? 0) + 1)
+    for (const r of flattenRules(appliedRules)) m.set(r.field, (m.get(r.field) ?? 0) + 1)
     return m
   }, [appliedRules])
 
@@ -364,6 +461,14 @@ export function MasterGrid(props: MasterGridProps) {
   const totalCount = fetched?.length ?? 0
   const hasFilters = rules.length > 0
   const frozenStyle = (id: string) => (frozen.left.has(id) ? { left: frozen.left.get(id) } : undefined)
+  const scrollerWidth = parentRef.current?.clientWidth || 1200 // 0 = not laid out yet
+  const freezeBlockedReason = (meta: GridColumnMeta) =>
+    !frozen.left.has(meta.id) && frozen.width + columnWidth(meta) > scrollerWidth * MAX_FROZEN_SHARE
+      ? 'No room to freeze more — unfreeze another column first.'
+      : null
+  // Editable only while unlocked; locked, every cell is read/navigate-only.
+  const canEditCell = (meta: GridColumnMeta) => unlocked && !!meta.editable
+  const cellBg = (meta: GridColumnMeta) => (!unlocked || meta.editable ? EDITABLE_BG : READONLY_BG)
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="bid-master-grid">
@@ -376,14 +481,8 @@ export function MasterGrid(props: MasterGridProps) {
             className="h-7 w-52 rounded-lg border border-line bg-white pl-7 pr-2 text-[13px] text-ink focus-visible:focus-ring"
           />
         </div>
-        <ToolbarPopover label="Filters" icon="SlidersHorizontal" badge={appliedRules.length}>
-          <FilterBuilder columns={filterable} rules={rules} onChange={setRules} />
-        </ToolbarPopover>
-        <ToolbarPopover
-          label="Columns" icon="List" open={columnsOpen}
-          onOpenChange={(open) => { setColumnsOpen(open); if (!open) setManageColumnId(null) }}
-        >
-          <ManageColumnsPanel all={allColumns} visible={visible} onVisibleChange={setVisibleIds} focusId={manageColumnId} />
+        <ToolbarPopover label="Filters" icon="SlidersHorizontal" badge={flattenRules(appliedRules).length}>
+          <FilterBuilder columns={filterable} rules={rules} onChange={setRules} lookups={lookups} />
         </ToolbarPopover>
         <Button variant="secondary" size="sm" className="h-7 px-2.5" onClick={() => setAddColumnOpen(true)}><Icon name="Plus" size={14} /> Add column</Button>
         {selectedIds.length > 0 && (
@@ -394,15 +493,24 @@ export function MasterGrid(props: MasterGridProps) {
           </div>
         )}
         {bulkError && <span role="alert" className="text-[12px] text-crimson-600">{bulkError}</span>}
-        <div className="ml-auto flex items-center gap-3">
-          <span className="hidden items-center gap-2 text-[11.5px] text-muted xl:flex">
-            <span className="rounded border border-goms-green bg-white px-1.5 py-px text-ink">Editable</span>
-            <span className="rounded border border-line bg-[#F6F7FA] px-1.5 py-px text-ink-600">Read-only</span>
-            <span>Click a cell to edit · Enter saves · Esc cancels</span>
+        {saveError && (
+          <span role="alert" className="flex items-center gap-1 text-[12px] text-crimson-600">
+            {saveError}
+            <button type="button" aria-label="Dismiss" className="rounded p-0.5 hover:bg-crimson-100" onClick={() => setSaveError(null)}><Icon name="X" size={12} /></button>
           </span>
-          <span className="text-[12px] text-muted" aria-live="polite">
-            {rows.length === totalCount ? `${totalCount} bids` : `${rows.length} of ${totalCount} bids`}
-          </span>
+        )}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <LockSwitch
+            unlocked={unlocked} onToggle={requestToggleLock}
+            lockedLabel="Master grid editing locked — tap to unlock"
+            unlockedLabel="Master grid editing unlocked — tap to lock"
+          />
+          <ToolbarPopover
+            label="Columns" icon="List" open={columnsOpen} align="end"
+            onOpenChange={(open) => { setColumnsOpen(open); if (!open) setManageColumnId(null) }}
+          >
+            <ManageColumnsPanel all={allColumns} visible={visible} onVisibleChange={setVisibleIds} focusId={manageColumnId} />
+          </ToolbarPopover>
           <Button variant="primary" size="sm" className="h-7 px-2.5" onClick={() => setCreateBidOpen(true)}>
             <Icon name="Plus" size={14} /> Create Bid
           </Button>
@@ -411,7 +519,7 @@ export function MasterGrid(props: MasterGridProps) {
 
       {hasFilters && (
         <FilterBar
-          rules={rules} columns={filterable} columnById={columnById} ignoredCount={ignored.length}
+          rules={rules} columns={filterable} columnById={columnById} lookups={lookups} ignoredCount={ignored.length}
           editing={editingRule} onEditing={setEditingRule}
           onChange={setRules} onAdd={() => addRule()}
         />
@@ -423,7 +531,7 @@ export function MasterGrid(props: MasterGridProps) {
         <table className="border-separate border-spacing-0 text-[12.5px] text-ink" style={{ width: tableWidth, tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: SELECT_COL_WIDTH }} />
-            {visible.map((c) => <col key={c.id} style={{ width: columnWidth(c) }} />)}
+            {displayCols.map((c) => <col key={c.id} style={{ width: columnWidth(c) }} />)}
           </colgroup>
           <thead className="sticky top-0 z-20">
             <tr>
@@ -441,10 +549,15 @@ export function MasterGrid(props: MasterGridProps) {
               {groupRuns.map((run, i) => (
                 <th
                   key={i} colSpan={run.span} scope="colgroup"
-                  className="h-6 overflow-hidden whitespace-nowrap border-r border-t-2 border-goms-navy/[0.15] border-t-goms-sky bg-[#E4ECF4] px-2 text-left text-[11px] font-semibold tracking-wide text-goms-navy"
+                  style={run.frozen ? { left: run.left } : undefined}
+                  className={cn(
+                    'h-6 overflow-hidden whitespace-nowrap border-r border-t-2 border-goms-navy/[0.15] border-t-goms-sky bg-[#E4ECF4] px-2 text-left text-[11px] font-semibold tracking-wide text-goms-navy',
+                    run.frozen && 'sticky z-10',
+                  )}
                 >
-                  {/* Sticky, so the label stays readable when its group scrolls under the frozen columns. */}
-                  {run.start < frozen.left.size
+                  {/* A frozen run is itself sticky; a scrolling run keeps its label
+                      readable while the group slides under the frozen columns. */}
+                  {run.frozen
                     ? run.label
                     : <span className="sticky inline-block" style={{ left: frozen.width + 8 }}>{run.label}</span>}
                 </th>
@@ -457,9 +570,16 @@ export function MasterGrid(props: MasterGridProps) {
                   const sorted = h.column.getIsSorted()
                   const filteredCount = rulesByField.get(meta.id) ?? 0
                   const isFrozen = frozen.left.has(meta.id)
+                  const shadows = [
+                    sorted && 'inset 0 -3px 0 #4CA7DD',
+                    flashId === meta.id && 'inset 0 -3px 0 #74C05C',
+                    dragOverId === meta.id && 'inset 3px 0 0 #4CA7DD',
+                    frozen.lastId === meta.id && FROZEN_SHADOW,
+                  ].filter(Boolean).join(', ')
                   return (
                     <th
-                      key={h.id} scope="col" data-col-id={meta.id} style={frozenStyle(meta.id)}
+                      key={h.id} scope="col" data-col-id={meta.id}
+                      style={{ ...frozenStyle(meta.id), ...(shadows ? { boxShadow: shadows } : {}) }}
                       aria-sort={sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : 'none'}
                       draggable title="Drag to reorder"
                       onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', meta.id); setDragId(meta.id) }}
@@ -469,12 +589,11 @@ export function MasterGrid(props: MasterGridProps) {
                       onDragEnd={() => { setDragId(null); setDragOverId(null) }}
                       className={cn(
                         'group/th h-8 border-b-2 border-r border-line border-b-goms-navy/25 pl-2 pr-1 text-left transition-colors duration-700',
-                        sorted ? 'bg-[#D6EAF8] shadow-[inset_0_-3px_0_#4CA7DD]' : 'bg-[#F7FAFC]',
-                        flashId === meta.id && 'bg-goms-green/25 shadow-[inset_0_-3px_0_#74C05C]',
+                        sorted ? 'bg-[#D6EAF8]' : 'bg-[#F7FAFC]',
+                        flashId === meta.id && 'bg-goms-green/25',
                         isFrozen && 'sticky z-10',
                         frozen.lastId === meta.id && 'border-r-2 border-r-goms-navy/25',
                         dragId === meta.id && 'opacity-40',
-                        dragOverId === meta.id && 'shadow-[inset_3px_0_0_#4CA7DD]',
                       )}
                     >
                       <div className="flex items-center gap-1">
@@ -488,8 +607,9 @@ export function MasterGrid(props: MasterGridProps) {
                           aria-label={h.column.getCanSort() ? `Sort by ${meta.header}` : meta.header}
                         >
                           <span className="truncate" title={meta.header}>{flexRender(h.column.columnDef.header, h.getContext())}</span>
-                          {meta.editable && <span title="Editable column" className="shrink-0 text-goms-green"><Icon name="Pencil" size={10} /></span>}
+                          {unlocked && meta.editable && <span title="Editable column" className="shrink-0 text-goms-green"><Icon name="Pencil" size={10} /></span>}
                         </button>
+                        {isFrozen && <span title="Frozen column" className="inline-flex shrink-0 text-goms-navy/60"><Icon name="Pin" size={11} /><span className="sr-only">Frozen</span></span>}
                         {filteredCount > 0 && (
                           <span title="Filtered" className="inline-flex shrink-0 text-goms-sky">
                             <Icon name="SlidersHorizontal" size={12} />
@@ -507,6 +627,8 @@ export function MasterGrid(props: MasterGridProps) {
                           onSort={(dir) => (dir ? h.column.toggleSorting(dir === 'desc', false) : h.column.clearSorting())}
                           onFilter={meta.type !== null ? () => addRule(meta.id) : null}
                           onManage={() => { setManageColumnId(meta.id); setColumnsOpen(true) }}
+                          frozen={isFrozen} freezeBlockedReason={freezeBlockedReason(meta)}
+                          onToggleFreeze={() => toggleFreeze(meta.id)}
                         />
                       </div>
                     </th>
@@ -548,24 +670,31 @@ export function MasterGrid(props: MasterGridProps) {
                   </td>
                   {row.getVisibleCells().map((cell) => {
                     const meta = cell.column.columnDef.meta as GridColumnMeta
-                    const display = renderCell(row.original, meta)
+                    const display = renderCell(row.original, meta, !canEditCell(meta))
+                    const isFrozen = frozen.left.has(meta.id)
                     return (
                       <td
-                        key={cell.id} style={{ ...frozenStyle(meta.id), height: ROW_HEIGHT }}
+                        key={cell.id}
+                        style={{
+                          ...frozenStyle(meta.id), height: ROW_HEIGHT,
+                          ...(frozen.lastId === meta.id ? { boxShadow: FROZEN_SHADOW } : {}),
+                        }}
+                        title={unlocked && !meta.editable ? meta.readOnlyReason : undefined}
                         className={cn(
                           'relative overflow-hidden whitespace-nowrap border-b border-r border-line p-0 transition-colors duration-700',
-                          meta.editable ? EDITABLE_BG : READONLY_BG,
+                          cellBg(meta),
                           isSelected && SELECTED_BG,
                           rightAligned(meta) && 'text-right',
-                          frozen.left.has(meta.id) && 'sticky z-10',
+                          isFrozen && 'sticky z-10',
                           frozen.lastId === meta.id && 'border-r-2 border-r-goms-navy/25',
                           flashId === meta.id && 'bg-goms-green/20',
                         )}
                       >
-                        {meta.editable ? (
+                        {canEditCell(meta) ? (
                           <EditableCell
-                            col={meta} value={cellValue(row.original, meta)} display={display}
+                            col={meta} value={cellValue(row.original, meta)} display={display} lookups={lookups}
                             externalError={cellErrors[`${row.original.id}:${meta.id}`]}
+                            pending={pendingEdits} cellKey={`${row.original.id}:${meta.id}`}
                             onCommit={(value) => commitCell(row.original, meta, value)}
                           />
                         ) : (
@@ -621,6 +750,18 @@ export function MasterGrid(props: MasterGridProps) {
           value="" onChange={reassignSelected} placeholder="Choose a sales person…"
           options={salesPersons.map((p) => ({ value: p.id, label: p.name }))}
         />
+      </Dialog>
+      <Dialog
+        open={lockPromptOpen} onClose={() => setLockPromptOpen(false)} title="You have an unsaved edit"
+        description="A cell is still being edited and its value cannot be saved as it stands. Fix it to save, or discard it before locking."
+        footer={(
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setLockPromptOpen(false)}>Keep editing</Button>
+            <Button variant="primary" onClick={discardAndLock}>Discard edit and lock</Button>
+          </div>
+        )}
+      >
+        <p className="text-[13px] text-muted">Nothing has been lost yet — choose Keep editing to go back to the cell.</p>
       </Dialog>
     </div>
   )

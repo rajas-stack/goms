@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { TypedFilterRule } from '@goms/domain'
+import { pruneFilterNodes, type FilterNode } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, Input } from '@/components/ui/Field'
@@ -7,6 +7,7 @@ import { useBidCustomFields, useBidSavedViewMutations } from '@/lib/api'
 import type { BidSavedView } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { isRuleComplete, resolveColumns } from '../gridColumns'
+import { useEntityLookups } from '../useEntityLookups'
 import { FilterBuilder } from './FilterBuilder'
 
 const SCOPES: { value: 'personal' | 'global'; title: string; hint: string }[] = [
@@ -19,17 +20,18 @@ const SCOPES: { value: 'personal' | 'global'; title: string; hint: string }[] = 
 export function CreateSavedViewDialog({ open, onClose, initialFilterRules, visibleColumns, onCreated }: {
   open: boolean
   onClose: () => void
-  initialFilterRules: TypedFilterRule[]
+  initialFilterRules: FilterNode[]
   /** Ordered visible column ids; empty/undefined = default (all). */
   visibleColumns?: string[]
   onCreated?: (view: BidSavedView) => void
 }) {
   const [name, setName] = useState('')
   const [scope, setScope] = useState<'personal' | 'global'>('personal')
-  const [rules, setRules] = useState<TypedFilterRule[]>(initialFilterRules)
+  const [rules, setRules] = useState<FilterNode[]>(initialFilterRules)
   const [error, setError] = useState<string | null>(null)
   const { create } = useBidSavedViewMutations()
   const { data: customFields = [] } = useBidCustomFields()
+  const lookups = useEntityLookups()
   const filterable = useMemo(() => resolveColumns(customFields).filter((c) => c.type !== null), [customFields])
 
   // Each time the dialog opens it starts from whatever the grid is showing now.
@@ -42,7 +44,7 @@ export function CreateSavedViewDialog({ open, onClose, initialFilterRules, visib
     setError(null)
     try {
       const view = await create.mutateAsync({
-        name: name.trim(), scope, filterRules: rules.filter(isRuleComplete), visibleColumns: visibleColumns ?? [],
+        name: name.trim(), scope, filterRules: pruneFilterNodes(rules, isRuleComplete), visibleColumns: visibleColumns ?? [],
       })
       onCreated?.(view)
       onClose()
@@ -85,7 +87,7 @@ export function CreateSavedViewDialog({ open, onClose, initialFilterRules, visib
         </div>
         <div>
           <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Filters</div>
-          <div className="rounded-lg border border-line"><FilterBuilder columns={filterable} rules={rules} onChange={setRules} /></div>
+          <div className="rounded-lg border border-line"><FilterBuilder columns={filterable} rules={rules} onChange={setRules} lookups={lookups} /></div>
         </div>
         {error && <p role="alert" className="text-[13px] text-crimson">{error}</p>}
       </div>
