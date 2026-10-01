@@ -18,7 +18,9 @@ describe('admin data import routes', () => {
     const paths = router.routes[0].children?.map((c) => c.path)
     expect(paths).toContain('/admin/data-import')
     expect(paths).toContain('/admin/data-import/session')
-  })
+    // The first import of ./router in this file pays the whole module graph's
+    // cold-transform cost (~4.5s), right at vitest's 5s default.
+  }, 30_000)
 
   it('omits /admin/data-import routes when VITE_ADMIN_IMPORT_ENABLED is unset (default)', async () => {
     vi.stubEnv('VITE_ADMIN_IMPORT_ENABLED', '')
@@ -34,6 +36,22 @@ describe('admin data import routes', () => {
     const paths = router.routes[0].children?.map((c) => c.path) ?? []
     expect(paths).toContain('/admin/data-import/geography')
     expect(paths).toContain('/admin/data-import/session')
+  })
+
+  it('registers /bid-tracker routes only when VITE_BID_TRACKER_ENABLED is true', async () => {
+    vi.stubEnv('VITE_BID_TRACKER_ENABLED', 'true')
+    const on = await import('./router')
+    const onPaths = on.router.routes[0].children?.map((c) => c.path) ?? []
+    expect(onPaths).toContain('/bid-tracker')
+    expect(onPaths).toContain('/bid-tracker/:section')
+    expect(onPaths).toContain('/bid-tracker/bid/:bidId')
+
+    vi.resetModules()
+    vi.stubEnv('VITE_BID_TRACKER_ENABLED', '')
+    const off = await import('./router')
+    const offPaths = off.router.routes[0].children?.map((c) => c.path) ?? []
+    expect(offPaths).not.toContain('/bid-tracker')
+    expect(offPaths).not.toContain('/bid-tracker/:section')
   })
 
   it('keeps the catch-all NotFound route last regardless of the flag', async () => {

@@ -8,6 +8,8 @@ describe('opportunities router', () => {
 
   beforeEach(async () => {
     await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM bid_milestones')
+    await pool.query('DELETE FROM bids')
     await pool.query('DELETE FROM opportunities')
     // Other test files (sharing this DB, fileParallelism off) may leave
     // employee rows behind, which would otherwise block deleting
@@ -159,5 +161,38 @@ describe('opportunities router', () => {
       const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
       await expect(caller.opportunities.list()).resolves.toBeDefined()
     })
+  })
+
+  it('rejects a submissionDate patch once a bid exists for the opportunity, but allows it before one exists', async () => {
+    const caller = appRouter.createCaller({})
+    const opp = await caller.opportunities.create({ departmentId, opportunityName: 'Deal', submissionDate: '2026-10-10' })
+    await caller.opportunities.update({ id: opp.id, patch: { submissionDate: '2026-10-15' } }) // still allowed, no bid yet
+    await caller.bids.create({ opportunityId: opp.id })
+    await expect(
+      caller.opportunities.update({ id: opp.id, patch: { submissionDate: '2026-10-20' } })
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+
+  it('rejects a stageKey patch once a bid exists for the opportunity, but allows it before one exists (Global Constraint: opportunities.stage_key has no direct-write path once a bid exists)', async () => {
+    const caller = appRouter.createCaller({})
+    const opp = await caller.opportunities.create({ departmentId, opportunityName: 'Deal' })
+    await caller.opportunities.update({ id: opp.id, patch: { stageKey: 'qualified' } }) // still allowed, no bid yet
+    await caller.bids.create({ opportunityId: opp.id })
+    await expect(
+      caller.opportunities.update({ id: opp.id, patch: { stageKey: 'won' } })
+    ).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+
+  it('translates a RESTRICT violation from a referencing bid into a friendly CONFLICT on delete', async () => {
+    const caller = appRouter.createCaller({})
+    const opp = await caller.opportunities.create({ departmentId, opportunityName: 'Deal' })
+    await caller.bids.create({ opportunityId: opp.id })
+    await expect(caller.opportunities.delete({ id: opp.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+
+    // Archiving does NOT unblock the delete (spec §4.7 — corrected from an
+    // earlier draft that said it would).
+    const bid = (await caller.bids.listForGrid({})).find((b: any) => b.opportunityId === opp.id)!
+    await caller.bids.archive({ id: bid.id })
+    await expect(caller.opportunities.delete({ id: opp.id })).rejects.toMatchObject({ code: 'CONFLICT' })
   })
 })

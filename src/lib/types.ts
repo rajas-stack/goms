@@ -2,8 +2,8 @@
 // apps/api's hierarchy router) — re-imported and re-exported here so every
 // existing import path (`@/lib/types`) keeps working unchanged, including
 // this file's own later use of Domain/Status below.
-import type { Domain, Status, NodeType, HierNode } from '@goms/domain'
-export type { Domain, Status, NodeType, HierNode }
+import type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue, TypedFilterRule } from '@goms/domain'
+export type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue }
 
 export type RelationshipStatus = 'engaged' | 'developing' | 'dormant' | 'new'
 /** Five-point relationship quality scale. */
@@ -137,8 +137,9 @@ export interface Employee {
  *  department and could not be aggregated without parsing every one. */
 export interface Opportunity {
   id: string
-  /** Owning department node. Real FK — was implicit containment. */
-  departmentId: string
+  /** Owning department node. Real FK — was implicit containment. `null` only for an
+   *  opportunity that has not been given one yet; Create Bid resolves it before a bid exists. */
+  departmentId: string | null
   /** Denormalized from the department for state-scoped queries and search.
    *  Kept in sync by `createOpportunity`; a department never changes state. */
   stateCode: number | null
@@ -150,6 +151,9 @@ export interface Opportunity {
   opportunityName: string
   /** GEM bid number or tender ID, whichever applies. */
   gemTenderId: string
+  /** Client city — free text, feeds the Bid Tracker Master Grid's "City"
+   *  column. `null`/absent for opportunities that predate it. */
+  city?: string | null
   /** ISO date (YYYY-MM-DD) the tender/GEM listing was published. */
   publishDate: string
   /** ISO date (YYYY-MM-DD) the bid is due. */
@@ -366,4 +370,107 @@ export interface OwnershipAssignment {
   note: string
   createdAt: string
   createdBy: string | null
+}
+
+// --- Bid Tracker ---
+
+export interface Bid {
+  id: string
+  opportunityId: string
+  bidCode: string
+  stageKey: string
+  decision: 'pending' | 'go' | 'no_go'
+  status: 'active' | 'archived'
+  dataConfidence: 'verified' | 'needs_review'
+  tenderLink: string | null
+  archivedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+export interface BidGridRow extends Bid {
+  departmentId: string
+  departmentName: string | null
+  stateCode: number | null
+  city: string | null
+  opportunityName: string
+  gemTenderId: string
+  submissionDate: string
+  valueAmount: string
+  valueUnit: string
+  emdAmount: string
+  emdUnit: string
+  vertical: string
+  ownerEmail: string | null
+  solutionLeadEmail: string | null
+  documentCount: number
+  latestCorrigendumStatus: 'pending_review' | 'reviewed' | null
+  nextMilestoneLabel: string | null
+  nextMilestoneDueAt: string | null
+  daysRemaining: number | null
+  nextActionNote: string | null
+  nextActionDueDate: string | null
+  /** The "Action Owner" column: assignee of the earliest open next action. */
+  nextActionAssigneeEmail: string | null
+  updatedBy: string | null
+  attentionFlag: 'dueSoon' | 'overdue' | 'corrigendumPending' | 'onTrack'
+  /** Active custom columns only, keyed by field `key`; absent = no value. */
+  customValues: Record<string, CustomValue>
+}
+export interface BidMilestone {
+  id: string; bidId: string; milestoneType: string; key: string; label: string
+  dueAt: string | null; venue: string | null; notes: string | null
+  status: 'open' | 'completed' | 'superseded'; source: 'manual' | 'corrigendum'
+  createdAt: string; updatedAt: string
+}
+export interface BidMilestoneWithBid extends BidMilestone { bidCode: string; opportunityName: string }
+export interface BidCorrigendumChange {
+  id: string; corrigendumId: string; fieldKey: string; currentValue: string; proposedValue: string
+  decision: 'pending' | 'accepted' | 'rejected'; decidedAt: string | null; decidedBy: string | null
+}
+export interface BidCorrigendum {
+  id: string; bidId: string; corrigendumNumber: number; sourceDocumentId: string | null
+  detectedAt: string; reviewedAt: string | null; reviewedBy: string | null
+  status: 'pending_review' | 'reviewed'; changes: BidCorrigendumChange[]
+}
+export interface ProtectedValue {
+  id: string; entityType: string; entityId: string; fieldKey: string
+  frozen: boolean; frozenAt: string | null; frozenBy: string | null
+}
+export interface BidDocument {
+  id: string; entityType: string; entityId: string; filename: string; storagePath: string
+  version: string; contentType: string; sizeBytes: number; uploadedBy: string | null; uploadedAt: string
+}
+export interface DocumentCitation {
+  id: string; documentId: string; pageLabel: string; quoteText: string; fieldRef: string | null; createdAt: string
+}
+export interface BidSavedView {
+  id: string; name: string; scope: 'personal' | 'global'; ownerEmail: string | null; isSystem: boolean
+  /** Type-aware rules (spec §8.1). `eq` is valid for every column type. */
+  filterRules: TypedFilterRule[]
+  /** ORDERED column ids (standard ids and `custom:<key>`): array order is
+   *  display order, absence means hidden. Never assumed to name only current
+   *  columns — a custom column may have been archived since. */
+  sort: unknown[]; visibleColumns: string[]; createdBy: string | null; createdAt: string | null; updatedAt: string | null
+}
+/** A user-defined Master Grid column (spec §8.1). `key` and `dataType` are
+ *  immutable after creation; `custom:<key>` is the grid column id. */
+export interface BidCustomField {
+  id: string; key: string; name: string; dataType: CustomFieldType
+  /** Non-null exactly for `select`. */
+  options: string[] | null
+  /** True once any non-null value has EVER been written (never reset, even if
+   *  every value is later cleared). Only a column where this is false can be
+   *  hard-deleted; all others are archive-only. */
+  hasHeldValue: boolean
+  position: number; status: 'active' | 'archived'
+  createdBy: string | null; updatedBy: string | null; createdAt: string; updatedAt: string
+}
+/** Local-store row: one per (bid, field); a cleared value has no row. */
+export interface BidCustomFieldValue {
+  bidId: string; fieldId: string; value: Exclude<CustomValue, null>; updatedAt: string
+}
+export interface ActionQueueEntry {
+  followUpId: string; bidId: string; bidCode: string; stageKey: string; opportunityName: string
+  dueDate: string; note: string; assigneeId: string | null
+  attentionFlag: 'dueSoon' | 'overdue' | 'corrigendumPending' | 'onTrack'
 }

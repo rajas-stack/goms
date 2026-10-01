@@ -16,6 +16,8 @@ describe('commercial.boq + commercial.auditLogs routers', () => {
     await pool.query('DELETE FROM sales_postings')
     await pool.query('DELETE FROM sales_persons')
     await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM bid_milestones')
+    await pool.query('DELETE FROM bids')
     await pool.query('DELETE FROM opportunities')
     await pool.query('DELETE FROM employees')
     await pool.query('DELETE FROM hierarchy_nodes')
@@ -539,5 +541,24 @@ describe('commercial.boq + commercial.auditLogs routers', () => {
       const caller = appRouter.createCaller(contextForEmail('someone@amnex.com'))
       await expect(caller.commercial.auditLogs.list()).resolves.toBeDefined()
     })
+  })
+
+  it('accepts and returns opportunityId on create/update', async () => {
+    const caller = appRouter.createCaller({})
+    const { dept, salesPerson, masters } = await setup(caller)
+    const opp = await caller.opportunities.create({ departmentId: dept.id, opportunityName: 'BOQ-linked tender' })
+    const boq = await makeBoq(caller, dept, salesPerson, { opportunityName: 'BOQ-linked tender', verticalId: masters.vertical.id, opportunityId: opp.id })
+    expect(boq.opportunityId).toBe(opp.id)
+  })
+
+  it('carries opportunityId forward through revise and duplicate', async () => {
+    const caller = appRouter.createCaller({})
+    const { dept, salesPerson, masters } = await setup(caller)
+    const opp = await caller.opportunities.create({ departmentId: dept.id, opportunityName: 'Revisable tender' })
+    const boq = await makeBoq(caller, dept, salesPerson, { opportunityName: 'Revisable tender', verticalId: masters.vertical.id, opportunityId: opp.id })
+    const revised = await caller.commercial.boq.revise({ id: boq.id })
+    expect(revised.opportunityId).toBe(opp.id)
+    const duplicated = await caller.commercial.boq.duplicate({ id: boq.id })
+    expect(duplicated.opportunityId).toBe(opp.id)
   })
 })

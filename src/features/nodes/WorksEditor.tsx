@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
@@ -6,13 +7,46 @@ import { Icon } from '@/components/ui/Icon'
 import { WorkFormDialog } from './WorkFormDialog'
 import { formatBudgetRange, formatWorkValue, workUnitLabel } from './department-meta'
 import { stageLabel } from '@/data/pipeline-stages'
-import { useOpportunityMutations, useOwnershipMutations, useResolvedOwners, useSalesPersons } from '@/lib/api'
+import { useBidForOpportunity, useBidMutations, useOpportunityMutations, useOwnershipMutations, useResolvedOwners, useSalesPersons } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
 import { OwnerBadge } from '@/features/sales/OwnerBadge'
 import { AssignOwnerDialog } from '@/features/sales/AssignOwnerDialog'
 import { assignOwnerFromEmail } from '@/lib/assignOwnerFromEmail'
 import { isoToday } from '@/lib/dates'
 import type { Opportunity } from '@/lib/types'
+import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
+
+/** Starts a bid for an opportunity that has none, then opens it. An icon button like
+ *  its neighbours (Edit/Remove): the details panel is narrow, and a text button here
+ *  overflowed the row and pushed those icons off the edge. A failed create (including a
+ *  duplicate from a concurrent tab) reports the server message via `onError`. */
+function CreateBidButton({ opportunityId, onError }: { opportunityId: string; onError: (message: string | null) => void }) {
+  const { data: bid, isLoading } = useBidForOpportunity(opportunityId)
+  const { create } = useBidMutations()
+  const navigate = useNavigate()
+  if (isLoading || bid) return null
+
+  async function handleCreate(e: React.MouseEvent) {
+    e.stopPropagation()
+    onError(null)
+    try {
+      const created = await create.mutateAsync({ opportunityId })
+      navigate(`/bid-tracker/bid/${created.id}`)
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Could not create the bid.')
+    }
+  }
+
+  return (
+    <button
+      type="button" aria-label="Create Bid" title="Create Bid in Bid Tracker" disabled={create.isPending}
+      onClick={handleCreate}
+      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-ink-900/[0.06] hover:text-ink disabled:opacity-50"
+    >
+      <Icon name="Flag" size={13} />
+    </button>
+  )
+}
 
 /** A department's opportunity pipeline, shown as collapsible cards plus the
  *  "Create Opportunity" button that opens WorkFormDialog. Opportunities are
@@ -31,10 +65,16 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
   const oppIds = opportunities.map((w) => w.id)
   const { data: owners = {} } = useResolvedOwners('opportunity', oppIds, isoToday())
   const [openId, setOpenId] = useState<string | null>(null)
+  const [createBidError, setCreateBidError] = useState<{ id: string; message: string } | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Opportunity | null>(null)
   const [assignFor, setAssignFor] = useState<Opportunity | null>(null)
   const [removing, setRemoving] = useState<Opportunity | null>(null)
+  // One lookup, for the opportunity being edited — not one per card, and not the
+  // whole Bid Tracker grid. Once a bid exists, stage and submission date belong
+  // to it: the dialog locks them and save() leaves them out of the patch.
+  const { data: editingBid } = useBidForOpportunity(editing?.id ?? null)
+  const managedInBidTracker = !!editingBid
 
   function openCreate() {
     setEditing(null)
@@ -57,7 +97,10 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
   // not suppress a genuine new direct assignment.
   async function save(draft: Omit<Opportunity, 'id' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>) {
     if (editing) {
-      await update.mutateAsync({ id: editing.id, patch: draft })
+      // The API rejects ANY stageKey/submissionDate in the patch for an opportunity
+      // with a bid — even an unchanged one — so they must not be sent at all.
+      const { stageKey: _stage, submissionDate: _submission, closedOn: _closed, ...rest } = draft
+      await update.mutateAsync({ id: editing.id, patch: managedInBidTracker ? rest : draft })
       const currentResolution = owners[editing.id]
       const currentOwnerSalesPersonId = currentResolution?.source === 'direct' ? currentResolution.salesPersonId : undefined
       await assignOwnerFromEmail({
@@ -115,6 +158,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                       <OwnerBadge owner={owners[w.id]} people={people} />
                     </span>
                   )}
+                  {isBidTrackerEnabled() && <CreateBidButton opportunityId={w.id} onError={(message) => setCreateBidError(message ? { id: w.id, message } : null)} />}
                   <button
                     type="button"
                     aria-label="Edit opportunity"
@@ -133,6 +177,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                   </button>
                 </div>
 
+                {createBidError?.id === w.id && <p role="alert" className="border-t border-line px-2.5 py-1.5 text-[12px] text-crimson">{createBidError.message}</p>}
                 {expanded && (
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-2 border-t border-line px-2.5 py-2.5 text-[13px]">
                     <Detail label="GEM / Tender ID" value={w.gemTenderId} />
@@ -171,6 +216,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
         open={dialogOpen}
         work={editing}
         draftKey={draftKeyPrefix ? `${draftKeyPrefix}:${editing?.id ?? 'new'}` : null}
+        managedInBidTracker={managedInBidTracker}
         onClose={() => setDialogOpen(false)}
         onSave={save}
       />

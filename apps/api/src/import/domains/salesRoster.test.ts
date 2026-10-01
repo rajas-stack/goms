@@ -148,6 +148,8 @@ describe('salesRoster importer', () => {
     await pool.query('DELETE FROM timeline_events')
     await pool.query('DELETE FROM employee_charges')
     await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM bid_milestones')
+    await pool.query('DELETE FROM bids')
     await pool.query('DELETE FROM opportunities')
     await pool.query(`DELETE FROM hierarchy_nodes WHERE domain='org'`)
     const orgNode = await pool.query(

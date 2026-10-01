@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useShell } from '@/app/AppLayout'
 import { Icon } from './ui/Icon'
 import { cn } from '@/lib/utils'
+import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
 
 interface Props {
   open: boolean
@@ -21,6 +22,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const navigate = useNavigate()
   const location = useLocation()
   const commercialActive = location.pathname.startsWith('/commercial-calculator')
+  const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
 
   useEffect(() => {
     if (!open) return
@@ -96,6 +98,23 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                 <Icon name="Calculator" size={17} />
                 Commercial Calculator
               </button>
+              {isBidTrackerEnabled() && (
+                <button
+                  onClick={() => {
+                    onClose()
+                    navigate('/bid-tracker')
+                  }}
+                  className={cn(
+                    'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
+                    bidTrackerActive
+                      ? 'bg-white text-ink-900 shadow-sm'
+                      : 'text-ink hover:bg-ink-900/[0.05]',
+                  )}
+                >
+                  <Icon name="Briefcase" size={17} />
+                  Bid Tracker
+                </button>
+              )}
             </motion.div>
           </>
         )}

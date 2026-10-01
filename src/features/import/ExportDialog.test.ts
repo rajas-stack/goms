@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { peopleRows, type Ctx } from './ExportDialog'
-import type { Employee, HierNode } from '@/lib/types'
+import { bidRows, peopleRows, type Ctx } from './ExportDialog'
+import type { BidCustomField, BidGridRow, Employee, HierNode } from '@/lib/types'
 
 function makeEmployee(overrides: Partial<Employee> = {}): Employee {
   return {
@@ -25,7 +25,7 @@ function makeDepartment(overrides: Partial<HierNode> = {}): HierNode {
 
 function makeCtx(overrides: Partial<Ctx> = {}): Ctx {
   return {
-    states: [], departments: [], employees: [], employeeDepartments: {}, events: [], opportunities: [],
+    states: [], departments: [], employees: [], employeeDepartments: {}, events: [], opportunities: [], bids: [], customFields: [],
     ...overrides,
   }
 }
@@ -61,5 +61,24 @@ describe('ExportDialog — peopleRows Address/Website (item 4: inherits from the
     const row = rows[1]
     expect(row[header.indexOf('Address')]).toBe('Stale Personal Address')
     expect(row[header.indexOf('Website')]).toBe('https://stale.example.com')
+  })
+})
+
+describe('ExportDialog — bidRows', () => {
+  it('appends one column per custom field, headed by its name, with blank for no value', () => {
+    const field = { id: 'f1', key: 'region', name: 'Region', dataType: 'text' } as BidCustomField
+    const bid = {
+      bidCode: 'BID-1', opportunityName: 'Opp', departmentName: 'Health', stateCode: null, city: null,
+      gemTenderId: 'GEM/1', stageKey: 'lead', decision: 'pending', dataConfidence: 'needs_review',
+      submissionDate: '', valueAmount: '', valueUnit: '', emdAmount: '', emdUnit: '', ownerEmail: null,
+      solutionLeadEmail: null, nextMilestoneLabel: null, nextMilestoneDueAt: null, nextActionNote: null,
+      nextActionDueDate: null, tenderLink: null, customValues: { region: 'North' },
+    } as unknown as BidGridRow
+    const other = { ...bid, bidCode: 'BID-2', customValues: {} } as BidGridRow
+    const rows = bidRows(makeCtx({ bids: [bid, other], customFields: [field] }))
+    expect(rows[0][rows[0].length - 1]).toBe('Region')
+    expect(rows[1][rows[1].length - 1]).toBe('North')
+    expect(rows[2][rows[2].length - 1]).toBe('')
+    expect(rows[1]).toHaveLength(rows[0].length)
   })
 })

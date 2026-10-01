@@ -7,6 +7,7 @@
 // 2026-08-31 local-vs-GCP functional parity audit
 // (docs/superpowers/analysis/2026-08-31-goms-local-vs-gcp-functional-parity-audit.md).
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
+import type { DepartmentChoice, NewBidOpportunity } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
 import { authPromptLink } from './authPromptLink'
 import type { AppRouter } from '../../../apps/api/src/index'
@@ -21,6 +22,8 @@ import type { OwnerResolution } from '@/data/ownership'
 import type {
   Customer, HierNode, Status, Employee, Charge, TimelineEvent, TimelineEventType, Transfer, MergeAuditRecord,
   SalesPerson, SalesPosting, Opportunity, OpportunityStageChange, OwnershipAssignment, FollowUp, SearchResult,
+  Bid, BidGridRow, BidMilestone, BidMilestoneWithBid, BidCorrigendum, BidCorrigendumChange, ProtectedValue, BidDocument,
+  DocumentCitation, BidSavedView, ActionQueueEntry, BidCustomField, CustomFieldType, CustomValue,
 } from '@/lib/types'
 import type {
   CommercialBomItem, CommercialSku, CreateBomItemInput, CreateSkuInput,
@@ -223,4 +226,108 @@ export class RemoteRepository implements Partial<Repository> {
     this.client.search.search.query({ query, stateCode })
   relatedRecords = (result: SearchResult): Promise<SearchResult[]> => this.client.search.relatedRecords.query(result)
   relationshipAnalytics = (): Promise<RelationshipAnalytics> => this.client.search.relationshipAnalytics.query()
+
+  // --- Bid Tracker ---
+  listBidsForGrid = (filterRules?: BidSavedView['filterRules']): Promise<BidGridRow[]> =>
+    this.client.bids.listForGrid.query({ filterRules }) as unknown as Promise<BidGridRow[]>
+  getBid = (id: string): Promise<Bid | null> => this.client.bids.get.query({ id }) as unknown as Promise<Bid | null>
+  getBidForOpportunity = (opportunityId: string): Promise<Bid | null> =>
+    this.client.bids.getForOpportunity.query({ opportunityId }) as unknown as Promise<Bid | null>
+  createBid = (opportunityId: string, department?: DepartmentChoice): Promise<Bid> =>
+    this.client.bids.create.mutate({ opportunityId, department }) as unknown as Promise<Bid>
+  createBidForNewOpportunity = (opportunity: NewBidOpportunity, department: DepartmentChoice): Promise<Bid> =>
+    this.client.bids.create.mutate({ newOpportunity: opportunity, department }) as unknown as Promise<Bid>
+  updateBid = (id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>): Promise<Bid> =>
+    this.client.bids.update.mutate({ id, patch }) as unknown as Promise<Bid>
+  archiveBid = (id: string): Promise<Bid> => this.client.bids.archive.mutate({ id }) as unknown as Promise<Bid>
+  markBidVerified = (id: string): Promise<Bid> => this.client.bids.markVerified.mutate({ id }) as unknown as Promise<Bid>
+  unarchiveBid = (id: string): Promise<Bid> => this.client.bids.unarchive.mutate({ id }) as unknown as Promise<Bid>
+  deleteBid = (id: string): Promise<void> => this.client.bids.delete.mutate({ id }) as unknown as Promise<void>
+  listBidActionQueue = (): Promise<ActionQueueEntry[]> =>
+    this.client.bids.actionQueue.list.query() as unknown as Promise<ActionQueueEntry[]>
+
+  listAllBidMilestones = (): Promise<BidMilestoneWithBid[]> =>
+    this.client.bidMilestones.listAll.query() as unknown as Promise<BidMilestoneWithBid[]>
+  listBidMilestones = (bidId: string): Promise<BidMilestone[]> =>
+    this.client.bidMilestones.listForBid.query({ bidId }) as unknown as Promise<BidMilestone[]>
+  createBidMilestone = (input: {
+    bidId: string; milestoneType: string; key: string; label: string
+    dueAt?: string | null; venue?: string; notes?: string
+  }): Promise<BidMilestone> => this.client.bidMilestones.create.mutate(input) as unknown as Promise<BidMilestone>
+  updateBidMilestone = (
+    id: string, patch: Partial<Pick<BidMilestone, 'label' | 'dueAt' | 'venue' | 'notes' | 'status'>>,
+  ): Promise<BidMilestone> => this.client.bidMilestones.update.mutate({ id, patch }) as unknown as Promise<BidMilestone>
+  deleteBidMilestone = (id: string): Promise<void> =>
+    this.client.bidMilestones.delete.mutate({ id }) as unknown as Promise<void>
+
+  listBidCorrigenda = (bidId: string): Promise<BidCorrigendum[]> =>
+    this.client.bidCorrigenda.listForBid.query({ bidId }) as unknown as Promise<BidCorrigendum[]>
+  createBidCorrigendum = (input: {
+    bidId: string; corrigendumNumber: number; sourceDocumentId?: string
+    changes: { fieldKey: string; currentValue: string; proposedValue: string }[]
+  }): Promise<BidCorrigendum> => this.client.bidCorrigenda.create.mutate(input) as unknown as Promise<BidCorrigendum>
+  reviewCorrigendumChange = (
+    input: { changeId: string; decision: 'accepted' | 'rejected'; reason?: string },
+  ): Promise<BidCorrigendumChange> =>
+    this.client.bidCorrigenda.reviewChange.mutate(input) as unknown as Promise<BidCorrigendumChange>
+
+  listProtectedValues = (entityType: string, entityId: string): Promise<ProtectedValue[]> =>
+    this.client.protectedValues.listFor.query({ entityType, entityId }) as unknown as Promise<ProtectedValue[]>
+  freezeValue = (entityType: string, entityId: string, fieldKey: string): Promise<void> =>
+    this.client.protectedValues.freeze.mutate({ entityType, entityId, fieldKey }) as unknown as Promise<void>
+  unfreezeValue = (entityType: string, entityId: string, fieldKey: string, reason: string): Promise<void> =>
+    this.client.protectedValues.unfreeze.mutate({ entityType, entityId, fieldKey, reason }) as unknown as Promise<void>
+
+  requestDocumentUploadUrl = (input: {
+    entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+  }): Promise<{ uploadId: string; uploadUrl: string }> =>
+    this.client.documents.requestUploadUrl.mutate(input) as unknown as Promise<{ uploadId: string; uploadUrl: string }>
+  confirmDocumentUpload = (uploadId: string): Promise<BidDocument> =>
+    this.client.documents.confirmUpload.mutate({ uploadId }) as unknown as Promise<BidDocument>
+  listDocuments = (entityType: string, entityId: string): Promise<BidDocument[]> =>
+    this.client.documents.listFor.query({ entityType, entityId }) as unknown as Promise<BidDocument[]>
+  deleteDocument = (id: string): Promise<void> => this.client.documents.delete.mutate({ id }) as unknown as Promise<void>
+  getDocumentDownloadUrl = async (id: string): Promise<string> => (await this.client.documents.getDownloadUrl.query({ id })).url
+  deleteDocumentCitation = (id: string): Promise<void> =>
+    this.client.documents.citations.delete.mutate({ id }) as unknown as Promise<void>
+  listDocumentCitations = (documentId: string): Promise<DocumentCitation[]> =>
+    this.client.documents.citations.list.query({ documentId }) as unknown as Promise<DocumentCitation[]>
+  createDocumentCitation = (
+    input: { documentId: string; pageLabel: string; quoteText?: string; fieldRef?: string },
+  ): Promise<DocumentCitation> =>
+    this.client.documents.citations.create.mutate(input) as unknown as Promise<DocumentCitation>
+
+  listBidSavedViews = (): Promise<BidSavedView[]> =>
+    this.client.bidSavedViews.list.query() as unknown as Promise<BidSavedView[]>
+  createBidSavedView = (input: {
+    name: string; scope: 'personal' | 'global'
+    filterRules?: BidSavedView['filterRules']; sort?: unknown[]; visibleColumns?: string[]
+  }): Promise<BidSavedView> => this.client.bidSavedViews.create.mutate(input) as unknown as Promise<BidSavedView>
+  updateBidSavedView = (
+    id: string, patch: Partial<Pick<BidSavedView, 'name' | 'filterRules' | 'sort' | 'visibleColumns'>>,
+  ): Promise<BidSavedView> => this.client.bidSavedViews.update.mutate({ id, patch }) as unknown as Promise<BidSavedView>
+  deleteBidSavedView = (id: string): Promise<void> =>
+    this.client.bidSavedViews.delete.mutate({ id }) as unknown as Promise<void>
+
+  // --- Bid Tracker: custom columns (spec §8.1) ---
+  listBidCustomFields = (includeArchived?: boolean): Promise<BidCustomField[]> =>
+    this.client.bidCustomFields.list.query({ includeArchived }) as unknown as Promise<BidCustomField[]>
+  createBidCustomField = (input: { name: string; dataType: CustomFieldType; options?: string[] }): Promise<BidCustomField> =>
+    this.client.bidCustomFields.create.mutate(input) as unknown as Promise<BidCustomField>
+  updateBidCustomField = (id: string, patch: { name?: string; options?: string[] }): Promise<BidCustomField> =>
+    this.client.bidCustomFields.update.mutate({ id, patch }) as unknown as Promise<BidCustomField>
+  reorderBidCustomFields = (ids: string[]): Promise<BidCustomField[]> =>
+    this.client.bidCustomFields.reorder.mutate({ ids }) as unknown as Promise<BidCustomField[]>
+  archiveBidCustomField = (id: string): Promise<BidCustomField> =>
+    this.client.bidCustomFields.archive.mutate({ id }) as unknown as Promise<BidCustomField>
+  unarchiveBidCustomField = (id: string): Promise<BidCustomField> =>
+    this.client.bidCustomFields.unarchive.mutate({ id }) as unknown as Promise<BidCustomField>
+  deleteBidCustomField = (id: string): Promise<void> =>
+    this.client.bidCustomFields.delete.mutate({ id }) as unknown as Promise<void>
+  setBidCustomValue = (
+    bidId: string, fieldId: string, value: string | number | boolean | null,
+  ): Promise<{ bidId: string; fieldId: string; key: string; value: CustomValue }> =>
+    this.client.bidCustomFields.setValue.mutate({ bidId, fieldId, value }) as unknown as Promise<{ bidId: string; fieldId: string; key: string; value: CustomValue }>
+  listBidCustomValues = (bidId: string): Promise<Record<string, CustomValue>> =>
+    this.client.bidCustomFields.valuesForBid.query({ bidId }) as unknown as Promise<Record<string, CustomValue>>
 }

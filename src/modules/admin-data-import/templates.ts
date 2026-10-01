@@ -9,6 +9,7 @@ export interface TemplateSheet {
 export const SPREADSHEET_DOMAIN_KEYS = [
   'organizationHierarchy', 'employees', 'salesRoster', 'commercialMastersCatalog',
   'commercialMastersFlat', 'currencies', 'taxClasses', 'approvalMatrix', 'skus', 'bom',
+  'bids', 'bidMilestones',
 ] as const satisfies readonly SpreadsheetDomainKey[]
 
 const CATALOG_COLUMNS = ['Code', 'Name', 'Description', 'Active', 'Display Order', 'Parent Code']
@@ -75,7 +76,20 @@ export const TEMPLATE_COLUMNS: Record<SpreadsheetDomainKey, TemplateSheet[]> = {
   bom: [
     { sheet: 'BOM', columns: ['Parent SKU Code', 'Component SKU Code', 'Mandatory', 'Quantity', 'Notes'] },
   ],
+  // Any further column on the Bids sheet is a custom-column value, matched by
+  // the column's name or `custom:<key>` (see PASSTHROUGH_HEADER_DOMAINS).
+  bids: [
+    { sheet: 'Bids', columns: ['GeM Tender ID', 'Tender Link'] },
+  ],
+  bidMilestones: [
+    { sheet: 'Bid Milestones', columns: ['GeM Tender ID', 'Milestone Type', 'Milestone Key', 'Milestone Label', 'Due At', 'Venue', 'Notes'] },
+  ],
 }
+
+/** Domains whose sheets carry user-defined columns: a heading that matches no
+ *  known header is kept verbatim as the row key instead of being dropped, so
+ *  the importer can fill the matching custom column or warn about the heading. */
+const PASSTHROUGH_HEADER_DOMAINS: ReadonlySet<SpreadsheetDomainKey> = new Set(['bids'])
 
 /** Spreadsheet header -> the field name each importer's Zod schema expects
  *  (apps/api/src/import/domains/*.ts). Headers are globally unique across
@@ -161,6 +175,14 @@ export const HEADER_TO_FIELD: Record<string, string> = {
   'Mandatory': 'mandatory',
   'Quantity': 'quantity',
   'Notes': 'notes',
+
+  'GeM Tender ID': 'gemTenderId',
+  'Tender Link': 'tenderLink',
+  'Milestone Type': 'milestoneType',
+  'Milestone Key': 'key',
+  'Milestone Label': 'label',
+  'Due At': 'dueAt',
+  'Venue': 'venue',
 
   // Aliases — organizationHierarchy
   'Type': 'nodeType', 'Org Type': 'nodeType',
@@ -426,7 +448,11 @@ export function rowsFromSheet(worksheet: XLSX.WorkSheet, domain?: SpreadsheetDom
     found.headers.forEach((header, colIndex) => {
       if (header === '') return
       const field = resolveHeaderField(domain, header)
-      if (!field) return
+      if (!field) {
+        const cell = dataRow[colIndex]
+        if (domain && PASSTHROUGH_HEADER_DOMAINS.has(domain) && cell !== undefined && cell !== null) row[header] = typeof cell === 'string' ? cell.trim() : cell
+        return
+      }
       const parsed = parseCellValue(field, dataRow[colIndex])
       if (parsed !== undefined) row[field] = parsed
     })

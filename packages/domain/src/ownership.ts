@@ -11,7 +11,12 @@ export interface OwnershipEmployee {
 }
 export interface OwnershipOpportunity {
   id: string
-  departmentId: string
+  /** null until the opportunity has been given a department (see Create Bid). */
+  departmentId: string | null
+}
+export interface OwnershipBid {
+  id: string
+  opportunityId: string
 }
 
 /** A single ownership/delegation row — the subset of `OwnershipAssignment`
@@ -32,6 +37,7 @@ export interface OwnershipContext {
   nodes: OwnershipNode[]
   employees: OwnershipEmployee[]
   opportunities: OwnershipOpportunity[]
+  bids: OwnershipBid[]
 }
 
 export interface OwnableEntityDef {
@@ -90,7 +96,17 @@ const OWNABLE_ENTITIES: OwnableEntityDef[] = [
     resolution: 'exact',
     inheritFrom: (id, ctx) => {
       const opp = ctx.opportunities.find((o) => o.id === id)
-      return opp ? { entityType: 'orgNode', entityId: opp.departmentId } : null
+      return opp?.departmentId ? { entityType: 'orgNode', entityId: opp.departmentId } : null
+    },
+  },
+  {
+    key: 'bid',
+    label: 'Bid',
+    icon: 'FileCheck2',
+    resolution: 'exact',
+    inheritFrom: (id, ctx) => {
+      const bid = ctx.bids.find((b) => b.id === id)
+      return bid ? { entityType: 'opportunity', entityId: bid.opportunityId } : null
     },
   },
 ]

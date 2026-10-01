@@ -237,6 +237,7 @@ export function SessionImportWizard() {
                       </td>
                       <td className="px-3 py-2 text-muted">
                         {row.errors.length > 0 && <ul className="list-inside list-disc">{row.errors.map((e) => <li key={e}>{e}</li>)}</ul>}
+                        {row.warnings && row.warnings.length > 0 && <ul className="list-inside list-disc text-amber-600">{row.warnings.map((w) => <li key={w}>{w}</li>)}</ul>}
                         {row.candidates && row.candidates.length > 0 && (
                           <p className="text-[11px] text-muted">
                             Did you mean: {row.candidates.map((c) => `${c.key} (${Math.round(c.score * 100)}%)`).join(', ')}?

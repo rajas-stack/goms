@@ -1,4 +1,5 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { DepartmentChoice, NewBidOpportunity } from '@goms/domain'
 import {
   repository, type AddTimelineInput, type AssignOwnerInput, type CreateEmployeeInput, type CreateFollowUpInput,
   type CreateNodeInput, type CreateOpportunityInput, type CreateSalesPersonInput, type ImportChildRow,
@@ -6,7 +7,8 @@ import {
   type TransferSalesPersonInput,
 } from '@/data/repository'
 import type {
-  Charge, Employee, FollowUp, HierNode, Opportunity, SalesPerson, SearchResult, Status, TimelineEvent, TimelineEventType,
+  Bid, BidMilestone, BidSavedView, Charge, Employee, FollowUp, HierNode, Opportunity, SalesPerson, SearchResult, Status,
+  TimelineEvent, TimelineEventType,
 } from './types'
 
 const qk = {
@@ -36,6 +38,16 @@ const qk = {
   ownedBy: (id: string, asOf: string) => ['ownedBy', id, asOf] as const,
   resolvedOwners: (t: string, asOf: string, ids: string[]) => ['resolvedOwners', t, asOf, ids] as const,
   openFollowUps: ['openFollowUps'] as const,
+  bidsForGrid: (filterRules?: unknown) => ['bidsForGrid', filterRules ?? null] as const,
+  bid: (id: string) => ['bid', id] as const,
+  bidMilestones: (bidId: string) => ['bidMilestones', bidId] as const,
+  bidCorrigenda: (bidId: string) => ['bidCorrigenda', bidId] as const,
+  protectedValues: (t: string, id: string) => ['protectedValues', t, id] as const,
+  documents: (t: string, id: string) => ['documents', t, id] as const,
+  bidSavedViews: ['bidSavedViews'] as const,
+  bidActionQueue: ['bidActionQueue'] as const,
+  bidCustomFields: (includeArchived?: boolean) => ['bidCustomFields', includeArchived ?? false] as const,
+  bidCustomValues: (bidId: string) => ['bidCustomValues', bidId] as const,
 }
 
 export const useStates = () => useQuery({ queryKey: qk.states, queryFn: () => repository.listStates() })
@@ -111,6 +123,8 @@ export function useOpportunityMutations() {
     qc.invalidateQueries({ queryKey: ['opportunitiesByDepartment'] })
     qc.invalidateQueries({ queryKey: ['opportunity'] })
     qc.invalidateQueries({ queryKey: ['opportunityStageChanges'] })
+    // The Bid Tracker Master Grid rows are joined from opportunity fields.
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
   }
   const create = useMutation({ mutationFn: (i: CreateOpportunityInput) => repository.createOpportunity(i), onSuccess: invalidate })
   const update = useMutation({
@@ -119,6 +133,227 @@ export function useOpportunityMutations() {
   })
   const remove = useMutation({ mutationFn: (id: string) => repository.deleteOpportunity(id), onSuccess: invalidate })
   return { create, update, remove }
+}
+
+// --- Bid Tracker ---
+export const useBidsForGrid = (filterRules?: BidSavedView['filterRules']) =>
+  // keepPreviousData: changing a filter must not blank the grid to a loading
+  // state while the new rows load — the old rows stay until the new ones land.
+  useQuery({
+    queryKey: qk.bidsForGrid(filterRules), queryFn: () => repository.listBidsForGrid(filterRules),
+    placeholderData: keepPreviousData,
+  })
+export const useBid = (id: string | null) =>
+  useQuery({ queryKey: qk.bid(id ?? ''), queryFn: async () => (await repository.getBid(id!)) ?? null, enabled: !!id })
+export function useBidMutations() {
+  const qc = useQueryClient()
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+    qc.invalidateQueries({ queryKey: ['bidMilestones', 'all'] })
+    qc.invalidateQueries({ queryKey: ['bid'] })
+    qc.invalidateQueries({ queryKey: ['bidForOpportunity'] })
+    qc.invalidateQueries({ queryKey: ['bidActionQueue'] })
+    // A bid's stage/decision syncs back to its opportunity (spec §4.4).
+    qc.invalidateQueries({ queryKey: ['opportunities'] })
+    qc.invalidateQueries({ queryKey: ['opportunity'] })
+    qc.invalidateQueries({ queryKey: ['opportunityStageChanges'] })
+  }
+  // Both entry points (the Bid Tracker's Create Bid dialog and the opportunity card) go through
+  // this one mutation; `department` is only sent when the opportunity has none.
+  const create = useMutation({
+    mutationFn: (a: { opportunityId: string; department?: DepartmentChoice }) => repository.createBid(a.opportunityId, a.department),
+    onSuccess: invalidate,
+  })
+  // Create the opportunity, its department and the bid in one go (Bid Tracker's Create Bid → new opportunity).
+  const createWithNewOpportunity = useMutation({
+    mutationFn: (a: { opportunity: NewBidOpportunity; department: DepartmentChoice }) => repository.createBidForNewOpportunity(a.opportunity, a.department),
+    onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['opportunities'] }); qc.invalidateQueries({ queryKey: ['departments'] }) },
+  })
+  const update = useMutation({
+    mutationFn: (a: { id: string; patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>> }) =>
+      repository.updateBid(a.id, a.patch),
+    onSuccess: invalidate,
+  })
+  const archive = useMutation({ mutationFn: (id: string) => repository.archiveBid(id), onSuccess: invalidate })
+  const unarchive = useMutation({ mutationFn: (id: string) => repository.unarchiveBid(id), onSuccess: invalidate })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteBid(id), onSuccess: invalidate })
+  const markVerified = useMutation({ mutationFn: (id: string) => repository.markBidVerified(id), onSuccess: invalidate })
+  return { create, createWithNewOpportunity, update, archive, unarchive, remove, markVerified }
+}
+export const useBidForOpportunity = (opportunityId: string | null) =>
+  useQuery({
+    queryKey: ['bidForOpportunity', opportunityId ?? ''],
+    queryFn: async () => (await repository.getBidForOpportunity(opportunityId!)) ?? null,
+    enabled: !!opportunityId,
+  })
+export const useBidActionQueue = () =>
+  useQuery({ queryKey: qk.bidActionQueue, queryFn: () => repository.listBidActionQueue() })
+
+export const useBidMilestones = (bidId: string | null) =>
+  useQuery({ queryKey: qk.bidMilestones(bidId ?? ''), queryFn: () => repository.listBidMilestones(bidId!), enabled: !!bidId })
+export const useAllBidMilestones = () =>
+  useQuery({ queryKey: ['bidMilestones', 'all'], queryFn: () => repository.listAllBidMilestones() })
+export function useBidMilestoneMutations(bidId: string) {
+  const qc = useQueryClient()
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: qk.bidMilestones(bidId) })
+    qc.invalidateQueries({ queryKey: ['bidMilestones', 'all'] })
+    qc.invalidateQueries({ queryKey: ['bid', bidId] })
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+  }
+  const create = useMutation({
+    mutationFn: (input: Parameters<typeof repository.createBidMilestone>[0]) => repository.createBidMilestone(input),
+    onSuccess: invalidate,
+  })
+  const update = useMutation({
+    mutationFn: (a: { id: string; patch: Partial<Pick<BidMilestone, 'label' | 'dueAt' | 'venue' | 'notes' | 'status'>> }) =>
+      repository.updateBidMilestone(a.id, a.patch),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteBidMilestone(id), onSuccess: invalidate })
+  return { create, update, remove }
+}
+
+export const useBidCorrigenda = (bidId: string | null) =>
+  useQuery({ queryKey: qk.bidCorrigenda(bidId ?? ''), queryFn: () => repository.listBidCorrigenda(bidId!), enabled: !!bidId })
+export function useBidCorrigendaMutations(bidId: string) {
+  const qc = useQueryClient()
+  // Reviewing a change can move a milestone, the bid's tender link/confidence,
+  // and the opportunity's submission date, so all of those go stale together.
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: qk.bidCorrigenda(bidId) })
+    qc.invalidateQueries({ queryKey: qk.bidMilestones(bidId) })
+    qc.invalidateQueries({ queryKey: ['bidMilestones', 'all'] })
+    qc.invalidateQueries({ queryKey: ['bid', bidId] })
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+    qc.invalidateQueries({ queryKey: ['opportunity'] })
+  }
+  const create = useMutation({
+    mutationFn: (input: Parameters<typeof repository.createBidCorrigendum>[0]) => repository.createBidCorrigendum(input),
+    onSuccess: invalidate,
+  })
+  const reviewChange = useMutation({
+    mutationFn: (input: Parameters<typeof repository.reviewCorrigendumChange>[0]) => repository.reviewCorrigendumChange(input),
+    onSuccess: invalidate,
+  })
+  return { create, reviewChange }
+}
+
+export const useProtectedValues = (entityType: string, entityId: string | null) =>
+  useQuery({
+    queryKey: qk.protectedValues(entityType, entityId ?? ''),
+    queryFn: () => repository.listProtectedValues(entityType, entityId!),
+    enabled: !!entityId,
+  })
+export function useProtectedValueMutations(entityType: string, entityId: string) {
+  const qc = useQueryClient()
+  const invalidate = () => qc.invalidateQueries({ queryKey: qk.protectedValues(entityType, entityId) })
+  const freeze = useMutation({ mutationFn: (fieldKey: string) => repository.freezeValue(entityType, entityId, fieldKey), onSuccess: invalidate })
+  const unfreeze = useMutation({
+    mutationFn: (a: { fieldKey: string; reason: string }) => repository.unfreezeValue(entityType, entityId, a.fieldKey, a.reason),
+    onSuccess: invalidate,
+  })
+  return { freeze, unfreeze }
+}
+
+export const useDocuments = (entityType: string, entityId: string | null) =>
+  useQuery({
+    queryKey: qk.documents(entityType, entityId ?? ''),
+    queryFn: () => repository.listDocuments(entityType, entityId!),
+    enabled: !!entityId,
+  })
+export function useDocumentMutations(entityType: string, entityId: string) {
+  const qc = useQueryClient()
+  const invalidate = () => qc.invalidateQueries({ queryKey: qk.documents(entityType, entityId) })
+  const requestUploadUrl = useMutation({
+    mutationFn: (input: Parameters<typeof repository.requestDocumentUploadUrl>[0]) => repository.requestDocumentUploadUrl(input),
+  })
+  const confirmUpload = useMutation({ mutationFn: (uploadId: string) => repository.confirmDocumentUpload(uploadId), onSuccess: invalidate })
+  const remove = useMutation({
+    mutationFn: (id: string) => repository.deleteDocument(id),
+    onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['bidsForGrid'] }) },
+  })
+  /** Mints a fresh signed URL on each call (a cached one would expire). */
+  const download = useMutation({ mutationFn: (id: string) => repository.getDocumentDownloadUrl(id) })
+  return { requestUploadUrl, confirmUpload, remove, download }
+}
+
+export const useDocumentCitations = (documentId: string | null) =>
+  useQuery({
+    queryKey: ['documentCitations', documentId ?? ''],
+    queryFn: () => repository.listDocumentCitations(documentId!),
+    enabled: !!documentId,
+  })
+export function useDocumentCitationMutations(documentId: string) {
+  const qc = useQueryClient()
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['documentCitations', documentId] })
+  const create = useMutation({
+    mutationFn: (input: { pageLabel: string; quoteText?: string }) => repository.createDocumentCitation({ documentId, ...input }),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteDocumentCitation(id), onSuccess: invalidate })
+  return { create, remove }
+}
+
+export const useBidSavedViews = () =>
+  useQuery({ queryKey: qk.bidSavedViews, queryFn: () => repository.listBidSavedViews() })
+export function useBidSavedViewMutations() {
+  const qc = useQueryClient()
+  const invalidate = () => qc.invalidateQueries({ queryKey: qk.bidSavedViews })
+  const create = useMutation({
+    mutationFn: (input: Parameters<typeof repository.createBidSavedView>[0]) => repository.createBidSavedView(input),
+    onSuccess: invalidate,
+  })
+  const update = useMutation({
+    mutationFn: (a: { id: string; patch: Partial<Pick<BidSavedView, 'name' | 'filterRules' | 'sort' | 'visibleColumns'>> }) =>
+      repository.updateBidSavedView(a.id, a.patch),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteBidSavedView(id), onSuccess: invalidate })
+  return { create, update, remove }
+}
+
+// --- Bid Tracker: custom columns (spec §8.1) ---
+export const useBidCustomFields = (includeArchived = false) =>
+  useQuery({ queryKey: qk.bidCustomFields(includeArchived), queryFn: () => repository.listBidCustomFields(includeArchived) })
+export const useBidCustomValues = (bidId: string | null) =>
+  useQuery({ queryKey: qk.bidCustomValues(bidId ?? ''), queryFn: () => repository.listBidCustomValues(bidId!), enabled: !!bidId })
+export function useBidCustomFieldMutations() {
+  const qc = useQueryClient()
+  // Any definition change (rename, options, order, archive) changes what the
+  // grid shows and how saved views resolve, so the grid refetches too.
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['bidCustomFields'] })
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+    qc.invalidateQueries({ queryKey: ['bidCustomValues'] })
+  }
+  const create = useMutation({
+    mutationFn: (input: Parameters<typeof repository.createBidCustomField>[0]) => repository.createBidCustomField(input),
+    onSuccess: invalidate,
+  })
+  const update = useMutation({
+    mutationFn: (a: { id: string; patch: { name?: string; options?: string[] } }) => repository.updateBidCustomField(a.id, a.patch),
+    onSuccess: invalidate,
+  })
+  const reorder = useMutation({ mutationFn: (ids: string[]) => repository.reorderBidCustomFields(ids), onSuccess: invalidate })
+  const archive = useMutation({ mutationFn: (id: string) => repository.archiveBidCustomField(id), onSuccess: invalidate })
+  const unarchive = useMutation({ mutationFn: (id: string) => repository.unarchiveBidCustomField(id), onSuccess: invalidate })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteBidCustomField(id), onSuccess: invalidate })
+  return { create, update, reorder, archive, unarchive, remove }
+}
+/** Sets/clears one custom cell. The grid layers optimistic updates on top in
+ *  Task 28; this hook only invalidates on success. */
+export function useSetBidCustomValue() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (a: { bidId: string; fieldId: string; value: string | number | boolean | null }) =>
+      repository.setBidCustomValue(a.bidId, a.fieldId, a.value),
+    onSuccess: (_result, a) => {
+      qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+      qc.invalidateQueries({ queryKey: qk.bidCustomValues(a.bidId) })
+      qc.invalidateQueries({ queryKey: ['bid', a.bidId] })
+    },
+  })
 }
 
 export const useSalesPersons = () =>
@@ -200,6 +435,8 @@ export function useOwnershipMutations() {
     qc.invalidateQueries({ queryKey: ['ownedBy'] })
     qc.invalidateQueries({ queryKey: ['resolvedOwners'] })
     qc.invalidateQueries({ queryKey: ['ownershipAssignments'] })
+    // The Bid Tracker grid's Bid Owner / Sales Lead columns resolve ownership server-side.
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
   }
   const assign = useMutation({ mutationFn: (i: AssignOwnerInput) => repository.assignOwner(i), onSuccess: invalidate })
   const end = useMutation({
@@ -229,6 +466,9 @@ export function useFollowUpMutations() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['followUps'] })
     qc.invalidateQueries({ queryKey: ['openFollowUps'] })
+    // A bid's Next Action feeds the Master Grid's action columns and the Action Queue.
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+    qc.invalidateQueries({ queryKey: ['bidActionQueue'] })
   }
   const create = useMutation({ mutationFn: (i: CreateFollowUpInput) => repository.createFollowUp(i), onSuccess: invalidate })
   const setStatus = useMutation({

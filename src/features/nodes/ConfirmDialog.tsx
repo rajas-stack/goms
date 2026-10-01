@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { useToast } from '@/components/ui/Toast'
@@ -12,24 +13,33 @@ export function ConfirmDialog({ open, node, onClose, onDeleted }: {
 }) {
   const toast = useToast()
   const { remove } = useNodeMutations()
+  const [error, setError] = useState<string | null>(null)
+
+  function close() { setError(null); onClose() }
 
   async function confirm() {
     if (!node) return
-    await remove.mutateAsync(node.id)
+    setError(null)
+    try {
+      await remove.mutateAsync(node.id)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't delete — please try again.")
+      return
+    }
     toast(`Deleted ${node.name}`)
     onDeleted()
-    onClose()
+    close()
   }
 
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={close}
       title={`Delete ${node?.name ?? ''}?`}
       description="This removes the node and everything beneath it, including any employees posted there. This can't be undone."
       footer={
         <>
-          <Button onClick={onClose} disabled={remove.isPending}>Keep</Button>
+          <Button onClick={close} disabled={remove.isPending}>Keep</Button>
           <Button variant="danger" onClick={confirm} disabled={remove.isPending}>
             {remove.isPending ? 'Deletingâ€¦' : 'Delete permanently'}
           </Button>
@@ -39,6 +49,7 @@ export function ConfirmDialog({ open, node, onClose, onDeleted }: {
       <p className="text-sm text-muted">
         Prefer to hide it instead? Archive keeps the record and its history, and you can restore it later.
       </p>
+      {error && <p role="alert" className="mt-3 rounded-lg border border-crimson/40 bg-crimson/5 px-3 py-2 text-[13px] text-crimson">{error}</p>}
     </Dialog>
   )
 }

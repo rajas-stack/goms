@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as api from '@/lib/api'
@@ -9,6 +9,12 @@ import type { Opportunity, SalesPerson } from '@/lib/types'
 // of that is under test here (this suite is about WorksEditor's save()
 // wiring to the ownership ledger), so it's replaced with the minimal shape
 // WorksEditor reads — mirrors HierarchyCanvas.test.tsx's approach.
+const navigateMock = vi.fn()
+vi.mock('react-router-dom', async (orig) => ({
+  ...(await orig<typeof import('react-router-dom')>()),
+  useNavigate: () => navigateMock,
+}))
+
 vi.mock('@/features/workspace/context', () => ({
   useWorkspace: () => ({ select: vi.fn() }),
 }))
@@ -19,9 +25,10 @@ vi.mock('@/features/workspace/context', () => ({
 // with a controllable `salesPersonEmail`, standing in for "user picked a new
 // Sales Person and hit Save" vs. "user hit Save without changing it".
 vi.mock('./WorkFormDialog', () => ({
-  WorkFormDialog: ({ open, work, onSave }: {
+  WorkFormDialog: ({ open, work, onSave, managedInBidTracker }: {
     open: boolean
     work: Opportunity | null
+    managedInBidTracker?: boolean
     onSave: (draft: Omit<Opportunity, 'id' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>) => void
   }) => {
     if (!open) return null
@@ -34,7 +41,7 @@ vi.mock('./WorkFormDialog', () => ({
         stageKey: 'lead', closedOn: null,
       }
     return (
-      <div data-testid="work-form-dialog">
+      <div data-testid="work-form-dialog" data-managed={managedInBidTracker ? 'true' : 'false'}>
         <button onClick={() => onSave({ ...base, salesPersonEmail: 'bob@amnex.com' })}>Save (pick Bob)</button>
         <button onClick={() => onSave(base)}>Save (unchanged)</button>
       </div>
@@ -67,7 +74,12 @@ const assignMutateAsync = vi.fn().mockResolvedValue(undefined)
 
 function stubApiHooks(opts: {
   resolvedOwners?: Record<string, { salesPersonId: string; source: 'direct' | 'inherited' }>
+  /** Whether the opportunity being edited has a bid in Bid Tracker. */
+  bid?: { id: string; opportunityId: string } | null
 } = {}) {
+  vi.spyOn(api, 'useBidForOpportunity').mockReturnValue(
+    { data: opts.bid ?? null } as unknown as ReturnType<typeof api.useBidForOpportunity>,
+  )
   vi.spyOn(api, 'useOpportunityMutations').mockReturnValue({
     create: { mutate: vi.fn(), mutateAsync: createMutateAsync, isPending: false },
     update: { mutate: vi.fn(), mutateAsync: updateMutateAsync, isPending: false },
@@ -149,5 +161,80 @@ describe('WorksEditor — auto-reflecting Edit Opportunity\'s Sales Person pick 
     expect(within(dialog).getByText(/Test Opportunity/)).toBeInTheDocument()
     // The quick Edit-Opportunity save path was never engaged by this flow.
     expect(assignMutateAsync).not.toHaveBeenCalled()
+  })
+})
+
+describe('WorksEditor — Bid Tracker guard', () => {
+  it('locks stage and submission date, and never sends them, once the opportunity has a bid', async () => {
+    stubApiHooks({ bid: { id: 'bid-1', opportunityId: 'opp-1' } })
+    const opp = makeOpportunity({ stageKey: 'qualified', submissionDate: '2026-10-10' })
+    const user = userEvent.setup()
+    render(<WorksEditor departmentId="dept-1" opportunities={[opp]} />)
+
+    await user.click(screen.getByLabelText('Edit opportunity'))
+    expect(screen.getByTestId('work-form-dialog')).toHaveAttribute('data-managed', 'true')
+    await user.click(screen.getByRole('button', { name: 'Save (unchanged)' }))
+
+    const { patch } = updateMutateAsync.mock.calls[0][0]
+    // The API rejects any stageKey/submissionDate/closedOn in the patch for an
+    // opportunity with a bid — even an unchanged one — so they must be absent.
+    expect(patch).not.toHaveProperty('stageKey')
+    expect(patch).not.toHaveProperty('submissionDate')
+    expect(patch).not.toHaveProperty('closedOn')
+    expect(patch).toHaveProperty('opportunityName', 'Test Opportunity')
+  })
+
+  it('leaves everything editable and sends the full draft when there is no bid', async () => {
+    stubApiHooks({ bid: null })
+    const opp = makeOpportunity({ stageKey: 'qualified', submissionDate: '2026-10-10' })
+    const user = userEvent.setup()
+    render(<WorksEditor departmentId="dept-1" opportunities={[opp]} />)
+
+    await user.click(screen.getByLabelText('Edit opportunity'))
+    expect(screen.getByTestId('work-form-dialog')).toHaveAttribute('data-managed', 'false')
+    await user.click(screen.getByRole('button', { name: 'Save (unchanged)' }))
+    expect(updateMutateAsync.mock.calls[0][0].patch).toMatchObject({ stageKey: 'qualified', submissionDate: '2026-10-10' })
+  })
+})
+
+describe('WorksEditor — Create Bid entry point', () => {
+  const bidMutations = (mutateAsync: ReturnType<typeof vi.fn>) =>
+    vi.spyOn(api, 'useBidMutations').mockReturnValue({ create: { mutateAsync } } as unknown as ReturnType<typeof api.useBidMutations>)
+
+  beforeEach(() => { vi.stubEnv('VITE_BID_TRACKER_ENABLED', 'true'); navigateMock.mockClear() })
+  afterEach(() => vi.unstubAllEnvs())
+
+  it('creates a bid for an opportunity without one and opens it', async () => {
+    stubApiHooks()
+    const create = vi.fn().mockResolvedValue({ id: 'new-bid-1', opportunityId: 'opp-1' })
+    bidMutations(create)
+    render(<WorksEditor departmentId="dept-1" opportunities={[makeOpportunity()]} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Create Bid' }))
+    expect(create).toHaveBeenCalledWith({ opportunityId: 'opp-1' })
+    expect(navigateMock).toHaveBeenCalledWith('/bid-tracker/bid/new-bid-1')
+  })
+
+  it('hides the button once the opportunity has a bid', () => {
+    stubApiHooks({ bid: { id: 'b1', opportunityId: 'opp-1' } })
+    bidMutations(vi.fn())
+    render(<WorksEditor departmentId="dept-1" opportunities={[makeOpportunity()]} />)
+    expect(screen.queryByRole('button', { name: 'Create Bid' })).not.toBeInTheDocument()
+  })
+
+  it('hides the button entirely when Bid Tracker is not enabled', () => {
+    vi.stubEnv('VITE_BID_TRACKER_ENABLED', 'false')
+    stubApiHooks()
+    bidMutations(vi.fn())
+    render(<WorksEditor departmentId="dept-1" opportunities={[makeOpportunity()]} />)
+    expect(screen.queryByRole('button', { name: 'Create Bid' })).not.toBeInTheDocument()
+  })
+
+  it('shows the server message, without navigating, when the create is rejected (duplicate bid)', async () => {
+    stubApiHooks()
+    bidMutations(vi.fn().mockRejectedValue(new Error('This opportunity already has a bid.')))
+    render(<WorksEditor departmentId="dept-1" opportunities={[makeOpportunity()]} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Create Bid' }))
+    expect(await screen.findByText(/already has a bid/i)).toBeInTheDocument()
+    expect(navigateMock).not.toHaveBeenCalled()
   })
 })

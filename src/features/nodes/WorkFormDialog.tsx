@@ -28,8 +28,11 @@ const EMPTY: OpportunityDraft = {
 /** Create/edit form for a single sales opportunity ("work"). Opened via the
  *  "Create Opportunity" button on a department's Works panel — never
  *  rendered as part of the add/edit department form. */
-export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
+export function WorkFormDialog({ open, work, draftKey, managedInBidTracker = false, onClose, onSave }: {
   open: boolean
+  /** The opportunity has a bid: Stage and Submission date are owned by Bid Tracker
+   *  (the API rejects direct writes to them), so they are shown read-only here. */
+  managedInBidTracker?: boolean
   /** Existing opportunity to edit, or null when creating. */
   work: Opportunity | null
   draftKey?: string | null
@@ -85,6 +88,11 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
             autoFocus
           />
         </Field>
+        {managedInBidTracker && (
+          <p role="note" className="rounded-lg bg-panel px-3 py-2 text-[13px] text-ink-700">
+            Managed in Bid Tracker — open the bid to change its stage or submission deadline.
+          </p>
+        )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="GEM ID / Tender ID">
             <Input value={form.gemTenderId} onChange={(e) => set('gemTenderId', e.target.value)} placeholder="e.g. GEM/2026/B/1234567" />
@@ -93,7 +101,7 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
             <AddableSelect value={form.vertical} onChange={(v) => set('vertical', v)} options={WORK_VERTICALS} storageKey="work-vertical" />
           </Field>
           <Field label="Stage">
-            <Select value={form.stageKey} onChange={(e) => set('stageKey', e.target.value)}>
+            <Select value={form.stageKey} disabled={managedInBidTracker} onChange={(e) => set('stageKey', e.target.value)}>
               {PIPELINE_STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
             </Select>
           </Field>
@@ -101,7 +109,7 @@ export function WorkFormDialog({ open, work, draftKey, onClose, onSave }: {
             <Input type="date" value={form.publishDate} onChange={(e) => set('publishDate', e.target.value)} />
           </Field>
           <Field label="Submission date">
-            <Input type="date" value={form.submissionDate} onChange={(e) => set('submissionDate', e.target.value)} />
+            <Input type="date" value={form.submissionDate} disabled={managedInBidTracker} onChange={(e) => set('submissionDate', e.target.value)} />
           </Field>
           <Field label="Component">
             <MultiSelectDropdown value={form.component} onChange={(v) => set('component', v)} groups={WORK_COMPONENT_GROUPS} storageKey="work-component" searchable searchPlaceholder="Search components…" />

@@ -18,12 +18,13 @@ function toAssignment(row: any) {
  *  simpler and just as correct as a per-hop query, and it means there is
  *  exactly one resolution algorithm in the codebase, not a SQL reimplementation
  *  alongside the in-memory one. */
-async function loadOwnershipContext(): Promise<{ assignments: any[]; ctx: OwnershipContext }> {
-  const [assignmentsResult, nodesResult, employeesResult, opportunitiesResult] = await Promise.all([
+export async function loadOwnershipContext(): Promise<{ assignments: any[]; ctx: OwnershipContext }> {
+  const [assignmentsResult, nodesResult, employeesResult, opportunitiesResult, bidsResult] = await Promise.all([
     pool.query('SELECT * FROM ownership_assignments'),
     pool.query('SELECT id, parent_id AS "parentId" FROM hierarchy_nodes'),
     pool.query('SELECT id, org_node_id AS "orgNodeId" FROM employees'),
     pool.query('SELECT id, department_id AS "departmentId" FROM opportunities'),
+    pool.query('SELECT id, opportunity_id AS "opportunityId" FROM bids'),
   ])
   return {
     assignments: assignmentsResult.rows.map(toAssignment),
@@ -31,6 +32,7 @@ async function loadOwnershipContext(): Promise<{ assignments: any[]; ctx: Owners
       nodes: nodesResult.rows,
       employees: employeesResult.rows,
       opportunities: opportunitiesResult.rows,
+      bids: bidsResult.rows,
     },
   }
 }

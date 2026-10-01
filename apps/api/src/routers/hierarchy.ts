@@ -5,25 +5,7 @@ import { pool } from '../db.js'
 import { isForeignKeyViolation } from '../db-errors.js'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType, type HierNode } from '@goms/domain'
 
-// Maps the DB row (snake_case) onto the frontend's `HierNode` shape
-// (camelCase) — see src/lib/types.ts (re-exported from packages/domain).
-// Explicit return type avoids a circular-inference error where tRPC's
-// procedure-output inference and ReturnType<typeof toNode> (used by
-// `breadcrumb` below) would otherwise depend on each other.
-function toNode(row: any): HierNode {
-  return {
-    id: row.id,
-    domain: row.domain,
-    typeKey: row.type_key,
-    parentId: row.parent_id,
-    stateCode: row.state_code,
-    name: row.name,
-    code: row.code,
-    sortOrder: row.sort_order,
-    metadata: row.metadata,
-    status: row.status,
-  }
-}
+import { toNode, insertHierarchyNode } from '../lib/hierarchyNodes.js'
 
 const domainSchema = z.enum(['geo', 'org', 'sales'])
 
@@ -163,68 +145,21 @@ export const hierarchyRouter = router({
       stateCode: z.number().int().nullable(), name: z.string().min(1), metadata: z.record(z.string()).optional(),
     }))
     .mutation(async ({ input }) => {
-      if (input.parentId) {
-        const parentResult = await pool.query(`SELECT type_key FROM hierarchy_nodes WHERE id=$1`, [input.parentId])
-        const parentType = parentResult.rows[0]?.type_key
-        if (parentType && !isValidChildType(parentType, input.typeKey)) {
-          throw new TRPCError({
-            code: 'BAD_REQUEST',
-            message: `A ${NODE_TYPE_MAP[input.typeKey]?.label ?? input.typeKey} cannot be created under a ${NODE_TYPE_MAP[parentType]?.label ?? parentType}`,
-          })
-        }
+      // One transaction for every type: the branch dedup's advisory lock is
+      // transaction-scoped, and insertHierarchyNode (shared with the Bid
+      // Tracker's create-department step) expects to run inside one.
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const node = await insertHierarchyNode(client, input)
+        await client.query('COMMIT')
+        return node
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
       }
-      if (input.typeKey === 'branch' && input.parentId) {
-        // Dedup check-then-insert isn't atomic on its own, and there's no
-        // unique index backing "one branch per name per parent" (branch
-        // names aren't unique across other type_keys, so a table-wide
-        // constraint isn't the right fix). A Postgres advisory lock keyed
-        // on the exact dedup tuple serializes concurrent createNode calls
-        // for the *same* (parentId, 'branch', name) without needing a
-        // schema change — pg_advisory_xact_lock auto-releases at
-        // COMMIT/ROLLBACK, so no separate unlock call is needed. Without
-        // this, two concurrent creates for the same branch name under the
-        // same parent could both pass the dedup SELECT before either
-        // commits, producing two identically-named branch nodes.
-        const client = await pool.connect()
-        try {
-          await client.query('BEGIN')
-          await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [
-            `branch:${input.parentId}:${input.name.trim().toLowerCase()}`,
-          ])
-          const dup = await client.query(
-            `SELECT * FROM hierarchy_nodes WHERE parent_id=$1 AND type_key='branch' AND status='active' AND lower(trim(name))=lower(trim($2))`,
-            [input.parentId, input.name],
-          )
-          if (dup.rows[0]) {
-            await client.query('COMMIT')
-            return toNode(dup.rows[0])
-          }
-          const siblingCount = (await client.query(
-            `SELECT COUNT(*)::int AS n FROM hierarchy_nodes WHERE parent_id=$1 AND status='active'`, [input.parentId],
-          )).rows[0].n
-          const result = await client.query(
-            `INSERT INTO hierarchy_nodes (domain, type_key, parent_id, state_code, name, sort_order, metadata)
-             VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-            [input.domain, input.typeKey, input.parentId, input.stateCode, input.name, siblingCount, input.metadata ?? {}],
-          )
-          await client.query('COMMIT')
-          return toNode(result.rows[0])
-        } catch (e) {
-          await client.query('ROLLBACK')
-          throw e
-        } finally {
-          client.release()
-        }
-      }
-      const siblingCount = input.parentId
-        ? (await pool.query(`SELECT COUNT(*)::int AS n FROM hierarchy_nodes WHERE parent_id=$1 AND status='active'`, [input.parentId])).rows[0].n
-        : 0
-      const result = await pool.query(
-        `INSERT INTO hierarchy_nodes (domain, type_key, parent_id, state_code, name, sort_order, metadata)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-        [input.domain, input.typeKey, input.parentId, input.stateCode, input.name, siblingCount, input.metadata ?? {}],
-      )
-      return toNode(result.rows[0])
     }),
 
   updateNode: protectedProcedure
@@ -254,6 +189,14 @@ export const hierarchyRouter = router({
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
+      // bids.opportunity_id is RESTRICT (archived bids included): name the blocking bid(s) up front
+      // instead of the generic foreign-key message below.
+      const blocking = (await client.query(
+        `SELECT b.bid_code FROM bids b JOIN opportunities o ON o.id = b.opportunity_id
+          WHERE o.department_id = ANY($1) ORDER BY b.bid_code LIMIT 5`, [ids])).rows
+      if (blocking.length) {
+        throw new TRPCError({ code: 'CONFLICT', message: `Cannot delete this node � its opportunities have bids in Bid Tracker (${blocking.map((r) => r.bid_code).join(', ')}). Delete those bids first, or archive the node instead.` })
+      }
       await client.query(`DELETE FROM employees WHERE org_node_id = ANY($1)`, [ids])
       // Opportunities used to live inside the node's own metadata, so they
       // died with it automatically. Now they're a separate table keyed by
@@ -264,10 +207,15 @@ export const hierarchyRouter = router({
       await client.query('COMMIT')
     } catch (e) {
       await client.query('ROLLBACK')
-      // Deleting a subtree containing a node any `transfers.to_org_node_id`
-      // (RESTRICT) or `commercial_boqs.department_id` (RESTRICT) still
-      // points at is rejected by the DB either way — this only replaces the
-      // raw, unhandled 23503 with a friendly message.
+      if (e instanceof TRPCError) throw e
+      // Deleting a subtree containing a node any `transfers.to_org_node_id`,
+      // `commercial_boqs.department_id`, or (via an opportunity in the
+      // subtree) `bids.opportunity_id` (all RESTRICT) still points at is
+      // rejected by the DB either way — this only replaces the raw,
+      // unhandled 23503 with a friendly message. bids.opportunity_id RESTRICTs
+      // regardless of the bid's archived status (spec §4.7) — this generic,
+      // error-code-based catch doesn't need to know that, it just needs the
+      // constraint to exist, which migration 1788400000000 added.
       if (isForeignKeyViolation(e)) {
         throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete this node — it is still referenced elsewhere (e.g. a past transfer or an existing BOQ).' })
       }
@@ -324,7 +272,11 @@ export const hierarchyRouter = router({
 
   duplicateNode: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
     const ids = await subtreeIds(input.id)
+    // `= ANY` returns rows in arbitrary order, but a child's INSERT needs its parent's clone to
+    // exist first (parent_id FK). subtreeIds walks parent-before-child, so insert in ITS order.
+    const order = new Map(ids.map((id, i) => [id, i]))
     const rows = (await pool.query(`SELECT * FROM hierarchy_nodes WHERE id = ANY($1)`, [ids])).rows
+      .sort((a: any, b: any) => order.get(a.id)! - order.get(b.id)!)
     const idMap = new Map<string, string>()
     for (const r of rows) idMap.set(r.id, crypto.randomUUID())
     const client = await pool.connect()

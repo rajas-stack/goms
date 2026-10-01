@@ -27,6 +27,7 @@ function renderAppLayoutAt(initialPath: string) {
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/directory" element={<div>Directory page</div>} />
+            <Route path="/bid-tracker" element={<div>Bid Tracker page</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -67,5 +68,14 @@ describe('TopBar Import button', () => {
 
     expect(screen.getByText('Bring in a batch of org records or people from a CSV or Excel file.', { exact: false })).toBeInTheDocument()
     expect(screen.getByText('Directory page')).toBeInTheDocument()
+  })
+
+  it('does not offer the Account Mapping Search / Import / Export inside the Bid Tracker', () => {
+    renderAppLayoutAt('/bid-tracker')
+
+    expect(screen.getByText('Bid Tracker page')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Import records' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Export records' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Search…')).not.toBeInTheDocument()
   })
 })

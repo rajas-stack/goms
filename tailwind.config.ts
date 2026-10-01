@@ -33,6 +33,10 @@ export default {
         emerald: { DEFAULT: '#2F8F5B', 600: '#26744A', 100: '#DCEFE3' },
         amber: { DEFAULT: '#C77A2A', 600: '#A5641F', 100: '#F7E9D6' },
         muted: '#5C6B80',
+        // GOMS brand palette. Namespaced because Tailwind's own `sky`/`green`
+        // scales are already used by other modules. Sky and green are accents
+        // (fills, borders, tints); navy carries text and active states.
+        goms: { navy: '#0B2B49', sky: '#4CA7DD', green: '#74C05C' },
       },
       // `display` used to be a separate face ("Bricolage Grotesque") for
       // headings; the whole site is IBM Plex Sans now, so it mirrors `sans`

@@ -50,6 +50,16 @@ resource "google_storage_bucket_iam_member" "runtime_bucket_access" {
   member = "serviceAccount:${google_service_account.goms_api_runtime.email}"
 }
 
+# Bid Tracker documents: the API mints V4 signed URLs with Cloud Run's
+# credentials, which signs through the IAM Credentials API
+# (iam.serviceAccounts.signBlob) — the runtime account needs that on ITSELF.
+# roles/storage.objectAdmin above lets it touch objects but not sign.
+resource "google_service_account_iam_member" "runtime_self_sign" {
+  service_account_id = google_service_account.goms_api_runtime.name
+  role               = "roles/iam.serviceAccountTokenCreator"
+  member             = "serviceAccount:${google_service_account.goms_api_runtime.email}"
+}
+
 # Image pinned to the commit-SHA tag actually running live on goms-prod
 # (confirmed 2026-09-07 via `gcloud run services describe` — revision
 # goms-api-00016-kkd, traffic explicitly pinned to it, image digest matches
@@ -98,7 +108,7 @@ resource "google_cloud_run_v2_service" "goms_api" {
     }
 
     containers {
-      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:6f376438f4ae0ef084fccab447afc8f93ac50c09"
+      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:0e64dfe455e1aceeb1cd2a3cb845049e0c0e5b52"
       # This service is only ever reached through Firebase Hosting's
       # `/api/**` rewrite (firebase.json), which arrives from a Google
       # front-end address and carries CDN addresses in X-Forwarded-For. Without
@@ -189,6 +199,17 @@ resource "google_cloud_run_v2_service" "goms_api" {
           }
         }
       }
+      # Live in production (read authentication on) but missing from this file:
+      # a plain apply would have silently turned it OFF. Reconciled 2026-09-30
+      # to the live service while preparing Bid Tracker's infra; no behavior change.
+      env {
+        name  = "READ_AUTH_ENFORCEMENT_ENABLED"
+        value = "true"
+      }
+      env {
+        name  = "ATTACHMENTS_BUCKET"
+        value = google_storage_bucket.attachments.name
+      }
     }
   }
 }
@@ -218,7 +239,7 @@ resource "google_cloud_run_v2_job" "goms_migrate" {
         # live via `gcloud run jobs describe`) so a migration run always
         # reflects the exact same code as the service it's migrating the
         # schema for.
-        image   = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:6f376438f4ae0ef084fccab447afc8f93ac50c09"
+        image   = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:7c5ade7797a82b7a9610b1f7e7152d24dc4e423c"
         command = ["node"]
         args    = ["node_modules/node-pg-migrate/bin/node-pg-migrate.js", "up"]
         env {

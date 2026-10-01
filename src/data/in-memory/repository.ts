@@ -1,6 +1,9 @@
 import type {
-  AttendeeRef, Charge, Customer, Domain, Employee, FollowUp, HierNode, MergeAuditRecord, MergeFieldResolution, Opportunity,
-  OpportunityStageChange, OwnershipAssignment, PreferredComm, RelationshipQuality, RelationshipStatus,
+  ActionQueueEntry, AttendeeRef, Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue,
+  BidDocument, BidGridRow, BidMilestone, BidMilestoneWithBid, CustomFieldType, CustomValue,
+  BidSavedView, Charge, Customer, Domain, DocumentCitation, Employee, FollowUp, HierNode, MergeAuditRecord,
+  MergeFieldResolution, Opportunity, OpportunityStageChange, OwnershipAssignment, PreferredComm, ProtectedValue,
+  RelationshipQuality, RelationshipStatus,
   SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
 import { uid } from '@/lib/utils'
@@ -11,7 +14,12 @@ import {
   DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP,
   buildOwnerMap, effectiveOwner, OWNABLE_ENTITY_MAP,
   type OwnerResolution, type OwnershipContext,
-  performSearch, performRelatedRecords, type SearchData, planPostingDatesEdit, type PostingDatesEdit } from '@goms/domain'
+  performSearch, performRelatedRecords, type SearchData, planPostingDatesEdit, type PostingDatesEdit,
+  DEFAULT_BID_STAGE_KEY, formatBidCode, isAtOrAfterSubmitted, computeAttentionFlag, applyFilterRules,
+  SYSTEM_BID_VIEWS, SYSTEM_BID_VIEW_KEYS, type SystemBidViewFilterRule,
+  coerceCustomValue, normalizeOptions, slugifyFieldKey,
+  DEPARTMENT_REQUIRED_MESSAGE, type DepartmentChoice, type NewBidOpportunity,
+} from '@goms/domain'
 export { MERGEABLE_FIELDS, type MergeableField }
 import { coversDate } from '@/lib/intervals'
 import { tierRank } from '../sales-tiers'
@@ -24,7 +32,7 @@ import {
   listBomItemsForSkuLogic, listEditionFeaturesLogic,
   listMasterLogic, listSkusLogic, removeBoqLineItemLogic, reorderBoqLineItemsLogic, reviseBoqLogic, setEditionFeaturesLogic,
   setMasterActiveLogic, updateBoqLineItemLogic, updateBoqLogic, updateBoqStatusLogic, updateBomItemLogic, updateMasterLogic,
-  updateSkuLogic,
+  updateSkuLogic, writeAuditLogEntry,
 } from '@/modules/commercial-calculator/repository-logic'
 import type {
   BoqStatus, CommercialAuditLog, CommercialBoq, CommercialBoqLineItem, CommercialBomItem, CommercialSku,
@@ -170,6 +178,7 @@ export interface CreateOpportunityInput {
   departmentId: string
   opportunityName: string
   gemTenderId?: string
+  city?: string | null
   publishDate?: string
   submissionDate?: string
   vertical?: string
@@ -472,11 +481,99 @@ export interface Repository {
 
   // --- Commercial Calculator: Audit Log (spec §6.6/§15) ----------------------
   listAuditLogs(filter?: { entityType?: string; entityId?: string }): Promise<CommercialAuditLog[]>
+
+  // --- Bid Tracker ---
+  listBidsForGrid(filterRules?: SystemBidViewFilterRule[]): Promise<BidGridRow[]>
+  getBid(id: string): Promise<Bid | null>
+  getBidForOpportunity(opportunityId: string): Promise<Bid | null>
+  createBid(opportunityId: string, department?: DepartmentChoice): Promise<Bid>
+  /** Create Bid for an opportunity that does not exist yet: the opportunity, its department and the bid
+   *  are created together (all-or-nothing), exactly as bids.create does server-side. */
+  createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice): Promise<Bid>
+  updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>): Promise<Bid>
+  archiveBid(id: string): Promise<Bid>
+  markBidVerified(id: string): Promise<Bid>
+  unarchiveBid(id: string): Promise<Bid>
+  deleteBid(id: string): Promise<void>
+  listBidActionQueue(): Promise<ActionQueueEntry[]>
+
+  listBidMilestones(bidId: string): Promise<BidMilestone[]>
+  listAllBidMilestones(): Promise<BidMilestoneWithBid[]>
+  createBidMilestone(input: {
+    bidId: string; milestoneType: string; key: string; label: string
+    dueAt?: string | null; venue?: string; notes?: string
+  }): Promise<BidMilestone>
+  updateBidMilestone(id: string, patch: Partial<Pick<BidMilestone, 'label' | 'dueAt' | 'venue' | 'notes' | 'status'>>): Promise<BidMilestone>
+  deleteBidMilestone(id: string): Promise<void>
+
+  listBidCorrigenda(bidId: string): Promise<BidCorrigendum[]>
+  createBidCorrigendum(input: {
+    bidId: string; corrigendumNumber: number; sourceDocumentId?: string
+    changes: { fieldKey: string; currentValue: string; proposedValue: string }[]
+  }): Promise<BidCorrigendum>
+  reviewCorrigendumChange(input: { changeId: string; decision: 'accepted' | 'rejected'; reason?: string }): Promise<BidCorrigendumChange>
+
+  listProtectedValues(entityType: string, entityId: string): Promise<ProtectedValue[]>
+  freezeValue(entityType: string, entityId: string, fieldKey: string): Promise<void>
+  unfreezeValue(entityType: string, entityId: string, fieldKey: string, reason: string): Promise<void>
+
+  requestDocumentUploadUrl(input: {
+    entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+  }): Promise<{ uploadId: string; uploadUrl: string }>
+  confirmDocumentUpload(uploadId: string): Promise<BidDocument>
+  listDocuments(entityType: string, entityId: string): Promise<BidDocument[]>
+  deleteDocument(id: string): Promise<void>
+  getDocumentDownloadUrl(id: string): Promise<string>
+  listDocumentCitations(documentId: string): Promise<DocumentCitation[]>
+  deleteDocumentCitation(id: string): Promise<void>
+  createDocumentCitation(input: { documentId: string; pageLabel: string; quoteText?: string; fieldRef?: string }): Promise<DocumentCitation>
+
+  listBidSavedViews(): Promise<BidSavedView[]>
+  createBidSavedView(input: {
+    name: string; scope: 'personal' | 'global'
+    filterRules?: SystemBidViewFilterRule[]; sort?: unknown[]; visibleColumns?: string[]
+  }): Promise<BidSavedView>
+  updateBidSavedView(id: string, patch: Partial<Pick<BidSavedView, 'name' | 'filterRules' | 'sort' | 'visibleColumns'>>): Promise<BidSavedView>
+  deleteBidSavedView(id: string): Promise<void>
+
+  // --- Bid Tracker: custom columns (spec §8.1) ---
+  listBidCustomFields(includeArchived?: boolean): Promise<BidCustomField[]>
+  createBidCustomField(input: { name: string; dataType: CustomFieldType; options?: string[] }): Promise<BidCustomField>
+  /** `key` and `dataType` are deliberately not patchable. */
+  updateBidCustomField(id: string, patch: { name?: string; options?: string[] }): Promise<BidCustomField>
+  /** `ids` must be exactly the current active column ids, each once. */
+  reorderBidCustomFields(ids: string[]): Promise<BidCustomField[]>
+  archiveBidCustomField(id: string): Promise<BidCustomField>
+  unarchiveBidCustomField(id: string): Promise<BidCustomField>
+  /** Throws while any value row exists — archive instead. */
+  deleteBidCustomField(id: string): Promise<void>
+  /** `null`/blank clears (removes the value row). */
+  setBidCustomValue(
+    bidId: string, fieldId: string, value: string | number | boolean | null,
+  ): Promise<{ bidId: string; fieldId: string; key: string; value: CustomValue }>
+  listBidCustomValues(bidId: string): Promise<Record<string, CustomValue>>
 }
 
 // Re-exported (not redefined) so existing `@/data/repository` import sites
 // keep working while the implementation lives in the date module.
 export { isoToday } from '@/lib/dates'
+
+/** Local-dev-only bid-code sequence — no cross-session durability guarantee
+ *  beyond what IndexedDB already gives the rest of this file (spec §6). */
+let inMemoryBidSeq = 1
+
+/** Upload slots handed out by `requestDocumentUploadUrl`, awaiting confirm. */
+const pendingBidUploads = new Map<string, {
+  entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+}>()
+
+/** Parses opportunities.submissionDate the same way the backend's
+ *  `bids.create` does (spec §4.5) — null for anything that doesn't parse. */
+function parseSubmissionDate(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  const parsed = new Date(raw)
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString()
+}
 
 class InMemoryRepository implements Repository {
   private data: GormsData = buildSeed()
@@ -503,6 +600,16 @@ class InMemoryRepository implements Repository {
       salesPersons: data.salesPersons ?? [],
       salesPostings: data.salesPostings ?? [],
       ownershipAssignments: data.ownershipAssignments ?? [],
+      bids: data.bids ?? [],
+      bidMilestones: data.bidMilestones ?? [],
+      bidCorrigenda: data.bidCorrigenda ?? [],
+      bidCorrigendumChanges: data.bidCorrigendumChanges ?? [],
+      protectedValues: data.protectedValues ?? [],
+      bidDocuments: data.bidDocuments ?? [],
+      documentCitations: data.documentCitations ?? [],
+      bidSavedViews: data.bidSavedViews ?? [],
+      bidCustomFields: data.bidCustomFields ?? [],
+      bidCustomFieldValues: data.bidCustomFieldValues ?? [],
     }
     // `mergeAudit` postdates some locally persisted snapshots (the static
     // type says it's always there, but a snapshot saved before this field
@@ -703,9 +810,9 @@ class InMemoryRepository implements Repository {
     // otherwise a deleted department's opportunities (and their stage
     // history) would live on forever, unreachable from the tree.
     const deletedOppIds = new Set(
-      this.data.opportunities.filter((o) => ids.has(o.departmentId)).map((o) => o.id),
+      this.data.opportunities.filter((o) => !!o.departmentId && ids.has(o.departmentId)).map((o) => o.id),
     )
-    this.data.opportunities = this.data.opportunities.filter((o) => !ids.has(o.departmentId))
+    this.data.opportunities = this.data.opportunities.filter((o) => !o.departmentId || !ids.has(o.departmentId))
     this.data.opportunityStageChanges = this.data.opportunityStageChanges
       .filter((c) => !deletedOppIds.has(c.opportunityId))
   }
@@ -1145,6 +1252,7 @@ class InMemoryRepository implements Repository {
       closedOn: PIPELINE_STAGE_MAP[stageKey]?.isClosed ? isoToday() : null,
       opportunityName: input.opportunityName,
       gemTenderId: input.gemTenderId ?? '',
+      city: input.city ?? null,
       publishDate: input.publishDate ?? '',
       submissionDate: input.submissionDate ?? '',
       vertical: input.vertical ?? '',
@@ -1173,6 +1281,8 @@ class InMemoryRepository implements Repository {
 
   async updateOpportunity(id: string, patch: Partial<Opportunity>) {
     const opp = this.data.opportunities.find((o) => o.id === id)!
+    const bidOfOpp = this.data.bids.find((b) => b.opportunityId === id)
+    if (bidOfOpp) this.assertNotProtected(bidOfOpp.id, (['valueAmount', 'emdAmount', 'gemTenderId'] as const).filter((f) => f in patch))
     const previousStage = opp.stageKey
     Object.assign(opp, patch)
     // A stage change is a logged event, not a silent field write — this log
@@ -1191,6 +1301,767 @@ class InMemoryRepository implements Repository {
   async deleteOpportunity(id: string) {
     this.data.opportunities = this.data.opportunities.filter((o) => o.id !== id)
     this.data.opportunityStageChanges = this.data.opportunityStageChanges.filter((c) => c.opportunityId !== id)
+  }
+
+  // --- Bid Tracker -----------------------------------------------------------
+
+  private attentionFor(bidId: string): BidGridRow['attentionFlag'] {
+    const deadline = this.data.bidMilestones.find(
+      (m) => m.bidId === bidId && m.key === 'submissionDeadline' && m.status === 'open',
+    )
+    const corrigendumIds = new Set(this.data.bidCorrigenda.filter((c) => c.bidId === bidId).map((c) => c.id))
+    const hasPendingCorrigendum = this.data.bidCorrigendumChanges.some(
+      (c) => corrigendumIds.has(c.corrigendumId) && c.decision === 'pending',
+    )
+    return computeAttentionFlag({ dueAt: deadline?.dueAt ?? null, hasPendingCorrigendum, today: isoToday() })
+  }
+
+  /** Mirrors the API's assertFieldsNotProtected (spec §13): a frozen field on a
+   *  bid rejects direct edits until it is unfrozen. */
+  private assertNotProtected(bidId: string, fieldKeys: string[]) {
+    const frozen = this.data.protectedValues.find(
+      (p) => p.entityType === 'bid' && p.entityId === bidId && p.frozen && fieldKeys.includes(p.fieldKey),
+    )
+    if (frozen) throw new Error(`"${frozen.fieldKey}" is protected — unfreeze it first.`)
+  }
+
+  private requireBid(id: string): Bid {
+    const bid = this.data.bids.find((b) => b.id === id)
+    if (!bid) throw new Error(`No such bid: ${id}`)
+    return bid
+  }
+
+  private joinCorrigendum(c: Omit<BidCorrigendum, 'changes'>): BidCorrigendum {
+    return { ...c, changes: this.data.bidCorrigendumChanges.filter((ch) => ch.corrigendumId === c.id) }
+  }
+
+  async listBidsForGrid(filterRules: SystemBidViewFilterRule[] = []) {
+    const today = isoToday()
+    const owners = buildOwnerMap(
+      this.data.ownershipAssignments, 'bid', this.data.bids.map((b) => b.id), today, this.ownershipContext(),
+    )
+    // Active custom columns only — an archived column's values are retained
+    // but never surface in the grid or in filtering (spec §8.1).
+    const activeFields = this.data.bidCustomFields.filter((f) => f.status === 'active')
+    const activeFieldById = new Map(activeFields.map((f) => [f.id, f]))
+    const fieldTypes: Record<string, CustomFieldType> = {}
+    for (const f of activeFields) fieldTypes[`custom:${f.key}`] = f.dataType
+    const customValuesByBid = new Map<string, Record<string, CustomValue>>()
+    for (const v of this.data.bidCustomFieldValues) {
+      const field = activeFieldById.get(v.fieldId)
+      if (!field) continue
+      const forBid = customValuesByBid.get(v.bidId) ?? {}
+      forBid[field.key] = v.value
+      customValuesByBid.set(v.bidId, forBid)
+    }
+    const rows: BidGridRow[] = this.data.bids.map((bid) => {
+      const opp = this.data.opportunities.find((o) => o.id === bid.opportunityId)
+      const ownerId = owners.get(bid.id)?.salesPersonId
+      const emailOf = (personId: string | null | undefined) =>
+        personId ? this.data.salesPersons.find((p) => p.id === personId)?.officialEmail ?? null : null
+      const ownerEmail = emailOf(ownerId)
+      const solutionLead = this.data.ownershipAssignments.find(
+        (a) => a.entityType === 'bid' && a.entityId === bid.id && a.role === 'solutionLead' && a.endDate === null,
+      )
+      const bidCorrigenda = this.data.bidCorrigenda.filter((c) => c.bidId === bid.id)
+      const latestCorrigendum = bidCorrigenda.reduce<(typeof bidCorrigenda)[number] | null>(
+        (best, c) => (!best || c.corrigendumNumber > best.corrigendumNumber ? c : best), null,
+      )
+      const nextMilestone = this.data.bidMilestones
+        .filter((m) => m.bidId === bid.id && m.status === 'open')
+        .sort((a, b) => (a.dueAt ?? '9999').localeCompare(b.dueAt ?? '9999'))[0]
+      const nextAction = this.data.followUps
+        .filter((f) => f.entityType === 'bid' && f.entityId === bid.id && f.status === 'open')
+        .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
+      return {
+        ...bid,
+        departmentId: opp?.departmentId ?? '',
+        departmentName: this.data.nodes.find((n) => n.id === opp?.departmentId)?.name ?? null,
+        stateCode: opp?.stateCode ?? null,
+        city: opp?.city ?? null,
+        opportunityName: opp?.opportunityName ?? '',
+        gemTenderId: opp?.gemTenderId ?? '',
+        submissionDate: opp?.submissionDate ?? '',
+        valueAmount: opp?.valueAmount ?? '',
+        valueUnit: opp?.valueUnit ?? '',
+        emdAmount: opp?.emdAmount ?? '',
+        emdUnit: opp?.emdUnit ?? '',
+        vertical: opp?.vertical ?? '',
+        ownerEmail,
+        solutionLeadEmail: emailOf(solutionLead?.salesPersonId),
+        documentCount: this.data.bidDocuments.filter((d) => d.entityType === 'bid' && d.entityId === bid.id).length,
+        latestCorrigendumStatus: latestCorrigendum
+          ? (this.data.bidCorrigendumChanges.some((c) => c.corrigendumId === latestCorrigendum.id && c.decision === 'pending')
+            ? 'pending_review' : 'reviewed')
+          : null,
+        nextMilestoneLabel: nextMilestone?.label ?? null,
+        nextMilestoneDueAt: nextMilestone?.dueAt ?? null,
+        daysRemaining: nextMilestone?.dueAt
+          ? Math.ceil((new Date(nextMilestone.dueAt).getTime() - Date.now()) / 86_400_000)
+          : null,
+        nextActionNote: nextAction?.note ?? null,
+        nextActionDueDate: nextAction?.dueDate ?? null,
+        nextActionAssigneeEmail: emailOf(nextAction?.assigneeId),
+        // The local store has no signed-in user, so no audit row ever carries
+        // an author — there is nothing real to show here.
+        updatedBy: null,
+        attentionFlag: this.attentionFor(bid.id),
+        customValues: customValuesByBid.get(bid.id) ?? {},
+      }
+    })
+    // Local dev has no signed-in user, so "$currentUser" never matches.
+    return applyFilterRules(rows as unknown as Record<string, unknown>[], filterRules, null, fieldTypes) as unknown as BidGridRow[]
+  }
+
+  async getBid(id: string) {
+    return this.data.bids.find((b) => b.id === id) ?? null
+  }
+
+  async getBidForOpportunity(opportunityId: string) {
+    return this.data.bids.find((b) => b.opportunityId === opportunityId) ?? null
+  }
+
+  /** Resolves a department choice to a department node — the existing one, or one created (with its major
+   *  department, if new) through `createNode`. Everything that can fail is validated BEFORE any node is
+   *  created: the in-memory store has no rollback. */
+  private async resolveDepartmentNode(choice: DepartmentChoice): Promise<HierNode> {
+    const usable = (id: string) => {
+      const n = this.data.nodes.find((x) => x.id === id)
+      if (!n || n.domain !== 'org' || n.typeKey !== 'department' || n.status !== 'active') {
+        throw new Error('That department no longer exists. Pick another one.')
+      }
+      return n
+    }
+    const sameName = (n: HierNode, name: string) => n.name.trim().toLowerCase() === name.trim().toLowerCase()
+    let department: HierNode
+    if (choice.mode === 'existing') {
+      department = usable(choice.departmentId)
+    } else {
+      const childName = choice.name.trim()
+      if (!childName) throw new Error('Enter a name.')
+      const parentChoice = choice.parent
+      if (parentChoice.mode === 'create' && !parentChoice.name.trim()) throw new Error('Enter a name.')
+      const existingParent = parentChoice.mode === 'existing' ? usable(parentChoice.departmentId) : undefined
+      const parent = existingParent
+        ?? this.data.nodes.find((n) => parentChoice.mode === 'create' && n.domain === 'org' && n.typeKey === 'department'
+          && n.parentId === null && n.status === 'active' && n.stateCode === parentChoice.stateCode && sameName(n, parentChoice.name))
+        ?? (parentChoice.mode === 'create'
+          ? await this.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: parentChoice.stateCode, name: parentChoice.name.trim() })
+          : undefined)
+      if (!parent) throw new Error('That department no longer exists. Pick another one.')
+      department = this.data.nodes.find((n) => n.domain === 'org' && n.typeKey === 'department' && n.parentId === parent.id
+        && n.status === 'active' && sameName(n, childName))
+        ?? await this.createNode({ domain: 'org', typeKey: 'department', parentId: parent.id, stateCode: parent.stateCode, name: childName })
+    }
+    return department
+  }
+
+  /** The Create Bid department rule (same as apps/api's resolveBidDepartment): an
+   *  opportunity that has a department keeps it; one that has none needs `choice` —
+   *  an existing department, or a new one (and its major department) created through
+   *  `createNode`, the same path Account Mapping uses. The department is written onto
+   *  the OPPORTUNITY; the bid keeps no copy. The in-memory store has no rollback, so
+   *  everything that can fail is validated BEFORE any node is created. */
+  private async resolveBidDepartment(opp: Opportunity, choice: DepartmentChoice | undefined) {
+    if (opp.departmentId) {
+      if (choice) throw new Error('This opportunity already has a department; it is used as is.')
+      return
+    }
+    if (!choice) throw new Error(DEPARTMENT_REQUIRED_MESSAGE)
+    const department = await this.resolveDepartmentNode(choice)
+    opp.departmentId = department.id
+    opp.stateCode = department.stateCode
+    this.auditCustom({
+      entityType: 'opportunity', entityId: opp.id, field: 'departmentId', oldValue: '', newValue: department.id,
+      action: 'update', reason: 'Set while creating a bid',
+    })
+  }
+
+  async createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice) {
+    const name = opportunity.opportunityName.trim()
+    if (!name) throw new Error('Enter the opportunity name.')
+    // Resolve (validate, then create) the department first; only then create the opportunity under it.
+    const dept = await this.resolveDepartmentNode(department)
+    const opp = await this.createOpportunity({
+      departmentId: dept.id, opportunityName: name, gemTenderId: opportunity.gemTenderId?.trim(),
+      city: opportunity.city?.trim() || null, submissionDate: opportunity.submissionDate?.trim(),
+    })
+    return this.createBid(opp.id)
+  }
+
+  async createBid(opportunityId: string, department?: DepartmentChoice) {
+    const opp = this.data.opportunities.find((o) => o.id === opportunityId)
+    if (!opp) throw new Error(`No such opportunity: ${opportunityId}`)
+    if (this.data.bids.some((b) => b.opportunityId === opportunityId)) {
+      throw new Error('This opportunity already has a bid.')
+    }
+    await this.resolveBidDepartment(opp, department)
+    const now = new Date().toISOString()
+    const bid: Bid = {
+      id: uid('bid'),
+      opportunityId,
+      bidCode: formatBidCode(new Date().getFullYear(), inMemoryBidSeq++),
+      stageKey: DEFAULT_BID_STAGE_KEY,
+      decision: 'pending',
+      status: 'active',
+      dataConfidence: 'verified',
+      tenderLink: null,
+      archivedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    }
+    this.data.bids.push(bid)
+    this.data.bidMilestones.push({
+      id: uid('bms'), bidId: bid.id, milestoneType: 'submissionDeadline', key: 'submissionDeadline',
+      label: 'Submission Deadline', dueAt: parseSubmissionDate(opp.submissionDate), venue: null, notes: null,
+      status: 'open', source: 'manual', createdAt: now, updatedAt: now,
+    })
+    return bid
+  }
+
+  async updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>) {
+    const bid = this.requireBid(id)
+    const next = { ...patch }
+    const effectiveStageKey = next.stageKey ?? bid.stageKey
+    if (next.decision === 'go' && !isAtOrAfterSubmitted(effectiveStageKey)) {
+      throw new Error('Cannot mark Go before the bid reaches Submitted.')
+    }
+    // A final decision always wins over a stageKey in the same patch, so the
+    // two fields can never visibly disagree (spec §4.4).
+    if (next.decision === 'go') next.stageKey = 'goApproved'
+    if (next.decision === 'no_go') next.stageKey = 'dropped'
+    this.assertNotProtected(id, Object.keys(next))
+    // One audit entry per patched field (like the API), so Activity History has
+    // real bid edits to show in local mode too.
+    for (const field of Object.keys(next) as (keyof typeof next)[]) {
+      const before = bid[field] == null ? '' : String(bid[field])
+      const after = next[field] == null ? '' : String(next[field])
+      if (before !== after) {
+        this.auditCustom({ entityType: 'bid', entityId: id, field, oldValue: before, newValue: after, action: 'update' })
+      }
+    }
+    Object.assign(bid, next, { updatedAt: new Date().toISOString() })
+    return bid
+  }
+
+  async archiveBid(id: string) {
+    const bid = this.requireBid(id)
+    bid.status = 'archived'
+    bid.archivedAt = new Date().toISOString()
+    bid.updatedAt = bid.archivedAt
+    return bid
+  }
+
+  async markBidVerified(id: string) {
+    const bid = this.requireBid(id)
+    const corrigendumIds = new Set(this.data.bidCorrigenda.filter((c) => c.bidId === id).map((c) => c.id))
+    if (this.data.bidCorrigendumChanges.some((ch) => corrigendumIds.has(ch.corrigendumId) && ch.decision === 'pending')) {
+      throw new Error('This bid has a pending corrigendum change — resolve it before marking verified.')
+    }
+    if (bid.dataConfidence !== 'verified') {
+      bid.dataConfidence = 'verified'
+      bid.updatedAt = new Date().toISOString()
+      this.auditCustom({ entityType: 'bid', entityId: id, field: 'dataConfidence', oldValue: 'needs_review', newValue: 'verified', action: 'mark_verified' })
+    }
+    return bid
+  }
+
+  async unarchiveBid(id: string) {
+    const bid = this.requireBid(id)
+    bid.status = 'active'
+    bid.archivedAt = null
+    bid.updatedAt = new Date().toISOString()
+    return bid
+  }
+
+  async deleteBid(id: string) {
+    this.requireBid(id)
+    const referenced =
+      this.data.bidCorrigenda.some((c) => c.bidId === id)
+      || this.data.protectedValues.some((p) => p.entityType === 'bid' && p.entityId === id)
+      || this.data.bidDocuments.some((d) => d.entityType === 'bid' && d.entityId === id)
+      || this.data.followUps.some((f) => f.entityType === 'bid' && f.entityId === id)
+    if (referenced) throw new Error('This bid has corrigenda, protected values, documents or follow-ups — archive it instead.')
+    this.data.bids = this.data.bids.filter((b) => b.id !== id)
+    this.data.bidMilestones = this.data.bidMilestones.filter((m) => m.bidId !== id)
+    // Mirrors the backend's ON DELETE CASCADE on bid_custom_field_values.
+    this.data.bidCustomFieldValues = this.data.bidCustomFieldValues.filter((v) => v.bidId !== id)
+  }
+
+  async listBidActionQueue() {
+    const today = isoToday()
+    const out: ActionQueueEntry[] = []
+    for (const f of this.data.followUps) {
+      if (f.entityType !== 'bid' || f.status !== 'open') continue
+      const bid = this.data.bids.find((b) => b.id === f.entityId)
+      if (!bid || bid.status !== 'active') continue
+      const opp = this.data.opportunities.find((o) => o.id === bid.opportunityId)
+      out.push({
+        followUpId: f.id, bidId: bid.id, bidCode: bid.bidCode, stageKey: bid.stageKey,
+        opportunityName: opp?.opportunityName ?? '', dueDate: f.dueDate, note: f.note, assigneeId: f.assigneeId,
+        attentionFlag: computeAttentionFlag({
+          dueAt: f.dueDate, hasPendingCorrigendum: this.attentionFor(bid.id) === 'corrigendumPending', today,
+        }),
+      })
+    }
+    return out.sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  }
+
+  async listAllBidMilestones(): Promise<BidMilestoneWithBid[]> {
+    const out: BidMilestoneWithBid[] = []
+    for (const m of this.data.bidMilestones) {
+      const bid = this.data.bids.find((b) => b.id === m.bidId)
+      if (!bid || bid.status !== 'active' || m.status === 'superseded') continue
+      const opp = this.data.opportunities.find((o) => o.id === bid.opportunityId)
+      out.push({ ...m, bidCode: bid.bidCode, opportunityName: opp?.opportunityName ?? '' })
+    }
+    return out.sort((a, b) => (a.dueAt ?? '9999').localeCompare(b.dueAt ?? '9999') || a.createdAt.localeCompare(b.createdAt))
+  }
+
+  async listBidMilestones(bidId: string) {
+    return this.data.bidMilestones
+      .filter((m) => m.bidId === bidId)
+      .sort((a, b) => (a.dueAt ?? '9999').localeCompare(b.dueAt ?? '9999') || a.createdAt.localeCompare(b.createdAt))
+  }
+
+  async createBidMilestone(input: {
+    bidId: string; milestoneType: string; key: string; label: string
+    dueAt?: string | null; venue?: string; notes?: string
+  }) {
+    this.requireBid(input.bidId)
+    if (this.data.bidMilestones.some((m) => m.bidId === input.bidId && m.key === input.key)) {
+      throw new Error(`Milestone "${input.key}" already exists for this bid.`)
+    }
+    const now = new Date().toISOString()
+    const milestone: BidMilestone = {
+      id: uid('bms'), bidId: input.bidId, milestoneType: input.milestoneType, key: input.key, label: input.label,
+      dueAt: input.dueAt ?? null, venue: input.venue ?? null, notes: input.notes ?? null,
+      status: 'open', source: 'manual', createdAt: now, updatedAt: now,
+    }
+    this.data.bidMilestones.push(milestone)
+    return milestone
+  }
+
+  async updateBidMilestone(
+    id: string,
+    patch: Partial<Pick<BidMilestone, 'label' | 'dueAt' | 'venue' | 'notes' | 'status'>>,
+  ) {
+    const m = this.data.bidMilestones.find((x) => x.id === id)
+    if (!m) throw new Error(`No such milestone: ${id}`)
+    // Only a change to the milestone's DATE touches the protected fact; status/notes edits don't.
+    if (patch.dueAt !== undefined && patch.dueAt !== m.dueAt) this.assertNotProtected(m.bidId, [m.key])
+    Object.assign(m, patch, { updatedAt: new Date().toISOString() })
+    return m
+  }
+
+  async deleteBidMilestone(id: string) {
+    const m = this.data.bidMilestones.find((x) => x.id === id)
+    if (!m) return
+    // A pending corrigendum change still targets this slot — deleting it
+    // would leave the change with nowhere to land.
+    const targeted = this.data.bidCorrigendumChanges.some((ch) => {
+      if (ch.decision !== 'pending' || ch.fieldKey !== m.key) return false
+      return this.data.bidCorrigenda.some((c) => c.id === ch.corrigendumId && c.bidId === m.bidId)
+    })
+    if (targeted) throw new Error('A pending corrigendum still targets this milestone.')
+    this.data.bidMilestones = this.data.bidMilestones.filter((x) => x.id !== id)
+  }
+
+  async listBidCorrigenda(bidId: string) {
+    return this.data.bidCorrigenda
+      .filter((c) => c.bidId === bidId)
+      .sort((a, b) => a.corrigendumNumber - b.corrigendumNumber)
+      .map((c) => this.joinCorrigendum(c))
+  }
+
+  async createBidCorrigendum(input: {
+    bidId: string; corrigendumNumber: number; sourceDocumentId?: string
+    changes: { fieldKey: string; currentValue: string; proposedValue: string }[]
+  }) {
+    const bid = this.requireBid(input.bidId)
+    if (!input.changes.length) throw new Error('A corrigendum needs at least one change.')
+    if (this.data.bidCorrigenda.some((c) => c.bidId === input.bidId && c.corrigendumNumber === input.corrigendumNumber)) {
+      throw new Error(`Corrigendum ${input.corrigendumNumber} already exists for this bid.`)
+    }
+    for (const ch of input.changes) {
+      if (ch.fieldKey === 'tenderLink') continue
+      if (!this.data.bidMilestones.some((m) => m.bidId === input.bidId && m.key === ch.fieldKey)) {
+        throw new Error(`Unknown field "${ch.fieldKey}" — create its milestone slot first.`)
+      }
+    }
+    const corrigendum: Omit<BidCorrigendum, 'changes'> = {
+      id: uid('cor'), bidId: input.bidId, corrigendumNumber: input.corrigendumNumber,
+      sourceDocumentId: input.sourceDocumentId ?? null, detectedAt: new Date().toISOString(),
+      reviewedAt: null, reviewedBy: null, status: 'pending_review',
+    }
+    this.data.bidCorrigenda.push(corrigendum)
+    for (const ch of input.changes) {
+      this.data.bidCorrigendumChanges.push({
+        id: uid('cch'), corrigendumId: corrigendum.id, ...ch, decision: 'pending', decidedAt: null, decidedBy: null,
+      })
+    }
+    bid.dataConfidence = 'needs_review'
+    bid.updatedAt = new Date().toISOString()
+    return this.joinCorrigendum(corrigendum)
+  }
+
+  async reviewCorrigendumChange(input: { changeId: string; decision: 'accepted' | 'rejected'; reason?: string }) {
+    const change = this.data.bidCorrigendumChanges.find((c) => c.id === input.changeId)
+    if (!change) throw new Error(`No such corrigendum change: ${input.changeId}`)
+    const corrigendum = this.data.bidCorrigenda.find((c) => c.id === change.corrigendumId)!
+    const bid = this.requireBid(corrigendum.bidId)
+    const now = new Date().toISOString()
+
+    if (input.decision === 'accepted') {
+      const frozen = this.data.protectedValues.some(
+        (p) => p.entityType === 'bid' && p.entityId === bid.id && p.fieldKey === change.fieldKey && p.frozen,
+      )
+      if (frozen) throw new Error(`"${change.fieldKey}" is frozen — unfreeze it before accepting this change.`)
+      if (change.fieldKey === 'tenderLink') {
+        bid.tenderLink = change.proposedValue
+        bid.updatedAt = now
+      } else {
+        const milestone = this.data.bidMilestones.find((m) => m.bidId === bid.id && m.key === change.fieldKey)
+        if (milestone) {
+          milestone.dueAt = change.proposedValue
+          milestone.source = 'corrigendum'
+          milestone.updatedAt = now
+        }
+        if (change.fieldKey === 'submissionDeadline') {
+          const opp = this.data.opportunities.find((o) => o.id === bid.opportunityId)
+          if (opp) opp.submissionDate = change.proposedValue.slice(0, 10)
+        }
+      }
+    }
+
+    change.decision = input.decision
+    change.decidedAt = now
+    change.decidedBy = null
+
+    const stillPending = this.data.bidCorrigendumChanges.some(
+      (c) => c.corrigendumId === corrigendum.id && c.decision === 'pending',
+    )
+    if (!stillPending) {
+      corrigendum.status = 'reviewed'
+      corrigendum.reviewedAt = now
+      // Like the API, resolving every change does NOT clear needs_review — a person confirms it via markBidVerified.
+    }
+    return change
+  }
+
+  async listProtectedValues(entityType: string, entityId: string) {
+    return this.data.protectedValues.filter((p) => p.entityType === entityType && p.entityId === entityId)
+  }
+
+  async freezeValue(entityType: string, entityId: string, fieldKey: string) {
+    const now = new Date().toISOString()
+    const existing = this.data.protectedValues.find(
+      (p) => p.entityType === entityType && p.entityId === entityId && p.fieldKey === fieldKey,
+    )
+    if (existing) {
+      existing.frozen = true
+      existing.frozenAt = now
+      return
+    }
+    this.data.protectedValues.push({
+      id: uid('pv'), entityType, entityId, fieldKey, frozen: true, frozenAt: now, frozenBy: null,
+    })
+  }
+
+  async unfreezeValue(entityType: string, entityId: string, fieldKey: string, reason: string) {
+    if (!reason.trim()) throw new Error('A reason is required to unfreeze a value.')
+    const pv = this.data.protectedValues.find(
+      (p) => p.entityType === entityType && p.entityId === entityId && p.fieldKey === fieldKey,
+    )
+    if (!pv) return
+    pv.frozen = false
+    pv.frozenAt = null
+    pv.frozenBy = null
+  }
+
+  async requestDocumentUploadUrl(input: {
+    entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+  }) {
+    // Local dev has no object storage: the "upload URL" is a placeholder and
+    // the file bytes are never stored — only the metadata row.
+    const uploadId = uid('upl')
+    pendingBidUploads.set(uploadId, input)
+    return { uploadId, uploadUrl: `local://bid-upload/${uploadId}` }
+  }
+
+  async confirmDocumentUpload(uploadId: string) {
+    const pending = pendingBidUploads.get(uploadId)
+    if (!pending) throw new Error(`No such upload: ${uploadId}`)
+    pendingBidUploads.delete(uploadId)
+    const doc: BidDocument = {
+      id: uid('doc'), entityType: pending.entityType, entityId: pending.entityId, filename: pending.filename,
+      storagePath: `local://${pending.entityType}/${pending.entityId}/${pending.filename}`,
+      version: pending.version ?? '1', contentType: pending.contentType, sizeBytes: pending.sizeBytes,
+      uploadedBy: null, uploadedAt: new Date().toISOString(),
+    }
+    this.data.bidDocuments.push(doc)
+    return doc
+  }
+
+  async listDocuments(entityType: string, entityId: string) {
+    return this.data.bidDocuments
+      .filter((d) => d.entityType === entityType && d.entityId === entityId)
+      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))
+  }
+
+  async deleteDocument(id: string) {
+    this.data.bidDocuments = this.data.bidDocuments.filter((d) => d.id !== id)
+    this.data.documentCitations = this.data.documentCitations.filter((c) => c.documentId !== id)
+  }
+
+  /** Local mode stores no file bytes, so there is nothing to open: the `local://` URL
+   *  tells the UI to say so instead of opening a dead link. */
+  async getDocumentDownloadUrl(id: string) {
+    const doc = this.data.bidDocuments.find((d) => d.id === id)
+    if (!doc) throw new Error(`No such document: ${id}`)
+    return doc.storagePath
+  }
+
+  async deleteDocumentCitation(id: string) {
+    this.data.documentCitations = this.data.documentCitations.filter((c) => c.id !== id)
+  }
+
+  async listDocumentCitations(documentId: string) {
+    return this.data.documentCitations.filter((c) => c.documentId === documentId)
+  }
+
+  async createDocumentCitation(input: { documentId: string; pageLabel: string; quoteText?: string; fieldRef?: string }) {
+    if (!this.data.bidDocuments.some((d) => d.id === input.documentId)) {
+      throw new Error(`No such document: ${input.documentId}`)
+    }
+    const citation: DocumentCitation = {
+      id: uid('cit'), documentId: input.documentId, pageLabel: input.pageLabel,
+      quoteText: input.quoteText ?? '', fieldRef: input.fieldRef ?? null, createdAt: new Date().toISOString(),
+    }
+    this.data.documentCitations.push(citation)
+    return citation
+  }
+
+  async listBidSavedViews() {
+    const system: BidSavedView[] = SYSTEM_BID_VIEWS.map((v) => ({
+      id: v.key, name: v.name, scope: 'global', ownerEmail: null, isSystem: true,
+      filterRules: v.filterRules, sort: [], visibleColumns: [], createdBy: null, createdAt: null, updatedAt: null,
+    }))
+    // Copies for the same reason as listBidCustomFields (in-place updates vs structural sharing).
+    return [...system, ...this.data.bidSavedViews.map((v) => ({ ...v, filterRules: [...v.filterRules], visibleColumns: [...v.visibleColumns] }))]
+  }
+
+  async createBidSavedView(input: {
+    name: string; scope: 'personal' | 'global'
+    filterRules?: SystemBidViewFilterRule[]; sort?: unknown[]; visibleColumns?: string[]
+  }) {
+    const now = new Date().toISOString()
+    const view: BidSavedView = {
+      id: uid('bsv'), name: input.name, scope: input.scope, ownerEmail: null, isSystem: false,
+      filterRules: input.filterRules ?? [], sort: input.sort ?? [], visibleColumns: input.visibleColumns ?? [],
+      createdBy: null, createdAt: now, updatedAt: now,
+    }
+    this.data.bidSavedViews.push(view)
+    return view
+  }
+
+  async updateBidSavedView(
+    id: string,
+    patch: Partial<Pick<BidSavedView, 'name' | 'filterRules' | 'sort' | 'visibleColumns'>>,
+  ) {
+    if (SYSTEM_BID_VIEW_KEYS.has(id)) throw new Error('System views cannot be edited.')
+    const view = this.data.bidSavedViews.find((v) => v.id === id)
+    if (!view) throw new Error(`No such view: ${id}`)
+    Object.assign(view, patch, { updatedAt: new Date().toISOString() })
+    return view
+  }
+
+  async deleteBidSavedView(id: string) {
+    if (SYSTEM_BID_VIEW_KEYS.has(id)) throw new Error('System views cannot be deleted.')
+    this.data.bidSavedViews = this.data.bidSavedViews.filter((v) => v.id !== id)
+  }
+
+  // --- Bid Tracker: custom columns (spec §8.1) — same rules as the backend's
+  // bidCustomFields router, using the same @goms/domain helpers. ------------
+
+  private auditCustom(entry: { entityType: string; entityId: string; field: string; oldValue: string; newValue: string; action: string; reason?: string }) {
+    writeAuditLogEntry(this.data.commercialCalculator, { reason: '', changedBy: null, ...entry })
+  }
+
+  private requireCustomField(id: string): BidCustomField {
+    const field = this.data.bidCustomFields.find((f) => f.id === id)
+    if (!field) throw new Error('No such custom column.')
+    return field
+  }
+
+  private assertActiveNameFree(name: string, exceptId?: string) {
+    const folded = name.trim().toLowerCase()
+    const clash = this.data.bidCustomFields.some(
+      (f) => f.status === 'active' && f.id !== exceptId && f.name.trim().toLowerCase() === folded,
+    )
+    if (clash) throw new Error(`A column named "${name.trim()}" already exists.`)
+  }
+
+  async listBidCustomFields(includeArchived = false) {
+    // Copies, not the live stored objects: other methods mutate them in place,
+    // and react-query's structural sharing would otherwise see "no change" after
+    // a rename/archive and never re-render anything reading this list.
+    return this.data.bidCustomFields
+      .filter((f) => includeArchived || f.status === 'active')
+      .map((f) => ({ ...f, options: f.options ? [...f.options] : null }))
+      .sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt))
+  }
+
+  async createBidCustomField(input: { name: string; dataType: CustomFieldType; options?: string[] }) {
+    const name = input.name.trim()
+    if (!name || name.length > 80) throw new Error('A column name must be 1–80 characters.')
+    let options: string[] | null = null
+    if (input.dataType === 'select') options = normalizeOptions(input.options ?? [])
+    else if (input.options !== undefined) throw new Error('Only a select column has options.')
+    this.assertActiveNameFree(name)
+    const now = new Date().toISOString()
+    const field: BidCustomField = {
+      id: uid('bcf'),
+      key: slugifyFieldKey(name, new Set(this.data.bidCustomFields.map((f) => f.key))),
+      name, dataType: input.dataType, options, hasHeldValue: false,
+      position: this.data.bidCustomFields.reduce((max, f) => Math.max(max, f.position), -1) + 1,
+      status: 'active', createdBy: null, updatedBy: null, createdAt: now, updatedAt: now,
+    }
+    this.data.bidCustomFields.push(field)
+    this.auditCustom({ entityType: 'bidCustomField', entityId: field.id, field: 'name', oldValue: '', newValue: name, action: 'custom_field_created' })
+    return field
+  }
+
+  async updateBidCustomField(id: string, patch: { name?: string; options?: string[] }) {
+    const field = this.requireCustomField(id)
+    const now = new Date().toISOString()
+    if (patch.name !== undefined && patch.name.trim() !== field.name) {
+      const name = patch.name.trim()
+      if (!name || name.length > 80) throw new Error('A column name must be 1–80 characters.')
+      if (field.status === 'active') this.assertActiveNameFree(name, id)
+      this.auditCustom({ entityType: 'bidCustomField', entityId: id, field: 'name', oldValue: field.name, newValue: name, action: 'custom_field_renamed' })
+      field.name = name
+      field.updatedAt = now
+    }
+    if (patch.options !== undefined) {
+      if (field.dataType !== 'select') throw new Error('Only a select column has options.')
+      const next = normalizeOptions(patch.options)
+      const prev = field.options ?? []
+      if (JSON.stringify(prev) !== JSON.stringify(next)) {
+        const removed = prev.filter((o) => !next.includes(o))
+        this.auditCustom({
+          entityType: 'bidCustomField', entityId: id, field: 'options', oldValue: JSON.stringify(prev), newValue: JSON.stringify(next),
+          reason: removed.length ? `Removed: ${removed.join(', ')} (existing values kept)` : '', action: 'custom_field_options_changed',
+        })
+        field.options = next
+        field.updatedAt = now
+      }
+    }
+    return field
+  }
+
+  async reorderBidCustomFields(ids: string[]) {
+    const active = this.data.bidCustomFields.filter((f) => f.status === 'active')
+    const activeIds = new Set(active.map((f) => f.id))
+    if (ids.length !== activeIds.size || new Set(ids).size !== ids.length || !ids.every((id) => activeIds.has(id))) {
+      throw new Error('ids must be exactly the current active columns, each once.')
+    }
+    for (const [index, id] of ids.entries()) {
+      const field = this.requireCustomField(id)
+      if (field.position === index) continue
+      this.auditCustom({
+        entityType: 'bidCustomField', entityId: id, field: 'position', oldValue: String(field.position), newValue: String(index),
+        action: 'custom_field_reordered',
+      })
+      field.position = index
+      field.updatedAt = new Date().toISOString()
+    }
+    return this.listBidCustomFields()
+  }
+
+  async archiveBidCustomField(id: string) {
+    const field = this.requireCustomField(id)
+    if (field.status === 'archived') return field
+    field.status = 'archived'
+    field.updatedAt = new Date().toISOString()
+    this.auditCustom({
+      entityType: 'bidCustomField', entityId: id, field: 'status', oldValue: 'active', newValue: 'archived',
+      reason: 'Values are kept', action: 'custom_field_archived',
+    })
+    return field
+  }
+
+  async unarchiveBidCustomField(id: string) {
+    const field = this.requireCustomField(id)
+    if (field.status === 'active') return field
+    if (this.data.bidCustomFields.some((f) => f.status === 'active' && f.name.trim().toLowerCase() === field.name.trim().toLowerCase())) {
+      throw new Error(`Another active column is already named "${field.name}" — rename one of them first.`)
+    }
+    field.status = 'active'
+    field.updatedAt = new Date().toISOString()
+    this.auditCustom({ entityType: 'bidCustomField', entityId: id, field: 'status', oldValue: 'archived', newValue: 'active', action: 'custom_field_unarchived' })
+    return field
+  }
+
+  async deleteBidCustomField(id: string) {
+    const field = this.requireCustomField(id)
+    // Never-held-a-value rule: clearing a value removes its row but not the flag.
+    if (field.hasHeldValue || this.data.bidCustomFieldValues.some((v) => v.fieldId === id)) {
+      throw new Error('This column has values — archive it instead.')
+    }
+    this.data.bidCustomFields = this.data.bidCustomFields.filter((f) => f.id !== id)
+    this.auditCustom({
+      entityType: 'bidCustomField', entityId: id, field: 'name', oldValue: field.name, newValue: '',
+      reason: 'Never held a value', action: 'custom_field_deleted',
+    })
+  }
+
+  async setBidCustomValue(bidId: string, fieldId: string, raw: string | number | boolean | null) {
+    const field = this.requireCustomField(fieldId)
+    if (field.status === 'archived') throw new Error('This column is archived.')
+    this.requireBid(bidId)
+    const value = coerceCustomValue(field.dataType, raw, field.options)
+    const existing = this.data.bidCustomFieldValues.find((v) => v.bidId === bidId && v.fieldId === fieldId)
+    const oldValue: CustomValue = existing?.value ?? null
+    const text = (v: CustomValue) => (v === null ? '' : String(v))
+    // entityId is the BID so the edit shows in that bid's Activity History.
+    const audit = (action: string) => this.auditCustom({
+      entityType: 'bidCustomFieldValue', entityId: bidId, field: field.key, oldValue: text(oldValue), newValue: text(value), action,
+    })
+    const touch = () => { this.requireBid(bidId).updatedAt = new Date().toISOString() }
+
+    if (value === null) {
+      if (existing) {
+        this.data.bidCustomFieldValues = this.data.bidCustomFieldValues.filter((v) => v !== existing)
+        audit('custom_value_cleared')
+        touch()
+      }
+      return { bidId, fieldId, key: field.key, value: null as CustomValue }
+    }
+    field.hasHeldValue = true
+    const now = new Date().toISOString()
+    if (existing) {
+      existing.value = value
+      existing.updatedAt = now
+    } else {
+      const row: BidCustomFieldValue = { bidId, fieldId, value, updatedAt: now }
+      this.data.bidCustomFieldValues.push(row)
+    }
+    if (oldValue !== value) {
+      audit('custom_value_set')
+      touch()
+    }
+    return { bidId, fieldId, key: field.key, value }
+  }
+
+  async listBidCustomValues(bidId: string) {
+    const out: Record<string, CustomValue> = {}
+    for (const v of this.data.bidCustomFieldValues) {
+      if (v.bidId !== bidId) continue
+      const field = this.data.bidCustomFields.find((f) => f.id === v.fieldId)
+      if (field?.status === 'active') out[field.key] = v.value
+    }
+    return out
   }
 
   async listSalesPersons() {
@@ -1219,7 +2090,7 @@ class InMemoryRepository implements Repository {
    *  cached: these arrays are mutated in place by other methods, so a cached
    *  context would silently go stale. */
   private ownershipContext(): OwnershipContext {
-    return { nodes: this.data.nodes, employees: this.data.employees, opportunities: this.data.opportunities }
+    return { nodes: this.data.nodes, employees: this.data.employees, opportunities: this.data.opportunities, bids: this.data.bids }
   }
 
   async listOwnershipAssignments() {
@@ -1678,7 +2549,10 @@ class InMemoryRepository implements Repository {
       employees: this.data.employees.filter((e) => e.status === 'active'),
       transfers: this.data.transfers,
       timeline: this.data.timeline,
-      opportunities: this.data.opportunities,
+      opportunities: this.data.opportunities.map((o) => {
+        const bid = this.data.bids.find((b) => b.opportunityId === o.id)
+        return { ...o, bidId: bid?.id ?? null, bidCode: bid?.bidCode ?? null, tenderLink: bid?.tenderLink ?? null }
+      }),
       salesPersons: this.data.salesPersons,
       postings: this.data.salesPostings,
       today: isoToday(),
@@ -1852,6 +2726,13 @@ const MUTATOR_KEYS = [
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
   'createBoq', 'updateBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'reorderBoqLineItems', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',
   'createCustomer', 'updateCustomer', 'deleteCustomer',
+  'createBid', 'createBidForNewOpportunity', 'updateBid', 'archiveBid', 'markBidVerified', 'unarchiveBid', 'deleteBid',
+  'createBidMilestone', 'updateBidMilestone', 'deleteBidMilestone',
+  'createBidCorrigendum', 'reviewCorrigendumChange', 'freezeValue', 'unfreezeValue',
+  'requestDocumentUploadUrl', 'confirmDocumentUpload', 'deleteDocument', 'createDocumentCitation', 'deleteDocumentCitation',
+  'createBidSavedView', 'updateBidSavedView', 'deleteBidSavedView',
+  'createBidCustomField', 'updateBidCustomField', 'reorderBidCustomFields', 'archiveBidCustomField',
+  'unarchiveBidCustomField', 'deleteBidCustomField', 'setBidCustomValue',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -1871,6 +2752,8 @@ const READER_KEYS = [
   'listSkus', 'getSku', 'listBomItemsForSku', 'listAllBomItems', 'listBoqs', 'getBoq', 'listBoqLineItems',
   'listAllBoqLineItems', 'listAuditLogs',
   'listCustomers', 'getCustomer',
+  'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
+  'listDocuments', 'listDocumentCitations', 'getDocumentDownloadUrl', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the

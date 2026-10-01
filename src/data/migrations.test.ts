@@ -132,6 +132,52 @@ describe('migrateSnapshot', () => {
     expect(out!.customers).toEqual([{ id: 'cust_1', name: 'Acme' }])
   })
 
+  it('adds empty Bid Tracker collections when migrating an old snapshot', () => {
+    const out = migrateSnapshot(v1Snapshot(), 1)
+    expect(out).not.toBeNull()
+    expect(out!.bids).toEqual([])
+    expect(out!.bidMilestones).toEqual([])
+    expect(out!.bidCorrigenda).toEqual([])
+    expect(out!.bidCorrigendumChanges).toEqual([])
+    expect(out!.protectedValues).toEqual([])
+    expect(out!.bidDocuments).toEqual([])
+    expect(out!.documentCitations).toEqual([])
+    expect(out!.bidSavedViews).toEqual([])
+  })
+
+  it('adds empty custom-column collections (v14), including when coming from v13', () => {
+    const fromV1 = migrateSnapshot(v1Snapshot(), 1)
+    expect(fromV1!.bidCustomFields).toEqual([])
+    expect(fromV1!.bidCustomFieldValues).toEqual([])
+    const fromV13 = migrateSnapshot({ ...v1Snapshot(), bids: [] }, 13)
+    expect(fromV13!.bidCustomFields).toEqual([])
+    expect(fromV13!.bidCustomFieldValues).toEqual([])
+  })
+
+  it('backfills hasHeldValue (v15) from whether a column has value rows, and keeps an existing flag', () => {
+    const snap = {
+      ...v1Snapshot(),
+      bidCustomFields: [{ id: 'used', key: 'a' }, { id: 'unused', key: 'b' }, { id: 'flagged', key: 'c', hasHeldValue: true }],
+      bidCustomFieldValues: [{ bidId: 'x', fieldId: 'used', value: 1 }],
+    }
+    const out = migrateSnapshot(snap, 14)
+    expect((out!.bidCustomFields as any[]).map((f) => [f.id, f.hasHeldValue])).toEqual([['used', true], ['unused', false], ['flagged', true]])
+  })
+
+  it('does not clobber existing custom-column data', () => {
+    const existing = { ...v1Snapshot(), bidCustomFields: [{ id: 'cf1', key: 'score' }], bidCustomFieldValues: [{ bidId: 'b', fieldId: 'cf1', value: 3 }] }
+    const out = migrateSnapshot(existing, 13)
+    expect(out!.bidCustomFields).toEqual([{ id: 'cf1', key: 'score', hasHeldValue: true }])
+    expect(out!.bidCustomFieldValues).toHaveLength(1)
+  })
+
+  it('does not clobber existing Bid Tracker data if a snapshot already has it', () => {
+    const withBids = { ...v1Snapshot(), bids: [{ id: 'bid_1', bidCode: 'BID-2026-0001' }] }
+    const out = migrateSnapshot(withBids, 12)
+    expect(out).not.toBeNull()
+    expect(out!.bids).toEqual([{ id: 'bid_1', bidCode: 'BID-2026-0001' }])
+  })
+
   it('backfills selectedPricingLevels onto a legacy SKU row that predates the field', () => {
     const legacy = {
       ...v1Snapshot(),

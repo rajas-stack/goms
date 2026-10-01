@@ -5,7 +5,7 @@ import { Field, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { useToast } from '@/components/ui/Toast'
 import {
-  useAllEmployees, useAllTimelineEvents, useDepartments, useEmployeeDepartments, useOpportunities, useStates,
+  useAllEmployees, useAllTimelineEvents, useBidCustomFields, useBidsForGrid, useDepartments, useEmployeeDepartments, useOpportunities, useStates,
 } from '@/lib/api'
 import { downloadCsv, toCsv } from '@/lib/csv'
 import { timelineEventLabel } from '@/lib/timeline-meta'
@@ -14,15 +14,16 @@ import { abbreviateDepartmentName, workUnitLabel } from '@/features/nodes/depart
 import { parseContactNumbers } from '@/features/nodes/contact-numbers'
 import { stageLabel } from '@/data/pipeline-stages'
 import { cn } from '@/lib/utils'
-import type { Employee, HierNode, Opportunity, TimelineEvent } from '@/lib/types'
+import type { BidCustomField, BidGridRow, Employee, HierNode, Opportunity, TimelineEvent } from '@/lib/types'
 
-type DatasetKey = 'departments' | 'people' | 'meetings' | 'opportunities'
+type DatasetKey = 'departments' | 'people' | 'meetings' | 'opportunities' | 'bids'
 
 const DATASETS: { key: DatasetKey; label: string; icon: string; describe: string }[] = [
   { key: 'departments', label: 'Departments', icon: 'Building2', describe: 'Every department with its state, code, and contact details' },
   { key: 'people', label: 'People', icon: 'Users', describe: 'Every contact with posting, department, and relationship fields' },
   { key: 'meetings', label: 'Meetings & interactions', icon: 'CalendarClock', describe: 'Every logged timeline entry with its person and attendees' },
   { key: 'opportunities', label: 'Opportunities', icon: 'Briefcase', describe: 'Every opportunity with its department, stage, and value' },
+  { key: 'bids', label: 'Bids', icon: 'Flag', describe: 'Every bid with its tender details, next milestone, and custom columns' },
 ]
 
 export interface Ctx {
@@ -32,6 +33,8 @@ export interface Ctx {
   employeeDepartments: Record<string, { id: string; name: string }>
   events: TimelineEvent[]
   opportunities: Opportunity[]
+  bids: BidGridRow[]
+  customFields: BidCustomField[]
 }
 
 function stateName(ctx: Ctx, code: number | null): string {
@@ -137,8 +140,8 @@ function opportunityRows(ctx: Ctx): string[][] {
     ],
     ...ctx.opportunities.map((o) => [
       o.opportunityName,
-      deptById.get(o.departmentId)?.name ?? '',
-      o.departmentId,
+      (o.departmentId ? deptById.get(o.departmentId)?.name : undefined) ?? '',
+      o.departmentId ?? '',
       stateName(ctx, o.stateCode),
       stageLabel(o.stageKey),
       o.closedOn ?? '',
@@ -160,11 +163,50 @@ function opportunityRows(ctx: Ctx): string[][] {
   ]
 }
 
+export function bidRows(ctx: Ctx): string[][] {
+  return [
+    [
+      'Bid code', 'Opportunity', 'Department', 'State', 'City', 'GEM / Tender ID', 'Stage', 'Decision',
+      'Data confidence', 'Submission date', 'Value', 'Value unit', 'EMD amount', 'EMD unit', 'Owner',
+      'Solution lead', 'Next milestone', 'Next milestone due', 'Next action', 'Next action due', 'Tender link',
+      ...ctx.customFields.map((f) => f.name),
+    ],
+    ...ctx.bids.map((b) => [
+      b.bidCode,
+      b.opportunityName,
+      b.departmentName ?? '',
+      stateName(ctx, b.stateCode),
+      b.city ?? '',
+      b.gemTenderId,
+      stageLabel(b.stageKey),
+      b.decision,
+      b.dataConfidence,
+      b.submissionDate,
+      b.valueAmount,
+      workUnitLabel(b.valueUnit),
+      b.emdAmount,
+      workUnitLabel(b.emdUnit),
+      b.ownerEmail ?? '',
+      b.solutionLeadEmail ?? '',
+      b.nextMilestoneLabel ?? '',
+      b.nextMilestoneDueAt ?? '',
+      b.nextActionNote ?? '',
+      b.nextActionDueDate ?? '',
+      b.tenderLink ?? '',
+      ...ctx.customFields.map((f) => {
+        const v = b.customValues[f.key]
+        return v === undefined || v === null ? '' : Array.isArray(v) ? v.join('; ') : String(v)
+      }),
+    ]),
+  ]
+}
+
 const BUILDERS: Record<DatasetKey, (ctx: Ctx) => string[][]> = {
   departments: departmentRows,
   people: peopleRows,
   meetings: meetingRows,
   opportunities: opportunityRows,
+  bids: bidRows,
 }
 
 /** Bulk CSV export, the read counterpart to `ImportDialog`. Pick one or more
@@ -181,6 +223,8 @@ export function ExportDialog({ open, onClose }: { open: boolean; onClose: () => 
   const { data: employeeDepartments = {} } = useEmployeeDepartments()
   const { data: events = [] } = useAllTimelineEvents()
   const { data: opportunities = [] } = useOpportunities()
+  const { data: bids = [] } = useBidsForGrid()
+  const { data: customFields = [] } = useBidCustomFields()
 
   // Scoping to a state filters departments by their own stateCode, and people
   // (plus their meetings) by the department they sit under — so a state export
@@ -197,9 +241,11 @@ export function ExportDialog({ open, onClose }: { open: boolean; onClose: () => 
   const scopedEvents = stateCode === null ? events : events.filter((t) => scopedEmployeeIds.has(t.employeeId))
   const scopedOpportunities = stateCode === null ? opportunities : opportunities.filter((o) => o.stateCode === stateCode)
 
+  const scopedBids = stateCode === null ? bids : bids.filter((b) => b.stateCode === stateCode)
+
   const ctx: Ctx = {
     states, departments: scopedDepartments, employees: scopedEmployees, employeeDepartments, events: scopedEvents,
-    opportunities: scopedOpportunities,
+    opportunities: scopedOpportunities, bids: scopedBids, customFields,
   }
 
   const COUNTS: Record<DatasetKey, number> = {
@@ -207,6 +253,7 @@ export function ExportDialog({ open, onClose }: { open: boolean; onClose: () => 
     people: scopedEmployees.length,
     meetings: scopedEvents.length,
     opportunities: scopedOpportunities.length,
+    bids: scopedBids.length,
   }
 
   function toggle(key: DatasetKey) {

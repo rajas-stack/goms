@@ -17,6 +17,11 @@ export const DOMAIN_DEPENDENCIES: Record<ImportDomainKey, ImportDomainKey[]> = {
   approvalMatrix: [],
   skus: ['commercialMastersCatalog', 'commercialMastersFlat', 'currencies', 'taxClasses'],
   bom: ['skus'],
+  // A bid's own resolution reads `opportunities` directly, which is not one of
+  // this map's keys, so it has no in-scope dependency. A milestone needs its
+  // bid to already exist — committed earlier, or earlier in this same session.
+  bids: [],
+  bidMilestones: ['bids'],
 }
 
 /** Stable topological sort (Kahn's algorithm, ties broken by input order)

@@ -25,6 +25,12 @@ interface PopoverPosition {
  *  whatever space is actually available in the chosen direction. Recomputes
  *  on open, window resize, and any ancestor scroll (capture-phase, since
  *  `scroll` doesn't bubble) so the panel tracks its anchor. */
+const near = (a: number, b: number) => Math.abs(a - b) < 0.5
+function samePosition(a: PopoverPosition, b: PopoverPosition): boolean {
+  return near(a.top, b.top) && near(a.left, b.left) && near(a.maxHeight, b.maxHeight)
+    && (a.width === undefined) === (b.width === undefined) && (a.width === undefined || near(a.width, b.width as number))
+}
+
 export function usePopoverPosition({
   open, anchorRef, panelRef, matchAnchorWidth = false, align = 'start', maxPanelHeight = 320, gap = 4,
 }: PopoverPositionOptions): PopoverPosition {
@@ -51,7 +57,13 @@ export function usePopoverPosition({
       let left = align === 'end' ? a.right - naturalWidth : a.left
       left = Math.min(Math.max(left, EDGE_PAD), window.innerWidth - naturalWidth - EDGE_PAD)
 
-      setPosition({ top, left, width: matchAnchorWidth ? a.width : undefined, maxHeight })
+      const next: PopoverPosition = { top, left, width: matchAnchorWidth ? a.width : undefined, maxHeight }
+      // The rAF loop below runs for as long as the panel is open. Setting state with a
+      // fresh object every frame re-rendered the whole popover subtree at 60 Hz even when
+      // nothing had moved — with two popovers open over a large grid (the Bid Tracker
+      // filter bar) that saturated the main thread for seconds. Only update on a real change
+      // (sub-pixel jitter ignored).
+      setPosition((prev) => (samePosition(prev, next) ? prev : next))
     }
 
     // The anchor can still be moving when this fires — e.g. a parent Dialog's

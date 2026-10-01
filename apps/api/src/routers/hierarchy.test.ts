@@ -13,6 +13,8 @@ describe('hierarchy router', () => {
     await pool.query('DELETE FROM commercial_boq_line_items')
     await pool.query('DELETE FROM commercial_boqs')
     await pool.query('DELETE FROM opportunity_stage_changes')
+    await pool.query('DELETE FROM bid_milestones')
+    await pool.query('DELETE FROM bids')
     await pool.query('DELETE FROM opportunities')
     await pool.query('DELETE FROM employees')
     await pool.query('DELETE FROM hierarchy_nodes')
@@ -393,5 +395,17 @@ describe('hierarchy router', () => {
       const caller = appRouter.createCaller({})
       await expect(caller.hierarchy.listDepartments()).resolves.toBeDefined()
     })
+  })
+
+  it('refuses to delete a subtree containing an opportunity with a bid — including one already archived, exercised through the cascading deleteNode path, not just a direct opportunities.delete', async () => {
+    const caller = appRouter.createCaller({})
+    const dept = await caller.hierarchy.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Blocked Dept' })
+    const opp = await caller.opportunities.create({ departmentId: dept.id, opportunityName: 'Tender' })
+    const bid = await caller.bids.create({ opportunityId: opp.id })
+    await caller.bids.archive({ id: bid.id })
+    await expect(caller.hierarchy.deleteNode({ id: dept.id })).rejects.toMatchObject({ code: 'CONFLICT', message: expect.stringContaining(bid.bidCode) })
+    // Once the bid is deleted, the node (and its opportunity) can go.
+    await caller.bids.delete({ id: bid.id })
+    await caller.hierarchy.deleteNode({ id: dept.id })
   })
 })
