@@ -69,6 +69,18 @@ export const SALES_TEAM: SalesTeamMember[] = [
   { name: 'Siddharth Biswas', email: 'siddharth2@amnex.com', designation: 'BU Sales Highways & Traffic', reportsTo: 'jayendra@amnex.com' },
 ]
 
+/** Territory each top-level regional head owns, keyed by the head's email —
+ *  the one place a region NAME exists (the roster above only carries it in
+ *  comments). A meeting's region is the territory of the head at the top of an
+ *  attendee's reporting chain (see `lib/meetingFilters.ts`); heads not listed
+ *  here (the Sales Head, BU Sales heads) deliberately belong to no region. */
+export const TERRITORY_BY_HEAD_EMAIL: Record<string, string> = {
+  'rohitt@amnex.com': 'North',
+  'parichay@amnex.com': 'East',
+  'rajeshl@amnex.com': 'South',
+  'sunilkumar@amnex.com': 'West',
+}
+
 /** Designation-derived default tier(s) for a member with no explicit `tiers`
  *  override. Substring-matched (not exact-equality) so a compound title like
  *  "Regional Manager & Head" resolves to BOTH `gm` and `rm` on its own —
