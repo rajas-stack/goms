@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import {
@@ -6,8 +6,7 @@ import {
   useResolvedOwners, useSalesPersons,
 } from '@/lib/api'
 import { WorkspaceProvider, useWorkspace } from '@/features/workspace/context'
-import { DetailsPanel } from '@/features/details/DetailsPanel'
-import { MobileDetailsSheet } from './StateWorkspace'
+import { SalesDetailsSidebar, SalesDetailsSidebarProvider, useSalesDetailsSidebar } from '@/features/sales/SalesDetailsSidebar'
 import { Icon } from '@/components/ui/Icon'
 import { Input } from '@/components/ui/Field'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -26,9 +25,8 @@ import type { SalesPerson, SalesPosting } from '@/lib/types'
 import { STATUS_STYLE, STATUS_LABEL, STATUS_FILTERS } from '@/data/sales-status'
 
 /** The Sales Master workspace. Mirrors StateWorkspace's structure — header row
- *  with a tab strip, a content area, and the shared resizable DetailsPanel —
- *  which is the main reason the module reads as native rather than bolted on
- *  (spec §5.3).
+ *  with a tab strip and a content area — with the shared DetailsPanel shown in a
+ *  contextual slide-in sidebar (SalesDetailsSidebar) rather than a permanent column.
  *
  *  All three sections are built: Roster, Org Chart, and Ownership (which
  *  doubles as the destination for the header's per-kind ownership counts). */
@@ -42,14 +40,14 @@ function SummaryCard({ label, value, icon, href }: { label: string; value: numbe
   return (
     <Link
       to={href}
-      className="flex items-center gap-3 rounded-xl border border-line bg-white px-4 py-3 shadow-sm transition-colors hover:border-ink-600/30 hover:bg-panel/60 focus-visible:focus-ring"
+      className="flex items-center gap-2.5 rounded-lg border border-line bg-white px-3 py-1.5 shadow-sm transition-colors hover:border-ink-600/30 hover:bg-panel/60 focus-visible:focus-ring"
     >
-      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-panel text-ink-700">
-        <Icon name={icon} size={16} />
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-panel text-ink-700">
+        <Icon name={icon} size={14} />
       </div>
       <div className="min-w-0">
-        <div className="text-xl font-semibold leading-tight text-ink-900">{value}</div>
-        <div className="truncate text-[12px] text-muted">{label}</div>
+        <div className="text-lg font-semibold leading-tight text-ink-900">{value}</div>
+        <div className="truncate text-[11px] leading-tight text-muted">{label}</div>
       </div>
     </Link>
   )
@@ -83,7 +81,7 @@ function SummaryCards() {
   const ownershipHref = (view: string) => `/sales/ownership?view=${view}${selectedPersonId ? `&owner=${selectedPersonId}` : ''}`
 
   return (
-    <div className="grid grid-cols-2 gap-2.5 border-b border-line p-3 sm:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 border-b border-line px-3 py-2 sm:grid-cols-4">
       <SummaryCard label="Total sales people" value={people.length} icon="Users" href="/sales/roster" />
       <SummaryCard label="Departments owned" value={openOwned('orgNode')} icon="Building2" href={ownershipHref('orgNode')} />
       <SummaryCard label="Contacts managed" value={openOwned('contact')} icon="User" href={ownershipHref('contact')} />
@@ -113,14 +111,14 @@ export function RosterRow({ person, posting, selected, onSelect }: {
     <button
       onClick={onSelect}
       className={cn(
-        'flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors',
+        'flex min-h-[52px] w-full items-center gap-3 rounded-lg border px-3 py-1.5 text-left transition-colors',
         selected ? 'border-ink-900/20 bg-ink-900/[0.04]' : 'border-line bg-white hover:bg-panel',
       )}
     >
       <Avatar person={{ name: person.name, photoUrl: person.photoUrl }} size="sm" />
       <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-medium text-ink-900">{person.name}</div>
-        <div className="truncate text-[12px] text-muted">
+        <div className="truncate text-sm font-medium leading-tight text-ink-900">{person.name}</div>
+        <div className="truncate text-[12px] leading-tight text-muted">
           {posting?.designation || 'No current posting'}
         </div>
       </div>
@@ -138,6 +136,7 @@ export function RosterRow({ person, posting, selected, onSelect }: {
 
 function Roster() {
   const ws = useWorkspace()
+  const details = useSalesDetailsSidebar()
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<(typeof STATUS_FILTERS)[number]['key']>('all')
   const { data: people = [], isLoading } = useSalesPersons()
@@ -166,7 +165,7 @@ function Roster() {
   const [formOpen, setFormOpen] = useState(false)
 
   return (
-    <div className="flex h-full flex-col gap-3 p-3">
+    <div className="flex h-full flex-col gap-2 p-3">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Icon name="Search" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
@@ -193,7 +192,7 @@ function Roster() {
             key={f.key}
             onClick={() => setStatusFilter(f.key)}
             className={cn(
-              'rounded-full border px-2.5 py-1 text-[12px] font-medium transition-colors',
+              'rounded-full border px-2.5 py-0.5 text-[12px] font-medium transition-colors',
               statusFilter === f.key
                 ? 'border-ink-900/20 bg-ink-900/[0.06] text-ink-900'
                 : 'border-line bg-white text-ink-600 hover:bg-panel',
@@ -218,14 +217,14 @@ function Roster() {
           }
         />
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
+        <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
           {rows.map((p) => (
             <RosterRow
               key={p.id}
               person={p}
               posting={postings[p.id]}
               selected={ws.selection?.kind === 'salesPerson' && ws.selection.id === p.id}
-              onSelect={() => ws.select('salesPerson', p.id)}
+              onSelect={() => { ws.select('salesPerson', p.id); details.reveal() }}
             />
           ))}
         </div>
@@ -257,6 +256,7 @@ const OWNERSHIP_VIEWS = [
  *  largest performance risk. */
 export function Ownership() {
   const ws = useWorkspace()
+  const details = useSalesDetailsSidebar()
   const [searchParams, setSearchParams] = useSearchParams()
   const view = OWNERSHIP_VIEWS.some((v) => v.key === searchParams.get('view')) ? searchParams.get('view')! : 'orgNode'
   const ownerFilter = searchParams.get('owner')
@@ -293,6 +293,7 @@ export function Ownership() {
     setSearchParams((p) => { p.delete('owner'); return p }, { replace: true })
   }
   function openEntity(id: string) {
+    details.reveal()
     if (view === 'contact') { ws.select('employee', id); return }
     if (view === 'opportunity') {
       const dept = opportunities.find((o) => o.id === id)?.departmentId
@@ -360,7 +361,7 @@ export function Ownership() {
             <button
               key={e.id}
               onClick={() => openEntity(e.id)}
-              className="flex w-full items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5 text-left hover:bg-panel"
+              className="flex min-h-[44px] w-full items-center gap-3 rounded-lg border border-line bg-white px-3 py-1.5 text-left hover:bg-panel"
             >
               <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{e.label}</span>
               <OwnerBadge owner={owners[e.id]} people={people} className="shrink-0" />
@@ -375,22 +376,22 @@ export function Ownership() {
 function SalesWorkspaceBody() {
   const { section } = useParams()
   const active = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0]
+  const ws = useWorkspace()
+  const details = useSalesDetailsSidebar()
+  const contentRef = useRef<HTMLDivElement>(null)
 
   return (
     <div className="flex h-full flex-col">
       <SummaryCards />
-      <div className="flex shrink-0 flex-col gap-2 border-b border-line px-3 py-2">
-        <div className="flex items-center gap-2">
-          <span className="shrink-0 text-sm font-semibold text-ink-900">Sales Team</span>
-          <SalesEditLockToggle className="ml-auto" />
-        </div>
-        <div className="flex items-center gap-1 overflow-x-auto">
+      <div className="flex shrink-0 items-center gap-3 border-b border-line px-3 py-1.5">
+        <span className="shrink-0 text-sm font-semibold text-ink-900">Sales Team</span>
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
           {SECTIONS.map((s) => (
             <Link
               key={s.key}
               to={`/sales/${s.key}`}
               className={cn(
-                'shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors',
+                'shrink-0 rounded-lg px-2.5 py-1 text-[13px] font-medium transition-colors',
                 s.key === active.key
                   ? 'bg-ink-900/[0.06] text-ink-900'
                   : 'text-ink-600/70 hover:bg-ink-900/[0.04] hover:text-ink-900',
@@ -400,18 +401,22 @@ function SalesWorkspaceBody() {
             </Link>
           ))}
         </div>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {ws.selection && !details.open && (
+            <Button size="sm" variant="secondary" onClick={details.reveal}>
+              <Icon name="Eye" size={14} /> Show details
+            </Button>
+          )}
+          <SalesEditLockToggle />
+        </div>
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div ref={contentRef} className="flex min-h-0 flex-1">
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="min-h-0 min-w-0 flex-1 overflow-hidden">
           {active.key === 'roster' ? <Roster /> : active.key === 'orgchart' ? <SalesOrgChartCanvas /> : <Ownership />}
         </motion.div>
-        <aside className="hidden w-[380px] shrink-0 border-l border-line lg:block">
-          <DetailsPanel />
-        </aside>
+        <SalesDetailsSidebar containerRef={contentRef} />
       </div>
-
-      <MobileDetailsSheet />
     </div>
   )
 }
@@ -423,7 +428,9 @@ export function SalesWorkspace() {
   // not scoped to one state.
   return (
     <WorkspaceProvider stateCode={-1}>
-      <SalesWorkspaceBody />
+      <SalesDetailsSidebarProvider>
+        <SalesWorkspaceBody />
+      </SalesDetailsSidebarProvider>
     </WorkspaceProvider>
   )
 }

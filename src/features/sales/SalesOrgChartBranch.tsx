@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from 'react'
 import { useCanvas } from '@/features/canvas/canvasContext'
 import { useWorkspace } from '@/features/workspace/context'
 import { SalesOrgChartCard } from './SalesOrgChartCard'
+import { useSalesDetailsSidebar } from './SalesDetailsSidebar'
 import type { SalesOrgTree } from './salesHierarchyTree'
 import type { SalesPerson, SalesPosting } from '@/lib/types'
 
@@ -14,6 +15,7 @@ export function SalesOrgChartBranch({ person, depth, parentKey, tree, postings, 
   ws: ReturnType<typeof useWorkspace>
 }) {
   const canvas = useCanvas()
+  const details = useSalesDetailsSidebar()
   const key = `sp:${person.id}`
   const kids = tree.childrenOf.get(person.id) ?? []
   const expanded = canvas.isExpanded(key, depth)
@@ -40,7 +42,7 @@ export function SalesOrgChartBranch({ person, depth, parentKey, tree, postings, 
         expanded={expanded}
         canExpand={kids.length > 0}
         directReportCount={kids.length}
-        onSelect={() => ws.select('salesPerson', person.id)}
+        onSelect={() => { ws.select('salesPerson', person.id); details.reveal() }}
         onToggle={() => canvas.setNodeExpanded(key, depth, !expanded)}
       />
       {expanded && kids.length > 0 && (
