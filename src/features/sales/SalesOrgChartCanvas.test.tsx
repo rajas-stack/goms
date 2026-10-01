@@ -85,8 +85,7 @@ describe('SalesOrgChartCanvas', () => {
       expect(screen.getByRole('button', { name: 'Expand all' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Collapse all' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Keyboard shortcuts' })).toBeInTheDocument()
-      // Connectors default on, so the toggle's accessible name reads "Hide …".
-      expect(screen.getByRole('button', { name: 'Hide connectors' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /connectors/i })).not.toBeInTheDocument()
       expect(screen.getByText('100%')).toBeInTheDocument()
     })
 
@@ -110,23 +109,6 @@ describe('SalesOrgChartCanvas', () => {
 
       await userEvent.click(screen.getByRole('button', { name: 'Zoom out' }))
       expect(screen.getByText('100%')).toBeInTheDocument()
-    })
-
-    it('Show/hide connectors toggles the connector overlay without affecting card rendering', async () => {
-      stub([ALICE, BOB], { b: posting('b', 'a'), a: posting('a', null) })
-      render(<SalesOrgChartCanvas />)
-      await userEvent.click(screen.getByTestId('sales-org-chart-toggle-a'))
-      expect(screen.getByTestId('sales-org-chart-card-b')).toBeInTheDocument()
-      expect(screen.getByTestId('sales-org-chart-connectors')).toBeInTheDocument()
-
-      await userEvent.click(screen.getByRole('button', { name: 'Hide connectors' }))
-      expect(screen.queryByTestId('sales-org-chart-connectors')).not.toBeInTheDocument()
-      // Hiding connectors is purely visual — the tree structure is untouched.
-      expect(screen.getByTestId('sales-org-chart-card-a')).toBeInTheDocument()
-      expect(screen.getByTestId('sales-org-chart-card-b')).toBeInTheDocument()
-
-      await userEvent.click(screen.getByRole('button', { name: 'Show connectors' }))
-      expect(screen.getByTestId('sales-org-chart-connectors')).toBeInTheDocument()
     })
 
     it('the keyboard-shortcuts dialog shows only the shortcuts this canvas actually supports', async () => {

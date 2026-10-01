@@ -14,9 +14,10 @@ export interface CanvasControlsToggle {
 /** The floating bottom-right control bar shared by every canvas surface —
  *  Organization/People/Geo (via `HierarchyCanvas`) and the Sales Org Chart —
  *  so navigation looks and behaves identically everywhere it appears rather
- *  than each canvas growing its own control bar. `middleToggle` is the one
- *  slot that varies per canvas (show/hide metadata for HierarchyCanvas,
- *  show/hide connectors for the Sales Org Chart); everything else is fixed. */
+ *  than each canvas growing its own control bar. On desktop it sits left of
+ *  the global FAB (fixed bottom-8 right-8, 56px), and above it on mobile, so
+ *  the two never overlap. `middleToggle` is the one
+ *  slot that varies per canvas (optional; used for show/hide metadata); everything else is fixed. */
 export function CanvasControls({ scale, onFit, onZoomOut, onZoomIn, onReset, onExpandAll, onCollapseAll, middleToggle, onShowShortcuts }: {
   scale: number
   onFit: () => void
@@ -29,7 +30,7 @@ export function CanvasControls({ scale, onFit, onZoomOut, onZoomIn, onReset, onE
   onShowShortcuts?: () => void
 }) {
   return (
-    <div data-canvas-ui className="pointer-events-none absolute bottom-5 right-5 flex flex-wrap items-center justify-end gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel">
+    <div data-canvas-ui className="pointer-events-none absolute bottom-[5.5rem] right-5 lg:bottom-5 lg:right-[7.5rem] flex flex-wrap items-center justify-end gap-1 rounded-xl border border-line bg-white/95 p-1 shadow-panel">
       <Tooltip label="Fit to screen (F)" className="pointer-events-auto">
         <button onClick={onFit} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-panel hover:text-ink-900" aria-label="Fit to screen">
           <Icon name="Maximize" size={14} />

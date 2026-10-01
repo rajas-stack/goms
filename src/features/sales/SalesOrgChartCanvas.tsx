@@ -59,7 +59,6 @@ function SalesOrgChartStage({ version }: { version: number }) {
   // a "show/hide connectors" toggle the shared HierarchyCanvas toolbar has
   // no equivalent of, since it never hides its own lines; this is the one
   // genuinely new piece the Sales Org Chart's toolbar needs.
-  const [showConnectors, setShowConnectors] = useState(true)
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
 
   const tree = buildSalesOrgTree(people, postings)
@@ -159,13 +158,11 @@ function SalesOrgChartStage({ version }: { version: number }) {
           transformOrigin: '0 0',
         }}
       >
-        {showConnectors && (
-          <svg data-testid="sales-org-chart-connectors" className="pointer-events-none absolute left-0 top-0 overflow-visible" width={1} height={1}>
-            {edges.map((e) => (
-              <path key={e.key} d={elbowPath(e)} fill="none" stroke="#B7C2D0" strokeWidth={1.5} />
-            ))}
-          </svg>
-        )}
+        <svg data-testid="sales-org-chart-connectors" className="pointer-events-none absolute left-0 top-0 overflow-visible" width={1} height={1}>
+          {edges.map((e) => (
+            <path key={e.key} d={elbowPath(e)} fill="none" stroke="#B7C2D0" strokeWidth={1.5} />
+          ))}
+        </svg>
         {tree.roots.map((person) => (
           <SalesOrgChartBranch
             key={person.id}
@@ -195,14 +192,6 @@ function SalesOrgChartStage({ version }: { version: number }) {
         onReset={resetView}
         onExpandAll={expandAll}
         onCollapseAll={collapseAll}
-        middleToggle={{
-          active: showConnectors,
-          onToggle: () => setShowConnectors((v) => !v),
-          activeIcon: 'Eye',
-          inactiveIcon: 'EyeOff',
-          activeLabel: 'Hide connectors',
-          inactiveLabel: 'Show connectors',
-        }}
         onShowShortcuts={() => setShortcutsOpen(true)}
       />
 
