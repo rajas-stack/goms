@@ -25,7 +25,7 @@ export const GRID_GROUPS: { id: GridGroupId; label: string }[] = [
 ]
 export const CUSTOM_GROUP = { id: 'custom' as const, label: 'Custom' }
 
-export interface ColumnOption { value: string; label: string }
+export interface ColumnOption { value: string; label: string; /** A person's official email (the Bid Owner column stores emails). */ email?: string }
 
 export interface GridColumnMeta {
   /** Stable id: the `BidGridRow` key for a standard column (also the filter
@@ -42,7 +42,9 @@ export interface GridColumnMeta {
   /** Inline-editable in the grid (while it is unlocked). `opportunity` = a plain
    *  Opportunity attribute patched via updateOpportunity; `custom` = a
    *  custom-field value. Everything else is read-only here. */
-  editable?: 'opportunity' | 'custom'
+  editable?: 'opportunity' | 'custom' | 'owner' | 'bid'
+  /** Pick from the Sales Team by email (Bid Owner): the cell holds an email, the list shows names. */
+  pick?: 'personByEmail'
   /** Why a standard column is NOT inline-editable (shown as its tooltip). Every
    *  standard column is either `editable` or carries a `readOnlyReason` — the
    *  explicit editable matrix, guarded by a test. */
@@ -86,22 +88,25 @@ export const STANDARD_COLUMNS: GridColumnMeta[] = [
   std('opportunityName', 'Opportunity / Mission', 'identity', 'text', { editable: 'opportunity', required: true }),
   std('bidCode', 'Bid ID', 'identity', 'text', { readOnlyReason: 'Generated identifier' }),
   std('gemTenderId', 'Tender ID', 'identity', 'text', { readOnlyReason: PROTECTED }),
-  std('tenderLink', 'Tender Link', 'identity', 'text', { readOnlyReason: PROTECTED }),
+  // Edits go through bids.update, which refuses a frozen (protected) value with its own message.
+  std('tenderLink', 'Tender Link', 'identity', 'text', { editable: 'bid' }),
 
   std('departmentName', 'Department / Client', 'client', 'text', { readOnlyReason: FROM_DEPARTMENT }),
   std('stateCode', 'State', 'client', 'state', { readOnlyReason: FROM_DEPARTMENT }),
   std('city', 'City', 'client', 'text', { editable: 'opportunity' }),
   std('vertical', 'Sector', 'client', 'text', { editable: 'opportunity' }),
 
-  std('ownerEmail', 'Bid Owner', 'ownership', 'text', { readOnlyReason: 'Ownership is assigned with Reassign Owner (keeps the ownership history)' }),
+  // Picking a person records a new ownership assignment (the history is kept), same as Reassign Owner.
+  std('ownerEmail', 'Bid Owner', 'ownership', 'text', { editable: 'owner', pick: 'personByEmail', required: true }),
   std('solutionLeadEmail', 'Sales Lead / Solution Lead', 'ownership', 'text', { readOnlyReason: "Ownership is assigned in the bid's Overview (keeps the ownership history)" }),
 
-  std('stageKey', 'Bid Stage', 'decision', 'select', { options: stageOptions, readOnlyReason: "Workflow-controlled — moves with the bid's stage actions" }),
+  // Stage and Decision change through bids.update, which enforces the stage / Go rules.
+  std('stageKey', 'Bid Stage', 'decision', 'select', { options: stageOptions, editable: 'bid', required: true }),
   std('nextActionNote', 'Next Action', 'decision', 'text', { readOnlyReason: FROM_FOLLOW_UP }),
   std('nextActionAssigneeEmail', 'Action Owner', 'decision', 'text', { readOnlyReason: FROM_FOLLOW_UP }),
   std('nextActionDueDate', 'Action Due', 'decision', 'date', { readOnlyReason: FROM_FOLLOW_UP }),
   std('attentionFlag', 'Attention', 'decision', 'select', { options: ATTENTION_OPTIONS, readOnlyReason: 'Calculated from the deadline and corrigenda' }),
-  std('decision', 'Decision', 'decision', 'select', { options: DECISION_OPTIONS, readOnlyReason: 'Workflow-controlled — Go / No-Go is decided in the bid' }),
+  std('decision', 'Decision', 'decision', 'select', { options: DECISION_OPTIONS, editable: 'bid', required: true }),
 
   std('nextMilestoneLabel', 'Next Milestone', 'dates', 'text', { readOnlyReason: "Comes from the bid's milestones — edit them in the bid" }),
   std('daysRemaining', 'Days Remaining', 'dates', 'number', { readOnlyReason: 'Calculated from the next milestone' }),
@@ -184,7 +189,7 @@ export interface EntityLookups { persons: ColumnOption[]; departments: ColumnOpt
 export const NO_LOOKUPS: EntityLookups = { persons: [], departments: [], states: [] }
 
 export function buildLookups(input: {
-  persons: { id: string; name: string }[]
+  persons: { id: string; name: string; officialEmail?: string }[]
   departments: { id: string; name: string; stateCode: number | null }[]
   states: { code: number; name: string }[]
 }): EntityLookups {
@@ -193,7 +198,7 @@ export function buildLookups(input: {
   const nameCount = new Map<string, number>()
   for (const d of input.departments) nameCount.set(d.name, (nameCount.get(d.name) ?? 0) + 1)
   return {
-    persons: input.persons.map((p) => ({ value: p.id, label: p.name })).sort((a, b) => a.label.localeCompare(b.label)),
+    persons: input.persons.map((p) => ({ value: p.id, label: p.name, email: p.officialEmail })).sort((a, b) => a.label.localeCompare(b.label)),
     departments: input.departments.map((d) => ({
       value: d.id,
       label: (nameCount.get(d.name) ?? 0) > 1 && d.stateCode !== null && stateName.has(d.stateCode) ? `${d.name} (${stateName.get(d.stateCode)})` : d.name,
@@ -203,7 +208,8 @@ export function buildLookups(input: {
 }
 
 /** The pick-list for a column: fixed options, or the live records for an entity type. */
-export function optionsOf(col: Pick<GridColumnMeta, 'type' | 'options'> | undefined, lookups: EntityLookups = NO_LOOKUPS): ColumnOption[] {
+export function optionsOf(col: Pick<GridColumnMeta, 'type' | 'options'> & { pick?: GridColumnMeta['pick'] } | undefined, lookups: EntityLookups = NO_LOOKUPS): ColumnOption[] {
+  if (col?.pick === 'personByEmail') return lookups.persons.filter((p) => p.email).map((p) => ({ value: p.email!, label: p.label, email: p.email }))
   switch (col?.type) {
     case 'person': return lookups.persons
     case 'department': return lookups.departments

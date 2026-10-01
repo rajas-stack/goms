@@ -40,9 +40,9 @@ describe('saved views', () => {
     await resetLocalData()
   })
 
-  it('shows the seven system views, never the two example views, and offers Create Saved View', async () => {
+  it('shows the system views (incl. Archived), never the two example views, and offers Create Saved View', async () => {
     renderWorkspace()
-    for (const n of ['All Bids', 'My Bids', 'Solutioning', 'Qualification', 'Due Soon', 'Overdue', 'Go Approved']) {
+    for (const n of ['All Bids', 'My Bids', 'Solutioning', 'Qualification', 'Due Soon', 'Overdue', 'Go Approved', 'Archived']) {
       expect(await screen.findByRole('button', { name: n })).toBeInTheDocument()
     }
     expect(screen.queryByText('Smart Transport Bids')).not.toBeInTheDocument()

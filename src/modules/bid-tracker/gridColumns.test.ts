@@ -47,7 +47,7 @@ describe('grid column registry — completeness', () => {
   })
 
   it('only plain opportunity attributes are inline-editable among the standard columns', () => {
-    expect(STANDARD_COLUMNS.filter((c) => c.editable).map((c) => c.id)).toEqual(['opportunityName', 'city', 'vertical'])
+    expect(STANDARD_COLUMNS.filter((c) => c.editable).map((c) => c.id)).toEqual(['opportunityName', 'tenderLink', 'city', 'vertical', 'ownerEmail', 'stageKey', 'decision'])
   })
 
   // The explicit editable matrix: no standard column is left unclassified.
@@ -58,10 +58,10 @@ describe('grid column registry — completeness', () => {
     }
   })
 
-  it('keeps ids, protected, workflow, ownership and derived columns read-only', () => {
+  it('keeps ids, protected deadline, derived and system columns read-only', () => {
     const readOnly = (id: string) => !STANDARD_COLUMNS.find((c) => c.id === id)!.editable
     for (const id of [
-      'opportunityId', 'bidCode', 'gemTenderId', 'tenderLink', 'submissionDate', 'stageKey', 'decision', 'ownerEmail',
+      'opportunityId', 'bidCode', 'gemTenderId', 'submissionDate',
       'solutionLeadEmail', 'departmentName', 'stateCode', 'nextActionNote', 'nextMilestoneLabel', 'daysRemaining',
       'documentCount', 'latestCorrigendumStatus', 'updatedAt', 'updatedBy', 'dataConfidence', 'attentionFlag', 'manage',
     ]) expect(readOnly(id), id).toBe(true)

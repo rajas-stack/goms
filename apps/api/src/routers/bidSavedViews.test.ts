@@ -12,7 +12,7 @@ describe('bidSavedViews router', () => {
     const list = await caller.bidSavedViews.list()
     const keys = list.map((v: any) => v.key ?? v.id)
     expect(keys).toEqual(expect.arrayContaining(['allBids', 'myBids', 'solutioning', 'qualification', 'dueSoon', 'overdue', 'goApproved']))
-    expect(list.filter((v: any) => v.isSystem)).toHaveLength(7)
+    expect(list.filter((v: any) => v.isSystem)).toHaveLength(8)
   })
 
   it('never seeds "Smart Transport Bids" or "High Value Deals > 20 Cr" — they do not exist until created', async () => {

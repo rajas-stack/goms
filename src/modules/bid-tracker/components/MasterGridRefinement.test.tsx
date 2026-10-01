@@ -94,14 +94,14 @@ describe('Master Grid refinement', () => {
       expect(screen.queryByTitle('Editable column')).not.toBeInTheDocument()
     })
 
-    it('clicking a cell while locked does not edit — it opens the bid', async () => {
-      const bid = await makeBid('Alpha')
-      const { container } = renderGrid()
+    it('no cell edits while locked; clicking a row does not open the bid, only its Opportunity ID does', async () => {
+      await makeBid('Alpha')
+      renderGrid()
       await screen.findByText('Alpha')
       const row = screen.getByTestId('bid-row')
       await userEvent.click(within(row).getAllByRole('cell')[4])
-      expect(container.querySelector('input[type=text]')).toBeNull()
-      void bid
+      expect(document.querySelector('input[type=text]')).toBeNull()
+      expect(within(row).getByRole('button', { name: /^Open opp_/ })).toBeInTheDocument()
     })
 
     it('unlocking makes editable cells editable and marks them; read-only ones stay read-only', async () => {
@@ -112,11 +112,11 @@ describe('Master Grid refinement', () => {
       await unlock()
       expect(lockSwitch()).toHaveAttribute('aria-pressed', 'true')
       expect(lockSwitch()).toHaveTextContent('Unlocked')
-      for (const header of ['Opportunity / Mission', 'City', 'Sector', 'Note']) {
+      for (const header of ['Opportunity / Mission', 'City', 'Sector', 'Note', 'Tender Link', 'Bid Owner', 'Bid Stage', 'Decision']) {
         expect(screen.getByRole('button', { name: `Edit ${header}` })).toBeInTheDocument()
       }
-      expect(screen.getAllByTitle('Editable column').length).toBe(4)
-      for (const header of ['Opportunity ID', 'Bid ID', 'Tender ID', 'Tender Link', 'Department / Client', 'State', 'Bid Owner', 'Bid Stage', 'Decision', 'Submission Deadline', 'Last Updated']) {
+      expect(screen.getAllByTitle('Editable column').length).toBe(8)
+      for (const header of ['Opportunity ID', 'Bid ID', 'Tender ID', 'Department / Client', 'State', 'Submission Deadline', 'Last Updated']) {
         expect(screen.queryByRole('button', { name: `Edit ${header}` })).not.toBeInTheDocument()
       }
     })
@@ -387,7 +387,7 @@ describe('Master Grid refinement', () => {
       await screen.findByText('Alpha')
       await unlock()
       await userEvent.click(screen.getAllByRole('button', { name: 'Edit Lead' })[0])
-      await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Lead' }), 'Asha Rao')
+      await userEvent.click(await screen.findByRole('option', { name: 'Asha Rao' }))
       await waitFor(async () => expect((await repository.listBidCustomValues(bid.id)).lead).toBe(asha.id))
       expect(await screen.findByText('Asha Rao')).toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'Sort by Lead' }))
@@ -405,10 +405,10 @@ describe('Master Grid refinement', () => {
       await screen.findByText('Alpha')
       await unlock()
       await userEvent.click(screen.getByRole('button', { name: 'Edit Nodal Dept' }))
-      await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Nodal Dept' }), 'Health Dept')
+      await userEvent.click(await screen.findByRole('option', { name: 'Health Dept' }))
       await waitFor(async () => expect((await repository.listBidCustomValues(bid.id)).nodal_dept).toBe(dept.id))
       await userEvent.click(await screen.findByRole('button', { name: 'Edit Where' }))
-      await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Where' }), state.name)
+      await userEvent.click(await screen.findByRole('option', { name: state.name }))
       await waitFor(async () => expect((await repository.listBidCustomValues(bid.id)).where).toBe(state.code))
       expect(await screen.findByText(state.name)).toBeInTheDocument()
     })
@@ -458,6 +458,78 @@ describe('Master Grid refinement', () => {
       await userEvent.type(boxes[boxes.length - 1], 'North')
       await userEvent.click(within(dialog).getByRole('button', { name: 'Add column' }))
       await waitFor(async () => expect((await repository.listBidCustomFields()).find((f) => f.name === 'Regions')).toMatchObject({ dataType: 'multiselect', options: ['West', 'North'] }))
+    })
+  })
+
+  describe('Notion-style editing of GOMS-linked cells', () => {
+    it('Bid Owner: pick a Sales Team member by searching; it records an ownership assignment', async () => {
+      const bid = await makeBid('Alpha')
+      const asha = await repository.createSalesPerson({ name: 'Asha Rao', officialEmail: 'asha@amnex.com', designation: 'RM', tierKey: 'rm' })
+      await repository.createSalesPerson({ name: 'Zed Khan', officialEmail: 'zed@amnex.com', designation: 'RM', tierKey: 'rm' })
+      renderGrid()
+      await screen.findByText('Alpha')
+      await unlock()
+      await userEvent.click(screen.getByRole('button', { name: 'Edit Bid Owner' }))
+      const list = await screen.findByRole('listbox', { name: 'Bid Owner' })
+      expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual(expect.arrayContaining(['Asha Rao', 'Zed Khan'])) // every saved sales person
+      await userEvent.type(screen.getByRole('textbox', { name: 'Search Bid Owner' }), 'zed')
+      expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual(['Zed Khan'])
+      await userEvent.clear(screen.getByRole('textbox', { name: 'Search Bid Owner' }))
+      await userEvent.click(await within(list).findByRole('option', { name: 'Asha Rao' }))
+      await waitFor(async () => {
+        const rows = await repository.listBidsForGrid()
+        expect(rows.find((r) => r.id === bid.id)?.ownerEmail).toBe('asha@amnex.com')
+      })
+      const history = await repository.listOwnershipAssignments()
+      expect(history.some((a) => a.entityId === bid.id && a.salesPersonId === asha.id)).toBe(true)
+      expect(await screen.findByText('asha@amnex.com')).toBeInTheDocument()
+    })
+
+    it('Bid Stage and Decision pick from their lists; a Go before Submitted is refused inline', async () => {
+      const bid = await makeBid('Alpha')
+      renderGrid()
+      await screen.findByText('Alpha')
+      await unlock()
+      await userEvent.click(screen.getByRole('button', { name: 'Edit Bid Stage' }))
+      await userEvent.click(await screen.findByRole('option', { name: 'Qualification' }))
+      await waitFor(async () => expect((await repository.getBid(bid.id))!.stageKey).toBe('qualification'))
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit Decision' }))
+      await userEvent.click(await screen.findByRole('option', { name: 'Go' }))
+      expect(await screen.findByText(/Cannot mark Go before the bid reaches Submitted/)).toBeInTheDocument()
+      expect((await repository.getBid(bid.id))!.decision).toBe('pending')
+    })
+
+    it('Tender Link edits as text', async () => {
+      const bid = await makeBid('Alpha')
+      renderGrid()
+      await screen.findByText('Alpha')
+      await unlock()
+      await userEvent.click(screen.getByRole('button', { name: 'Edit Tender Link' }))
+      await userEvent.type(screen.getByRole('textbox', { name: 'Tender Link' }), 'https://gem.gov.in/b/9{Enter}')
+      await waitFor(async () => expect((await repository.getBid(bid.id))!.tenderLink).toBe('https://gem.gov.in/b/9'))
+    })
+
+    it('Escape closes a pick-list without changing the cell', async () => {
+      const bid = await makeBid('Alpha')
+      renderGrid()
+      await screen.findByText('Alpha')
+      await unlock()
+      await userEvent.click(screen.getByRole('button', { name: 'Edit Bid Stage' }))
+      await screen.findByRole('listbox', { name: 'Bid Stage' })
+      await userEvent.keyboard('{Escape}')
+      await waitFor(() => expect(screen.queryByRole('listbox', { name: 'Bid Stage' })).not.toBeInTheDocument())
+      expect((await repository.getBid(bid.id))!.stageKey).toBe('solutioning')
+    })
+  })
+
+  describe('Archived view', () => {
+    it('Archived is a view on every sheet and lists archived bids', async () => {
+      const a = await makeBid('Alpha'); await makeBid('Beta')
+      await repository.archiveBid(a.id)
+      renderGrid({ filterRules: [{ field: 'status', operator: 'eq', value: 'archived' }] })
+      await screen.findByText('Alpha')
+      await waitFor(() => expect(rowNames()).toEqual(['Alpha']))
+      expect(screen.getByRole('button', { name: 'Unarchive' })).toBeInTheDocument()
     })
   })
 

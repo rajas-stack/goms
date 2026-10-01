@@ -175,9 +175,9 @@ describe('MasterGrid', () => {
       await unlock()
       await screen.findByText('Silver (removed)')
       await userEvent.click(screen.getByRole('button', { name: 'Edit Tier' }))
-      const select = screen.getByRole('combobox', { name: 'Tier' })
-      expect(within(select).getByRole('option', { name: 'Silver (removed option)' })).toBeInTheDocument()
-      await userEvent.selectOptions(select, 'Gold')
+      const list = await screen.findByRole('listbox', { name: 'Tier' })
+      expect(within(list).getByRole('option', { name: 'Silver (removed option)' })).toBeInTheDocument()
+      await userEvent.click(within(list).getByRole('option', { name: 'Gold' }))
       await waitFor(async () => expect((await repository.listBidCustomValues(bid.id)).tier).toBe('Gold'))
     })
 
@@ -209,7 +209,7 @@ describe('MasterGrid', () => {
       renderGrid()
       await unlock()
       await screen.findByText('Alpha')
-      for (const header of ['Tender ID', 'Tender Link', 'Submission Deadline', 'Bid Stage', 'Decision', 'Bid Owner', 'Department / Client', 'State', 'Next Action']) {
+      for (const header of ['Tender ID', 'Submission Deadline', 'Department / Client', 'State', 'Next Action', 'Opportunity ID', 'Bid ID']) {
         expect(screen.queryByRole('button', { name: `Edit ${header}` })).not.toBeInTheDocument()
       }
     })

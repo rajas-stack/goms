@@ -184,7 +184,7 @@ export function MasterGrid(props: MasterGridProps) {
   const { data: fetched, isLoading } = useBidsForGrid(appliedRules)
   const { data: customFields = [] } = useBidCustomFields()
   const lookups = useEntityLookups()
-  const { archive, unarchive } = useBidMutations()
+  const { archive, unarchive, update: updateBid } = useBidMutations()
   const { assign } = useOwnershipMutations()
   const { data: salesPersons = [] } = useSalesPersons()
   const setCustomValue = useSetBidCustomValue()
@@ -276,7 +276,15 @@ export function MasterGrid(props: MasterGridProps) {
     qc.setQueriesData<BidGridRow[]>({ queryKey: ['bidsForGrid'] }, (old) => old?.map((r) => (r.id === row.id ? patchRow(r) : r)))
     try {
       if (col.custom) await setCustomValue.mutateAsync({ bidId: row.id, fieldId: col.custom.id, value })
-      else await updateOpportunity.mutateAsync({ id: row.opportunityId, patch: { [col.id]: opportunityValue } })
+      else if (col.editable === 'owner') {
+        // Picking a person records a new ownership assignment from today (the history is kept).
+        const person = lookups.persons.find((p) => p.email === value)
+        if (!person) throw new Error('Choose a person from the Sales Team.')
+        await assign.mutateAsync({ entityType: 'bid', entityId: row.id, salesPersonId: person.value, startDate: new Date().toISOString().slice(0, 10) })
+      } else if (col.editable === 'bid') {
+        // Stage, Decision and Tender Link go through the bid's own update (its stage / Go / protected-value rules apply).
+        await updateBid.mutateAsync({ id: row.id, patch: { [col.id]: value } as { stageKey?: string; decision?: 'pending' | 'go' | 'no_go'; tenderLink?: string | null } })
+      } else await updateOpportunity.mutateAsync({ id: row.opportunityId, patch: { [col.id]: opportunityValue } })
     } catch (e) {
       for (const [key, data] of snapshot) qc.setQueryData(key, data)
       const message = e instanceof Error ? e.message : 'Could not save.'
@@ -324,6 +332,18 @@ export function MasterGrid(props: MasterGridProps) {
     const v = cellValue(row, col)
     const dash = <span className="text-muted">—</span>
     const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
+    if (col.id === 'opportunityId') {
+      // The only way into a bid's details: clicking its Opportunity ID. Every other cell is for editing.
+      return (
+        <button
+          type="button" title="Open details" aria-label={`Open ${String(v)}`}
+          onClick={(e) => { e.stopPropagation(); navigate(`/bid-tracker/bid/${row.id}`) }}
+          className="max-w-full truncate rounded px-0.5 text-left font-medium text-goms-navy underline decoration-goms-sky/70 underline-offset-2 hover:bg-goms-sky/[0.14] focus-visible:focus-ring"
+        >
+          {String(v)}
+        </button>
+      )
+    }
     if (col.id === 'manage') {
       return (
         <Button
@@ -339,6 +359,7 @@ export function MasterGrid(props: MasterGridProps) {
       return <Badge tone={ATTENTION_TONE[flag]}>{ATTENTION_OPTIONS.find((o) => o.value === flag)?.label ?? flag}</Badge>
     }
     if (col.id === 'tenderLink') {
+      if (!links && row.tenderLink) return row.tenderLink
       return row.tenderLink
         ? <a href={row.tenderLink} target="_blank" rel="noreferrer" className="text-goms-navy underline decoration-goms-sky underline-offset-2" onClick={stop}>Link</a>
         : dash
@@ -670,8 +691,7 @@ export function MasterGrid(props: MasterGridProps) {
               return (
                 <tr
                   key={row.id} data-testid="bid-row" style={{ height: ROW_HEIGHT }}
-                  className={cn('group/row cursor-pointer transition-colors', row.original.status === 'archived' && 'opacity-60')}
-                  onClick={() => navigate(`/bid-tracker/bid/${row.original.id}`)}
+                  className={cn('group/row transition-colors', row.original.status === 'archived' && 'opacity-60')}
                 >
                   <td
                     style={{ left: 0, height: ROW_HEIGHT }}
