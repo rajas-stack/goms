@@ -39,12 +39,19 @@ test-api:
   # pushes to main now skip it entirely. Non-main branches were already
   # excluded by the branch condition and still are (changes: is ANDed
   # with the if:, not a substitute for it).
+  #
+  # packages/domain/**/* added (2026-09-09): apps/api genuinely imports
+  # from @goms/domain at runtime (e.g. domains/salesRoster.ts's
+  # SALES_TIERS/tierRank) -- a change there could break the API even
+  # though it lives outside apps/api/, and was previously invisible to
+  # this filter.
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
         - apps/api/**/*
         - apps/api/migrations/**/*
         - apps/api/package.json
+        - packages/domain/**/*
         - package.json
         - package-lock.json
         - .gitlab-ci.yml
@@ -97,8 +104,33 @@ build-api:
       --context "${CI_PROJECT_DIR}"
       --dockerfile "${CI_PROJECT_DIR}/apps/api/Dockerfile"
       --destination "asia-south1-docker.pkg.dev/${GCP_PROJECT_ID_DEV}/goms/goms-api:${CI_COMMIT_SHA}"
+  # Previously ran on every push to main unconditionally -- the single
+  # biggest avoidable cost in this pipeline, since kaniko builds the full
+  # API image (npm ci + tsc) even for a frontend-only push that can't
+  # change apps/api's build output at all. Mirrors test-api's own
+  # changes: list immediately above (same reasoning, same paths,
+  # including the packages/domain/**/* addition) -- an image is only
+  # built when something that actually affects it changed.
+  #
+  # Caveat: deploy-dev's manual job deploys whatever image is tagged
+  # ${CI_COMMIT_SHA} for THIS pipeline. If build-api is skipped here
+  # (no backend-relevant change), that tag won't exist, so deploy-dev
+  # would fail if manually triggered from this specific pipeline. This is
+  # the same accepted tradeoff test-api's gating already made -- in
+  # practice, deploy-dev is triggered from a pipeline where backend code
+  # was just intentionally changed (per its own comment below: "trigger
+  # this from the pipeline view when a dev deploy is actually wanted"),
+  # so build-api ran for that pipeline too.
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - apps/api/**/*
+        - apps/api/migrations/**/*
+        - apps/api/package.json
+        - packages/domain/**/*
+        - package.json
+        - package-lock.json
+        - .gitlab-ci.yml
 
 deploy-dev:
   stage: deploy-dev
