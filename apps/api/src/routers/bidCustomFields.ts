@@ -208,12 +208,15 @@ export const bidCustomFieldsRouter = router({
    *  `has_held_value` is set on the first non-null write and never reset, so a
    *  column whose values were all cleared afterwards is still archive-only. */
   delete: protectedProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    // `withValues` = the person confirmed deleting the column AND every value it holds (audit keeps the record).
+    .input(z.object({ id: z.string().uuid(), withValues: z.boolean().optional() }))
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
       const current = await loadField(client, input.id, true)
-      const used = (await client.query('SELECT 1 FROM bid_custom_field_values WHERE field_id=$1 LIMIT 1', [input.id])).rows.length > 0
-      const blocked = () => new TRPCError({ code: 'CONFLICT', message: 'This column has values — archive it instead.' })
-      if (used || current.has_held_value) throw blocked()
+      const valueCount = (await client.query('SELECT count(*)::int AS n FROM bid_custom_field_values WHERE field_id=$1', [input.id])).rows[0].n as number
+      const used = valueCount > 0
+      const blocked = () => new TRPCError({ code: 'CONFLICT', message: 'This column has values — archive it instead, or delete it together with its values.' })
+      if ((used || current.has_held_value) && !input.withValues) throw blocked()
+      if (used) await client.query('DELETE FROM bid_custom_field_values WHERE field_id=$1', [input.id])
       try {
         await client.query('DELETE FROM bid_custom_fields WHERE id=$1', [input.id])
       } catch (e) {
@@ -221,7 +224,7 @@ export const bidCustomFieldsRouter = router({
         throw e
       }
       await writeAuditLog(client, {
-        entityType: 'bidCustomField', entityId: input.id, field: 'name', oldValue: current.name, newValue: '', reason: 'Never held a value',
+        entityType: 'bidCustomField', entityId: input.id, field: 'name', oldValue: current.name, newValue: '', reason: used ? `Deleted with ${valueCount} value${valueCount === 1 ? '' : 's'}` : input.withValues && current.has_held_value ? 'Deleted (its values had been cleared)' : 'Never held a value',
         action: 'custom_field_deleted', changedBy: ctx.user?.email,
       })
     })),

@@ -349,7 +349,7 @@ export function useBidCustomFieldMutations() {
   const reorder = useMutation({ mutationFn: (ids: string[]) => repository.reorderBidCustomFields(ids), onSuccess: invalidate })
   const archive = useMutation({ mutationFn: (id: string) => repository.archiveBidCustomField(id), onSuccess: invalidate })
   const unarchive = useMutation({ mutationFn: (id: string) => repository.unarchiveBidCustomField(id), onSuccess: invalidate })
-  const remove = useMutation({ mutationFn: (id: string) => repository.deleteBidCustomField(id), onSuccess: invalidate })
+  const remove = useMutation({ mutationFn: (a: { id: string; withValues?: boolean }) => repository.deleteBidCustomField(a.id, a.withValues), onSuccess: invalidate })
   return { create, update, reorder, archive, unarchive, remove }
 }
 /** Sets/clears one custom cell. The grid layers optimistic updates on top in

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { cn } from '@/lib/utils'
+import type { BidCustomField } from '@/lib/types'
 import { CUSTOM_GROUP, GRID_GROUPS, type GridColumnMeta } from '../gridColumns'
 
 const groupLabel = (id: string) => (id === CUSTOM_GROUP.id ? CUSTOM_GROUP.label : GRID_GROUPS.find((g) => g.id === id)?.label ?? id)
@@ -10,13 +11,16 @@ const groupLabel = (id: string) => (id === CUSTOM_GROUP.id ? CUSTOM_GROUP.label 
  *  (the same array saved views persist): position = display order, absence =
  *  hidden. This panel is the ONE place to move / hide / show a column — the
  *  header menu only links here ("Manage column…"). */
-export function ColumnsPanel({ all, visible, onChange, focusId }: {
+export function ColumnsPanel({ all, visible, onChange, focusId, onDeleteCustom }: {
   all: GridColumnMeta[]
   /** Visible columns, in display order. */
   visible: GridColumnMeta[]
   onChange: (orderedVisibleIds: string[]) => void
   /** The column whose header opened this panel: scrolled to and highlighted. */
   focusId?: string | null
+  /** Delete a custom column for good (the caller confirms). Default columns are built in, so
+   *  their Delete removes them from the grid instead — restorable under Hidden. */
+  onDeleteCustom?: (field: BidCustomField) => void
 }) {
   const focusRef = useRef<HTMLLIElement>(null)
   useEffect(() => { focusRef.current?.scrollIntoView?.({ block: 'nearest' }) }, [focusId])
@@ -61,6 +65,14 @@ export function ColumnsPanel({ all, visible, onChange, focusId }: {
                 variant="ghost" size="icon" aria-label={`Hide ${c.header}`} disabled={visible.length === 1}
                 title={visible.length === 1 ? 'At least one column must stay' : 'Hide from this view'} onClick={() => hide(c.id)}>
                 <Icon name="EyeOff" size={14} />
+              </Button>
+              <Button
+                variant="ghost" size="icon" aria-label={`Delete ${c.header}`}
+                disabled={!c.custom && visible.length === 1}
+                title={c.custom ? 'Delete this column and its values' : 'Remove from the grid (restore it anytime under Hidden)'}
+                onClick={() => (c.custom ? onDeleteCustom?.(c.custom) : hide(c.id))}
+              >
+                <Icon name="Trash2" size={14} />
               </Button>
             </li>
           ))}

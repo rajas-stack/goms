@@ -546,7 +546,7 @@ export interface Repository {
   archiveBidCustomField(id: string): Promise<BidCustomField>
   unarchiveBidCustomField(id: string): Promise<BidCustomField>
   /** Throws while any value row exists — archive instead. */
-  deleteBidCustomField(id: string): Promise<void>
+  deleteBidCustomField(id: string, withValues?: boolean): Promise<void>
   /** `null`/blank clears (removes the value row). */
   setBidCustomValue(
     bidId: string, fieldId: string, value: string | number | boolean | null,
@@ -2016,16 +2016,18 @@ class InMemoryRepository implements Repository {
     return field
   }
 
-  async deleteBidCustomField(id: string) {
+  async deleteBidCustomField(id: string, withValues = false) {
     const field = this.requireCustomField(id)
-    // Never-held-a-value rule: clearing a value removes its row but not the flag.
-    if (field.hasHeldValue || this.data.bidCustomFieldValues.some((v) => v.fieldId === id)) {
-      throw new Error('This column has values — archive it instead.')
+    const valueCount = this.data.bidCustomFieldValues.filter((v) => v.fieldId === id).length
+    // Without the explicit `withValues` confirmation a column that ever held a value is archive-only.
+    if ((field.hasHeldValue || valueCount > 0) && !withValues) {
+      throw new Error('This column has values — archive it instead, or delete it together with its values.')
     }
+    this.data.bidCustomFieldValues = this.data.bidCustomFieldValues.filter((v) => v.fieldId !== id)
     this.data.bidCustomFields = this.data.bidCustomFields.filter((f) => f.id !== id)
     this.auditCustom({
       entityType: 'bidCustomField', entityId: id, field: 'name', oldValue: field.name, newValue: '',
-      reason: 'Never held a value', action: 'custom_field_deleted',
+      reason: valueCount > 0 ? `Deleted with ${valueCount} value${valueCount === 1 ? '' : 's'}` : withValues && field.hasHeldValue ? 'Deleted (its values had been cleared)' : 'Never held a value', action: 'custom_field_deleted',
     })
   }
 

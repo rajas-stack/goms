@@ -60,12 +60,12 @@ describe('Master Grid refinement', () => {
       expect(at(/^Filters/)).toBeGreaterThanOrEqual(0)
       expect(at(/Add column/)).toBeGreaterThan(at(/^Filters/))
       expect(at(/Master grid editing/)).toBeGreaterThan(at(/Add column/))
-      expect(at(/^Columns/)).toBeGreaterThan(at(/Master grid editing/))
-      expect(at(/Create Bid/)).toBeGreaterThan(at(/^Columns/))
-      expect(labels.filter((l) => /^Columns/.test(l ?? ''))).toHaveLength(1)
+      expect(at(/^Manage columns/)).toBeGreaterThan(at(/Master grid editing/))
+      expect(at(/Create Bid/)).toBeGreaterThan(at(/^Manage columns/))
+      expect(labels.filter((l) => /^Manage columns/.test(l ?? ''))).toHaveLength(1)
       // Columns sits in the right-hand cluster with Create Bid.
       const cluster = screen.getByRole('button', { name: /Create Bid/ }).parentElement!
-      expect(within(cluster).getByRole('button', { name: /^Columns/ })).toBeInTheDocument()
+      expect(within(cluster).getByRole('button', { name: /^Manage columns/ })).toBeInTheDocument()
       expect(within(cluster).getByRole('button', { name: /Master grid editing/ })).toBeInTheDocument()
     })
 
@@ -472,7 +472,7 @@ describe('Master Grid refinement', () => {
       await userEvent.type(within(rule).getByRole('textbox', { name: 'Value' }), value)
     }
 
-    it('"Match any" switches the top-level connective to OR', async () => {
+    it('the And/Or dropdown switches the top-level connective to OR', async () => {
       await seed()
       renderGrid()
       await screen.findByText('Alpha')
@@ -480,7 +480,7 @@ describe('Master Grid refinement', () => {
       await addFilter(); await setRule(screen.getAllByTestId('filter-rule')[0], 'Opportunity / Mission', 'equals', 'Alpha')
       await addFilter(); await setRule(screen.getAllByTestId('filter-rule')[1], 'Opportunity / Mission', 'equals', 'Gamma')
       await waitFor(() => expect(rowNames()).toEqual([]))  // all of: nothing is both
-      await userEvent.click(within(screen.getByRole('group', { name: 'Match conditions' })).getByRole('button', { name: 'Any' }))
+      await userEvent.selectOptions(screen.getAllByRole('combobox', { name: 'Connective' })[0], 'Or')
       await waitFor(() => expect(rowNames().sort()).toEqual(['Alpha', 'Gamma']))
       expect(screen.getByTestId('active-filters')).toHaveTextContent(/Alpha.*or.*Gamma/)
     })
@@ -505,7 +505,7 @@ describe('Master Grid refinement', () => {
       expect(bar).toHaveTextContent(/contains a.*and/)
     })
 
-    it('flipping a group to "all" ANDs its conditions; Ungroup folds them back into the list', async () => {
+    it('flipping the group dropdown to And ANDs its conditions; Ungroup folds them back into the list', async () => {
       await seed()
       renderGrid()
       await screen.findByText('Alpha')
@@ -520,7 +520,7 @@ describe('Master Grid refinement', () => {
       await setRule(rootRule, 'Opportunity / Mission', 'contains', 'l')
       // Default for a group in an "all" list is "any": a-or-p, and l.
       await waitFor(() => expect(rowNames().sort()).toEqual(['Alpha', 'Delta']))
-      await userEvent.click(within(within(group).getByRole('group', { name: 'Group: match conditions' })).getByRole('button', { name: 'All' }))
+      await userEvent.selectOptions(within(group).getAllByRole('combobox', { name: 'Connective' }).slice(-1)[0], 'And')
       await waitFor(() => expect(rowNames()).toEqual(['Alpha'])) // l, a and p
       await userEvent.click(within(group).getByRole('button', { name: 'Ungroup' }))
       expect(screen.queryByTestId('filter-group')).not.toBeInTheDocument()

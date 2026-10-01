@@ -69,7 +69,7 @@ describe('saved views', () => {
     await screen.findByText('Alpha')
 
     // Build a custom-column filter in the grid, and hide a column.
-    await userEvent.click(screen.getByRole('button', { name: /Columns/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Manage columns/ }))
     await userEvent.click(await screen.findByRole('button', { name: 'Hide City' }))
     await userEvent.click(screen.getByRole('button', { name: /Create Saved View/ }))
     const dialog = await screen.findByRole('dialog')
@@ -97,7 +97,7 @@ describe('saved views', () => {
     await screen.findByText('Alpha')
 
     // System view: hiding a column is session-only.
-    await userEvent.click(screen.getByRole('button', { name: /Columns/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Manage columns/ }))
     await userEvent.click(await screen.findByRole('button', { name: 'Hide City' }))
     await new Promise((r) => setTimeout(r, 900))
     expect((await repository.listBidSavedViews()).filter((v) => v.isSystem).every((v) => v.visibleColumns.length === 0)).toBe(true)
@@ -108,7 +108,7 @@ describe('saved views', () => {
     // User view: switching restores its own ordered columns; changing them persists.
     await userEvent.click(await screen.findByRole('button', { name: 'Mine' }))
     await waitFor(() => expect(leafHeaders()).toEqual(['Opportunity / Mission', 'Bid ID']))
-    await userEvent.click(screen.getByRole('button', { name: /Columns/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Manage columns/ }))
     await userEvent.click(await screen.findByRole('button', { name: 'Move Bid ID up' }))
     await waitFor(async () => {
       expect((await repository.listBidSavedViews()).find((v) => v.id === view.id)!.visibleColumns).toEqual(['bidCode', 'opportunityName'])

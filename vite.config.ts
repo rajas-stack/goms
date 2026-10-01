@@ -28,6 +28,6 @@ export default defineConfig({
   // up watches across all of it is what actually made every cold `npm run
   // dev` start hang for minutes before the first page could render.
   server: {
-    watch: { ignored: ['**/android/**', '**/ios/**'] },
+    watch: { ignored: ['**/android/**', '**/ios/**', '**/.worktrees/**', '**/.claude/**', '**/dist/**', '**/test-results/**', '**/playwright-report/**'] },
   },
 })

@@ -322,8 +322,8 @@ export class RemoteRepository implements Partial<Repository> {
     this.client.bidCustomFields.archive.mutate({ id }) as unknown as Promise<BidCustomField>
   unarchiveBidCustomField = (id: string): Promise<BidCustomField> =>
     this.client.bidCustomFields.unarchive.mutate({ id }) as unknown as Promise<BidCustomField>
-  deleteBidCustomField = (id: string): Promise<void> =>
-    this.client.bidCustomFields.delete.mutate({ id }) as unknown as Promise<void>
+  deleteBidCustomField = (id: string, withValues?: boolean): Promise<void> =>
+    this.client.bidCustomFields.delete.mutate({ id, withValues }) as unknown as Promise<void>
   setBidCustomValue = (
     bidId: string, fieldId: string, value: string | number | boolean | null,
   ): Promise<{ bidId: string; fieldId: string; key: string; value: CustomValue }> =>

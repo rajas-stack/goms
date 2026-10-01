@@ -45,15 +45,13 @@ export function FilterBuilder({ columns, rules, onChange, lookups = NO_LOOKUPS }
   return (
     <div className="flex w-[36rem] max-w-[calc(100vw-2rem)] flex-col gap-2 p-3" data-testid="filter-builder">
       {rules.length === 0 && <p className="text-[13px] text-muted">No filters. Add one to narrow the grid.</p>}
-      {root.items.length > 1 && (
-        <MatchSwitch label="Match" logic={root.logic} onChange={(logic) => commit({ ...root, logic })} />
-      )}
       {root.items.map((node, i) => {
-        const prefix = i === 0 ? 'Where' : LOGIC_WORD[root.logic]
+        const prefix = i === 0 ? 'Where' : ''
+        const connective = i === 0 ? undefined : { logic: root.logic, onChange: (logic: Logic) => commit({ ...root, logic }) }
         if (isFilterGroup(node)) {
           return (
             <GroupBox
-              key={i} group={node} prefix={prefix} columns={columns} byId={byId} lookups={lookups}
+              key={i} group={node} prefix={prefix} connective={connective} columns={columns} byId={byId} lookups={lookups}
               onChange={(g) => setItem(i, g)}
               onUngroup={() => commit({ ...root, items: root.items.flatMap((n, k) => (k === i ? node.rules : [n])) })}
             />
@@ -61,7 +59,7 @@ export function FilterBuilder({ columns, rules, onChange, lookups = NO_LOOKUPS }
         }
         return (
           <RuleRow
-            key={i} rule={node} prefix={prefix} columns={columns} byId={byId} lookups={lookups}
+            key={i} rule={node} prefix={prefix} connective={connective} columns={columns} byId={byId} lookups={lookups}
             onChange={(r) => setItem(i, r)} onRemove={() => setItem(i, null)}
           />
         )
@@ -79,31 +77,24 @@ export function FilterBuilder({ columns, rules, onChange, lookups = NO_LOOKUPS }
   )
 }
 
-function MatchSwitch({ label, logic, onChange }: { label: string; logic: Logic; onChange: (logic: Logic) => void }) {
+/** The "And / Or" that joins a row to the one above it. Rows in the same list share one
+ *  connective, so changing it re-joins the whole list. */
+function Connective({ logic, onChange }: { logic: Logic; onChange: (logic: Logic) => void }) {
   return (
-    <div className="flex items-center gap-2 text-[12px] text-muted">
-      <span className="font-semibold uppercase tracking-wide">{label}</span>
-      <div role="group" aria-label={`${label} conditions`} className="inline-flex overflow-hidden rounded-lg border border-line">
-        {(['and', 'or'] as const).map((l) => (
-          <button
-            key={l} type="button" aria-pressed={logic === l} onClick={() => onChange(l)}
-            className={cn(
-              'px-2.5 py-1 text-[12px] font-medium focus-visible:focus-ring',
-              logic === l ? 'bg-goms-navy text-paper' : 'bg-white text-ink hover:bg-goms-sky/[0.12]',
-            )}
-          >
-            {l === 'and' ? 'All' : 'Any'}
-          </button>
-        ))}
-      </div>
-      <span>of these conditions</span>
-    </div>
+    <select
+      aria-label="Connective" value={logic} onChange={(e) => onChange(e.target.value as Logic)}
+      className="h-7 w-[3.75rem] shrink-0 rounded-md border border-line bg-white px-1 text-[12px] font-semibold uppercase tracking-wide text-goms-navy focus-visible:focus-ring"
+    >
+      <option value="and">{LOGIC_WORD.and}</option>
+      <option value="or">{LOGIC_WORD.or}</option>
+    </select>
   )
 }
 
-function GroupBox({ group, prefix, columns, byId, lookups, onChange, onUngroup }: {
+function GroupBox({ group, prefix, connective, columns, byId, lookups, onChange, onUngroup }: {
   group: FilterGroup
   prefix: string
+  connective?: { logic: Logic; onChange: (logic: Logic) => void }
   columns: GridColumnMeta[]
   byId: Map<string, GridColumnMeta>
   lookups: EntityLookups
@@ -123,10 +114,12 @@ function GroupBox({ group, prefix, columns, byId, lookups, onChange, onUngroup }
   return (
     <div className="flex flex-col gap-2" data-testid="filter-group">
       <div className="flex items-start gap-2">
-        <span className="w-11 shrink-0 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">{prefix}</span>
+        {connective
+          ? <span className="pt-0.5"><Connective logic={connective.logic} onChange={connective.onChange} /></span>
+          : <span className="w-11 shrink-0 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted">{prefix}</span>}
         <div className="flex min-w-0 flex-1 flex-col gap-2 rounded-lg border border-goms-sky/60 bg-goms-sky/[0.07] p-2">
           <div className="flex items-center justify-between gap-2">
-            <MatchSwitch label="Group: match" logic={group.logic} onChange={(logic) => onChange({ ...group, logic })} />
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Group</span>
             <div className="flex items-center">
               <Button variant="ghost" size="sm" className="h-7 px-2" onClick={onUngroup}>Ungroup</Button>
               <Button variant="ghost" size="icon" aria-label="Remove group" onClick={() => onChange(null)}><Icon name="X" size={14} /></Button>
@@ -134,7 +127,7 @@ function GroupBox({ group, prefix, columns, byId, lookups, onChange, onUngroup }
           </div>
           {rows.map((rule, i) => (
             <RuleRow
-              key={i} rule={rule} prefix={i === 0 ? '' : LOGIC_WORD[group.logic]} columns={columns} byId={byId} lookups={lookups}
+              key={i} rule={rule} prefix="" connective={i === 0 ? undefined : { logic: group.logic, onChange: (logic) => onChange({ ...group, logic }) }} columns={columns} byId={byId} lookups={lookups}
               onChange={(r) => setRule(i, r)} onRemove={() => setRule(i, null)}
             />
           ))}
@@ -147,9 +140,10 @@ function GroupBox({ group, prefix, columns, byId, lookups, onChange, onUngroup }
   )
 }
 
-function RuleRow({ rule, prefix, columns, byId, lookups, onChange, onRemove }: {
+function RuleRow({ rule, prefix, connective, columns, byId, lookups, onChange, onRemove }: {
   rule: TypedFilterRule
   prefix: string
+  connective?: { logic: Logic; onChange: (logic: Logic) => void }
   columns: GridColumnMeta[]
   byId: Map<string, GridColumnMeta>
   lookups: EntityLookups
@@ -176,7 +170,9 @@ function RuleRow({ rule, prefix, columns, byId, lookups, onChange, onRemove }: {
 
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="filter-rule">
-      <span className="w-11 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted">{prefix}</span>
+      {connective
+        ? <Connective logic={connective.logic} onChange={connective.onChange} />
+        : <span className="w-11 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted">{prefix}</span>}
       <select aria-label="Field" className={control} value={rule.field} onChange={(e) => changeField(e.target.value)}>
         {!col && <option value={rule.field}>{rule.field} (unavailable)</option>}
         <optgroup label="Columns">

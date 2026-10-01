@@ -5,6 +5,7 @@ import { Dialog } from '@/components/ui/Dialog'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { useBidCustomFieldMutations } from '@/lib/api'
 import type { BidCustomField } from '@/lib/types'
+import { useEntityLookups } from '../useEntityLookups'
 import { OptionsEditor } from './OptionsEditor'
 
 /** Grouped for the picker: basics first, then structured types, then the types
@@ -39,6 +40,11 @@ export function AddCustomColumnDialog({ open, onClose, onCreated }: {
   const [options, setOptions] = useState<string[]>(['', ''])
   const [error, setError] = useState<string | null>(null)
   const { create } = useBidCustomFieldMutations()
+  const lookups = useEntityLookups()
+  // What the cell pick-list will offer, straight from the saved Account Mapping / Sales Team records.
+  const available = dataType === 'person' ? { n: lookups.persons.length, noun: 'sales people', where: 'the Sales Team' }
+    : dataType === 'department' ? { n: lookups.departments.length, noun: 'departments', where: 'Account Mapping' }
+    : dataType === 'state' ? { n: lookups.states.length, noun: 'states', where: 'Account Mapping' } : null
 
   useEffect(() => {
     if (open) { setName(''); setDataType('text'); setOptions(['', '']); setError(null) }
@@ -81,6 +87,13 @@ export function AddCustomColumnDialog({ open, onClose, onCreated }: {
             ))}
           </Select>
         </Field>
+        {available && (
+          <p className="-mt-2 text-[12.5px] text-muted" data-testid="linked-count">
+            {available.n > 0
+              ? `${available.n} ${available.noun} already saved in ${available.where} will be offered in this column.`
+              : `No ${available.noun} are saved in ${available.where} yet — add them there and they will appear here.`}
+          </p>
+        )}
         {hasOptions(dataType) && (
           <Field label="Options" required hint="Blank and duplicate options are dropped.">
             <OptionsEditor value={options} onChange={setOptions} />

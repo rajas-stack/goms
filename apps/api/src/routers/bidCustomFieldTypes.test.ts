@@ -172,6 +172,18 @@ describe('custom column types, grouped filters and inline-edit history', () => {
     expect(await caller().auditLogs.list({ entityType: 'bid' })).toEqual([])
   })
 
+  it('deleting a column that holds values needs withValues, then removes the values and logs it', async () => {
+    const { bidId } = await newBid('Alpha')
+    const f = await caller().bidCustomFields.create({ name: 'Note', dataType: 'text' })
+    await caller().bidCustomFields.setValue({ bidId, fieldId: f.id, value: 'x' })
+    await expect(caller().bidCustomFields.delete({ id: f.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+    await caller().bidCustomFields.delete({ id: f.id, withValues: true })
+    expect(await caller().bidCustomFields.list({ includeArchived: true })).toEqual([])
+    expect((await pool.query('SELECT 1 FROM bid_custom_field_values')).rows).toEqual([])
+    const log = await caller().auditLogs.list({ entityType: 'bidCustomField' })
+    expect(log.find((l: any) => l.action === 'custom_field_deleted')?.reason).toBe('Deleted with 1 value')
+  })
+
   describe('bulk import resolves names to references', () => {
     it('maps names / emails to ids, errors on unknown or ambiguous names, splits multi-selects', async () => {
       const personId = await salesPerson('Asha Rao', 'asha3@amnex.com')

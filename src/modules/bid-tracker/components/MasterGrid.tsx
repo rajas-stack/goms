@@ -45,16 +45,16 @@ const ATTENTION_TONE: Record<BidGridRow['attentionFlag'], BadgeTone> = {
 }
 const rightAligned = (col: GridColumnMeta) => col.type === 'number' || col.type === 'currency'
 
-const ROW_HEIGHT = 32
+const ROW_HEIGHT = 36
 const SELECT_COL_WIDTH = 40
 // Spreadsheet surfaces. While the grid is UNLOCKED, editable cells are white and
 // read-only cells a cool grey, so "can I type here?" is answered before the
 // pointer gets there; while LOCKED every cell is the plain white surface (there
 // is nothing to type into). Frozen cells need solid fills (they sit over
 // scrolling content), hence explicit colours.
-const EDITABLE_BG = 'bg-white group-hover/row:bg-[#EEF6FC]'
-const READONLY_BG = 'bg-[#F5F7FA] group-hover/row:bg-[#E9F2FA]'
-const SELECTED_BG = 'bg-[#DCEEFA]'
+const EDITABLE_BG = 'bg-white group-hover/row:bg-[#F2F8FD]'
+const READONLY_BG = 'bg-[#FAFBFC] group-hover/row:bg-[#F2F8FD]'
+const SELECTED_BG = 'bg-[#E4F1FB]'
 const FROZEN_SHADOW = '3px 0 5px -2px rgba(11,43,73,0.28)'
 /** Frozen columns may take at most this share of the visible width, so the
  *  scrolling part of the sheet never disappears (matters most on a phone). */
@@ -72,6 +72,14 @@ const saveFrozen = (ids: string[]) => {
 }
 
 const helper = createColumnHelper<BidGridRow>()
+
+/** Status-like standard columns read as coloured pills, not plain text. */
+const STATUS_BADGE: Record<string, Record<string, BadgeTone>> = {
+  stageKey: { solutioning: 'gray', qualification: 'blue', preBidQueries: 'purple', commercialProposal: 'amber', submitted: 'indigo', goApproved: 'emerald', dropped: 'crimson' },
+  decision: { pending: 'gray', go: 'emerald', no_go: 'crimson' },
+  dataConfidence: { verified: 'emerald', needs_review: 'amber' },
+  latestCorrigendumStatus: { pending_review: 'amber', reviewed: 'emerald' },
+}
 
 /** A web address without its scheme and trailing slash, for a narrow cell. */
 const shortUrl = (url: string) => url.replace(/^https?:\/\//i, '').replace(/\/$/, '')
@@ -333,6 +341,11 @@ export function MasterGrid(props: MasterGridProps) {
         ? <a href={row.tenderLink} target="_blank" rel="noreferrer" className="text-goms-navy underline decoration-goms-sky underline-offset-2" onClick={stop}>Link</a>
         : dash
     }
+    const tones = STATUS_BADGE[col.id]
+    if (tones && !isEmptyCell(v)) {
+      const label = col.options?.find((o) => o.value === v)?.label ?? String(v)
+      return <Badge tone={tones[String(v)] ?? 'gray'}>{label}</Badge>
+    }
     if (col.id === 'updatedAt' && typeof v === 'string') return <span className="tabular-nums">{v.slice(0, 16).replace('T', ' ')}</span>
     if (col.id === 'decision') return <span className="capitalize">{String(v).replace('_', ' ')}</span>
     if (isEmptyCell(v)) return dash
@@ -506,7 +519,7 @@ export function MasterGrid(props: MasterGridProps) {
             unlockedLabel="Master grid editing unlocked — tap to lock"
           />
           <ToolbarPopover
-            label="Columns" icon="List" open={columnsOpen} align="end"
+            label="Manage columns" icon="List" open={columnsOpen} align="end"
             onOpenChange={(open) => { setColumnsOpen(open); if (!open) setManageColumnId(null) }}
           >
             <ManageColumnsPanel all={allColumns} visible={visible} onVisibleChange={setVisibleIds} focusId={manageColumnId} />
@@ -527,7 +540,7 @@ export function MasterGrid(props: MasterGridProps) {
 
       {/* One scroll element serves vertical virtualization AND horizontal scroll —
           a nested second scroller would desync the virtualizer's offsets. */}
-      <div ref={parentRef} className="min-h-0 flex-1 overflow-auto overscroll-contain scrollbar-thin" data-testid="grid-scroller">
+      <div ref={parentRef} className="mx-3 mb-3 mt-2 min-h-0 flex-1 overflow-auto overscroll-contain scrollbar-thin rounded-xl border border-line bg-white shadow-sm" data-testid="grid-scroller">
         <table className="border-separate border-spacing-0 text-[12.5px] text-ink" style={{ width: tableWidth, tableLayout: 'fixed' }}>
           <colgroup>
             <col style={{ width: SELECT_COL_WIDTH }} />
@@ -537,7 +550,7 @@ export function MasterGrid(props: MasterGridProps) {
             <tr>
               <th
                 scope="col" rowSpan={2} style={{ left: 0 }}
-                className="sticky z-10 border-b-2 border-r border-line border-b-goms-navy/25 border-t-2 border-t-goms-sky bg-[#E4ECF4] px-0 text-center"
+                className="sticky z-10 border-b border-line bg-[#F4F7FA] px-0 text-center"
               >
                 <div className="flex justify-center">
                   <Checkbox
@@ -551,7 +564,7 @@ export function MasterGrid(props: MasterGridProps) {
                   key={i} colSpan={run.span} scope="colgroup"
                   style={run.frozen ? { left: run.left } : undefined}
                   className={cn(
-                    'h-6 overflow-hidden whitespace-nowrap border-r border-t-2 border-goms-navy/[0.15] border-t-goms-sky bg-[#E4ECF4] px-2 text-left text-[11px] font-semibold tracking-wide text-goms-navy',
+                    'h-6 overflow-hidden whitespace-nowrap border-l border-line first:border-l-0 bg-[#F4F7FA] px-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.08em] text-goms-navy/70',
                     run.frozen && 'sticky z-10',
                   )}
                 >
@@ -588,8 +601,8 @@ export function MasterGrid(props: MasterGridProps) {
                       onDrop={(e) => { e.preventDefault(); if (dragId) dropColumn(dragId, meta.id); setDragId(null); setDragOverId(null) }}
                       onDragEnd={() => { setDragId(null); setDragOverId(null) }}
                       className={cn(
-                        'group/th h-8 border-b-2 border-r border-line border-b-goms-navy/25 pl-2 pr-1 text-left transition-colors duration-700',
-                        sorted ? 'bg-[#D6EAF8]' : 'bg-[#F7FAFC]',
+                        'group/th h-9 border-b border-line pl-3 pr-1 text-left transition-colors duration-700',
+                        sorted ? 'bg-[#EAF4FC]' : 'bg-white',
                         flashId === meta.id && 'bg-goms-green/25',
                         isFrozen && 'sticky z-10',
                         frozen.lastId === meta.id && 'border-r-2 border-r-goms-navy/25',
@@ -601,7 +614,7 @@ export function MasterGrid(props: MasterGridProps) {
                           type="button" disabled={!h.column.getCanSort()}
                           onClick={h.column.getToggleSortingHandler()}
                           className={cn(
-                            'flex min-w-0 flex-1 items-center gap-1 text-left text-[12px] font-semibold text-goms-navy',
+                            'flex min-w-0 flex-1 items-center gap-1 text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600',
                             h.column.getCanSort() ? 'cursor-pointer' : 'cursor-default',
                           )}
                           aria-label={h.column.getCanSort() ? `Sort by ${meta.header}` : meta.header}
@@ -626,7 +639,6 @@ export function MasterGrid(props: MasterGridProps) {
                           canSort={h.column.getCanSort()}
                           onSort={(dir) => (dir ? h.column.toggleSorting(dir === 'desc', false) : h.column.clearSorting())}
                           onFilter={meta.type !== null ? () => addRule(meta.id) : null}
-                          onManage={() => { setManageColumnId(meta.id); setColumnsOpen(true) }}
                           frozen={isFrozen} freezeBlockedReason={freezeBlockedReason(meta)}
                           onToggleFreeze={() => toggleFreeze(meta.id)}
                         />
@@ -656,12 +668,12 @@ export function MasterGrid(props: MasterGridProps) {
               return (
                 <tr
                   key={row.id} data-testid="bid-row" style={{ height: ROW_HEIGHT }}
-                  className={cn('group/row cursor-pointer', row.original.status === 'archived' && 'opacity-60')}
+                  className={cn('group/row cursor-pointer transition-colors', row.original.status === 'archived' && 'opacity-60')}
                   onClick={() => navigate(`/bid-tracker/bid/${row.original.id}`)}
                 >
                   <td
                     style={{ left: 0, height: ROW_HEIGHT }}
-                    className={cn('sticky z-10 border-b border-r border-line p-0 text-center', isSelected ? SELECTED_BG : READONLY_BG)}
+                    className={cn('sticky z-10 border-b border-line/70 p-0 text-center', isSelected ? SELECTED_BG : READONLY_BG)}
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="flex justify-center">
@@ -681,7 +693,7 @@ export function MasterGrid(props: MasterGridProps) {
                         }}
                         title={unlocked && !meta.editable ? meta.readOnlyReason : undefined}
                         className={cn(
-                          'relative overflow-hidden whitespace-nowrap border-b border-r border-line p-0 transition-colors duration-700',
+                          'relative overflow-hidden whitespace-nowrap border-b border-line/70 p-0 transition-colors duration-150',
                           cellBg(meta),
                           isSelected && SELECTED_BG,
                           rightAligned(meta) && 'text-right',
@@ -698,7 +710,7 @@ export function MasterGrid(props: MasterGridProps) {
                             onCommit={(value) => commitCell(row.original, meta, value)}
                           />
                         ) : (
-                          <div className={cn('flex h-[31px] items-center px-2', rightAligned(meta) && 'justify-end')}>
+                          <div className={cn('flex h-[35px] items-center px-3', rightAligned(meta) && 'justify-end')}>
                             <span className="min-w-0 truncate">{display}</span>
                           </div>
                         )}

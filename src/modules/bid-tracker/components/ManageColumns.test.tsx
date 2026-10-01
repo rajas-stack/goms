@@ -23,7 +23,7 @@ function renderGrid(props: MasterGridProps = {}) {
 }
 const leafHeaders = () => Array.from(document.querySelectorAll('thead tr:nth-child(2) th')).map((th) => th.textContent)
 const groupHeaders = () => Array.from(document.querySelectorAll('th[scope=colgroup]')).map((th) => th.textContent)
-const openColumns = async () => userEvent.click(screen.getByRole('button', { name: /^Columns/ }))
+const openColumns = async () => userEvent.click(screen.getByRole('button', { name: /^Manage columns/ }))
 const customRow = (name: string) => screen.getAllByTestId('custom-column-row').find((r) => r.textContent?.includes(name))!
 
 async function addColumnViaDialog(name: string, type?: string, options?: string[]) {
@@ -172,22 +172,57 @@ describe('custom column management', () => {
     expect(await screen.findByRole('button', { name: 'Sort by Score' })).toBeInTheDocument()
   })
 
-  it('offers Delete only for a column that has never held a value — not after a value was set and cleared', async () => {
+  it('Delete is offered for every custom column; one holding values asks for a stronger confirmation and removes them too', async () => {
     const bid = await makeBid()
     const used = await repository.createBidCustomField({ name: 'Used', dataType: 'text' })
     await repository.createBidCustomField({ name: 'Fresh', dataType: 'text' })
     await repository.setBidCustomValue(bid.id, used.id, 'x')
-    await repository.setBidCustomValue(bid.id, used.id, null) // cleared, but it HAS held a value
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderGrid()
+    await screen.findByRole('button', { name: 'Sort by Fresh' })
+    await openColumns()
+    await userEvent.click(within(customRow('Fresh')).getByRole('button', { name: 'Delete Fresh' }))
+    await waitFor(async () => expect((await repository.listBidCustomFields(true)).map((f) => f.name)).toEqual(['Used']))
+    expect(confirm.mock.calls[0][0]).toMatch(/nothing is lost/)
+    await userEvent.click(within(customRow('Used')).getByRole('button', { name: 'Delete Used' }))
+    expect(confirm.mock.calls[1][0]).toMatch(/Every value in it is deleted too/)
+    await waitFor(async () => expect(await repository.listBidCustomFields(true)).toEqual([]))
+    expect(await repository.listBidCustomValues(bid.id)).toEqual({})
+    const log = await repository.listAuditLogs({ entityType: 'bidCustomField' })
+    expect(log.find((l) => l.action === 'custom_field_deleted' && l.oldValue === 'Used')?.reason).toBe('Deleted with 1 value')
+  })
+
+  it('cancelling the confirmation deletes nothing, and an archived column can be deleted too', async () => {
+    const bid = await makeBid()
+    const used = await repository.createBidCustomField({ name: 'Used', dataType: 'text' })
+    await repository.setBidCustomValue(bid.id, used.id, 'x')
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderGrid()
+    await screen.findByRole('button', { name: 'Sort by Used' })
+    await openColumns()
+    await userEvent.click(within(customRow('Used')).getByRole('button', { name: 'Delete Used' }))
+    expect((await repository.listBidCustomFields(true)).length).toBe(1)
+    confirm.mockReturnValue(true)
+    await userEvent.click(within(customRow('Used')).getByRole('button', { name: 'Archive Used' }))
+    const archivedRow = await screen.findByTestId('archived-column-row')
+    await userEvent.click(within(archivedRow).getByRole('button', { name: 'Delete Used' }))
+    await waitFor(async () => expect(await repository.listBidCustomFields(true)).toEqual([]))
+  })
+
+  it('every column in the Shown list has Delete: default ones leave the grid (restorable), custom ones are deleted', async () => {
+    await makeBid()
+    await repository.createBidCustomField({ name: 'Fresh', dataType: 'text' })
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderGrid()
     await screen.findByRole('button', { name: 'Sort by Fresh' })
     await openColumns()
-    expect(within(customRow('Used')).queryByRole('button', { name: 'Delete Used' })).not.toBeInTheDocument()
-    await userEvent.click(within(customRow('Fresh')).getByRole('button', { name: 'Delete Fresh' }))
-    await waitFor(async () => expect((await repository.listBidCustomFields(true)).map((f) => f.name)).toEqual(['Used']))
-    // Archived-but-used stays archive-only too.
-    await userEvent.click(within(customRow('Used')).getByRole('button', { name: 'Archive Used' }))
-    const archivedRow = await screen.findByTestId('archived-column-row')
-    expect(within(archivedRow).queryByRole('button', { name: /Delete/ })).not.toBeInTheDocument()
+    const panel = await screen.findByTestId('columns-panel')
+    const rows = within(panel).getAllByTestId('shown-column')
+    for (const row of rows) expect(within(row).getByRole('button', { name: /^Delete / })).toBeInTheDocument()
+    await userEvent.click(within(panel).getByRole('button', { name: 'Delete City' }))
+    expect(screen.queryByRole('button', { name: 'Sort by City' })).not.toBeInTheDocument()
+    expect(within(panel).getByRole('button', { name: 'Show City' })).toBeInTheDocument() // restorable
+    await userEvent.click(within(panel).getByRole('button', { name: 'Delete Fresh' }))
+    await waitFor(async () => expect(await repository.listBidCustomFields(true)).toEqual([]))
   })
 })

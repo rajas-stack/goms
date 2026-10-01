@@ -66,17 +66,20 @@ export function ManageColumnsPanel({ all, visible, onVisibleChange, focusId }: {
     void run(() => archive.mutateAsync(f.id))
   }
   const doDelete = (f: BidCustomField) => {
-    if (!window.confirm(`Delete "${f.name}"? It has never held a value, so nothing is lost.`)) return
-    void run(() => remove.mutateAsync(f.id))
+    const message = f.hasHeldValue
+      ? `Delete "${f.name}" permanently? Every value in it is deleted too and cannot be recovered. (Archive keeps the values.)`
+      : `Delete "${f.name}"? It has never held a value, so nothing is lost.`
+    if (!window.confirm(message)) return
+    void run(() => remove.mutateAsync({ id: f.id, withValues: f.hasHeldValue }))
   }
 
-  const deleteButton = (f: BidCustomField) => (!f.hasHeldValue ? (
-    <Button variant="ghost" size="icon" aria-label={`Delete ${f.name}`} onClick={() => doDelete(f)}><Icon name="Trash2" size={14} /></Button>
-  ) : null)
+  const deleteButton = (f: BidCustomField) => (
+    <Button variant="ghost" size="icon" aria-label={`Delete ${f.name}`} title="Delete column" onClick={() => doDelete(f)}><Icon name="Trash2" size={14} /></Button>
+  )
 
   return (
     <div className="flex flex-col divide-y divide-line" data-testid="manage-columns-panel">
-      <ColumnsPanel all={all} visible={visible} onChange={onVisibleChange} focusId={focusId} />
+      <ColumnsPanel all={all} visible={visible} onChange={onVisibleChange} focusId={focusId} onDeleteCustom={doDelete} />
 
       {/* Nothing to manage yet → no section at all (no empty heading or hint);
           creating the first custom column is the toolbar's Add column button. */}

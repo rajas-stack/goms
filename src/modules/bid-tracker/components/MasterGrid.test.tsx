@@ -436,7 +436,7 @@ describe('MasterGrid', () => {
       renderGrid()
       await screen.findByText('Alpha')
       await screen.findByRole('button', { name: 'Sort by Score' })
-      await openPopover('Columns')
+      await openPopover('Manage columns')
       await userEvent.click(screen.getByRole('button', { name: 'Hide City' }))
       expect(screen.queryByRole('button', { name: 'Edit City' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Sort by City' })).not.toBeInTheDocument()
@@ -453,36 +453,23 @@ describe('MasterGrid', () => {
       await screen.findByText('Alpha')
       await userEvent.click(screen.getByRole('button', { name: 'Sector column menu' }))
       const items = screen.getAllByRole('menuitem').map((m) => m.textContent?.trim())
-      expect(items).toEqual(['Sort ascending', 'Sort descending', 'Filter by this column', 'Freeze column', 'Manage column…'])
+      expect(items).toEqual(['Sort ascending', 'Sort descending', 'Filter by this column', 'Freeze column'])
     })
 
-    it('"Manage column…" opens the Columns panel on that column, highlighted — and the panel hides and restores it', async () => {
+    it('Manage columns in the toolbar hides and restores a column; the header menu has no Manage item', async () => {
       await makeBid('Alpha')
       renderGrid()
       await screen.findByText('Alpha')
       await userEvent.click(screen.getByRole('button', { name: 'Sector column menu' }))
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Manage column…' }))
+      expect(screen.queryByRole('menuitem', { name: /Manage column/ })).not.toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Sector column menu' }))
+      await openPopover('Manage columns')
       const panel = await screen.findByTestId('columns-panel')
       const row = within(panel).getAllByTestId('shown-column').find((li) => li.textContent?.startsWith('Sector'))!
-      expect(row).toHaveAttribute('aria-current', 'true')
       await userEvent.click(within(row).getByRole('button', { name: 'Hide Sector' }))
       expect(screen.queryByRole('button', { name: 'Sort by Sector' })).not.toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Sort by City' })).toBeInTheDocument() // the rest are untouched
       await userEvent.click(screen.getByRole('button', { name: 'Show Sector' }))
       expect(screen.getByRole('button', { name: 'Sort by Sector' })).toBeInTheDocument()
-    })
-
-    it('highlights a custom column in the panel too, where it can also be renamed and archived', async () => {
-      await makeBid('Alpha')
-      await repository.createBidCustomField({ name: 'Score', dataType: 'number' })
-      renderGrid()
-      await screen.findByRole('button', { name: 'Sort by Score' })
-      await userEvent.click(screen.getByRole('button', { name: 'Score column menu' }))
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Manage column…' }))
-      const row = (await screen.findAllByTestId('custom-column-row'))[0]
-      expect(row).toHaveAttribute('aria-current', 'true')
-      expect(within(row).getByRole('button', { name: 'Rename Score' })).toBeInTheDocument()
-      expect(within(row).getByRole('button', { name: 'Archive Score' })).toBeInTheDocument()
     })
 
     it('moves a column from the Columns panel, reporting the new order', async () => {
@@ -490,7 +477,7 @@ describe('MasterGrid', () => {
       const onVisibleColumnsChange = vi.fn()
       renderGrid({ visibleColumns: ['opportunityName', 'bidCode', 'city'], onVisibleColumnsChange })
       await screen.findByText('Alpha')
-      await openPopover('Columns')
+      await openPopover('Manage columns')
       await userEvent.click(screen.getByRole('button', { name: 'Move City up' }))
       expect(onVisibleColumnsChange).toHaveBeenCalledWith(['opportunityName', 'city', 'bidCode'])
     })
@@ -499,7 +486,7 @@ describe('MasterGrid', () => {
       await makeBid('Alpha')
       renderGrid({ visibleColumns: ['bidCode'], onVisibleColumnsChange: () => {} })
       await screen.findByRole('button', { name: 'Sort by Bid ID' })
-      await openPopover('Columns')
+      await openPopover('Manage columns')
       expect(screen.getByRole('button', { name: 'Hide Bid ID' })).toBeDisabled()
     })
 
@@ -507,7 +494,7 @@ describe('MasterGrid', () => {
       await makeBid('Alpha')
       renderGrid()
       await screen.findByText('Alpha')
-      await openPopover('Columns')
+      await openPopover('Manage columns')
       expect(screen.getAllByRole('button', { name: /Add column/ })).toHaveLength(1)
     })
 
@@ -516,7 +503,7 @@ describe('MasterGrid', () => {
       const onVisibleColumnsChange = vi.fn()
       renderGrid({ visibleColumns: ['opportunityName', 'bidCode'], onVisibleColumnsChange })
       await screen.findByText('Alpha')
-      await openPopover('Columns')
+      await openPopover('Manage columns')
       await userEvent.click(screen.getByRole('button', { name: 'Move Bid ID up' }))
       expect(onVisibleColumnsChange).toHaveBeenCalledWith(['bidCode', 'opportunityName'])
     })

@@ -14,7 +14,7 @@ export type PendingEdits = MutableRefObject<Map<string, { discard: () => void }>
 
 // The editor sits exactly on top of the cell, like a spreadsheet's in-cell editor:
 // it covers the cell border with a 2px accent outline and never changes row height.
-const input = 'absolute inset-0 z-20 h-[31px] w-full rounded-none border-2 bg-white px-2 text-[12.5px] text-ink shadow-[0_2px_8px_rgba(11,43,73,0.22)] outline-none'
+const input = 'absolute inset-0 z-20 h-[35px] w-full rounded-none border-2 bg-white px-2 text-[12.5px] text-ink shadow-[0_2px_8px_rgba(11,43,73,0.22)] outline-none'
 
 /** Raw text for a type's editor, from the stored value. */
 function draftOf(type: string, value: unknown): string {
@@ -129,7 +129,7 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
         title={externalError ?? 'Click to edit'}
         data-editable-cell
         className={cn(
-          'flex h-[31px] w-full min-w-0 cursor-cell items-center gap-1 px-2 outline-none',
+          'flex h-[35px] w-full min-w-0 cursor-cell items-center gap-1 px-3 outline-none',
           'hover:shadow-[inset_0_0_0_1px_rgba(76,167,221,0.9)] focus-visible:shadow-[inset_0_0_0_2px_#0B2B49]',
           externalError && 'text-crimson shadow-[inset_0_0_0_1px_#B23A48]',
         )}
@@ -216,7 +216,7 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
   }
 
   return (
-    <div className="relative h-[31px] w-full" onClick={(e) => e.stopPropagation()}>
+    <div className="relative h-[35px] w-full" onClick={(e) => e.stopPropagation()}>
       {editor}
       {error && (
         <p role="alert" className="absolute left-0 top-full z-30 mt-0.5 whitespace-nowrap rounded bg-crimson px-1.5 py-0.5 text-[11px] text-white shadow-pop">{error}</p>

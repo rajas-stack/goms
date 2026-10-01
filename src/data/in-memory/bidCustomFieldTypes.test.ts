@@ -105,4 +105,14 @@ describe('InMemoryRepository custom column types', () => {
     expect(log.map((l) => [l.field, l.oldValue, l.newValue]).sort()).toEqual([['city', '', 'Pune'], ['vertical', '', 'Smart City']])
     expect((await repository.getBid(bid.id))!.updatedAt >= before).toBe(true)
   })
+
+  it('a column holding values is archive-only unless deleted together with its values', async () => {
+    const bid = await newBid()
+    const f = await repository.createBidCustomField({ name: 'Note', dataType: 'text' })
+    await repository.setBidCustomValue(bid.id, f.id, 'x')
+    await expect(repository.deleteBidCustomField(f.id)).rejects.toThrow(/archive it instead/)
+    await repository.deleteBidCustomField(f.id, true)
+    expect(await repository.listBidCustomFields(true)).toEqual([])
+    expect(await repository.listBidCustomValues(bid.id)).toEqual({})
+  })
 })
