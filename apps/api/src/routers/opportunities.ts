@@ -69,6 +69,54 @@ const columnFor: Record<string, string> = {
   emdAmount: 'emd_amount', emdUnit: 'emd_unit', salesPersonEmail: 'sales_person_email',
 }
 
+/** Wire shape of a new opportunity. `departmentId` is required here (Account Mapping creates an
+ *  opportunity inside a department); the Bid Tracker's Create Bid creates one WITHOUT a department and
+ *  resolves it in the same transaction (see bids.create / resolveBidDepartment). */
+export const createOpportunitySchema = z.object({
+  departmentId: z.string().uuid(), opportunityName: z.string().min(1),
+  gemTenderId: z.string().optional(), city: z.string().nullable().optional(), publishDate: z.string().optional(), submissionDate: z.string().optional(),
+  vertical: z.string().optional(), component: z.array(z.string()).optional(), quantity: z.string().optional(),
+  currency: z.string().optional(), valueAmount: z.string().optional(), valueUnit: z.string().optional(),
+  budgetKnown: z.string().optional(), emdAmount: z.string().optional(), emdUnit: z.string().optional(),
+  salesPersonEmail: z.string().optional(), stageKey: z.string().optional(),
+})
+
+/** THE insert path for an opportunity (+ its opening stage-change row) — `opportunities.create` and the
+ *  Bid Tracker's create-opportunity-with-bid both go through it. Runs on the caller's transaction client.
+ *  `departmentId` may be null only for the latter, which assigns one before the transaction commits. */
+export async function insertOpportunity(
+  client: { query: (text: string, values?: any[]) => Promise<{ rows: any[] }> },
+  input: Omit<z.infer<typeof createOpportunitySchema>, 'departmentId'> & { departmentId: string | null },
+) {
+  const dept = input.departmentId
+    ? (await client.query('SELECT state_code FROM hierarchy_nodes WHERE id=$1', [input.departmentId])).rows[0]
+    : undefined
+  const stageKey = input.stageKey ?? DEFAULT_STAGE_KEY
+  const closedOn = PIPELINE_STAGE_MAP[stageKey]?.isClosed ? new Date().toISOString().slice(0, 10) : null
+  const result = await client.query(
+    `INSERT INTO opportunities (
+       department_id, state_code, stage_key, closed_on, opportunity_name, gem_tender_id,
+       publish_date, submission_date, vertical, component, quantity, currency, value_amount,
+       value_unit, budget_known, emd_amount, emd_unit, sales_person_email, city
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+     RETURNING *`,
+    [
+      input.departmentId, dept?.state_code ?? null, stageKey, closedOn, input.opportunityName,
+      input.gemTenderId ?? '', input.publishDate ?? '', input.submissionDate ?? '', input.vertical ?? '',
+      input.component ?? [], input.quantity ?? '', input.currency ?? 'INR', input.valueAmount ?? '',
+      input.valueUnit ?? 'lakh', input.budgetKnown ?? '', input.emdAmount ?? '', input.emdUnit ?? 'lakh',
+      input.salesPersonEmail ?? '', input.city ?? null,
+    ],
+  )
+  const opp = result.rows[0]
+  await client.query(
+    `INSERT INTO opportunity_stage_changes (opportunity_id, from_stage_key, to_stage_key, changed_at, note)
+     VALUES ($1,NULL,$2,$3,'Opportunity created')`,
+    [opp.id, stageKey, opp.created_at],
+  )
+  return opp
+}
+
 export const opportunitiesRouter = router({
   list: protectedReadProcedure.query(async () => {
     const result = await pool.query(
@@ -91,42 +139,12 @@ export const opportunitiesRouter = router({
     return result.rows.map(toStageChange)
   }),
   create: protectedProcedure
-    .input(z.object({
-      departmentId: z.string().uuid(), opportunityName: z.string().min(1),
-      gemTenderId: z.string().optional(), city: z.string().nullable().optional(), publishDate: z.string().optional(), submissionDate: z.string().optional(),
-      vertical: z.string().optional(), component: z.array(z.string()).optional(), quantity: z.string().optional(),
-      currency: z.string().optional(), valueAmount: z.string().optional(), valueUnit: z.string().optional(),
-      budgetKnown: z.string().optional(), emdAmount: z.string().optional(), emdUnit: z.string().optional(),
-      salesPersonEmail: z.string().optional(), stageKey: z.string().optional(),
-    }))
+    .input(createOpportunitySchema)
     .mutation(async ({ input }) => {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
-        const dept = (await client.query('SELECT state_code FROM hierarchy_nodes WHERE id=$1', [input.departmentId])).rows[0]
-        const stageKey = input.stageKey ?? DEFAULT_STAGE_KEY
-        const closedOn = PIPELINE_STAGE_MAP[stageKey]?.isClosed ? new Date().toISOString().slice(0, 10) : null
-        const result = await client.query(
-          `INSERT INTO opportunities (
-             department_id, state_code, stage_key, closed_on, opportunity_name, gem_tender_id,
-             publish_date, submission_date, vertical, component, quantity, currency, value_amount,
-             value_unit, budget_known, emd_amount, emd_unit, sales_person_email, city
-           ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
-           RETURNING *`,
-          [
-            input.departmentId, dept?.state_code ?? null, stageKey, closedOn, input.opportunityName,
-            input.gemTenderId ?? '', input.publishDate ?? '', input.submissionDate ?? '', input.vertical ?? '',
-            input.component ?? [], input.quantity ?? '', input.currency ?? 'INR', input.valueAmount ?? '',
-            input.valueUnit ?? 'lakh', input.budgetKnown ?? '', input.emdAmount ?? '', input.emdUnit ?? 'lakh',
-            input.salesPersonEmail ?? '', input.city ?? null,
-          ],
-        )
-        const opp = result.rows[0]
-        await client.query(
-          `INSERT INTO opportunity_stage_changes (opportunity_id, from_stage_key, to_stage_key, changed_at, note)
-           VALUES ($1,NULL,$2,$3,'Opportunity created')`,
-          [opp.id, stageKey, opp.created_at],
-        )
+        const opp = await insertOpportunity(client, input)
         await client.query('COMMIT')
         return toOpportunity(opp)
       } catch (e) {

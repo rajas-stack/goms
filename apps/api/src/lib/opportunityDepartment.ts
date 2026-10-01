@@ -19,6 +19,15 @@ export const departmentChoiceSchema = z.discriminatedUnion('mode', [
   }),
 ])
 
+/** The few fields the Create Bid dialog collects for a brand-new opportunity; every other opportunity
+ *  field takes its normal default and can be edited afterwards, exactly as for any opportunity. */
+export const newBidOpportunitySchema = z.object({
+  opportunityName: z.string().trim().min(1, 'Enter the opportunity name.').max(300),
+  gemTenderId: z.string().trim().max(200).optional(),
+  city: z.string().trim().max(200).nullable().optional(),
+  submissionDate: z.string().trim().max(100).optional(),
+})
+
 const bad = (message: string) => new TRPCError({ code: 'BAD_REQUEST', message })
 
 /** A department an opportunity may belong to: an active org `department` node

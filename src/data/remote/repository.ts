@@ -7,7 +7,7 @@
 // 2026-08-31 local-vs-GCP functional parity audit
 // (docs/superpowers/analysis/2026-08-31-goms-local-vs-gcp-functional-parity-audit.md).
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
-import type { DepartmentChoice } from '@goms/domain'
+import type { DepartmentChoice, NewBidOpportunity } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
 import { authPromptLink } from './authPromptLink'
 import type { AppRouter } from '../../../apps/api/src/index'
@@ -235,6 +235,8 @@ export class RemoteRepository implements Partial<Repository> {
     this.client.bids.getForOpportunity.query({ opportunityId }) as unknown as Promise<Bid | null>
   createBid = (opportunityId: string, department?: DepartmentChoice): Promise<Bid> =>
     this.client.bids.create.mutate({ opportunityId, department }) as unknown as Promise<Bid>
+  createBidForNewOpportunity = (opportunity: NewBidOpportunity, department: DepartmentChoice): Promise<Bid> =>
+    this.client.bids.create.mutate({ newOpportunity: opportunity, department }) as unknown as Promise<Bid>
   updateBid = (id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>): Promise<Bid> =>
     this.client.bids.update.mutate({ id, patch }) as unknown as Promise<Bid>
   archiveBid = (id: string): Promise<Bid> => this.client.bids.archive.mutate({ id }) as unknown as Promise<Bid>

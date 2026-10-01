@@ -18,7 +18,7 @@ import {
   DEFAULT_BID_STAGE_KEY, formatBidCode, isAtOrAfterSubmitted, computeAttentionFlag, applyFilterRules,
   SYSTEM_BID_VIEWS, SYSTEM_BID_VIEW_KEYS, type SystemBidViewFilterRule,
   coerceCustomValue, normalizeOptions, slugifyFieldKey,
-  DEPARTMENT_REQUIRED_MESSAGE, type DepartmentChoice,
+  DEPARTMENT_REQUIRED_MESSAGE, type DepartmentChoice, type NewBidOpportunity,
 } from '@goms/domain'
 export { MERGEABLE_FIELDS, type MergeableField }
 import { coversDate } from '@/lib/intervals'
@@ -487,6 +487,9 @@ export interface Repository {
   getBid(id: string): Promise<Bid | null>
   getBidForOpportunity(opportunityId: string): Promise<Bid | null>
   createBid(opportunityId: string, department?: DepartmentChoice): Promise<Bid>
+  /** Create Bid for an opportunity that does not exist yet: the opportunity, its department and the bid
+   *  are created together (all-or-nothing), exactly as bids.create does server-side. */
+  createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice): Promise<Bid>
   updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>): Promise<Bid>
   archiveBid(id: string): Promise<Bid>
   markBidVerified(id: string): Promise<Bid>
@@ -1418,18 +1421,10 @@ class InMemoryRepository implements Repository {
     return this.data.bids.find((b) => b.opportunityId === opportunityId) ?? null
   }
 
-  /** The Create Bid department rule (same as apps/api's resolveBidDepartment): an
-   *  opportunity that has a department keeps it; one that has none needs `choice` —
-   *  an existing department, or a new one (and its major department) created through
-   *  `createNode`, the same path Account Mapping uses. The department is written onto
-   *  the OPPORTUNITY; the bid keeps no copy. The in-memory store has no rollback, so
-   *  everything that can fail is validated BEFORE any node is created. */
-  private async resolveBidDepartment(opp: Opportunity, choice: DepartmentChoice | undefined) {
-    if (opp.departmentId) {
-      if (choice) throw new Error('This opportunity already has a department; it is used as is.')
-      return
-    }
-    if (!choice) throw new Error(DEPARTMENT_REQUIRED_MESSAGE)
+  /** Resolves a department choice to a department node — the existing one, or one created (with its major
+   *  department, if new) through `createNode`. Everything that can fail is validated BEFORE any node is
+   *  created: the in-memory store has no rollback. */
+  private async resolveDepartmentNode(choice: DepartmentChoice): Promise<HierNode> {
     const usable = (id: string) => {
       const n = this.data.nodes.find((x) => x.id === id)
       if (!n || n.domain !== 'org' || n.typeKey !== 'department' || n.status !== 'active') {
@@ -1458,12 +1453,40 @@ class InMemoryRepository implements Repository {
         && n.status === 'active' && sameName(n, childName))
         ?? await this.createNode({ domain: 'org', typeKey: 'department', parentId: parent.id, stateCode: parent.stateCode, name: childName })
     }
+    return department
+  }
+
+  /** The Create Bid department rule (same as apps/api's resolveBidDepartment): an
+   *  opportunity that has a department keeps it; one that has none needs `choice` —
+   *  an existing department, or a new one (and its major department) created through
+   *  `createNode`, the same path Account Mapping uses. The department is written onto
+   *  the OPPORTUNITY; the bid keeps no copy. The in-memory store has no rollback, so
+   *  everything that can fail is validated BEFORE any node is created. */
+  private async resolveBidDepartment(opp: Opportunity, choice: DepartmentChoice | undefined) {
+    if (opp.departmentId) {
+      if (choice) throw new Error('This opportunity already has a department; it is used as is.')
+      return
+    }
+    if (!choice) throw new Error(DEPARTMENT_REQUIRED_MESSAGE)
+    const department = await this.resolveDepartmentNode(choice)
     opp.departmentId = department.id
     opp.stateCode = department.stateCode
     this.auditCustom({
       entityType: 'opportunity', entityId: opp.id, field: 'departmentId', oldValue: '', newValue: department.id,
       action: 'update', reason: 'Set while creating a bid',
     })
+  }
+
+  async createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice) {
+    const name = opportunity.opportunityName.trim()
+    if (!name) throw new Error('Enter the opportunity name.')
+    // Resolve (validate, then create) the department first; only then create the opportunity under it.
+    const dept = await this.resolveDepartmentNode(department)
+    const opp = await this.createOpportunity({
+      departmentId: dept.id, opportunityName: name, gemTenderId: opportunity.gemTenderId?.trim(),
+      city: opportunity.city?.trim() || null, submissionDate: opportunity.submissionDate?.trim(),
+    })
+    return this.createBid(opp.id)
   }
 
   async createBid(opportunityId: string, department?: DepartmentChoice) {
@@ -2703,7 +2726,7 @@ const MUTATOR_KEYS = [
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
   'createBoq', 'updateBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'reorderBoqLineItems', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',
   'createCustomer', 'updateCustomer', 'deleteCustomer',
-  'createBid', 'updateBid', 'archiveBid', 'markBidVerified', 'unarchiveBid', 'deleteBid',
+  'createBid', 'createBidForNewOpportunity', 'updateBid', 'archiveBid', 'markBidVerified', 'unarchiveBid', 'deleteBid',
   'createBidMilestone', 'updateBidMilestone', 'deleteBidMilestone',
   'createBidCorrigendum', 'reviewCorrigendumChange', 'freezeValue', 'unfreezeValue',
   'requestDocumentUploadUrl', 'confirmDocumentUpload', 'deleteDocument', 'createDocumentCitation', 'deleteDocumentCitation',

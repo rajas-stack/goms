@@ -155,4 +155,73 @@ describe('bids.create — resolving the opportunity department', () => {
     })).rejects.toBeTruthy()
     expect(await bidCount()).toBe(0)
   })
+
+  // ---- creating the opportunity itself, in the same transaction -------------------------------
+  const oppCount = async () => Number((await pool.query('SELECT count(*) n FROM opportunities')).rows[0].n)
+
+  it('new opportunity + existing department: opportunity, assignment and bid are created together', async () => {
+    const bid = await caller().bids.create({
+      newOpportunity: { opportunityName: 'AI Solution', gemTenderId: 'GEM/1', submissionDate: '2026-12-01' },
+      department: { mode: 'existing', departmentId: meity.id },
+    })
+    const opp = (await pool.query('SELECT * FROM opportunities WHERE id=$1', [bid.opportunityId])).rows[0]
+    expect(opp).toMatchObject({ opportunity_name: 'AI Solution', gem_tender_id: 'GEM/1', department_id: meity.id, state_code: 0 })
+    expect((await pool.query('SELECT count(*) n FROM opportunity_stage_changes WHERE opportunity_id=$1', [opp.id])).rows[0].n).toBe('1')
+    expect(await bidCount()).toBe(1)
+  })
+
+  it('new opportunity + a newly created hierarchy (MeitY → India AI): everything is created and linked', async () => {
+    await pool.query('DELETE FROM hierarchy_nodes')
+    const bid = await caller().bids.create({
+      newOpportunity: { opportunityName: 'AI Solution' },
+      department: { mode: 'create', name: 'India AI', parent: { mode: 'create', name: 'MeitY', stateCode: 0 } },
+    })
+    const all = await nodes()
+    const major = all.find((n) => n.name === 'MeitY')!
+    const child = all.find((n) => n.name === 'India AI')!
+    expect(child.parent_id).toBe(major.id)
+    expect((await oppRow(bid.opportunityId)).department_id).toBe(child.id)
+  })
+
+  it('a new opportunity needs a department: refused, and no opportunity is left behind', async () => {
+    const before = await oppCount()
+    await expect(caller().bids.create({ newOpportunity: { opportunityName: 'No dept' } }))
+      .rejects.toMatchObject({ code: 'BAD_REQUEST', message: DEPARTMENT_REQUIRED_MESSAGE })
+    expect(await oppCount()).toBe(before)
+    expect(await bidCount()).toBe(0)
+  })
+
+  it('a new opportunity with an unusable department creates nothing', async () => {
+    const before = await oppCount(), nodesBefore = (await nodes()).length
+    await expect(caller().bids.create({
+      newOpportunity: { opportunityName: 'Ghost' },
+      department: { mode: 'existing', departmentId: '00000000-0000-4000-8000-000000000000' },
+    })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    expect(await oppCount()).toBe(before)
+    expect((await nodes()).length).toBe(nodesBefore)
+    expect(await bidCount()).toBe(0)
+  })
+
+  it('rolls back the NEW opportunity, the new hierarchy and the assignment if the bid insert then fails', async () => {
+    // Make the bid insert fail late: the code the bid is about to receive is already taken.
+    const holder = await caller().opportunities.create({ departmentId: meity.id, opportunityName: 'Holder' })
+    const year = new Date().getFullYear()
+    await pool.query('DELETE FROM bid_number_sequences')
+    await pool.query(`INSERT INTO bids (opportunity_id, bid_code) VALUES ($1, $2)`, [holder.id, `BID-${year}-0001`])
+    const before = await oppCount(), nodesBefore = (await nodes()).length
+    await expect(caller().bids.create({
+      newOpportunity: { opportunityName: 'Will not survive' },
+      department: { mode: 'create', name: 'India AI', parent: { mode: 'create', name: 'Brand New Ministry', stateCode: 0 } },
+    })).rejects.toBeTruthy()
+    expect(await oppCount()).toBe(before)
+    expect((await nodes()).length).toBe(nodesBefore)
+    expect(await bidCount()).toBe(1) // only the pre-existing holder bid
+  })
+
+  it('takes exactly one of an existing opportunity or a new one', async () => {
+    const opp = await caller().opportunities.create({ departmentId: meity.id, opportunityName: 'Existing' })
+    await expect(caller().bids.create({ opportunityId: opp.id, newOpportunity: { opportunityName: 'Both' } })).rejects.toBeTruthy()
+    await expect(caller().bids.create({})).rejects.toBeTruthy()
+    expect(await bidCount()).toBe(0)
+  })
 })

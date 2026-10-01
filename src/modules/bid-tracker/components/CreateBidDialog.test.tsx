@@ -37,6 +37,7 @@ const choose = async (comboName: string, optionLabel: string) => {
   await userEvent.click(await screen.findByText(optionLabel))
 }
 const createButton = () => screen.getByRole('button', { name: 'Create bid' })
+const createButtonNew = () => screen.getByRole('button', { name: 'Create opportunity and bid' })
 
 describe('CreateBidDialog', () => {
   beforeEach(async () => { await resetLocalData() })
@@ -186,5 +187,87 @@ describe('CreateBidDialog', () => {
     await repository.createBid(only.id)
     renderDialog()
     expect(await screen.findByTestId('bid-opportunity-empty')).toHaveTextContent('already has a bid')
+  })
+
+  // ---- creating the opportunity inside the dialog ---------------------------------------------
+  const startNew = async () => userEvent.click(await screen.findByRole('button', { name: /Create new opportunity/ }))
+  const oppNames = async () => (await repository.listOpportunities()).map((o) => o.opportunityName)
+
+  it('new opportunity + existing department: creates the opportunity and its bid, then opens the bid', async () => {
+    const { indiaAi } = await meityIndiaAi()
+    renderDialog()
+    await startNew()
+    expect(createButtonNew()).toBeDisabled() // name and department both required
+    await userEvent.type(screen.getByRole('textbox', { name: 'Opportunity name' }), 'AI Solution')
+    expect(createButtonNew()).toBeDisabled() // still no department
+    await choose('Existing department', 'MeitY → India AI')
+    expect(screen.getByTestId('department-preview')).toHaveTextContent('MeitY → India AI')
+    await userEvent.click(createButtonNew())
+    expect(await screen.findByText('Bid detail page')).toBeInTheDocument()
+    const created = (await repository.listOpportunities()).find((o) => o.opportunityName === 'AI Solution')!
+    expect(created.departmentId).toBe(indiaAi.id)
+    expect(await repository.getBidForOpportunity(created.id)).not.toBeNull()
+  })
+
+  it('new opportunity + a newly created hierarchy (MeitY → India AI): all three are created', async () => {
+    renderDialog()
+    await startNew()
+    await userEvent.type(screen.getByRole('textbox', { name: 'Opportunity name' }), 'AI Solution')
+    await userEvent.click(screen.getByRole('button', { name: 'Create new department hierarchy' }))
+    await userEvent.click(screen.getByRole('button', { name: 'New' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'New major department name' }), 'Brand New Ministry')
+    await userEvent.type(screen.getByRole('textbox', { name: 'New department name' }), 'Brand New Dept')
+    expect(screen.getByTestId('department-preview')).toHaveTextContent('Brand New Ministry (new) → Brand New Dept (new)')
+    await userEvent.click(createButtonNew())
+    expect(await screen.findByText('Bid detail page')).toBeInTheDocument()
+    const all = await repository.listDepartments()
+    const major = all.find((d) => d.name === 'Brand New Ministry')!
+    const child = all.find((d) => d.name === 'Brand New Dept')!
+    expect(child.parentId).toBe(major.id)
+    const created = (await repository.listOpportunities()).find((o) => o.opportunityName === 'AI Solution')!
+    expect(created.departmentId).toBe(child.id)
+    expect(await repository.getBidForOpportunity(created.id)).not.toBeNull()
+  })
+
+  it('when every opportunity already has a bid, the empty state still leads somewhere: create a new opportunity', async () => {
+    const { indiaAi } = await meityIndiaAi()
+    const only = await opp('Only one', indiaAi.id)
+    await repository.createBid(only.id)
+    renderDialog()
+    expect(await screen.findByTestId('bid-opportunity-empty')).toHaveTextContent('create a new opportunity')
+    await startNew()
+    expect(await screen.findByTestId('new-opportunity-form')).toBeInTheDocument()
+  })
+
+  it('cancelling after filling in a new opportunity and hierarchy creates nothing', async () => {
+    await meityIndiaAi()
+    const oppsBefore = await oppNames(), namesBefore = await orgNames()
+    renderDialog()
+    await startNew()
+    await userEvent.type(screen.getByRole('textbox', { name: 'Opportunity name' }), 'Abandoned')
+    await userEvent.click(screen.getByRole('button', { name: 'Create new department hierarchy' }))
+    await userEvent.click(screen.getByRole('button', { name: 'New' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'New major department name' }), 'Abandoned Ministry')
+    await userEvent.type(screen.getByRole('textbox', { name: 'New department name' }), 'Abandoned Dept')
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await oppNames()).toEqual(oppsBefore)
+    expect(await orgNames()).toEqual(namesBefore)
+  })
+
+  it('a failed department step creates no opportunity, no hierarchy and no bid', async () => {
+    const { meity } = await meityIndiaAi()
+    const oppsBefore = await oppNames()
+    renderDialog()
+    await startNew()
+    await userEvent.type(screen.getByRole('textbox', { name: 'Opportunity name' }), 'Will not exist')
+    await userEvent.click(screen.getByRole('button', { name: 'Create new department hierarchy' }))
+    await choose('Major department', 'MeitY')
+    await userEvent.type(screen.getByRole('textbox', { name: 'New department name' }), 'Orphan Dept')
+    await repository.deleteNode(meity.id) // the parent disappears before the user presses Create
+    await userEvent.click(createButtonNew())
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no longer exists/)
+    expect(await oppNames()).toEqual(oppsBefore)
+    expect((await orgNames()).filter((n) => n === 'Orphan Dept')).toHaveLength(0)
+    expect(screen.queryByText('Bid detail page')).not.toBeInTheDocument()
   })
 })

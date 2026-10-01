@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { DepartmentChoice } from '@goms/domain'
+import type { DepartmentChoice, NewBidOpportunity } from '@goms/domain'
 import {
   repository, type AddTimelineInput, type AssignOwnerInput, type CreateEmployeeInput, type CreateFollowUpInput,
   type CreateNodeInput, type CreateOpportunityInput, type CreateSalesPersonInput, type ImportChildRow,
@@ -164,6 +164,11 @@ export function useBidMutations() {
     mutationFn: (a: { opportunityId: string; department?: DepartmentChoice }) => repository.createBid(a.opportunityId, a.department),
     onSuccess: invalidate,
   })
+  // Create the opportunity, its department and the bid in one go (Bid Tracker's Create Bid → new opportunity).
+  const createWithNewOpportunity = useMutation({
+    mutationFn: (a: { opportunity: NewBidOpportunity; department: DepartmentChoice }) => repository.createBidForNewOpportunity(a.opportunity, a.department),
+    onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['opportunities'] }); qc.invalidateQueries({ queryKey: ['departments'] }) },
+  })
   const update = useMutation({
     mutationFn: (a: { id: string; patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>> }) =>
       repository.updateBid(a.id, a.patch),
@@ -173,7 +178,7 @@ export function useBidMutations() {
   const unarchive = useMutation({ mutationFn: (id: string) => repository.unarchiveBid(id), onSuccess: invalidate })
   const remove = useMutation({ mutationFn: (id: string) => repository.deleteBid(id), onSuccess: invalidate })
   const markVerified = useMutation({ mutationFn: (id: string) => repository.markBidVerified(id), onSuccess: invalidate })
-  return { create, update, archive, unarchive, remove, markVerified }
+  return { create, createWithNewOpportunity, update, archive, unarchive, remove, markVerified }
 }
 export const useBidForOpportunity = (opportunityId: string | null) =>
   useQuery({

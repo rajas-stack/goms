@@ -4,11 +4,11 @@ import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
 import { assertFieldsNotProtected } from '../lib/protectedValues.js'
-import { formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP, computeAttentionFlag, applyFilterRules, buildOwnerMap, type CustomFieldType, type CustomValue } from '@goms/domain'
-import { applyStageChange } from './opportunities.js'
+import { DEPARTMENT_REQUIRED_MESSAGE, formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP, computeAttentionFlag, applyFilterRules, buildOwnerMap, type CustomFieldType, type CustomValue } from '@goms/domain'
+import { applyStageChange, insertOpportunity } from './opportunities.js'
 import { loadOwnershipContext } from './ownership.js'
 import { writeAuditLog } from '../lib/auditLog.js'
-import { departmentChoiceSchema, resolveBidDepartment } from '../lib/opportunityDepartment.js'
+import { departmentChoiceSchema, newBidOpportunitySchema, resolveBidDepartment } from '../lib/opportunityDepartment.js'
 import { filterRuleSchema } from '../lib/filterRuleSchema.js'
 import { CUSTOM_VALUE_COLUMNS, customValueFromRow } from '../lib/customFieldValues.js'
 
@@ -218,21 +218,34 @@ export const bidsRouter = router({
   // through the shared hierarchy insert) in this same transaction, so a failure
   // anywhere leaves no new department nodes, no assignment and no bid behind.
   create: protectedProcedure
-    .input(z.object({ opportunityId: z.string().uuid(), department: departmentChoiceSchema.optional() }))
+    .input(z.object({
+      opportunityId: z.string().uuid().optional(),
+      // Create the opportunity as part of the same transaction (department is then mandatory).
+      newOpportunity: newBidOpportunitySchema.optional(),
+      department: departmentChoiceSchema.optional(),
+    }).refine((v) => !!v.opportunityId !== !!v.newOpportunity, { message: 'Choose an existing opportunity or describe a new one.' }))
     .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
-        await resolveBidDepartment(client, input.opportunityId, input.department, ctx.user?.email)
-        const opp = (await client.query('SELECT submission_date FROM opportunities WHERE id=$1', [input.opportunityId])).rows[0]
-        if (!opp) throw new TRPCError({ code: 'BAD_REQUEST', message: `No such opportunity: ${input.opportunityId}` })
+        // A new opportunity is inserted WITHOUT a department, then must be given one below — the
+        // same resolution an existing department-less opportunity goes through. All in this transaction.
+        let opportunityId = input.opportunityId
+        if (input.newOpportunity) {
+          if (!input.department) throw new TRPCError({ code: 'BAD_REQUEST', message: DEPARTMENT_REQUIRED_MESSAGE })
+          opportunityId = (await insertOpportunity(client, { ...input.newOpportunity, departmentId: null })).id
+        }
+        if (!opportunityId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose an existing opportunity or describe a new one.' })
+        await resolveBidDepartment(client, opportunityId, input.department, ctx.user?.email)
+        const opp = (await client.query('SELECT submission_date FROM opportunities WHERE id=$1', [opportunityId])).rows[0]
+        if (!opp) throw new TRPCError({ code: 'BAD_REQUEST', message: `No such opportunity: ${opportunityId}` })
 
         const bidCode = await allocateBidCode(client)
         let bidRow: any
         try {
           bidRow = (await client.query(
             `INSERT INTO bids (opportunity_id, bid_code, stage_key) VALUES ($1,$2,$3) RETURNING *`,
-            [input.opportunityId, bidCode, DEFAULT_BID_STAGE_KEY],
+            [opportunityId, bidCode, DEFAULT_BID_STAGE_KEY],
           )).rows[0]
         } catch (e) {
           if (isUniqueViolation(e)) {

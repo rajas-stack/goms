@@ -162,5 +162,13 @@ export type DepartmentChoice =
   | { mode: 'existing'; departmentId: string }
   | { mode: 'create'; name: string; parent: DepartmentParentChoice }
 
+/** What the Create Bid dialog collects when the opportunity itself is new. */
+export interface NewBidOpportunity {
+  opportunityName: string
+  gemTenderId?: string
+  city?: string | null
+  submissionDate?: string
+}
+
 export const DEPARTMENT_REQUIRED_MESSAGE =
   'This opportunity has no department. Choose an existing department or create one to create the bid.'

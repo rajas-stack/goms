@@ -18,12 +18,13 @@ const segment = (active: boolean) => cn(
   active ? 'bg-goms-navy text-paper' : 'text-ink hover:bg-goms-sky/[0.14]',
 )
 
-/** Create Bid: pick the opportunity, resolve its department, create the bid.
+/** Create Bid: pick an existing opportunity OR create a new one, resolve its department, create the bid.
  *  The department lives on the OPPORTUNITY. One that already has it is used as is
  *  (shown, never re-asked); one that has none must be given one here — an existing
  *  department, or a new hierarchy created without leaving Bid Tracker — and the
  *  server assigns it and creates the bid in one transaction (bids.create, the same
- *  mutation the opportunity card uses). Cancelling changes nothing. */
+ *  mutation the opportunity card uses). A new opportunity is created in that same server transaction, so the
+ *  opportunity, its department and the bid all exist or none of them do. Cancelling changes nothing. */
 export function CreateBidDialog({ open, onClose, opportunityId }: { open: boolean; onClose: () => void; opportunityId?: string }) {
   return (
     <Dialog open={open} onClose={onClose} title="Create Bid" description="Pick the opportunity this bid is for. Each opportunity can have one bid." size="lg">
@@ -39,12 +40,18 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
   const { data: bids = [] } = useBidsForGrid()
   const { data: departments = [] } = useDepartments()
   const { data: states = [] } = useStates()
-  const { create } = useBidMutations()
+  const { create, createWithNewOpportunity } = useBidMutations()
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(presetId ?? null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  // Department step (only used when the opportunity has none)
+  // A brand-new opportunity (instead of picking an existing one)
+  const [isNew, setIsNew] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newTender, setNewTender] = useState('')
+  const [newCity, setNewCity] = useState('')
+  const [newDue, setNewDue] = useState('')
+  // Department step (used when the opportunity has none — always for a new one)
   const [deptMode, setDeptMode] = useState<'existing' | 'create'>('existing')
   const [existingId, setExistingId] = useState('')
   const [parentMode, setParentMode] = useState<'existing' | 'create'>('existing')
@@ -79,7 +86,7 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
   }, [available, query, byId])
 
   const selected: Opportunity | undefined = selectedId ? opportunities.find((o) => o.id === selectedId) : undefined
-  const hasDepartment = !!selected?.departmentId
+  const hasDepartment = !isNew && !!selected?.departmentId
 
   // What the user chose for a department-less opportunity, as the server's payload (null = incomplete).
   const choice = useMemo((): DepartmentChoice | null => {
@@ -104,12 +111,18 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
   }, [choice, byId])
 
   const submit = async () => {
-    if (!selected || busy) return
+    if ((!selected && !isNew) || busy) return
     if (!hasDepartment && !choice) return
+    if (isNew && !newName.trim()) return
     setError(null)
     setBusy(true)
     try {
-      const bid = await create.mutateAsync({ opportunityId: selected.id, department: hasDepartment ? undefined : choice ?? undefined })
+      const bid = isNew
+        ? await createWithNewOpportunity.mutateAsync({
+          opportunity: { opportunityName: newName.trim(), gemTenderId: newTender.trim() || undefined, city: newCity.trim() || null, submissionDate: newDue.trim() || undefined },
+          department: choice!,
+        })
+        : await create.mutateAsync({ opportunityId: selected!.id, department: hasDepartment ? undefined : choice ?? undefined })
       onClose()
       navigate(`/bid-tracker/bid/${bid.id}`)
     } catch (e) {
@@ -119,17 +132,32 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
   }
 
   // ---------------- step 2: department + confirm ----------------
-  if (selected) {
-    const path = pathOf(selected.departmentId)
+  if (selected || isNew) {
+    const path = pathOf(selected?.departmentId ?? null)
     return (
       <div className="flex flex-col gap-4" data-testid="create-bid-confirm">
-        <div>
-          <div className="text-[12px] text-muted">Opportunity</div>
-          <div className="flex items-center gap-2">
-            <span className="text-[14px] font-semibold text-goms-navy">{selected.opportunityName}</span>
-            {!presetId && <button type="button" className="text-[12px] text-goms-navy underline" onClick={() => { setSelectedId(null); setError(null) }}>Change</button>}
+        {isNew ? (
+          <div className="flex flex-col gap-2" data-testid="new-opportunity-form">
+            <div className="flex items-center gap-2">
+              <span className="text-[12px] text-muted">New opportunity</span>
+              <button type="button" className="text-[12px] text-goms-navy underline" onClick={() => { setIsNew(false); setError(null) }}>Pick an existing one instead</button>
+            </div>
+            <Input aria-label="Opportunity name" placeholder="Opportunity name, e.g. AI Solution" value={newName} maxLength={300} autoFocus onChange={(e) => setNewName(e.target.value)} />
+            <div className="grid grid-cols-3 gap-2">
+              <Input aria-label="Tender ID" placeholder="Tender / GeM ID (optional)" value={newTender} maxLength={200} onChange={(e) => setNewTender(e.target.value)} />
+              <Input aria-label="City" placeholder="City (optional)" value={newCity} maxLength={200} onChange={(e) => setNewCity(e.target.value)} />
+              <Input aria-label="Submission date" type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} />
+            </div>
           </div>
-        </div>
+        ) : selected && (
+          <div>
+            <div className="text-[12px] text-muted">Opportunity</div>
+            <div className="flex items-center gap-2">
+              <span className="text-[14px] font-semibold text-goms-navy">{selected.opportunityName}</span>
+              {!presetId && <button type="button" className="text-[12px] text-goms-navy underline" onClick={() => { setSelectedId(null); setError(null) }}>Change</button>}
+            </div>
+          </div>
+        )}
 
         {hasDepartment ? (
           <div className="rounded-lg border border-line bg-panel/60 p-3 text-[13px]" data-testid="department-resolved">
@@ -139,7 +167,7 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
           </div>
         ) : (
           <div className="flex flex-col gap-3 rounded-lg border border-amber/50 bg-amber-100/40 p-3" data-testid="department-required">
-            <div className="text-[13px]"><span className="font-semibold">Department required.</span> This opportunity has no department yet. Choose one or create it here.</div>
+            <div className="text-[13px]"><span className="font-semibold">Department required.</span> {isNew ? 'Choose the department for this new opportunity, or create it here.' : 'This opportunity has no department yet. Choose one or create it here.'}</div>
             <div className="flex gap-1 rounded-lg bg-panel p-1" role="group" aria-label="Department">
               <button type="button" className={segment(deptMode === 'existing')} onClick={() => setDeptMode('existing')}>Select existing department</button>
               <button type="button" className={segment(deptMode === 'create')} onClick={() => setDeptMode('create')}>Create new department hierarchy</button>
@@ -187,8 +215,8 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
         {error && <p role="alert" className="text-[13px] text-crimson">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={busy || (!hasDepartment && !choice)} onClick={() => void submit()}>
-            {busy ? 'Creating…' : 'Create bid'}
+          <Button variant="primary" disabled={busy || (!hasDepartment && !choice) || (isNew && !newName.trim())} onClick={() => void submit()}>
+            {busy ? 'Creating…' : isNew ? 'Create opportunity and bid' : 'Create bid'}
           </Button>
         </div>
       </div>
@@ -206,6 +234,12 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
           className="h-9 w-full rounded-lg border border-line bg-white pl-8 pr-2 text-[13px] text-ink focus-visible:focus-ring"
         />
       </div>
+      <button
+        type="button" onClick={() => { setIsNew(true); setNewName(query.trim()); setError(null) }}
+        className="flex items-center gap-2 rounded-lg border border-dashed border-goms-sky px-3 py-2 text-left text-[13px] font-medium text-goms-navy hover:bg-goms-sky/10"
+      >
+        <Icon name="Plus" size={14} /> Create new opportunity
+      </button>
       <ul className="max-h-[22rem] overflow-y-auto rounded-lg border border-line" data-testid="bid-opportunity-list">
         {matches.slice(0, MAX_SHOWN).map((o) => {
           const path = pathOf(o.departmentId)
@@ -229,7 +263,7 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
         {isLoading && <li className="p-4 text-center text-[13px] text-muted">Loading opportunities…</li>}
         {!isLoading && matches.length === 0 && (
           <li className="p-4 text-center text-[13px] text-muted" data-testid="bid-opportunity-empty">
-            {available.length === 0 ? 'Every existing opportunity already has a bid.' : 'No opportunity without a bid matches that search.'}
+            {available.length === 0 ? 'Every existing opportunity already has a bid — create a new opportunity above.' : 'No opportunity without a bid matches that search — you can create it as a new opportunity above.'}
           </li>
         )}
       </ul>
