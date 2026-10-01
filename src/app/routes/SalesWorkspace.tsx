@@ -383,15 +383,17 @@ function SalesWorkspaceBody() {
   return (
     <div className="flex h-full flex-col">
       <SummaryCards />
-      <div className="flex shrink-0 items-center gap-3 border-b border-line px-3 py-1.5">
+      {/* Below `sm` the tabs drop to their own full-width row (order-last) so the lock pill sits
+          beside the title instead of crowding them; from `sm` up it is the single row it always was. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-3 py-1.5 sm:flex-nowrap">
         <span className="shrink-0 text-sm font-semibold text-ink-900">Sales Team</span>
-        <div className="flex min-w-0 items-center gap-1 overflow-x-auto">
+        <div className="order-last flex w-full min-w-0 items-center gap-1 overflow-x-auto sm:order-none sm:w-auto">
           {SECTIONS.map((s) => (
             <Link
               key={s.key}
               to={`/sales/${s.key}`}
               className={cn(
-                'shrink-0 rounded-lg px-2.5 py-1 text-[13px] font-medium transition-colors',
+                'shrink-0 rounded-lg px-3 py-2 sm:px-2.5 sm:py-1 text-[13px] font-medium transition-colors',
                 s.key === active.key
                   ? 'bg-ink-900/[0.06] text-ink-900'
                   : 'text-ink-600/70 hover:bg-ink-900/[0.04] hover:text-ink-900',
