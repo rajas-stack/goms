@@ -42,13 +42,17 @@ export function GridContextMenu({ x, y, title, groups, onClose }: {
     ref.current?.focus()
     const close = () => onClose()
     const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) onClose() }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('contextmenu', onDown)
+    // Capture phase on purpose: React flushes a discrete event's effects while that event is
+    // still bubbling, so a bubble-phase `document` listener added here would receive the very
+    // right-click that opened the menu and shut it again in the same tick. The capture pass over
+    // `document` has already finished by then, so it only ever sees *later* events.
+    document.addEventListener('mousedown', onDown, true)
+    document.addEventListener('contextmenu', onDown, true)
     window.addEventListener('scroll', close, true)
     window.addEventListener('resize', close)
     return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('contextmenu', onDown)
+      document.removeEventListener('mousedown', onDown, true)
+      document.removeEventListener('contextmenu', onDown, true)
       window.removeEventListener('scroll', close, true)
       window.removeEventListener('resize', close)
     }
