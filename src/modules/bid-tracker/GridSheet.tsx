@@ -6,7 +6,8 @@ import { isRuleComplete } from './gridColumns'
 import { CreateSavedViewDialog } from './components/CreateSavedViewDialog'
 import { MasterGrid } from './components/MasterGrid'
 import { SavedViewTabs } from './components/SavedViewTabs'
-import type { SheetId } from './sheets'
+import { Icon } from '@/components/ui/Icon'
+import { MASTER_SCOPES, type MasterScope, type SheetId } from './sheets'
 
 const DEFAULT_VIEW_ID = 'allBids'
 const SAVE_DEBOUNCE_MS = 600
@@ -25,6 +26,8 @@ export function GridSheet({ sheet }: { sheet: SheetId }) {
   const [rules, setRules] = useState<FilterNode[]>([])
   const [visibleColumns, setVisibleColumns] = useState<string[] | undefined>(undefined)
   const [createOpen, setCreateOpen] = useState(false)
+  // Master only: which sheet's columns to look at (default: every sheet's, together).
+  const [scope, setScope] = useState<MasterScope>('all')
 
   const activeView: BidSavedView | undefined = views.find((v) => v.id === activeViewId)
   // A system view has no row to save edits into, so edits on one are
@@ -80,6 +83,8 @@ export function GridSheet({ sheet }: { sheet: SheetId }) {
       <div className="min-h-0 flex-1 overflow-hidden">
         <MasterGrid
           sheet={sheet}
+          columnScope={sheet === 'master' ? scope : undefined}
+          toolbarLead={sheet === 'master' ? <SheetSwitcher value={scope} onChange={setScope} /> : undefined}
           filterRules={rules} onFilterRulesChange={onRulesChange}
           visibleColumns={visibleColumns} onVisibleColumnsChange={onColumnsChange}
         />
@@ -90,5 +95,21 @@ export function GridSheet({ sheet }: { sheet: SheetId }) {
         onCreated={(view) => selectView(view.id, [...views, view])}
       />
     </div>
+  )
+}
+
+/** Master's quick switcher: look at every sheet's columns together, or just one sheet's. */
+function SheetSwitcher({ value, onChange }: { value: MasterScope; onChange: (scope: MasterScope) => void }) {
+  return (
+    <label className="relative inline-flex items-center" title="Show the columns of one sheet, or all of them">
+      <Icon name="Layers" size={14} className="pointer-events-none absolute left-2 text-goms-navy" />
+      <select
+        aria-label="Sheet" value={value} onChange={(e) => onChange(e.target.value as MasterScope)}
+        className="h-7 appearance-none rounded-lg border border-goms-navy/30 bg-goms-navy/[0.06] pl-7 pr-7 text-[13px] font-medium text-goms-navy focus-visible:focus-ring"
+      >
+        {MASTER_SCOPES.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+      <Icon name="ChevronDown" size={13} className="pointer-events-none absolute right-2 text-goms-navy" />
+    </label>
   )
 }

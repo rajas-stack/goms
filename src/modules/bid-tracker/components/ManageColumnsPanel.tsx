@@ -16,12 +16,14 @@ const box = 'h-8 min-w-0 flex-1 rounded-lg border border-line bg-white px-2 text
  *  below it the management of the user-defined columns — rename, edit options,
  *  default order, archive, restore, and delete (only for a column that has never
  *  held a value; everything else is archive-only, spec §8.1). */
-export function ManageColumnsPanel({ all, visible, onVisibleChange, focusId }: {
+export function ManageColumnsPanel({ all, visible, onVisibleChange, focusId, inScope }: {
   all: GridColumnMeta[]
   visible: GridColumnMeta[]
   onVisibleChange: (orderedVisibleIds: string[]) => void
   /** Column to scroll to and highlight (opened from its header's "Manage column…"). */
   focusId?: string | null
+  /** Which custom columns this panel manages (the sheet's own; Master: all or the switcher's pick). */
+  inScope?: (field: BidCustomField) => boolean
 }) {
   const { data: fields = [] } = useBidCustomFields(true)
   const { update, reorder, archive, unarchive, remove } = useBidCustomFieldMutations()
@@ -29,8 +31,9 @@ export function ManageColumnsPanel({ all, visible, onVisibleChange, focusId }: {
   const [editingOptions, setEditingOptions] = useState<{ id: string; options: string[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const active = fields.filter((f) => f.status === 'active').sort((a, b) => a.position - b.position)
-  const archived = fields.filter((f) => f.status === 'archived')
+  const scoped = inScope ? fields.filter(inScope) : fields
+  const active = scoped.filter((f) => f.status === 'active').sort((a, b) => a.position - b.position)
+  const archived = scoped.filter((f) => f.status === 'archived')
 
   const run = async (action: () => Promise<unknown>) => {
     setError(null)

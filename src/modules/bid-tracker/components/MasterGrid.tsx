@@ -31,11 +31,13 @@ import {
   type GridColumnMeta,
 } from '../gridColumns'
 import { fromRoot, toRoot } from '../filterTree'
+import { columnInScope, columnOwner, type MasterScope, type SheetId } from '../sheets'
 import { useEntityLookups } from '../useEntityLookups'
 import { AddCustomColumnDialog } from './AddCustomColumnDialog'
 import { ColumnHeaderMenu } from './ColumnHeaderMenu'
 import { CreateBidDialog } from './CreateBidDialog'
 import { FilterBar } from './FilterBar'
+import { GridContextMenu, type MenuEntry } from './GridContextMenu'
 import { ManageColumnsPanel } from './ManageColumnsPanel'
 import { EditableCell, type CellDraft, type PendingEdits } from './EditableCell'
 import { FilterBuilder } from './FilterBuilder'
@@ -72,6 +74,18 @@ const saveFrozen = (sheet: string, ids: string[]) => {
 }
 
 const helper = createColumnHelper<BidGridRow>()
+
+// Favourites are a personal shortlist, remembered in this browser.
+const FAVOURITES_KEY = 'goms:bidGrid:favourites'
+const loadFavourites = (): Set<string> => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(FAVOURITES_KEY) ?? '[]')
+    return new Set(Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : [])
+  } catch { return new Set() }
+}
+const saveFavourites = (ids: Set<string>) => {
+  try { localStorage.setItem(FAVOURITES_KEY, JSON.stringify([...ids])) } catch { /* private mode: not remembered */ }
+}
 
 /** Status-like standard columns read as coloured pills, not plain text. */
 const STATUS_BADGE: Record<string, Record<string, BadgeTone>> = {
@@ -123,6 +137,10 @@ function ToolbarPopover({ label, icon, badge, children, open: controlledOpen, on
 export interface MasterGridProps {
   /** Which Opportunity sheet this is: frozen columns are remembered per sheet. */
   sheet?: string
+  /** Master only: narrow the custom columns shown to one sheet's (default: all of them). */
+  columnScope?: MasterScope
+  /** Rendered first in the toolbar (the Master sheet's switcher). */
+  toolbarLead?: ReactNode
   /** Filter rules. Controlled when `onFilterRulesChange` is given (a saved view
    *  owns them); otherwise the grid keeps its own, seeded from this. */
   filterRules?: FilterNode[]
@@ -172,6 +190,10 @@ export function MasterGrid(props: MasterGridProps) {
   const [unlocked, setUnlocked] = useState(false)
   const [lockPromptOpen, setLockPromptOpen] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  // Archived bids leave every normal view; the Archived button switches to a view of only them.
+  const [showArchived, setShowArchived] = useState(false)
+  const [favourites, setFavourites] = useState<Set<string>>(loadFavourites)
+  const [menu, setMenu] = useState<{ x: number; y: number; title: string; groups: MenuEntry[][] } | null>(null)
   const pendingEdits: PendingEdits = useRef(new Map())
   const unlockedRef = useRef(unlocked)
   unlockedRef.current = unlocked
@@ -182,9 +204,17 @@ export function MasterGrid(props: MasterGridProps) {
   // --- data -------------------------------------------------------------------
   const appliedRules = useMemo(() => pruneFilterNodes(rules, isRuleComplete), [rules])
   const { data: fetched, isLoading } = useBidsForGrid(appliedRules)
-  const { data: customFields = [] } = useBidCustomFields()
+  const sheetId = (props.sheet ?? 'bidTracker') as SheetId
+  const { data: allCustomFields = [] } = useBidCustomFields()
+  // A sheet shows only the custom columns it owns; Master shows every sheet's (or the one picked in its switcher).
+  const customFields = useMemo(
+    () => allCustomFields.filter((f) => columnInScope(f.sheet, sheetId, props.columnScope)),
+    [allCustomFields, sheetId, props.columnScope],
+  )
+  // A column added while viewing Master through one sheet's lens belongs to that sheet.
+  const newColumnOwner = sheetId === 'master' && props.columnScope && props.columnScope !== 'all' ? props.columnScope : columnOwner(sheetId)
   const lookups = useEntityLookups()
-  const { archive, unarchive, update: updateBid } = useBidMutations()
+  const { archive, unarchive, remove: removeBid, update: updateBid } = useBidMutations()
   const { assign } = useOwnershipMutations()
   const { data: salesPersons = [] } = useSalesPersons()
   const setCustomValue = useSetBidCustomValue()
@@ -205,9 +235,14 @@ export function MasterGrid(props: MasterGridProps) {
     [visible, frozenSet],
   )
 
+  const archivedCount = useMemo(() => (fetched ?? []).filter((r) => r.status === 'archived').length, [fetched])
+  const modeRows = useMemo(
+    () => (fetched ?? []).filter((r) => (showArchived ? r.status === 'archived' : r.status !== 'archived')),
+    [fetched, showArchived],
+  )
   const rows = useMemo(
-    () => (fetched ?? []).filter((r) => rowMatchesSearch(r, visible, search, lookups)),
-    [fetched, visible, search, lookups],
+    () => modeRows.filter((r) => rowMatchesSearch(r, visible, search, lookups)),
+    [modeRows, visible, search, lookups],
   )
 
   // --- selection & bulk actions -----------------------------------------------
@@ -234,6 +269,17 @@ export function MasterGrid(props: MasterGridProps) {
     return failed.length === 0
   }
   const archiveSelected = () => runBulk((id) => archive.mutateAsync(id))
+  const unarchiveSelected = () => runBulk((id) => unarchive.mutateAsync(id))
+  const toggleFavourite = (id: string) => setFavourites((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    saveFavourites(next)
+    return next
+  })
+  const deleteBid = (row: BidGridRow) => {
+    if (!window.confirm(`Delete ${row.bidCode} (${row.opportunityName}) permanently? The opportunity stays; the bid, its milestones and values are removed. Archive keeps everything.`)) return
+    removeBid.mutate(row.id, { onError: (e) => setBulkError(e instanceof Error ? e.message : 'Could not delete the bid.') })
+  }
   const reassignSelected = async (salesPersonId: string) => {
     if (!salesPersonId) return
     const today = new Date().toISOString().slice(0, 10)
@@ -345,13 +391,34 @@ export function MasterGrid(props: MasterGridProps) {
       )
     }
     if (col.id === 'manage') {
+      const fav = favourites.has(row.id)
+      const archived = row.status === 'archived'
+      const icon = 'flex h-6 w-6 items-center justify-center rounded-md text-muted hover:bg-ink-900/[0.07] hover:text-ink focus-visible:focus-ring'
       return (
-        <Button
-          variant="ghost" size="sm" className="h-6 px-1.5 text-[12px]"
-          onClick={(e) => { e.stopPropagation(); (row.status === 'archived' ? unarchive : archive).mutate(row.id) }}
-        >
-          {row.status === 'archived' ? 'Unarchive' : 'Archive'}
-        </Button>
+        <span className="flex items-center gap-0.5">
+          <button
+            type="button" aria-label={fav ? 'Remove from favourites' : 'Add to favourites'} aria-pressed={fav}
+            title={fav ? 'Remove from favourites' : 'Add to favourites'}
+            onClick={(e) => { e.stopPropagation(); toggleFavourite(row.id) }}
+            className={cn(icon, fav && 'text-amber-500 hover:text-amber-500')}
+          >
+            <Icon name="Star" size={14} className={fav ? 'fill-amber-400' : undefined} />
+          </button>
+          <button
+            type="button" aria-label={archived ? 'Unarchive' : 'Archive'} title={archived ? 'Unarchive' : 'Archive'}
+            onClick={(e) => { e.stopPropagation(); (archived ? unarchive : archive).mutate(row.id) }}
+            className={icon}
+          >
+            <Icon name={archived ? 'ArchiveRestore' : 'Archive'} size={14} />
+          </button>
+          <button
+            type="button" aria-label="Delete bid" title="Delete bid"
+            onClick={(e) => { e.stopPropagation(); deleteBid(row) }}
+            className={cn(icon, 'hover:bg-crimson-100 hover:text-crimson')}
+          >
+            <Icon name="Trash2" size={14} />
+          </button>
+        </span>
       )
     }
     if (col.id === 'attentionFlag') {
@@ -494,7 +561,7 @@ export function MasterGrid(props: MasterGridProps) {
 
   if (isLoading) return <div className="p-4 text-sm text-muted">Loading bids…</div>
 
-  const totalCount = fetched?.length ?? 0
+  const totalCount = modeRows.length
   const hasFilters = rules.length > 0
   const frozenStyle = (id: string) => (frozen.left.has(id) ? { left: frozen.left.get(id) } : undefined)
   const scrollerWidth = parentRef.current?.clientWidth || 1200 // 0 = not laid out yet
@@ -504,11 +571,63 @@ export function MasterGrid(props: MasterGridProps) {
       : null
   // Editable only while unlocked; locked, every cell is read/navigate-only.
   const canEditCell = (meta: GridColumnMeta) => unlocked && !!meta.editable
+  // --- right-click menus ----------------------------------------------------------
+  const openCellMenu = (e: React.MouseEvent, row: BidGridRow, meta: GridColumnMeta) => {
+    e.preventDefault()
+    const v = cellValue(row, meta)
+    const text = meta.type === 'select'
+      ? (meta.options?.find((o) => o.value === v)?.label ?? String(v ?? ''))
+      : formatValueText(meta, v, lookups)
+    const archived = row.status === 'archived'
+    const editable = canEditCell(meta)
+    const root = toRoot(rules)
+    const groups: MenuEntry[][] = [
+      [
+        { label: 'Open details', icon: 'ExternalLink', onSelect: () => navigate(`/bid-tracker/bid/${row.id}`) },
+        {
+          label: editable ? 'Edit cell' : (unlocked ? 'Edit cell (read-only column)' : 'Edit cell (unlock first)'), icon: 'Pencil', disabled: !editable,
+          onSelect: () => document.querySelector<HTMLElement>(`[data-cell="${row.id}:${meta.id}"] [data-editable-cell]`)?.click(),
+        },
+        { label: 'Copy value', icon: 'Copy', disabled: !text, onSelect: () => { void navigator.clipboard?.writeText(text) } },
+      ],
+      [
+        {
+          label: `Filter: ${meta.header} is this value`, icon: 'SlidersHorizontal', disabled: meta.type === null || isEmptyCell(v),
+          onSelect: () => setRules(fromRoot({ ...root, items: [...root.items, { field: meta.id, operator: 'eq', value: String(v) }] })),
+        },
+      ],
+      [
+        { label: favourites.has(row.id) ? 'Remove from favourites' : 'Add to favourites', icon: 'Star', onSelect: () => toggleFavourite(row.id) },
+        { label: archived ? 'Unarchive' : 'Archive', icon: archived ? 'ArchiveRestore' : 'Archive', onSelect: () => (archived ? unarchive : archive).mutate(row.id) },
+        { label: 'Delete bid…', icon: 'Trash2', danger: true, onSelect: () => deleteBid(row) },
+      ],
+    ]
+    setMenu({ x: e.clientX, y: e.clientY, title: `${row.bidCode} · ${meta.header}`, groups })
+  }
+  const openHeaderMenu = (e: React.MouseEvent, column: { getIsSorted: () => false | 'asc' | 'desc'; getCanSort: () => boolean; toggleSorting: (desc?: boolean, multi?: boolean) => void; clearSorting: () => void }, meta: GridColumnMeta) => {
+    e.preventDefault()
+    const sorted = column.getIsSorted()
+    const frozenNow = frozen.left.has(meta.id)
+    const groups: MenuEntry[][] = [
+      [
+        { label: 'Sort ascending', icon: 'ArrowUp', disabled: !column.getCanSort() || sorted === 'asc', onSelect: () => column.toggleSorting(false, false) },
+        { label: 'Sort descending', icon: 'ArrowDown', disabled: !column.getCanSort() || sorted === 'desc', onSelect: () => column.toggleSorting(true, false) },
+        { label: 'Clear sort', icon: 'RotateCcw', disabled: !sorted, onSelect: () => column.clearSorting() },
+      ],
+      [
+        { label: 'Filter by this column', icon: 'SlidersHorizontal', disabled: meta.type === null, onSelect: () => addRule(meta.id) },
+        { label: frozenNow ? 'Unfreeze column' : 'Freeze column', icon: frozenNow ? 'PinOff' : 'Pin', disabled: !frozenNow && !!freezeBlockedReason(meta), onSelect: () => toggleFreeze(meta.id) },
+        { label: 'Hide column', icon: 'EyeOff', disabled: visible.length <= 1, onSelect: () => setVisibleIds(visible.map((c) => c.id).filter((id) => id !== meta.id)) },
+      ],
+    ]
+    setMenu({ x: e.clientX, y: e.clientY, title: `${meta.header} column`, groups })
+  }
   const cellBg = (meta: GridColumnMeta) => (!unlocked || meta.editable ? EDITABLE_BG : READONLY_BG)
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="bid-master-grid">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-line px-3 py-1.5">
+        {props.toolbarLead}
         <div className="relative">
           <Icon name="Search" size={14} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
           <input
@@ -524,7 +643,9 @@ export function MasterGrid(props: MasterGridProps) {
         {selectedIds.length > 0 && (
           <div className="flex items-center gap-2 rounded-lg bg-goms-sky/[0.16] px-2 py-0.5 text-[13px] text-goms-navy" data-testid="bulk-toolbar">
             <span className="font-medium">{selectedIds.length} selected</span>
-            <Button variant="secondary" size="sm" className="h-6 px-2" onClick={archiveSelected}>Archive Selected</Button>
+            {showArchived
+              ? <Button variant="secondary" size="sm" className="h-6 px-2" onClick={unarchiveSelected}>Unarchive Selected</Button>
+              : <Button variant="secondary" size="sm" className="h-6 px-2" onClick={archiveSelected}>Archive Selected</Button>}
             <Button variant="secondary" size="sm" className="h-6 px-2" onClick={() => setReassignOpen(true)}>Reassign Owner</Button>
           </div>
         )}
@@ -541,11 +662,19 @@ export function MasterGrid(props: MasterGridProps) {
             lockedLabel="Master grid editing locked — tap to unlock"
             unlockedLabel="Master grid editing unlocked — tap to lock"
           />
+          <Button
+            variant="secondary" size="sm" aria-pressed={showArchived} className={cn('h-7 px-2.5', showArchived && 'border-goms-navy bg-goms-navy/[0.07]')}
+            title={showArchived ? 'Back to active bids' : 'Show archived bids'}
+            onClick={() => { setShowArchived((v) => !v); setSelected(new Set()) }}
+          >
+            <Icon name="Archive" size={14} /> {showArchived ? 'Archived' : 'Archived'}
+            {archivedCount > 0 && <span className="rounded-full bg-ink-900/10 px-1.5 text-[11px]">{archivedCount}</span>}
+          </Button>
           <ToolbarPopover
             label="Manage columns" icon="List" open={columnsOpen} align="end"
             onOpenChange={(open) => { setColumnsOpen(open); if (!open) setManageColumnId(null) }}
           >
-            <ManageColumnsPanel all={allColumns} visible={visible} onVisibleChange={setVisibleIds} focusId={manageColumnId} />
+            <ManageColumnsPanel all={allColumns} visible={visible} onVisibleChange={setVisibleIds} focusId={manageColumnId} inScope={(f) => columnInScope(f.sheet, sheetId, props.columnScope)} />
           </ToolbarPopover>
           <Button variant="primary" size="sm" className="h-7 px-2.5" onClick={() => setCreateBidOpen(true)}>
             <Icon name="Plus" size={14} /> Create Bid
@@ -615,6 +744,7 @@ export function MasterGrid(props: MasterGridProps) {
                   return (
                     <th
                       key={h.id} scope="col" data-col-id={meta.id}
+                      onContextMenu={(e) => openHeaderMenu(e, h.column, meta)}
                       style={{ ...frozenStyle(meta.id), ...(shadows ? { boxShadow: shadows } : {}) }}
                       aria-sort={sorted === 'asc' ? 'ascending' : sorted === 'desc' ? 'descending' : 'none'}
                       draggable title="Drag to reorder"
@@ -708,7 +838,8 @@ export function MasterGrid(props: MasterGridProps) {
                     const isFrozen = frozen.left.has(meta.id)
                     return (
                       <td
-                        key={cell.id}
+                        key={cell.id} data-cell={`${row.original.id}:${meta.id}`}
+                        onContextMenu={(e) => openCellMenu(e, row.original, meta)}
                         style={{
                           ...frozenStyle(meta.id), height: ROW_HEIGHT,
                           ...(frozen.lastId === meta.id ? { boxShadow: FROZEN_SHADOW } : {}),
@@ -754,18 +885,19 @@ export function MasterGrid(props: MasterGridProps) {
         </table>
         {tableRows.length === 0 && (
           <div className="sticky left-0 flex w-full max-w-full flex-col items-center gap-2 p-8 text-center text-sm text-muted" data-testid="grid-empty">
-            {totalCount === 0 && !hasFilters ? 'No bids yet.' : 'No bids match the current search and filters.'}
+            {totalCount === 0 && !hasFilters ? (showArchived ? 'No archived bids.' : 'No bids yet.') : 'No bids match the current search and filters.'}
             {(hasFilters || search) && (
               <Button variant="ghost" size="sm" onClick={() => { setRules([]); setSearch('') }}>Clear search and filters</Button>
             )}
-            {totalCount === 0 && !hasFilters && (
+            {totalCount === 0 && !hasFilters && !showArchived && (
               <Button variant="primary" size="sm" onClick={() => setCreateBidOpen(true)}><Icon name="Plus" size={14} /> Create Bid</Button>
             )}
           </div>
         )}
       </div>
+      {menu && <GridContextMenu x={menu.x} y={menu.y} title={menu.title} groups={menu.groups} onClose={() => setMenu(null)} />}
       <AddCustomColumnDialog
-        open={addColumnOpen} onClose={() => setAddColumnOpen(false)}
+        open={addColumnOpen} onClose={() => setAddColumnOpen(false)} sheet={newColumnOwner}
         // With an explicit column list (a saved view), absence means hidden — so a
         // brand-new column is appended to it; in the default view it shows itself.
         onCreated={(field) => {

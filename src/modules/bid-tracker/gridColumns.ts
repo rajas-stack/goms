@@ -129,7 +129,7 @@ const WIDTH_BY_ID: Record<string, number> = {
   departmentName: 240, stateCode: 130, city: 130, vertical: 140, ownerEmail: 210, solutionLeadEmail: 230,
   stageKey: 150, nextActionNote: 220, nextActionAssigneeEmail: 210, nextActionDueDate: 120, attentionFlag: 170, decision: 110,
   nextMilestoneLabel: 180, daysRemaining: 130, submissionDate: 160, documentCount: 110, latestCorrigendumStatus: 170,
-  updatedAt: 150, updatedBy: 170, dataConfidence: 150, manage: 110,
+  updatedAt: 150, updatedBy: 170, dataConfidence: 150, manage: 130,
 }
 const WIDTH_BY_TYPE: Record<string, number> = {
   text: 170, number: 120, date: 130, select: 150, boolean: 110,

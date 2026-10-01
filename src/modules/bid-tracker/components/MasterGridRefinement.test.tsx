@@ -522,17 +522,6 @@ describe('Master Grid refinement', () => {
     })
   })
 
-  describe('Archived view', () => {
-    it('Archived is a view on every sheet and lists archived bids', async () => {
-      const a = await makeBid('Alpha'); await makeBid('Beta')
-      await repository.archiveBid(a.id)
-      renderGrid({ filterRules: [{ field: 'status', operator: 'eq', value: 'archived' }] })
-      await screen.findByText('Alpha')
-      await waitFor(() => expect(rowNames()).toEqual(['Alpha']))
-      expect(screen.getByRole('button', { name: 'Unarchive' })).toBeInTheDocument()
-    })
-  })
-
   describe('AND / OR filters', () => {
     async function seed() {
       await makeBid('Alpha'); await makeBid('Beta'); await makeBid('Gamma'); await makeBid('Delta')

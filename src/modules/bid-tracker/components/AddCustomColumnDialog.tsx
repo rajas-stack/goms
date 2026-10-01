@@ -30,7 +30,9 @@ const TYPE_HINT = new Map(TYPE_GROUPS.flatMap((g) => g.types.map((t) => [t.type,
 
 /** Creates a user-defined column. The data type is fixed once created (changing
  *  it under existing values would corrupt them) — the dialog says so. */
-export function AddCustomColumnDialog({ open, onClose, onCreated }: {
+export function AddCustomColumnDialog({ open, onClose, onCreated, sheet }: {
+  /** The sheet that will own the new column (default: Bid Tracker). */
+  sheet?: BidCustomField['sheet']
   open: boolean
   onClose: () => void
   onCreated?: (field: BidCustomField) => void
@@ -54,7 +56,7 @@ export function AddCustomColumnDialog({ open, onClose, onCreated }: {
     setError(null)
     try {
       const field = await create.mutateAsync({
-        name: name.trim(), dataType, ...(hasOptions(dataType) ? { options } : {}),
+        name: name.trim(), dataType, sheet, ...(hasOptions(dataType) ? { options } : {}),
       })
       onCreated?.(field)
       onClose()

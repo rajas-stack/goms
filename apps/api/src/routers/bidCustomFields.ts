@@ -11,7 +11,7 @@ import { assertEntityExists, auditDisplay } from '../lib/customFieldEntities.js'
 function toBidCustomField(row: any) {
   return {
     id: row.id, key: row.key, name: row.name, dataType: row.data_type as CustomFieldType,
-    options: (row.options as string[] | null) ?? null, hasHeldValue: row.has_held_value as boolean, position: row.position, status: row.status as 'active' | 'archived',
+    sheet: row.sheet as string, options: (row.options as string[] | null) ?? null, hasHeldValue: row.has_held_value as boolean, position: row.position, status: row.status as 'active' | 'archived',
     createdBy: row.created_by, updatedBy: row.updated_by, createdAt: row.created_at, updatedAt: row.updated_at,
   }
 }
@@ -66,7 +66,7 @@ export const bidCustomFieldsRouter = router({
     }),
 
   create: protectedProcedure
-    .input(z.object({ name: fieldName, dataType: fieldType, options: z.array(z.string()).optional() }))
+    .input(z.object({ name: fieldName, dataType: fieldType, options: z.array(z.string()).optional(), sheet: z.enum(['bidTracker', 'pipeline', 'campaign', 'master']).optional() }))
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
       let options: string[] | null = null
       if (hasOptions(input.dataType)) {
@@ -81,9 +81,9 @@ export const bidCustomFieldsRouter = router({
       let row: any
       try {
         row = (await client.query(
-          `INSERT INTO bid_custom_fields (key, name, data_type, options, position, created_by, updated_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$6) RETURNING *`,
-          [key, input.name, input.dataType, options === null ? null : JSON.stringify(options), position, ctx.user?.email ?? null],
+          `INSERT INTO bid_custom_fields (key, name, data_type, options, position, created_by, updated_by, sheet)
+           VALUES ($1,$2,$3,$4,$5,$6,$6,$7) RETURNING *`,
+          [key, input.name, input.dataType, options === null ? null : JSON.stringify(options), position, ctx.user?.email ?? null, input.sheet ?? 'bidTracker'],
         )).rows[0]
       } catch (e) {
         if (isUniqueViolation(e)) nameConflict(input.name)

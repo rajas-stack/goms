@@ -8,7 +8,7 @@ import {
 import { buildLookups } from './gridColumns'
 
 const field = (key: string, name: string, dataType: BidCustomField['dataType'], options: string[] | null = null): BidCustomField => ({
-  id: `f-${key}`, key, name, dataType, options, hasHeldValue: true, position: 0, status: 'active', createdBy: null, updatedBy: null,
+  id: `f-${key}`, key, name, dataType, sheet: 'bidTracker', options, hasHeldValue: true, position: 0, status: 'active', createdBy: null, updatedBy: null,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z',
 })
 const person = (id: string, name: string, officialEmail: string) => ({ id, name, officialEmail }) as SalesPerson

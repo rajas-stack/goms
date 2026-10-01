@@ -7,7 +7,7 @@ import {
 } from './gridColumns'
 
 const field = (over: Partial<BidCustomField> & Pick<BidCustomField, 'key' | 'name' | 'dataType'>): BidCustomField => ({
-  id: `id-${over.key}`, options: null, hasHeldValue: false, position: 0, status: 'active', createdBy: null, updatedBy: null,
+  id: `id-${over.key}`, sheet: 'bidTracker', options: null, hasHeldValue: false, position: 0, status: 'active', createdBy: null, updatedBy: null,
   createdAt: '2026-01-01T00:00:00Z', updatedAt: '2026-01-01T00:00:00Z', ...over,
 })
 

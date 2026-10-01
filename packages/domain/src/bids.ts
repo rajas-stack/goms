@@ -80,8 +80,6 @@ export const SYSTEM_BID_VIEWS: SystemBidView[] = [
   { key: 'dueSoon', name: 'Due Soon', filterRules: [{ field: 'attentionFlag', operator: 'eq', value: 'dueSoon' }] },
   { key: 'overdue', name: 'Overdue', filterRules: [{ field: 'attentionFlag', operator: 'eq', value: 'overdue' }] },
   { key: 'goApproved', name: 'Go Approved', filterRules: [{ field: 'stageKey', operator: 'eq', value: 'goApproved' }] },
-  // Archived bids are kept, not deleted; this is where they are found (and unarchived) on every sheet.
-  { key: 'archived', name: 'Archived', filterRules: [{ field: 'status', operator: 'eq', value: 'archived' }] },
 ]
 export const SYSTEM_BID_VIEW_KEYS = new Set(SYSTEM_BID_VIEWS.map((v) => v.key))
 

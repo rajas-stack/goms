@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { cn } from '@/lib/utils'
@@ -27,12 +27,21 @@ export function ColumnsPanel({ all, visible, onChange, focusId, onDeleteCustom }
   const visibleIds = visible.map((c) => c.id)
   const hidden = all.filter((c) => !visibleIds.includes(c.id))
 
-  const move = (index: number, delta: -1 | 1) => {
-    const next = [...visibleIds]
-    const target = index + delta
-    if (target < 0 || target >= next.length) return
-    ;[next[index], next[target]] = [next[target], next[index]]
-    onChange(next)
+  // Reorder by dragging a row anywhere up or down the list (or Alt+↑/↓ on its handle, for the keyboard).
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [overId, setOverId] = useState<string | null>(null)
+  const moveTo = (fromId: string, toId: string) => {
+    const ids = [...visibleIds]
+    const from = ids.indexOf(fromId)
+    const to = ids.indexOf(toId)
+    if (from < 0 || to < 0 || from === to) return
+    ids.splice(from, 1)
+    ids.splice(to, 0, fromId)
+    onChange(ids)
+  }
+  const nudge = (index: number, delta: -1 | 1) => {
+    const target = visible[index + delta]
+    if (target) moveTo(visible[index].id, target.id)
   }
   const hide = (id: string) => onChange(visibleIds.filter((v) => v !== id))
   const show = (id: string) => onChange([...visibleIds, id])
@@ -49,17 +58,31 @@ export function ColumnsPanel({ all, visible, onChange, focusId, onDeleteCustom }
             <li
               key={c.id} ref={c.id === focusId ? focusRef : undefined} data-testid="shown-column"
               aria-current={c.id === focusId ? 'true' : undefined}
-              className={cn('flex items-center gap-1 rounded-md px-1 py-0.5 hover:bg-goms-sky/[0.1]', c.id === focusId && 'bg-goms-sky/20 ring-1 ring-goms-sky')}
+              draggable
+              onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', c.id); setDragId(c.id) }}
+              onDragOver={(e) => { if (dragId && dragId !== c.id) { e.preventDefault(); setOverId(c.id) } }}
+              onDrop={(e) => { e.preventDefault(); if (dragId) moveTo(dragId, c.id); setDragId(null); setOverId(null) }}
+              onDragEnd={() => { setDragId(null); setOverId(null) }}
+              className={cn(
+                'flex items-center gap-1 rounded-md px-1 py-0.5 hover:bg-goms-sky/[0.1]',
+                c.id === focusId && 'bg-goms-sky/20 ring-1 ring-goms-sky',
+                dragId === c.id && 'opacity-40',
+                overId === c.id && 'shadow-[inset_0_2px_0_#4CA7DD]',
+              )}
             >
+              <button
+                type="button" aria-label={`Drag to reorder ${c.header}`} title="Drag up or down to reorder"
+                onKeyDown={(e) => {
+                  if (e.altKey && e.key === 'ArrowUp') { e.preventDefault(); nudge(i, -1) }
+                  if (e.altKey && e.key === 'ArrowDown') { e.preventDefault(); nudge(i, 1) }
+                }}
+                className="flex h-6 w-5 shrink-0 cursor-grab items-center justify-center rounded text-muted hover:text-ink active:cursor-grabbing focus-visible:focus-ring"
+              >
+                <Icon name="GripVertical" size={14} />
+              </button>
               <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
                 {c.header} <span className="text-[11px] text-muted">· {groupLabel(c.group)}</span>
               </span>
-              <Button variant="ghost" size="icon" aria-label={`Move ${c.header} up`} title="Move left in the grid" disabled={i === 0} onClick={() => move(i, -1)}>
-                <Icon name="ArrowUp" size={14} />
-              </Button>
-              <Button variant="ghost" size="icon" aria-label={`Move ${c.header} down`} title="Move right in the grid" disabled={i === visible.length - 1} onClick={() => move(i, 1)}>
-                <Icon name="ArrowDown" size={14} />
-              </Button>
               {/* The last column stays: an empty list would mean "show every column". */}
               <Button
                 variant="ghost" size="icon" aria-label={`Hide ${c.header}`} disabled={visible.length === 1}

@@ -538,7 +538,7 @@ export interface Repository {
 
   // --- Bid Tracker: custom columns (spec §8.1) ---
   listBidCustomFields(includeArchived?: boolean): Promise<BidCustomField[]>
-  createBidCustomField(input: { name: string; dataType: CustomFieldType; options?: string[] }): Promise<BidCustomField>
+  createBidCustomField(input: { name: string; dataType: CustomFieldType; options?: string[]; sheet?: BidCustomField['sheet'] }): Promise<BidCustomField>
   /** `key` and `dataType` are deliberately not patchable. */
   updateBidCustomField(id: string, patch: { name?: string; options?: string[] }): Promise<BidCustomField>
   /** `ids` must be exactly the current active column ids, each once. */
@@ -1925,7 +1925,7 @@ class InMemoryRepository implements Repository {
       .sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt))
   }
 
-  async createBidCustomField(input: { name: string; dataType: CustomFieldType; options?: string[] }) {
+  async createBidCustomField(input: { name: string; dataType: CustomFieldType; options?: string[]; sheet?: BidCustomField['sheet'] }) {
     const name = input.name.trim()
     if (!name || name.length > 80) throw new Error('A column name must be 1–80 characters.')
     let options: string[] | null = null
@@ -1936,7 +1936,7 @@ class InMemoryRepository implements Repository {
     const field: BidCustomField = {
       id: uid('bcf'),
       key: slugifyFieldKey(name, new Set(this.data.bidCustomFields.map((f) => f.key))),
-      name, dataType: input.dataType, options, hasHeldValue: false,
+      name, dataType: input.dataType, options, hasHeldValue: false, sheet: input.sheet ?? 'bidTracker',
       position: this.data.bidCustomFields.reduce((max, f) => Math.max(max, f.position), -1) + 1,
       status: 'active', createdBy: null, updatedBy: null, createdAt: now, updatedAt: now,
     }

@@ -115,15 +115,22 @@ describe('MasterGrid', () => {
       expect(within(row).getByText('Solutioning')).toBeInTheDocument()
     })
 
-    it('archives and unarchives from the Manage column without navigating', async () => {
+    it('archiving removes the bid from the grid; the Archived button shows only archived bids, where it can be unarchived', async () => {
       const bid = await makeBid('Alpha')
+      await makeBid('Beta')
       renderGrid()
       await screen.findByText('Alpha')
-      await userEvent.click(screen.getByRole('button', { name: 'Archive' }))
-      await screen.findByRole('button', { name: 'Unarchive' })
+      await userEvent.click(within(screen.getAllByTestId('bid-row')[0]).getByRole('button', { name: 'Archive' }))
+      await waitFor(() => expect(rowNames()).toEqual(['Beta']))
       expect((await repository.getBid(bid.id))!.status).toBe('archived')
+      const toggle = screen.getByRole('button', { name: /^Archived/ })
+      expect(toggle).toHaveTextContent('1')
+      await userEvent.click(toggle)
+      await waitFor(() => expect(rowNames()).toEqual(['Alpha']))
       await userEvent.click(screen.getByRole('button', { name: 'Unarchive' }))
-      await screen.findByRole('button', { name: 'Archive' })
+      await waitFor(() => expect(screen.getByTestId('grid-empty')).toHaveTextContent('No archived bids.'))
+      await userEvent.click(screen.getByRole('button', { name: /^Archived/ }))
+      await waitFor(() => expect(rowNames().sort()).toEqual(['Alpha', 'Beta']))
     })
   })
 
@@ -443,7 +450,7 @@ describe('MasterGrid', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Show City' }))
       const leafs = () => Array.from(document.querySelectorAll('thead tr:nth-child(2) th')).map((th) => th.textContent)
       expect(leafs()[leafs().length - 1]).toBe('City') // shown again at the end
-      await userEvent.click(screen.getByRole('button', { name: 'Move City up' }))
+      fireEvent.keyDown(screen.getByRole('button', { name: 'Drag to reorder City' }), { key: 'ArrowUp', altKey: true })
       expect(leafs()[leafs().length - 2]).toBe('City')
     })
 
@@ -478,7 +485,7 @@ describe('MasterGrid', () => {
       renderGrid({ visibleColumns: ['opportunityName', 'bidCode', 'city'], onVisibleColumnsChange })
       await screen.findByText('Alpha')
       await openPopover('Manage columns')
-      await userEvent.click(screen.getByRole('button', { name: 'Move City up' }))
+      fireEvent.keyDown(screen.getByRole('button', { name: 'Drag to reorder City' }), { key: 'ArrowUp', altKey: true })
       expect(onVisibleColumnsChange).toHaveBeenCalledWith(['opportunityName', 'city', 'bidCode'])
     })
 
@@ -504,7 +511,7 @@ describe('MasterGrid', () => {
       renderGrid({ visibleColumns: ['opportunityName', 'bidCode'], onVisibleColumnsChange })
       await screen.findByText('Alpha')
       await openPopover('Manage columns')
-      await userEvent.click(screen.getByRole('button', { name: 'Move Bid ID up' }))
+      fireEvent.keyDown(screen.getByRole('button', { name: 'Drag to reorder Bid ID' }), { key: 'ArrowUp', altKey: true })
       expect(onVisibleColumnsChange).toHaveBeenCalledWith(['bidCode', 'opportunityName'])
     })
   })

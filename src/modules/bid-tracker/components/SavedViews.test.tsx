@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -40,9 +40,9 @@ describe('saved views', () => {
     await resetLocalData()
   })
 
-  it('shows the system views (incl. Archived), never the two example views, and offers Create Saved View', async () => {
+  it('shows the seven system views, never the two example views, and offers Create Saved View', async () => {
     renderWorkspace()
-    for (const n of ['All Bids', 'My Bids', 'Solutioning', 'Qualification', 'Due Soon', 'Overdue', 'Go Approved', 'Archived']) {
+    for (const n of ['All Bids', 'My Bids', 'Solutioning', 'Qualification', 'Due Soon', 'Overdue', 'Go Approved']) {
       expect(await screen.findByRole('button', { name: n })).toBeInTheDocument()
     }
     expect(screen.queryByText('Smart Transport Bids')).not.toBeInTheDocument()
@@ -109,7 +109,7 @@ describe('saved views', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Mine' }))
     await waitFor(() => expect(leafHeaders()).toEqual(['Opportunity / Mission', 'Bid ID']))
     await userEvent.click(screen.getByRole('button', { name: /Manage columns/ }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Move Bid ID up' }))
+    fireEvent.keyDown(await screen.findByRole('button', { name: 'Drag to reorder Bid ID' }), { key: 'ArrowUp', altKey: true })
     await waitFor(async () => {
       expect((await repository.listBidSavedViews()).find((v) => v.id === view.id)!.visibleColumns).toEqual(['bidCode', 'opportunityName'])
     }, { timeout: 3000 })

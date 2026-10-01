@@ -456,8 +456,11 @@ export interface BidSavedView {
 }
 /** A user-defined Master Grid column (spec §8.1). `key` and `dataType` are
  *  immutable after creation; `custom:<key>` is the grid column id. */
+/** The Opportunity sheet a custom column belongs to; Master shows every sheet's columns together. */
+export type ColumnOwner = 'bidTracker' | 'pipeline' | 'campaign' | 'master'
 export interface BidCustomField {
   id: string; key: string; name: string; dataType: CustomFieldType
+  sheet: ColumnOwner
   /** Non-null exactly for `select`. */
   options: string[] | null
   /** True once any non-null value has EVER been written (never reset, even if

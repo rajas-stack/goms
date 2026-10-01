@@ -312,7 +312,7 @@ export class RemoteRepository implements Partial<Repository> {
   // --- Bid Tracker: custom columns (spec §8.1) ---
   listBidCustomFields = (includeArchived?: boolean): Promise<BidCustomField[]> =>
     this.client.bidCustomFields.list.query({ includeArchived }) as unknown as Promise<BidCustomField[]>
-  createBidCustomField = (input: { name: string; dataType: CustomFieldType; options?: string[] }): Promise<BidCustomField> =>
+  createBidCustomField = (input: { name: string; dataType: CustomFieldType; options?: string[]; sheet?: BidCustomField['sheet'] }): Promise<BidCustomField> =>
     this.client.bidCustomFields.create.mutate(input) as unknown as Promise<BidCustomField>
   updateBidCustomField = (id: string, patch: { name?: string; options?: string[] }): Promise<BidCustomField> =>
     this.client.bidCustomFields.update.mutate({ id, patch }) as unknown as Promise<BidCustomField>
