@@ -4,6 +4,7 @@ import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isForeignKeyViolation } from '../db-errors.js'
 import { assertFieldsNotProtected } from '../lib/protectedValues.js'
+import { writeAuditLog } from '../lib/auditLog.js'
 import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from '@goms/domain'
 
 function toOpportunity(row: any) {
@@ -61,6 +62,8 @@ const patchShape = {
   budgetKnown: z.string().optional(), emdAmount: z.string().optional(), emdUnit: z.string().optional(),
   salesPersonEmail: z.string().optional(),
 }
+/** Opportunity fields edited from a bid's grid row that belong in the bid's Activity History. */
+const BID_HISTORY_FIELDS = ['opportunityName', 'city', 'vertical']
 const columnFor: Record<string, string> = {
   departmentId: 'department_id', stateCode: 'state_code', stageKey: 'stage_key', closedOn: 'closed_on',
   opportunityName: 'opportunity_name', gemTenderId: 'gem_tender_id', city: 'city', publishDate: 'publish_date',
@@ -156,7 +159,7 @@ export const opportunitiesRouter = router({
     }),
   update: protectedProcedure
     .input(z.object({ id: z.string().uuid(), patch: z.object(patchShape) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
@@ -203,6 +206,23 @@ export const opportunitiesRouter = router({
           const setClauses = fields.map((f, i) => `${columnFor[f]}=$${i + 1}`)
           values.push(input.id)
           await client.query(`UPDATE opportunities SET ${setClauses.join(', ')} WHERE id=$${values.length}`, values)
+
+          // The fields the Bid Tracker grid edits inline are part of the BID's history:
+          // log each real change against the bid, and mark the bid as updated.
+          const bid = (await client.query('SELECT id FROM bids WHERE opportunity_id=$1', [input.id])).rows[0]
+          const logged = bid ? fields.filter((f) => BID_HISTORY_FIELDS.includes(f)) : []
+          let changed = false
+          for (const f of logged) {
+            const before = String(current[columnFor[f]] ?? '')
+            const after = String((input.patch as any)[f] ?? '')
+            if (before === after) continue
+            changed = true
+            await writeAuditLog(client, {
+              entityType: 'bid', entityId: bid.id, field: f, oldValue: before, newValue: after,
+              reason: '', action: 'update', changedBy: ctx.user?.email,
+            })
+          }
+          if (changed) await client.query('UPDATE bids SET updated_at=now() WHERE id=$1', [bid.id])
         }
 
         // A stage change is a logged event, not a silent field write — this

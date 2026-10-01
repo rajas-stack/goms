@@ -157,6 +157,14 @@ describe('custom field domain helpers', () => {
       date: ['before', 'after', 'between'],
       select: ['eq', 'in'],
       boolean: ['eq'],
+      currency: ['eq', 'gt', 'lt', 'between'],
+      url: ['contains', 'eq', 'startsWith'],
+      email: ['contains', 'eq', 'startsWith'],
+      phone: ['contains', 'eq', 'startsWith'],
+      person: ['eq', 'in'],
+      department: ['eq', 'in'],
+      state: ['eq', 'in'],
+      multiselect: ['eq', 'in'],
     })
   })
 })

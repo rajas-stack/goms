@@ -4,6 +4,7 @@ import { classifyRows, findFuzzyCandidates } from '../engine.js'
 import { assertFieldsNotProtected } from '../../lib/protectedValues.js'
 import { writeAuditLog } from '../../lib/auditLog.js'
 import { auditText, CUSTOM_VALUE_COLUMNS, customValueColumns, customValueFromRow } from '../../lib/customFieldValues.js'
+import { displayStored, loadEntityIndex, resolveImportCell, type EntityIndex } from '../../lib/customFieldEntities.js'
 import type { ImportFieldDiff, ImportRowResult } from '../types.js'
 
 type Client = { query: (sql: string, params?: unknown[]) => Promise<any> }
@@ -78,12 +79,12 @@ async function fetchExistingBidsByTenderId(client: Client): Promise<Map<string, 
   ]))
 }
 
-function coerceRecognized(recognized: ReturnType<typeof classifyHeadings>['recognized']) {
+function coerceRecognized(recognized: ReturnType<typeof classifyHeadings>['recognized'], index: EntityIndex) {
   const values: { field: CustomFieldDef; value: Exclude<CustomValue, null> }[] = []
   const errors: string[] = []
   for (const { field, heading, raw } of recognized) {
     try {
-      const value = coerceCustomValue(field.dataType, raw, field.options)
+      const value = coerceCustomValue(field.dataType, resolveImportCell(field.dataType, raw, index), field.options)
       if (value !== null) values.push({ field, value })
     } catch (e) {
       errors.push(`Column "${heading}": ${e instanceof Error ? e.message : 'invalid value'}`)
@@ -96,6 +97,7 @@ export async function validateBidRows(client: Client, rawRows: unknown[]): Promi
   const opportunityIdByTenderId = await fetchOpportunityIdsByTenderId(client)
   const existingBidsByTenderId = await fetchExistingBidsByTenderId(client)
   const customFields = await fetchCustomFields(client)
+  const entityIndex = await loadEntityIndex(client)
   const knownTenderIds = Array.from(opportunityIdByTenderId.keys())
 
   const results = classifyRows<unknown, ExistingBid>({
@@ -111,10 +113,16 @@ export async function validateBidRows(client: Client, rawRows: unknown[]): Promi
       if (row.tenderLink && row.tenderLink !== existing.tenderLink) {
         diffs.push({ field: 'tenderLink', oldValue: existing.tenderLink, newValue: row.tenderLink })
       }
-      const { values } = coerceRecognized(classifyHeadings(row, customFields).recognized)
+      const { values } = coerceRecognized(classifyHeadings(row, customFields).recognized, entityIndex)
       for (const { field, value } of values) {
         const before = existing.customValues[field.key] ?? ''
-        if (String(value) !== before) diffs.push({ field: `custom:${field.key}`, oldValue: before, newValue: String(value) })
+        if (String(value) !== before) {
+          diffs.push({
+            field: `custom:${field.key}`,
+            oldValue: before === '' ? '' : displayStored(field.dataType, before, entityIndex),
+            newValue: displayStored(field.dataType, value, entityIndex),
+          })
+        }
       }
       return diffs
     },
@@ -122,7 +130,7 @@ export async function validateBidRows(client: Client, rawRows: unknown[]): Promi
       const parsed = bidRowSchema.safeParse(raw)
       if (!parsed.success) return { errors: parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`) }
       const key = parsed.data.gemTenderId
-      const { errors: valueErrors } = coerceRecognized(classifyHeadings(parsed.data, customFields).recognized)
+      const { errors: valueErrors } = coerceRecognized(classifyHeadings(parsed.data, customFields).recognized, entityIndex)
       if (valueErrors.length) return { errors: valueErrors }
       if (opportunityIdByTenderId.has(key)) return { errors: [] }
       const suggestions = findFuzzyCandidates(key, knownTenderIds)
@@ -153,6 +161,7 @@ export async function validateBidRows(client: Client, rawRows: unknown[]): Promi
 export async function commitBidRows(client: Client, rawRows: unknown[], preview: ImportRowResult[]): Promise<void> {
   const opportunityIdByTenderId = await fetchOpportunityIdsByTenderId(client)
   const customFields = await fetchCustomFields(client)
+  const entityIndex = await loadEntityIndex(client)
 
   for (let i = 0; i < rawRows.length; i++) {
     const result = preview[i]
@@ -161,7 +170,7 @@ export async function commitBidRows(client: Client, rawRows: unknown[], preview:
     const opportunityId = opportunityIdByTenderId.get(row.gemTenderId)
     if (!opportunityId) continue // validate already guarantees a create/update row resolves; defensive only
     const { recognized, unknown } = classifyHeadings(row, customFields)
-    const { values } = coerceRecognized(recognized)
+    const { values } = coerceRecognized(recognized, entityIndex)
 
     let bidId: string
     if (result.action === 'create') {
@@ -190,7 +199,7 @@ export async function commitBidRows(client: Client, rawRows: unknown[], preview:
       }
     }
 
-    for (const { field, value } of values) await upsertImportedCustomValue(client, bidId, field, value)
+    for (const { field, value } of values) await upsertImportedCustomValue(client, bidId, field, value, entityIndex)
     // A sheet with columns we could not place is something a human should glance at.
     if (unknown.length) await client.query(`UPDATE bids SET data_confidence='needs_review', updated_at=now() WHERE id=$1`, [bidId])
   }
@@ -214,7 +223,7 @@ export async function commitBidRows(client: Client, rawRows: unknown[], preview:
 }
 
 /** Same typed upsert + has_held_value + audit as bidCustomFields.setValue. */
-async function upsertImportedCustomValue(client: Client, bidId: string, field: CustomFieldDef, value: Exclude<CustomValue, null>) {
+async function upsertImportedCustomValue(client: Client, bidId: string, field: CustomFieldDef, value: Exclude<CustomValue, null>, index: EntityIndex) {
   const existing = (await client.query(
     `SELECT ${CUSTOM_VALUE_COLUMNS} FROM bid_custom_field_values WHERE bid_id=$1 AND field_id=$2`, [bidId, field.id],
   )).rows[0]
@@ -231,8 +240,8 @@ async function upsertImportedCustomValue(client: Client, bidId: string, field: C
   )
   if (oldValue !== value) {
     await writeAuditLog(client, {
-      entityType: 'bidCustomFieldValue', entityId: bidId, field: field.key, oldValue: auditText(oldValue),
-      newValue: auditText(value), reason: 'Imported', action: 'custom_value_set',
+      entityType: 'bidCustomFieldValue', entityId: bidId, field: field.key, oldValue: displayStored(field.dataType, oldValue, index),
+      newValue: displayStored(field.dataType, value, index), reason: 'Imported', action: 'custom_value_set',
     })
   }
 }

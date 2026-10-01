@@ -1,11 +1,12 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { coerceCustomValue, normalizeOptions, slugifyFieldKey, type CustomFieldType, type CustomValue } from '@goms/domain'
+import { CUSTOM_FIELD_TYPES, coerceCustomValue, hasOptions, normalizeOptions, slugifyFieldKey, type CustomFieldType, type CustomValue } from '@goms/domain'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isForeignKeyViolation, isUniqueViolation } from '../db-errors.js'
 import { writeAuditLog } from '../lib/auditLog.js'
-import { auditText, customValueColumns, customValueFromRow, CUSTOM_VALUE_COLUMNS } from '../lib/customFieldValues.js'
+import { customValueColumns, customValueFromRow, CUSTOM_VALUE_COLUMNS } from '../lib/customFieldValues.js'
+import { assertEntityExists, auditDisplay } from '../lib/customFieldEntities.js'
 
 function toBidCustomField(row: any) {
   return {
@@ -15,7 +16,7 @@ function toBidCustomField(row: any) {
   }
 }
 
-const fieldType = z.enum(['text', 'number', 'date', 'select', 'boolean'])
+const fieldType = z.enum(CUSTOM_FIELD_TYPES as [CustomFieldType, ...CustomFieldType[]])
 const fieldName = z.string().trim().min(1).max(80)
 
 /** Serializes definition changes (create/rename/unarchive/reorder) so the
@@ -68,10 +69,10 @@ export const bidCustomFieldsRouter = router({
     .input(z.object({ name: fieldName, dataType: fieldType, options: z.array(z.string()).optional() }))
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
       let options: string[] | null = null
-      if (input.dataType === 'select') {
+      if (hasOptions(input.dataType)) {
         try { options = normalizeOptions(input.options ?? []) } catch (e) { badRequest(e) }
       } else if (input.options !== undefined) {
-        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only a select column has options.' })
+        throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only a select or multi-select column has options.' })
       }
       await lockDefinitions(client)
       const taken = new Set<string>((await client.query('SELECT key FROM bid_custom_fields')).rows.map((r: any) => r.key))
@@ -114,7 +115,7 @@ export const bidCustomFieldsRouter = router({
         audits.push({ ...base, field: 'name', oldValue: current.name, newValue: input.patch.name, reason: '', action: 'custom_field_renamed' })
       }
       if (input.patch.options !== undefined) {
-        if (current.data_type !== 'select') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only a select column has options.' })
+        if (!hasOptions(current.data_type)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only a select or multi-select column has options.' })
         let next: string[]
         try { next = normalizeOptions(input.patch.options) } catch (e) { badRequest(e) }
         const prev: string[] = current.options ?? []
@@ -239,15 +240,18 @@ export const bidCustomFieldsRouter = router({
       const dataType = field.data_type as CustomFieldType
       let value: CustomValue
       try { value = coerceCustomValue(dataType, input.value, field.options) } catch (e) { badRequest(e) }
+      await assertEntityExists(client, dataType, value)
 
       const existing = (await client.query(
         `SELECT ${CUSTOM_VALUE_COLUMNS} FROM bid_custom_field_values WHERE bid_id=$1 AND field_id=$2`, [input.bidId, input.fieldId],
       )).rows[0]
       const oldValue = existing ? customValueFromRow(dataType, existing) : null
-      const audit = (action: string) => writeAuditLog(client, {
+      // Readable audit text: an entity column logs the name, not the stored id/code.
+      const audit = async (action: string) => writeAuditLog(client, {
         // entityId is the BID so the edit shows in that bid's Activity History.
-        entityType: 'bidCustomFieldValue', entityId: input.bidId, field: field.key, oldValue: auditText(oldValue),
-        newValue: auditText(value), reason: '', action, changedBy: ctx.user?.email,
+        entityType: 'bidCustomFieldValue', entityId: input.bidId, field: field.key,
+        oldValue: await auditDisplay(client, dataType, oldValue), newValue: await auditDisplay(client, dataType, value),
+        reason: '', action, changedBy: ctx.user?.email,
       })
 
       if (value === null) {

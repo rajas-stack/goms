@@ -1,6 +1,6 @@
 import {
   CUSTOM_FIELD_PREFIX, STANDARD_BID_FIELD_TYPES, matchesTypedRule,
-  type CustomFieldType, type TypedFilterRule,
+  isFilterGroup, type CustomFieldType, type FilterNode,
 } from './bidCustomFields.js'
 
 // Bid Tracker's own stage machine — deliberately separate from
@@ -59,7 +59,7 @@ export function formatBidCode(year: number | string, seq: number): string {
  *  is still valid for every field type, so stored rules and the system views
  *  are unaffected. `value2` is the upper bound of `between`; `values` is the
  *  option list of `in`. */
-export type SystemBidViewFilterRule = TypedFilterRule
+export type SystemBidViewFilterRule = FilterNode
 export interface SystemBidView {
   key: string
   name: string
@@ -114,14 +114,19 @@ export function resolveFilterValue(value: string, currentUserEmail: string | nul
   return value === '$currentUser' ? currentUserEmail : value
 }
 
-/** Filters grid rows by AND-ing every rule. `fieldTypes` maps a rule's `field`
- *  to its type: standard columns default to `STANDARD_BID_FIELD_TYPES`, and
- *  the caller adds one `custom:<key>` entry per ACTIVE custom field. Custom
+/** Filters grid rows. `rules` is an AND list whose items are either a rule
+ *  or a group (`{logic, rules}`) joined by AND / OR, evaluated recursively — so
+ *  "State = Gujarat AND (Region = West OR Region = North)" is
+ *  `[stateRule, { logic: 'or', rules: [west, north] }]`. A flat array of rules
+ *  keeps its old meaning (every rule must match). `fieldTypes` maps a rule's
+ *  `field` to its type: standard columns default to `STANDARD_BID_FIELD_TYPES`,
+ *  and the caller adds one `custom:<key>` entry per ACTIVE custom field. Custom
  *  cells are read from `row.customValues[key]`.
  *
  *  A rule on a `custom:<key>` field that is absent from `fieldTypes` (the
  *  column was archived or never existed) is SKIPPED — not "match nothing" —
- *  so a saved view survives its column being archived (spec §8.1). */
+ *  so a saved view survives its column being archived (spec §8.1). A group left
+ *  with no applicable rules is skipped too. */
 export function applyFilterRules<T extends Record<string, unknown>>(
   rows: T[],
   rules: SystemBidViewFilterRule[],
@@ -129,9 +134,12 @@ export function applyFilterRules<T extends Record<string, unknown>>(
   fieldTypes: Record<string, CustomFieldType> = {},
 ): T[] {
   const types = { ...STANDARD_BID_FIELD_TYPES, ...fieldTypes }
-  const applicable = rules.filter((r) => !r.field.startsWith(CUSTOM_FIELD_PREFIX) || r.field in types)
-  if (!applicable.length) return rows
-  return rows.filter((row) => applicable.every((rule) => {
+  const applicable = (n: FilterNode): boolean =>
+    isFilterGroup(n) ? n.rules.some(applicable) : !n.field.startsWith(CUSTOM_FIELD_PREFIX) || n.field in types
+  const live = rules.filter(applicable)
+  if (!live.length) return rows
+
+  const matchRule = (row: T, rule: Exclude<FilterNode, { logic: unknown }>): boolean => {
     const target = resolveFilterValue(rule.value, currentUserEmail)
     // A token that resolves to "no value" (e.g. $currentUser with no
     // signed-in user) must never match, even a row whose own field is also
@@ -143,7 +151,14 @@ export function applyFilterRules<T extends Record<string, unknown>>(
       ? (row.customValues as Record<string, unknown> | undefined)?.[rule.field.slice(CUSTOM_FIELD_PREFIX.length)]
       : row[rule.field]
     return matchesTypedRule(types[rule.field] ?? 'text', cell, rule, target)
-  }))
+  }
+  const matchNode = (row: T, node: FilterNode): boolean => {
+    if (!isFilterGroup(node)) return matchRule(row, node)
+    const kids = node.rules.filter(applicable)
+    if (!kids.length) return true
+    return node.logic === 'or' ? kids.some((k) => matchNode(row, k)) : kids.every((k) => matchNode(row, k))
+  }
+  return rows.filter((row) => live.every((node) => matchNode(row, node)))
 }
 
 // --- Create Bid: resolving the opportunity's department ----------------------

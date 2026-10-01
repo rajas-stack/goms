@@ -9,7 +9,7 @@ import { applyStageChange, insertOpportunity } from './opportunities.js'
 import { loadOwnershipContext } from './ownership.js'
 import { writeAuditLog } from '../lib/auditLog.js'
 import { departmentChoiceSchema, newBidOpportunitySchema, resolveBidDepartment } from '../lib/opportunityDepartment.js'
-import { filterRuleSchema } from '../lib/filterRuleSchema.js'
+import { filterNodeSchema } from '../lib/filterRuleSchema.js'
 import { CUSTOM_VALUE_COLUMNS, customValueFromRow } from '../lib/customFieldValues.js'
 
 export function toBid(row: any) {
@@ -89,7 +89,7 @@ export const bidsRouter = router({
     }),
 
   listForGrid: protectedReadProcedure
-    .input(z.object({ filterRules: z.array(filterRuleSchema).optional() }).optional())
+    .input(z.object({ filterRules: z.array(filterNodeSchema).optional() }).optional())
     .query(async ({ input, ctx }) => {
       const [gridResult, corrigendaPendingResult, { assignments, ctx: ownershipCtx }, customFieldsResult, customValuesResult] = await Promise.all([
         pool.query(`
