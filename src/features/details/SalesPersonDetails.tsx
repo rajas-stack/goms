@@ -113,12 +113,16 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
 
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="flex h-full flex-col overflow-y-auto">
-      <div className="flex items-center gap-3 border-b border-line px-4 py-4">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-4">
         <Avatar person={{ name: person.name, photoUrl: person.photoUrl }} size="md" />
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-base font-semibold text-ink-900">{person.name}</h2>
-          <p className="truncate text-[13px] text-muted">{current?.designation || 'No current posting'}</p>
+        {/* Wraps (never ellipsizes) so the full name is always readable; the
+            basis keeps it from being squeezed below ~9rem before the action
+            buttons drop to their own line instead. */}
+        <div className="min-w-0 flex-1 basis-36">
+          <h2 className="break-words text-base font-semibold leading-snug text-ink-900">{person.name}</h2>
+          <p className="break-words text-[13px] leading-snug text-muted">{current?.designation || 'No current posting'}</p>
         </div>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
         <Tooltip label={unlocked ? 'Edit' : 'Unlock editing to make changes'}>
           <Button size="sm" disabled={!unlocked} onClick={() => setEditOpen(true)}><Icon name="Pencil" size={14} /> Edit</Button>
         </Tooltip>
@@ -191,6 +195,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
             </>
           )}
         </Menu>
+        </div>
       </div>
 
       <div className="px-4 py-3">

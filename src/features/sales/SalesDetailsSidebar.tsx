@@ -174,7 +174,7 @@ export function SalesDetailsSidebar({ containerRef }: { containerRef: React.RefO
             onKeyDown={onKeyDown}
             className="absolute inset-y-0 left-0 z-20 w-1.5 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-ink-900/15 focus-visible:bg-ink-900/20 focus-visible:outline-none"
           />
-          <div className="flex h-full flex-col" style={{ width: shown }}>
+          <div className="flex h-full flex-col" style={{ width: shown - 1 /* aside border-l */ }}>
             <div className="flex shrink-0 items-center justify-between border-b border-line px-3 py-1.5">
               <span className="text-[12px] font-semibold uppercase tracking-wide text-muted">Details</span>
               <CloseButton onClick={hide} />
