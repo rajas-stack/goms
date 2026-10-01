@@ -1,4 +1,5 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { DepartmentChoice } from '@goms/domain'
 import {
   repository, type AddTimelineInput, type AssignOwnerInput, type CreateEmployeeInput, type CreateFollowUpInput,
   type CreateNodeInput, type CreateOpportunityInput, type CreateSalesPersonInput, type ImportChildRow,
@@ -157,7 +158,12 @@ export function useBidMutations() {
     qc.invalidateQueries({ queryKey: ['opportunity'] })
     qc.invalidateQueries({ queryKey: ['opportunityStageChanges'] })
   }
-  const create = useMutation({ mutationFn: (opportunityId: string) => repository.createBid(opportunityId), onSuccess: invalidate })
+  // Both entry points (the Bid Tracker's Create Bid dialog and the opportunity card) go through
+  // this one mutation; `department` is only sent when the opportunity has none.
+  const create = useMutation({
+    mutationFn: (a: { opportunityId: string; department?: DepartmentChoice }) => repository.createBid(a.opportunityId, a.department),
+    onSuccess: invalidate,
+  })
   const update = useMutation({
     mutationFn: (a: { id: string; patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>> }) =>
       repository.updateBid(a.id, a.patch),

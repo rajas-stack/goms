@@ -210,7 +210,7 @@ describe('WorksEditor — Create Bid entry point', () => {
     bidMutations(create)
     render(<WorksEditor departmentId="dept-1" opportunities={[makeOpportunity()]} />)
     await userEvent.click(screen.getByRole('button', { name: 'Create Bid' }))
-    expect(create).toHaveBeenCalledWith('opp-1')
+    expect(create).toHaveBeenCalledWith({ opportunityId: 'opp-1' })
     expect(navigateMock).toHaveBeenCalledWith('/bid-tracker/bid/new-bid-1')
   })
 

@@ -8,6 +8,7 @@ import { formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_ST
 import { applyStageChange } from './opportunities.js'
 import { loadOwnershipContext } from './ownership.js'
 import { writeAuditLog } from '../lib/auditLog.js'
+import { departmentChoiceSchema, resolveBidDepartment } from '../lib/opportunityDepartment.js'
 import { filterRuleSchema } from '../lib/filterRuleSchema.js'
 import { CUSTOM_VALUE_COLUMNS, customValueFromRow } from '../lib/customFieldValues.js'
 
@@ -210,12 +211,19 @@ export const bidsRouter = router({
       return applyFilterRules(rows, input?.filterRules ?? [], ctx.user?.email ?? null, customFieldTypes)
     }),
 
+  // The ONE way to create a bid (Bid Tracker's Create Bid dialog and the
+  // opportunity card both call it). A bid needs its opportunity to belong to a
+  // department: resolveBidDepartment uses the opportunity's own, or — only when it
+  // has none — applies the caller's choice (existing, or a new hierarchy created
+  // through the shared hierarchy insert) in this same transaction, so a failure
+  // anywhere leaves no new department nodes, no assignment and no bid behind.
   create: protectedProcedure
-    .input(z.object({ opportunityId: z.string().uuid() }))
-    .mutation(async ({ input }) => {
+    .input(z.object({ opportunityId: z.string().uuid(), department: departmentChoiceSchema.optional() }))
+    .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
+        await resolveBidDepartment(client, input.opportunityId, input.department, ctx.user?.email)
         const opp = (await client.query('SELECT submission_date FROM opportunities WHERE id=$1', [input.opportunityId])).rows[0]
         if (!opp) throw new TRPCError({ code: 'BAD_REQUEST', message: `No such opportunity: ${input.opportunityId}` })
 

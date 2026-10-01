@@ -11,7 +11,8 @@ export interface OwnershipEmployee {
 }
 export interface OwnershipOpportunity {
   id: string
-  departmentId: string
+  /** null until the opportunity has been given a department (see Create Bid). */
+  departmentId: string | null
 }
 export interface OwnershipBid {
   id: string
@@ -95,7 +96,7 @@ const OWNABLE_ENTITIES: OwnableEntityDef[] = [
     resolution: 'exact',
     inheritFrom: (id, ctx) => {
       const opp = ctx.opportunities.find((o) => o.id === id)
-      return opp ? { entityType: 'orgNode', entityId: opp.departmentId } : null
+      return opp?.departmentId ? { entityType: 'orgNode', entityId: opp.departmentId } : null
     },
   },
   {

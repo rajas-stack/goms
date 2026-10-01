@@ -145,3 +145,22 @@ export function applyFilterRules<T extends Record<string, unknown>>(
     return matchesTypedRule(types[rule.field] ?? 'text', cell, rule, target)
   }))
 }
+
+// --- Create Bid: resolving the opportunity's department ----------------------
+// A bid needs its opportunity to belong to a department. When it doesn't, the
+// caller supplies exactly one of these — an existing department, or a new
+// department under a parent ("major") department that is itself existing or new.
+// The department is stored on the OPPORTUNITY (opportunities.department_id); the
+// bid never keeps a copy.
+export type DepartmentParentChoice =
+  | { mode: 'existing'; departmentId: string }
+  /** `stateCode` is the new major department's jurisdiction (0 = Central
+   *  Ministries); a child department always inherits its parent's. */
+  | { mode: 'create'; name: string; stateCode: number | null }
+
+export type DepartmentChoice =
+  | { mode: 'existing'; departmentId: string }
+  | { mode: 'create'; name: string; parent: DepartmentParentChoice }
+
+export const DEPARTMENT_REQUIRED_MESSAGE =
+  'This opportunity has no department. Choose an existing department or create one to create the bid.'

@@ -30,7 +30,7 @@ function CreateBidButton({ opportunityId, onError }: { opportunityId: string; on
     e.stopPropagation()
     onError(null)
     try {
-      const created = await create.mutateAsync(opportunityId)
+      const created = await create.mutateAsync({ opportunityId })
       navigate(`/bid-tracker/bid/${created.id}`)
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Could not create the bid.')

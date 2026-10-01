@@ -140,8 +140,8 @@ function opportunityRows(ctx: Ctx): string[][] {
     ],
     ...ctx.opportunities.map((o) => [
       o.opportunityName,
-      deptById.get(o.departmentId)?.name ?? '',
-      o.departmentId,
+      (o.departmentId ? deptById.get(o.departmentId)?.name : undefined) ?? '',
+      o.departmentId ?? '',
       stateName(ctx, o.stateCode),
       stageLabel(o.stageKey),
       o.closedOn ?? '',

@@ -20,61 +20,171 @@ function renderDialog(onClose = () => {}) {
   )
 }
 
-const opp = (name: string, extra: { gemTenderId?: string; city?: string } = {}) =>
-  repository.createOpportunity({ departmentId: 'dept-1', opportunityName: name, submissionDate: '2099-01-15', ...extra })
+const dept = (name: string, parentId: string | null = null) =>
+  repository.createNode({ domain: 'org', typeKey: 'department', parentId, stateCode: 0, name })
+/** MeitY → India AI, the department an opportunity can belong to. */
+async function meityIndiaAi() {
+  const meity = await dept('MeitY')
+  return { meity, indiaAi: await dept('India AI', meity.id) }
+}
+const opp = (name: string, departmentId: string | null, extra: { gemTenderId?: string; city?: string } = {}) =>
+  repository.createOpportunity({ departmentId: departmentId ?? 'tmp', opportunityName: name, submissionDate: '2099-01-15', ...extra })
+    .then(async (o) => (departmentId === null ? repository.updateOpportunity(o.id, { departmentId: null }) : o))
+const orgNames = async () => (await repository.listDepartments()).map((d) => d.name).sort()
+const pick = async (name: string | RegExp) => userEvent.click(await screen.findByRole('button', { name }))
+const choose = async (comboName: string, optionLabel: string) => {
+  await userEvent.click(screen.getByRole('combobox', { name: comboName }))
+  await userEvent.click(await screen.findByText(optionLabel))
+}
+const createButton = () => screen.getByRole('button', { name: 'Create bid' })
 
 describe('CreateBidDialog', () => {
   beforeEach(async () => { await resetLocalData() })
 
-  it('lists only opportunities that do not already have a bid', async () => {
-    const withBid = await opp('Has a bid')
+  it('lists only opportunities without a bid, with their department path, and narrows by search', async () => {
+    const { indiaAi } = await meityIndiaAi()
+    const withBid = await opp('Has a bid', indiaAi.id)
     await repository.createBid(withBid.id)
-    await opp('Needs a bid')
+    await opp('Road Sensors', indiaAi.id, { gemTenderId: 'GEM/ROAD/1' })
+    await opp('Water Meters', indiaAi.id, { city: 'Surat' })
+    await opp('Orphan', null)
     renderDialog()
     const list = await screen.findByTestId('bid-opportunity-list')
-    await waitFor(() => expect(within(list).getByText('Needs a bid')).toBeInTheDocument())
+    await waitFor(() => expect(within(list).getByText('Road Sensors')).toBeInTheDocument())
     expect(within(list).queryByText('Has a bid')).not.toBeInTheDocument()
-  })
-
-  it('narrows the list by name, tender ID or city', async () => {
-    await opp('Road Sensors', { gemTenderId: 'GEM/ROAD/1', city: 'Pune' })
-    await opp('Water Meters', { gemTenderId: 'GEM/WATER/2', city: 'Surat' })
-    renderDialog()
-    await screen.findByText('Road Sensors')
+    expect(within(list).getAllByText(/MeitY → India AI/, { selector: 'span' }).length).toBeGreaterThan(0)
+    expect(within(list).getByText(/No department yet/)).toBeInTheDocument()
     await userEvent.type(screen.getByRole('searchbox', { name: 'Search opportunities' }), 'surat')
-    expect(screen.queryByText('Road Sensors')).not.toBeInTheDocument()
-    expect(screen.getByText('Water Meters')).toBeInTheDocument()
-    await userEvent.clear(screen.getByRole('searchbox', { name: 'Search opportunities' }))
-    await userEvent.type(screen.getByRole('searchbox', { name: 'Search opportunities' }), 'GEM/ROAD')
-    expect(screen.getByText('Road Sensors')).toBeInTheDocument()
-    expect(screen.queryByText('Water Meters')).not.toBeInTheDocument()
+    expect(within(list).queryByText('Road Sensors')).not.toBeInTheDocument()
+    expect(within(list).getByText('Water Meters')).toBeInTheDocument()
   })
 
-  it('creates the bid through the shared create path and opens its detail page', async () => {
-    const target = await opp('Smart Poles')
+  it('opportunity WITH a department: shows Department and Major Department, never asks again, and creates the bid', async () => {
+    const { indiaAi } = await meityIndiaAi()
+    const target = await opp('AI Solution', indiaAi.id)
     renderDialog()
-    await userEvent.click(await screen.findByRole('button', { name: /Smart Poles/ }))
+    await pick(/AI Solution/)
+    const resolved = await screen.findByTestId('department-resolved')
+    expect(resolved).toHaveTextContent('Department India AI')
+    expect(resolved).toHaveTextContent('Major Department MeitY')
+    expect(screen.queryByTestId('department-required')).not.toBeInTheDocument()
+    await userEvent.click(createButton())
     expect(await screen.findByText('Bid detail page')).toBeInTheDocument()
-    const created = await repository.getBidForOpportunity(target.id)
-    expect(created).not.toBeNull()
-    expect(created?.opportunityId).toBe(target.id)
+    expect((await repository.getBidForOpportunity(target.id))?.opportunityId).toBe(target.id)
+    expect((await repository.listOpportunities()).find((o) => o.id === target.id)?.departmentId).toBe(indiaAi.id)
   })
 
-  it('has no way to create a bid without an opportunity, and says so when none are free', async () => {
-    const only = await opp('Only one')
-    await repository.createBid(only.id)
+  it('opportunity WITHOUT a department: the department step is required, and offered instead of a dead end', async () => {
+    await opp('AI Solution', null)
     renderDialog()
-    expect(await screen.findByTestId('bid-opportunity-empty')).toHaveTextContent('Every opportunity already has a bid')
-    expect(screen.queryByRole('button', { name: /Create bid/ })).not.toBeInTheDocument()
+    await pick(/AI Solution/)
+    expect(await screen.findByTestId('department-required')).toBeInTheDocument()
+    expect(createButton()).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Select existing department' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create new department hierarchy' })).toBeInTheDocument()
   })
 
-  it('shows the server message and stays open when creation is rejected (e.g. a bid was created in another tab)', async () => {
-    const raced = await opp('Raced')
+  it('no department → select an existing one: the opportunity is assigned, then the bid is created', async () => {
+    const { indiaAi } = await meityIndiaAi()
+    const target = await opp('AI Solution', null)
     renderDialog()
-    const button = await screen.findByRole('button', { name: /Raced/ })
+    await pick(/AI Solution/)
+    await choose('Existing department', 'MeitY → India AI')
+    expect(screen.getByTestId('department-preview')).toHaveTextContent('MeitY → India AI')
+    await userEvent.click(createButton())
+    expect(await screen.findByText('Bid detail page')).toBeInTheDocument()
+    expect((await repository.listOpportunities()).find((o) => o.id === target.id)?.departmentId).toBe(indiaAi.id)
+    expect(await repository.getBidForOpportunity(target.id)).not.toBeNull()
+  })
+
+  it('no department → create India AI under the existing MeitY: department created, assigned, bid created', async () => {
+    const meity = await dept('MeitY')
+    const target = await opp('AI Solution', null)
+    renderDialog()
+    await pick(/AI Solution/)
+    await userEvent.click(screen.getByRole('button', { name: 'Create new department hierarchy' }))
+    await choose('Major department', 'MeitY')
+    await userEvent.type(screen.getByRole('textbox', { name: 'New department name' }), 'India AI')
+    expect(screen.getByTestId('department-preview')).toHaveTextContent('MeitY → India AI (new)')
+    await userEvent.click(createButton())
+    expect(await screen.findByText('Bid detail page')).toBeInTheDocument()
+    const indiaAi = (await repository.listDepartments()).find((d) => d.name === 'India AI')!
+    expect(indiaAi).toMatchObject({ parentId: meity.id, typeKey: 'department' })
+    expect((await repository.listOpportunities()).find((o) => o.id === target.id)?.departmentId).toBe(indiaAi.id)
+    expect(await repository.getBidForOpportunity(target.id)).not.toBeNull()
+  })
+
+  it('no department → create BOTH a new major department (MeitY) and India AI', async () => {
+    const target = await opp('AI Solution', null)
+    renderDialog()
+    await pick(/AI Solution/)
+    await userEvent.click(screen.getByRole('button', { name: 'Create new department hierarchy' }))
+    await userEvent.click(screen.getByRole('button', { name: 'New' }))
+    await userEvent.type(screen.getByRole('textbox', { name: 'New major department name' }), 'MeitY')
+    await userEvent.type(screen.getByRole('textbox', { name: 'New department name' }), 'India AI')
+    expect(screen.getByTestId('department-preview')).toHaveTextContent('MeitY (new) → India AI (new)')
+    await userEvent.click(createButton())
+    expect(await screen.findByText('Bid detail page')).toBeInTheDocument()
+    const all = await repository.listDepartments()
+    const meity = all.find((d) => d.name === 'MeitY')!
+    const indiaAi = all.find((d) => d.name === 'India AI')!
+    expect(meity.parentId).toBeNull()
+    expect(indiaAi.parentId).toBe(meity.id)
+    expect((await repository.listOpportunities()).find((o) => o.id === target.id)?.departmentId).toBe(indiaAi.id)
+  })
+
+  it('cancelling the dialog makes no changes', async () => {
+    const meity = await dept('MeitY')
+    const target = await opp('AI Solution', null)
+    const namesBefore = await orgNames()
+    let closed = false
+    renderDialog(() => { closed = true })
+    await pick(/AI Solution/)
+    await userEvent.click(screen.getByRole('button', { name: 'Create new department hierarchy' }))
+    await choose('Major department', 'MeitY')
+    await userEvent.type(screen.getByRole('textbox', { name: 'New department name' }), 'India AI')
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(closed).toBe(true)
+    expect(await orgNames()).toEqual(namesBefore)
+    expect((await repository.listOpportunities()).find((o) => o.id === target.id)?.departmentId).toBeNull()
+    expect(await repository.getBidForOpportunity(target.id)).toBeNull()
+    expect(meity.name).toBe('MeitY')
+  })
+
+  it('a duplicate bid is still rejected: server message shown, dialog stays, nothing navigates', async () => {
+    const { indiaAi } = await meityIndiaAi()
+    const raced = await opp('Raced', indiaAi.id)
+    renderDialog()
+    await pick(/Raced/)
     await repository.createBid(raced.id) // someone else got there first
-    await userEvent.click(button)
+    await userEvent.click(createButton())
     expect(await screen.findByRole('alert')).toHaveTextContent('already has a bid')
     expect(screen.queryByText('Bid detail page')).not.toBeInTheDocument()
+  })
+
+  it('a failed hierarchy step creates no partial bid: the department vanished mid-flow, so no bid, no assignment, no new nodes', async () => {
+    const { meity } = await meityIndiaAi()
+    const target = await opp('AI Solution', null)
+    renderDialog()
+    await pick(/AI Solution/)
+    await userEvent.click(screen.getByRole('button', { name: 'Create new department hierarchy' }))
+    await choose('Major department', 'MeitY')
+    await userEvent.type(screen.getByRole('textbox', { name: 'New department name' }), 'Brand New Dept')
+    const namesBefore = await orgNames()
+    await repository.deleteNode(meity.id) // gone before the user presses Create
+    await userEvent.click(createButton())
+    expect(await screen.findByRole('alert')).toHaveTextContent(/no longer exists/)
+    expect(await repository.getBidForOpportunity(target.id)).toBeNull()
+    expect((await repository.listOpportunities()).find((o) => o.id === target.id)?.departmentId).toBeNull()
+    expect((await orgNames()).filter((n) => n === 'Brand New Dept')).toHaveLength(0)
+    expect((await orgNames()).length).toBeLessThanOrEqual(namesBefore.length)
+  })
+
+  it('says so when every opportunity already has a bid', async () => {
+    const { indiaAi } = await meityIndiaAi()
+    const only = await opp('Only one', indiaAi.id)
+    await repository.createBid(only.id)
+    renderDialog()
+    expect(await screen.findByTestId('bid-opportunity-empty')).toHaveTextContent('already has a bid')
   })
 })

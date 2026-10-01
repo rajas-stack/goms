@@ -137,8 +137,9 @@ export interface Employee {
  *  department and could not be aggregated without parsing every one. */
 export interface Opportunity {
   id: string
-  /** Owning department node. Real FK — was implicit containment. */
-  departmentId: string
+  /** Owning department node. Real FK — was implicit containment. `null` only for an
+   *  opportunity that has not been given one yet; Create Bid resolves it before a bid exists. */
+  departmentId: string | null
   /** Denormalized from the department for state-scoped queries and search.
    *  Kept in sync by `createOpportunity`; a department never changes state. */
   stateCode: number | null

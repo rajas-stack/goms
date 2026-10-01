@@ -18,6 +18,7 @@ import {
   DEFAULT_BID_STAGE_KEY, formatBidCode, isAtOrAfterSubmitted, computeAttentionFlag, applyFilterRules,
   SYSTEM_BID_VIEWS, SYSTEM_BID_VIEW_KEYS, type SystemBidViewFilterRule,
   coerceCustomValue, normalizeOptions, slugifyFieldKey,
+  DEPARTMENT_REQUIRED_MESSAGE, type DepartmentChoice,
 } from '@goms/domain'
 export { MERGEABLE_FIELDS, type MergeableField }
 import { coversDate } from '@/lib/intervals'
@@ -485,7 +486,7 @@ export interface Repository {
   listBidsForGrid(filterRules?: SystemBidViewFilterRule[]): Promise<BidGridRow[]>
   getBid(id: string): Promise<Bid | null>
   getBidForOpportunity(opportunityId: string): Promise<Bid | null>
-  createBid(opportunityId: string): Promise<Bid>
+  createBid(opportunityId: string, department?: DepartmentChoice): Promise<Bid>
   updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>): Promise<Bid>
   archiveBid(id: string): Promise<Bid>
   markBidVerified(id: string): Promise<Bid>
@@ -806,9 +807,9 @@ class InMemoryRepository implements Repository {
     // otherwise a deleted department's opportunities (and their stage
     // history) would live on forever, unreachable from the tree.
     const deletedOppIds = new Set(
-      this.data.opportunities.filter((o) => ids.has(o.departmentId)).map((o) => o.id),
+      this.data.opportunities.filter((o) => !!o.departmentId && ids.has(o.departmentId)).map((o) => o.id),
     )
-    this.data.opportunities = this.data.opportunities.filter((o) => !ids.has(o.departmentId))
+    this.data.opportunities = this.data.opportunities.filter((o) => !o.departmentId || !ids.has(o.departmentId))
     this.data.opportunityStageChanges = this.data.opportunityStageChanges
       .filter((c) => !deletedOppIds.has(c.opportunityId))
   }
@@ -1417,12 +1418,61 @@ class InMemoryRepository implements Repository {
     return this.data.bids.find((b) => b.opportunityId === opportunityId) ?? null
   }
 
-  async createBid(opportunityId: string) {
+  /** The Create Bid department rule (same as apps/api's resolveBidDepartment): an
+   *  opportunity that has a department keeps it; one that has none needs `choice` —
+   *  an existing department, or a new one (and its major department) created through
+   *  `createNode`, the same path Account Mapping uses. The department is written onto
+   *  the OPPORTUNITY; the bid keeps no copy. The in-memory store has no rollback, so
+   *  everything that can fail is validated BEFORE any node is created. */
+  private async resolveBidDepartment(opp: Opportunity, choice: DepartmentChoice | undefined) {
+    if (opp.departmentId) {
+      if (choice) throw new Error('This opportunity already has a department; it is used as is.')
+      return
+    }
+    if (!choice) throw new Error(DEPARTMENT_REQUIRED_MESSAGE)
+    const usable = (id: string) => {
+      const n = this.data.nodes.find((x) => x.id === id)
+      if (!n || n.domain !== 'org' || n.typeKey !== 'department' || n.status !== 'active') {
+        throw new Error('That department no longer exists. Pick another one.')
+      }
+      return n
+    }
+    const sameName = (n: HierNode, name: string) => n.name.trim().toLowerCase() === name.trim().toLowerCase()
+    let department: HierNode
+    if (choice.mode === 'existing') {
+      department = usable(choice.departmentId)
+    } else {
+      const childName = choice.name.trim()
+      if (!childName) throw new Error('Enter a name.')
+      const parentChoice = choice.parent
+      if (parentChoice.mode === 'create' && !parentChoice.name.trim()) throw new Error('Enter a name.')
+      const existingParent = parentChoice.mode === 'existing' ? usable(parentChoice.departmentId) : undefined
+      const parent = existingParent
+        ?? this.data.nodes.find((n) => parentChoice.mode === 'create' && n.domain === 'org' && n.typeKey === 'department'
+          && n.parentId === null && n.status === 'active' && n.stateCode === parentChoice.stateCode && sameName(n, parentChoice.name))
+        ?? (parentChoice.mode === 'create'
+          ? await this.createNode({ domain: 'org', typeKey: 'department', parentId: null, stateCode: parentChoice.stateCode, name: parentChoice.name.trim() })
+          : undefined)
+      if (!parent) throw new Error('That department no longer exists. Pick another one.')
+      department = this.data.nodes.find((n) => n.domain === 'org' && n.typeKey === 'department' && n.parentId === parent.id
+        && n.status === 'active' && sameName(n, childName))
+        ?? await this.createNode({ domain: 'org', typeKey: 'department', parentId: parent.id, stateCode: parent.stateCode, name: childName })
+    }
+    opp.departmentId = department.id
+    opp.stateCode = department.stateCode
+    this.auditCustom({
+      entityType: 'opportunity', entityId: opp.id, field: 'departmentId', oldValue: '', newValue: department.id,
+      action: 'update', reason: 'Set while creating a bid',
+    })
+  }
+
+  async createBid(opportunityId: string, department?: DepartmentChoice) {
     const opp = this.data.opportunities.find((o) => o.id === opportunityId)
     if (!opp) throw new Error(`No such opportunity: ${opportunityId}`)
     if (this.data.bids.some((b) => b.opportunityId === opportunityId)) {
       throw new Error('This opportunity already has a bid.')
     }
+    await this.resolveBidDepartment(opp, department)
     const now = new Date().toISOString()
     const bid: Bid = {
       id: uid('bid'),

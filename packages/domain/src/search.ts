@@ -45,7 +45,7 @@ export interface SearchEmployee {
 }
 export interface SearchOpportunity {
   id: string
-  departmentId: string
+  departmentId: string | null
   stateCode: number | null
   opportunityName: string
   gemTenderId: string
@@ -357,7 +357,7 @@ function toWorkResult(work: SearchOpportunity, node: HierNode | undefined): Sear
     title: work.opportunityName || 'Untitled opportunity',
     subtitle: `${node?.name ?? 'Unknown department'} · ${work.vertical}`,
     code: null, domain: node?.domain ?? null, stateCode: work.stateCode,
-    containerId: work.departmentId, bidId: work.bidId,
+    containerId: work.departmentId ?? undefined, bidId: work.bidId,
   }
 }
 
@@ -366,7 +366,8 @@ const worksCategory: SearchCategoryDef = {
   match(query, ctx) {
     const out: SearchResult[] = []
     for (const w of ctx.opportunities) {
-      if (!ctx.inScope(w.departmentId)) continue
+      // An opportunity not yet given a department sits in no container, so it has no scope to search in.
+      if (!w.departmentId || !ctx.inScope(w.departmentId)) continue
       const salesName = ctx.salesPersons.find((p) => p.officialEmail === w.salesPersonEmail)?.name ?? ''
       const hay = `${w.opportunityName} ${w.gemTenderId} ${w.vertical} ${w.component.join(' ')} ${salesName} ${w.bidCode ?? ''} ${w.tenderLink ?? ''}`.toLowerCase()
       if (matches(hay, query)) out.push(toWorkResult(w, ctx.nodeById.get(w.departmentId)))
