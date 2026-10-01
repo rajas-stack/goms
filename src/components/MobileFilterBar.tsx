@@ -14,11 +14,13 @@ import { cn } from '@/lib/utils'
  *
  *  `children` keeps its own layout classes (grid/flex/wrap); this component
  *  only decides whether the wrapper is shown. */
-export function MobileFilterBar({ activeCount, children }: {
+export function MobileFilterBar({ activeCount, children, className }: {
   /** How many filters are currently set — shown as a badge on the button so
    *  active filters are visible without opening the panel. */
   activeCount: number
   children: ReactNode
+  /** Extra classes for the panel wrapper — e.g. to let it share a row with a sibling from `sm:` up. */
+  className?: string
 }) {
   const [open, setOpen] = useState(false)
 
@@ -43,7 +45,7 @@ export function MobileFilterBar({ activeCount, children }: {
         <Icon name="ChevronDown" size={14} className={cn('text-muted transition-transform', open && 'rotate-180')} />
       </button>
 
-      <div className={cn(open || 'hidden sm:block')}>{children}</div>
+      <div className={cn(open || 'hidden sm:block', className)}>{children}</div>
     </>
   )
 }
