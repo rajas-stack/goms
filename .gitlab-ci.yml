@@ -16,7 +16,7 @@ variables:
   GCP_PROJECT_ID_DEV: "goms-dev"
   GCP_PROJECT_NUMBER_DEV: "453079755108"
 
-stages: [test, build, deploy-dev, deploy] # 'deploy' kept for the existing pages job below, untouched
+stages: [test, deploy-dev, deploy] # 'deploy' kept for the existing pages job below, untouched
 
 test-api:
   stage: test
@@ -56,82 +56,6 @@ test-api:
         - package-lock.json
         - .gitlab-ci.yml
 
-build-api:
-  stage: build
-  # Built with kaniko, not `docker build` -- this runner's job containers have no Docker
-  # daemon/socket and no dind service, so `docker` isn't available (see git history for
-  # the exact failure). Kaniko builds OCI images without a daemon and needs no privileged
-  # mode, so it doesn't depend on the runner enabling dind.
-  image:
-    name: gcr.io/kaniko-project/executor:debug
-    entrypoint: [""]
-  id_tokens:
-    GCP_ID_TOKEN:
-      aud: https://iam.googleapis.com/projects/$GCP_PROJECT_NUMBER_DEV/locations/global/workloadIdentityPools/gitlab-pool/providers/gitlab-oidc
-  script:
-    # kaniko's debug image has no /tmp (confirmed by running it locally -- it's built on a
-    # minimal base with only /kaniko, /workspace, /bin, /busybox); /kaniko itself is
-    # world-writable, so credentials go there instead.
-    - mkdir -p /kaniko/creds
-    - echo "$GCP_ID_TOKEN" > /kaniko/creds/gitlab_token
-    # kaniko's image has no gcloud, so the WIF credential-config JSON that
-    # `gcloud iam workload-identity-pools create-cred-config` would normally generate is
-    # written by hand here. Shape verified by running that exact gcloud command offline
-    # against placeholder values and diffing the output -- this must match it exactly.
-    - |
-      cat > /kaniko/creds/creds.json <<CREDSEOF
-      {
-        "universe_domain": "googleapis.com",
-        "type": "external_account",
-        "audience": "//iam.googleapis.com/projects/$GCP_PROJECT_NUMBER_DEV/locations/global/workloadIdentityPools/gitlab-pool/providers/gitlab-oidc",
-        "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
-        "token_url": "https://sts.googleapis.com/v1/token",
-        "credential_source": { "file": "/kaniko/creds/gitlab_token" },
-        "service_account_impersonation_url": "https://iamcredentials.googleapis.com/v1/projects/-/serviceAccounts/goms-ci-deploy@$GCP_PROJECT_ID_DEV.iam.gserviceaccount.com:generateAccessToken"
-      }
-      CREDSEOF
-    - export GOOGLE_APPLICATION_CREDENTIALS=/kaniko/creds/creds.json
-    # docker-credential-gcr is bundled in this image and wires itself into
-    # /kaniko/.docker/config.json (the file kaniko's executor checks for registry auth) as
-    # the credential helper for every GCR/AR host, including asia-south1-docker.pkg.dev.
-    # It resolves ADC from GOOGLE_APPLICATION_CREDENTIALS, including WIF external_account
-    # files -- verified locally: pointed at a fake pool/provider, it correctly attempted a
-    # real STS + impersonation token exchange and failed only on "invalid_target" (the
-    # fake pool not existing), not on an unrecognized-credential-type error.
-    - /kaniko/docker-credential-gcr configure-docker -include-artifact-registry
-    - >
-      /kaniko/executor
-      --context "${CI_PROJECT_DIR}"
-      --dockerfile "${CI_PROJECT_DIR}/apps/api/Dockerfile"
-      --destination "asia-south1-docker.pkg.dev/${GCP_PROJECT_ID_DEV}/goms/goms-api:${CI_COMMIT_SHA}"
-  # Previously ran on every push to main unconditionally -- the single
-  # biggest avoidable cost in this pipeline, since kaniko builds the full
-  # API image (npm ci + tsc) even for a frontend-only push that can't
-  # change apps/api's build output at all. Mirrors test-api's own
-  # changes: list immediately above (same reasoning, same paths,
-  # including the packages/domain/**/* addition) -- an image is only
-  # built when something that actually affects it changed.
-  #
-  # Caveat: deploy-dev's manual job deploys whatever image is tagged
-  # ${CI_COMMIT_SHA} for THIS pipeline. If build-api is skipped here
-  # (no backend-relevant change), that tag won't exist, so deploy-dev
-  # would fail if manually triggered from this specific pipeline. This is
-  # the same accepted tradeoff test-api's gating already made -- in
-  # practice, deploy-dev is triggered from a pipeline where backend code
-  # was just intentionally changed (per its own comment below: "trigger
-  # this from the pipeline view when a dev deploy is actually wanted"),
-  # so build-api ran for that pipeline too.
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-      changes:
-        - apps/api/**/*
-        - apps/api/migrations/**/*
-        - apps/api/package.json
-        - packages/domain/**/*
-        - package.json
-        - package-lock.json
-        - .gitlab-ci.yml
-
 deploy-dev:
   stage: deploy-dev
   image: google/cloud-sdk:slim
@@ -147,21 +71,14 @@ deploy-dev:
       --credential-source-file=/tmp/gitlab_token --output-file=/tmp/creds.json
     - export GOOGLE_APPLICATION_CREDENTIALS=/tmp/creds.json
     - gcloud auth login --cred-file=/tmp/creds.json
-    - >
-      gcloud run deploy goms-api --project=$GCP_PROJECT_ID_DEV --region=asia-south1
-      --image=asia-south1-docker.pkg.dev/$GCP_PROJECT_ID_DEV/goms/goms-api:$CI_COMMIT_SHA
-    # goms-migrate (added outside this plan, see the GCP foundation plan's Task 6.5) was
-    # left pinned to its original :bootstrap image tag here — every migration added since
-    # silently applied nothing, because the job never ran the image that actually contained
-    # it. Keep the job's image in lockstep with the service on every dev deploy so this
-    # can't happen again; goms-ci-deploy's existing roles/run.admin already covers jobs too.
-    - >
-      gcloud run jobs update goms-migrate --project=$GCP_PROJECT_ID_DEV --region=asia-south1
-      --image=asia-south1-docker.pkg.dev/$GCP_PROJECT_ID_DEV/goms/goms-api:$CI_COMMIT_SHA
-    # Frontend build + deploy — previously this job only touched the API,
-    # so the hosted goms-dev.firebaseapp.com frontend had to be built and
-    # `firebase deploy`'d by hand, and nobody ever passed VITE_API_BASE_URL
-    # to that manual build. Its absence is documented as the *default*
+    # Frontend-only (2026-10-01): the API image build (build-api) and the
+    # Cloud Run / goms-migrate deploy steps were removed to save shared-runner
+    # minutes. Dev API deploys are done directly (docker build + push,
+    # `gcloud run deploy`, and updating the goms-migrate job image by hand).
+    #
+    # Frontend build + deploy -- the hosted goms-dev.firebaseapp.com frontend
+    # used to be built and `firebase deploy`'d by hand, and nobody ever passed
+    # VITE_API_BASE_URL to that manual build. Its absence is documented as the *default*
     # local-only IndexedDB mode (.env.example), so the hosted site silently
     # ran fully local instead of talking to goms-api. Fixed by building here
     # instead, with VITE_API_BASE_URL pointed at the site's own origin —
