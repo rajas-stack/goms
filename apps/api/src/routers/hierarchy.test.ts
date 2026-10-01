@@ -403,6 +403,9 @@ describe('hierarchy router', () => {
     const opp = await caller.opportunities.create({ departmentId: dept.id, opportunityName: 'Tender' })
     const bid = await caller.bids.create({ opportunityId: opp.id })
     await caller.bids.archive({ id: bid.id })
-    await expect(caller.hierarchy.deleteNode({ id: dept.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+    await expect(caller.hierarchy.deleteNode({ id: dept.id })).rejects.toMatchObject({ code: 'CONFLICT', message: expect.stringContaining(bid.bidCode) })
+    // Once the bid is deleted, the node (and its opportunity) can go.
+    await caller.bids.delete({ id: bid.id })
+    await caller.hierarchy.deleteNode({ id: dept.id })
   })
 })

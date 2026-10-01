@@ -189,6 +189,14 @@ export const hierarchyRouter = router({
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
+      // bids.opportunity_id is RESTRICT (archived bids included): name the blocking bid(s) up front
+      // instead of the generic foreign-key message below.
+      const blocking = (await client.query(
+        `SELECT b.bid_code FROM bids b JOIN opportunities o ON o.id = b.opportunity_id
+          WHERE o.department_id = ANY($1) ORDER BY b.bid_code LIMIT 5`, [ids])).rows
+      if (blocking.length) {
+        throw new TRPCError({ code: 'CONFLICT', message: `Cannot delete this node — its opportunities have bids in Bid Tracker (${blocking.map((r) => r.bid_code).join(', ')}). Delete those bids first, or archive the node instead.` })
+      }
       await client.query(`DELETE FROM employees WHERE org_node_id = ANY($1)`, [ids])
       // Opportunities used to live inside the node's own metadata, so they
       // died with it automatically. Now they're a separate table keyed by
@@ -199,6 +207,7 @@ export const hierarchyRouter = router({
       await client.query('COMMIT')
     } catch (e) {
       await client.query('ROLLBACK')
+      if (e instanceof TRPCError) throw e
       // Deleting a subtree containing a node any `transfers.to_org_node_id`,
       // `commercial_boqs.department_id`, or (via an opportunity in the
       // subtree) `bids.opportunity_id` (all RESTRICT) still points at is

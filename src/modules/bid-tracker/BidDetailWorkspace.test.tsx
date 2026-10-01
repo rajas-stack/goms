@@ -53,6 +53,19 @@ describe('BidDetailWorkspace', () => {
     expect(screen.getByText('(inherited)')).toBeInTheDocument()
   })
 
+  it('archives, restores and deletes the bid from its header, returning to the grid', async () => {
+    const bid = await makeBid()
+    renderAt(`/bid-tracker/bid/${bid.id}`)
+    await userEvent.click(await screen.findByRole('button', { name: /Archive/ }))
+    expect(await screen.findByText('Archived')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Restore/ }))
+    await waitFor(() => expect(screen.queryByText('Archived')).not.toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: /Delete bid/ }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    expect(await screen.findByText('grid page')).toBeInTheDocument()
+    expect(await repository.getBid(bid.id)).toBeFalsy()
+  })
+
   it('links back to the Master Grid, and says so for a bid that no longer exists', async () => {
     renderAt('/bid-tracker/bid/nope')
     expect(await screen.findByText(/no longer exists/)).toBeInTheDocument()
