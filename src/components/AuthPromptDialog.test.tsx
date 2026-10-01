@@ -171,4 +171,59 @@ describe('AuthPromptDialog', () => {
       expect(queryFn).toHaveBeenCalledTimes(1)
     })
   })
+
+  describe('unauthenticated protected reads render gracefully, not as a generic error', () => {
+    // Mirrors the real pattern every business-router page uses (SalesWorkspace's
+    // Roster, Directory, etc.): `const { data = [] } = useQuery(...)`, with no
+    // `isError` branch at all. A 401/403 collapses into the exact same
+    // empty-state render as "no data yet" — this component's global dialog is
+    // the ONLY thing that ever surfaces the auth failure to the user. Regression
+    // coverage for the 2026-09-15 goms-prod investigation, which confirmed this
+    // is what already happens (a genuinely different crash — a stale post-deploy
+    // JS chunk reference, unrelated to this data-fetch path — was mistaken for
+    // an auth-race bug; see staleChunkRecovery.ts for that fix).
+    function ListProbe({ queryFn }: { queryFn: () => Promise<string[]> }) {
+      const { data = [] } = useQuery({ queryKey: ['list-probe'], queryFn, retry: false })
+      return <div data-testid="list-probe">{data.length === 0 ? 'No items yet.' : data.join(',')}</div>
+    }
+
+    it('shows the normal empty state, never error text, while a protected read 401s and the prompt is up', async () => {
+      const client = new QueryClient()
+      const queryFn = vi.fn().mockRejectedValue({ data: { code: 'UNAUTHORIZED' } })
+
+      render(
+        <QueryClientProvider client={client}>
+          <ListProbe queryFn={queryFn} />
+          <AuthPromptDialog />
+        </QueryClientProvider>,
+      )
+      // The real app's authPromptLink (a separate, already-tested tRPC link)
+      // is what actually calls this on a 401 — invoked directly here since
+      // this test's ListProbe talks to a bare useQuery, not the real client.
+      act(() => notifyAuthRequired('unauthorized'))
+
+      await waitFor(() => expect(queryFn).toHaveBeenCalled())
+
+      expect(screen.getByTestId('list-probe')).toHaveTextContent('No items yet.')
+      expect(screen.queryByText(/error/i)).not.toBeInTheDocument()
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByText(/sign in required/i)).toBeInTheDocument()
+    })
+
+    it('behaves identically for a genuine, non-auth query failure — this pattern was never auth-specific', async () => {
+      const client = new QueryClient()
+      const queryFn = vi.fn().mockRejectedValue(new Error('ECONNRESET'))
+
+      render(
+        <QueryClientProvider client={client}>
+          <ListProbe queryFn={queryFn} />
+        </QueryClientProvider>,
+      )
+
+      await waitFor(() => expect(queryFn).toHaveBeenCalled())
+
+      expect(screen.getByTestId('list-probe')).toHaveTextContent('No items yet.')
+      expect(screen.queryByText(/error/i)).not.toBeInTheDocument()
+    })
+  })
 })
