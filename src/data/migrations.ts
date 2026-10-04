@@ -50,8 +50,13 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *  v15 `bidCustomFields[].hasHeldValue` — the durable "has ever held a value"
  *      flag that gates hard deletion (spec §8.1). Backfilled from whether the
  *      column currently has any value rows.
+ *  v16 delivery-team roster and opportunity role references. Starts with an
+ *      empty non-Sales roster and null assignments; never guesses from Sales
+ *      ownership or legacy salesPersonEmail.
+ *  v17 `deliveryTeamMembers[].managerId` (reports-to, for the team org
+ *      charts). Backfilled to null — everyone starts as a root.
  */
-export const SCHEMA_VERSION = 15
+export const SCHEMA_VERSION = 17
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -322,6 +327,24 @@ function toV15(data: SnapshotShape): SnapshotShape {
   }
 }
 
+function toV16(data: SnapshotShape): SnapshotShape {
+  const opportunities = asArray(data.opportunities).map((opportunity) => ({
+    ...opportunity,
+    geoSalesPersonId: opportunity.geoSalesPersonId ?? null,
+    buSalesPersonId: opportunity.buSalesPersonId ?? null,
+    preSalesPersonId: opportunity.preSalesPersonId ?? null,
+    legalPersonId: opportunity.legalPersonId ?? null,
+    bidTeamMemberId: opportunity.bidTeamMemberId ?? null,
+  }))
+  return { ...data, opportunities, deliveryTeamMembers: Array.isArray(data.deliveryTeamMembers) ? data.deliveryTeamMembers : [] }
+}
+
+/** v16 → v17. See `SCHEMA_VERSION` doc comment. */
+function toV17(data: SnapshotShape): SnapshotShape {
+  const deliveryTeamMembers = asArray(data.deliveryTeamMembers).map((member) => ({ ...member, managerId: member.managerId ?? null }))
+  return { ...data, deliveryTeamMembers }
+}
+
 /** v13 → v14. See `SCHEMA_VERSION` doc comment. Idempotent for the same
  *  reason as v13. */
 function toV14(data: SnapshotShape): SnapshotShape {
@@ -350,6 +373,8 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   13: toV13,
   14: toV14,
   15: toV15,
+  16: toV16,
+  17: toV17,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

@@ -4,6 +4,7 @@ import type { BidCustomField, BidGridRow } from '@/lib/types'
 import {
   CUSTOM_GROUP, GRID_GROUPS, STANDARD_COLUMNS, buildLookups, compareTyped, customColumnMeta, formatValueText, ignoredRules,
   isRuleComplete, operatorLabel, optionsOf, resolveColumns, resolveVisibleColumns, rowMatchesSearch, sortKeyOf,
+  orderedColumnIds, setColumnVisibility, showAllColumnIds,
 } from './gridColumns'
 
 const field = (over: Partial<BidCustomField> & Pick<BidCustomField, 'key' | 'name' | 'dataType'>): BidCustomField => ({
@@ -23,12 +24,12 @@ describe('grid column registry — completeness', () => {
     const byGroup = (id: string) => STANDARD_COLUMNS.filter((c) => c.group === id).map((c) => c.header)
     expect(byGroup('identity')).toEqual(['Opportunity ID', 'Opportunity / Mission', 'Bid ID', 'Tender ID', 'Tender Link'])
     expect(byGroup('client')).toEqual(['Department / Client', 'State', 'City', 'Sector'])
-    expect(byGroup('ownership')).toEqual(['Bid Owner', 'Sales Lead / Solution Lead'])
+    expect(byGroup('ownership')).toEqual(['Geo-sales', 'BU-sales', 'Pre-sales', 'Legal', 'Bid', 'Bid Owner', 'Sales Lead / Solution Lead'])
     expect(byGroup('decision')).toEqual(['Bid Stage', 'Next Action', 'Action Owner', 'Action Due', 'Attention', 'Decision'])
     expect(byGroup('dates')).toEqual(['Next Milestone', 'Days Remaining', 'Submission Deadline'])
     expect(byGroup('documents')).toEqual(['Tender Files', 'Latest Corrigendum'])
     expect(byGroup('system')).toEqual(['Last Updated', 'Updated By', 'Data Confidence', 'Manage'])
-    expect(STANDARD_COLUMNS).toHaveLength(26)
+    expect(STANDARD_COLUMNS).toHaveLength(31)
   })
 
   it('binds City and Action Owner to the row fields the API provides', () => {
@@ -102,6 +103,18 @@ describe('visible columns (ordered list)', () => {
   it('array order is display order, absence is hidden, unknown and duplicate ids are dropped', () => {
     const out = resolveVisibleColumns(all, ['custom:score', 'bidCode', 'custom:gone', 'bidCode'])
     expect(out.map((c) => c.id)).toEqual(['custom:score', 'bidCode'])
+  })
+  it('hiding then showing a column restores it to its original slot without moving neighbors', () => {
+    const startingOrder = ['opportunityName', 'bidCode', 'city']
+    const hidden = setColumnVisibility(all, startingOrder, 'bidCode', false)
+    expect(resolveVisibleColumns(all, hidden).map((column) => column.id)).toEqual(['opportunityName', 'city'])
+    const restored = setColumnVisibility(all, hidden, 'bidCode', true)
+    expect(resolveVisibleColumns(all, restored).map((column) => column.id)).toEqual(startingOrder)
+    expect(orderedColumnIds(all, restored).slice(0, 3)).toEqual(startingOrder)
+  })
+  it('show all changes visibility without changing the saved full order', () => {
+    const changed = setColumnVisibility(all, ['city', 'bidCode', 'opportunityName'], 'bidCode', false)
+    expect(showAllColumnIds(all, changed).slice(0, 3)).toEqual(['city', 'bidCode', 'opportunityName'])
   })
 })
 

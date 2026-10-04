@@ -42,10 +42,10 @@ export function isAtOrAfterSubmitted(key: string): boolean {
 /** "Next Stage Requirements" banner — derived, not persisted (spec §10).
  *  Keyed by the CURRENT stage: what's needed to move past it. */
 export const BID_STAGE_REQUIREMENTS: Record<string, string[]> = {
-  solutioning: ['Technical solution finalized', 'Pre-bid queries submitted'],
-  qualification: ['Executive Go / No-Go sign-off'],
-  preBidQueries: ['Pre-bid query responses received'],
-  commercialProposal: ['Commercial proposal finalized', 'EMD/tender fee arranged'],
+  solutioning: ['Finalize technical solution', 'Submit pre-bid queries'],
+  qualification: ['Record executive Go / No-Go sign-off'],
+  preBidQueries: ['Receive pre-bid query responses'],
+  commercialProposal: ['Finalize commercial proposal', 'Arrange EMD/tender fee'],
   submitted: ['Await tender opening / evaluation'],
   goApproved: [],
   dropped: [],
@@ -182,6 +182,8 @@ export interface NewBidOpportunity {
   opportunityName: string
   gemTenderId?: string
   city?: string | null
+  referenceNo?: string | null
+  assignmentName?: string | null
   submissionDate?: string
 }
 

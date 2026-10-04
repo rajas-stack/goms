@@ -26,8 +26,8 @@ import {
 import { cn } from '@/lib/utils'
 import type { BidGridRow } from '@/lib/types'
 import {
-  ATTENTION_OPTIONS, CUSTOM_GROUP, GRID_GROUPS, cellValue, columnWidth, compareTyped, formatCurrency, formatValueText,
-  ignoredRules, isEmptyCell, isRuleComplete, resolveColumns, resolveVisibleColumns, rowMatchesSearch, sortKeyOf,
+  ATTENTION_OPTIONS, CUSTOM_GROUP, GRID_GROUPS, cellValue, columnIdFromOrderToken, columnWidth, compareTyped, formatCurrency, formatValueText,
+  ignoredRules, isEmptyCell, isRuleComplete, orderedColumnIds, resolveColumns, resolveVisibleColumns, rowMatchesSearch, setColumnVisibility, sortKeyOf,
   type GridColumnMeta,
 } from '../gridColumns'
 import { fromRoot, toRoot } from '../filterTree'
@@ -617,7 +617,7 @@ export function MasterGrid(props: MasterGridProps) {
       [
         { label: 'Filter by this column', icon: 'SlidersHorizontal', disabled: meta.type === null, onSelect: () => addRule(meta.id) },
         { label: frozenNow ? 'Unfreeze column' : 'Freeze column', icon: frozenNow ? 'PinOff' : 'Pin', disabled: !frozenNow && !!freezeBlockedReason(meta), onSelect: () => toggleFreeze(meta.id) },
-        { label: 'Hide column', icon: 'EyeOff', disabled: visible.length <= 1, onSelect: () => setVisibleIds(visible.map((c) => c.id).filter((id) => id !== meta.id)) },
+        { label: 'Hide column', icon: 'EyeOff', disabled: visible.length <= 1, onSelect: () => setVisibleIds(setColumnVisibility(allColumns, visibleIds, meta.id, false)) },
       ],
     ]
     setMenu({ x: e.clientX, y: e.clientY, title: `${meta.header} column`, groups })
@@ -674,7 +674,7 @@ export function MasterGrid(props: MasterGridProps) {
             label="Manage columns" icon="List" open={columnsOpen} align="end"
             onOpenChange={(open) => { setColumnsOpen(open); if (!open) setManageColumnId(null) }}
           >
-            <ManageColumnsPanel all={allColumns} visible={visible} onVisibleChange={setVisibleIds} focusId={manageColumnId} inScope={(f) => columnInScope(f.sheet, sheetId, props.columnScope)} />
+            <ManageColumnsPanel all={allColumns} visible={visible} columnOrder={visibleIds} onVisibleChange={setVisibleIds} focusId={manageColumnId} inScope={(f) => columnInScope(f.sheet, sheetId, props.columnScope)} />
           </ToolbarPopover>
           <Button variant="primary" size="sm" className="h-7 px-2.5" onClick={() => setCreateBidOpen(true)}>
             <Icon name="Plus" size={14} /> Create Bid
@@ -902,7 +902,11 @@ export function MasterGrid(props: MasterGridProps) {
         // brand-new column is appended to it; in the default view it shows itself.
         onCreated={(field) => {
           const id = `custom:${field.key}`
-          if (visibleIds?.length) setVisibleIds([...visibleIds, id])
+          if (visibleIds?.length) {
+            const order = orderedColumnIds(allColumns, visibleIds)
+              .filter((token) => columnIdFromOrderToken(token) !== id)
+            setVisibleIds([...order, id])
+          }
           scrollToId.current = id
           setFlashId(id)
         }}

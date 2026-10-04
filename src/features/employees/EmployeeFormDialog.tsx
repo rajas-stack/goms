@@ -3,6 +3,7 @@ import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { PhoneInput, isValidPhone } from '@/components/ui/PhoneInput'
+import { EmailInput } from '@/components/ui/EmailInput'
 import { Icon } from '@/components/ui/Icon'
 import { PhotoUploadField } from '@/components/ui/PhotoUploadField'
 import { DraftNotice } from '@/components/ui/DraftNotice'
@@ -445,8 +446,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
           </Field>
           {!reporteeMode && !form.vacant && (
             <Field label="Email">
-              <Input
-                type="email"
+              <EmailInput
                 value={form.email}
                 onChange={set('email')}
                 aria-invalid={!emailValid}

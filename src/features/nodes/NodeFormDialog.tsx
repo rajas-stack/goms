@@ -3,6 +3,7 @@ import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { PhoneInput, isValidPhone } from '@/components/ui/PhoneInput'
+import { EmailInput } from '@/components/ui/EmailInput'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
 import { useAllEmployees, useEmployeeMutations, useNodeMutations } from '@/lib/api'
@@ -10,6 +11,7 @@ import { useFormDraft } from '@/lib/useFormDraft'
 import { childTypesOf, NODE_TYPE_MAP } from '@/lib/node-types'
 import { fieldsForType } from './metadata-fields'
 import { DepartmentFields } from './DepartmentFields'
+import { OfficeLocationsField } from './OfficeLocationsField'
 import { abbreviateDepartmentName } from './department-meta'
 import type { Domain, HierNode } from '@/lib/types'
 
@@ -32,13 +34,14 @@ interface Props {
 
 export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepartment, initialTypeKey, onClose, onSaved }: Props) {
   const toast = useToast()
-  const { create, update } = useNodeMutations()
+  const { create, update, remove: removeNode } = useNodeMutations()
   const { create: createEmployee } = useEmployeeMutations()
 
   const childOptions = useMemo(() => (parent ? childTypesOf(parent.typeKey) : []), [parent])
   const [typeKey, setTypeKey] = useState<string>('')
   const [name, setName] = useState('')
   const [meta, setMeta] = useState<Record<string, string>>({})
+  const [pendingDepartmentHead, setPendingDepartmentHead] = useState<{ id: string; name: string; designation: string } | null>(null)
   // Tracks whether Short name already holds a real value (hand-typed or
   // loaded from an existing department) — while it doesn't, the effect below
   // keeps it in sync with the full name as it's typed.
@@ -47,7 +50,7 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
   // The three pieces of state above, bundled into one value so `useFormDraft`
   // can save/restore them together — a name typed with a metadata field
   // half-filled is one in-progress edit, not two independent ones.
-  const draftForm = { typeKey, name, meta }
+  const draftForm = { typeKey, name, meta, pendingDepartmentHead }
   const draftKey = mode === 'edit'
     ? (node ? `node:${node.id}` : null)
     : createDepartment
@@ -84,25 +87,37 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
     setTypeKey(preset)
     setName(mode === 'edit' ? node?.name ?? '' : '')
     setMeta(resetMeta)
+    setPendingDepartmentHead(null)
     shortNameTouched.current = !!resetMeta.shortName
   })
 
   useEffect(() => {
     if (!open) return
     const preset = initialTypeKey && childOptions.some((t) => t.key === initialTypeKey) ? initialTypeKey : childOptions[0]?.key ?? ''
-    const base = { typeKey: preset, name: mode === 'edit' ? node?.name ?? '' : '', meta: mode === 'edit' ? { ...node?.metadata } : {} }
+    const base = {
+      typeKey: preset,
+      name: mode === 'edit' ? node?.name ?? '' : '',
+      meta: mode === 'edit' ? { ...node?.metadata } : {},
+      pendingDepartmentHead: null,
+    }
     const restored = draft.take(base)
     const effectiveMeta = restored?.meta ?? base.meta
     setTypeKey(restored?.typeKey ?? base.typeKey)
     setName(restored?.name ?? base.name)
     setMeta(effectiveMeta)
+    setPendingDepartmentHead(restored?.pendingDepartmentHead ?? null)
     shortNameTouched.current = !!effectiveMeta.shortName
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode, node, childOptions, initialTypeKey])
 
   async function handleCreateHead(headName: string, designation: string) {
     const targetNodeId = node?.id ?? parent?.id
-    if (!targetNodeId) throw new Error('No org node to attach to')
+    if (!targetNodeId && createDepartment) {
+      const id = `pending-department-head:${headName}`
+      setPendingDepartmentHead({ id, name: headName, designation })
+      return id
+    }
+    if (!targetNodeId) throw new Error('Save the department before adding a department head.')
     const created = await createEmployee.mutateAsync({
       name: headName, designation, email: '', phone: '', orgNodeId: targetNodeId, managerId: null,
     })
@@ -124,14 +139,37 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
       toast(`Updated ${name.trim()}`)
       onSaved(node.id)
     } else {
+      const metadata = { ...meta }
+      const pendingHead = createDepartment && pendingDepartmentHead?.id === metadata.deptHead ? pendingDepartmentHead : null
+      if (createDepartment && metadata.deptHead?.startsWith('pending-department-head:')) delete metadata.deptHead
       const created = await create.mutateAsync({
         domain,
         typeKey: effectiveTypeKey,
         parentId: createDepartment ? null : parent!.id,
         stateCode,
         name: name.trim(),
-        metadata: meta,
+        metadata,
       })
+      if (pendingHead) {
+        try {
+          const employee = await createEmployee.mutateAsync({
+            name: pendingHead.name,
+            designation: pendingHead.designation,
+            email: '',
+            phone: '',
+            orgNodeId: created.id,
+            managerId: null,
+          })
+          await update.mutateAsync({ id: created.id, patch: { metadata: { ...metadata, deptHead: employee.id } } })
+        } catch (error) {
+          try {
+            await removeNode.mutateAsync(created.id)
+          } catch {
+            throw new Error('Could not create the department head, and the new department could not be rolled back. Please check Account Mapping before retrying.')
+          }
+          throw new Error(`Could not create the department head. The new department was rolled back. ${error instanceof Error ? error.message : ''}`.trim())
+        }
+      }
       toast(`Added ${typeLabel.toLowerCase()} “${name.trim()}”`)
       onSaved(created.id)
     }
@@ -156,7 +194,7 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
       footer={
         <>
           <Button onClick={onClose} disabled={create.isPending || update.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!name.trim() || create.isPending || update.isPending}>
+          <Button variant="primary" onClick={submit} disabled={!name.trim() || create.isPending || update.isPending || createEmployee.isPending}>
             {mode === 'edit'
               ? (update.isPending ? 'Saving…' : 'Save changes')
               : (create.isPending ? 'Creating…' : `Create ${typeLabel.toLowerCase()}`)}
@@ -190,12 +228,16 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
             onShortNameChange={handleShortNameChange}
             employees={employees}
             onCreateHead={handleCreateHead}
+            pendingHead={pendingDepartmentHead}
             jurisdictionStateCode={stateCode}
           />
         )}
         {fields.map((f) => {
           const value = meta[f.key] ?? ''
           const phoneInvalid = f.type === 'phone' && !isValidPhone(value)
+          if (f.key === 'officeAddress' && isDepartment) {
+            return <OfficeLocationsField key={f.key} meta={meta} setMeta={setMeta} />
+          }
           return (
             <Field
               key={f.key}
@@ -209,9 +251,11 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
                   <PhoneInput value={value} onChange={(v) => setMeta((m) => ({ ...m, [f.key]: v }))} invalid={phoneInvalid} />
                   {phoneInvalid && <span className="mt-1 block text-xs text-crimson">Enter a valid 10-digit number.</span>}
                 </>
+              ) : f.type === 'email' ? (
+                <EmailInput aria-label={f.label} value={value} onChange={(email) => setMeta((m) => ({ ...m, [f.key]: email }))} />
               ) : (
                 <Input
-                  type={f.type === 'email' ? 'email' : f.type === 'url' ? 'url' : 'text'}
+                  type={f.type === 'url' ? 'url' : 'text'}
                   value={value}
                   onChange={(e) => setMeta((m) => ({ ...m, [f.key]: e.target.value }))}
                 />

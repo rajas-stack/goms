@@ -7,6 +7,7 @@ import { useWorkspace } from '@/features/workspace/context'
 import { fieldsForType } from '@/features/nodes/metadata-fields'
 import { abbreviateDepartmentName } from '@/features/nodes/department-meta'
 import { parseContactNumbers, type ContactNumberEntry } from '@/features/nodes/contact-numbers'
+import { parseOfficeLocations } from '@/features/nodes/office-locations'
 import { DepartmentSection } from './DepartmentSection'
 import { Button } from '@/components/ui/Button'
 import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
@@ -50,7 +51,11 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
   // type picker) — that fallback would wrongly suggest a real child type here
   // for true leaves like `unit`, so this only trusts an explicitly declared one.
   const hasRealChildType = (NODE_TYPE_MAP[node.typeKey]?.childKeys.length ?? 0) > 0
-  const allFields = fieldsForType(node.typeKey, node.domain).filter((f) => node.metadata[f.key])
+  const allFields = fieldsForType(node.typeKey, node.domain).filter((f) =>
+    f.key === 'officeAddress'
+      ? parseOfficeLocations(node.metadata.officeAddresses, node.metadata.officeAddress).length > 0
+      : !!node.metadata[f.key],
+  )
   const descriptionField = allFields.find((f) => f.key === 'description')
   const fields = allFields.filter((f) => f.key !== 'description')
   const archived = node.status === 'archived'
@@ -217,6 +222,15 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
                       <a href={`tel:${node.metadata[f.key]}`} className="text-teal-600 hover:underline">
                         {node.metadata[f.key]}
                       </a>
+                    ) : f.key === 'officeAddress' && isDepartment ? (
+                      <ul className="space-y-2">
+                        {parseOfficeLocations(node.metadata.officeAddresses, node.metadata.officeAddress).map((location) => (
+                          <li key={location.id} className="break-words">
+                            <span className="font-medium text-ink-800">{location.label}</span>
+                            <p className="whitespace-pre-wrap">{location.address}</p>
+                          </li>
+                        ))}
+                      </ul>
                     ) : (
                       node.metadata[f.key]
                     )}

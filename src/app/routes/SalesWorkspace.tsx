@@ -62,7 +62,7 @@ function SummaryCard({ label, value, icon, href }: { label: string; value: numbe
  *  for headcount, and the Ownership tab (scoped to the selected salesperson,
  *  if any) for the three ownership-derived counts — reusing that tab's own
  *  Departments/Contacts/Opportunities switcher rather than building new pages. */
-function SummaryCards() {
+function SummaryCards({ basePath }: { basePath: string }) {
   const ws = useWorkspace()
   const { data: people = [] } = useSalesPersons()
   const { data: assignments = [] } = useOwnershipAssignments()
@@ -78,11 +78,11 @@ function SummaryCards() {
   const openOpportunities = opportunities.filter((o) => !PIPELINE_STAGE_MAP[o.stageKey]?.isClosed).length
 
   const selectedPersonId = ws.selection?.kind === 'salesPerson' ? ws.selection.id : null
-  const ownershipHref = (view: string) => `/sales/ownership?view=${view}${selectedPersonId ? `&owner=${selectedPersonId}` : ''}`
+  const ownershipHref = (view: string) => `${basePath}/ownership?view=${view}${selectedPersonId ? `&owner=${selectedPersonId}` : ''}`
 
   return (
     <div className="grid grid-cols-2 gap-2 border-b border-line px-3 py-2 sm:grid-cols-4">
-      <SummaryCard label="Total sales people" value={people.length} icon="Users" href="/sales/roster" />
+      <SummaryCard label="Total sales people" value={people.length} icon="Users" href={`${basePath}/roster`} />
       <SummaryCard label="Departments owned" value={openOwned('orgNode')} icon="Building2" href={ownershipHref('orgNode')} />
       <SummaryCard label="Contacts managed" value={openOwned('contact')} icon="User" href={ownershipHref('contact')} />
       <SummaryCard label="Open opportunities" value={openOpportunities} icon="Briefcase" href={ownershipHref('opportunity')} />
@@ -373,7 +373,7 @@ export function Ownership() {
   )
 }
 
-function SalesWorkspaceBody() {
+function SalesWorkspaceBody({ basePath }: { basePath: string }) {
   const { section } = useParams()
   const active = SECTIONS.find((s) => s.key === section) ?? SECTIONS[0]
   const ws = useWorkspace()
@@ -382,7 +382,7 @@ function SalesWorkspaceBody() {
 
   return (
     <div className="flex h-full flex-col">
-      <SummaryCards />
+      <SummaryCards basePath={basePath} />
       {/* Below `sm` the tabs drop to their own full-width row (order-last) so the lock pill sits
           beside the title instead of crowding them; from `sm` up it is the single row it always was. */}
       <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-3 py-1.5 sm:flex-nowrap">
@@ -391,7 +391,7 @@ function SalesWorkspaceBody() {
           {SECTIONS.map((s) => (
             <Link
               key={s.key}
-              to={`/sales/${s.key}`}
+              to={`${basePath}/${s.key}`}
               className={cn(
                 'shrink-0 rounded-lg px-3 py-2 sm:px-2.5 sm:py-1 text-[13px] font-medium transition-colors',
                 s.key === active.key
@@ -423,15 +423,16 @@ function SalesWorkspaceBody() {
   )
 }
 
-export function SalesWorkspace() {
+export function SalesWorkspace({ basePath = '/sales' }: { basePath?: string } = {}) {
   // `WorkspaceProvider` is mounted per-route in this app, not once at the
   // layout — `useWorkspace()` throws without it. `-1` is the existing
   // cross-state sentinel (Directory uses it too): the sales roster is national,
-  // not scoped to one state.
+  // not scoped to one state. `basePath` lets Teams embed this under
+  // `/teams/sales` so its section links stay inside the Teams tab.
   return (
     <WorkspaceProvider stateCode={-1}>
       <SalesDetailsSidebarProvider>
-        <SalesWorkspaceBody />
+        <SalesWorkspaceBody basePath={basePath} />
       </SalesDetailsSidebarProvider>
     </WorkspaceProvider>
   )

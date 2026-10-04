@@ -1,6 +1,6 @@
 import type {
   Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue, BidDocument, BidMilestone, BidSavedView,
-  Customer, DocumentCitation, Employee, ExternalId, FollowUp, HierNode, MergeAuditRecord, Opportunity, OpportunityStageChange,
+  Customer, DeliveryTeamMember, DocumentCitation, Employee, ExternalId, FollowUp, HierNode, MergeAuditRecord, Opportunity, OpportunityStageChange,
   OwnershipAssignment, ProtectedValue, SalesPerson, SalesPosting, TimelineEvent, Transfer,
 } from '@/lib/types'
 import adminRaw from './india-admin.json'
@@ -84,6 +84,8 @@ export interface GormsData {
   commercialCalculator: CommercialCalculatorData
   /** No seed fixture defined yet — starts empty. */
   customers: Customer[]
+  /** Non-Sales operational rosters; Sales continues to use salesPersons. */
+  deliveryTeamMembers: DeliveryTeamMember[]
 
   /** Added in v13 (Bid Tracker). All start empty — no demo/sample bid data
    *  is ever seeded (design spec, explicit non-goal). */
@@ -315,6 +317,8 @@ export function buildSeed(): GormsData {
     opportunities, opportunityStageChanges, followUps, salesPersons, salesPostings,
     ownershipAssignments, mergeAudit, commercialCalculator,
     customers: [],
+    deliveryTeamMembers: [],
+    deliveryTeamMembers: [],
     bids: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
     protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [],
     bidCustomFields: [], bidCustomFieldValues: [],

@@ -14,14 +14,14 @@ import type { AppRouter } from '../../../apps/api/src/index'
 import type {
   Repository, CreateCustomerInput, CreateNodeInput, CreateEmployeeInput, AddTimelineInput,
   ImportChildRow, ImportEmployeeRow, MergeEmployeesInput, TransferInput,
-  CreateSalesPersonInput, TransferSalesPersonInput, StateSummary,
+  CreateSalesPersonInput, CreateDeliveryTeamMemberInput, UpdateDeliveryTeamMemberPatch, TransferSalesPersonInput, StateSummary,
   CreateOpportunityInput, AssignOwnerInput, TransferBookOfBusinessInput, CreateFollowUpInput,
   RelationshipAnalytics,
 } from '../repository'
 import type { OwnerResolution } from '@/data/ownership'
 import type {
   Customer, HierNode, Status, Employee, Charge, TimelineEvent, TimelineEventType, Transfer, MergeAuditRecord,
-  SalesPerson, SalesPosting, Opportunity, OpportunityStageChange, OwnershipAssignment, FollowUp, SearchResult,
+  SalesPerson, SalesPosting, DeliveryTeamKey, DeliveryTeamMember, Opportunity, OpportunityStageChange, OwnershipAssignment, FollowUp, SearchResult,
   Bid, BidGridRow, BidMilestone, BidMilestoneWithBid, BidCorrigendum, BidCorrigendumChange, ProtectedValue, BidDocument,
   DocumentCitation, BidSavedView, ActionQueueEntry, BidCustomField, CustomFieldType, CustomValue,
 } from '@/lib/types'
@@ -118,6 +118,13 @@ export class RemoteRepository implements Partial<Repository> {
     this.client.sales.update.mutate({ id, patch: patch as any }).then((r) => r!)
   setSalesPersonStatus = (id: string, status: SalesPerson['status']): Promise<void> => this.client.sales.setStatus.mutate({ id, status })
   deleteSalesPerson = (id: string): Promise<void> => this.client.sales.delete.mutate({ id })
+  listDeliveryTeamMembers = (team?: DeliveryTeamKey): Promise<DeliveryTeamMember[]> => this.client.deliveryTeams.list.query({ team, includeInactive: true })
+  createDeliveryTeamMember = (input: CreateDeliveryTeamMemberInput): Promise<DeliveryTeamMember> => this.client.deliveryTeams.create.mutate(input)
+  updateDeliveryTeamMember = (id: string, patch: UpdateDeliveryTeamMemberPatch): Promise<DeliveryTeamMember> =>
+    this.client.deliveryTeams.update.mutate({ id, patch }) as Promise<DeliveryTeamMember>
+  setDeliveryTeamMemberStatus = (id: string, status: DeliveryTeamMember['status']): Promise<void> =>
+    this.client.deliveryTeams.setStatus.mutate({ id, status })
+  deleteDeliveryTeamMember = (id: string): Promise<void> => this.client.deliveryTeams.delete.mutate({ id })
   transferSalesPerson = (input: TransferSalesPersonInput): Promise<SalesPosting> => this.client.sales.transfer.mutate(input)
   updatePostingDates = (postingId: string, edit: { startDate?: string; lastDayHeld?: string | null }): Promise<SalesPosting> =>
     this.client.sales.updatePostingDates.mutate({ postingId, ...edit })

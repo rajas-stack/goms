@@ -154,6 +154,12 @@ export interface Opportunity {
   /** Client city — free text, feeds the Bid Tracker Master Grid's "City"
    *  column. `null`/absent for opportunities that predate it. */
   city?: string | null
+  /** Reference / Bid No — a bid or reference number distinct from `gemTenderId`.
+   *  `null`/absent for opportunities that predate it. */
+  referenceNo?: string | null
+  /** Name of assignment — the tender's own title for the work, distinct from
+   *  `opportunityName`. `null`/absent for opportunities that predate it. */
+  assignmentName?: string | null
   /** ISO date (YYYY-MM-DD) the tender/GEM listing was published. */
   publishDate: string
   /** ISO date (YYYY-MM-DD) the bid is due. */
@@ -179,6 +185,11 @@ export interface Opportunity {
    *  three go together so there is never a period with two answers to "who
    *  owns this". Until then it remains the only owner record. */
   salesPersonEmail: string
+  geoSalesPersonId?: string | null
+  buSalesPersonId?: string | null
+  preSalesPersonId?: string | null
+  legalPersonId?: string | null
+  bidTeamMemberId?: string | null
 
   createdAt: string
   createdBy: string | null
@@ -331,6 +342,19 @@ export interface SalesPosting {
   createdBy: string | null
 }
 
+export type DeliveryTeamKey = 'preSales' | 'legal' | 'bid'
+
+export interface DeliveryTeamMember {
+  id: string
+  team: DeliveryTeamKey
+  name: string
+  email: string
+  status: 'active' | 'inactive'
+  /** Reports-to, within the same team. Null for the team's top of the org chart. */
+  managerId: string | null
+  createdAt: string
+}
+
 /** A commercial customer/account. New in Phase 2 — no prior in-memory
  *  behavior existed for this entity. */
 export interface Customer {
@@ -400,6 +424,11 @@ export interface BidGridRow extends Bid {
   emdAmount: string
   emdUnit: string
   vertical: string
+  geoSalesPersonId: string | null
+  buSalesPersonId: string | null
+  preSalesPersonId: string | null
+  legalPersonId: string | null
+  bidTeamMemberId: string | null
   ownerEmail: string | null
   solutionLeadEmail: string | null
   documentCount: number

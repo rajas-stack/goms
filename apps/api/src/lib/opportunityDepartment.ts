@@ -25,6 +25,8 @@ export const newBidOpportunitySchema = z.object({
   opportunityName: z.string().trim().min(1, 'Enter the opportunity name.').max(300),
   gemTenderId: z.string().trim().max(200).optional(),
   city: z.string().trim().max(200).nullable().optional(),
+  referenceNo: z.string().trim().max(200).nullable().optional(),
+  assignmentName: z.string().trim().max(300).nullable().optional(),
   submissionDate: z.string().trim().max(100).optional(),
 })
 

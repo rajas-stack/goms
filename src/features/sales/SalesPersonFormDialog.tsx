@@ -3,6 +3,8 @@ import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { PhotoUploadField } from '@/components/ui/PhotoUploadField'
+import { EmailInput } from '@/components/ui/EmailInput'
+import { PhoneInput, isValidPhone } from '@/components/ui/PhoneInput'
 import { useToast } from '@/components/ui/Toast'
 import { useCurrentPostings, useSalesPersonMutations, useSalesPersons } from '@/lib/api'
 import { SALES_TIERS } from '@/data/sales-tiers'
@@ -109,7 +111,8 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
     onClose()
   }
 
-  const canSubmit = name.trim().length > 0 && email.trim().length > 0
+  const mobileValid = isValidPhone(mobile)
+  const canSubmit = name.trim().length > 0 && email.trim().length > 0 && mobileValid
 
   return (
     <Dialog
@@ -134,10 +137,11 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name" />
         </Field>
         <Field label="Official email" required>
-          <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@amnex.com" />
+          <EmailInput value={email} onChange={setEmail} placeholder="name@amnex.com" />
         </Field>
-        <Field label="Mobile">
-          <Input value={mobile} onChange={(e) => setMobile(e.target.value)} />
+        <Field label="Mobile" hint="+91 · 10-digit number">
+          <PhoneInput value={mobile} onChange={setMobile} invalid={!mobileValid} />
+          {!mobileValid && <span className="mt-1 block text-xs text-crimson">Enter a valid 10-digit number.</span>}
         </Field>
         <PhotoUploadField photoUrl={photoUrl} onChange={setPhotoUrl} />
 

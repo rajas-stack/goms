@@ -1,7 +1,7 @@
 import type {
   ActionQueueEntry, AttendeeRef, Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue,
   BidDocument, BidGridRow, BidMilestone, BidMilestoneWithBid, CustomFieldType, CustomValue,
-  BidSavedView, Charge, Customer, Domain, DocumentCitation, Employee, FollowUp, HierNode, MergeAuditRecord,
+  BidSavedView, Charge, Customer, DeliveryTeamKey, DeliveryTeamMember, Domain, DocumentCitation, Employee, FollowUp, HierNode, MergeAuditRecord,
   MergeFieldResolution, Opportunity, OpportunityStageChange, OwnershipAssignment, PreferredComm, ProtectedValue,
   RelationshipQuality, RelationshipStatus,
   SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
@@ -179,6 +179,8 @@ export interface CreateOpportunityInput {
   opportunityName: string
   gemTenderId?: string
   city?: string | null
+  referenceNo?: string | null
+  assignmentName?: string | null
   publishDate?: string
   submissionDate?: string
   vertical?: string
@@ -191,9 +193,23 @@ export interface CreateOpportunityInput {
   emdAmount?: string
   emdUnit?: string
   salesPersonEmail?: string
+  geoSalesPersonId?: string | null
+  buSalesPersonId?: string | null
+  preSalesPersonId?: string | null
+  legalPersonId?: string | null
+  bidTeamMemberId?: string | null
   /** Defaults to `DEFAULT_STAGE_KEY`. */
   stageKey?: string
 }
+
+export interface CreateDeliveryTeamMemberInput {
+  team: DeliveryTeamKey
+  name: string
+  email?: string
+  managerId?: string | null
+}
+
+export type UpdateDeliveryTeamMemberPatch = Partial<Pick<DeliveryTeamMember, 'name' | 'email' | 'managerId'>>
 
 export interface CreateSalesPersonInput {
   name: string
@@ -326,6 +342,12 @@ export interface Repository {
   createOpportunity(input: CreateOpportunityInput): Promise<Opportunity>
   updateOpportunity(id: string, patch: Partial<Opportunity>): Promise<Opportunity>
   deleteOpportunity(id: string): Promise<void>
+
+  listDeliveryTeamMembers(team?: DeliveryTeamKey): Promise<DeliveryTeamMember[]>
+  createDeliveryTeamMember(input: CreateDeliveryTeamMemberInput): Promise<DeliveryTeamMember>
+  updateDeliveryTeamMember(id: string, patch: UpdateDeliveryTeamMemberPatch): Promise<DeliveryTeamMember>
+  setDeliveryTeamMemberStatus(id: string, status: 'active' | 'inactive'): Promise<void>
+  deleteDeliveryTeamMember(id: string): Promise<void>
 
   /** The AMNEX sales roster, name-sorted. Includes every status — the UI
    *  filters, so a resigned person stays reachable from their history. */
@@ -599,6 +621,7 @@ class InMemoryRepository implements Repository {
       followUps: data.followUps ?? [],
       salesPersons: data.salesPersons ?? [],
       salesPostings: data.salesPostings ?? [],
+      deliveryTeamMembers: data.deliveryTeamMembers ?? [],
       ownershipAssignments: data.ownershipAssignments ?? [],
       bids: data.bids ?? [],
       bidMilestones: data.bidMilestones ?? [],
@@ -1242,6 +1265,7 @@ class InMemoryRepository implements Repository {
   }
 
   async createOpportunity(input: CreateOpportunityInput) {
+    this.assertOpportunityTeamAssignments(input)
     const dept = this.data.nodes.find((n) => n.id === input.departmentId)
     const stageKey = input.stageKey ?? DEFAULT_STAGE_KEY
     const opp: Opportunity = {
@@ -1253,6 +1277,8 @@ class InMemoryRepository implements Repository {
       opportunityName: input.opportunityName,
       gemTenderId: input.gemTenderId ?? '',
       city: input.city ?? null,
+      referenceNo: input.referenceNo ?? null,
+      assignmentName: input.assignmentName ?? null,
       publishDate: input.publishDate ?? '',
       submissionDate: input.submissionDate ?? '',
       vertical: input.vertical ?? '',
@@ -1265,6 +1291,11 @@ class InMemoryRepository implements Repository {
       emdAmount: input.emdAmount ?? '',
       emdUnit: input.emdUnit ?? 'lakh',
       salesPersonEmail: input.salesPersonEmail ?? '',
+      geoSalesPersonId: input.geoSalesPersonId ?? null,
+      buSalesPersonId: input.buSalesPersonId ?? null,
+      preSalesPersonId: input.preSalesPersonId ?? null,
+      legalPersonId: input.legalPersonId ?? null,
+      bidTeamMemberId: input.bidTeamMemberId ?? null,
       createdAt: isoToday(),
       createdBy: null,
     }
@@ -1281,6 +1312,7 @@ class InMemoryRepository implements Repository {
 
   async updateOpportunity(id: string, patch: Partial<Opportunity>) {
     const opp = this.data.opportunities.find((o) => o.id === id)!
+    this.assertOpportunityTeamAssignments(patch)
     const bidOfOpp = this.data.bids.find((b) => b.opportunityId === id)
     if (bidOfOpp) this.assertNotProtected(bidOfOpp.id, (['valueAmount', 'emdAmount', 'gemTenderId'] as const).filter((f) => f in patch))
     const previousStage = opp.stageKey
@@ -1309,6 +1341,85 @@ class InMemoryRepository implements Repository {
       })
     }
     return opp
+  }
+
+  private assertOpportunityTeamAssignments(patch: Partial<Opportunity>): void {
+    const salesAssignments = ['geoSalesPersonId', 'buSalesPersonId'] as const
+    for (const key of salesAssignments) {
+      const id = patch[key]
+      if (id && !this.data.salesPersons.some((person) => person.id === id)) {
+        throw new Error('Choose a person from the Sales team.')
+      }
+    }
+    const teamAssignments: [keyof Opportunity, DeliveryTeamKey][] = [
+      ['preSalesPersonId', 'preSales'], ['legalPersonId', 'legal'], ['bidTeamMemberId', 'bid'],
+    ]
+    for (const [key, team] of teamAssignments) {
+      const id = patch[key]
+      if (typeof id !== 'string' || !id) continue
+      if (!this.data.deliveryTeamMembers.some((member) => member.id === id && member.team === team && member.status === 'active')) {
+        throw new Error(`Choose an active person from the ${team} team.`)
+      }
+    }
+  }
+
+  async listDeliveryTeamMembers(team?: DeliveryTeamKey): Promise<DeliveryTeamMember[]> {
+    return this.data.deliveryTeamMembers
+      .filter((member) => !team || member.team === team)
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  async createDeliveryTeamMember(input: CreateDeliveryTeamMemberInput): Promise<DeliveryTeamMember> {
+    const name = input.name.trim()
+    const email = input.email?.trim() ?? ''
+    if (!name) throw new Error('Enter a team member name.')
+    if (this.data.deliveryTeamMembers.some((member) => member.team === input.team && member.name.toLowerCase() === name.toLowerCase())) {
+      throw new Error('A person with this name is already on the team.')
+    }
+    const managerId = input.managerId || null
+    this.assertValidDeliveryManager(input.team, null, managerId)
+    const member: DeliveryTeamMember = { id: uid('team'), team: input.team, name, email, status: 'active', managerId, createdAt: isoToday() }
+    this.data.deliveryTeamMembers.push(member)
+    return member
+  }
+
+  async updateDeliveryTeamMember(id: string, patch: UpdateDeliveryTeamMemberPatch): Promise<DeliveryTeamMember> {
+    const member = this.data.deliveryTeamMembers.find((person) => person.id === id)
+    if (!member) throw new Error('Team member no longer exists.')
+    if (patch.managerId !== undefined) {
+      const managerId = patch.managerId || null
+      this.assertValidDeliveryManager(member.team, member.id, managerId)
+      member.managerId = managerId
+    }
+    if (patch.name !== undefined) member.name = patch.name.trim()
+    if (patch.email !== undefined) member.email = patch.email.trim()
+    return member
+  }
+
+  /** Reports-to must be someone on the same team, and must not make the chain circular. */
+  private assertValidDeliveryManager(team: DeliveryTeamKey, memberId: string | null, managerId: string | null) {
+    if (!managerId) return
+    const byId = new Map(this.data.deliveryTeamMembers.map((person) => [person.id, person]))
+    if (byId.get(managerId)?.team !== team) throw new Error('Choose a manager from the same team.')
+    for (let cursor: string | null = managerId; cursor; cursor = byId.get(cursor)?.managerId ?? null) {
+      if (cursor === memberId) throw new Error('That would make the reporting line circular.')
+    }
+  }
+
+  async setDeliveryTeamMemberStatus(id: string, status: DeliveryTeamMember['status']): Promise<void> {
+    const member = this.data.deliveryTeamMembers.find((person) => person.id === id)
+    if (member) member.status = status
+  }
+
+  async deleteDeliveryTeamMember(id: string): Promise<void> {
+    this.data.deliveryTeamMembers = this.data.deliveryTeamMembers
+      .filter((member) => member.id !== id)
+      .map((member) => (member.managerId === id ? { ...member, managerId: null } : member))
+    for (const opportunity of this.data.opportunities) {
+      if (opportunity.preSalesPersonId === id) opportunity.preSalesPersonId = null
+      if (opportunity.legalPersonId === id) opportunity.legalPersonId = null
+      if (opportunity.bidTeamMemberId === id) opportunity.bidTeamMemberId = null
+    }
   }
 
   async deleteOpportunity(id: string) {
@@ -1400,6 +1511,11 @@ class InMemoryRepository implements Repository {
         emdAmount: opp?.emdAmount ?? '',
         emdUnit: opp?.emdUnit ?? '',
         vertical: opp?.vertical ?? '',
+        geoSalesPersonId: opp?.geoSalesPersonId ?? null,
+        buSalesPersonId: opp?.buSalesPersonId ?? null,
+        preSalesPersonId: opp?.preSalesPersonId ?? null,
+        legalPersonId: opp?.legalPersonId ?? null,
+        bidTeamMemberId: opp?.bidTeamMemberId ?? null,
         ownerEmail,
         solutionLeadEmail: emailOf(solutionLead?.salesPersonId),
         documentCount: this.data.bidDocuments.filter((d) => d.entityType === 'bid' && d.entityId === bid.id).length,
@@ -1498,6 +1614,7 @@ class InMemoryRepository implements Repository {
     const opp = await this.createOpportunity({
       departmentId: dept.id, opportunityName: name, gemTenderId: opportunity.gemTenderId?.trim(),
       city: opportunity.city?.trim() || null, submissionDate: opportunity.submissionDate?.trim(),
+      referenceNo: opportunity.referenceNo?.trim() || null, assignmentName: opportunity.assignmentName?.trim() || null,
     })
     return this.createBid(opp.id)
   }

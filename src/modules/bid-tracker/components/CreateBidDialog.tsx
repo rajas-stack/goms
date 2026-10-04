@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { DepartmentChoice } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
@@ -6,15 +6,17 @@ import { Combobox } from '@/components/ui/Combobox'
 import { Dialog } from '@/components/ui/Dialog'
 import { Input } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
-import { useBidMutations, useBidsForGrid, useDepartments, useOpportunities, useStates } from '@/lib/api'
+import { useBidMutations, useBidsForGrid, useDepartments, useOpportunities } from '@/lib/api'
 import type { HierNode, Opportunity } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { NodeFormDialog } from '@/features/nodes/NodeFormDialog'
+import { formatCapturedDate, parseFriendlyDate } from '../dateInput'
 
 const MAX_SHOWN = 50
 const CENTRAL = '0' // Central Ministries (Govt. of India)
 
 const segment = (active: boolean) => cn(
-  'h-8 flex-1 rounded-md px-3 text-[13px] font-medium transition-colors',
+  'h-7 rounded px-3 text-[12px] font-medium transition-colors',
   active ? 'bg-goms-navy text-paper' : 'text-ink hover:bg-goms-sky/[0.14]',
 )
 
@@ -26,20 +28,60 @@ const segment = (active: boolean) => cn(
  *  mutation the opportunity card uses). A new opportunity is created in that same server transaction, so the
  *  opportunity, its department and the bid all exist or none of them do. Cancelling changes nothing. */
 export function CreateBidDialog({ open, onClose, opportunityId }: { open: boolean; onClose: () => void; opportunityId?: string }) {
+  const [departmentDialogOpen, setDepartmentDialogOpen] = useState(false)
+  const [newDepartmentId, setNewDepartmentId] = useState<string | null>(null)
+  useEffect(() => {
+    if (open) return
+    setDepartmentDialogOpen(false)
+    setNewDepartmentId(null)
+  }, [open])
+
+  const close = () => {
+    if (departmentDialogOpen) return
+    onClose()
+  }
+
   return (
-    <Dialog open={open} onClose={onClose} title="Create Bid" description="Pick the opportunity this bid is for. Each opportunity can have one bid." size="lg">
-      {/* Mounts (and fetches its lists) only while open; state resets on every open. */}
-      <CreateBidFlow onClose={onClose} presetId={opportunityId} />
-    </Dialog>
+    <>
+      <Dialog open={open} onClose={close} title="Create Bid" description="Pick the opportunity this bid is for. Each opportunity can have one bid." size="lg">
+        {/* Mounts (and fetches its lists) only while open; state resets on every open. */}
+        <CreateBidFlow
+          onClose={close}
+          presetId={opportunityId}
+          newDepartmentId={newDepartmentId}
+          onRequestCreateDepartment={() => {
+            setNewDepartmentId(null)
+            setDepartmentDialogOpen(true)
+          }}
+        />
+      </Dialog>
+      <NodeFormDialog
+        open={departmentDialogOpen}
+        mode="create"
+        stateCode={Number(CENTRAL)}
+        parent={null}
+        node={null}
+        createDepartment
+        onClose={() => setDepartmentDialogOpen(false)}
+        onSaved={(id) => {
+          setNewDepartmentId(id)
+          setDepartmentDialogOpen(false)
+        }}
+      />
+    </>
   )
 }
 
-function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: string }) {
+function CreateBidFlow({ onClose, presetId, newDepartmentId, onRequestCreateDepartment }: {
+  onClose: () => void
+  presetId?: string
+  newDepartmentId: string | null
+  onRequestCreateDepartment: () => void
+}) {
   const navigate = useNavigate()
   const { data: opportunities = [], isLoading } = useOpportunities()
   const { data: bids = [] } = useBidsForGrid()
   const { data: departments = [] } = useDepartments()
-  const { data: states = [] } = useStates()
   const { create, createWithNewOpportunity } = useBidMutations()
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(presetId ?? null)
@@ -49,16 +91,17 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
   const [isNew, setIsNew] = useState(false)
   const [newName, setNewName] = useState('')
   const [newTender, setNewTender] = useState('')
-  const [newCity, setNewCity] = useState('')
+  const [newReference, setNewReference] = useState('')
+  const [newAssignment, setNewAssignment] = useState('')
   const [newDue, setNewDue] = useState('')
-  // Department step (used when the opportunity has none — always for a new one)
-  const [deptMode, setDeptMode] = useState<'existing' | 'create'>('existing')
+  const [newDueText, setNewDueText] = useState('')
+  const parsedDuePreview = useMemo(() => formatCapturedDate(newDueText), [newDueText])
+  const invalidDue = !!newDueText.trim() && !newDue
   const [existingId, setExistingId] = useState('')
-  const [parentMode, setParentMode] = useState<'existing' | 'create'>('existing')
-  const [parentId, setParentId] = useState('')
-  const [parentName, setParentName] = useState('')
-  const [parentState, setParentState] = useState(CENTRAL)
-  const [deptName, setDeptName] = useState('')
+
+  useEffect(() => {
+    if (newDepartmentId) setExistingId(newDepartmentId)
+  }, [newDepartmentId])
 
   const byId = useMemo(() => new Map<string, HierNode>(departments.map((d) => [d.id, d])), [departments])
   /** Root → leaf names, e.g. ['MeitY', 'India AI']. */
@@ -68,7 +111,11 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
     return out
   }
   const deptOptions = useMemo(
-    () => departments.map((d) => ({ value: d.id, label: pathOf(d.id).join(' → ') })).sort((a, b) => a.label.localeCompare(b.label)),
+    () => departments.map((d) => ({
+      value: d.id,
+      label: pathOf(d.id).join(' → '),
+      searchText: d.metadata.shortName ?? '',
+    })).sort((a, b) => a.label.localeCompare(b.label)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [departments],
   )
@@ -89,24 +136,13 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
   const hasDepartment = !isNew && !!selected?.departmentId
 
   // What the user chose for a department-less opportunity, as the server's payload (null = incomplete).
-  const choice = useMemo((): DepartmentChoice | null => {
-    if (deptMode === 'existing') return existingId ? { mode: 'existing', departmentId: existingId } : null
-    if (!deptName.trim()) return null
-    if (parentMode === 'existing') return parentId ? { mode: 'create', name: deptName.trim(), parent: { mode: 'existing', departmentId: parentId } } : null
-    return parentName.trim()
-      ? { mode: 'create', name: deptName.trim(), parent: { mode: 'create', name: parentName.trim(), stateCode: Number(parentState) } }
-      : null
-  }, [deptMode, existingId, deptName, parentMode, parentId, parentName, parentState])
+  const choice = useMemo((): Extract<DepartmentChoice, { mode: 'existing' }> | null => {
+    return existingId ? { mode: 'existing', departmentId: existingId } : null
+  }, [existingId])
 
-  /** The hierarchy that will result, for the preview, flagging what is new. */
+  /** The selected department hierarchy. */
   const preview = useMemo(() => {
-    if (!choice) return null
-    if (choice.mode === 'existing') return pathOf(choice.departmentId).join(' → ')
-    const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
-    const parentLabel = choice.parent.mode === 'existing' ? pathOf(choice.parent.departmentId).join(' → ') : `${choice.parent.name} (new)`
-    const parentNodeId = choice.parent.mode === 'existing' ? choice.parent.departmentId : null
-    const exists = parentNodeId && departments.some((d) => d.parentId === parentNodeId && same(d.name, choice.name))
-    return `${parentLabel} → ${choice.name}${exists ? ' (existing)' : ' (new)'}`
+    return choice ? pathOf(choice.departmentId).join(' → ') : null
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [choice, byId])
 
@@ -114,12 +150,16 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
     if ((!selected && !isNew) || busy) return
     if (!hasDepartment && !choice) return
     if (isNew && !newName.trim()) return
+    if (isNew && invalidDue) return
     setError(null)
     setBusy(true)
     try {
       const bid = isNew
         ? await createWithNewOpportunity.mutateAsync({
-          opportunity: { opportunityName: newName.trim(), gemTenderId: newTender.trim() || undefined, city: newCity.trim() || null, submissionDate: newDue.trim() || undefined },
+          opportunity: {
+            opportunityName: newName.trim(), gemTenderId: newTender.trim() || undefined, submissionDate: newDue.trim() || undefined,
+            referenceNo: newReference.trim() || null, assignmentName: newAssignment.trim() || null,
+          },
           department: choice!,
         })
         : await create.mutateAsync({ opportunityId: selected!.id, department: hasDepartment ? undefined : choice ?? undefined })
@@ -142,12 +182,44 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
               <span className="text-[12px] text-muted">New opportunity</span>
               <button type="button" className="text-[12px] text-goms-navy underline" onClick={() => { setIsNew(false); setError(null) }}>Pick an existing one instead</button>
             </div>
-            <Input aria-label="Opportunity name" placeholder="Opportunity name, e.g. AI Solution" value={newName} maxLength={300} autoFocus onChange={(e) => setNewName(e.target.value)} />
-            <div className="grid grid-cols-3 gap-2">
-              <Input aria-label="Tender ID" placeholder="Tender / GeM ID (optional)" value={newTender} maxLength={200} onChange={(e) => setNewTender(e.target.value)} />
-              <Input aria-label="City" placeholder="City (optional)" value={newCity} maxLength={200} onChange={(e) => setNewCity(e.target.value)} />
-              <Input aria-label="Submission date" type="date" value={newDue} onChange={(e) => setNewDue(e.target.value)} />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <label className="flex flex-col gap-1">
+                <span className="text-[12px] font-medium text-muted">Tender / GeM ID</span>
+                <Input aria-label="Tender ID" placeholder="Optional" value={newTender} maxLength={200} onChange={(e) => setNewTender(e.target.value)} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[12px] font-medium text-muted">Reference / Bid No</span>
+                <Input aria-label="Reference / Bid No" placeholder="Optional" value={newReference} maxLength={200} onChange={(e) => setNewReference(e.target.value)} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-[12px] font-medium text-muted">Bid submission deadline</span>
+                <Input
+                  aria-label="Submission date and time"
+                  aria-describedby={invalidDue ? 'new-opp-due-hint new-opp-due-error' : 'new-opp-due-hint'}
+                  type="text"
+                  placeholder="e.g. 13th May 2026 3pm or 13/5/26 15:00"
+                  value={newDueText}
+                  onChange={(e) => {
+                    setNewDueText(e.target.value)
+                    const parsed = parseFriendlyDate(e.target.value)
+                    if (parsed) {
+                      setNewDue(parsed.toISOString())
+                    } else {
+                      setNewDue('')
+                    }
+                  }}
+                />
+                {newDueText && parsedDuePreview && (
+                  <div className="rounded border border-dashed border-goms-sky bg-goms-sky/[0.06] px-2 py-1 text-[11px] text-goms-navy">
+                    Captured: {parsedDuePreview}
+                  </div>
+                )}
+                {invalidDue && <span id="new-opp-due-error" role="alert" className="text-[11px] text-crimson">Enter a valid date and time, or clear the field.</span>}
+              </label>
             </div>
+            <p id="new-opp-due-hint" className="-mt-1 text-[11px] text-muted">Paste any common format. It will be captured instantly and can be edited again before you create the opportunity and bid.</p>
+            <Input aria-label="Opportunity name" placeholder="Opportunity name, e.g. AI Solution" value={newName} maxLength={300} autoFocus onChange={(e) => setNewName(e.target.value)} />
+            <Input aria-label="Name of assignment" placeholder="Name of assignment, as written in the tender (optional)" value={newAssignment} maxLength={300} onChange={(e) => setNewAssignment(e.target.value)} />
           </div>
         ) : selected && (
           <div>
@@ -166,48 +238,24 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
             {path.length > 2 && <div className="text-muted">Hierarchy: {path.join(' → ')}</div>}
           </div>
         ) : (
-          <div className="flex flex-col gap-3 rounded-lg border border-amber/50 bg-amber-100/40 p-3" data-testid="department-required">
-            <div className="text-[13px]"><span className="font-semibold">Department required.</span> {isNew ? 'Choose the department for this new opportunity, or create it here.' : 'This opportunity has no department yet. Choose one or create it here.'}</div>
-            <div className="flex gap-1 rounded-lg bg-panel p-1" role="group" aria-label="Department">
-              <button type="button" className={segment(deptMode === 'existing')} onClick={() => setDeptMode('existing')}>Select existing department</button>
-              <button type="button" className={segment(deptMode === 'create')} onClick={() => setDeptMode('create')}>Create new department hierarchy</button>
-            </div>
-
-            {deptMode === 'existing' ? (
-              <Combobox aria-label="Existing department" value={existingId} onChange={setExistingId} options={deptOptions} placeholder="Search departments…" />
-            ) : (
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-[12px] font-medium text-muted">Major Department</div>
-                  <div className="flex gap-1 rounded-lg bg-panel p-1" role="group" aria-label="Major Department">
-                    <button type="button" className={segment(parentMode === 'existing')} onClick={() => setParentMode('existing')}>Existing</button>
-                    <button type="button" className={segment(parentMode === 'create')} onClick={() => setParentMode('create')}>New</button>
-                  </div>
-                  {parentMode === 'existing' ? (
-                    <Combobox aria-label="Major department" value={parentId} onChange={setParentId} options={deptOptions} placeholder="Search major departments…" />
-                  ) : (
-                    <div className="flex gap-2">
-                      <Input aria-label="New major department name" placeholder="e.g. MeitY" value={parentName} maxLength={200} onChange={(e) => setParentName(e.target.value)} />
-                      <select
-                        aria-label="Jurisdiction" value={parentState} onChange={(e) => setParentState(e.target.value)}
-                        className="h-10 shrink-0 rounded-lg border border-line bg-white px-2 text-[13px] text-ink"
-                      >
-                        <option value={CENTRAL}>Central Ministries</option>
-                        {states.filter((s) => s.code !== 0).map((s) => <option key={s.code} value={String(s.code)}>{s.name}</option>)}
-                      </select>
-                    </div>
-                  )}
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <div className="text-[12px] font-medium text-muted">Department</div>
-                  <Input aria-label="New department name" placeholder="e.g. India AI" value={deptName} maxLength={200} onChange={(e) => setDeptName(e.target.value)} />
-                </div>
+          <div className="flex flex-col gap-2 rounded-lg border border-line bg-panel/40 p-3" data-testid="department-required">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-[13px] font-semibold text-ink">
+                Department
+                <span className="rounded bg-amber-100 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-amber-600">Required</span>
               </div>
-            )}
+              <div className="flex shrink-0 gap-0.5 rounded-md bg-panel p-0.5" role="group" aria-label="Department">
+                <button type="button" aria-label="Select existing department" aria-pressed="true" className={segment(true)} disabled>Existing</button>
+                <button type="button" aria-label="Create new department" aria-pressed="false" className={segment(false)} onClick={onRequestCreateDepartment}>Create new</button>
+              </div>
+            </div>
+            {!isNew && <p className="text-[12px] text-muted">This opportunity has no department yet.</p>}
 
-            <div className="text-[13px]" data-testid="department-preview">
-              <span className="text-muted">Resulting hierarchy  </span>
-              <span className="font-medium text-goms-navy">{preview ?? 'Not chosen yet'}</span>
+            <Combobox aria-label="Existing department" value={existingId} onChange={setExistingId} options={deptOptions} placeholder="Search departments…" />
+
+            <div className="truncate text-[12px]" data-testid="department-preview">
+              <span className="text-muted">Hierarchy: </span>
+              <span className={preview ? 'font-medium text-goms-navy' : 'text-muted'}>{preview ?? 'not chosen yet'}</span>
             </div>
           </div>
         )}
@@ -215,7 +263,7 @@ function CreateBidFlow({ onClose, presetId }: { onClose: () => void; presetId?: 
         {error && <p role="alert" className="text-[13px] text-crimson">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={busy || (!hasDepartment && !choice) || (isNew && !newName.trim())} onClick={() => void submit()}>
+          <Button variant="primary" disabled={busy || (!hasDepartment && !choice) || (isNew && (!newName.trim() || invalidDue))} onClick={() => void submit()}>
             {busy ? 'Creating…' : isNew ? 'Create opportunity and bid' : 'Create bid'}
           </Button>
         </div>

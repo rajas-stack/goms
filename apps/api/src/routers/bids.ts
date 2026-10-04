@@ -93,7 +93,8 @@ export const bidsRouter = router({
     .query(async ({ input, ctx }) => {
       const [gridResult, corrigendaPendingResult, { assignments, ctx: ownershipCtx }, customFieldsResult, customValuesResult] = await Promise.all([
         pool.query(`
-          SELECT b.*, o.department_id, o.state_code, o.city, o.opportunity_name, o.gem_tender_id, o.submission_date,
+             SELECT b.*, o.department_id, o.state_code, o.city, o.opportunity_name, o.gem_tender_id, o.submission_date,
+               o.geo_sales_person_id, o.bu_sales_person_id, o.pre_sales_person_id, o.legal_person_id, o.bid_team_member_id,
                  o.value_amount, o.value_unit, o.emd_amount, o.emd_unit, o.vertical,
                  dept.name AS department_name,
                  doc_counts.document_count,
@@ -192,6 +193,9 @@ export const bidsRouter = router({
           stateCode: r.state_code, city: r.city ?? null, opportunityName: r.opportunity_name,
           gemTenderId: r.gem_tender_id, submissionDate: r.submission_date, valueAmount: r.value_amount,
           valueUnit: r.value_unit, emdAmount: r.emd_amount, emdUnit: r.emd_unit, vertical: r.vertical,
+          geoSalesPersonId: r.geo_sales_person_id ?? null, buSalesPersonId: r.bu_sales_person_id ?? null,
+          preSalesPersonId: r.pre_sales_person_id ?? null, legalPersonId: r.legal_person_id ?? null,
+          bidTeamMemberId: r.bid_team_member_id ?? null,
           ownerEmail: owner ? (emailById.get(owner.salesPersonId) ?? null) : null,
           solutionLeadEmail: r.solution_lead_sales_person_id ? (emailById.get(r.solution_lead_sales_person_id) ?? null) : null,
           documentCount: r.document_count ?? 0,

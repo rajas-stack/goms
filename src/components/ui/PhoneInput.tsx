@@ -1,6 +1,7 @@
 import { Input } from './Field'
 
 const MOBILE_LEN = 10
+const MAX_INPUT_LENGTH = 32
 // A landline/EPBX local number, entered separately from its STD code (the
 // STD code is its own field elsewhere in the form) — 6-8 digits, matching
 // the local-part length of a real Indian STD-prefixed number.
@@ -8,10 +9,6 @@ const LOCAL_MIN_LEN = 6
 const LOCAL_MAX_LEN = 8
 
 export type PhoneMode = 'mobile' | 'landlineLocal'
-
-function maxLenFor(mode: PhoneMode): number {
-  return mode === 'landlineLocal' ? LOCAL_MAX_LEN : MOBILE_LEN
-}
 
 const onlyDigits = (s: string) => s.replace(/\D/g, '')
 
@@ -23,7 +20,8 @@ const onlyDigits = (s: string) => s.replace(/\D/g, '')
  *  prefix alongside an STD code. */
 function parsePhone(value: string, mode: PhoneMode = 'mobile'): string {
   const rest = value.trim().replace(/^\+?91[\s-]?/, '')
-  return onlyDigits(rest).slice(0, maxLenFor(mode))
+  const digits = onlyDigits(rest)
+  return mode === 'mobile' ? digits.replace(/^0/, '') : digits
 }
 
 /** Canonical stored form. Mobile: "+91 9812345678" — a real international
@@ -32,7 +30,7 @@ function parsePhone(value: string, mode: PhoneMode = 'mobile'): string {
  *  international mobile call are different dialing contexts; the STD code
  *  itself lives in a separate field. Empty → empty string either way. */
 export function formatPhone(number: string, mode: PhoneMode = 'mobile'): string {
-  const d = onlyDigits(number).slice(0, maxLenFor(mode))
+  const d = parsePhone(number, mode)
   if (!d) return ''
   return mode === 'landlineLocal' ? d : `+91 ${d}`
 }
@@ -72,7 +70,7 @@ export function PhoneInput({ value, onChange, invalid, mode = 'mobile' }: Props)
         value={number}
         onChange={(e) => onChange(formatPhone(e.target.value, mode))}
         inputMode="numeric"
-        maxLength={maxLenFor(mode)}
+        maxLength={MAX_INPUT_LENGTH}
         placeholder="2345678"
         aria-label="Number"
         className={errorCls}
@@ -89,7 +87,7 @@ export function PhoneInput({ value, onChange, invalid, mode = 'mobile' }: Props)
         value={number}
         onChange={(e) => onChange(formatPhone(e.target.value, mode))}
         inputMode="numeric"
-        maxLength={maxLenFor(mode)}
+        maxLength={MAX_INPUT_LENGTH}
         placeholder="9812345678"
         aria-label="Phone number (10 digits)"
         className={`flex-1 ${errorCls}`}

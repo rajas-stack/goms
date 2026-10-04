@@ -172,6 +172,23 @@ describe('custom column management', () => {
     expect(await screen.findByRole('button', { name: 'Sort by Score' })).toBeInTheDocument()
   })
 
+  it('hiding and showing a middle column preserves every column slot', async () => {
+    await makeBid()
+    await repository.createBidCustomField({ name: 'Score', dataType: 'number' })
+    renderGrid({ visibleColumns: ['opportunityName', 'custom:score', 'bidCode', 'city'] })
+    await screen.findByRole('button', { name: 'Sort by Score' })
+    const originalOrder = leafHeaders()
+    await openColumns()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide Score' }))
+    expect(screen.queryByRole('button', { name: 'Sort by Score' })).not.toBeInTheDocument()
+    expect(leafHeaders()).toEqual(originalOrder.filter((header) => header !== 'Score'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show Score' }))
+    await screen.findByRole('button', { name: 'Sort by Score' })
+    expect(leafHeaders()).toEqual(originalOrder)
+  })
+
   it('Delete is offered for every custom column; one holding values asks for a stronger confirmation and removes them too', async () => {
     const bid = await makeBid()
     const used = await repository.createBidCustomField({ name: 'Used', dataType: 'text' })

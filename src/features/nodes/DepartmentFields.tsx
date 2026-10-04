@@ -22,7 +22,7 @@ const DERIVED_SALES_ROLES: { tier: SalesTier; label: string }[] = [
  *  Everything is stored on the node's metadata so the HierNode shape is
  *  untouched. Works/opportunities are managed separately, from the
  *  department's details view — never inside this form. */
-export function DepartmentFields({ meta, setMeta, onShortNameChange, employees, onCreateHead, jurisdictionStateCode }: {
+export function DepartmentFields({ meta, setMeta, onShortNameChange, employees, onCreateHead, pendingHead, jurisdictionStateCode }: {
   meta: Record<string, string>
   setMeta: (updater: (m: Record<string, string>) => Record<string, string>) => void
   /** Short name has its own setter (rather than going through `set` below) so
@@ -34,6 +34,7 @@ export function DepartmentFields({ meta, setMeta, onShortNameChange, employees, 
    *  yet. Undefined while the department itself hasn't been saved (no
    *  org node to attach a new employee to). */
   onCreateHead?: (name: string, designation: string) => Promise<string>
+  pendingHead?: { id: string; name: string; designation: string } | null
   /** The department's own jurisdiction (NodeFormDialog's `stateCode`) — not
    *  to be confused with this component's own `stateCode` local state below
    *  (the contact number's state, an independent pick). A Central Ministries
@@ -97,6 +98,7 @@ export function DepartmentFields({ meta, setMeta, onShortNameChange, employees, 
           value={meta.deptHead ?? ''}
           onChange={(id) => set('deptHead', id)}
           onCreate={onCreateHead}
+          pendingSelection={pendingHead}
           createLabel={(name) => `Create new department head “${name}”`}
         />
       </Field>

@@ -57,8 +57,9 @@ export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMile
     <div className="space-y-5 p-4">
       {requirements.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-ink" role="note">
-          <strong>Next Stage Requirements ({stage?.label}):</strong>
-          <div>Recommended inputs needed: {requirements.join(', ')}.</div>
+          <strong>Stage exit criteria ({stage?.label}):</strong>
+          <div className="mt-1">To move beyond this stage: {requirements.join('; ')}.</div>
+          <p className="mt-1 text-[12px] text-muted">These criteria are guidance only; completion or submission is not verified here.</p>
         </div>
       )}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

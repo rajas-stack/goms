@@ -16,9 +16,10 @@ const box = 'h-8 min-w-0 flex-1 rounded-lg border border-line bg-white px-2 text
  *  below it the management of the user-defined columns — rename, edit options,
  *  default order, archive, restore, and delete (only for a column that has never
  *  held a value; everything else is archive-only, spec §8.1). */
-export function ManageColumnsPanel({ all, visible, onVisibleChange, focusId, inScope }: {
+export function ManageColumnsPanel({ all, visible, columnOrder, onVisibleChange, focusId, inScope }: {
   all: GridColumnMeta[]
   visible: GridColumnMeta[]
+  columnOrder?: string[]
   onVisibleChange: (orderedVisibleIds: string[]) => void
   /** Column to scroll to and highlight (opened from its header's "Manage column…"). */
   focusId?: string | null
@@ -82,7 +83,7 @@ export function ManageColumnsPanel({ all, visible, onVisibleChange, focusId, inS
 
   return (
     <div className="flex flex-col divide-y divide-line" data-testid="manage-columns-panel">
-      <ColumnsPanel all={all} visible={visible} onChange={onVisibleChange} focusId={focusId} onDeleteCustom={doDelete} />
+      <ColumnsPanel all={all} visible={visible} columnOrder={columnOrder} onChange={onVisibleChange} focusId={focusId} onDeleteCustom={doDelete} />
 
       {/* Nothing to manage yet → no section at all (no empty heading or hint);
           creating the first custom column is the toolbar's Add column button. */}

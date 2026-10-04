@@ -12,6 +12,7 @@ import {
 } from './department-meta'
 import { DEFAULT_STAGE_KEY, PIPELINE_STAGES } from '@/data/pipeline-stages'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
+import { OpportunityTeamAssignments } from '@/features/teams/OpportunityTeamAssignments'
 import type { Opportunity } from '@/lib/types'
 
 type OpportunityDraft = Omit<Opportunity, 'id' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>
@@ -22,6 +23,7 @@ const EMPTY: OpportunityDraft = {
   currency: WORK_CURRENCIES[0].code, valueAmount: '', valueUnit: 'lakh',
   budgetKnown: '', emdAmount: '', emdUnit: 'lakh',
   salesPersonEmail: '',
+  geoSalesPersonId: null, buSalesPersonId: null, preSalesPersonId: null, legalPersonId: null, bidTeamMemberId: null,
   stageKey: DEFAULT_STAGE_KEY, closedOn: null,
 }
 
@@ -120,6 +122,10 @@ export function WorkFormDialog({ open, work, draftKey, managedInBidTracker = fal
           <Field label="Sales person">
             <SalesTeamPicker value={form.salesPersonEmail} onChange={(email) => set('salesPersonEmail', email)} ariaLabel="Sales person" />
           </Field>
+          <OpportunityTeamAssignments
+            value={form}
+            onChange={(key, id) => set(key, id)}
+          />
           <div className="sm:col-span-2">
             <Field label="Budget confirmed?">
               <div className="flex items-center gap-4" role="radiogroup" aria-label="Budget confirmed">

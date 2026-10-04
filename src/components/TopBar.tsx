@@ -18,10 +18,11 @@ export function TopBar({ onOpenDrawer }: Props) {
   const isHome = location.pathname === '/'
   const isCommercialCalculator = location.pathname.startsWith('/commercial-calculator')
   const isBidTracker = location.pathname.startsWith('/bid-tracker')
-  // Search/Import/Export act on Account Mapping's hierarchy data, so neither
+  const isTeams = location.pathname.startsWith('/teams')
+  // Search/Import/Export act on Account Mapping's hierarchy data, so no
   // standalone module shows them.
-  const hidesAccountMappingTools = isCommercialCalculator || isBidTracker
-  const moduleLabel = isCommercialCalculator ? 'Commercial Calculator' : isBidTracker ? 'Opportunity' : 'Accounts Mapping'
+  const hidesAccountMappingTools = isCommercialCalculator || isBidTracker || isTeams
+  const moduleLabel = isCommercialCalculator ? 'Commercial Calculator' : isBidTracker ? 'Opportunity' : isTeams ? 'Teams' : 'Accounts Mapping'
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-paper/90 px-3 sm:gap-3 sm:px-5">
       <button

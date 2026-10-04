@@ -7,7 +7,7 @@ import {
   BID_STAGES, ENTITY_FIELD_TYPES, flattenRules, parseMultiValue,
   type CustomFieldType, type FilterNode, type TypedFilterRule,
 } from '@goms/domain'
-import type { BidCustomField, BidGridRow } from '@/lib/types'
+import type { BidCustomField, BidGridRow, DeliveryTeamKey, DeliveryTeamMember } from '@/lib/types'
 
 export type GridGroupId = 'identity' | 'client' | 'ownership' | 'decision' | 'dates' | 'documents' | 'system' | 'custom'
 
@@ -45,6 +45,8 @@ export interface GridColumnMeta {
   editable?: 'opportunity' | 'custom' | 'owner' | 'bid'
   /** Pick from the Sales Team by email (Bid Owner): the cell holds an email, the list shows names. */
   pick?: 'personByEmail'
+  /** Roster source for a role assignment person field. */
+  teamKey?: 'sales' | DeliveryTeamKey
   /** Why a standard column is NOT inline-editable (shown as its tooltip). Every
    *  standard column is either `editable` or carries a `readOnlyReason` — the
    *  explicit editable matrix, guarded by a test. */
@@ -97,6 +99,11 @@ export const STANDARD_COLUMNS: GridColumnMeta[] = [
   std('vertical', 'Sector', 'client', 'text', { editable: 'opportunity' }),
 
   // Picking a person records a new ownership assignment (the history is kept), same as Reassign Owner.
+  std('geoSalesPersonId', 'Geo-sales', 'ownership', 'person', { editable: 'opportunity', teamKey: 'sales' }),
+  std('buSalesPersonId', 'BU-sales', 'ownership', 'person', { editable: 'opportunity', teamKey: 'sales' }),
+  std('preSalesPersonId', 'Pre-sales', 'ownership', 'person', { editable: 'opportunity', teamKey: 'preSales' }),
+  std('legalPersonId', 'Legal', 'ownership', 'person', { editable: 'opportunity', teamKey: 'legal' }),
+  std('bidTeamMemberId', 'Bid', 'ownership', 'person', { editable: 'opportunity', teamKey: 'bid' }),
   std('ownerEmail', 'Bid Owner', 'ownership', 'text', { editable: 'owner', pick: 'personByEmail', required: true }),
   std('solutionLeadEmail', 'Sales Lead / Solution Lead', 'ownership', 'text', { readOnlyReason: "Ownership is assigned in the bid's Overview (keeps the ownership history)" }),
 
@@ -126,7 +133,9 @@ export const STANDARD_COLUMNS: GridColumnMeta[] = [
  *  virtualized window, so columns would jitter sideways while scrolling. */
 const WIDTH_BY_ID: Record<string, number> = {
   opportunityId: 130, opportunityName: 280, bidCode: 120, gemTenderId: 190, tenderLink: 100,
-  departmentName: 240, stateCode: 130, city: 130, vertical: 140, ownerEmail: 210, solutionLeadEmail: 230,
+  departmentName: 240, stateCode: 130, city: 130, vertical: 140,
+  geoSalesPersonId: 180, buSalesPersonId: 180, preSalesPersonId: 180, legalPersonId: 180, bidTeamMemberId: 180,
+  ownerEmail: 210, solutionLeadEmail: 230,
   stageKey: 150, nextActionNote: 220, nextActionAssigneeEmail: 210, nextActionDueDate: 120, attentionFlag: 170, decision: 110,
   nextMilestoneLabel: 180, daysRemaining: 130, submissionDate: 160, documentCount: 110, latestCorrigendumStatus: 170,
   updatedAt: 150, updatedBy: 170, dataConfidence: 150, manage: 130,
@@ -165,16 +174,66 @@ export function resolveColumns(customFields: BidCustomField[]): GridColumnMeta[]
   return [...STANDARD_COLUMNS, ...custom]
 }
 
-/** `visibleColumns` is the ORDERED list saved views persist: array order is
- *  display order and absence means hidden. `undefined`/empty = the default
- *  view: everything, in canonical order. Ids that no longer exist (an
- *  archived custom column) are dropped here, not from the stored view. */
+const HIDDEN_COLUMN_PREFIX = '~hidden:'
+
+export function columnIdFromOrderToken(token: string): string {
+  return token.startsWith(HIDDEN_COLUMN_PREFIX) ? token.slice(HIDDEN_COLUMN_PREFIX.length) : token
+}
+
+export function isHiddenColumnOrderToken(token: string): boolean {
+  return token.startsWith(HIDDEN_COLUMN_PREFIX)
+}
+
+/** Full stable order encoded in the existing saved-view column array. Legacy
+ *  lists contain only shown ids; missing ids become hidden markers at the end.
+ *  Newer lists retain hidden ids in place so toggling visibility cannot move
+ *  columns. Unknown ids are preserved for other Master Grid scopes and ignored
+ *  when the current scope resolves its actual columns. */
+export function orderedColumnIds(all: GridColumnMeta[], saved: string[] | undefined): string[] {
+  if (!saved?.length) return all.map((column) => column.id)
+  const known = new Set(all.map((column) => column.id))
+  const seen = new Set<string>()
+  const ordered: string[] = []
+  for (const token of saved) {
+    const id = columnIdFromOrderToken(token)
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    ordered.push(token)
+  }
+  for (const column of all) {
+    if (seen.has(column.id)) continue
+    seen.add(column.id)
+    ordered.push(known.has(column.id) ? `${HIDDEN_COLUMN_PREFIX}${column.id}` : column.id)
+  }
+  return ordered
+}
+
+export function setColumnVisibility(all: GridColumnMeta[], saved: string[] | undefined, id: string, shown: boolean): string[] {
+  return orderedColumnIds(all, saved).map((token) => {
+    if (columnIdFromOrderToken(token) !== id) return token
+    return shown ? id : `${HIDDEN_COLUMN_PREFIX}${id}`
+  })
+}
+
+export function showAllColumnIds(all: GridColumnMeta[], saved: string[] | undefined): string[] {
+  const currentIds = new Set(all.map((column) => column.id))
+  return orderedColumnIds(all, saved).map((token) => {
+    const id = columnIdFromOrderToken(token)
+    return currentIds.has(id) ? id : token
+  })
+}
+
+/** `visibleColumns` persists the full order using hidden markers; legacy arrays
+ *  remain compatible. `undefined`/empty = default: every column, canonical
+ *  order. */
 export function resolveVisibleColumns(all: GridColumnMeta[], visibleColumns: string[] | undefined): GridColumnMeta[] {
   if (!visibleColumns || visibleColumns.length === 0) return all
   const byId = new Map(all.map((c) => [c.id, c]))
   const seen = new Set<string>()
   const out: GridColumnMeta[] = []
-  for (const id of visibleColumns) {
+  for (const token of orderedColumnIds(all, visibleColumns)) {
+    if (isHiddenColumnOrderToken(token)) continue
+    const id = columnIdFromOrderToken(token)
     const col = byId.get(id)
     if (col && !seen.has(id)) { seen.add(id); out.push(col) }
   }
@@ -185,11 +244,21 @@ export function resolveVisibleColumns(all: GridColumnMeta[], visibleColumns: str
 
 /** The live records behind person / department / state columns. A cell stores
  *  the record's id (state: its code); the NAME is looked up here, never copied. */
-export interface EntityLookups { persons: ColumnOption[]; departments: ColumnOption[]; states: ColumnOption[] }
-export const NO_LOOKUPS: EntityLookups = { persons: [], departments: [], states: [] }
+export interface EntityLookups {
+  persons: ColumnOption[]
+  deliveryTeamNames: Record<DeliveryTeamKey, ColumnOption[]>
+  deliveryTeams: Record<DeliveryTeamKey, ColumnOption[]>
+  departments: ColumnOption[]
+  states: ColumnOption[]
+}
+export const NO_LOOKUPS: EntityLookups = {
+  persons: [], deliveryTeamNames: { preSales: [], legal: [], bid: [] },
+  deliveryTeams: { preSales: [], legal: [], bid: [] }, departments: [], states: [],
+}
 
 export function buildLookups(input: {
   persons: { id: string; name: string; officialEmail?: string }[]
+  deliveryTeamMembers?: DeliveryTeamMember[]
   departments: { id: string; name: string; stateCode: number | null }[]
   states: { code: number; name: string }[]
 }): EntityLookups {
@@ -199,6 +268,16 @@ export function buildLookups(input: {
   for (const d of input.departments) nameCount.set(d.name, (nameCount.get(d.name) ?? 0) + 1)
   return {
     persons: input.persons.map((p) => ({ value: p.id, label: p.name, email: p.officialEmail })).sort((a, b) => a.label.localeCompare(b.label)),
+    deliveryTeamNames: {
+      preSales: input.deliveryTeamMembers?.filter((member) => member.team === 'preSales').map((member) => ({ value: member.id, label: member.name })) ?? [],
+      legal: input.deliveryTeamMembers?.filter((member) => member.team === 'legal').map((member) => ({ value: member.id, label: member.name })) ?? [],
+      bid: input.deliveryTeamMembers?.filter((member) => member.team === 'bid').map((member) => ({ value: member.id, label: member.name })) ?? [],
+    },
+    deliveryTeams: {
+      preSales: input.deliveryTeamMembers?.filter((member) => member.team === 'preSales' && member.status === 'active').map((member) => ({ value: member.id, label: member.name })) ?? [],
+      legal: input.deliveryTeamMembers?.filter((member) => member.team === 'legal' && member.status === 'active').map((member) => ({ value: member.id, label: member.name })) ?? [],
+      bid: input.deliveryTeamMembers?.filter((member) => member.team === 'bid' && member.status === 'active').map((member) => ({ value: member.id, label: member.name })) ?? [],
+    },
     departments: input.departments.map((d) => ({
       value: d.id,
       label: (nameCount.get(d.name) ?? 0) > 1 && d.stateCode !== null && stateName.has(d.stateCode) ? `${d.name} (${stateName.get(d.stateCode)})` : d.name,
@@ -208,8 +287,9 @@ export function buildLookups(input: {
 }
 
 /** The pick-list for a column: fixed options, or the live records for an entity type. */
-export function optionsOf(col: Pick<GridColumnMeta, 'type' | 'options'> & { pick?: GridColumnMeta['pick'] } | undefined, lookups: EntityLookups = NO_LOOKUPS): ColumnOption[] {
+export function optionsOf(col: Pick<GridColumnMeta, 'type' | 'options' | 'teamKey'> & { pick?: GridColumnMeta['pick'] } | undefined, lookups: EntityLookups = NO_LOOKUPS): ColumnOption[] {
   if (col?.pick === 'personByEmail') return lookups.persons.filter((p) => p.email).map((p) => ({ value: p.email!, label: p.label, email: p.email }))
+  if (col?.teamKey) return col.teamKey === 'sales' ? lookups.persons : lookups.deliveryTeams[col.teamKey]
   switch (col?.type) {
     case 'person': return lookups.persons
     case 'department': return lookups.departments
@@ -238,8 +318,11 @@ export const formatCurrency = (n: number) =>
 
 /** One value as plain text, by type: what search matches, what sorting orders
  *  by for entity types, and what an export writes. Empty = ''. */
-export function formatValueText(col: Pick<GridColumnMeta, 'type' | 'options'>, v: unknown, lookups: EntityLookups = NO_LOOKUPS): string {
+export function formatValueText(col: Pick<GridColumnMeta, 'type' | 'options' | 'teamKey'>, v: unknown, lookups: EntityLookups = NO_LOOKUPS): string {
   if (isEmptyCell(v)) return ''
+  if (col.teamKey && col.teamKey !== 'sales') {
+    return lookups.deliveryTeamNames[col.teamKey].find((option) => option.value === String(v))?.label ?? String(v)
+  }
   switch (col.type) {
     case 'boolean': return v ? 'Yes' : 'No'
     case 'currency': return Number.isFinite(Number(v)) ? formatCurrency(Number(v)) : String(v)

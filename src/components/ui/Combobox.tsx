@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 export interface ComboboxOption {
   value: string
   label: string
+  searchText?: string
 }
 
 interface ComboboxProps {
@@ -54,7 +55,7 @@ export function Combobox({
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return options
-    return options.filter((o) => o.label.toLowerCase().includes(q))
+    return options.filter((o) => `${o.label} ${o.searchText ?? ''}`.toLowerCase().includes(q))
   }, [options, query])
 
   // Closed: the input shows the committed selection. Open: it shows whatever the

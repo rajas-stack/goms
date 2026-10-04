@@ -23,6 +23,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const location = useLocation()
   const commercialActive = location.pathname.startsWith('/commercial-calculator')
   const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
+  const teamsActive = location.pathname.startsWith('/teams')
 
   useEffect(() => {
     if (!open) return
@@ -115,6 +116,21 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                   Opportunity
                 </button>
               )}
+              <button
+                onClick={() => {
+                  onClose()
+                  navigate('/teams')
+                }}
+                className={cn(
+                  'mt-auto flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
+                  teamsActive
+                    ? 'bg-white text-ink-900 shadow-sm'
+                    : 'text-ink hover:bg-ink-900/[0.05]',
+                )}
+              >
+                <Icon name="Users" size={17} />
+                Teams
+              </button>
             </motion.div>
           </>
         )}
