@@ -21,7 +21,7 @@ export type {
 } from './in-memory/repository'
 
 export {
-  MERGEABLE_FIELDS, bootstrapRepository, resetLocalData, getFullSnapshot, restoreFromBackup, isoToday,
+  MERGEABLE_FIELDS, bootstrapRepository, resetLocalData, isoToday,
 } from './in-memory/repository'
 
 export const repository: Repository = import.meta.env.VITE_API_BASE_URL
