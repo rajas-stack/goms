@@ -448,7 +448,8 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
             <Field label="Email">
               <EmailInput
                 value={form.email}
-                onChange={set('email')}
+                // EmailInput reports the normalized string, not a change event.
+                onChange={(email) => setForm((f) => ({ ...f, email }))}
                 aria-invalid={!emailValid}
                 className={emailValid ? '' : 'border-crimson focus:border-crimson'}
               />

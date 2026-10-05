@@ -33,6 +33,12 @@ function stubLayout() {
 
 const rowNames = () => screen.queryAllByTestId('bid-row').map((r) => within(r).queryByText(/^(Alpha|Beta|Gamma|Delta)$/)?.textContent)
 const leafHeaders = () => Array.from(document.querySelectorAll('thead tr:nth-child(2) th')).map((th) => th.textContent?.replace('Frozen', ''))
+/** Text of an element without its aria-hidden parts (e.g. avatar initials). */
+const visibleName = (el: HTMLElement) => {
+  const clone = el.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove())
+  return clone.textContent?.trim()
+}
 const lockSwitch = () => screen.getByRole('button', { name: /Master grid editing (locked|unlocked)/ })
 const unlock = async () => userEvent.click(await screen.findByRole('button', { name: /editing locked/ }))
 const leafTh = (name: string) => document.querySelector(`thead th[data-col-id="${name}"]`) as HTMLElement
@@ -101,7 +107,8 @@ describe('Master Grid refinement', () => {
       const row = screen.getByTestId('bid-row')
       await userEvent.click(within(row).getAllByRole('cell')[4])
       expect(document.querySelector('input[type=text]')).toBeNull()
-      expect(within(row).getByRole('button', { name: /^Open opp_/ })).toBeInTheDocument()
+      // The Opportunity ID cell shows the human opportunity code and is the details link.
+      expect(within(row).getByRole('button', { name: /^Open FY\d{2}-Q\d-/ })).toBeInTheDocument()
     })
 
     it('unlocking makes editable cells editable and marks them; read-only ones stay read-only', async () => {
@@ -112,13 +119,41 @@ describe('Master Grid refinement', () => {
       await unlock()
       expect(lockSwitch()).toHaveAttribute('aria-pressed', 'true')
       expect(lockSwitch()).toHaveTextContent('Unlocked')
-      for (const header of ['Opportunity / Mission', 'City', 'Sector', 'Note', 'Tender Link', 'Bid Owner', 'Bid Stage', 'Decision']) {
+      const editable = [
+        'Opportunity / Mission', 'Opportunity Type', 'Tender Link', 'Department / Client', 'City', 'Sector',
+        'Geo-sales', 'BU-sales', 'Pre-sales', 'Legal', 'Bid', 'Bid Owner', 'Sales Lead / Solution Lead',
+        'Bid Stage', 'Next Action', 'Action Owner', 'Action Due', 'Decision', 'Data Confidence', 'Note',
+      ]
+      for (const header of editable) {
         expect(screen.getByRole('button', { name: `Edit ${header}` })).toBeInTheDocument()
       }
-      expect(screen.getAllByTitle('Editable column').length).toBe(8)
-      for (const header of ['Opportunity ID', 'Bid ID', 'Tender ID', 'Department / Client', 'State', 'Submission Deadline', 'Last Updated']) {
+      expect(screen.getAllByTitle('Editable column').length).toBe(editable.length)
+      for (const header of ['Opportunity ID', 'Bid ID', 'Tender ID', 'State', 'Next Milestone', 'Days Remaining', 'Submission Deadline', 'Tender Files', 'Latest Corrigendum', 'Last Updated', 'Updated By', 'Attention']) {
         expect(screen.queryByRole('button', { name: `Edit ${header}` })).not.toBeInTheDocument()
       }
+      // Read-only cells become a focusable lock box once unlocked.
+      expect(document.querySelectorAll('[data-readonly-cell]').length).toBeGreaterThan(0)
+    })
+
+    it('per-column locks: opens Tender ID, locks City, keeps calculated columns locked, and remembers the choice', async () => {
+      await makeBid('Alpha')
+      const view = renderGrid()
+      await screen.findByText('Alpha')
+      await unlock()
+      expect(screen.queryByRole('button', { name: 'Edit Tender ID' })).not.toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Unlock Tender ID column' }))
+      expect(screen.getByRole('button', { name: 'Edit Tender ID' })).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Lock City column' }))
+      expect(screen.queryByRole('button', { name: 'Edit City' })).not.toBeInTheDocument()
+      // Calculated / system columns have no write path, so they offer no switch.
+      expect(screen.queryByRole('button', { name: /lock Days Remaining column/i })).not.toBeInTheDocument()
+      // The choice survives a remount (remembered per sheet).
+      view.unmount()
+      renderGrid()
+      await screen.findByText('Alpha')
+      await unlock()
+      expect(screen.getByRole('button', { name: 'Edit Tender ID' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Edit City' })).not.toBeInTheDocument()
     })
 
     it('read-only cells say why when the grid is unlocked', async () => {
@@ -471,9 +506,10 @@ describe('Master Grid refinement', () => {
       await unlock()
       await userEvent.click(screen.getByRole('button', { name: 'Edit Bid Owner' }))
       const list = await screen.findByRole('listbox', { name: 'Bid Owner' })
-      expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual(expect.arrayContaining(['Asha Rao', 'Zed Khan'])) // every saved sales person
+      // Options carry an avatar (aria-hidden initials) beside the name.
+      expect(within(list).getAllByRole('option').map(visibleName)).toEqual(expect.arrayContaining(['Asha Rao', 'Zed Khan'])) // every saved sales person
       await userEvent.type(screen.getByRole('textbox', { name: 'Search Bid Owner' }), 'zed')
-      expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual(['Zed Khan'])
+      expect(within(list).getAllByRole('option').map(visibleName)).toEqual(['Zed Khan'])
       await userEvent.clear(screen.getByRole('textbox', { name: 'Search Bid Owner' }))
       await userEvent.click(await within(list).findByRole('option', { name: 'Asha Rao' }))
       await waitFor(async () => {
@@ -482,7 +518,8 @@ describe('Master Grid refinement', () => {
       })
       const history = await repository.listOwnershipAssignments()
       expect(history.some((a) => a.entityId === bid.id && a.salesPersonId === asha.id)).toBe(true)
-      expect(await screen.findByText('asha@amnex.com')).toBeInTheDocument()
+      // The cell shows the owner's name (with avatar), not the raw email.
+      expect(await within(screen.getByTestId('bid-row')).findByText('Asha Rao')).toBeInTheDocument()
     })
 
     it('Bid Stage and Decision pick from their lists; a Go before Submitted is refused inline', async () => {

@@ -85,6 +85,11 @@ function stubApiHooks(opts: {
     update: { mutate: vi.fn(), mutateAsync: updateMutateAsync, isPending: false },
     remove: { mutate: vi.fn(), mutateAsync: removeMutateAsync, isPending: false },
   } as unknown as ReturnType<typeof api.useOpportunityMutations>)
+  // CreateBidButton renders when VITE_BID_TRACKER_ENABLED is on (e.g. via .env.local); stub its
+  // mutation so these suites do not depend on the local env or need a QueryClientProvider.
+  vi.spyOn(api, 'useBidMutations').mockReturnValue(
+    { create: { mutateAsync: vi.fn(), isPending: false } } as unknown as ReturnType<typeof api.useBidMutations>,
+  )
   vi.spyOn(api, 'useOwnershipMutations').mockReturnValue({
     assign: { mutateAsync: assignMutateAsync, isPending: false },
     end: {},

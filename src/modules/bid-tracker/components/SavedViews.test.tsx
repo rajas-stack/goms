@@ -111,7 +111,9 @@ describe('saved views', () => {
     await userEvent.click(screen.getByRole('button', { name: /Manage columns/ }))
     fireEvent.keyDown(await screen.findByRole('button', { name: 'Drag to reorder Bid ID' }), { key: 'ArrowUp', altKey: true })
     await waitFor(async () => {
-      expect((await repository.listBidSavedViews()).find((v) => v.id === view.id)!.visibleColumns).toEqual(['bidCode', 'opportunityName'])
+      // Hidden columns are stored in place as `~hidden:<id>` markers; the shown order is what changed.
+      const stored = (await repository.listBidSavedViews()).find((v) => v.id === view.id)!.visibleColumns
+      expect(stored.filter((token) => !token.startsWith('~hidden:'))).toEqual(['bidCode', 'opportunityName'])
     }, { timeout: 3000 })
   })
 

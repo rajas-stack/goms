@@ -91,7 +91,10 @@ describe('custom column management', () => {
     renderGrid({ visibleColumns: ['opportunityName'], onVisibleColumnsChange })
     await screen.findByText('Alpha')
     await addColumnViaDialog('Note')
-    await waitFor(() => expect(onVisibleColumnsChange).toHaveBeenCalledWith(['opportunityName', 'custom:note']))
+    // Hidden columns keep their slots as `~hidden:<id>` markers; the new column is shown right after the shown ones.
+    await waitFor(() => expect(onVisibleColumnsChange).toHaveBeenCalled())
+    const order = onVisibleColumnsChange.mock.calls[onVisibleColumnsChange.mock.calls.length - 1][0] as string[]
+    expect(order.filter((token) => !token.startsWith('~hidden:'))).toEqual(['opportunityName', 'custom:note'])
   })
 
   it('renames a column (header changes, key and values stay) and edits select options', async () => {

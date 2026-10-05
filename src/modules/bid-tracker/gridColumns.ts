@@ -59,6 +59,9 @@ export interface GridColumnMeta {
   pick?: 'personByEmail' | 'department'
   /** Row field the editor reads when it differs from the displayed one (Department / Client edits `departmentId`). */
   editKey?: keyof BidGridRow
+  /** Read-only by default, but a user may unlock the column (per sheet) to edit it through this
+   *  write path. Interim per-browser switch until role-based access decides who may. */
+  unlockable?: 'opportunity'
   /** Roster source for a role assignment person field. */
   teamKey?: 'sales' | DeliveryTeamKey
   /** Why a standard column is NOT inline-editable (shown as its tooltip). Every
@@ -105,13 +108,14 @@ export const STANDARD_COLUMNS: GridColumnMeta[] = [
   std('opportunityName', 'Opportunity / Mission', 'identity', 'text', { editable: 'opportunity', required: true }),
   std('opportunityType', 'Opportunity Type', 'identity', 'select', { options: OPPORTUNITY_TYPE_OPTIONS, editable: 'opportunity' }),
   std('bidCode', 'Bid ID', 'identity', 'text', { readOnlyReason: 'Generated identifier' }),
-  std('gemTenderId', 'Tender ID', 'identity', 'text', { readOnlyReason: PROTECTED }),
+  // Unlockable: the opportunity update still refuses a value frozen by the Protected Values flow.
+  std('gemTenderId', 'Tender ID', 'identity', 'text', { readOnlyReason: PROTECTED, unlockable: 'opportunity' }),
   // Edits go through bids.update, which refuses a frozen (protected) value with its own message.
   std('tenderLink', 'Tender Link', 'identity', 'text', { editable: 'bid' }),
 
   // Picking a department also moves the opportunity's State to that department's.
   std('departmentName', 'Department / Client', 'client', 'text', { editable: 'department', pick: 'department', editKey: 'departmentId', required: true }),
-  std('stateCode', 'State', 'client', 'state', { readOnlyReason: FROM_DEPARTMENT }),
+  std('stateCode', 'State', 'client', 'state', { readOnlyReason: FROM_DEPARTMENT, unlockable: 'opportunity' }),
   std('city', 'City', 'client', 'text', { editable: 'opportunity' }),
   std('vertical', 'Sector', 'client', 'text', { editable: 'opportunity' }),
 

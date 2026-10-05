@@ -29,6 +29,8 @@ const groupHeaders = () => Array.from(document.querySelectorAll('th[scope=colgro
 // The grid opens LOCKED; unlocking is what turns editable cells into editors.
 const unlock = async () => userEvent.click(await screen.findByRole('button', { name: /editing locked/ }))
 const openPopover = async (name: string) => userEvent.click(screen.getByRole('button', { name: new RegExp(name) }))
+/** Shown ids from the last reported column order (hidden slots are `~hidden:<id>` markers). */
+const shownOrder = (spy: ReturnType<typeof vi.fn>) => (spy.mock.calls[spy.mock.calls.length - 1]?.[0] as string[]).filter((token) => !token.startsWith('~hidden:'))
 
 const STANDARD_GROUPS = ['Identity', 'Client', 'Ownership', 'Decision', 'Dates', 'Documents', 'System']
 const REQUIRED_LEAVES: Record<string, string[]> = {
@@ -120,7 +122,9 @@ describe('MasterGrid', () => {
       const row = (await screen.findByText('Alpha')).closest('tr')!
       expect(within(row).getByText('New Delhi')).toBeInTheDocument()
       expect(within(row).getByText('Confirm EMD')).toBeInTheDocument()
-      expect(within(row).getByText('action@amnex.com')).toBeInTheDocument()
+      // Person cells show the person's name (with avatar), not the raw email.
+      expect(await within(row).findByText('Action Person')).toBeInTheDocument()
+      expect(within(row).queryByText('action@amnex.com')).not.toBeInTheDocument()
       expect(within(row).getByText('2099-02-01')).toBeInTheDocument()
       expect(within(row).getByText('On Track')).toBeInTheDocument()
       expect(within(row).getByText('Solutioning')).toBeInTheDocument()
@@ -227,7 +231,8 @@ describe('MasterGrid', () => {
       renderGrid()
       await unlock()
       await screen.findByText('Alpha')
-      for (const header of ['Tender ID', 'Submission Deadline', 'Department / Client', 'State', 'Next Action', 'Opportunity ID', 'Bid ID']) {
+      // Department / Client and Next Action became inline-editable; these stay read-only.
+      for (const header of ['Tender ID', 'Submission Deadline', 'State', 'Next Milestone', 'Opportunity ID', 'Bid ID']) {
         expect(screen.queryByRole('button', { name: `Edit ${header}` })).not.toBeInTheDocument()
       }
     })
@@ -454,15 +459,17 @@ describe('MasterGrid', () => {
       renderGrid()
       await screen.findByText('Alpha')
       await screen.findByRole('button', { name: 'Sort by Score' })
+      const leafs = () => Array.from(document.querySelectorAll('thead tr:nth-child(2) th')).map((th) => th.textContent)
+      const cityIndex = leafs().indexOf('City')
+      expect(cityIndex).toBeGreaterThan(0)
       await openPopover('Manage columns')
       await userEvent.click(screen.getByRole('button', { name: 'Hide City' }))
       expect(screen.queryByRole('button', { name: 'Edit City' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Sort by City' })).not.toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'Show City' }))
-      const leafs = () => Array.from(document.querySelectorAll('thead tr:nth-child(2) th')).map((th) => th.textContent)
-      expect(leafs()[leafs().length - 1]).toBe('City') // shown again at the end
+      expect(leafs().indexOf('City')).toBe(cityIndex) // shown again in its original slot
       fireEvent.keyDown(screen.getByRole('button', { name: 'Drag to reorder City' }), { key: 'ArrowUp', altKey: true })
-      expect(leafs()[leafs().length - 2]).toBe('City')
+      expect(leafs().indexOf('City')).toBe(cityIndex - 1)
     })
 
     it('keeps the header menu to quick actions: no Move or Remove, which live only in the Columns panel', async () => {
@@ -497,7 +504,8 @@ describe('MasterGrid', () => {
       await screen.findByText('Alpha')
       await openPopover('Manage columns')
       fireEvent.keyDown(screen.getByRole('button', { name: 'Drag to reorder City' }), { key: 'ArrowUp', altKey: true })
-      expect(onVisibleColumnsChange).toHaveBeenCalledWith(['opportunityName', 'city', 'bidCode'])
+      // Hidden columns keep their slot as `~hidden:<id>` markers after the shown ones.
+      expect(shownOrder(onVisibleColumnsChange)).toEqual(['opportunityName', 'city', 'bidCode'])
     })
 
     it('never hides the last remaining column (an empty list would mean "show everything")', async () => {
@@ -523,7 +531,7 @@ describe('MasterGrid', () => {
       await screen.findByText('Alpha')
       await openPopover('Manage columns')
       fireEvent.keyDown(screen.getByRole('button', { name: 'Drag to reorder Bid ID' }), { key: 'ArrowUp', altKey: true })
-      expect(onVisibleColumnsChange).toHaveBeenCalledWith(['bidCode', 'opportunityName'])
+      expect(shownOrder(onVisibleColumnsChange)).toEqual(['bidCode', 'opportunityName'])
     })
   })
 
@@ -612,7 +620,8 @@ describe('MasterGrid', () => {
         expect(JSON.stringify(owners)).toContain(person.id)
       })
       // The grid itself must refresh (owner is resolved server-side), not just the ledger.
-      expect(await screen.findByText('rita@amnex.com')).toBeInTheDocument()
+      const row = screen.getAllByTestId('bid-row')[0]
+      expect(await within(row).findByText('Rita Rao')).toBeInTheDocument()
     })
   })
 })

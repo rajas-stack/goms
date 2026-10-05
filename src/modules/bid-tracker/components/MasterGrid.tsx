@@ -89,6 +89,19 @@ const saveFrozen = (sheet: string, ids: string[]) => {
   try { localStorage.setItem(frozenKey(sheet), JSON.stringify(ids)) } catch { /* private mode: freeze just won't persist */ }
 }
 
+interface ColumnLocks { locked: string[]; unlocked: string[] }
+const columnLocksKey = (sheet: string) => `goms:bidGrid:columnLocks:${sheet}`
+const loadColumnLocks = (sheet: string): ColumnLocks => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(columnLocksKey(sheet)) ?? '{}') as Partial<ColumnLocks>
+    const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+    return { locked: ids(raw.locked), unlocked: ids(raw.unlocked) }
+  } catch { return { locked: [], unlocked: [] } }
+}
+const saveColumnLocks = (sheet: string, locks: ColumnLocks) => {
+  try { localStorage.setItem(columnLocksKey(sheet), JSON.stringify(locks)) } catch { /* private mode: locks just won't persist */ }
+}
+
 const helper = createColumnHelper<BidGridRow>()
 
 // Favourites are a personal shortlist, remembered in this browser.
@@ -216,6 +229,29 @@ export function MasterGrid(props: MasterGridProps) {
 
   // Frozen (pinned) columns: chosen per column from its header menu, remembered in this browser.
   const [frozenIds, setFrozenIds] = useState<string[]>(() => loadFrozen(props.sheet ?? 'bidTracker'))
+
+  // Per-column locks, per sheet, remembered in this browser — an interim switch
+  // until role-based access decides who may edit what. A column is editable when
+  // the grid is unlocked AND the column is: editable columns start open (and can
+  // be locked), `unlockable` ones start locked (and can be opened); the rest have
+  // no write path and stay locked.
+  const [columnLocks, setColumnLocks] = useState<ColumnLocks>(() => loadColumnLocks(props.sheet ?? 'bidTracker'))
+  const effectiveMeta = (meta: GridColumnMeta): GridColumnMeta => {
+    if (columnLocks.locked.includes(meta.id)) return { ...meta, editable: undefined }
+    if (!meta.editable && meta.unlockable && columnLocks.unlocked.includes(meta.id)) return { ...meta, editable: meta.unlockable }
+    return meta
+  }
+  const canLockColumn = (meta: GridColumnMeta) => !!(meta.editable || meta.unlockable)
+  const isColumnOpen = (meta: GridColumnMeta) => !!effectiveMeta(meta).editable
+  const toggleColumnLock = (meta: GridColumnMeta) => setColumnLocks((cur) => {
+    const open = !!effectiveMeta(meta).editable
+    const without = (ids: string[]) => ids.filter((id) => id !== meta.id)
+    const next: ColumnLocks = open
+      ? { locked: meta.editable ? [...without(cur.locked), meta.id] : without(cur.locked), unlocked: without(cur.unlocked) }
+      : { locked: without(cur.locked), unlocked: meta.editable ? without(cur.unlocked) : [...without(cur.unlocked), meta.id] }
+    saveColumnLocks(props.sheet ?? 'bidTracker', next)
+    return next
+  })
 
   // --- data -------------------------------------------------------------------
   const appliedRules = useMemo(() => pruneFilterNodes(rules, isRuleComplete), [rules])
@@ -370,7 +406,9 @@ export function MasterGrid(props: MasterGridProps) {
   const commitCell = async (row: BidGridRow, col: GridColumnMeta, value: CellDraft) => {
     const errorKey = `${row.id}:${col.id}`
     // Of the editable opportunity attributes only City is nullable; clearing the others stores ''.
-    const opportunityValue = value === null && col.id !== 'city' ? '' : value
+    const opportunityValue = col.type === 'state'
+      ? (value === null || value === '' ? null : Number(value))
+      : value === null && col.id !== 'city' ? '' : value
     setCellErrors((e) => { const { [errorKey]: _drop, ...rest } = e; return rest })
     const snapshot = qc.getQueriesData<BidGridRow[]>({ queryKey: ['bidsForGrid'] })
     const department = col.editable === 'department' ? departments.find((d) => d.id === value) : undefined
@@ -647,7 +685,7 @@ export function MasterGrid(props: MasterGridProps) {
       ? 'No room to freeze more — unfreeze another column first.'
       : null
   // Editable only while unlocked; locked, every cell is read/navigate-only.
-  const canEditCell = (meta: GridColumnMeta) => unlocked && !!meta.editable
+  const canEditCell = (meta: GridColumnMeta) => unlocked && isColumnOpen(meta)
   // --- right-click menus ----------------------------------------------------------
   const openCellMenu = (e: React.MouseEvent, row: BidGridRow, meta: GridColumnMeta) => {
     e.preventDefault()
@@ -699,7 +737,7 @@ export function MasterGrid(props: MasterGridProps) {
     ]
     setMenu({ x: e.clientX, y: e.clientY, title: `${meta.header} column`, groups })
   }
-  const cellBg = (meta: GridColumnMeta) => (!unlocked || meta.editable ? EDITABLE_BG : READONLY_BG)
+  const cellBg = (meta: GridColumnMeta) => (!unlocked || isColumnOpen(meta) ? EDITABLE_BG : READONLY_BG)
 
   // --- spreadsheet keyboard: arrows / Tab / Shift+Tab move the active cell -------
   /** Focus a cell's editor-box (or its read-only box), scrolling it into the virtual window first. */
@@ -883,8 +921,23 @@ export function MasterGrid(props: MasterGridProps) {
                           aria-label={h.column.getCanSort() ? `Sort by ${meta.header}` : meta.header}
                         >
                           <span className="truncate" title={meta.header}>{flexRender(h.column.columnDef.header, h.getContext())}</span>
-                          {unlocked && meta.editable && <span title="Editable column" className="shrink-0 text-goms-green"><Icon name="Pencil" size={10} /></span>}
+                          {unlocked && isColumnOpen(meta) && <span title="Editable column" className="shrink-0 text-goms-green"><Icon name="Pencil" size={10} /></span>}
                         </button>
+                        {canLockColumn(meta) ? (
+                          <button
+                            type="button" onClick={() => toggleColumnLock(meta)} aria-pressed={!isColumnOpen(meta)}
+                            aria-label={isColumnOpen(meta) ? `Lock ${meta.header} column` : `Unlock ${meta.header} column`}
+                            title={isColumnOpen(meta) ? `Lock ${meta.header} (stop edits in this column)` : `Unlock ${meta.header} for editing`}
+                            className={cn(
+                              'flex h-5 w-5 shrink-0 items-center justify-center rounded transition-colors hover:bg-ink-900/[0.07] focus-visible:focus-ring',
+                              isColumnOpen(meta) ? 'text-muted/60 opacity-0 group-hover/th:opacity-100 focus-visible:opacity-100' : 'text-amber-600',
+                            )}
+                          >
+                            <Icon name={isColumnOpen(meta) ? 'Unlock' : 'Lock'} size={11} />
+                          </button>
+                        ) : meta.id !== 'manage' && (
+                          <span title={`Always locked — ${meta.readOnlyReason ?? 'no write path'}`} aria-label="Always locked" role="img" className="inline-flex shrink-0 text-muted/50"><Icon name="Lock" size={11} /></span>
+                        )}
                         {isFrozen && <span title="Frozen column" className="inline-flex shrink-0 text-goms-navy/60"><Icon name="Pin" size={11} /><span className="sr-only">Frozen</span></span>}
                         {filteredCount > 0 && (
                           <span title="Filtered" className="inline-flex shrink-0 text-goms-sky">
@@ -954,7 +1007,9 @@ export function MasterGrid(props: MasterGridProps) {
                           ...frozenStyle(meta.id), height: ROW_HEIGHT,
                           boxShadow: frozen.lastId === meta.id ? `${CELL_BEVEL}, ${FROZEN_SHADOW}` : CELL_BEVEL,
                         }}
-                        title={unlocked && !meta.editable ? meta.readOnlyReason : undefined}
+                        title={unlocked && !isColumnOpen(meta)
+                          ? [meta.readOnlyReason ?? 'Column locked', canLockColumn(meta) && 'unlock the column from its header to edit'].filter(Boolean).join(' — ')
+                          : undefined}
                         className={cn(
                           'relative overflow-hidden whitespace-nowrap border-b border-r border-line/70 p-0 transition-colors duration-150',
                           cellBg(meta),
@@ -968,10 +1023,10 @@ export function MasterGrid(props: MasterGridProps) {
                       >
                         {canEditCell(meta) ? (
                           <EditableCell
-                            col={meta} value={editValue(row.original, meta)} display={display} lookups={lookups}
+                            col={effectiveMeta(meta)} value={editValue(row.original, meta)} display={display} lookups={lookups}
                             externalError={cellErrors[`${row.original.id}:${meta.id}`]}
                             pending={pendingEdits} cellKey={`${row.original.id}:${meta.id}`}
-                            onCommit={(value) => commitCell(row.original, meta, value)}
+                            onCommit={(value) => commitCell(row.original, effectiveMeta(meta), value)}
                           />
                         ) : (
                           <div

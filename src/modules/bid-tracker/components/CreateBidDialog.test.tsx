@@ -193,7 +193,8 @@ describe('CreateBidDialog', () => {
     const departmentDialog = await screen.findByRole('dialog', { name: 'New department' })
     expect(screen.getByRole('dialog', { name: 'Create Bid' })).toBeInTheDocument()
     await userEvent.click(within(departmentDialog).getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('dialog', { name: 'New department' })).not.toBeInTheDocument()
+    // The dialog unmounts after its exit fade.
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'New department' })).not.toBeInTheDocument())
     expect(screen.getByRole('textbox', { name: 'Opportunity name' })).toHaveValue('Draft opportunity')
     expect(screen.getByRole('textbox', { name: 'Submission date and time' })).toHaveValue('24thsept261500')
     expect(await orgNames()).not.toContain('Draft Department')
