@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { repository, resetLocalData } from '@/data/repository'
 import { OpportunityWorkspace } from './OpportunityWorkspace'
+import type { OwnedSheet } from './sheets'
 
 function stubLayout() {
   vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(800)
@@ -27,6 +28,7 @@ function renderAt(path: string) {
           <Route path="/bid-tracker/pipeline/:tab" element={<OpportunityWorkspace tab="pipeline" />} />
           <Route path="/bid-tracker/campaign" element={<OpportunityWorkspace tab="campaign" />} />
           <Route path="/bid-tracker/master" element={<OpportunityWorkspace tab="master" />} />
+          <Route path="/bid-tracker/dashboard" element={<OpportunityWorkspace tab="dashboard" />} />
           <Route path="/bid-tracker/:section" element={<OpportunityWorkspace tab="bid-tracker" />} />
         </Routes>
       </MemoryRouter>
@@ -34,9 +36,13 @@ function renderAt(path: string) {
   )
 }
 
-async function makeBid(name: string) {
+async function makeBid(name: string, sheet?: OwnedSheet) {
   const opp = await repository.createOpportunity({ departmentId: 'dept-1', opportunityName: name, submissionDate: '2099-01-15' })
-  return repository.createBid(opp.id)
+  return repository.createBid(opp.id, undefined, sheet)
+}
+const SHEET_AT: Record<string, OwnedSheet> = {
+  '/bid-tracker/pipeline/funnel': 'pipeline-funnel', '/bid-tracker/pipeline/backup': 'pipeline-backup',
+  '/bid-tracker/pipeline/commits': 'pipeline-commits', '/bid-tracker/campaign': 'campaign', '/bid-tracker/master': 'campaign',
 }
 const nav = () => within(screen.getByRole('navigation', { name: 'Opportunity sheets' }))
 const where = () => screen.getByTestId('where').textContent
@@ -48,12 +54,10 @@ describe('Opportunity workspace', () => {
     await resetLocalData()
   })
 
-  it('offers Bid Tracker, Pipeline, Campaign and Master, with Bid Tracker keeping its own sections', async () => {
+  it('offers Bid Tracker, Pipeline, Campaign, Master and Dashboard, with Bid Tracker keeping its own sections', async () => {
     await makeBid('Alpha')
     renderAt('/bid-tracker')
-    for (const label of ['Bid Tracker', 'Pipeline', 'Campaign', 'Master']) {
-      expect(nav().getByRole('link', { name: label })).toBeInTheDocument()
-    }
+    expect(nav().getAllByRole('link').map((l) => l.textContent)).toEqual(['Bid Tracker', 'Pipeline', 'Campaign', 'Master', 'Dashboard'])
     expect(await screen.findByText('Alpha')).toBeInTheDocument()
     for (const section of ['Master Grid', 'Milestones & Dates', 'Action Queue', 'Activity History']) {
       expect(screen.getByRole('button', { name: section })).toBeInTheDocument()
@@ -61,7 +65,7 @@ describe('Opportunity workspace', () => {
   })
 
   it('Pipeline opens on Funnel and has Funnel / Backup / Commits sub-tabs', async () => {
-    await makeBid('Alpha')
+    await makeBid('Alpha', 'pipeline-funnel')
     renderAt('/bid-tracker/pipeline')
     await waitFor(() => expect(where()).toBe('/bid-tracker/pipeline/funnel'))
     for (const label of ['Funnel', 'Backup', 'Commits']) expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
@@ -81,16 +85,23 @@ describe('Opportunity workspace', () => {
     await waitFor(() => expect(where()).toBe('/bid-tracker/master'))
     await userEvent.click(nav().getByRole('link', { name: 'Pipeline' }))
     await waitFor(() => expect(where()).toBe('/bid-tracker/pipeline/funnel'))
+    await userEvent.click(nav().getByRole('link', { name: 'Dashboard' }))
+    await waitFor(() => expect(where()).toBe('/bid-tracker/dashboard'))
+    expect(await screen.findByRole('heading', { name: 'Opportunity dashboard' })).toBeInTheDocument()
   })
 
   it.each([['/bid-tracker/pipeline/funnel'], ['/bid-tracker/pipeline/backup'], ['/bid-tracker/pipeline/commits'], ['/bid-tracker/campaign'], ['/bid-tracker/master']])(
-    '%s is the same Excel-style grid over the same bids, with lock, freeze, filters and Manage columns',
+    '%s is the same Excel-style grid over its own rows, with lock, freeze, filters and Manage columns',
     async (path) => {
-      await makeBid('Alpha')
-      await makeBid('Beta')
+      await makeBid('Alpha', SHEET_AT[path])
+      await makeBid('Beta', SHEET_AT[path])
+      await makeBid('Elsewhere', path === '/bid-tracker/master' ? 'bidTracker' : undefined)
       renderAt(path)
       await screen.findByText('Alpha')
       expect(screen.getByText('Beta')).toBeInTheDocument()
+      // A Bid Tracker row shows on Master only.
+      if (path === '/bid-tracker/master') expect(screen.getByText('Elsewhere')).toBeInTheDocument()
+      else expect(screen.queryByText('Elsewhere')).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Master grid editing locked/ })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /^Filters/ })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Manage columns/ })).toBeInTheDocument()
@@ -101,7 +112,7 @@ describe('Opportunity workspace', () => {
   )
 
   it('each sheet has its own saved views; system views are on every sheet', async () => {
-    await makeBid('Alpha')
+    await makeBid('Alpha', 'pipeline-funnel')
     await repository.createBidSavedView({ name: 'Funnel only', scope: 'global', sheet: 'pipeline-funnel' })
     await repository.createBidSavedView({ name: 'Campaign only', scope: 'global', sheet: 'campaign' })
     await repository.createBidSavedView({ name: 'Old tracker view', scope: 'global' }) // no sheet = Bid Tracker
@@ -131,7 +142,7 @@ describe('Opportunity workspace', () => {
   })
 
   it('frozen columns are remembered per sheet', async () => {
-    await makeBid('Alpha')
+    await makeBid('Alpha', 'campaign')
     localStorage.clear()
     const first = renderAt('/bid-tracker/campaign')
     await screen.findByText('Alpha')

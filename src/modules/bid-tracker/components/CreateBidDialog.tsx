@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { OPPORTUNITY_TYPES, type DepartmentChoice } from '@goms/domain'
+import { DEFAULT_OWNED_SHEET, OPPORTUNITY_TYPES, OWNED_SHEETS, OWNED_SHEET_LABELS, type DepartmentChoice, type OwnedSheet } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Combobox } from '@/components/ui/Combobox'
 import { Dialog } from '@/components/ui/Dialog'
@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import { NodeFormDialog } from '@/features/nodes/NodeFormDialog'
 import { OpportunityCodePreview } from '@/features/opportunities/OpportunityCodePreview'
 import { formatCapturedDate, parseFriendlyDate } from '../dateInput'
+import type { SheetId } from '../sheets'
 
 const MAX_SHOWN = 50
 const CENTRAL = '0' // Central Ministries (Govt. of India)
@@ -28,7 +29,11 @@ const segment = (active: boolean) => cn(
  *  server assigns it and creates the bid in one transaction (bids.create, the same
  *  mutation the opportunity card uses). A new opportunity is created in that same server transaction, so the
  *  opportunity, its department and the bid all exist or none of them do. Cancelling changes nothing. */
-export function CreateBidDialog({ open, onClose, opportunityId }: { open: boolean; onClose: () => void; opportunityId?: string }) {
+export function CreateBidDialog({ open, onClose, opportunityId, sheet = 'bidTracker' }: {
+  open: boolean; onClose: () => void; opportunityId?: string
+  /** The sheet the new row is filed into. On Master the user picks it (default Bid Tracker). */
+  sheet?: SheetId
+}) {
   const [departmentDialogOpen, setDepartmentDialogOpen] = useState(false)
   const [newDepartmentId, setNewDepartmentId] = useState<string | null>(null)
   useEffect(() => {
@@ -49,6 +54,7 @@ export function CreateBidDialog({ open, onClose, opportunityId }: { open: boolea
         <CreateBidFlow
           onClose={close}
           presetId={opportunityId}
+          sheet={sheet}
           newDepartmentId={newDepartmentId}
           onRequestCreateDepartment={() => {
             setNewDepartmentId(null)
@@ -73,12 +79,15 @@ export function CreateBidDialog({ open, onClose, opportunityId }: { open: boolea
   )
 }
 
-function CreateBidFlow({ onClose, presetId, newDepartmentId, onRequestCreateDepartment }: {
+function CreateBidFlow({ onClose, presetId, sheet, newDepartmentId, onRequestCreateDepartment }: {
   onClose: () => void
   presetId?: string
+  sheet: SheetId
   newDepartmentId: string | null
   onRequestCreateDepartment: () => void
 }) {
+  // Master has no rows of its own: the user picks which sheet the new row lives in.
+  const [targetSheet, setTargetSheet] = useState<OwnedSheet>(sheet === 'master' ? DEFAULT_OWNED_SHEET : sheet)
   const navigate = useNavigate()
   const { data: opportunities = [], isLoading } = useOpportunities()
   const { data: bids = [] } = useBidsForGrid()
@@ -164,8 +173,9 @@ function CreateBidFlow({ onClose, presetId, newDepartmentId, onRequestCreateDepa
             opportunityType: newType || undefined,
           },
           department: choice!,
+          sheet: targetSheet,
         })
-        : await create.mutateAsync({ opportunityId: selected!.id, department: hasDepartment ? undefined : choice ?? undefined })
+        : await create.mutateAsync({ opportunityId: selected!.id, department: hasDepartment ? undefined : choice ?? undefined, sheet: targetSheet })
       onClose()
       navigate(`/bid-tracker/bid/${bid.id}`)
     } catch (e) {
@@ -270,6 +280,15 @@ function CreateBidFlow({ onClose, presetId, newDepartmentId, onRequestCreateDepa
               <span className={preview ? 'font-medium text-goms-navy' : 'text-muted'}>{preview ?? 'not chosen yet'}</span>
             </div>
           </div>
+        )}
+
+        {sheet === 'master' && (
+          <label className="flex flex-col gap-1 sm:w-1/2">
+            <span className="text-[12px] font-medium text-muted">File into sheet</span>
+            <Select aria-label="File into sheet" value={targetSheet} onChange={(e) => setTargetSheet(e.target.value as OwnedSheet)}>
+              {OWNED_SHEETS.map((s) => <option key={s} value={s}>{OWNED_SHEET_LABELS[s]}</option>)}
+            </Select>
+          </label>
         )}
 
         {error && <p role="alert" className="text-[13px] text-crimson">{error}</p>}

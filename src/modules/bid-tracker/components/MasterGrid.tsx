@@ -35,12 +35,15 @@ const dayAfter = (isoDate: string) => {
 import { cn } from '@/lib/utils'
 import type { BidGridRow } from '@/lib/types'
 import {
-  ATTENTION_OPTIONS, CUSTOM_GROUP, GRID_GROUPS, cellValue, editValue, columnIdFromOrderToken, columnWidth, compareTyped, formatCurrency, formatValueText,
+  ATTENTION_OPTIONS, CUSTOM_GROUP, GRID_GROUPS, cellValue, editValue, columnIdFromOrderToken, columnWidth, compareTyped, defaultVisibleColumnIds, formatCurrency, formatValueText,
   ignoredRules, isEmptyCell, isRuleComplete, personOf, orderedColumnIds, resolveColumns, resolveVisibleColumns, rowMatchesSearch, setColumnVisibility, sortKeyOf,
   type GridColumnMeta,
 } from '../gridColumns'
 import { fromRoot, toRoot } from '../filterTree'
-import { columnInScope, columnOwner, type MasterScope, type SheetId } from '../sheets'
+import {
+  OWNED_SHEETS, OWNED_SHEET_LABELS, columnInScope, columnOwner, createLabelFor, rowInSheet,
+  type MasterScope, type OwnedSheet, type SheetId,
+} from '../sheets'
 import { useEntityLookups } from '../useEntityLookups'
 import { AddCustomColumnDialog } from './AddCustomColumnDialog'
 import { ColumnHeaderMenu } from './ColumnHeaderMenu'
@@ -190,7 +193,8 @@ export function MasterGrid(props: MasterGridProps) {
   const rules = props.onFilterRulesChange ? (props.filterRules ?? []) : innerRules
   const setRules = (next: FilterNode[]) => (props.onFilterRulesChange ?? setInnerRules)(next)
   const [innerVisible, setInnerVisible] = useState<string[] | undefined>(props.visibleColumns)
-  const visibleIds = props.onVisibleColumnsChange ? props.visibleColumns : innerVisible
+  // What the user / saved view chose; undefined or empty = this sheet's default (see `visibleIds` below).
+  const chosenVisibleIds = props.onVisibleColumnsChange ? props.visibleColumns : innerVisible
   const setVisibleIds = (next: string[]) => (props.onVisibleColumnsChange ?? setInnerVisible)(next)
 
   const [addColumnOpen, setAddColumnOpen] = useState(false)
@@ -275,6 +279,10 @@ export function MasterGrid(props: MasterGridProps) {
   const { update: updateOpportunity } = useOpportunityMutations()
 
   const allColumns = useMemo(() => resolveColumns(customFields), [customFields])
+  const visibleIds = useMemo(
+    () => (chosenVisibleIds?.length ? chosenVisibleIds : defaultVisibleColumnIds(allColumns, sheetId)),
+    [chosenVisibleIds, allColumns, sheetId],
+  )
   const visible = useMemo(() => resolveVisibleColumns(allColumns, visibleIds), [allColumns, visibleIds])
   const ignored = useMemo(() => ignoredRules(rules, allColumns), [rules, allColumns])
   const filterable = useMemo(() => allColumns.filter((c) => c.type !== null), [allColumns])
@@ -289,10 +297,13 @@ export function MasterGrid(props: MasterGridProps) {
     [visible, frozenSet],
   )
 
-  const archivedCount = useMemo(() => (fetched ?? []).filter((r) => r.status === 'archived').length, [fetched])
+  // Every row lives in ONE sheet; a sheet shows only its own (Master shows them all).
+  // Archived count, archived view, search and empty states all work within these.
+  const sheetRows = useMemo(() => (fetched ?? []).filter((r) => rowInSheet(r.sheet, sheetId)), [fetched, sheetId])
+  const archivedCount = useMemo(() => sheetRows.filter((r) => r.status === 'archived').length, [sheetRows])
   const modeRows = useMemo(
-    () => (fetched ?? []).filter((r) => (showArchived ? r.status === 'archived' : r.status !== 'archived')),
-    [fetched, showArchived],
+    () => sheetRows.filter((r) => (showArchived ? r.status === 'archived' : r.status !== 'archived')),
+    [sheetRows, showArchived],
   )
   const rows = useMemo(
     () => modeRows.filter((r) => rowMatchesSearch(r, visible, search, lookups)),
@@ -321,6 +332,30 @@ export function MasterGrid(props: MasterGridProps) {
     setSelected(new Set(failed))
     if (failed.length) setBulkError(`${failed.length} of ${selectedIds.length} could not be updated.`)
     return failed.length === 0
+  }
+  // --- move between sheets: optimistic, rolled back (with an error) on failure ----
+  const moveTargets = (from: OwnedSheet | null) => OWNED_SHEETS.filter((s) => s !== from)
+  const moveRows = async (ids: string[], to: OwnedSheet) => {
+    if (!ids.length) return
+    setBulkError(null)
+    const snapshot = qc.getQueriesData<BidGridRow[]>({ queryKey: ['bidsForGrid'] })
+    const moving = new Set(ids)
+    qc.setQueriesData<BidGridRow[]>({ queryKey: ['bidsForGrid'] }, (old) => old?.map((r) => (moving.has(r.id) ? { ...r, sheet: to } : r)))
+    const failed: string[] = []
+    let reason = ''
+    for (const id of ids) {
+      try { await updateBid.mutateAsync({ id, patch: { sheet: to } }) } catch (e) {
+        failed.push(id)
+        reason = e instanceof Error ? e.message : ''
+      }
+    }
+    setSelected(new Set(failed))
+    if (!failed.length) return
+    // Put the cache back as it was, then let the server say where every row really is.
+    for (const [key, data] of snapshot) qc.setQueryData(key, data)
+    void qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+    const what = ids.length === 1 ? 'The bid could not be moved' : `${failed.length} of ${ids.length} could not be moved`
+    setBulkError(`${what} to ${OWNED_SHEET_LABELS[to]}${reason ? `: ${reason}` : '.'}`)
   }
   const archiveSelected = () => runBulk((id) => archive.mutateAsync(id))
   const unarchiveSelected = () => runBulk((id) => unarchive.mutateAsync(id))
@@ -677,6 +712,7 @@ export function MasterGrid(props: MasterGridProps) {
   if (isLoading) return <div className="p-4 text-sm text-muted">Loading bids…</div>
 
   const totalCount = modeRows.length
+  const createLabel = createLabelFor(sheetId)
   const hasFilters = rules.length > 0
   const frozenStyle = (id: string) => (frozen.left.has(id) ? { left: frozen.left.get(id) } : undefined)
   const scrollerWidth = parentRef.current?.clientWidth || 1200 // 0 = not laid out yet
@@ -711,6 +747,10 @@ export function MasterGrid(props: MasterGridProps) {
           onSelect: () => setRules(fromRoot({ ...root, items: [...root.items, { field: meta.id, operator: 'eq', value: String(v) }] })),
         },
       ],
+      // Move to…: every sheet this row does not already live in.
+      moveTargets(row.sheet ?? null).map((to) => ({
+        label: `Move to ${OWNED_SHEET_LABELS[to]}`, icon: 'MoveRight', onSelect: () => { void moveRows([row.id], to) },
+      })),
       [
         { label: favourites.has(row.id) ? 'Remove from favourites' : 'Add to favourites', icon: 'Star', onSelect: () => toggleFavourite(row.id) },
         { label: archived ? 'Unarchive' : 'Archive', icon: archived ? 'ArchiveRestore' : 'Archive', onSelect: () => (archived ? unarchive : archive).mutate(row.id) },
@@ -795,6 +835,14 @@ export function MasterGrid(props: MasterGridProps) {
               ? <Button variant="secondary" size="sm" className="h-6 px-2" onClick={unarchiveSelected}>Unarchive Selected</Button>
               : <Button variant="secondary" size="sm" className="h-6 px-2" onClick={archiveSelected}>Archive Selected</Button>}
             <Button variant="secondary" size="sm" className="h-6 px-2" onClick={() => setReassignOpen(true)}>Reassign Owner</Button>
+            <select
+              aria-label="Move selected to" value=""
+              onChange={(e) => { if (e.target.value) void moveRows(selectedIds, e.target.value as OwnedSheet) }}
+              className="h-6 rounded-md border border-line bg-white px-1.5 text-[12.5px] text-goms-navy focus-visible:focus-ring"
+            >
+              <option value="">Move to…</option>
+              {moveTargets(sheetId === 'master' ? null : sheetId).map((to) => <option key={to} value={to}>{OWNED_SHEET_LABELS[to]}</option>)}
+            </select>
           </div>
         )}
         {bulkError && <span role="alert" className="text-[12px] text-crimson-600">{bulkError}</span>}
@@ -825,7 +873,7 @@ export function MasterGrid(props: MasterGridProps) {
             <ManageColumnsPanel all={allColumns} visible={visible} columnOrder={visibleIds} onVisibleChange={setVisibleIds} focusId={manageColumnId} inScope={(f) => columnInScope(f.sheet, sheetId, props.columnScope)} />
           </ToolbarPopover>
           <Button variant="primary" size="sm" className="h-7 px-2.5" onClick={() => setCreateBidOpen(true)}>
-            <Icon name="Plus" size={14} /> Create Bid
+            <Icon name="Plus" size={14} /> {createLabel}
           </Button>
         </div>
       </div>
@@ -1064,12 +1112,14 @@ export function MasterGrid(props: MasterGridProps) {
         </table>
         {tableRows.length === 0 && (
           <div className="sticky left-0 flex w-full max-w-full flex-col items-center gap-2 p-8 text-center text-sm text-muted" data-testid="grid-empty">
-            {totalCount === 0 && !hasFilters ? (showArchived ? 'No archived bids.' : 'No bids yet.') : 'No bids match the current search and filters.'}
+            {totalCount === 0 && !hasFilters
+              ? (showArchived ? 'Nothing archived in this sheet.' : 'Nothing in this sheet yet.')
+              : 'No bids match the current search and filters.'}
             {(hasFilters || search) && (
               <Button variant="ghost" size="sm" onClick={() => { setRules([]); setSearch('') }}>Clear search and filters</Button>
             )}
             {totalCount === 0 && !hasFilters && !showArchived && (
-              <Button variant="primary" size="sm" onClick={() => setCreateBidOpen(true)}><Icon name="Plus" size={14} /> Create Bid</Button>
+              <Button variant="primary" size="sm" onClick={() => setCreateBidOpen(true)}><Icon name="Plus" size={14} /> {createLabel}</Button>
             )}
           </div>
         )}
@@ -1081,7 +1131,7 @@ export function MasterGrid(props: MasterGridProps) {
         // brand-new column is appended to it; in the default view it shows itself.
         onCreated={(field) => {
           const id = `custom:${field.key}`
-          if (visibleIds?.length) {
+          if (chosenVisibleIds?.length) {
             const order = orderedColumnIds(allColumns, visibleIds)
               .filter((token) => columnIdFromOrderToken(token) !== id)
             setVisibleIds([...order, id])
@@ -1090,7 +1140,7 @@ export function MasterGrid(props: MasterGridProps) {
           setFlashId(id)
         }}
       />
-      <CreateBidDialog open={createBidOpen} onClose={() => setCreateBidOpen(false)} />
+      <CreateBidDialog open={createBidOpen} onClose={() => setCreateBidOpen(false)} sheet={sheetId} />
       <Dialog
         open={reassignOpen} onClose={() => setReassignOpen(false)}
         title={`Reassign owner for ${selectedIds.length} bid${selectedIds.length === 1 ? '' : 's'}`}

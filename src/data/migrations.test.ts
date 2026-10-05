@@ -57,6 +57,12 @@ describe('migrateSnapshot', () => {
     expect(migrateSnapshot({ employees: [] }, 1)).toBeNull()
   })
 
+  it('v22 files every existing bid into the Bid Tracker sheet, keeping a known sheet', () => {
+    const out = MIGRATIONS[22]({ bids: [{ id: 'b1' }, { id: 'b2', sheet: 'campaign' }, { id: 'b3', sheet: 'master' }] })
+    expect((out.bids as { sheet: string }[]).map((b) => b.sheet)).toEqual(['bidTracker', 'campaign', 'bidTracker'])
+    expect(MIGRATIONS[22]({ nodes: [] })).toEqual({ nodes: [] })
+  })
+
   it('has a migration step for every version above 1', () => {
     for (let v = 2; v <= SCHEMA_VERSION; v++) {
       expect(MIGRATIONS[v], `missing migration to v${v}`).toBeTypeOf('function')
@@ -175,7 +181,8 @@ describe('migrateSnapshot', () => {
     const withBids = { ...v1Snapshot(), bids: [{ id: 'bid_1', bidCode: 'BID-2026-0001' }] }
     const out = migrateSnapshot(withBids, 12)
     expect(out).not.toBeNull()
-    expect(out!.bids).toEqual([{ id: 'bid_1', bidCode: 'BID-2026-0001' }])
+    // (v22 adds the bid's sheet — every pre-existing bid is a Bid Tracker row.)
+    expect(out!.bids).toEqual([{ id: 'bid_1', bidCode: 'BID-2026-0001', sheet: 'bidTracker' }])
   })
 
   it('backfills selectedPricingLevels onto a legacy SKU row that predates the field', () => {

@@ -20,6 +20,7 @@ import {
   coerceCustomValue, normalizeOptions, slugifyFieldKey,
   DEPARTMENT_REQUIRED_MESSAGE, type DepartmentChoice, type NewBidOpportunity,
   allocateOpportunityCode, opportunityCodeParts,
+  DEFAULT_OWNED_SHEET, isOwnedSheet, type OwnedSheet,
 } from '@goms/domain'
 export { MERGEABLE_FIELDS, type MergeableField }
 import { coversDate } from '@/lib/intervals'
@@ -528,11 +529,13 @@ export interface Repository {
   listBidsForGrid(filterRules?: SystemBidViewFilterRule[]): Promise<BidGridRow[]>
   getBid(id: string): Promise<Bid | null>
   getBidForOpportunity(opportunityId: string): Promise<Bid | null>
-  createBid(opportunityId: string, department?: DepartmentChoice): Promise<Bid>
+  /** `sheet`: the Opportunity sheet the new row lives in (default Bid Tracker). */
+  createBid(opportunityId: string, department?: DepartmentChoice, sheet?: OwnedSheet): Promise<Bid>
   /** Create Bid for an opportunity that does not exist yet: the opportunity, its department and the bid
    *  are created together (all-or-nothing), exactly as bids.create does server-side. */
-  createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice): Promise<Bid>
-  updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>): Promise<Bid>
+  createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice, sheet?: OwnedSheet): Promise<Bid>
+  /** `sheet` moves the row to another Opportunity sheet. */
+  updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink' | 'sheet'>>): Promise<Bid>
   archiveBid(id: string): Promise<Bid>
   markBidVerified(id: string): Promise<Bid>
   unarchiveBid(id: string): Promise<Bid>
@@ -608,6 +611,11 @@ let inMemoryBidSeq = 1
 const pendingBidUploads = new Map<string, {
   entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
 }>()
+
+/** A bid's sheet must be one it can live in (never 'master', never a typo). */
+function assertOwnedSheet(sheet: unknown): asserts sheet is OwnedSheet {
+  if (!isOwnedSheet(sheet)) throw new Error(`Unknown sheet: ${String(sheet)}`)
+}
 
 /** Parses opportunities.submissionDate the same way the backend's
  *  `bids.create` does (spec §4.5) — null for anything that doesn't parse. */
@@ -1608,6 +1616,7 @@ class InMemoryRepository implements Repository {
         .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
       return {
         ...bid,
+        sheet: bid.sheet ?? DEFAULT_OWNED_SHEET,
         opportunityCode: opp?.opportunityCode ?? '',
         opportunityType: opp?.opportunityType ?? '',
         departmentId: opp?.departmentId ?? '',
@@ -1717,9 +1726,10 @@ class InMemoryRepository implements Repository {
     })
   }
 
-  async createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice) {
+  async createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice, sheet: OwnedSheet = DEFAULT_OWNED_SHEET) {
     const name = opportunity.opportunityName.trim()
     if (!name) throw new Error('Enter the opportunity name.')
+    assertOwnedSheet(sheet)
     // Resolve (validate, then create) the department first; only then create the opportunity under it.
     const dept = await this.resolveDepartmentNode(department)
     const opp = await this.createOpportunity({
@@ -1728,10 +1738,11 @@ class InMemoryRepository implements Repository {
       referenceNo: opportunity.referenceNo?.trim() || null, assignmentName: opportunity.assignmentName?.trim() || null,
       opportunityType: opportunity.opportunityType?.trim() ?? '',
     })
-    return this.createBid(opp.id)
+    return this.createBid(opp.id, undefined, sheet)
   }
 
-  async createBid(opportunityId: string, department?: DepartmentChoice) {
+  async createBid(opportunityId: string, department?: DepartmentChoice, sheet: OwnedSheet = DEFAULT_OWNED_SHEET) {
+    assertOwnedSheet(sheet)
     const opp = this.data.opportunities.find((o) => o.id === opportunityId)
     if (!opp) throw new Error(`No such opportunity: ${opportunityId}`)
     if (this.data.bids.some((b) => b.opportunityId === opportunityId)) {
@@ -1748,6 +1759,7 @@ class InMemoryRepository implements Repository {
       status: 'active',
       dataConfidence: 'verified',
       tenderLink: null,
+      sheet,
       archivedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -1761,9 +1773,10 @@ class InMemoryRepository implements Repository {
     return bid
   }
 
-  async updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>) {
+  async updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink' | 'sheet'>>) {
     const bid = this.requireBid(id)
     const next = { ...patch }
+    if (next.sheet !== undefined) assertOwnedSheet(next.sheet)
     const effectiveStageKey = next.stageKey ?? bid.stageKey
     if (next.decision === 'go' && !isAtOrAfterSubmitted(effectiveStageKey)) {
       throw new Error('Cannot mark Go before the bid reaches Submitted.')
