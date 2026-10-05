@@ -2,9 +2,11 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { Combobox } from '@/components/ui/Combobox'
 import { useToast } from '@/components/ui/Toast'
 import { useOwnershipMutations, useSalesPersons } from '@/lib/api'
 import { isoToday } from '@/lib/dates'
+import { salesPersonOption } from './salesPersonOption'
 
 /** Assigns an owner or a delegate to one entity.
  *
@@ -82,12 +84,13 @@ export function AssignOwnerDialog({ open, entityType, entityId, entityLabel, onC
     >
       <div className="space-y-3">
         <Field label="Sales person" required>
-          <Select value={salesPersonId} onChange={(e) => setSalesPersonId(e.target.value)}>
-            <option value="">Select…</option>
-            {people.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </Select>
+          <Combobox
+            value={salesPersonId}
+            onChange={setSalesPersonId}
+            options={people.map(salesPersonOption)}
+            placeholder="Select…"
+            aria-label="Sales person"
+          />
         </Field>
 
         <Field label="Role">

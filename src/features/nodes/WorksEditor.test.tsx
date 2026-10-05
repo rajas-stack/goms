@@ -29,14 +29,14 @@ vi.mock('./WorkFormDialog', () => ({
     open: boolean
     work: Opportunity | null
     managedInBidTracker?: boolean
-    onSave: (draft: Omit<Opportunity, 'id' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>) => void
+    onSave: (draft: Omit<Opportunity, 'id' | 'opportunityCode' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>) => void
   }) => {
     if (!open) return null
-    const base: Omit<Opportunity, 'id' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'> = work
+    const base: Omit<Opportunity, 'id' | 'opportunityCode' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'> = work
       ? { ...work }
       : {
         opportunityName: 'New Opp', gemTenderId: '', publishDate: '', submissionDate: '',
-        vertical: '', component: [], quantity: '', currency: 'INR', valueAmount: '', valueUnit: 'lakh',
+        vertical: '', opportunityType: '', component: [], quantity: '', currency: 'INR', valueAmount: '', valueUnit: 'lakh',
         budgetKnown: '', emdAmount: '', emdUnit: 'lakh', salesPersonEmail: '',
         stageKey: 'lead', closedOn: null,
       }
@@ -58,7 +58,7 @@ const BOB: SalesPerson = { ...ALICE, id: 'sp-bob', name: 'Bob', officialEmail: '
 
 function makeOpportunity(overrides: Partial<Opportunity> = {}): Opportunity {
   return {
-    id: 'opp-1', departmentId: 'dept-1', stateCode: 5, createdAt: '', createdBy: null,
+    id: 'opp-1', opportunityCode: '', opportunityType: '', departmentId: 'dept-1', stateCode: 5, createdAt: '', createdBy: null,
     opportunityName: 'Test Opportunity', gemTenderId: '', publishDate: '', submissionDate: '',
     vertical: '', component: [], quantity: '', currency: 'INR', valueAmount: '', valueUnit: 'lakh',
     budgetKnown: '', emdAmount: '', emdUnit: 'lakh', salesPersonEmail: 'alice@amnex.com',

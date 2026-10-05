@@ -5,17 +5,23 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
+import { PersonName } from '@/components/ui/PersonName'
+import { Combobox, type ComboboxOption } from '@/components/ui/Combobox'
 import { Tabs } from '@/components/ui/Tabs'
 import { useDeliveryTeamMemberMutations, useDeliveryTeamMembers, useOpportunities } from '@/lib/api'
 import { PIPELINE_STAGE_MAP } from '@/data/pipeline-stages'
 import type { DeliveryTeamKey, DeliveryTeamMember, Opportunity } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { DeliveryOrgChart } from '@/features/teams/DeliveryOrgChart'
+import { OrgEmployees } from '@/features/org/OrgEmployees'
+import { OrgStructureChart } from '@/features/org/OrgStructureChart'
 import { SalesWorkspace } from './SalesWorkspace'
 
-type TeamKey = 'sales' | DeliveryTeamKey
+type TeamKey = 'org' | 'employees' | 'sales' | DeliveryTeamKey
 
 const TABS: { value: TeamKey; label: string }[] = [
+  { value: 'org', label: 'Org Structure' },
+  { value: 'employees', label: 'Employees' },
   { value: 'sales', label: 'Sales' },
   { value: 'preSales', label: 'Pre-sales' },
   { value: 'legal', label: 'Legal' },
@@ -34,6 +40,8 @@ const SECTIONS = [
   { key: 'ownership', label: 'Ownership' },
 ] as const
 
+const toPersonOption = (person: DeliveryTeamMember): ComboboxOption => ({ value: person.id, label: person.name, searchText: person.email, person })
+
 /** Everyone who reports (directly or indirectly) to `id` — can't be picked as
  *  that person's manager without making the chain circular. */
 function reportsUnder(id: string, members: DeliveryTeamMember[]): Set<string> {
@@ -51,27 +59,16 @@ function reportsUnder(id: string, members: DeliveryTeamMember[]): Set<string> {
   return found
 }
 
+/** A delivery team's roster. Members mirrored from Org Structure (most of them)
+ *  are read-only here — their reports-to, designation and membership come from
+ *  the org, edited in Teams → Employees. Anyone added by hand before the org
+ *  existed (no org link) keeps the old inline controls. */
 function TeamRoster({ team }: { team: DeliveryTeamKey }) {
   const { data: members = [], isLoading } = useDeliveryTeamMembers(team)
-  const { create, update, setStatus, remove } = useDeliveryTeamMemberMutations()
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [managerId, setManagerId] = useState('')
+  const { update, setStatus, remove } = useDeliveryTeamMemberMutations()
   const [error, setError] = useState<string | null>(null)
   const activeMembers = members.filter((member) => member.status === 'active')
-
-  async function addMember() {
-    if (!name.trim() || create.isPending) return
-    setError(null)
-    try {
-      await create.mutateAsync({ team, name: name.trim(), email: email.trim(), managerId: managerId || null })
-      setName('')
-      setEmail('')
-      setManagerId('')
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not add this person.')
-    }
-  }
+  const nameOf = new Map(members.map((member) => [member.id, member]))
 
   async function changeManager(id: string, nextManagerId: string) {
     setError(null)
@@ -84,16 +81,10 @@ function TeamRoster({ team }: { team: DeliveryTeamKey }) {
 
   return (
     <section aria-label={`${team} roster`} className="flex min-h-0 flex-1 flex-col gap-3 p-3">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
-        <Field label="Full name" required><Input value={name} onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void addMember() }} placeholder="Team member name" /></Field>
-        <Field label="Email"><Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void addMember() }} placeholder="name@example.com" /></Field>
-        <Field label="Reports to">
-          <Select value={managerId} onChange={(event) => setManagerId(event.target.value)}>
-            <option value="">No manager (top of team)</option>
-            {activeMembers.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
-          </Select>
-        </Field>
-        <Button variant="primary" disabled={!name.trim() || create.isPending} onClick={() => void addMember()}><Icon name="Plus" size={14} /> Add person</Button>
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-goms-sky/40 bg-goms-sky/[0.08] px-3 py-2 text-[12px] text-goms-navy">
+        <Icon name="Network" size={14} />
+        <span>This roster follows the company Org Structure. Add people, set levels and reports-to in Employees.</span>
+        <Link to="/teams/employees" className="ml-auto font-semibold underline underline-offset-2">Open Employees</Link>
       </div>
       {error && <p role="alert" className="text-[12px] text-crimson">{error}</p>}
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -106,24 +97,31 @@ function TeamRoster({ team }: { team: DeliveryTeamKey }) {
               const managerOptions = activeMembers.filter((person) => !blocked.has(person.id) || person.id === member.managerId)
               return (
               <li key={member.id} className="flex min-h-12 flex-wrap items-center gap-3 px-3 py-2">
-                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-panel text-[11px] font-semibold text-ink-700">{member.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join('').toUpperCase()}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-ink-900">{member.name}</span>
-                  {member.email && <span className="block truncate text-[12px] text-muted">{member.email}</span>}
-                </span>
-                <Select
-                  aria-label={`${member.name} reports to`}
-                  value={member.managerId ?? ''}
-                  disabled={update.isPending}
-                  onChange={(event) => void changeManager(member.id, event.target.value)}
-                  className="w-auto min-w-[11rem] max-w-[14rem]"
-                >
-                  <option value="">No manager</option>
-                  {managerOptions.map((person) => <option key={person.id} value={person.id}>Reports to {person.name}</option>)}
-                </Select>
+                <PersonName person={member} size="sm" subtitle={[member.designation, member.email].filter(Boolean).join(' · ') || undefined} className="flex-1" nameClassName="text-sm font-medium text-ink-900" />
+                {member.orgPersonId ? (
+                  <span className="flex w-56 items-center gap-1.5 text-[12px] text-muted" title="Set in Teams → Employees">
+                    {member.managerId && nameOf.get(member.managerId)
+                      ? <>Reports to <PersonName person={nameOf.get(member.managerId)!} size="2xs" className="min-w-0" nameClassName="text-ink-700" /></>
+                      : 'Heads this team'}
+                  </span>
+                ) : (
+                  <Combobox
+                    aria-label={`${member.name} reports to`}
+                    value={member.managerId ?? ''}
+                    disabled={update.isPending}
+                    onChange={(next) => void changeManager(member.id, next)}
+                    options={managerOptions.map(toPersonOption)}
+                    placeholder="No manager"
+                    className="w-56"
+                  />
+                )}
                 <Badge tone={member.status === 'active' ? 'emerald' : 'gray'}>{member.status === 'active' ? 'Active' : 'Inactive'}</Badge>
-                <Button variant="secondary" size="sm" disabled={setStatus.isPending} onClick={() => setStatus.mutate({ id: member.id, status: member.status === 'active' ? 'inactive' : 'active' })}>{member.status === 'active' ? 'Deactivate' : 'Activate'}</Button>
-                <Button variant="ghost" size="icon" aria-label={`Delete ${member.name}`} title="Delete and clear opportunity assignments" onClick={() => remove.mutate(member.id)}><Icon name="Trash2" size={14} /></Button>
+                {!member.orgPersonId && (
+                  <>
+                    <Button variant="secondary" size="sm" disabled={setStatus.isPending} onClick={() => setStatus.mutate({ id: member.id, status: member.status === 'active' ? 'inactive' : 'active' })}>{member.status === 'active' ? 'Deactivate' : 'Activate'}</Button>
+                    <Button variant="ghost" size="icon" aria-label={`Delete ${member.name}`} title="Delete and clear opportunity assignments" onClick={() => remove.mutate(member.id)}><Icon name="Trash2" size={14} /></Button>
+                  </>
+                )}
               </li>
               )
             })}
@@ -173,7 +171,7 @@ function TeamOwnership({ team, assignmentField }: { team: DeliveryTeamKey; assig
                     <span className="block truncate text-sm font-medium text-ink-900">{opportunity.opportunityName || 'Untitled opportunity'}</span>
                     <span className="block truncate text-[12px] text-muted">{[opportunity.vertical, opportunity.gemTenderId].filter(Boolean).join(' · ') || 'No vertical or tender ID'}</span>
                   </span>
-                  <Badge tone="neutral">{member.name}</Badge>
+                  <PersonName person={member} className="max-w-[12rem] shrink-0" nameClassName="text-[12px] font-medium text-ink-700" />
                   <Badge tone={closed ? 'gray' : 'emerald'}>{closed ? 'Closed' : 'Active'}</Badge>
                 </li>
               )
@@ -233,8 +231,9 @@ export function TeamsWorkspace() {
         <Tabs tabs={TABS} value={tab.value} onChange={(value) => navigate(`/teams/${value}`)} />
       </div>
       <div className="min-h-0 flex-1">
-        {tab.value === 'sales'
-          ? <SalesWorkspace basePath="/teams/sales" />
+        {tab.value === 'org' ? <OrgStructureChart />
+          : tab.value === 'employees' ? <OrgEmployees />
+          : tab.value === 'sales' ? <SalesWorkspace basePath="/teams/sales" />
           : <DeliveryTeam key={tab.value} team={tab.value} label={tab.label} section={section} />}
       </div>
     </div>

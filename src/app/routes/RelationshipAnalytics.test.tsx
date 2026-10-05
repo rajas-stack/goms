@@ -5,6 +5,8 @@ import * as api from '@/lib/api'
 import { RelationshipAnalytics } from './RelationshipAnalytics'
 
 function stub(overrides: Partial<ReturnType<typeof api.useRelationshipAnalytics>['data']> = {}) {
+  // Interaction rows look up each person's photo from the employee directory.
+  vi.spyOn(api, 'useAllEmployees').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useAllEmployees>)
   vi.spyOn(api, 'useRelationshipAnalytics').mockReturnValue({
     data: {
       total: 10, connected: 6, notConnected: 4, vacant: 1, highPriority: 2,

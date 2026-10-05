@@ -10,7 +10,8 @@ import { SalesDetailsSidebar, SalesDetailsSidebarProvider, useSalesDetailsSideba
 import { Icon } from '@/components/ui/Icon'
 import { Input } from '@/components/ui/Field'
 import { Tooltip } from '@/components/ui/Tooltip'
-import { Avatar } from '@/components/ui/Avatar'
+import { Avatar, type AvatarPerson } from '@/components/ui/Avatar'
+import { PersonName } from '@/components/ui/PersonName'
 import { useSalesEditLock } from '@/features/sales/salesEditLock'
 import { SalesEditLockToggle } from '@/features/sales/SalesEditLockToggle'
 import { OwnerBadge } from '@/features/sales/OwnerBadge'
@@ -267,9 +268,12 @@ export function Ownership() {
   const { data: people = [] } = useSalesPersons()
   const asOf = isoToday()
 
-  const entities = useMemo(() => {
+  const entities = useMemo((): { id: string; label: string; person?: AvatarPerson }[] => {
     if (view === 'contact') {
-      return employees.map((e) => ({ id: e.id, label: e.vacant ? `${e.designation || 'Vacant position'} · Vacant` : e.name }))
+      return employees.map((e) => {
+        const label = e.vacant ? `${e.designation || 'Vacant position'} · Vacant` : e.name
+        return { id: e.id, label, person: { name: label, photoUrl: e.photoUrl, vacant: e.vacant } }
+      })
     }
     if (view === 'opportunity') {
       return opportunities.map((o) => ({ id: o.id, label: o.opportunityName || 'Untitled opportunity' }))
@@ -363,7 +367,11 @@ export function Ownership() {
               onClick={() => openEntity(e.id)}
               className="flex min-h-[44px] w-full items-center gap-3 rounded-lg border border-line bg-white px-3 py-1.5 text-left hover:bg-panel"
             >
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{e.label}</span>
+              {e.person ? (
+                <PersonName person={e.person} className="flex-1 text-sm font-medium text-ink-900" />
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{e.label}</span>
+              )}
               <OwnerBadge owner={owners[e.id]} people={people} className="shrink-0" />
             </button>
           ))}

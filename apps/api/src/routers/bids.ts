@@ -8,6 +8,7 @@ import { DEPARTMENT_REQUIRED_MESSAGE, formatBidCode, DEFAULT_BID_STAGE_KEY, isAt
 import { applyStageChange, insertOpportunity } from './opportunities.js'
 import { loadOwnershipContext } from './ownership.js'
 import { writeAuditLog } from '../lib/auditLog.js'
+import { assignOpportunityCode } from '../lib/opportunityCode.js'
 import { departmentChoiceSchema, newBidOpportunitySchema, resolveBidDepartment } from '../lib/opportunityDepartment.js'
 import { filterNodeSchema } from '../lib/filterRuleSchema.js'
 import { CUSTOM_VALUE_COLUMNS, customValueFromRow } from '../lib/customFieldValues.js'
@@ -93,7 +94,7 @@ export const bidsRouter = router({
     .query(async ({ input, ctx }) => {
       const [gridResult, corrigendaPendingResult, { assignments, ctx: ownershipCtx }, customFieldsResult, customValuesResult] = await Promise.all([
         pool.query(`
-             SELECT b.*, o.department_id, o.state_code, o.city, o.opportunity_name, o.gem_tender_id, o.submission_date,
+             SELECT b.*, o.opportunity_code, o.opportunity_type, o.department_id, o.state_code, o.city, o.opportunity_name, o.gem_tender_id, o.submission_date,
                o.geo_sales_person_id, o.bu_sales_person_id, o.pre_sales_person_id, o.legal_person_id, o.bid_team_member_id,
                  o.value_amount, o.value_unit, o.emd_amount, o.emd_unit, o.vertical,
                  dept.name AS department_name,
@@ -189,7 +190,8 @@ export const bidsRouter = router({
         const owner = ownerMap.get(r.id)
         const nextMilestoneDueAt: string | null = r.next_milestone_due_at ? new Date(r.next_milestone_due_at).toISOString() : null
         return {
-          ...toBid(r), departmentId: r.department_id, departmentName: r.department_name ?? null,
+          ...toBid(r), opportunityCode: r.opportunity_code ?? '', opportunityType: r.opportunity_type ?? '',
+          departmentId: r.department_id, departmentName: r.department_name ?? null,
           stateCode: r.state_code, city: r.city ?? null, opportunityName: r.opportunity_name,
           gemTenderId: r.gem_tender_id, submissionDate: r.submission_date, valueAmount: r.value_amount,
           valueUnit: r.value_unit, emdAmount: r.emd_amount, emdUnit: r.emd_unit, vertical: r.vertical,
@@ -237,10 +239,13 @@ export const bidsRouter = router({
         let opportunityId = input.opportunityId
         if (input.newOpportunity) {
           if (!input.department) throw new TRPCError({ code: 'BAD_REQUEST', message: DEPARTMENT_REQUIRED_MESSAGE })
-          opportunityId = (await insertOpportunity(client, { ...input.newOpportunity, departmentId: null })).id
+          opportunityId = (await insertOpportunity(client, { ...input.newOpportunity, departmentId: null }, { deferCode: true })).id
         }
         if (!opportunityId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose an existing opportunity or describe a new one.' })
         await resolveBidDepartment(client, opportunityId, input.department, ctx.user?.email)
+        // Now that the department (and so state + client) is final: a new opportunity gets its
+        // Opportunity ID here; an existing one keeps its locked code (only a NULL code is filled).
+        await assignOpportunityCode(client, opportunityId)
         const opp = (await client.query('SELECT submission_date FROM opportunities WHERE id=$1', [opportunityId])).rows[0]
         if (!opp) throw new TRPCError({ code: 'BAD_REQUEST', message: `No such opportunity: ${opportunityId}` })
 

@@ -28,6 +28,7 @@ export const newBidOpportunitySchema = z.object({
   referenceNo: z.string().trim().max(200).nullable().optional(),
   assignmentName: z.string().trim().max(300).nullable().optional(),
   submissionDate: z.string().trim().max(100).optional(),
+  opportunityType: z.string().trim().max(40).optional(),
 })
 
 const bad = (message: string) => new TRPCError({ code: 'BAD_REQUEST', message })

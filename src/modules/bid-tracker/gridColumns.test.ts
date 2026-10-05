@@ -22,14 +22,14 @@ describe('grid column registry — completeness', () => {
 
   it('names every required leaf column under its own group', () => {
     const byGroup = (id: string) => STANDARD_COLUMNS.filter((c) => c.group === id).map((c) => c.header)
-    expect(byGroup('identity')).toEqual(['Opportunity ID', 'Opportunity / Mission', 'Bid ID', 'Tender ID', 'Tender Link'])
+    expect(byGroup('identity')).toEqual(['Opportunity ID', 'Opportunity / Mission', 'Opportunity Type', 'Bid ID', 'Tender ID', 'Tender Link'])
     expect(byGroup('client')).toEqual(['Department / Client', 'State', 'City', 'Sector'])
     expect(byGroup('ownership')).toEqual(['Geo-sales', 'BU-sales', 'Pre-sales', 'Legal', 'Bid', 'Bid Owner', 'Sales Lead / Solution Lead'])
     expect(byGroup('decision')).toEqual(['Bid Stage', 'Next Action', 'Action Owner', 'Action Due', 'Attention', 'Decision'])
     expect(byGroup('dates')).toEqual(['Next Milestone', 'Days Remaining', 'Submission Deadline'])
     expect(byGroup('documents')).toEqual(['Tender Files', 'Latest Corrigendum'])
     expect(byGroup('system')).toEqual(['Last Updated', 'Updated By', 'Data Confidence', 'Manage'])
-    expect(STANDARD_COLUMNS).toHaveLength(31)
+    expect(STANDARD_COLUMNS).toHaveLength(32)
   })
 
   it('binds City and Action Owner to the row fields the API provides', () => {
@@ -47,8 +47,13 @@ describe('grid column registry — completeness', () => {
     }
   })
 
-  it('only plain opportunity attributes are inline-editable among the standard columns', () => {
-    expect(STANDARD_COLUMNS.filter((c) => c.editable).map((c) => c.id)).toEqual(['opportunityName', 'tenderLink', 'city', 'vertical', 'ownerEmail', 'stageKey', 'decision'])
+  it('lists exactly the inline-editable standard columns', () => {
+    expect(STANDARD_COLUMNS.filter((c) => c.editable).map((c) => c.id)).toEqual([
+      'opportunityName', 'opportunityType', 'tenderLink', 'departmentName', 'city', 'vertical',
+      'geoSalesPersonId', 'buSalesPersonId', 'preSalesPersonId', 'legalPersonId', 'bidTeamMemberId',
+      'ownerEmail', 'solutionLeadEmail', 'stageKey', 'nextActionNote', 'nextActionAssigneeEmail', 'nextActionDueDate',
+      'decision', 'dataConfidence',
+    ])
   })
 
   // The explicit editable matrix: no standard column is left unclassified.
@@ -63,8 +68,8 @@ describe('grid column registry — completeness', () => {
     const readOnly = (id: string) => !STANDARD_COLUMNS.find((c) => c.id === id)!.editable
     for (const id of [
       'opportunityId', 'bidCode', 'gemTenderId', 'submissionDate',
-      'solutionLeadEmail', 'departmentName', 'stateCode', 'nextActionNote', 'nextMilestoneLabel', 'daysRemaining',
-      'documentCount', 'latestCorrigendumStatus', 'updatedAt', 'updatedBy', 'dataConfidence', 'attentionFlag', 'manage',
+      'stateCode', 'nextMilestoneLabel', 'daysRemaining',
+      'documentCount', 'latestCorrigendumStatus', 'updatedAt', 'updatedBy', 'attentionFlag', 'manage',
     ]) expect(readOnly(id), id).toBe(true)
   })
 

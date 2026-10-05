@@ -147,9 +147,11 @@ export function applyFilterRules<T extends Record<string, unknown>>(
     // wrongly surface every bid that happens to have no owner assigned.
     if (target === null) return false
     const isCustom = rule.field.startsWith(CUSTOM_FIELD_PREFIX)
+    // The Opportunity ID column shows the human-readable code (the raw id only
+    // for a row that has none yet), so a filter on it matches what is shown.
     const cell = isCustom
       ? (row.customValues as Record<string, unknown> | undefined)?.[rule.field.slice(CUSTOM_FIELD_PREFIX.length)]
-      : row[rule.field]
+      : rule.field === 'opportunityId' ? (row.opportunityCode || row.opportunityId) : row[rule.field]
     return matchesTypedRule(types[rule.field] ?? 'text', cell, rule, target)
   }
   const matchNode = (row: T, node: FilterNode): boolean => {
@@ -185,6 +187,8 @@ export interface NewBidOpportunity {
   referenceNo?: string | null
   assignmentName?: string | null
   submissionDate?: string
+  /** One of OPPORTUNITY_TYPES (opportunityCode.ts); '' / absent = not set. */
+  opportunityType?: string
 }
 
 export const DEPARTMENT_REQUIRED_MESSAGE =

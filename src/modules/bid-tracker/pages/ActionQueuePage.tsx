@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { BID_STAGES } from '@goms/domain'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
+import { PersonName } from '@/components/ui/PersonName'
 import { useBidActionQueue, useSalesPersons } from '@/lib/api'
 import { ATTENTION_OPTIONS } from '../gridColumns'
 
@@ -17,7 +18,11 @@ export function ActionQueuePage() {
   if (entries.length === 0) {
     return <div className="p-6 text-center text-sm text-muted" data-testid="action-queue-empty">No open actions. Next actions added to a bid appear here.</div>
   }
-  const nameOf = (id: string | null) => (id ? people.find((p) => p.id === id)?.name ?? '—' : 'Unassigned')
+  const ownerCell = (id: string | null) => {
+    if (!id) return 'Unassigned'
+    const person = people.find((p) => p.id === id)
+    return person ? <PersonName person={person} /> : '—'
+  }
   return (
     <div className="h-full overflow-auto">
       <table className="w-full min-w-max border-separate border-spacing-0 text-sm">
@@ -35,7 +40,7 @@ export function ActionQueuePage() {
               <td className="border-b border-line px-3 py-2">{e.bidCode}</td>
               <td className="border-b border-line px-3 py-2">{stageLabel(e.stageKey)}</td>
               <td className="border-b border-line px-3 py-2">{e.note || '—'}</td>
-              <td className="border-b border-line px-3 py-2">{nameOf(e.assigneeId)}</td>
+              <td className="border-b border-line px-3 py-2">{ownerCell(e.assigneeId)}</td>
               <td className="whitespace-nowrap border-b border-line px-3 py-2">{e.dueDate}</td>
               <td className="border-b border-line px-3 py-2">
                 <Badge tone={ATTENTION_TONE[e.attentionFlag]}>{ATTENTION_OPTIONS.find((o) => o.value === e.attentionFlag)?.label}</Badge>

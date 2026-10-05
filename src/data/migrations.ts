@@ -2,6 +2,10 @@ import { uid } from '@/lib/utils'
 import { buildOwnershipFixture } from './ownership-fixture'
 import { buildSalesRoster, mergeMissingSalesRoster } from './sales-roster-seed'
 import { SALES_TEAM } from './sales-team'
+import { mergeTeamRosters } from './pre-sales-team'
+import { mergeOrgSeed, syncAllTeamsFromOrg, type OrgPerson } from './org-structure'
+import type { DeliveryTeamMember, HierNode, Opportunity } from '@/lib/types'
+import { assignMissingOpportunityCodes } from './opportunityCodes'
 import type { GormsData } from './seed'
 import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
 
@@ -55,8 +59,22 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *      ownership or legacy salesPersonEmail.
  *  v17 `deliveryTeamMembers[].managerId` (reports-to, for the team org
  *      charts). Backfilled to null — everyone starts as a root.
+ *  v18 `deliveryTeamMembers[].designation` backfilled to '', then the Pre-sales
+ *      roster (pre-sales-team.ts) topped up by name — same "add what's
+ *      missing, never overwrite" rule as v6's sales roster.
+ *  v19 Dharmesh Dhamecha's Bid Management group moves from the Pre-sales
+ *      roster to the Bid team (Shamik Joshi heading both); re-runs the same
+ *      idempotent roster merge, which relocates the seeded entries.
+ *  v20 Opportunity ID: `opportunities[].opportunityType` backfilled to '', and
+ *      every opportunity without an `opportunityCode` gets one (createdAt,
+ *      then id, order) from the new per-fiscal-year `opportunityCodeSequences`
+ *      counters — the same builder a newly created opportunity goes through
+ *      (opportunityCodes.ts). An existing code is never changed.
+ *  v21 Company Org Structure (`orgPeople`, org-structure.ts) seeded by name,
+ *      then the Pre-sales / Bid / Legal rosters re-derived from it (existing
+ *      member ids kept, so opportunity assignments still resolve).
  */
-export const SCHEMA_VERSION = 17
+export const SCHEMA_VERSION = 21
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -345,6 +363,35 @@ function toV17(data: SnapshotShape): SnapshotShape {
   return { ...data, deliveryTeamMembers }
 }
 
+/** v17 → v18. See `SCHEMA_VERSION` doc comment. */
+function toV18(data: SnapshotShape): SnapshotShape {
+  const backfilled = asArray(data.deliveryTeamMembers).map((member) => ({ ...member, designation: member.designation ?? '' }))
+  return { ...data, deliveryTeamMembers: mergeTeamRosters(backfilled as unknown as DeliveryTeamMember[]) }
+}
+
+/** v20 → v21. See `SCHEMA_VERSION` doc comment. */
+function toV21(data: SnapshotShape): SnapshotShape {
+  const orgPeople = mergeOrgSeed(asArray(data.orgPeople) as unknown as OrgPerson[])
+  const members = asArray(data.deliveryTeamMembers) as unknown as DeliveryTeamMember[]
+  return { ...data, orgPeople, deliveryTeamMembers: syncAllTeamsFromOrg(orgPeople, members) }
+}
+
+/** v18 → v19. See `SCHEMA_VERSION` doc comment. */
+function toV19(data: SnapshotShape): SnapshotShape {
+  return { ...data, deliveryTeamMembers: mergeTeamRosters(asArray(data.deliveryTeamMembers) as unknown as DeliveryTeamMember[]) }
+}
+
+/** v19 → v20. See `SCHEMA_VERSION` doc comment. Idempotent: only code-less rows are touched. */
+function toV20(data: SnapshotShape): SnapshotShape {
+  const withType = asArray(data.opportunities).map((o) => ({ ...o, opportunityType: typeof o.opportunityType === 'string' ? o.opportunityType : '' }))
+  const sequences = (data.opportunityCodeSequences && typeof data.opportunityCodeSequences === 'object'
+    ? data.opportunityCodeSequences : {}) as Record<string, number>
+  const { opportunities, sequences: next } = assignMissingOpportunityCodes(
+    withType as unknown as Opportunity[], asArray(data.nodes) as unknown as HierNode[], sequences,
+  )
+  return { ...data, opportunities, opportunityCodeSequences: next }
+}
+
 /** v13 → v14. See `SCHEMA_VERSION` doc comment. Idempotent for the same
  *  reason as v13. */
 function toV14(data: SnapshotShape): SnapshotShape {
@@ -375,6 +422,10 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   15: toV15,
   16: toV16,
   17: toV17,
+  18: toV18,
+  19: toV19,
+  20: toV20,
+  21: toV21,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

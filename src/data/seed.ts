@@ -8,6 +8,8 @@ import subdistrictsRaw from './subdistricts.json'
 import { buildGovHierarchy, CENTRAL_STATE_CODE } from './gov-hierarchy'
 import { buildOwnershipFixture } from './ownership-fixture'
 import { buildSalesRoster } from './sales-roster-seed'
+import { mergeTeamRosters } from './pre-sales-team'
+import { mergeOrgSeed, syncAllTeamsFromOrg, type OrgPerson } from './org-structure'
 import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
 import type { CommercialCalculatorData } from '@/modules/commercial-calculator/types'
 
@@ -71,6 +73,9 @@ export interface GormsData {
   transfers: Transfer[]
   opportunities: Opportunity[]
   opportunityStageChanges: OpportunityStageChange[]
+  /** Next Opportunity ID sequence number per fiscal year, e.g. `{ FY27: 15 }`
+   *  (@goms/domain allocateOpportunityCode). Added in v20; starts empty. */
+  opportunityCodeSequences: Record<string, number>
   /** Added by Task 12. Declared here so `GormsData` matches the migrated
    *  snapshot shape; Task 12 adds the `FollowUp` type and the seed value. */
   followUps: FollowUp[]
@@ -84,8 +89,11 @@ export interface GormsData {
   commercialCalculator: CommercialCalculatorData
   /** No seed fixture defined yet — starts empty. */
   customers: Customer[]
-  /** Non-Sales operational rosters; Sales continues to use salesPersons. */
+  /** Non-Sales operational rosters; Sales continues to use salesPersons.
+   *  Members linked to an org person are derived from `orgPeople`. */
   deliveryTeamMembers: DeliveryTeamMember[]
+  /** Company Org Structure — levels and reports-to (src/data/org-structure.ts). */
+  orgPeople: OrgPerson[]
 
   /** Added in v13 (Bid Tracker). All start empty — no demo/sample bid data
    *  is ever seeded (design spec, explicit non-goal). */
@@ -314,11 +322,11 @@ export function buildSeed(): GormsData {
 
   return {
     nodes, employees, externalIds, timeline, transfers,
-    opportunities, opportunityStageChanges, followUps, salesPersons, salesPostings,
+    opportunities, opportunityStageChanges, opportunityCodeSequences: {}, followUps, salesPersons, salesPostings,
     ownershipAssignments, mergeAudit, commercialCalculator,
     customers: [],
-    deliveryTeamMembers: [],
-    deliveryTeamMembers: [],
+    orgPeople: mergeOrgSeed([]),
+    deliveryTeamMembers: syncAllTeamsFromOrg(mergeOrgSeed([]), mergeTeamRosters([])),
     bids: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
     protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [],
     bidCustomFields: [], bidCustomFieldValues: [],

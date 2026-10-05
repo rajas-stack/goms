@@ -32,9 +32,9 @@ const openPopover = async (name: string) => userEvent.click(screen.getByRole('bu
 
 const STANDARD_GROUPS = ['Identity', 'Client', 'Ownership', 'Decision', 'Dates', 'Documents', 'System']
 const REQUIRED_LEAVES: Record<string, string[]> = {
-  Identity: ['Opportunity ID', 'Opportunity / Mission', 'Bid ID', 'Tender ID', 'Tender Link'],
+  Identity: ['Opportunity ID', 'Opportunity / Mission', 'Opportunity Type', 'Bid ID', 'Tender ID', 'Tender Link'],
   Client: ['Department / Client', 'State', 'City', 'Sector'],
-  Ownership: ['Bid Owner', 'Sales Lead / Solution Lead'],
+  Ownership: ['Geo-sales', 'BU-sales', 'Pre-sales', 'Legal', 'Bid', 'Bid Owner', 'Sales Lead / Solution Lead'],
   Decision: ['Bid Stage', 'Next Action', 'Action Owner', 'Action Due', 'Attention', 'Decision'],
   Dates: ['Next Milestone', 'Days Remaining', 'Submission Deadline'],
   Documents: ['Tender Files', 'Latest Corrigendum'],
@@ -101,6 +101,17 @@ describe('MasterGrid', () => {
   })
 
   describe('row data', () => {
+    it('shows the human-readable Opportunity ID as the details link, and searches by it', async () => {
+      await makeBid('Alpha')
+      await makeBid('Beta', { submissionDate: '2026-08-15' })
+      renderGrid()
+      expect(await screen.findByRole('button', { name: 'Open FY99-Q4-NA-NA-NA-NA-NA-NA-1' })).toHaveTextContent('FY99-Q4-NA-NA-NA-NA-NA-NA-1')
+      expect(screen.getByRole('button', { name: 'Open FY27-Q2-NA-NA-NA-NA-NA-NA-1' })).toBeInTheDocument()
+      await userEvent.type(screen.getByRole('searchbox', { name: 'Search bids' }), 'FY27-Q2')
+      await waitFor(() => expect(screen.queryByText('Alpha')).not.toBeInTheDocument())
+      expect(screen.getByText('Beta')).toBeInTheDocument()
+    })
+
     it('shows city, owner-facing fields and the Action Owner from the next open action', async () => {
       const bid = await makeBid('Alpha', { city: 'New Delhi' })
       const person = await repository.createSalesPerson({ name: 'Action Person', officialEmail: 'action@amnex.com', designation: 'RM', tierKey: 'rm' })

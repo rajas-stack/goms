@@ -235,6 +235,24 @@ describe('CreateBidDialog', () => {
     expect(indiaAi.name).toBe('India AI')
   })
 
+  it('new opportunity: previews the Opportunity ID live, saves the type, and assigns the number on save', async () => {
+    await meityIndiaAi()
+    renderDialog()
+    await startNew()
+    await userEvent.type(screen.getByRole('textbox', { name: 'Opportunity name' }), 'Coded')
+    const preview = screen.getByTestId('opportunity-code-preview')
+    await userEvent.type(screen.getByRole('textbox', { name: 'Submission date and time' }), '24/09/2026 15:00')
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Opportunity type' }), 'RFP')
+    expect(preview).toHaveTextContent('FY27-Q2-NA-NA-NA-NA-RFP-NA-#')
+    await choose('Existing department', 'MeitY → India AI')
+    await waitFor(() => expect(preview).toHaveTextContent('FY27-Q2-NA-CENTRAL-CEN-IA-RFP-NA-#'))
+    await userEvent.click(createButtonNew())
+    await screen.findByText('Bid detail page')
+    const created = (await repository.listOpportunities()).find((o) => o.opportunityName === 'Coded')!
+    expect(created.opportunityType).toBe('RFP')
+    expect(created.opportunityCode).toBe('FY27-Q2-NA-CENTRAL-CEN-IA-RFP-NA-1')
+  })
+
   it('when every opportunity already has a bid, the empty state still leads somewhere: create a new opportunity', async () => {
     const { indiaAi } = await meityIndiaAi()
     const only = await opp('Only one', indiaAi.id)

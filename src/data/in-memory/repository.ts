@@ -19,11 +19,14 @@ import {
   SYSTEM_BID_VIEWS, SYSTEM_BID_VIEW_KEYS, type SystemBidViewFilterRule,
   coerceCustomValue, normalizeOptions, slugifyFieldKey,
   DEPARTMENT_REQUIRED_MESSAGE, type DepartmentChoice, type NewBidOpportunity,
+  allocateOpportunityCode, opportunityCodeParts,
 } from '@goms/domain'
 export { MERGEABLE_FIELDS, type MergeableField }
 import { coversDate } from '@/lib/intervals'
 import { tierRank } from '../sales-tiers'
 import { buildSeed, type GormsData } from '../seed'
+import { managerProblem, reportsBrokenByLevel, syncAllTeamsFromOrg, type OrgPerson } from '../org-structure'
+import { opportunityCodeInputFor } from '../opportunityCodes'
 import { clearSnapshot, loadSnapshot, scheduleSave } from '../persist'
 import {
   addBoqLineItemLogic, createBoqLogic, createBomItemLogic, createMasterLogic, createSkuLogic,
@@ -184,6 +187,8 @@ export interface CreateOpportunityInput {
   publishDate?: string
   submissionDate?: string
   vertical?: string
+  /** One of OPPORTUNITY_TYPES; defaults to '' (not set). */
+  opportunityType?: string
   component?: string[]
   quantity?: string
   currency?: string
@@ -206,10 +211,21 @@ export interface CreateDeliveryTeamMemberInput {
   team: DeliveryTeamKey
   name: string
   email?: string
+  designation?: string
   managerId?: string | null
 }
 
-export type UpdateDeliveryTeamMemberPatch = Partial<Pick<DeliveryTeamMember, 'name' | 'email' | 'managerId'>>
+export type UpdateDeliveryTeamMemberPatch = Partial<Pick<DeliveryTeamMember, 'name' | 'email' | 'designation' | 'managerId'>>
+
+export interface CreateOrgPersonInput {
+  name: string
+  level: number
+  designation?: string
+  departments?: string[]
+  managerId?: string | null
+  email?: string
+}
+export type UpdateOrgPersonPatch = Partial<Pick<OrgPerson, 'name' | 'designation' | 'level' | 'departments' | 'managerId' | 'email' | 'status'>>
 
 export interface CreateSalesPersonInput {
   name: string
@@ -348,6 +364,10 @@ export interface Repository {
   updateDeliveryTeamMember(id: string, patch: UpdateDeliveryTeamMemberPatch): Promise<DeliveryTeamMember>
   setDeliveryTeamMemberStatus(id: string, status: 'active' | 'inactive'): Promise<void>
   deleteDeliveryTeamMember(id: string): Promise<void>
+  listOrgPeople(): Promise<OrgPerson[]>
+  createOrgPerson(input: CreateOrgPersonInput): Promise<OrgPerson>
+  updateOrgPerson(id: string, patch: UpdateOrgPersonPatch): Promise<OrgPerson>
+  deleteOrgPerson(id: string): Promise<void>
 
   /** The AMNEX sales roster, name-sorted. Includes every status — the UI
    *  filters, so a resigned person stays reachable from their history. */
@@ -618,10 +638,12 @@ class InMemoryRepository implements Repository {
       ...data,
       opportunities: data.opportunities ?? [],
       opportunityStageChanges: data.opportunityStageChanges ?? [],
+      opportunityCodeSequences: data.opportunityCodeSequences ?? {},
       followUps: data.followUps ?? [],
       salesPersons: data.salesPersons ?? [],
       salesPostings: data.salesPostings ?? [],
       deliveryTeamMembers: data.deliveryTeamMembers ?? [],
+      orgPeople: data.orgPeople ?? [],
       ownershipAssignments: data.ownershipAssignments ?? [],
       bids: data.bids ?? [],
       bidMilestones: data.bidMilestones ?? [],
@@ -1270,6 +1292,7 @@ class InMemoryRepository implements Repository {
     const stageKey = input.stageKey ?? DEFAULT_STAGE_KEY
     const opp: Opportunity = {
       id: uid('opp'),
+      opportunityCode: '', // assigned below, once the row is complete
       departmentId: input.departmentId,
       stateCode: dept?.stateCode ?? null,
       stageKey,
@@ -1282,6 +1305,7 @@ class InMemoryRepository implements Repository {
       publishDate: input.publishDate ?? '',
       submissionDate: input.submissionDate ?? '',
       vertical: input.vertical ?? '',
+      opportunityType: input.opportunityType ?? '',
       component: input.component ?? [],
       quantity: input.quantity ?? '',
       currency: input.currency ?? 'INR',
@@ -1300,6 +1324,7 @@ class InMemoryRepository implements Repository {
       createdBy: null,
     }
     this.data.opportunities.push(opp)
+    this.assignOpportunityCode(opp)
     // The opening row of the stage log. Migrated opportunities deliberately
     // get none (their real history is unknown — see migrations.ts), so a
     // missing opening row means "pre-existing", not "lost".
@@ -1310,18 +1335,36 @@ class InMemoryRepository implements Repository {
     return opp
   }
 
+  /** Gives a just-created opportunity its Opportunity ID from the per-FY
+   *  counter (skipping any number an existing code of that FY already uses).
+   *  No-op once it has one — the code is locked from creation on. JS runs
+   *  this synchronously, so two creates can never draw the same number. */
+  private assignOpportunityCode(opp: Opportunity) {
+    if (opp.opportunityCode) return
+    const allocated = allocateOpportunityCode(
+      opportunityCodeParts(opportunityCodeInputFor(opp, this.data.nodes)),
+      this.data.opportunityCodeSequences ?? {},
+      this.data.opportunities.map((o) => o.opportunityCode),
+    )
+    opp.opportunityCode = allocated.code
+    this.data.opportunityCodeSequences = allocated.sequences
+  }
+
   async updateOpportunity(id: string, patch: Partial<Opportunity>) {
     const opp = this.data.opportunities.find((o) => o.id === id)!
+    if ('opportunityCode' in patch && patch.opportunityCode !== opp.opportunityCode) {
+      throw new Error('The Opportunity ID is generated when the opportunity is created and cannot be changed.')
+    }
     this.assertOpportunityTeamAssignments(patch)
     const bidOfOpp = this.data.bids.find((b) => b.opportunityId === id)
     if (bidOfOpp) this.assertNotProtected(bidOfOpp.id, (['valueAmount', 'emdAmount', 'gemTenderId'] as const).filter((f) => f in patch))
     const previousStage = opp.stageKey
-    const before = { opportunityName: opp.opportunityName, city: opp.city, vertical: opp.vertical }
+    const before = { opportunityName: opp.opportunityName, city: opp.city, vertical: opp.vertical, opportunityType: opp.opportunityType }
     Object.assign(opp, patch)
     // Inline grid edits are part of the bid's history (mirrors opportunities.update).
     if (bidOfOpp) {
       let changed = false
-      for (const f of ['opportunityName', 'city', 'vertical'] as const) {
+      for (const f of ['opportunityName', 'city', 'vertical', 'opportunityType'] as const) {
         if (!(f in patch)) continue
         const was = String(before[f] ?? ''); const now = String(opp[f] ?? '')
         if (was === now) continue
@@ -1378,7 +1421,9 @@ class InMemoryRepository implements Repository {
     }
     const managerId = input.managerId || null
     this.assertValidDeliveryManager(input.team, null, managerId)
-    const member: DeliveryTeamMember = { id: uid('team'), team: input.team, name, email, status: 'active', managerId, createdAt: isoToday() }
+    const member: DeliveryTeamMember = {
+      id: uid('team'), team: input.team, name, email, designation: input.designation?.trim() ?? '', status: 'active', managerId, createdAt: isoToday(),
+    }
     this.data.deliveryTeamMembers.push(member)
     return member
   }
@@ -1393,6 +1438,7 @@ class InMemoryRepository implements Repository {
     }
     if (patch.name !== undefined) member.name = patch.name.trim()
     if (patch.email !== undefined) member.email = patch.email.trim()
+    if (patch.designation !== undefined) member.designation = patch.designation.trim()
     return member
   }
 
@@ -1420,6 +1466,69 @@ class InMemoryRepository implements Repository {
       if (opportunity.legalPersonId === id) opportunity.legalPersonId = null
       if (opportunity.bidTeamMemberId === id) opportunity.bidTeamMemberId = null
     }
+  }
+
+  // --- Org Structure: the source of truth the delivery-team rosters derive from ---
+
+  async listOrgPeople(): Promise<OrgPerson[]> {
+    return [...this.data.orgPeople].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
+  }
+
+  async createOrgPerson(input: CreateOrgPersonInput): Promise<OrgPerson> {
+    const name = input.name.trim()
+    if (!name) throw new Error('Enter the employee name.')
+    if (this.data.orgPeople.some((p) => p.name.trim().toLowerCase() === name.toLowerCase())) {
+      throw new Error('Someone with this name is already in the org.')
+    }
+    const person: OrgPerson = {
+      id: uid('org'), name, designation: input.designation?.trim() ?? '', level: input.level,
+      departments: [...new Set(input.departments ?? [])], managerId: input.managerId || null,
+      email: input.email?.trim() ?? '', status: 'active', createdAt: isoToday(),
+    }
+    const problem = managerProblem(person, person.managerId, [...this.data.orgPeople, person])
+    if (problem) throw new Error(problem)
+    this.data.orgPeople = [...this.data.orgPeople, person]
+    this.resyncTeamsFromOrg()
+    return person
+  }
+
+  async updateOrgPerson(id: string, patch: UpdateOrgPersonPatch): Promise<OrgPerson> {
+    const current = this.data.orgPeople.find((p) => p.id === id)
+    if (!current) throw new Error('This person is no longer in the org.')
+    const next: OrgPerson = {
+      ...current,
+      ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+      ...(patch.designation !== undefined ? { designation: patch.designation.trim() } : {}),
+      ...(patch.email !== undefined ? { email: patch.email.trim() } : {}),
+      ...(patch.level !== undefined ? { level: patch.level } : {}),
+      ...(patch.departments !== undefined ? { departments: [...new Set(patch.departments)] } : {}),
+      ...(patch.managerId !== undefined ? { managerId: patch.managerId || null } : {}),
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+    }
+    if (!next.name) throw new Error('Enter the employee name.')
+    const people = this.data.orgPeople.map((p) => (p.id === id ? next : p))
+    const problem = managerProblem(next, next.managerId, people)
+    if (problem) throw new Error(problem)
+    const broken = reportsBrokenByLevel(id, next.level, people)
+    if (broken.length) throw new Error(`${broken.map((p) => p.name).join(', ')} would report to someone at their own level or below — move them first.`)
+    this.data.orgPeople = people
+    this.resyncTeamsFromOrg()
+    return next
+  }
+
+  /** Removes a person; their direct reports move up to that person's manager. */
+  async deleteOrgPerson(id: string): Promise<void> {
+    const person = this.data.orgPeople.find((p) => p.id === id)
+    if (!person) return
+    this.data.orgPeople = this.data.orgPeople
+      .filter((p) => p.id !== id)
+      .map((p) => (p.managerId === id ? { ...p, managerId: person.managerId } : p))
+    this.resyncTeamsFromOrg()
+  }
+
+  /** Pre-sales / Bid / Legal follow the org; their member ids are kept so assignments resolve. */
+  private resyncTeamsFromOrg() {
+    this.data.deliveryTeamMembers = syncAllTeamsFromOrg(this.data.orgPeople, this.data.deliveryTeamMembers)
   }
 
   async deleteOpportunity(id: string) {
@@ -1499,6 +1608,8 @@ class InMemoryRepository implements Repository {
         .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
       return {
         ...bid,
+        opportunityCode: opp?.opportunityCode ?? '',
+        opportunityType: opp?.opportunityType ?? '',
         departmentId: opp?.departmentId ?? '',
         departmentName: this.data.nodes.find((n) => n.id === opp?.departmentId)?.name ?? null,
         stateCode: opp?.stateCode ?? null,
@@ -1615,6 +1726,7 @@ class InMemoryRepository implements Repository {
       departmentId: dept.id, opportunityName: name, gemTenderId: opportunity.gemTenderId?.trim(),
       city: opportunity.city?.trim() || null, submissionDate: opportunity.submissionDate?.trim(),
       referenceNo: opportunity.referenceNo?.trim() || null, assignmentName: opportunity.assignmentName?.trim() || null,
+      opportunityType: opportunity.opportunityType?.trim() ?? '',
     })
     return this.createBid(opp.id)
   }

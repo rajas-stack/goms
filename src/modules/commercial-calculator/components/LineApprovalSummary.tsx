@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
-import { Field, Input, Select } from '@/components/ui/Field'
+import { Combobox } from '@/components/ui/Combobox'
+import { Field, Input } from '@/components/ui/Field'
 import { resolveApprovalBand } from '../repository-logic'
 import { formatPercent } from '../format'
 import type { ApprovalMatrixRule, CommercialBoqLineItem } from '../types'
@@ -55,10 +56,12 @@ export function LineApprovalSummary({ line, approvalMatrix, employees, onDecide 
       {showDecisionControls && (
         <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Field label="Approver" required>
-            <Select value={approverId} onChange={(e) => setApproverId(e.target.value)}>
-              <option value="">Select…</option>
-              {employees!.map((emp) => <option key={emp.id} value={emp.id}>{emp.name} — {emp.designation}</option>)}
-            </Select>
+            <Combobox
+              value={approverId}
+              onChange={setApproverId}
+              options={employees!.map((emp) => ({ value: emp.id, label: `${emp.name} — ${emp.designation}`, person: emp }))}
+              aria-label="Approver"
+            />
           </Field>
           <Field label="Remarks">
             <Input value={remarks} onChange={(e) => setRemarks(e.target.value)} />

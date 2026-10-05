@@ -6,6 +6,7 @@ import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
+import { PersonName } from '@/components/ui/PersonName'
 
 /** Persistent sign-in indicator, visible on every screen (TopBar) — not just
  *  reactively when a mutation gets rejected (AuthPromptDialog). Signing in
@@ -41,9 +42,11 @@ export function AuthStatus() {
   return (
     <>
       <Tooltip label={user.email ?? 'Signed in'} side="bottom" className="shrink-0">
-        <div className="flex h-11 items-center gap-1 rounded-full border border-line bg-panel py-1 pl-2.5 pr-1 text-[11px] font-medium text-ink-700 lg:h-8">
-          <Icon name="User" size={12} />
-          <span className="max-w-[9rem] truncate">{user.email}</span>
+        <div className="flex h-11 items-center gap-1 rounded-full border border-line bg-panel py-1 pl-1 pr-1 text-[12px] font-medium text-ink-700 lg:h-8">
+          <PersonName
+            person={{ name: user.displayName || user.email || 'Signed in', photoUrl: user.photoURL }}
+            className="max-w-[11rem]"
+          />
           <button
             onClick={() => setConfirmSignOut(true)}
             aria-label="Sign out"

@@ -125,6 +125,12 @@ export class RemoteRepository implements Partial<Repository> {
   setDeliveryTeamMemberStatus = (id: string, status: DeliveryTeamMember['status']): Promise<void> =>
     this.client.deliveryTeams.setStatus.mutate({ id, status })
   deleteDeliveryTeamMember = (id: string): Promise<void> => this.client.deliveryTeams.delete.mutate({ id })
+  // Org Structure is local-data only so far; connected mode has no API for it yet.
+  private orgNotConnected = (): never => { throw new Error('Org Structure is not available in connected mode yet.') }
+  listOrgPeople = async (): Promise<never[]> => []
+  createOrgPerson = async (): Promise<never> => this.orgNotConnected()
+  updateOrgPerson = async (): Promise<never> => this.orgNotConnected()
+  deleteOrgPerson = async (): Promise<never> => this.orgNotConnected()
   transferSalesPerson = (input: TransferSalesPersonInput): Promise<SalesPosting> => this.client.sales.transfer.mutate(input)
   updatePostingDates = (postingId: string, edit: { startDate?: string; lastDayHeld?: string | null }): Promise<SalesPosting> =>
     this.client.sales.updatePostingDates.mutate({ postingId, ...edit })

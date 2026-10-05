@@ -1,15 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { DepartmentChoice } from '@goms/domain'
+import { OPPORTUNITY_TYPES, type DepartmentChoice } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Combobox } from '@/components/ui/Combobox'
 import { Dialog } from '@/components/ui/Dialog'
-import { Input } from '@/components/ui/Field'
+import { Input, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { useBidMutations, useBidsForGrid, useDepartments, useOpportunities } from '@/lib/api'
 import type { HierNode, Opportunity } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { NodeFormDialog } from '@/features/nodes/NodeFormDialog'
+import { OpportunityCodePreview } from '@/features/opportunities/OpportunityCodePreview'
 import { formatCapturedDate, parseFriendlyDate } from '../dateInput'
 
 const MAX_SHOWN = 50
@@ -93,6 +94,7 @@ function CreateBidFlow({ onClose, presetId, newDepartmentId, onRequestCreateDepa
   const [newTender, setNewTender] = useState('')
   const [newReference, setNewReference] = useState('')
   const [newAssignment, setNewAssignment] = useState('')
+  const [newType, setNewType] = useState('')
   const [newDue, setNewDue] = useState('')
   const [newDueText, setNewDueText] = useState('')
   const parsedDuePreview = useMemo(() => formatCapturedDate(newDueText), [newDueText])
@@ -159,6 +161,7 @@ function CreateBidFlow({ onClose, presetId, newDepartmentId, onRequestCreateDepa
           opportunity: {
             opportunityName: newName.trim(), gemTenderId: newTender.trim() || undefined, submissionDate: newDue.trim() || undefined,
             referenceNo: newReference.trim() || null, assignmentName: newAssignment.trim() || null,
+            opportunityType: newType || undefined,
           },
           department: choice!,
         })
@@ -220,12 +223,21 @@ function CreateBidFlow({ onClose, presetId, newDepartmentId, onRequestCreateDepa
             <p id="new-opp-due-hint" className="-mt-1 text-[11px] text-muted">Paste any common format. It will be captured instantly and can be edited again before you create the opportunity and bid.</p>
             <Input aria-label="Opportunity name" placeholder="Opportunity name, e.g. AI Solution" value={newName} maxLength={300} autoFocus onChange={(e) => setNewName(e.target.value)} />
             <Input aria-label="Name of assignment" placeholder="Name of assignment, as written in the tender (optional)" value={newAssignment} maxLength={300} onChange={(e) => setNewAssignment(e.target.value)} />
+            <label className="flex flex-col gap-1 sm:w-1/3">
+              <span className="text-[12px] font-medium text-muted">Opportunity type</span>
+              <Select aria-label="Opportunity type" value={newType} onChange={(e) => setNewType(e.target.value)}>
+                <option value="">Not set</option>
+                {OPPORTUNITY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </Select>
+            </label>
+            <OpportunityCodePreview departmentId={existingId || null} submissionDate={newDue} opportunityType={newType} />
           </div>
         ) : selected && (
           <div>
             <div className="text-[12px] text-muted">Opportunity</div>
             <div className="flex items-center gap-2">
               <span className="text-[14px] font-semibold text-goms-navy">{selected.opportunityName}</span>
+              {selected.opportunityCode && <code className="font-mono text-[12px] text-muted">{selected.opportunityCode}</code>}
               {!presetId && <button type="button" className="text-[12px] text-goms-navy underline" onClick={() => { setSelectedId(null); setError(null) }}>Change</button>}
             </div>
           </div>

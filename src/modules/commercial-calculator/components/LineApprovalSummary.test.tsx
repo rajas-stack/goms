@@ -59,7 +59,8 @@ describe('LineApprovalSummary', () => {
         onDecide={onDecide}
       />,
     )
-    await user.selectOptions(screen.getByLabelText(/approver/i), 'e1')
+    await user.click(screen.getByRole('combobox', { name: /approver/i }))
+    await user.click(await screen.findByRole('option', { name: /Jane Doe/ }))
     await user.type(screen.getByLabelText(/remarks/i), 'Looks good')
     await user.click(screen.getByRole('button', { name: /^approve$/i }))
     expect(onDecide).toHaveBeenCalledWith('l9', 'approved', 'e1', 'Looks good')

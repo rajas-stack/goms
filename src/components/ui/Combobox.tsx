@@ -4,11 +4,14 @@ import { Icon } from './Icon'
 import { PopoverPanel } from './popover/PopoverPanel'
 import { useRovingIndex } from './popover/useRovingIndex'
 import { cn } from '@/lib/utils'
+import { Avatar, type AvatarPerson } from './Avatar'
 
 export interface ComboboxOption {
   value: string
   label: string
   searchText?: string
+  /** When the option is a human, their face is shown beside the label. */
+  person?: AvatarPerson
 }
 
 interface ComboboxProps {
@@ -47,10 +50,9 @@ export function Combobox({
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
 
-  const selectedLabel = useMemo(
-    () => options.find((o) => o.value === value)?.label ?? '',
-    [options, value],
-  )
+  const selected = useMemo(() => options.find((o) => o.value === value), [options, value])
+  const selectedLabel = selected?.label ?? ''
+  const selectedPerson = selected?.person
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -97,7 +99,8 @@ export function Combobox({
 
   if (disabled) {
     return (
-      <div className={cn('flex h-9 w-full items-center rounded-lg border border-line bg-panel px-3 text-[13px] text-ink-700', className)}>
+      <div className={cn('flex h-9 w-full items-center gap-2 rounded-lg border border-line bg-panel px-3 text-[13px] text-ink-700', selectedPerson && 'pl-1.5', className)}>
+        {selectedPerson && <Avatar person={selectedPerson} size="xs" />}
         {selectedLabel || <span className="text-muted/70">{placeholder}</span>}
       </div>
     )
@@ -106,6 +109,9 @@ export function Combobox({
   return (
     <div ref={rootRef} className={cn('relative', className)}>
       <div className="relative">
+        {selectedPerson && !open && (
+          <Avatar person={selectedPerson} size="xs" className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2" />
+        )}
         <input
           ref={inputRef}
           type="text"
@@ -120,7 +126,10 @@ export function Combobox({
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={onKeyDown}
-          className="h-9 w-full rounded-lg border border-line bg-white pl-3 pr-8 text-[13px] text-ink placeholder:text-muted/70 transition-colors focus:border-ink-600 focus-visible:focus-ring"
+          className={cn(
+            'h-9 w-full rounded-lg border border-line bg-white pl-3 pr-8 text-[13px] text-ink placeholder:text-muted/70 transition-colors focus:border-ink-600 focus-visible:focus-ring',
+            selectedPerson && !open && 'pl-9',
+          )}
           {...aria}
         />
         {value && !open ? (
@@ -166,12 +175,13 @@ export function Combobox({
                     onMouseEnter={() => roving.setActive(i)}
                     onClick={() => commit(o)}
                     className={cn(
-                      'flex min-h-11 w-full items-center rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors lg:min-h-0',
+                      'flex min-h-11 w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] transition-colors lg:min-h-0',
                       i === roving.active ? 'bg-ink-900/[0.06] text-ink-900' : 'text-ink',
                       o.value === value && 'font-semibold',
                     )}
                   >
-                    {o.label}
+                    {o.person && <Avatar person={o.person} size="xs" />}
+                    <span className="min-w-0 truncate">{o.label}</span>
                   </button>
                 </li>
               ))

@@ -215,7 +215,8 @@ describe('ProposalDetail — relocated per-line approval controls', () => {
       lines: [line({ id: 'l7', approvalStatus: 'pending', discountPct: 20 })],
     })
     await user.click(screen.getByRole('button', { name: /toggle approval summary/i }))
-    await user.selectOptions(screen.getByLabelText(/approver/i), 'e1')
+    await user.click(screen.getByRole('combobox', { name: /approver/i }))
+    await user.click(await screen.findByRole('option', { name: /Jane Approver/ }))
     await user.click(screen.getByRole('button', { name: /^approve$/i }))
     expect(lineUpdateMutateAsync).toHaveBeenCalledWith(expect.objectContaining({
       id: 'l7', patch: expect.objectContaining({ approvalStatus: 'approved', approverId: 'e1' }),

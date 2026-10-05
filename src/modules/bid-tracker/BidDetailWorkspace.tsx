@@ -60,6 +60,11 @@ export function BidDetailWorkspace() {
         </Link>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <h1 className="font-display text-lg font-semibold text-ink-900">{row?.opportunityName ?? bid.bidCode}</h1>
+          {row?.opportunityCode && (
+            <span title="Opportunity ID" className="rounded border border-line bg-panel px-1.5 py-px font-mono text-[12px] font-semibold text-goms-navy">
+              {row.opportunityCode}
+            </span>
+          )}
           <Badge tone="neutral">{bid.bidCode}</Badge>
           {row && <Badge tone={ATTENTION_TONE[row.attentionFlag]}>{ATTENTION_OPTIONS.find((o) => o.value === row.attentionFlag)?.label}</Badge>}
           {bid.status === 'archived' && <Badge tone="gray">Archived</Badge>}

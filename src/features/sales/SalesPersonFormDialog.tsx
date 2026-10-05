@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { Combobox } from '@/components/ui/Combobox'
 import { PhotoUploadField } from '@/components/ui/PhotoUploadField'
 import { EmailInput } from '@/components/ui/EmailInput'
 import { PhoneInput, isValidPhone } from '@/components/ui/PhoneInput'
 import { useToast } from '@/components/ui/Toast'
 import { useCurrentPostings, useSalesPersonMutations, useSalesPersons } from '@/lib/api'
 import { SALES_TIERS } from '@/data/sales-tiers'
+import { salesPersonOption } from './salesPersonOption'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
 import { liveSalesRoster, resolveSalesChain } from '@/data/sales-hierarchy'
 
@@ -156,10 +158,13 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
               </Select>
             </Field>
             <Field label="Reports to">
-              <Select value={managerId} onChange={(e) => setManagerId(e.target.value)}>
-                <option value="">No manager</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
+              <Combobox
+                value={managerId}
+                onChange={setManagerId}
+                options={people.map(salesPersonOption)}
+                placeholder="No manager"
+                aria-label="Reports to"
+              />
             </Field>
           </>
         )}

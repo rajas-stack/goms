@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useCurrentPostings, useDepartments, useEmployeeMutations, useEmployeesUnder, useSalesPersons } from '@/lib/api'
 import { convertWorkAmount, formatBudgetRange, WORK_VALUE_UNITS } from '@/features/nodes/department-meta'
 import { EmployeePicker } from '@/features/employees/EmployeePicker'
@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/Button'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { Collapsible } from '@/components/ui/Collapsible'
 import { Combobox } from '@/components/ui/Combobox'
+import { PersonName } from '@/components/ui/PersonName'
+import type { AvatarPerson } from '@/components/ui/Avatar'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { useToast } from '@/components/ui/Toast'
 import { useAllBomItems, useBoqMutations, useBoqs, useMasters, useSkus } from '../api'
@@ -477,21 +479,28 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
               <Combobox
                 value={salesPersonId}
                 onChange={setSalesPersonId}
-                options={salesPersons.map((p) => ({ value: p.id, label: p.name }))}
+                options={salesPersons.map((p) => ({ value: p.id, label: p.name, person: p }))}
                 aria-label="Sales Person"
               />
             </Field>
+            {/* Empty value = "None" (the placeholder); the clear button resets to it. */}
             <Field label="Pre-Sales">
-              <Select value={preSalesId} onChange={(e) => setPreSalesId(e.target.value)}>
-                <option value="">None</option>
-                {preSalesList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
+              <Combobox
+                value={preSalesId}
+                onChange={setPreSalesId}
+                options={preSalesList.map((p) => ({ value: p.id, label: p.name, person: { name: p.name } }))}
+                placeholder="None"
+                aria-label="Pre-Sales"
+              />
             </Field>
             <Field label="BU Sales" hint="Filtered to Sales Persons with a &quot;BU Sales&quot; posting.">
-              <Select value={buSalesPersonId} onChange={(e) => setBuSalesPersonId(e.target.value)}>
-                <option value="">None</option>
-                {buSalesPersons.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
+              <Combobox
+                value={buSalesPersonId}
+                onChange={setBuSalesPersonId}
+                options={buSalesPersons.map((p) => ({ value: p.id, label: p.name, person: p }))}
+                placeholder="None"
+                aria-label="BU Sales"
+              />
             </Field>
           </div>
 
@@ -622,9 +631,9 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                 <DetailField label="Opportunity" value={opportunityName || '—'} />
                 <DetailField label="Department" value={departmentById.get(departmentId)?.name ?? '—'} />
                 <DetailField label="Vertical" value={verticalById.get(verticalId)?.name ?? '—'} />
-                <DetailField label="Customer" value={customerName || '—'} />
-                <DetailField label="Sales Person" value={salesPersonById.get(salesPersonId)?.name ?? '—'} />
-                <DetailField label="Pre-Sales" value={preSalesById.get(preSalesId)?.name ?? '—'} />
+                <DetailField label="Customer" value={customerName ? <PersonName person={{ name: customerName }} /> : '—'} />
+                <DetailField label="Sales Person" value={personOrDash(salesPersonById.get(salesPersonId))} />
+                <DetailField label="Pre-Sales" value={personOrDash(preSalesById.get(preSalesId))} />
               </div>
               <div className="overflow-x-auto rounded-xl border border-line">
                 <table className="w-full text-left text-[12px]">
@@ -792,11 +801,16 @@ function ConfiguredLineRow({
   )
 }
 
-function DetailField({ label, value }: { label: string; value: string }) {
+function DetailField({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</div>
       <div className="text-[13px] text-ink-900">{value}</div>
     </div>
   )
+}
+
+/** A person's face + name, or an em dash when the field is unset. */
+function personOrDash(person: AvatarPerson | undefined): ReactNode {
+  return person ? <PersonName person={person} /> : '—'
 }

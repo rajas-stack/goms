@@ -15,6 +15,7 @@ function stubAll() {
   vi.spyOn(api, 'useOpenFollowUps').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useOpenFollowUps>)
   vi.spyOn(api, 'useAllTimelineEvents').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useAllTimelineEvents>)
   vi.spyOn(api, 'useRelationshipAnalytics').mockReturnValue({ data: undefined } as unknown as ReturnType<typeof api.useRelationshipAnalytics>)
+  vi.spyOn(api, 'useAllEmployees').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useAllEmployees>)
 }
 
 describe('Insights', () => {

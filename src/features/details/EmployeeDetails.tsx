@@ -27,15 +27,15 @@ import { findCandidatesFor } from '@/features/employees/duplicate-detection'
 import { AddReporteeMenu } from '@/features/employees/AddReporteeMenu'
 import { resolveDepartment } from '@/features/employees/resolveDepartment'
 import { abbreviateDepartmentName } from '@/features/nodes/department-meta'
-import { employeeAccent } from '@/lib/node-colors'
 import { MEETING_LOG_TYPES, TIMELINE_META, timelineEventLabel } from '@/lib/timeline-meta'
 import { attendeeName, attendeeSalesPersonId } from '@/lib/attendees'
 import { useDismissedDuplicatePairs } from '@/lib/dismissed-pairs'
-import { cn, initials } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 import { useResolvedOwners } from '@/lib/api'
 import { OwnershipBlock } from '@/features/sales/OwnershipBlock'
 import { isoToday } from '@/lib/dates'
 import { Avatar } from '@/components/ui/Avatar'
+import { PersonName } from '@/components/ui/PersonName'
 import type { Charge, Employee, TimelineEvent, Transfer } from '@/lib/types'
 
 const COMM_LABEL: Record<string, string> = {
@@ -99,7 +99,6 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
 
   if (!emp) return null
   const vacant = emp.vacant
-  const accent = employeeAccent(emp)
   const department = trail.find((t) => t.typeKey === 'department')
   // Item 4: Website/Address belong to the department, not the employee — the
   // form no longer collects them (EmployeeFormDialog), so this resolves the
@@ -143,7 +142,8 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
             <Icon name="Copy" size={14} className="shrink-0 text-amber-600" />
             <span className="min-w-0 flex-1">
               Possible duplicate of{' '}
-              <button onClick={() => ws.select('employee', duplicateOfEmp.id)} className="font-semibold hover:underline">
+              <button onClick={() => ws.select('employee', duplicateOfEmp.id)} className="inline-flex items-center gap-1.5 align-middle font-semibold hover:underline">
+                <Avatar person={duplicateOfEmp} size="xs" />
                 {duplicateOfEmp.name}
               </button>
             </span>
@@ -158,7 +158,8 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
             <Icon name="Copy" size={14} className="shrink-0 text-amber-600" />
             <span className="min-w-0 flex-1">
               This might be the same person as{' '}
-              <button onClick={() => ws.select('employee', topAutoMatch.b.id)} className="font-semibold hover:underline">
+              <button onClick={() => ws.select('employee', topAutoMatch.b.id)} className="inline-flex items-center gap-1.5 align-middle font-semibold hover:underline">
+                <Avatar person={topAutoMatch.b} size="xs" />
                 {topAutoMatch.b.name}
               </button>
               {' '}({topAutoMatch.matchedOn.join(', ').toLowerCase()})
@@ -173,17 +174,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
         )}
 
         <div className="flex items-start gap-4">
-          {vacant ? (
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-600">
-              <Icon name="UserX" size={22} />
-            </span>
-          ) : emp.photoUrl ? (
-            <img src={emp.photoUrl} alt={emp.name} className="h-14 w-14 shrink-0 rounded-2xl object-cover" />
-          ) : (
-            <span className={cn('flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl font-display text-lg font-bold', accent.chip)}>
-              {initials(emp.name)}
-            </span>
-          )}
+          <Avatar person={{ name: emp.name, photoUrl: emp.photoUrl, vacant }} size="lg" className="font-display" />
           <div className="min-w-0 flex-1">
             <span className="eyebrow">
               {department
@@ -567,13 +558,22 @@ function TransferRow({ transfer }: { transfer: Transfer }) {
           <span>Designation: {transfer.fromDesignation} → {transfer.toDesignation}</span>
         )}
         {transfer.fromManagerName !== transfer.toManagerName && (
-          <span>Reports to: {transfer.fromManagerName} → {transfer.toManagerName}</span>
+          <span className="flex flex-wrap items-center gap-1">
+            Reports to: <ManagerName name={transfer.fromManagerName} /> → <ManagerName name={transfer.toManagerName} />
+          </span>
         )}
         {transfer.reason && <span>Reason: {transfer.reason}</span>}
       </div>
       {transfer.remarks && <p className="mt-1 text-[12px] text-ink-700">{transfer.remarks}</p>}
     </div>
   )
+}
+
+/** Transfer manager names are snapshot strings (no record to pull a photo
+ *  from), so the face is an initials avatar; blank snapshots stay as '—'. */
+function ManagerName({ name }: { name: string | null | undefined }) {
+  if (!name) return <span>—</span>
+  return <PersonName person={{ name }} size="2xs" />
 }
 
 const ATTENDANCE_TYPES = new Set(['meeting', 'inPerson'])

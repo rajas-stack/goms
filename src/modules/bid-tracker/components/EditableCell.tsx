@@ -5,7 +5,8 @@ import { Checkbox } from '@/components/ui/Checkbox'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import { Icon } from '@/components/ui/Icon'
 import { cn } from '@/lib/utils'
-import { NO_LOOKUPS, isEmptyCell, optionsOf, type EntityLookups, type GridColumnMeta } from '../gridColumns'
+import { Avatar } from '@/components/ui/Avatar'
+import { NO_LOOKUPS, isEmptyCell, optionsOf, type ColumnOption, type EntityLookups, type GridColumnMeta } from '../gridColumns'
 
 export type CellDraft = string | number | boolean | null
 
@@ -87,13 +88,15 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirty, cellKey, pending])
 
-  const start = () => {
+  const start = (seed?: string) => {
     cancelled.current = false
     done.current = false
-    setDraft(current)
+    setDraft(seed ?? current)
     setError(null)
     setEditing(true)
   }
+  // Spreadsheet habit: typing on a selected cell replaces its value (free-text editors only).
+  const typesFreely = !(col.pick || ['select', 'boolean', 'state', 'person', 'department', 'multiselect', 'date'].includes(type))
 
   const commit = (raw: string) => {
     if (cancelled.current || done.current) return
@@ -130,12 +133,19 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
         title={externalError ?? 'Click to edit'}
         data-editable-cell
         className={cn(
+          // Each editable cell reads as its own box while unlocked; the active
+          // (focused) cell gets the spreadsheet's 2px selection rectangle.
           'flex h-[35px] w-full min-w-0 cursor-cell items-center gap-1 px-3 outline-none',
-          'hover:shadow-[inset_0_0_0_1px_rgba(76,167,221,0.9)] focus-visible:shadow-[inset_0_0_0_2px_#0B2B49]',
+          'shadow-[inset_0_0_0_1px_rgba(76,167,221,0.35)] hover:shadow-[inset_0_0_0_1px_rgba(76,167,221,0.95)]',
+          'focus:shadow-[inset_0_0_0_2px_#0B2B49] focus:bg-[#F2F8FD]',
           externalError && 'text-crimson shadow-[inset_0_0_0_1px_#B23A48]',
         )}
         onClick={(e) => { e.stopPropagation(); start() }}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); e.stopPropagation(); start() } }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); e.stopPropagation(); start() }
+          else if (typesFreely && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); e.stopPropagation(); start(e.key) }
+          else if ((e.key === 'Delete' || e.key === 'Backspace') && !col.required && typesFreely) { e.preventDefault(); e.stopPropagation(); start(''); }
+        }}
       >
         <span className="min-w-0 flex-1 truncate">{display}</span>
         {externalError && <span className="shrink-0 text-[11px]">{externalError}</span>}
@@ -223,7 +233,7 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
  *  column's own options. Escape or clicking away cancels. */
 function CellPicker({ label, options, value, borderClass, allowClear, removed, onPick, onCancel }: {
   label: string
-  options: { value: string; label: string }[]
+  options: ColumnOption[]
   value: string
   borderClass: string
   allowClear: boolean
@@ -240,7 +250,8 @@ function CellPicker({ label, options, value, borderClass, allowClear, removed, o
     ...(removed ? [{ value: removed, label: removed + ' (removed option)' }] : []),
     ...options.filter((o) => o.label.toLowerCase().includes(query.trim().toLowerCase())),
   ]
-  const shown = options.find((o) => o.value === value)?.label ?? (removed && value === removed ? removed : '')
+  const shownOption = options.find((o) => o.value === value)
+  const shown = shownOption?.label ?? (removed && value === removed ? removed : '')
   const onKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive((i) => Math.min(i + 1, rows.length - 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)) }
@@ -248,7 +259,8 @@ function CellPicker({ label, options, value, borderClass, allowClear, removed, o
     else if (e.key === 'Escape') { e.preventDefault(); onCancel() }
   }
   return (
-    <div ref={anchorRef} className={cn(input, borderClass, 'flex items-center gap-1 truncate')}>
+    <div ref={anchorRef} className={cn(input, borderClass, 'flex items-center gap-1.5 truncate')}>
+      {shownOption?.isPerson && <Avatar person={{ name: shownOption.label, photoUrl: shownOption.photoUrl }} size="xs" />}
       <span className="min-w-0 flex-1 truncate">{shown || <span className="text-muted">Choose…</span>}</span>
       <Icon name="ChevronDown" size={13} className="shrink-0 text-muted" />
       <PopoverPanel open anchorRef={anchorRef} onClose={onCancel} maxPanelHeight={300}>
@@ -276,6 +288,7 @@ function CellPicker({ label, options, value, borderClass, allowClear, removed, o
                       i === active && 'bg-goms-sky/[0.16]', o.value === '' && 'text-muted',
                     )}
                   >
+                    {o.isPerson && <Avatar person={{ name: o.label, photoUrl: o.photoUrl }} size="xs" />}
                     <span className="min-w-0 flex-1 truncate">{o.label}</span>
                     {o.value === value && o.value !== '' && <Icon name="Check" size={13} className="shrink-0 text-goms-navy" />}
                   </button>

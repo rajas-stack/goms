@@ -2,6 +2,7 @@ import { BID_STAGE_MAP, BID_STAGE_REQUIREMENTS } from '@goms/domain'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { PersonName } from '@/components/ui/PersonName'
 import { useBidCorrigenda, useBidMutations, useFollowUpMutations, useFollowUps, useResolvedOwners, useSalesPersons } from '@/lib/api'
 import { isoToday } from '@/lib/dates'
 import type { Bid, BidMilestone } from '@/lib/types'
@@ -79,10 +80,10 @@ export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMile
         </Stat>
         <Stat label="Bid Owner">
           {ownerPerson ? (
-            <>
-              {ownerPerson.name}
-              {owner?.source === 'inherited' && <span className="ml-1 text-[12px] text-muted">(inherited)</span>}
-            </>
+            <span className="inline-flex min-w-0 items-center">
+              <PersonName person={ownerPerson} />
+              {owner?.source === 'inherited' && <span className="ml-1 shrink-0 text-[12px] text-muted">(inherited)</span>}
+            </span>
           ) : <span className="text-muted">Unassigned</span>}
         </Stat>
         <Stat label="Earliest Next Milestone">

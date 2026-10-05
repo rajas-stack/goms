@@ -11,6 +11,7 @@ function toMember(row: any) {
     team: row.team,
     name: row.name,
     email: row.email,
+    designation: row.designation ?? '',
     status: row.status,
     managerId: row.manager_id ?? null,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
@@ -57,13 +58,14 @@ export const deliveryTeamsRouter = router({
     team: teamSchema,
     name: z.string().trim().min(1).max(200),
     email: z.string().trim().max(254).optional(),
+    designation: z.string().trim().max(200).optional(),
     managerId: z.string().uuid().nullable().optional(),
   })).mutation(async ({ input }) => {
     await assertValidManager(input.team, null, input.managerId ?? null)
     try {
       const result = await pool.query(
-        `INSERT INTO delivery_team_members (team, name, email, manager_id) VALUES ($1,$2,$3,$4) RETURNING *`,
-        [input.team, input.name, input.email ?? '', input.managerId ?? null],
+        `INSERT INTO delivery_team_members (team, name, email, designation, manager_id) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+        [input.team, input.name, input.email ?? '', input.designation ?? '', input.managerId ?? null],
       )
       return toMember(result.rows[0])
     } catch (error) {
@@ -78,6 +80,7 @@ export const deliveryTeamsRouter = router({
     patch: z.object({
       name: z.string().trim().min(1).max(200).optional(),
       email: z.string().trim().max(254).optional(),
+      designation: z.string().trim().max(200).optional(),
       managerId: z.string().uuid().nullable().optional(),
     }),
   })).mutation(async ({ input }) => {
@@ -88,7 +91,7 @@ export const deliveryTeamsRouter = router({
       if (!member) throw new TRPCError({ code: 'NOT_FOUND', message: 'Team member no longer exists.' })
       await assertValidManager(member.team, member.id, input.patch.managerId)
     }
-    const columns: Record<string, string> = { name: 'name', email: 'email', managerId: 'manager_id' }
+    const columns: Record<string, string> = { name: 'name', email: 'email', designation: 'designation', managerId: 'manager_id' }
     const values: (string | null)[] = fields.map((field) => (input.patch as Record<string, string | null>)[field])
     const clauses = fields.map((field, index) => `${columns[field]}=$${index + 1}`)
     values.push(input.id)

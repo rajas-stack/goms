@@ -4,7 +4,8 @@ import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { ChargeBadge, RelationshipSummary } from '@/components/ui/Badge'
 import { employeeAccent } from '@/lib/node-colors'
-import { cn, initials } from '@/lib/utils'
+import { Avatar } from '@/components/ui/Avatar'
+import { cn } from '@/lib/utils'
 import type { Employee } from '@/lib/types'
 
 interface Props {
@@ -55,21 +56,12 @@ export const EmployeeCard = forwardRef<HTMLDivElement, Props>(
           dragging && 'opacity-50',
         )}
       >
-        {vacant ? (
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-600">
-            <Icon name="UserX" size={17} />
-          </span>
-        ) : employee.photoUrl ? (
-          <img
-            src={employee.photoUrl}
-            alt={employee.name}
-            className="h-9 w-9 shrink-0 rounded-xl object-cover"
-          />
-        ) : (
-          <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl font-display text-[13px] font-bold', accent.chip)}>
-            {initials(employee.name)}
-          </span>
-        )}
+        {/* 36px keeps the card's original footprint beside the 13px name + 11px designation. */}
+        <Avatar
+          person={{ name: employee.name, photoUrl: employee.photoUrl, vacant }}
+          size="sm"
+          className="h-9 w-9 font-display text-[13px]"
+        />
         <div className="min-w-0 flex-1">
           {vacant ? (
             <>

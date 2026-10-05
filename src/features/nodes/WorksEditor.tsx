@@ -95,7 +95,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
   // one id. Per the same ruling as the Employee form: only an existing
   // `direct` resolution counts as "already owned" — an `inherited` one must
   // not suppress a genuine new direct assignment.
-  async function save(draft: Omit<Opportunity, 'id' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>) {
+  async function save(draft: Omit<Opportunity, 'id' | 'opportunityCode' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>) {
     if (editing) {
       // The API rejects ANY stageKey/submissionDate in the patch for an opportunity
       // with a bid — even an unchanged one — so they must not be sent at all.
@@ -139,6 +139,9 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                     <Icon name="ChevronRight" size={14} />
                   </motion.span>
                   <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-900">{w.opportunityName || 'Untitled opportunity'}</span>
+                  {w.opportunityCode && (
+                    <span title="Opportunity ID" className="hidden shrink-0 truncate font-mono text-[11px] text-muted sm:inline">{w.opportunityCode}</span>
+                  )}
                   <span className="shrink-0 rounded-full bg-panel px-2 py-0.5 text-[11px] font-medium text-ink-700">
                     {stageLabel(w.stageKey)}
                   </span>
@@ -215,6 +218,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
       <WorkFormDialog
         open={dialogOpen}
         work={editing}
+        departmentId={departmentId}
         draftKey={draftKeyPrefix ? `${draftKeyPrefix}:${editing?.id ?? 'new'}` : null}
         managedInBidTracker={managedInBidTracker}
         onClose={() => setDialogOpen(false)}

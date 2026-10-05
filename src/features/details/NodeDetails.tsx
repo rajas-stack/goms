@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/Button'
 import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
 import { FitText } from '@/components/ui/FitText'
 import { Icon } from '@/components/ui/Icon'
+import { Avatar } from '@/components/ui/Avatar'
 import { Badge, CodeChip } from '@/components/ui/Badge'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
@@ -263,12 +264,7 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
                   onClick={() => ws.select('employee', e.id)}
                   className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-ink-900/[0.04]"
                 >
-                  <span className={cn(
-                    'flex h-8 w-8 items-center justify-center rounded-lg font-mono text-[11px] font-semibold',
-                    e.vacant ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600',
-                  )}>
-                    {e.vacant ? <Icon name="UserX" size={14} /> : e.name.split(' ').map((p) => p[0]).slice(0, 2).join('')}
-                  </span>
+                  <Avatar person={{ name: e.name, photoUrl: e.photoUrl, vacant: e.vacant }} size="sm" />
                   <span className="min-w-0 flex-1">
                     <span className={cn('block break-words text-sm font-medium', e.vacant ? 'text-amber-600' : 'text-ink-900')}>
                       {e.vacant ? 'Vacant position' : e.name}

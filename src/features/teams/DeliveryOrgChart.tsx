@@ -7,20 +7,33 @@ import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { useDeliveryTeamMembers } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import type { DeliveryTeamKey, DeliveryTeamMember } from '@/lib/types'
+import type { DeliveryTeamKey } from '@/lib/types'
+
+/** Anyone drawable on an org chart: a delivery-team member or an Org Structure person. */
+export interface ChartPerson {
+  id: string
+  name: string
+  designation: string
+  managerId: string | null
+  status: 'active' | 'inactive'
+  email?: string
+  photoUrl?: string | null
+  /** Org level (L0 = top), shown as a badge when present. */
+  level?: number
+}
 
 interface DeliveryOrgTree {
-  roots: DeliveryTeamMember[]
-  childrenOf: Map<string, DeliveryTeamMember[]>
+  roots: ChartPerson[]
+  childrenOf: Map<string, ChartPerson[]>
 }
 
 /** Roots are members with no manager (or a manager not on this team). Anyone
  *  unreachable from a root — only possible with a corrupt circular chain —
  *  is promoted to a root rather than silently dropped. */
-export function buildDeliveryOrgTree(members: DeliveryTeamMember[]): DeliveryOrgTree {
+export function buildDeliveryOrgTree(members: ChartPerson[]): DeliveryOrgTree {
   const ids = new Set(members.map((member) => member.id))
-  const childrenOf = new Map<string, DeliveryTeamMember[]>()
-  const roots: DeliveryTeamMember[] = []
+  const childrenOf = new Map<string, ChartPerson[]>()
+  const roots: ChartPerson[] = []
   for (const member of members) {
     if (member.managerId && ids.has(member.managerId) && member.managerId !== member.id) {
       childrenOf.set(member.managerId, [...(childrenOf.get(member.managerId) ?? []), member])
@@ -29,7 +42,7 @@ export function buildDeliveryOrgTree(members: DeliveryTeamMember[]): DeliveryOrg
     }
   }
   const reached = new Set<string>()
-  const visit = (member: DeliveryTeamMember) => {
+  const visit = (member: ChartPerson) => {
     if (reached.has(member.id)) return
     reached.add(member.id)
     for (const child of childrenOf.get(member.id) ?? []) visit(child)
@@ -40,7 +53,7 @@ export function buildDeliveryOrgTree(members: DeliveryTeamMember[]): DeliveryOrg
 }
 
 const OrgCard = forwardRef<HTMLDivElement, {
-  member: DeliveryTeamMember
+  member: ChartPerson
   reportCount: number
   expanded: boolean
   onToggle: () => void
@@ -53,9 +66,13 @@ const OrgCard = forwardRef<HTMLDivElement, {
       member.status === 'inactive' && 'opacity-60',
     )}
   >
-    <Avatar person={{ name: member.name }} size="md" />
+    {member.level !== undefined && (
+      <span className="absolute left-2 top-2 rounded-md bg-goms-navy/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-goms-navy">L{member.level}</span>
+    )}
+    <Avatar person={{ name: member.name, photoUrl: member.photoUrl }} size="md" />
     <div className="w-full min-w-0">
       <div className="truncate text-[13px] font-semibold text-ink-900">{member.name}</div>
+      <div className="truncate text-[11px] text-muted">{member.designation || '—'}</div>
       {member.email && <div className="truncate text-[10px] text-muted/80">{member.email}</div>}
     </div>
     <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium', member.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-panel text-muted')}>
@@ -79,7 +96,7 @@ const OrgCard = forwardRef<HTMLDivElement, {
 ))
 OrgCard.displayName = 'OrgCard'
 
-function Branch({ member, depth, parentKey, tree }: { member: DeliveryTeamMember; depth: number; parentKey: string | null; tree: DeliveryOrgTree }) {
+function Branch({ member, depth, parentKey, tree }: { member: ChartPerson; depth: number; parentKey: string | null; tree: DeliveryOrgTree }) {
   const canvas = useCanvas()
   const key = `dt:${member.id}`
   const kids = tree.childrenOf.get(member.id) ?? []
@@ -111,18 +128,28 @@ function Branch({ member, depth, parentKey, tree }: { member: DeliveryTeamMember
 /** Team org chart for Pre-sales / Legal / Bid — same pan/zoom canvas and
  *  card language as the Sales Org Chart, driven by `managerId` (reports-to). */
 export function DeliveryOrgChart({ team }: { team: DeliveryTeamKey }) {
+  const { data: members = [], isLoading } = useDeliveryTeamMembers(team)
+  return (
+    <PeopleOrgChart
+      people={members.filter((member) => member.status === 'active')} isLoading={isLoading}
+      emptyMessage="No one on this team yet — add people in Teams → Org Structure."
+    />
+  )
+}
+
+/** Pan/zoom org chart for any list of people linked by `managerId`. */
+export function PeopleOrgChart(props: { people: ChartPerson[]; isLoading?: boolean; emptyMessage: string }) {
   const [version, setVersion] = useState(0)
   const bump = useCallback(() => setVersion((v) => v + 1), [])
   return (
     <CanvasProvider onChange={bump}>
-      <Stage team={team} version={version} />
+      <Stage {...props} version={version} />
     </CanvasProvider>
   )
 }
 
-function Stage({ team, version }: { team: DeliveryTeamKey; version: number }) {
+function Stage({ people: members, isLoading = false, emptyMessage, version }: { people: ChartPerson[]; isLoading?: boolean; emptyMessage: string; version: number }) {
   const canvas = useCanvas()
-  const { data: members = [], isLoading } = useDeliveryTeamMembers(team)
   const viewportRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const viewport = useCanvasViewport(viewportRef, contentRef)
@@ -152,7 +179,7 @@ function Stage({ team, version }: { team: DeliveryTeamKey; version: number }) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 py-10 text-center">
         <div className="flex h-11 w-11 items-center justify-center rounded-full bg-panel text-muted"><Icon name="Network" size={18} /></div>
-        <p className="text-sm text-muted">No one on this team yet — add people from the Roster tab.</p>
+        <p className="text-sm text-muted">{emptyMessage}</p>
       </div>
     )
   }

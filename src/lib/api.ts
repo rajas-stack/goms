@@ -2,7 +2,7 @@ import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } f
 import type { DepartmentChoice, NewBidOpportunity } from '@goms/domain'
 import {
   repository, type AddTimelineInput, type AssignOwnerInput, type CreateEmployeeInput, type CreateFollowUpInput,
-  type CreateNodeInput, type CreateOpportunityInput, type CreateSalesPersonInput, type CreateDeliveryTeamMemberInput, type UpdateDeliveryTeamMemberPatch, type ImportChildRow,
+  type CreateNodeInput, type CreateOpportunityInput, type CreateSalesPersonInput, type CreateDeliveryTeamMemberInput, type UpdateDeliveryTeamMemberPatch, type CreateOrgPersonInput, type UpdateOrgPersonPatch, type ImportChildRow,
   type ImportEmployeeRow, type MergeEmployeesInput, type TransferBookOfBusinessInput, type TransferInput,
   type TransferSalesPersonInput,
 } from '@/data/repository'
@@ -394,6 +394,25 @@ export function useDeliveryTeamMemberMutations() {
   })
   const remove = useMutation({ mutationFn: (id: string) => repository.deleteDeliveryTeamMember(id), onSuccess: invalidate })
   return { create, update, setStatus, remove }
+}
+
+export const useOrgPeople = () => useQuery({ queryKey: ['orgPeople'], queryFn: () => repository.listOrgPeople() })
+
+/** Org changes re-derive the Pre-sales / Bid / Legal rosters, so those refresh too. */
+export function useOrgPersonMutations() {
+  const qc = useQueryClient()
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['orgPeople'] })
+    qc.invalidateQueries({ queryKey: ['deliveryTeamMembers'] })
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+  }
+  const create = useMutation({ mutationFn: (input: CreateOrgPersonInput) => repository.createOrgPerson(input), onSuccess: invalidate })
+  const update = useMutation({
+    mutationFn: (input: { id: string; patch: UpdateOrgPersonPatch }) => repository.updateOrgPerson(input.id, input.patch),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteOrgPerson(id), onSuccess: invalidate })
+  return { create, update, remove }
 }
 export const useSalesPerson = (id: string | null) =>
   useQuery({ queryKey: qk.salesPerson(id ?? ''), queryFn: () => repository.getSalesPerson(id!), enabled: !!id })

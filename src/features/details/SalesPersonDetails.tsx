@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import {
   useAllEmployees, useCurrentPostings, useDepartments, useOpportunities, useOwnedBy, useSalesPerson,
@@ -11,7 +11,8 @@ import { useToast } from '@/components/ui/Toast'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
-import { Avatar } from '@/components/ui/Avatar'
+import { Avatar, type AvatarPerson } from '@/components/ui/Avatar'
+import { PersonName } from '@/components/ui/PersonName'
 import { Icon } from '@/components/ui/Icon'
 import { Menu, MenuDivider, MenuItem } from '@/components/ui/Menu'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -47,7 +48,7 @@ function MenuGroupLabel({ children }: { children: string }) {
   return <p className="px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{children}</p>
 }
 
-function Row({ label, value, icon }: { label: string; value: string; icon: string }) {
+function Row({ label, value, icon }: { label: string; value: ReactNode; icon: string }) {
   return (
     <div className="flex items-start gap-2.5 py-1.5">
       <Icon name={icon} size={14} className="mt-0.5 shrink-0 text-muted" />
@@ -99,6 +100,10 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   const gmOverride = current?.gmOverrideId ? people.find((p) => p.id === current.gmOverrideId) : undefined
   const derivedGm = manager ? resolveSalesChain(manager.officialEmail, liveSalesRoster(people, currentPostings)).gm : undefined
   const gmName = gmOverride?.name ?? derivedGm?.name
+  // The roster entry carries no photo — resolve back to the full record for the face.
+  const gmPerson = gmOverride ?? (derivedGm ? people.find((p) => p.officialEmail === derivedGm.email) : undefined)
+  const managerValue = manager ? <PersonName person={manager} /> : '—'
+  const gmValue = gmName ? <PersonName person={{ name: gmName, photoUrl: gmPerson?.photoUrl }} /> : '—'
   const deptById = new Map(departments.map((d) => [d.id, d]))
   const empById = new Map(employees.map((e) => [e.id, e]))
   const oppById = new Map(opportunities.map((o) => [o.id, o]))
@@ -214,8 +219,8 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
             <dl>
               <Row label="Designation" value={current?.designation || '—'} icon="IdCard" />
               <Row label="Tier" value={current ? tierLabel(current.tierKey) : '—'} icon="Layers" />
-              <Row label="Reporting manager" value={manager?.name ?? '—'} icon="Network" />
-              <Row label="GM / Higher Reporting Manager" value={gmName ?? '—'} icon="Network" />
+              <Row label="Reporting manager" value={managerValue} icon="Network" />
+              <Row label="GM / Higher Reporting Manager" value={gmValue} icon="Network" />
             </dl>
           </div>
 
@@ -287,8 +292,8 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
           <dl className="mb-2 rounded-lg border border-line bg-panel/30 px-2.5">
             <Row label="Designation" value={current.designation || '—'} icon="IdCard" />
             <Row label="Tier" value={tierLabel(current.tierKey) || '—'} icon="Layers" />
-            <Row label="Reporting manager" value={manager?.name ?? '—'} icon="Network" />
-            <Row label="GM / Higher Reporting Manager" value={gmName ?? '—'} icon="Network" />
+            <Row label="Reporting manager" value={managerValue} icon="Network" />
+            <Row label="GM / Higher Reporting Manager" value={gmValue} icon="Network" />
             <Row label="Office" value={current.office || '—'} icon="Building2" />
             <Row label="Effective from" value={current.startDate || '—'} icon="CalendarClock" />
             <Row label="Effective to" value={displayEndDate(current.endDate) ?? 'Present'} icon="CalendarClock" />
@@ -344,6 +349,10 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
               <BookGroup
                 label="Contacts" rows={byKind.contact} emptyMessage="No contacts yet"
                 nameOf={(id) => empById.get(id)?.name ?? id}
+                personOf={(id) => {
+                  const e = empById.get(id)
+                  return { name: e?.name ?? id, photoUrl: e?.photoUrl, vacant: e?.vacant }
+                }}
                 onOpen={(id) => ws.select('employee', id)}
               />
               <BookGroup
@@ -392,10 +401,12 @@ function BobCountCard({ label, count, icon }: { label: string; count: number; ic
  *  default buries the summary counts above it. */
 const COLLAPSED_ROWS = 3
 
-function BookGroup({ label, rows, nameOf, onOpen, emptyMessage }: {
+function BookGroup({ label, rows, nameOf, personOf, onOpen, emptyMessage }: {
   label: string
   rows: { id: string; entityId: string; role: string }[]
   nameOf: (entityId: string) => string
+  /** Set only for groups whose rows are people (contacts) — adds their face. */
+  personOf?: (entityId: string) => AvatarPerson
   onOpen: (entityId: string) => void
   emptyMessage: string
 }) {
@@ -419,7 +430,11 @@ function BookGroup({ label, rows, nameOf, onOpen, emptyMessage }: {
               onClick={() => onOpen(a.entityId)}
               className="flex w-full items-center justify-between gap-2 rounded-lg border border-line px-2.5 py-2 text-left transition-colors hover:bg-panel"
             >
-              <span className="min-w-0 flex-1 truncate text-[13px] text-ink-900">{nameOf(a.entityId)}</span>
+              {personOf ? (
+                <PersonName person={personOf(a.entityId)} className="flex-1 text-[13px] text-ink-900" />
+              ) : (
+                <span className="min-w-0 flex-1 truncate text-[13px] text-ink-900">{nameOf(a.entityId)}</span>
+              )}
               {a.role !== 'owner' && (
                 <span className="shrink-0 rounded-full bg-sky-50 px-2 py-0.5 text-[11px] text-sky-800">delegate</span>
               )}

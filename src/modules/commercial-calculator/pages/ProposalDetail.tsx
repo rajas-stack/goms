@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAllEmployees, useCurrentPostings, useDepartments, useSalesPersons } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/Button'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { Collapsible } from '@/components/ui/Collapsible'
 import { Combobox } from '@/components/ui/Combobox'
+import { PersonName } from '@/components/ui/PersonName'
+import type { AvatarPerson } from '@/components/ui/Avatar'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
@@ -46,13 +48,18 @@ const NEXT_STATUSES: Record<BoqStatus, BoqStatus[]> = {
  *  visibility — the repository is still the enforcement point. */
 const DELETABLE_STATUSES: BoqStatus[] = ['draft', 'cancelled', 'rejected', 'archived']
 
-function DetailField({ label, value }: { label: string; value: string }) {
+function DetailField({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="text-[11px] font-medium uppercase tracking-wide text-muted">{label}</div>
       <div className="text-[13px] text-ink-900">{value || '—'}</div>
     </div>
   )
+}
+
+/** A person's face + name, or an em dash when the field is unset/blank. */
+function personOrDash(person: AvatarPerson | undefined): ReactNode {
+  return person?.name ? <PersonName person={person} /> : '—'
 }
 
 /** BOQ editable-workspace overhaul: a single continuous, section-based
@@ -167,7 +174,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">BOQ {boq.boqVersion > 1 ? `v${boq.boqVersion}` : ''}</div>
             <h2 className="text-lg font-semibold text-ink-900">{boq.boqNumber} — {boq.opportunityName}</h2>
-            <p className="text-[13px] text-muted">{boq.customerName}</p>
+            {boq.customerName && <PersonName person={{ name: boq.customerName }} className="text-[13px] text-muted" />}
           </div>
           <div className="flex gap-2">
             {NEXT_STATUSES[boq.status]
@@ -305,7 +312,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             skuById={skuById}
             departmentName={departments.find((d) => d.id === boq.departmentId)?.name ?? '—'}
             verticalName={verticals.find((v) => v.id === boq.verticalId)?.name ?? '—'}
-            salesPersonName={salesPersons.find((p) => p.id === boq.salesPersonId)?.name ?? '—'}
+            salesPerson={salesPersons.find((p) => p.id === boq.salesPersonId)}
             open={previewOpen}
             onOpenChange={setPreviewOpen}
           />
@@ -349,8 +356,8 @@ function BoqDetailsSection({ boq, boqs, departments, salesPersons, buSalesPerson
   boq: CommercialBoq
   boqs: CommercialBoq[]
   departments: { id: string; name: string }[]
-  salesPersons: { id: string; name: string }[]
-  buSalesPersons: { id: string; name: string }[]
+  salesPersons: { id: string; name: string; photoUrl: string | null }[]
+  buSalesPersons: { id: string; name: string; photoUrl: string | null }[]
   verticals: { id: string; code: string; name: string }[]
   currencies: { id: string; code: string; name: string }[]
   preSalesList: { id: string; name: string }[]
@@ -449,7 +456,7 @@ function BoqDetailsSection({ boq, boqs, departments, salesPersons, buSalesPerson
           <Field label="Customer Name">
             <Input value={draft.customerName} onChange={(e) => setDraft((d) => ({ ...d, customerName: e.target.value }))} />
           </Field>
-        ) : <DetailField label="Customer Name" value={boq.customerName} />}
+        ) : <DetailField label="Customer Name" value={personOrDash({ name: boq.customerName })} />}
 
         {editing ? (
           <Field label="Organization">
@@ -465,27 +472,22 @@ function BoqDetailsSection({ boq, boqs, departments, salesPersons, buSalesPerson
 
         {editing ? (
           <Field label="Sales Person">
-            <Combobox value={draft.salesPersonId} onChange={(v) => setDraft((d) => ({ ...d, salesPersonId: v }))} options={salesPersons.map((p) => ({ value: p.id, label: p.name }))} aria-label="Sales Person" />
+            <Combobox value={draft.salesPersonId} onChange={(v) => setDraft((d) => ({ ...d, salesPersonId: v }))} options={salesPersons.map((p) => ({ value: p.id, label: p.name, person: p }))} aria-label="Sales Person" />
           </Field>
-        ) : <DetailField label="Sales Person" value={salesPersons.find((p) => p.id === boq.salesPersonId)?.name ?? '—'} />}
+        ) : <DetailField label="Sales Person" value={personOrDash(salesPersons.find((p) => p.id === boq.salesPersonId))} />}
 
+        {/* Empty value = "None" (the placeholder); the clear button resets to it. */}
         {editing ? (
           <Field label="BU Sales" hint="Filtered to Sales Persons with a &quot;BU Sales&quot; posting.">
-            <Select value={draft.buSalesPersonId} onChange={(e) => setDraft((d) => ({ ...d, buSalesPersonId: e.target.value }))}>
-              <option value="">None</option>
-              {buSalesPersons.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </Select>
+            <Combobox value={draft.buSalesPersonId} onChange={(v) => setDraft((d) => ({ ...d, buSalesPersonId: v }))} options={buSalesPersons.map((p) => ({ value: p.id, label: p.name, person: p }))} placeholder="None" aria-label="BU Sales" />
           </Field>
-        ) : <DetailField label="BU Sales" value={salesPersons.find((p) => p.id === boq.buSalesPersonId)?.name ?? '—'} />}
+        ) : <DetailField label="BU Sales" value={personOrDash(salesPersons.find((p) => p.id === boq.buSalesPersonId))} />}
 
         {editing ? (
           <Field label="Pre-Sales">
-            <Select value={draft.preSalesId} onChange={(e) => setDraft((d) => ({ ...d, preSalesId: e.target.value }))}>
-              <option value="">None</option>
-              {preSalesList.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </Select>
+            <Combobox value={draft.preSalesId} onChange={(v) => setDraft((d) => ({ ...d, preSalesId: v }))} options={preSalesList.map((p) => ({ value: p.id, label: p.name, person: { name: p.name } }))} placeholder="None" aria-label="Pre-Sales" />
           </Field>
-        ) : <DetailField label="Pre-Sales" value={preSalesList.find((p) => p.id === boq.preSalesId)?.name ?? '—'} />}
+        ) : <DetailField label="Pre-Sales" value={personOrDash(preSalesList.find((p) => p.id === boq.preSalesId))} />}
 
         <div className="col-span-2 lg:col-span-3">
           {editing ? (
@@ -873,16 +875,18 @@ function NonDraftLineRow({ line, sku, approvalMatrix, employees, onDecide, expan
   )
 }
 
-function PreviewTab({ boq, lines, skuById, departmentName, verticalName, salesPersonName, open, onOpenChange }: {
+function PreviewTab({ boq, lines, skuById, departmentName, verticalName, salesPerson, open, onOpenChange }: {
   boq: CommercialBoq
   lines: CommercialBoqLineItem[]
   skuById: Map<string, CommercialSku>
   departmentName: string
   verticalName: string
-  salesPersonName: string
+  salesPerson: AvatarPerson | undefined
   open: boolean
   onOpenChange: (open: boolean) => void
 }) {
+  // The printed proposal stays plain text — only the on-screen preview shows faces.
+  const salesPersonName = salesPerson?.name ?? '—'
   function handlePrint() {
     const html = buildProposalPrintHtml({ boq, lines, skuById, departmentName, verticalName, salesPersonName })
     // A dedicated window rather than printing the live app: the app shell is
@@ -910,11 +914,11 @@ function PreviewTab({ boq, lines, skuById, departmentName, verticalName, salesPe
           </Button>
         </div>
         <div className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
-          <DetailField label="Customer" value={boq.customerName} />
+          <DetailField label="Customer" value={personOrDash({ name: boq.customerName })} />
           <DetailField label="Organization" value={boq.customerOrganization} />
           <DetailField label="Department" value={departmentName} />
           <DetailField label="Vertical" value={verticalName} />
-          <DetailField label="Sales Person" value={salesPersonName} />
+          <DetailField label="Sales Person" value={personOrDash(salesPerson)} />
         </div>
         <div className="overflow-x-auto rounded-xl border border-line">
           <table className="w-full text-left text-[12px]">

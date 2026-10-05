@@ -25,6 +25,7 @@ export function SalesTeamPicker({ value, onChange, disabled, ariaLabel }: {
   const options = salesPersons.map((p) => ({
     value: p.officialEmail,
     label: `${p.name} · ${currentPostings[p.id]?.designation || 'No current posting'}`,
+    person: { name: p.name, photoUrl: p.photoUrl },
   }))
   return (
     <Combobox

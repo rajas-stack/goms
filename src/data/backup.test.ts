@@ -6,8 +6,8 @@ import type { GormsData } from './seed'
 function minimalGormsData(): GormsData {
   return {
     nodes: [], employees: [], externalIds: [], timeline: [], transfers: [], opportunities: [],
-    opportunityStageChanges: [], followUps: [], salesPersons: [], salesPostings: [],
-    ownershipAssignments: [], mergeAudit: [], customers: [],
+    opportunityStageChanges: [], opportunityCodeSequences: {}, followUps: [], salesPersons: [], salesPostings: [],
+    ownershipAssignments: [], mergeAudit: [], customers: [], deliveryTeamMembers: [], orgPeople: [],
     bids: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
     protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [],
     bidCustomFields: [], bidCustomFieldValues: [],

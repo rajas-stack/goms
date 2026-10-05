@@ -42,7 +42,7 @@ async function loadSearchData(): Promise<SearchData> {
       attendees: r.attendees ?? undefined, date: r.date, type: r.type,
     })),
     opportunities: opportunities.rows.map((r) => ({
-      id: r.id, departmentId: r.department_id, stateCode: r.state_code, opportunityName: r.opportunity_name,
+      id: r.id, opportunityCode: r.opportunity_code ?? null, departmentId: r.department_id, stateCode: r.state_code, opportunityName: r.opportunity_name,
       gemTenderId: r.gem_tender_id, vertical: r.vertical, component: r.component, salesPersonEmail: r.sales_person_email,
       bidId: r.bid_id, bidCode: r.bid_code, tenderLink: r.tender_link,
     })),

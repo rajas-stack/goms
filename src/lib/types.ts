@@ -137,6 +137,11 @@ export interface Employee {
  *  department and could not be aggregated without parsing every one. */
 export interface Opportunity {
   id: string
+  /** Human-readable Opportunity ID, e.g. FY27-Q2-DF-WEST-GJ-DST-RFP-DL-1
+   *  (@goms/domain opportunityCode.ts). Generated ONCE when the opportunity is
+   *  created and never changed afterwards. '' only for a row that has not been
+   *  given one yet (a legacy API row awaiting the backfill script). */
+  opportunityCode: string
   /** Owning department node. Real FK — was implicit containment. `null` only for an
    *  opportunity that has not been given one yet; Create Bid resolves it before a bid exists. */
   departmentId: string | null
@@ -165,6 +170,8 @@ export interface Opportunity {
   /** ISO date (YYYY-MM-DD) the bid is due. */
   submissionDate: string
   vertical: string
+  /** RFP / RFQ / EOI / RFI / GeM / Tender / Direct (OPPORTUNITY_TYPES); '' = not set. */
+  opportunityType: string
   /** One or more component/product-line tags. */
   component: string[]
   quantity: string
@@ -349,9 +356,14 @@ export interface DeliveryTeamMember {
   team: DeliveryTeamKey
   name: string
   email: string
+  /** Job title shown on the roster and org chart ('' when not known). */
+  designation: string
   status: 'active' | 'inactive'
   /** Reports-to, within the same team. Null for the team's top of the org chart. */
   managerId: string | null
+  /** The Org Structure person this member mirrors. When set, name, designation and
+   *  reports-to are derived from the org (see src/data/org-structure.ts) and edited there. */
+  orgPersonId?: string | null
   createdAt: string
 }
 
@@ -412,6 +424,9 @@ export interface Bid {
   updatedAt: string
 }
 export interface BidGridRow extends Bid {
+  /** The opportunity's human-readable code — what the Opportunity ID column shows ('' if none yet). */
+  opportunityCode: string
+  opportunityType: string
   departmentId: string
   departmentName: string | null
   stateCode: number | null

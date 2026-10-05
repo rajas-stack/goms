@@ -3,6 +3,11 @@ import { Field } from '@/components/ui/Field'
 import { useDeliveryTeamMembers, useSalesPersons } from '@/lib/api'
 import type { Opportunity } from '@/lib/types'
 
+/** Delivery-team members have no photo field — their Avatar falls back to initials. */
+function toOption(person: { id: string; name: string; photoUrl?: string | null }) {
+  return { value: person.id, label: person.name, person: { name: person.name, photoUrl: person.photoUrl } }
+}
+
 const ASSIGNMENT_FIELDS = [
   { key: 'geoSalesPersonId', label: 'Geo-sales', team: 'sales' },
   { key: 'buSalesPersonId', label: 'BU-sales', team: 'sales' },
@@ -21,10 +26,10 @@ export function OpportunityTeamAssignments({ value, onChange }: {
   const { data: salesPeople = [] } = useSalesPersons()
   const { data: deliveryMembers = [] } = useDeliveryTeamMembers()
   const options = {
-    sales: salesPeople.filter((person) => person.status === 'active').map((person) => ({ value: person.id, label: person.name })),
-    preSales: deliveryMembers.filter((person) => person.team === 'preSales' && person.status === 'active').map((person) => ({ value: person.id, label: person.name })),
-    legal: deliveryMembers.filter((person) => person.team === 'legal' && person.status === 'active').map((person) => ({ value: person.id, label: person.name })),
-    bid: deliveryMembers.filter((person) => person.team === 'bid' && person.status === 'active').map((person) => ({ value: person.id, label: person.name })),
+    sales: salesPeople.filter((person) => person.status === 'active').map(toOption),
+    preSales: deliveryMembers.filter((person) => person.team === 'preSales' && person.status === 'active').map(toOption),
+    legal: deliveryMembers.filter((person) => person.team === 'legal' && person.status === 'active').map(toOption),
+    bid: deliveryMembers.filter((person) => person.team === 'bid' && person.status === 'active').map(toOption),
   }
 
   return (

@@ -4,7 +4,7 @@
 // custom — is described by the same `GridColumnMeta`, so sorting, filtering,
 // search, visibility/order and saved views all work off one shape.
 import {
-  BID_STAGES, ENTITY_FIELD_TYPES, flattenRules, parseMultiValue,
+  BID_STAGES, ENTITY_FIELD_TYPES, OPPORTUNITY_TYPES, flattenRules, parseMultiValue,
   type CustomFieldType, type FilterNode, type TypedFilterRule,
 } from '@goms/domain'
 import type { BidCustomField, BidGridRow, DeliveryTeamKey, DeliveryTeamMember } from '@/lib/types'
@@ -25,7 +25,15 @@ export const GRID_GROUPS: { id: GridGroupId; label: string }[] = [
 ]
 export const CUSTOM_GROUP = { id: 'custom' as const, label: 'Custom' }
 
-export interface ColumnOption { value: string; label: string; /** A person's official email (the Bid Owner column stores emails). */ email?: string }
+export interface ColumnOption {
+  value: string
+  label: string
+  /** A person's official email (the Bid Owner column stores emails). */
+  email?: string
+  /** Set on person options so grid cells and pickers can show the face beside the name. */
+  photoUrl?: string | null
+  isPerson?: boolean
+}
 
 export interface GridColumnMeta {
   /** Stable id: the `BidGridRow` key for a standard column (also the filter
@@ -41,10 +49,16 @@ export interface GridColumnMeta {
   options?: ColumnOption[]
   /** Inline-editable in the grid (while it is unlocked). `opportunity` = a plain
    *  Opportunity attribute patched via updateOpportunity; `custom` = a
-   *  custom-field value. Everything else is read-only here. */
-  editable?: 'opportunity' | 'custom' | 'owner' | 'bid'
-  /** Pick from the Sales Team by email (Bid Owner): the cell holds an email, the list shows names. */
-  pick?: 'personByEmail'
+   *  custom-field value. `department` re-points the opportunity (and its state);
+   *  `solutionLead` records a new Sales/Solution Lead assignment; `nextAction`
+   *  replaces the bid's open follow-up; `verify` marks the bid verified.
+   *  Everything else is read-only here. */
+  editable?: 'opportunity' | 'custom' | 'owner' | 'bid' | 'department' | 'solutionLead' | 'nextAction' | 'verify'
+  /** Pick-list source when the cell's stored value is not what the list shows:
+   *  `personByEmail` = Sales Team by email (the list shows names); `department` = live departments by id. */
+  pick?: 'personByEmail' | 'department'
+  /** Row field the editor reads when it differs from the displayed one (Department / Client edits `departmentId`). */
+  editKey?: keyof BidGridRow
   /** Roster source for a role assignment person field. */
   teamKey?: 'sales' | DeliveryTeamKey
   /** Why a standard column is NOT inline-editable (shown as its tooltip). Every
@@ -68,6 +82,7 @@ export const ATTENTION_OPTIONS: ColumnOption[] = [
 const CONFIDENCE_OPTIONS: ColumnOption[] = [
   { value: 'verified', label: 'Verified' }, { value: 'needs_review', label: 'Needs Review' },
 ]
+export const OPPORTUNITY_TYPE_OPTIONS: ColumnOption[] = OPPORTUNITY_TYPES.map((t) => ({ value: t, label: t }))
 const CORRIGENDUM_OPTIONS: ColumnOption[] = [
   { value: 'pending_review', label: 'Pending Review' }, { value: 'reviewed', label: 'Reviewed' },
 ]
@@ -88,12 +103,14 @@ const FROM_FOLLOW_UP = "Comes from the bid's open follow-up — edit it in the b
 export const STANDARD_COLUMNS: GridColumnMeta[] = [
   std('opportunityId', 'Opportunity ID', 'identity', 'text', { readOnlyReason: 'Generated identifier' }),
   std('opportunityName', 'Opportunity / Mission', 'identity', 'text', { editable: 'opportunity', required: true }),
+  std('opportunityType', 'Opportunity Type', 'identity', 'select', { options: OPPORTUNITY_TYPE_OPTIONS, editable: 'opportunity' }),
   std('bidCode', 'Bid ID', 'identity', 'text', { readOnlyReason: 'Generated identifier' }),
   std('gemTenderId', 'Tender ID', 'identity', 'text', { readOnlyReason: PROTECTED }),
   // Edits go through bids.update, which refuses a frozen (protected) value with its own message.
   std('tenderLink', 'Tender Link', 'identity', 'text', { editable: 'bid' }),
 
-  std('departmentName', 'Department / Client', 'client', 'text', { readOnlyReason: FROM_DEPARTMENT }),
+  // Picking a department also moves the opportunity's State to that department's.
+  std('departmentName', 'Department / Client', 'client', 'text', { editable: 'department', pick: 'department', editKey: 'departmentId', required: true }),
   std('stateCode', 'State', 'client', 'state', { readOnlyReason: FROM_DEPARTMENT }),
   std('city', 'City', 'client', 'text', { editable: 'opportunity' }),
   std('vertical', 'Sector', 'client', 'text', { editable: 'opportunity' }),
@@ -105,13 +122,15 @@ export const STANDARD_COLUMNS: GridColumnMeta[] = [
   std('legalPersonId', 'Legal', 'ownership', 'person', { editable: 'opportunity', teamKey: 'legal' }),
   std('bidTeamMemberId', 'Bid', 'ownership', 'person', { editable: 'opportunity', teamKey: 'bid' }),
   std('ownerEmail', 'Bid Owner', 'ownership', 'text', { editable: 'owner', pick: 'personByEmail', required: true }),
-  std('solutionLeadEmail', 'Sales Lead / Solution Lead', 'ownership', 'text', { readOnlyReason: "Ownership is assigned in the bid's Overview (keeps the ownership history)" }),
+  // Like Bid Owner: ends the current lead and records the new one (history kept).
+  std('solutionLeadEmail', 'Sales Lead / Solution Lead', 'ownership', 'text', { editable: 'solutionLead', pick: 'personByEmail' }),
 
   // Stage and Decision change through bids.update, which enforces the stage / Go rules.
   std('stageKey', 'Bid Stage', 'decision', 'select', { options: stageOptions, editable: 'bid', required: true }),
-  std('nextActionNote', 'Next Action', 'decision', 'text', { readOnlyReason: FROM_FOLLOW_UP }),
-  std('nextActionAssigneeEmail', 'Action Owner', 'decision', 'text', { readOnlyReason: FROM_FOLLOW_UP }),
-  std('nextActionDueDate', 'Action Due', 'decision', 'date', { readOnlyReason: FROM_FOLLOW_UP }),
+  // The three Next Action columns edit the bid's open follow-up (replaced, so its history stays).
+  std('nextActionNote', 'Next Action', 'decision', 'text', { editable: 'nextAction' }),
+  std('nextActionAssigneeEmail', 'Action Owner', 'decision', 'text', { editable: 'nextAction', pick: 'personByEmail' }),
+  std('nextActionDueDate', 'Action Due', 'decision', 'date', { editable: 'nextAction' }),
   std('attentionFlag', 'Attention', 'decision', 'select', { options: ATTENTION_OPTIONS, readOnlyReason: 'Calculated from the deadline and corrigenda' }),
   std('decision', 'Decision', 'decision', 'select', { options: DECISION_OPTIONS, editable: 'bid', required: true }),
 
@@ -124,7 +143,8 @@ export const STANDARD_COLUMNS: GridColumnMeta[] = [
 
   std('updatedAt', 'Last Updated', 'system', 'date', { readOnlyReason: 'System field' }),
   std('updatedBy', 'Updated By', 'system', 'text', { readOnlyReason: 'System field' }),
-  std('dataConfidence', 'Data Confidence', 'system', 'select', { options: CONFIDENCE_OPTIONS, readOnlyReason: 'Set by verification in the bid' }),
+  // Only "Verified" can be chosen by hand; Needs Review is set by corrigenda and imports.
+  std('dataConfidence', 'Data Confidence', 'system', 'select', { options: CONFIDENCE_OPTIONS, editable: 'verify', required: true }),
   std('manage', 'Manage', 'system', null, { readOnlyReason: 'Row action' }),
 ]
 
@@ -132,7 +152,7 @@ export const STANDARD_COLUMNS: GridColumnMeta[] = [
  *  layout the browser re-measures every column as rows scroll in and out of the
  *  virtualized window, so columns would jitter sideways while scrolling. */
 const WIDTH_BY_ID: Record<string, number> = {
-  opportunityId: 130, opportunityName: 280, bidCode: 120, gemTenderId: 190, tenderLink: 100,
+  opportunityId: 260, opportunityName: 280, opportunityType: 150, bidCode: 120, gemTenderId: 190, tenderLink: 100,
   departmentName: 240, stateCode: 130, city: 130, vertical: 140,
   geoSalesPersonId: 180, buSalesPersonId: 180, preSalesPersonId: 180, legalPersonId: 180, bidTeamMemberId: 180,
   ownerEmail: 210, solutionLeadEmail: 230,
@@ -257,7 +277,7 @@ export const NO_LOOKUPS: EntityLookups = {
 }
 
 export function buildLookups(input: {
-  persons: { id: string; name: string; officialEmail?: string }[]
+  persons: { id: string; name: string; officialEmail?: string; photoUrl?: string | null }[]
   deliveryTeamMembers?: DeliveryTeamMember[]
   departments: { id: string; name: string; stateCode: number | null }[]
   states: { code: number; name: string }[]
@@ -266,18 +286,16 @@ export function buildLookups(input: {
   // Department names repeat across states, so a duplicate carries its state.
   const nameCount = new Map<string, number>()
   for (const d of input.departments) nameCount.set(d.name, (nameCount.get(d.name) ?? 0) + 1)
+  const members = (team: DeliveryTeamKey, activeOnly: boolean): ColumnOption[] =>
+    input.deliveryTeamMembers
+      ?.filter((member) => member.team === team && (!activeOnly || member.status === 'active'))
+      .map((member) => ({ value: member.id, label: member.name, email: member.email || undefined, isPerson: true })) ?? []
   return {
-    persons: input.persons.map((p) => ({ value: p.id, label: p.name, email: p.officialEmail })).sort((a, b) => a.label.localeCompare(b.label)),
-    deliveryTeamNames: {
-      preSales: input.deliveryTeamMembers?.filter((member) => member.team === 'preSales').map((member) => ({ value: member.id, label: member.name })) ?? [],
-      legal: input.deliveryTeamMembers?.filter((member) => member.team === 'legal').map((member) => ({ value: member.id, label: member.name })) ?? [],
-      bid: input.deliveryTeamMembers?.filter((member) => member.team === 'bid').map((member) => ({ value: member.id, label: member.name })) ?? [],
-    },
-    deliveryTeams: {
-      preSales: input.deliveryTeamMembers?.filter((member) => member.team === 'preSales' && member.status === 'active').map((member) => ({ value: member.id, label: member.name })) ?? [],
-      legal: input.deliveryTeamMembers?.filter((member) => member.team === 'legal' && member.status === 'active').map((member) => ({ value: member.id, label: member.name })) ?? [],
-      bid: input.deliveryTeamMembers?.filter((member) => member.team === 'bid' && member.status === 'active').map((member) => ({ value: member.id, label: member.name })) ?? [],
-    },
+    persons: input.persons
+      .map((p) => ({ value: p.id, label: p.name, email: p.officialEmail, photoUrl: p.photoUrl ?? null, isPerson: true }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    deliveryTeamNames: { preSales: members('preSales', false), legal: members('legal', false), bid: members('bid', false) },
+    deliveryTeams: { preSales: members('preSales', true), legal: members('legal', true), bid: members('bid', true) },
     departments: input.departments.map((d) => ({
       value: d.id,
       label: (nameCount.get(d.name) ?? 0) > 1 && d.stateCode !== null && stateName.has(d.stateCode) ? `${d.name} (${stateName.get(d.stateCode)})` : d.name,
@@ -288,7 +306,8 @@ export function buildLookups(input: {
 
 /** The pick-list for a column: fixed options, or the live records for an entity type. */
 export function optionsOf(col: Pick<GridColumnMeta, 'type' | 'options' | 'teamKey'> & { pick?: GridColumnMeta['pick'] } | undefined, lookups: EntityLookups = NO_LOOKUPS): ColumnOption[] {
-  if (col?.pick === 'personByEmail') return lookups.persons.filter((p) => p.email).map((p) => ({ value: p.email!, label: p.label, email: p.email }))
+  if (col?.pick === 'personByEmail') return lookups.persons.filter((p) => p.email).map((p) => ({ ...p, value: p.email! }))
+  if (col?.pick === 'department') return lookups.departments
   if (col?.teamKey) return col.teamKey === 'sales' ? lookups.persons : lookups.deliveryTeams[col.teamKey]
   switch (col?.type) {
     case 'person': return lookups.persons
@@ -310,7 +329,15 @@ export const isEmptyCell = (v: unknown) => v === null || v === undefined || v ==
 
 export function cellValue(row: BidGridRow, col: GridColumnMeta): unknown {
   if (col.custom) return row.customValues?.[col.custom.key]
+  // The Opportunity ID column shows the human-readable code (the raw id only for
+  // a row that has none yet) — so search, sort and export all work on the code.
+  if (col.id === 'opportunityId') return row.opportunityCode || row.opportunityId
   return (row as unknown as Record<string, unknown>)[col.id]
+}
+
+/** The value an inline editor starts from — `editKey` when the cell displays something derived. */
+export function editValue(row: BidGridRow, col: GridColumnMeta): unknown {
+  return col.editKey ? row[col.editKey] : cellValue(row, col)
 }
 
 export const formatCurrency = (n: number) =>
@@ -318,6 +345,21 @@ export const formatCurrency = (n: number) =>
 
 /** One value as plain text, by type: what search matches, what sorting orders
  *  by for entity types, and what an export writes. Empty = ''. */
+/** The person a cell points at (by id, or by email for Bid Owner / Lead / Action Owner),
+ *  or null when the column isn't a person column or the value is empty. Unknown ids/emails
+ *  still render as a person with the raw value as the name. */
+export function personOf(col: GridColumnMeta, v: unknown, lookups: EntityLookups = NO_LOOKUPS): { name: string; photoUrl: string | null } | null {
+  if (isEmptyCell(v)) return null
+  const byEmail = col.pick === 'personByEmail' || col.id === 'updatedBy'
+  if (!byEmail && col.type !== 'person') return null
+  const value = String(v)
+  const pool = col.teamKey && col.teamKey !== 'sales' ? lookups.deliveryTeamNames[col.teamKey] : lookups.persons
+  const match = byEmail
+    ? lookups.persons.find((p) => p.email?.toLowerCase() === value.toLowerCase())
+    : pool.find((p) => p.value === value)
+  return { name: match?.label ?? value, photoUrl: match?.photoUrl ?? null }
+}
+
 export function formatValueText(col: Pick<GridColumnMeta, 'type' | 'options' | 'teamKey'>, v: unknown, lookups: EntityLookups = NO_LOOKUPS): string {
   if (isEmptyCell(v)) return ''
   if (col.teamKey && col.teamKey !== 'sales') {
