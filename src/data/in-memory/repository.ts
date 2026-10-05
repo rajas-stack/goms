@@ -3005,6 +3005,8 @@ const MUTATOR_KEYS = [
   'createBidSavedView', 'updateBidSavedView', 'deleteBidSavedView',
   'createBidCustomField', 'updateBidCustomField', 'reorderBidCustomFields', 'archiveBidCustomField',
   'unarchiveBidCustomField', 'deleteBidCustomField', 'setBidCustomValue',
+  'createDeliveryTeamMember', 'updateDeliveryTeamMember', 'setDeliveryTeamMemberStatus', 'deleteDeliveryTeamMember',
+  'createOrgPerson', 'updateOrgPerson', 'deleteOrgPerson',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -3026,6 +3028,7 @@ const READER_KEYS = [
   'listCustomers', 'getCustomer',
   'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
   'listDocuments', 'listDocumentCitations', 'getDocumentDownloadUrl', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
+  'listDeliveryTeamMembers', 'listOrgPeople',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the
