@@ -1,3 +1,4 @@
+import { DEFAULT_OWNED_SHEET, isOwnedSheet } from '@goms/domain'
 import { uid } from '@/lib/utils'
 import { buildOwnershipFixture } from './ownership-fixture'
 import { buildSalesRoster, mergeMissingSalesRoster } from './sales-roster-seed'
@@ -73,8 +74,11 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *  v21 Company Org Structure (`orgPeople`, org-structure.ts) seeded by name,
  *      then the Pre-sales / Bid / Legal rosters re-derived from it (existing
  *      member ids kept, so opportunity assignments still resolve).
+ *  v22 Sheet ownership: `bids[].sheet` — which Opportunity sheet a bid lives
+ *      in. Every existing bid was a Bid Tracker row, so it is backfilled to
+ *      'bidTracker'; a bid that already carries a known sheet keeps it.
  */
-export const SCHEMA_VERSION = 21
+export const SCHEMA_VERSION = 22
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -376,6 +380,13 @@ function toV21(data: SnapshotShape): SnapshotShape {
   return { ...data, orgPeople, deliveryTeamMembers: syncAllTeamsFromOrg(orgPeople, members) }
 }
 
+/** v21 → v22. See `SCHEMA_VERSION` doc comment. Idempotent. */
+function toV22(data: SnapshotShape): SnapshotShape {
+  if (!Array.isArray(data.bids)) return data
+  const bids = asArray(data.bids).map((b) => ({ ...b, sheet: isOwnedSheet(b.sheet) ? b.sheet : DEFAULT_OWNED_SHEET }))
+  return { ...data, bids }
+}
+
 /** v18 → v19. See `SCHEMA_VERSION` doc comment. */
 function toV19(data: SnapshotShape): SnapshotShape {
   return { ...data, deliveryTeamMembers: mergeTeamRosters(asArray(data.deliveryTeamMembers) as unknown as DeliveryTeamMember[]) }
@@ -426,6 +437,7 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   19: toV19,
   20: toV20,
   21: toV21,
+  22: toV22,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

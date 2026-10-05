@@ -4,7 +4,10 @@ import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
 import { assertFieldsNotProtected } from '../lib/protectedValues.js'
-import { DEPARTMENT_REQUIRED_MESSAGE, formatBidCode, DEFAULT_BID_STAGE_KEY, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP, computeAttentionFlag, applyFilterRules, buildOwnerMap, type CustomFieldType, type CustomValue } from '@goms/domain'
+import {
+  DEPARTMENT_REQUIRED_MESSAGE, formatBidCode, DEFAULT_BID_STAGE_KEY, DEFAULT_OWNED_SHEET, OWNED_SHEETS, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP,
+  computeAttentionFlag, applyFilterRules, buildOwnerMap, type CustomFieldType, type CustomValue, type OwnedSheet,
+} from '@goms/domain'
 import { applyStageChange, insertOpportunity } from './opportunities.js'
 import { loadOwnershipContext } from './ownership.js'
 import { writeAuditLog } from '../lib/auditLog.js'
@@ -17,9 +20,13 @@ export function toBid(row: any) {
   return {
     id: row.id, opportunityId: row.opportunity_id, bidCode: row.bid_code, stageKey: row.stage_key,
     decision: row.decision, status: row.status, dataConfidence: row.data_confidence,
-    tenderLink: row.tender_link, archivedAt: row.archived_at, createdAt: row.created_at, updatedAt: row.updated_at,
+    tenderLink: row.tender_link, sheet: (row.sheet ?? DEFAULT_OWNED_SHEET) as OwnedSheet,
+    archivedAt: row.archived_at, createdAt: row.created_at, updatedAt: row.updated_at,
   }
 }
+
+/** Which Opportunity sheet a bid lives in (OWNED_SHEETS; Master is never one). */
+const sheetSchema = z.enum(OWNED_SHEETS)
 
 async function oneBid(id: string) {
   const result = await pool.query('SELECT * FROM bids WHERE id=$1', [id])
@@ -48,7 +55,7 @@ function parseSubmissionDate(raw: string | null | undefined): string | null {
 }
 
 const bidColumnFor: Record<string, string> = {
-  stageKey: 'stage_key', decision: 'decision', tenderLink: 'tender_link',
+  stageKey: 'stage_key', decision: 'decision', tenderLink: 'tender_link', sheet: 'sheet',
 }
 
 const bidActionQueueRouter = router({
@@ -229,6 +236,8 @@ export const bidsRouter = router({
       // Create the opportunity as part of the same transaction (department is then mandatory).
       newOpportunity: newBidOpportunitySchema.optional(),
       department: departmentChoiceSchema.optional(),
+      // The Opportunity sheet the new row is filed into (default Bid Tracker).
+      sheet: sheetSchema.optional(),
     }).refine((v) => !!v.opportunityId !== !!v.newOpportunity, { message: 'Choose an existing opportunity or describe a new one.' }))
     .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
@@ -253,8 +262,8 @@ export const bidsRouter = router({
         let bidRow: any
         try {
           bidRow = (await client.query(
-            `INSERT INTO bids (opportunity_id, bid_code, stage_key) VALUES ($1,$2,$3) RETURNING *`,
-            [opportunityId, bidCode, DEFAULT_BID_STAGE_KEY],
+            `INSERT INTO bids (opportunity_id, bid_code, stage_key, sheet) VALUES ($1,$2,$3,$4) RETURNING *`,
+            [opportunityId, bidCode, DEFAULT_BID_STAGE_KEY, input.sheet ?? DEFAULT_OWNED_SHEET],
           )).rows[0]
         } catch (e) {
           if (isUniqueViolation(e)) {
@@ -291,6 +300,8 @@ export const bidsRouter = router({
       patch: z.object({
         stageKey: z.string().optional(), decision: z.enum(['pending', 'go', 'no_go']).optional(),
         tenderLink: z.string().nullable().optional(),
+        // Moves the row to another Opportunity sheet.
+        sheet: sheetSchema.optional(),
       }),
     }))
     .mutation(async ({ input, ctx }) => {

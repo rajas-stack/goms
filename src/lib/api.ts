@@ -1,5 +1,5 @@
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { DepartmentChoice, NewBidOpportunity } from '@goms/domain'
+import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import {
   repository, type AddTimelineInput, type AssignOwnerInput, type CreateEmployeeInput, type CreateFollowUpInput,
   type CreateNodeInput, type CreateOpportunityInput, type CreateSalesPersonInput, type CreateDeliveryTeamMemberInput, type UpdateDeliveryTeamMemberPatch, type CreateOrgPersonInput, type UpdateOrgPersonPatch, type ImportChildRow,
@@ -161,16 +161,19 @@ export function useBidMutations() {
   // Both entry points (the Bid Tracker's Create Bid dialog and the opportunity card) go through
   // this one mutation; `department` is only sent when the opportunity has none.
   const create = useMutation({
-    mutationFn: (a: { opportunityId: string; department?: DepartmentChoice }) => repository.createBid(a.opportunityId, a.department),
+    mutationFn: (a: { opportunityId: string; department?: DepartmentChoice; sheet?: OwnedSheet }) =>
+      repository.createBid(a.opportunityId, a.department, a.sheet),
     onSuccess: invalidate,
   })
   // Create the opportunity, its department and the bid in one go (Bid Tracker's Create Bid → new opportunity).
   const createWithNewOpportunity = useMutation({
-    mutationFn: (a: { opportunity: NewBidOpportunity; department: DepartmentChoice }) => repository.createBidForNewOpportunity(a.opportunity, a.department),
+    mutationFn: (a: { opportunity: NewBidOpportunity; department: DepartmentChoice; sheet?: OwnedSheet }) =>
+      repository.createBidForNewOpportunity(a.opportunity, a.department, a.sheet),
     onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['opportunities'] }); qc.invalidateQueries({ queryKey: ['departments'] }) },
   })
+  // `sheet` in the patch moves the row to another Opportunity sheet.
   const update = useMutation({
-    mutationFn: (a: { id: string; patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>> }) =>
+    mutationFn: (a: { id: string; patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink' | 'sheet'>> }) =>
       repository.updateBid(a.id, a.patch),
     onSuccess: invalidate,
   })

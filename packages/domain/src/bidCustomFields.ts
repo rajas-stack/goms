@@ -116,6 +116,7 @@ export const STANDARD_BID_FIELD_TYPES: Record<string, CustomFieldType> = {
   latestCorrigendumStatus: 'select',
   updatedBy: 'text',
   updatedAt: 'date',
+  sheet: 'select',
 }
 
 export const CUSTOM_FIELD_PREFIX = 'custom:'

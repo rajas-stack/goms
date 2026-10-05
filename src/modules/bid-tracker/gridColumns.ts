@@ -4,7 +4,7 @@
 // custom — is described by the same `GridColumnMeta`, so sorting, filtering,
 // search, visibility/order and saved views all work off one shape.
 import {
-  BID_STAGES, ENTITY_FIELD_TYPES, OPPORTUNITY_TYPES, flattenRules, parseMultiValue,
+  BID_STAGES, ENTITY_FIELD_TYPES, OPPORTUNITY_TYPES, OWNED_SHEETS, OWNED_SHEET_LABELS, flattenRules, parseMultiValue,
   type CustomFieldType, type FilterNode, type TypedFilterRule,
 } from '@goms/domain'
 import type { BidCustomField, BidGridRow, DeliveryTeamKey, DeliveryTeamMember } from '@/lib/types'
@@ -59,6 +59,9 @@ export interface GridColumnMeta {
   pick?: 'personByEmail' | 'department'
   /** Row field the editor reads when it differs from the displayed one (Department / Client edits `departmentId`). */
   editKey?: keyof BidGridRow
+  /** Read-only by default, but a user may unlock the column (per sheet) to edit it through this
+   *  write path. Interim per-browser switch until role-based access decides who may. */
+  unlockable?: 'opportunity'
   /** Roster source for a role assignment person field. */
   teamKey?: 'sales' | DeliveryTeamKey
   /** Why a standard column is NOT inline-editable (shown as its tooltip). Every
@@ -83,6 +86,7 @@ const CONFIDENCE_OPTIONS: ColumnOption[] = [
   { value: 'verified', label: 'Verified' }, { value: 'needs_review', label: 'Needs Review' },
 ]
 export const OPPORTUNITY_TYPE_OPTIONS: ColumnOption[] = OPPORTUNITY_TYPES.map((t) => ({ value: t, label: t }))
+export const SHEET_OPTIONS: ColumnOption[] = OWNED_SHEETS.map((s) => ({ value: s, label: OWNED_SHEET_LABELS[s] }))
 const CORRIGENDUM_OPTIONS: ColumnOption[] = [
   { value: 'pending_review', label: 'Pending Review' }, { value: 'reviewed', label: 'Reviewed' },
 ]
@@ -105,13 +109,16 @@ export const STANDARD_COLUMNS: GridColumnMeta[] = [
   std('opportunityName', 'Opportunity / Mission', 'identity', 'text', { editable: 'opportunity', required: true }),
   std('opportunityType', 'Opportunity Type', 'identity', 'select', { options: OPPORTUNITY_TYPE_OPTIONS, editable: 'opportunity' }),
   std('bidCode', 'Bid ID', 'identity', 'text', { readOnlyReason: 'Generated identifier' }),
-  std('gemTenderId', 'Tender ID', 'identity', 'text', { readOnlyReason: PROTECTED }),
+  // Unlockable: the opportunity update still refuses a value frozen by the Protected Values flow.
+  std('gemTenderId', 'Tender ID', 'identity', 'text', { readOnlyReason: PROTECTED, unlockable: 'opportunity' }),
   // Edits go through bids.update, which refuses a frozen (protected) value with its own message.
   std('tenderLink', 'Tender Link', 'identity', 'text', { editable: 'bid' }),
+  // Which sheet the row lives in. Shown on Master; hidden by default on the other sheets (every row there is theirs).
+  std('sheet', 'Sheet', 'identity', 'select', { options: SHEET_OPTIONS, readOnlyReason: 'Use Move to… to change the sheet' }),
 
   // Picking a department also moves the opportunity's State to that department's.
   std('departmentName', 'Department / Client', 'client', 'text', { editable: 'department', pick: 'department', editKey: 'departmentId', required: true }),
-  std('stateCode', 'State', 'client', 'state', { readOnlyReason: FROM_DEPARTMENT }),
+  std('stateCode', 'State', 'client', 'state', { readOnlyReason: FROM_DEPARTMENT, unlockable: 'opportunity' }),
   std('city', 'City', 'client', 'text', { editable: 'opportunity' }),
   std('vertical', 'Sector', 'client', 'text', { editable: 'opportunity' }),
 
@@ -152,7 +159,7 @@ export const STANDARD_COLUMNS: GridColumnMeta[] = [
  *  layout the browser re-measures every column as rows scroll in and out of the
  *  virtualized window, so columns would jitter sideways while scrolling. */
 const WIDTH_BY_ID: Record<string, number> = {
-  opportunityId: 260, opportunityName: 280, opportunityType: 150, bidCode: 120, gemTenderId: 190, tenderLink: 100,
+  opportunityId: 260, opportunityName: 280, opportunityType: 150, bidCode: 120, gemTenderId: 190, tenderLink: 100, sheet: 170,
   departmentName: 240, stateCode: 130, city: 130, vertical: 140,
   geoSalesPersonId: 180, buSalesPersonId: 180, preSalesPersonId: 180, legalPersonId: 180, bidTeamMemberId: 180,
   ownerEmail: 210, solutionLeadEmail: 230,
@@ -233,6 +240,15 @@ export function setColumnVisibility(all: GridColumnMeta[], saved: string[] | und
     if (columnIdFromOrderToken(token) !== id) return token
     return shown ? id : `${HIDDEN_COLUMN_PREFIX}${id}`
   })
+}
+
+/** A sheet's column list when no saved view sets one: every column in canonical
+ *  order — except the Sheet column, which only Master shows by default (on any
+ *  other sheet every row is that sheet's, so the column would say nothing).
+ *  `undefined` = "every column" (the plain default). */
+export function defaultVisibleColumnIds(all: GridColumnMeta[], sheet: string): string[] | undefined {
+  if (sheet === 'master' || !all.some((c) => c.id === 'sheet')) return undefined
+  return setColumnVisibility(all, undefined, 'sheet', false)
 }
 
 export function showAllColumnIds(all: GridColumnMeta[], saved: string[] | undefined): string[] {

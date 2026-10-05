@@ -63,6 +63,7 @@ const bidTrackerRoutes = isBidTrackerEnabled()
       { path: '/bid-tracker/pipeline/:tab', element: <OpportunityWorkspace tab="pipeline" /> },
       { path: '/bid-tracker/campaign', element: <OpportunityWorkspace tab="campaign" /> },
       { path: '/bid-tracker/master', element: <OpportunityWorkspace tab="master" /> },
+      { path: '/bid-tracker/dashboard', element: <OpportunityWorkspace tab="dashboard" /> },
       { path: '/bid-tracker/:section', element: <OpportunityWorkspace tab="bid-tracker" /> },
     ]
   : []

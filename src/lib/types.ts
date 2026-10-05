@@ -2,7 +2,7 @@
 // apps/api's hierarchy router) — re-imported and re-exported here so every
 // existing import path (`@/lib/types`) keeps working unchanged, including
 // this file's own later use of Domain/Status below.
-import type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue, FilterNode } from '@goms/domain'
+import type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue, FilterNode, OwnedSheet } from '@goms/domain'
 export type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue }
 
 export type RelationshipStatus = 'engaged' | 'developing' | 'dormant' | 'new'
@@ -419,6 +419,8 @@ export interface Bid {
   status: 'active' | 'archived'
   dataConfidence: 'verified' | 'needs_review'
   tenderLink: string | null
+  /** The Opportunity sheet this row lives in (Master shows every sheet's rows). */
+  sheet: OwnedSheet
   archivedAt: string | null
   createdAt: string
   updatedAt: string

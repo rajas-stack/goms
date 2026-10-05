@@ -4,12 +4,14 @@ import { Tabs } from '@/components/ui/Tabs'
 import { cn } from '@/lib/utils'
 import { BidTrackerWorkspace } from './BidTrackerWorkspace'
 import { GridSheet } from './GridSheet'
+import { DashboardPage } from './pages/DashboardPage'
 import { OPPORTUNITY_TABS, PIPELINE_TABS, type OpportunityTab, type PipelineTab } from './sheets'
 
 /** The Opportunity module: Bid Tracker, Pipeline (Funnel / Backup / Commits),
- *  Campaign and Master. Laid out like Account Mapping's Map / Directory /
- *  Insights / Meetings bar. Every sheet is the same Excel-style grid over the
- *  same bids (custom columns, filters, freeze, lock) with its own saved views. */
+ *  Campaign, Master and Dashboard. Laid out like Account Mapping's Map / Directory /
+ *  Insights / Meetings bar. Every sheet is the same Excel-style grid (custom
+ *  columns, filters, freeze, lock) with its own saved views, over the rows that
+ *  live in it; Master lists every sheet's rows and Dashboard summarises them. */
 export function OpportunityWorkspace({ tab }: { tab: OpportunityTab }) {
   const { tab: pipelineParam } = useParams()
   const navigate = useNavigate()
@@ -50,6 +52,7 @@ export function OpportunityWorkspace({ tab }: { tab: OpportunityTab }) {
         {tab === 'pipeline' && pipeline && <GridSheet key={pipeline.sheet} sheet={pipeline.sheet} />}
         {tab === 'campaign' && <GridSheet sheet="campaign" />}
         {tab === 'master' && <GridSheet sheet="master" />}
+        {tab === 'dashboard' && <DashboardPage />}
       </div>
     </div>
   )

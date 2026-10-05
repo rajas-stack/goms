@@ -27,6 +27,22 @@ export const BID_STAGES: BidStageDef[] = [
 export const BID_STAGE_MAP: Record<string, BidStageDef> = Object.fromEntries(BID_STAGES.map((s) => [s.key, s]))
 export const DEFAULT_BID_STAGE_KEY = 'solutioning'
 
+/** The Opportunity sheets a bid can LIVE in — each row belongs to exactly one.
+ *  (Master is not one of them: it is the collective view over all of these.) */
+export const OWNED_SHEETS = ['bidTracker', 'pipeline-funnel', 'pipeline-backup', 'pipeline-commits', 'campaign'] as const
+export type OwnedSheet = (typeof OWNED_SHEETS)[number]
+export const DEFAULT_OWNED_SHEET: OwnedSheet = 'bidTracker'
+export const OWNED_SHEET_LABELS: Record<OwnedSheet, string> = {
+  bidTracker: 'Bid Tracker',
+  'pipeline-funnel': 'Pipeline · Funnel',
+  'pipeline-backup': 'Pipeline · Backup',
+  'pipeline-commits': 'Pipeline · Commits',
+  campaign: 'Campaign',
+}
+export function isOwnedSheet(value: unknown): value is OwnedSheet {
+  return typeof value === 'string' && (OWNED_SHEETS as readonly string[]).includes(value)
+}
+
 /** -1 for an unknown key, so a stale/retired stage never compares as
  *  "at or after" anything by accident. */
 export function bidStageOrder(key: string): number {

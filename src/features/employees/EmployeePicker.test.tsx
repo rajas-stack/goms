@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -26,7 +27,12 @@ describe('EmployeePicker — Avatar rollout (Task 9.1)', () => {
   it('keeps a newly created selection visible before candidates refresh', async () => {
     const user = userEvent.setup()
     const onCreate = vi.fn().mockResolvedValue('pending-head-id')
-    render(<EmployeePicker candidates={[]} value="" onChange={() => {}} onCreate={onCreate} />)
+    // A real parent stores the new id as the value while `candidates` has not refreshed yet.
+    function Parent() {
+      const [value, setValue] = useState('')
+      return <EmployeePicker candidates={[]} value={value} onChange={setValue} onCreate={onCreate} />
+    }
+    render(<Parent />)
 
     await user.type(screen.getByPlaceholderText('Search a person…'), 'New Head')
     await user.click(await screen.findByRole('button', { name: /Create new person/ }))

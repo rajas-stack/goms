@@ -73,7 +73,7 @@ describe('Avatar', () => {
       />
     )
     const container = screen.getByTestId('avatar')
-    expect(container).toHaveClass('h-6', 'w-6', 'text-xs')
+    expect(container).toHaveClass('h-6', 'w-6', 'text-[10px]')
   })
 
   it('maps size sm to 32px', () => {
@@ -84,7 +84,7 @@ describe('Avatar', () => {
       />
     )
     const container = screen.getByTestId('avatar')
-    expect(container).toHaveClass('h-8', 'w-8', 'text-sm')
+    expect(container).toHaveClass('h-8', 'w-8', 'text-xs')
   })
 
   it('maps size md to 40px', () => {
@@ -95,7 +95,7 @@ describe('Avatar', () => {
       />
     )
     const container = screen.getByTestId('avatar')
-    expect(container).toHaveClass('h-10', 'w-10', 'text-base')
+    expect(container).toHaveClass('h-10', 'w-10', 'text-sm')
   })
 
   it('maps size lg to 56px', () => {
@@ -116,7 +116,7 @@ describe('Avatar', () => {
       />
     )
     const container = screen.getByTestId('avatar')
-    expect(container).toHaveClass('h-10', 'w-10', 'text-base')
+    expect(container).toHaveClass('h-10', 'w-10', 'text-sm')
   })
 
   it('applies custom className to the container', () => {

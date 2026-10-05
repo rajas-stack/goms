@@ -4,7 +4,7 @@ import type { BidCustomField, BidGridRow } from '@/lib/types'
 import {
   CUSTOM_GROUP, GRID_GROUPS, STANDARD_COLUMNS, buildLookups, compareTyped, customColumnMeta, formatValueText, ignoredRules,
   isRuleComplete, operatorLabel, optionsOf, resolveColumns, resolveVisibleColumns, rowMatchesSearch, sortKeyOf,
-  orderedColumnIds, setColumnVisibility, showAllColumnIds,
+  orderedColumnIds, setColumnVisibility, showAllColumnIds, defaultVisibleColumnIds,
 } from './gridColumns'
 
 const field = (over: Partial<BidCustomField> & Pick<BidCustomField, 'key' | 'name' | 'dataType'>): BidCustomField => ({
@@ -22,14 +22,14 @@ describe('grid column registry — completeness', () => {
 
   it('names every required leaf column under its own group', () => {
     const byGroup = (id: string) => STANDARD_COLUMNS.filter((c) => c.group === id).map((c) => c.header)
-    expect(byGroup('identity')).toEqual(['Opportunity ID', 'Opportunity / Mission', 'Opportunity Type', 'Bid ID', 'Tender ID', 'Tender Link'])
+    expect(byGroup('identity')).toEqual(['Opportunity ID', 'Opportunity / Mission', 'Opportunity Type', 'Bid ID', 'Tender ID', 'Tender Link', 'Sheet'])
     expect(byGroup('client')).toEqual(['Department / Client', 'State', 'City', 'Sector'])
     expect(byGroup('ownership')).toEqual(['Geo-sales', 'BU-sales', 'Pre-sales', 'Legal', 'Bid', 'Bid Owner', 'Sales Lead / Solution Lead'])
     expect(byGroup('decision')).toEqual(['Bid Stage', 'Next Action', 'Action Owner', 'Action Due', 'Attention', 'Decision'])
     expect(byGroup('dates')).toEqual(['Next Milestone', 'Days Remaining', 'Submission Deadline'])
     expect(byGroup('documents')).toEqual(['Tender Files', 'Latest Corrigendum'])
     expect(byGroup('system')).toEqual(['Last Updated', 'Updated By', 'Data Confidence', 'Manage'])
-    expect(STANDARD_COLUMNS).toHaveLength(32)
+    expect(STANDARD_COLUMNS).toHaveLength(33)
   })
 
   it('binds City and Action Owner to the row fields the API provides', () => {
@@ -69,8 +69,22 @@ describe('grid column registry — completeness', () => {
     for (const id of [
       'opportunityId', 'bidCode', 'gemTenderId', 'submissionDate',
       'stateCode', 'nextMilestoneLabel', 'daysRemaining',
-      'documentCount', 'latestCorrigendumStatus', 'updatedAt', 'updatedBy', 'attentionFlag', 'manage',
+      'documentCount', 'latestCorrigendumStatus', 'updatedAt', 'updatedBy', 'attentionFlag', 'manage', 'sheet',
     ]) expect(readOnly(id), id).toBe(true)
+  })
+
+  it('the Sheet column names every sheet a row can live in, and is changed only through Move to…', () => {
+    const sheet = STANDARD_COLUMNS.find((c) => c.id === 'sheet')!
+    expect(sheet).toMatchObject({ header: 'Sheet', group: 'identity', type: 'select', readOnlyReason: 'Use Move to… to change the sheet' })
+    expect(sheet.options?.map((o) => o.label)).toEqual(['Bid Tracker', 'Pipeline · Funnel', 'Pipeline · Backup', 'Pipeline · Commits', 'Campaign'])
+  })
+
+  it('shows the Sheet column by default on Master only', () => {
+    const all = resolveColumns([])
+    expect(defaultVisibleColumnIds(all, 'master')).toBeUndefined()
+    const ids = resolveVisibleColumns(all, defaultVisibleColumnIds(all, 'campaign')).map((c) => c.id)
+    expect(ids).not.toContain('sheet')
+    expect(ids).toHaveLength(all.length - 1)
   })
 
   it('makes the Opportunity / Mission name required when edited', () => {
