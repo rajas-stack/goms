@@ -38,25 +38,35 @@ export function GridContextMenu({ x, y, title, groups, onClose }: {
     })
   }, [x, y])
 
+  // Callers pass an inline `onClose`; reading it through a ref keeps the listeners (and the menu's
+  // focus) from being torn down and re-added on every parent render.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
+
   useEffect(() => {
-    ref.current?.focus()
-    const close = () => onClose()
-    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) onClose() }
+    ref.current?.focus({ preventScroll: true })
+    const close = () => onCloseRef.current()
+    const onDown = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) onCloseRef.current() }
     // Capture phase on purpose: React flushes a discrete event's effects while that event is
     // still bubbling, so a bubble-phase `document` listener added here would receive the very
     // right-click that opened the menu and shut it again in the same tick. The capture pass over
     // `document` has already finished by then, so it only ever sees *later* events.
     document.addEventListener('mousedown', onDown, true)
     document.addEventListener('contextmenu', onDown, true)
-    window.addEventListener('scroll', close, true)
+    // Close on *user* scrolling (wheel / touch), not on every `scroll` event: the grid also scrolls
+    // by itself (settling after a sheet switch, the virtualizer, scroll-into-view), and that used to
+    // dismiss a menu the instant it opened.
+    window.addEventListener('wheel', close, { capture: true, passive: true })
+    window.addEventListener('touchmove', close, { capture: true, passive: true })
     window.addEventListener('resize', close)
     return () => {
       document.removeEventListener('mousedown', onDown, true)
       document.removeEventListener('contextmenu', onDown, true)
-      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('wheel', close, true)
+      window.removeEventListener('touchmove', close, true)
       window.removeEventListener('resize', close)
     }
-  }, [onClose])
+  }, [])
 
   const run = (entry: MenuEntry | undefined) => {
     if (!entry || entry.disabled) return

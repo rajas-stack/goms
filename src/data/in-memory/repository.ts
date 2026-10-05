@@ -3005,6 +3005,8 @@ const MUTATOR_KEYS = [
   'createBidSavedView', 'updateBidSavedView', 'deleteBidSavedView',
   'createBidCustomField', 'updateBidCustomField', 'reorderBidCustomFields', 'archiveBidCustomField',
   'unarchiveBidCustomField', 'deleteBidCustomField', 'setBidCustomValue',
+  'createDeliveryTeamMember', 'updateDeliveryTeamMember', 'setDeliveryTeamMemberStatus', 'deleteDeliveryTeamMember',
+  'createOrgPerson', 'updateOrgPerson', 'deleteOrgPerson',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -3026,6 +3028,7 @@ const READER_KEYS = [
   'listCustomers', 'getCustomer',
   'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
   'listDocuments', 'listDocumentCitations', 'getDocumentDownloadUrl', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
+  'listDeliveryTeamMembers', 'listOrgPeople',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the
@@ -3051,23 +3054,6 @@ export async function bootstrapRepository(): Promise<void> {
 export async function resetLocalData(): Promise<void> {
   await clearSnapshot()
   impl.hydrate(buildSeed())
-}
-
-/** The full store, serializable as-is for a JSON backup — see
- *  src/data/backup.ts. Not part of `Repository`: read-only introspection of
- *  the whole store, not a per-entity domain operation. */
-export function getFullSnapshot(): GormsData {
-  return impl.snapshot()
-}
-
-/** Replaces the whole store with a restored backup and persists it, the
- *  same way any other mutation would — but bypassing the `Repository` proxy
- *  since this isn't a per-entity domain operation either. Callers must
- *  invalidate their own query cache afterward; this module has no
- *  dependency on React Query. */
-export function restoreFromBackup(data: GormsData): void {
-  impl.hydrate(data)
-  scheduleSave(() => impl.snapshot())
 }
 
 /** The store, wrapped so that every mutation schedules a save. A proxy rather

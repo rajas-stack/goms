@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // `adminImportRoutes` (router.tsx) is read from `import.meta.env.VITE_ADMIN_IMPORT_ENABLED`
 // at module-load time, so switching modes needs a fresh module graph — see
-// the same pattern in TopBar.test.tsx / SettingsDialog.test.tsx.
+// the same pattern in TopBar.test.tsx.
 describe('admin data import routes', () => {
   beforeEach(() => {
     vi.resetModules()
