@@ -12,24 +12,31 @@ import {
 } from './department-meta'
 import { DEFAULT_STAGE_KEY, PIPELINE_STAGES } from '@/data/pipeline-stages'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
+import { OpportunityTeamAssignments } from '@/features/teams/OpportunityTeamAssignments'
+import { OpportunityCodePreview } from '@/features/opportunities/OpportunityCodePreview'
+import { OPPORTUNITY_TYPES } from '@goms/domain'
 import type { Opportunity } from '@/lib/types'
 
-type OpportunityDraft = Omit<Opportunity, 'id' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>
+/** `opportunityCode` is never part of the draft: it is generated on create and locked after. */
+type OpportunityDraft = Omit<Opportunity, 'id' | 'opportunityCode' | 'departmentId' | 'stateCode' | 'createdAt' | 'createdBy'>
 
 const EMPTY: OpportunityDraft = {
   opportunityName: '', gemTenderId: '', publishDate: '', submissionDate: '',
-  vertical: WORK_VERTICALS[0], component: [], quantity: '',
+  vertical: WORK_VERTICALS[0], opportunityType: '', component: [], quantity: '',
   currency: WORK_CURRENCIES[0].code, valueAmount: '', valueUnit: 'lakh',
   budgetKnown: '', emdAmount: '', emdUnit: 'lakh',
   salesPersonEmail: '',
+  geoSalesPersonId: null, buSalesPersonId: null, preSalesPersonId: null, legalPersonId: null, bidTeamMemberId: null,
   stageKey: DEFAULT_STAGE_KEY, closedOn: null,
 }
 
 /** Create/edit form for a single sales opportunity ("work"). Opened via the
  *  "Create Opportunity" button on a department's Works panel — never
  *  rendered as part of the add/edit department form. */
-export function WorkFormDialog({ open, work, draftKey, managedInBidTracker = false, onClose, onSave }: {
+export function WorkFormDialog({ open, work, departmentId = null, draftKey, managedInBidTracker = false, onClose, onSave }: {
   open: boolean
+  /** The department the opportunity is created in — feeds the live Opportunity ID preview. */
+  departmentId?: string | null
   /** The opportunity has a bid: Stage and Submission date are owned by Bid Tracker
    *  (the API rejects direct writes to them), so they are shown read-only here. */
   managedInBidTracker?: boolean
@@ -58,7 +65,9 @@ export function WorkFormDialog({ open, work, draftKey, managedInBidTracker = fal
 
   function submit() {
     if (!form.opportunityName.trim()) return
-    onSave({ ...form, opportunityName: form.opportunityName.trim() })
+    // The seeded form of an edited opportunity carries its (locked) code; never send it back.
+    const { opportunityCode: _locked, ...rest } = form as OpportunityDraft & { opportunityCode?: string }
+    onSave({ ...rest, opportunityName: form.opportunityName.trim() })
     draft.clear()
     onClose()
   }
@@ -88,6 +97,18 @@ export function WorkFormDialog({ open, work, draftKey, managedInBidTracker = fal
             autoFocus
           />
         </Field>
+        {work ? (
+          work.opportunityCode && (
+            <p className="text-[13px] text-ink-700">
+              Opportunity ID <code className="ml-1 font-mono font-semibold text-goms-navy">{work.opportunityCode}</code>
+            </p>
+          )
+        ) : (
+          <OpportunityCodePreview
+            departmentId={departmentId} submissionDate={form.submissionDate} vertical={form.vertical}
+            opportunityType={form.opportunityType} component={form.component}
+          />
+        )}
         {managedInBidTracker && (
           <p role="note" className="rounded-lg bg-panel px-3 py-2 text-[13px] text-ink-700">
             Managed in Bid Tracker — open the bid to change its stage or submission deadline.
@@ -99,6 +120,12 @@ export function WorkFormDialog({ open, work, draftKey, managedInBidTracker = fal
           </Field>
           <Field label="Vertical">
             <AddableSelect value={form.vertical} onChange={(v) => set('vertical', v)} options={WORK_VERTICALS} storageKey="work-vertical" />
+          </Field>
+          <Field label="Opportunity type">
+            <Select value={form.opportunityType} onChange={(e) => set('opportunityType', e.target.value)}>
+              <option value="">Not set</option>
+              {OPPORTUNITY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </Select>
           </Field>
           <Field label="Stage">
             <Select value={form.stageKey} disabled={managedInBidTracker} onChange={(e) => set('stageKey', e.target.value)}>
@@ -120,6 +147,10 @@ export function WorkFormDialog({ open, work, draftKey, managedInBidTracker = fal
           <Field label="Sales person">
             <SalesTeamPicker value={form.salesPersonEmail} onChange={(email) => set('salesPersonEmail', email)} ariaLabel="Sales person" />
           </Field>
+          <OpportunityTeamAssignments
+            value={form}
+            onChange={(key, id) => set(key, id)}
+          />
           <div className="sm:col-span-2">
             <Field label="Budget confirmed?">
               <div className="flex items-center gap-4" role="radiogroup" aria-label="Budget confirmed">

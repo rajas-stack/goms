@@ -29,12 +29,14 @@ const groupHeaders = () => Array.from(document.querySelectorAll('th[scope=colgro
 // The grid opens LOCKED; unlocking is what turns editable cells into editors.
 const unlock = async () => userEvent.click(await screen.findByRole('button', { name: /editing locked/ }))
 const openPopover = async (name: string) => userEvent.click(screen.getByRole('button', { name: new RegExp(name) }))
+/** Shown ids from the last reported column order (hidden slots are `~hidden:<id>` markers). */
+const shownOrder = (spy: ReturnType<typeof vi.fn>) => (spy.mock.calls[spy.mock.calls.length - 1]?.[0] as string[]).filter((token) => !token.startsWith('~hidden:'))
 
 const STANDARD_GROUPS = ['Identity', 'Client', 'Ownership', 'Decision', 'Dates', 'Documents', 'System']
 const REQUIRED_LEAVES: Record<string, string[]> = {
-  Identity: ['Opportunity ID', 'Opportunity / Mission', 'Bid ID', 'Tender ID', 'Tender Link'],
+  Identity: ['Opportunity ID', 'Opportunity / Mission', 'Opportunity Type', 'Bid ID', 'Tender ID', 'Tender Link'],
   Client: ['Department / Client', 'State', 'City', 'Sector'],
-  Ownership: ['Bid Owner', 'Sales Lead / Solution Lead'],
+  Ownership: ['Geo-sales', 'BU-sales', 'Pre-sales', 'Legal', 'Bid', 'Bid Owner', 'Sales Lead / Solution Lead'],
   Decision: ['Bid Stage', 'Next Action', 'Action Owner', 'Action Due', 'Attention', 'Decision'],
   Dates: ['Next Milestone', 'Days Remaining', 'Submission Deadline'],
   Documents: ['Tender Files', 'Latest Corrigendum'],
@@ -101,6 +103,17 @@ describe('MasterGrid', () => {
   })
 
   describe('row data', () => {
+    it('shows the human-readable Opportunity ID as the details link, and searches by it', async () => {
+      await makeBid('Alpha')
+      await makeBid('Beta', { submissionDate: '2026-08-15' })
+      renderGrid()
+      expect(await screen.findByRole('button', { name: 'Open FY99-Q4-NA-NA-NA-NA-NA-NA-1' })).toHaveTextContent('FY99-Q4-NA-NA-NA-NA-NA-NA-1')
+      expect(screen.getByRole('button', { name: 'Open FY27-Q2-NA-NA-NA-NA-NA-NA-1' })).toBeInTheDocument()
+      await userEvent.type(screen.getByRole('searchbox', { name: 'Search bids' }), 'FY27-Q2')
+      await waitFor(() => expect(screen.queryByText('Alpha')).not.toBeInTheDocument())
+      expect(screen.getByText('Beta')).toBeInTheDocument()
+    })
+
     it('shows city, owner-facing fields and the Action Owner from the next open action', async () => {
       const bid = await makeBid('Alpha', { city: 'New Delhi' })
       const person = await repository.createSalesPerson({ name: 'Action Person', officialEmail: 'action@amnex.com', designation: 'RM', tierKey: 'rm' })
@@ -109,7 +122,9 @@ describe('MasterGrid', () => {
       const row = (await screen.findByText('Alpha')).closest('tr')!
       expect(within(row).getByText('New Delhi')).toBeInTheDocument()
       expect(within(row).getByText('Confirm EMD')).toBeInTheDocument()
-      expect(within(row).getByText('action@amnex.com')).toBeInTheDocument()
+      // Person cells show the person's name (with avatar), not the raw email.
+      expect(await within(row).findByText('Action Person')).toBeInTheDocument()
+      expect(within(row).queryByText('action@amnex.com')).not.toBeInTheDocument()
       expect(within(row).getByText('2099-02-01')).toBeInTheDocument()
       expect(within(row).getByText('On Track')).toBeInTheDocument()
       expect(within(row).getByText('Solutioning')).toBeInTheDocument()
@@ -128,7 +143,7 @@ describe('MasterGrid', () => {
       await userEvent.click(toggle)
       await waitFor(() => expect(rowNames()).toEqual(['Alpha']))
       await userEvent.click(screen.getByRole('button', { name: 'Unarchive' }))
-      await waitFor(() => expect(screen.getByTestId('grid-empty')).toHaveTextContent('No archived bids.'))
+      await waitFor(() => expect(screen.getByTestId('grid-empty')).toHaveTextContent('Nothing archived in this sheet.'))
       await userEvent.click(screen.getByRole('button', { name: /^Archived/ }))
       await waitFor(() => expect(rowNames().sort()).toEqual(['Alpha', 'Beta']))
     })
@@ -216,7 +231,8 @@ describe('MasterGrid', () => {
       renderGrid()
       await unlock()
       await screen.findByText('Alpha')
-      for (const header of ['Tender ID', 'Submission Deadline', 'Department / Client', 'State', 'Next Action', 'Opportunity ID', 'Bid ID']) {
+      // Department / Client and Next Action became inline-editable; these stay read-only.
+      for (const header of ['Tender ID', 'Submission Deadline', 'State', 'Next Milestone', 'Opportunity ID', 'Bid ID']) {
         expect(screen.queryByRole('button', { name: `Edit ${header}` })).not.toBeInTheDocument()
       }
     })
@@ -443,15 +459,17 @@ describe('MasterGrid', () => {
       renderGrid()
       await screen.findByText('Alpha')
       await screen.findByRole('button', { name: 'Sort by Score' })
+      const leafs = () => Array.from(document.querySelectorAll('thead tr:nth-child(2) th')).map((th) => th.textContent)
+      const cityIndex = leafs().indexOf('City')
+      expect(cityIndex).toBeGreaterThan(0)
       await openPopover('Manage columns')
       await userEvent.click(screen.getByRole('button', { name: 'Hide City' }))
       expect(screen.queryByRole('button', { name: 'Edit City' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Sort by City' })).not.toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'Show City' }))
-      const leafs = () => Array.from(document.querySelectorAll('thead tr:nth-child(2) th')).map((th) => th.textContent)
-      expect(leafs()[leafs().length - 1]).toBe('City') // shown again at the end
+      expect(leafs().indexOf('City')).toBe(cityIndex) // shown again in its original slot
       fireEvent.keyDown(screen.getByRole('button', { name: 'Drag to reorder City' }), { key: 'ArrowUp', altKey: true })
-      expect(leafs()[leafs().length - 2]).toBe('City')
+      expect(leafs().indexOf('City')).toBe(cityIndex - 1)
     })
 
     it('keeps the header menu to quick actions: no Move or Remove, which live only in the Columns panel', async () => {
@@ -486,7 +504,8 @@ describe('MasterGrid', () => {
       await screen.findByText('Alpha')
       await openPopover('Manage columns')
       fireEvent.keyDown(screen.getByRole('button', { name: 'Drag to reorder City' }), { key: 'ArrowUp', altKey: true })
-      expect(onVisibleColumnsChange).toHaveBeenCalledWith(['opportunityName', 'city', 'bidCode'])
+      // Hidden columns keep their slot as `~hidden:<id>` markers after the shown ones.
+      expect(shownOrder(onVisibleColumnsChange)).toEqual(['opportunityName', 'city', 'bidCode'])
     })
 
     it('never hides the last remaining column (an empty list would mean "show everything")', async () => {
@@ -512,7 +531,7 @@ describe('MasterGrid', () => {
       await screen.findByText('Alpha')
       await openPopover('Manage columns')
       fireEvent.keyDown(screen.getByRole('button', { name: 'Drag to reorder Bid ID' }), { key: 'ArrowUp', altKey: true })
-      expect(onVisibleColumnsChange).toHaveBeenCalledWith(['bidCode', 'opportunityName'])
+      expect(shownOrder(onVisibleColumnsChange)).toEqual(['bidCode', 'opportunityName'])
     })
   })
 
@@ -540,7 +559,7 @@ describe('MasterGrid', () => {
 
   it('shows an empty state when there are no bids', async () => {
     renderGrid()
-    expect(await screen.findByTestId('grid-empty')).toHaveTextContent('No bids yet.')
+    expect(await screen.findByTestId('grid-empty')).toHaveTextContent('Nothing in this sheet yet.')
     fireEvent.click(document.body)
   })
 
@@ -594,14 +613,92 @@ describe('MasterGrid', () => {
       await screen.findByText('Alpha')
       await userEvent.click(screen.getByRole('checkbox', { name: 'Select row' }))
       await userEvent.click(screen.getByRole('button', { name: /reassign owner/i }))
-      await userEvent.click(await screen.findByRole('combobox'))
+      // (The bulk toolbar's "Move selected to" is a combobox too — pick the dialog's.)
+      await userEvent.click(within(await screen.findByRole('dialog')).getByRole('combobox'))
       await userEvent.click(await screen.findByText('Rita Rao'))
       await waitFor(async () => {
         const owners = await repository.resolveOwners('bid', [a.id], new Date().toISOString().slice(0, 10))
         expect(JSON.stringify(owners)).toContain(person.id)
       })
       // The grid itself must refresh (owner is resolved server-side), not just the ledger.
-      expect(await screen.findByText('rita@amnex.com')).toBeInTheDocument()
+      const row = screen.getAllByTestId('bid-row')[0]
+      expect(await within(row).findByText('Rita Rao')).toBeInTheDocument()
+    })
+  })
+
+  describe('sheet ownership', () => {
+    async function makeIn(name: string, sheet: Parameters<typeof repository.createBid>[2]) {
+      const opp = await repository.createOpportunity({ departmentId: 'dept-1', opportunityName: name, submissionDate: '2099-01-15' })
+      return repository.createBid(opp.id, undefined, sheet)
+    }
+
+    it('a sheet lists only its own rows; Master lists every sheet with a Sheet column', async () => {
+      await makeIn('Alpha', 'bidTracker')
+      await makeIn('Beta', 'campaign')
+      const tracker = renderGrid({ sheet: 'bidTracker' })
+      await screen.findByText('Alpha')
+      expect(rowNames()).toEqual(['Alpha'])
+      expect(screen.getByRole('button', { name: /Create Bid/ })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Sort by Sheet' })).not.toBeInTheDocument()
+      tracker.unmount()
+
+      const campaign = renderGrid({ sheet: 'campaign' })
+      await screen.findByText('Beta')
+      expect(rowNames()).toEqual(['Beta'])
+      expect(screen.getByRole('button', { name: /Add to Campaign/ })).toBeInTheDocument()
+      campaign.unmount()
+
+      renderGrid({ sheet: 'master' })
+      await screen.findByText('Alpha')
+      expect(rowNames().sort()).toEqual(['Alpha', 'Beta'])
+      expect(screen.getByRole('button', { name: 'Sort by Sheet' })).toBeInTheDocument()
+      const betaRow = screen.getByText('Beta').closest('tr')!
+      expect(within(betaRow).getByText('Campaign')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^Create$/ })).toBeInTheDocument()
+    })
+
+    it('an empty sheet says so, and counts archived rows of that sheet only', async () => {
+      const bid = await makeIn('Alpha', 'bidTracker')
+      await repository.archiveBid(bid.id)
+      renderGrid({ sheet: 'pipeline-funnel' })
+      expect(await screen.findByTestId('grid-empty')).toHaveTextContent('Nothing in this sheet yet.')
+      // Toolbar and empty-state buttons both say it.
+      expect(screen.getAllByRole('button', { name: /Add to Pipeline/ })).toHaveLength(2)
+      // The bid archived in Bid Tracker is not counted here.
+      expect(screen.getByRole('button', { name: /^Archived/ })).toHaveTextContent(/^Archived$/)
+    })
+
+    it('Move to… from the row menu moves the row to another sheet', async () => {
+      const bid = await makeIn('Alpha', 'bidTracker')
+      renderGrid({ sheet: 'bidTracker' })
+      fireEvent.contextMenu((await screen.findByText('Alpha')).closest('td')!)
+      const menu = await screen.findByRole('menu')
+      expect(within(menu).queryByRole('menuitem', { name: 'Move to Bid Tracker' })).not.toBeInTheDocument()
+      await userEvent.click(within(menu).getByRole('menuitem', { name: 'Move to Campaign' }))
+      await waitFor(() => expect(screen.queryByText('Alpha')).not.toBeInTheDocument())
+      expect((await repository.getBid(bid.id))!.sheet).toBe('campaign')
+    })
+
+    it('a failed move is rolled back with an error', async () => {
+      await makeIn('Alpha', 'bidTracker')
+      vi.spyOn(repository, 'updateBid').mockRejectedValueOnce(new Error('Server says no'))
+      renderGrid({ sheet: 'bidTracker' })
+      fireEvent.contextMenu((await screen.findByText('Alpha')).closest('td')!)
+      await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Move to Pipeline · Backup' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('could not be moved to Pipeline · Backup: Server says no')
+      expect(await screen.findByText('Alpha')).toBeInTheDocument()
+    })
+
+    it('moves the selected rows in bulk', async () => {
+      const a = await makeIn('Alpha', 'campaign')
+      const b = await makeIn('Beta', 'campaign')
+      renderGrid({ sheet: 'campaign' })
+      await screen.findByText('Alpha')
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows' }))
+      await userEvent.selectOptions(within(screen.getByTestId('bulk-toolbar')).getByRole('combobox', { name: 'Move selected to' }), 'pipeline-commits')
+      await waitFor(() => expect(screen.getByTestId('grid-empty')).toBeInTheDocument())
+      expect((await repository.getBid(a.id))!.sheet).toBe('pipeline-commits')
+      expect((await repository.getBid(b.id))!.sheet).toBe('pipeline-commits')
     })
   })
 })

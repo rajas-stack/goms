@@ -8,6 +8,8 @@ import { computeSalesTeamInsights } from '@/features/sales/salesTeamInsights'
 import { STATUS_LABEL } from '@/data/sales-status'
 import { Bar, Empty, Panel, StatCard } from './InsightsPrimitives'
 import { Icon } from '@/components/ui/Icon'
+import { PersonName } from '@/components/ui/PersonName'
+import type { AvatarPerson } from '@/components/ui/Avatar'
 
 function ConfidenceTag() {
   return (
@@ -45,6 +47,10 @@ export function SalesTeamInsights() {
       </div>
     )
   }
+
+  // Rows only carry a sales person id + name; the face comes from the roster.
+  const photoById = new Map(people.map((p) => [p.id, p.photoUrl] as const))
+  const personOf = (id: string, name: string): AvatarPerson => ({ name, photoUrl: photoById.get(id) ?? null })
 
   const maxOf = (n: number[]) => Math.max(1, ...n)
   const maxTeamSize = maxOf(data.teamByManager.map((t) => t.directReportCount))
@@ -84,7 +90,7 @@ export function SalesTeamInsights() {
             ) : (
               <div className="space-y-2.5">
                 {data.teamByManager.map((t) => (
-                  <Bar key={t.managerId} label={t.managerName} value={t.directReportCount} max={maxTeamSize} barClass="bg-teal" />
+                  <Bar key={t.managerId} label={t.managerName} person={personOf(t.managerId, t.managerName)} value={t.directReportCount} max={maxTeamSize} barClass="bg-teal" />
                 ))}
               </div>
             )}
@@ -103,7 +109,7 @@ export function SalesTeamInsights() {
             ) : (
               <div className="space-y-2.5">
                 {data.ownershipByPerson.map((o) => (
-                  <Bar key={o.salesPersonId} label={o.name} value={o.total} max={maxOwnership} barClass="bg-emerald" />
+                  <Bar key={o.salesPersonId} label={o.name} person={personOf(o.salesPersonId, o.name)} value={o.total} max={maxOwnership} barClass="bg-emerald" />
                 ))}
               </div>
             )}
@@ -115,7 +121,7 @@ export function SalesTeamInsights() {
             ) : (
               <div className="space-y-2.5">
                 {data.followUpsByAssignee.map((f) => (
-                  <Bar key={f.salesPersonId ?? 'unassigned'} label={f.name} value={f.count} max={maxFollowUps} barClass="bg-amber" />
+                  <Bar key={f.salesPersonId ?? 'unassigned'} label={f.name} person={f.salesPersonId ? personOf(f.salesPersonId, f.name) : undefined} value={f.count} max={maxFollowUps} barClass="bg-amber" />
                 ))}
               </div>
             )}
@@ -133,7 +139,7 @@ export function SalesTeamInsights() {
             ) : (
               <div className="space-y-2.5">
                 {data.opportunities.byPerson.map((o) => (
-                  <Bar key={o.salesPersonId} label={o.name} value={o.count} max={maxOpportunities} barClass="bg-indigo" />
+                  <Bar key={o.salesPersonId} label={o.name} person={personOf(o.salesPersonId, o.name)} value={o.count} max={maxOpportunities} barClass="bg-indigo" />
                 ))}
               </div>
             )}
@@ -147,7 +153,7 @@ export function SalesTeamInsights() {
               <div className="space-y-3">
                 {data.pipelineValue.byPerson.map((p) => (
                   <div key={p.salesPersonId} className="text-[12px]">
-                    <div className="font-medium text-ink-900">{p.name}</div>
+                    <PersonName person={personOf(p.salesPersonId, p.name)} nameClassName="font-medium text-ink-900" />
                     <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-muted">
                       {p.totalsByUnit.map((u) => (
                         <span key={u.unit}>{u.total.toLocaleString('en-IN')} {u.unit} <span className="text-[10px]">({u.count})</span></span>
@@ -170,7 +176,7 @@ export function SalesTeamInsights() {
           ) : (
             <div className="space-y-2.5">
               {data.activity.byPerson.map((a) => (
-                <Bar key={a.salesPersonId} label={a.name} value={a.count} max={maxActivity} barClass="bg-teal" />
+                <Bar key={a.salesPersonId} label={a.name} person={personOf(a.salesPersonId, a.name)} value={a.count} max={maxActivity} barClass="bg-teal" />
               ))}
             </div>
           )}

@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { Combobox } from '@/components/ui/Combobox'
 import { useToast } from '@/components/ui/Toast'
 import { useSalesPersonMutations, useSalesPersons, useSalesPostings } from '@/lib/api'
 import { SALES_TIERS } from '@/data/sales-tiers'
 import { isoToday } from '@/lib/dates'
+import { salesPersonOption } from './salesPersonOption'
 import type { SalesPerson } from '@/lib/types'
 
 /** Closes a salesperson's current posting and opens a new one — the real
@@ -89,10 +91,13 @@ export function TransferSalesPersonDialog({ open, person, onClose }: {
           </Select>
         </Field>
         <Field label="Reports to">
-          <Select value={managerId} onChange={(e) => setManagerId(e.target.value)}>
-            <option value="">No manager</option>
-            {people.filter((p) => p.id !== person?.id).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </Select>
+          <Combobox
+            value={managerId}
+            onChange={setManagerId}
+            options={people.filter((p) => p.id !== person?.id).map(salesPersonOption)}
+            placeholder="No manager"
+            aria-label="Reports to"
+          />
         </Field>
         <Field label="Office" hint="Optional">
           <Input value={office} onChange={(e) => setOffice(e.target.value)} />

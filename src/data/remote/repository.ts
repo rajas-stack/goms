@@ -7,21 +7,21 @@
 // 2026-08-31 local-vs-GCP functional parity audit
 // (docs/superpowers/analysis/2026-08-31-goms-local-vs-gcp-functional-parity-audit.md).
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
-import type { DepartmentChoice, NewBidOpportunity } from '@goms/domain'
+import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
 import { authPromptLink } from './authPromptLink'
 import type { AppRouter } from '../../../apps/api/src/index'
 import type {
   Repository, CreateCustomerInput, CreateNodeInput, CreateEmployeeInput, AddTimelineInput,
   ImportChildRow, ImportEmployeeRow, MergeEmployeesInput, TransferInput,
-  CreateSalesPersonInput, TransferSalesPersonInput, StateSummary,
+  CreateSalesPersonInput, CreateDeliveryTeamMemberInput, UpdateDeliveryTeamMemberPatch, TransferSalesPersonInput, StateSummary,
   CreateOpportunityInput, AssignOwnerInput, TransferBookOfBusinessInput, CreateFollowUpInput,
   RelationshipAnalytics,
 } from '../repository'
 import type { OwnerResolution } from '@/data/ownership'
 import type {
   Customer, HierNode, Status, Employee, Charge, TimelineEvent, TimelineEventType, Transfer, MergeAuditRecord,
-  SalesPerson, SalesPosting, Opportunity, OpportunityStageChange, OwnershipAssignment, FollowUp, SearchResult,
+  SalesPerson, SalesPosting, DeliveryTeamKey, DeliveryTeamMember, Opportunity, OpportunityStageChange, OwnershipAssignment, FollowUp, SearchResult,
   Bid, BidGridRow, BidMilestone, BidMilestoneWithBid, BidCorrigendum, BidCorrigendumChange, ProtectedValue, BidDocument,
   DocumentCitation, BidSavedView, ActionQueueEntry, BidCustomField, CustomFieldType, CustomValue,
 } from '@/lib/types'
@@ -118,6 +118,19 @@ export class RemoteRepository implements Partial<Repository> {
     this.client.sales.update.mutate({ id, patch: patch as any }).then((r) => r!)
   setSalesPersonStatus = (id: string, status: SalesPerson['status']): Promise<void> => this.client.sales.setStatus.mutate({ id, status })
   deleteSalesPerson = (id: string): Promise<void> => this.client.sales.delete.mutate({ id })
+  listDeliveryTeamMembers = (team?: DeliveryTeamKey): Promise<DeliveryTeamMember[]> => this.client.deliveryTeams.list.query({ team, includeInactive: true })
+  createDeliveryTeamMember = (input: CreateDeliveryTeamMemberInput): Promise<DeliveryTeamMember> => this.client.deliveryTeams.create.mutate(input)
+  updateDeliveryTeamMember = (id: string, patch: UpdateDeliveryTeamMemberPatch): Promise<DeliveryTeamMember> =>
+    this.client.deliveryTeams.update.mutate({ id, patch }) as Promise<DeliveryTeamMember>
+  setDeliveryTeamMemberStatus = (id: string, status: DeliveryTeamMember['status']): Promise<void> =>
+    this.client.deliveryTeams.setStatus.mutate({ id, status })
+  deleteDeliveryTeamMember = (id: string): Promise<void> => this.client.deliveryTeams.delete.mutate({ id })
+  // Org Structure is local-data only so far; connected mode has no API for it yet.
+  private orgNotConnected = (): never => { throw new Error('Org Structure is not available in connected mode yet.') }
+  listOrgPeople = async (): Promise<never[]> => []
+  createOrgPerson = async (): Promise<never> => this.orgNotConnected()
+  updateOrgPerson = async (): Promise<never> => this.orgNotConnected()
+  deleteOrgPerson = async (): Promise<never> => this.orgNotConnected()
   transferSalesPerson = (input: TransferSalesPersonInput): Promise<SalesPosting> => this.client.sales.transfer.mutate(input)
   updatePostingDates = (postingId: string, edit: { startDate?: string; lastDayHeld?: string | null }): Promise<SalesPosting> =>
     this.client.sales.updatePostingDates.mutate({ postingId, ...edit })
@@ -233,11 +246,11 @@ export class RemoteRepository implements Partial<Repository> {
   getBid = (id: string): Promise<Bid | null> => this.client.bids.get.query({ id }) as unknown as Promise<Bid | null>
   getBidForOpportunity = (opportunityId: string): Promise<Bid | null> =>
     this.client.bids.getForOpportunity.query({ opportunityId }) as unknown as Promise<Bid | null>
-  createBid = (opportunityId: string, department?: DepartmentChoice): Promise<Bid> =>
-    this.client.bids.create.mutate({ opportunityId, department }) as unknown as Promise<Bid>
-  createBidForNewOpportunity = (opportunity: NewBidOpportunity, department: DepartmentChoice): Promise<Bid> =>
-    this.client.bids.create.mutate({ newOpportunity: opportunity, department }) as unknown as Promise<Bid>
-  updateBid = (id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>): Promise<Bid> =>
+  createBid = (opportunityId: string, department?: DepartmentChoice, sheet?: OwnedSheet): Promise<Bid> =>
+    this.client.bids.create.mutate({ opportunityId, department, sheet }) as unknown as Promise<Bid>
+  createBidForNewOpportunity = (opportunity: NewBidOpportunity, department: DepartmentChoice, sheet?: OwnedSheet): Promise<Bid> =>
+    this.client.bids.create.mutate({ newOpportunity: opportunity, department, sheet }) as unknown as Promise<Bid>
+  updateBid = (id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink' | 'sheet'>>): Promise<Bid> =>
     this.client.bids.update.mutate({ id, patch }) as unknown as Promise<Bid>
   archiveBid = (id: string): Promise<Bid> => this.client.bids.archive.mutate({ id }) as unknown as Promise<Bid>
   markBidVerified = (id: string): Promise<Bid> => this.client.bids.markVerified.mutate({ id }) as unknown as Promise<Bid>

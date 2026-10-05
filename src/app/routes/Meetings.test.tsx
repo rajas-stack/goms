@@ -158,7 +158,8 @@ describe('Meetings — filters', () => {
   it('Account Manager options are Account Managers only', async () => {
     const { user } = setup()
     await user.click(screen.getByRole('combobox', { name: 'Filter by account manager' }))
-    expect((await screen.findAllByRole('option')).map((o) => o.textContent)).toEqual(['Ketan Thakkar', 'Vishal Sharma'])
+    // Each option also carries the person's avatar (initials), so read the label span.
+    expect((await screen.findAllByRole('option')).map((o) => o.lastElementChild?.textContent)).toEqual(['Ketan Thakkar', 'Vishal Sharma'])
   })
 
   it('BU Sales filter', async () => {

@@ -1,5 +1,6 @@
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
+import { PersonName } from '@/components/ui/PersonName'
 import { formatPercent, isNegativeMargin } from '../format'
 
 /** The section-jump nav shared by `CreateBoq.tsx` and `ProposalDetail.tsx` —
@@ -45,7 +46,9 @@ export function BoqWorkspaceHeader({
     <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-line bg-white/95 px-4 py-1.5 text-[12px] backdrop-blur">
       <span className="font-semibold text-ink-900">{boqNumber ?? 'New BOQ'}</span>
       <span className="rounded-full bg-panel px-2 py-0.5 text-[11px] font-medium text-ink-700">{statusLabel}</span>
-      <span className="truncate text-muted">{customerName || '—'}</span>
+      {customerName
+        ? <PersonName person={{ name: customerName }} className="text-muted" />
+        : <span className="text-muted">—</span>}
       <span className="text-muted">Lines <span className="font-medium text-ink-900">{lineCount}</span></span>
       <span className="text-muted">
         Margin{' '}

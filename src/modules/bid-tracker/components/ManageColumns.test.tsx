@@ -91,7 +91,10 @@ describe('custom column management', () => {
     renderGrid({ visibleColumns: ['opportunityName'], onVisibleColumnsChange })
     await screen.findByText('Alpha')
     await addColumnViaDialog('Note')
-    await waitFor(() => expect(onVisibleColumnsChange).toHaveBeenCalledWith(['opportunityName', 'custom:note']))
+    // Hidden columns keep their slots as `~hidden:<id>` markers; the new column is shown right after the shown ones.
+    await waitFor(() => expect(onVisibleColumnsChange).toHaveBeenCalled())
+    const order = onVisibleColumnsChange.mock.calls[onVisibleColumnsChange.mock.calls.length - 1][0] as string[]
+    expect(order.filter((token) => !token.startsWith('~hidden:'))).toEqual(['opportunityName', 'custom:note'])
   })
 
   it('renames a column (header changes, key and values stay) and edits select options', async () => {
@@ -170,6 +173,23 @@ describe('custom column management', () => {
     expect(screen.queryByRole('button', { name: 'Sort by Score' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Show Score' }))
     expect(await screen.findByRole('button', { name: 'Sort by Score' })).toBeInTheDocument()
+  })
+
+  it('hiding and showing a middle column preserves every column slot', async () => {
+    await makeBid()
+    await repository.createBidCustomField({ name: 'Score', dataType: 'number' })
+    renderGrid({ visibleColumns: ['opportunityName', 'custom:score', 'bidCode', 'city'] })
+    await screen.findByRole('button', { name: 'Sort by Score' })
+    const originalOrder = leafHeaders()
+    await openColumns()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hide Score' }))
+    expect(screen.queryByRole('button', { name: 'Sort by Score' })).not.toBeInTheDocument()
+    expect(leafHeaders()).toEqual(originalOrder.filter((header) => header !== 'Score'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Show Score' }))
+    await screen.findByRole('button', { name: 'Sort by Score' })
+    expect(leafHeaders()).toEqual(originalOrder)
   })
 
   it('Delete is offered for every custom column; one holding values asks for a stronger confirmation and removes them too', async () => {

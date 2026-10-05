@@ -27,6 +27,22 @@ export const BID_STAGES: BidStageDef[] = [
 export const BID_STAGE_MAP: Record<string, BidStageDef> = Object.fromEntries(BID_STAGES.map((s) => [s.key, s]))
 export const DEFAULT_BID_STAGE_KEY = 'solutioning'
 
+/** The Opportunity sheets a bid can LIVE in — each row belongs to exactly one.
+ *  (Master is not one of them: it is the collective view over all of these.) */
+export const OWNED_SHEETS = ['bidTracker', 'pipeline-funnel', 'pipeline-backup', 'pipeline-commits', 'campaign'] as const
+export type OwnedSheet = (typeof OWNED_SHEETS)[number]
+export const DEFAULT_OWNED_SHEET: OwnedSheet = 'bidTracker'
+export const OWNED_SHEET_LABELS: Record<OwnedSheet, string> = {
+  bidTracker: 'Bid Tracker',
+  'pipeline-funnel': 'Pipeline · Funnel',
+  'pipeline-backup': 'Pipeline · Backup',
+  'pipeline-commits': 'Pipeline · Commits',
+  campaign: 'Campaign',
+}
+export function isOwnedSheet(value: unknown): value is OwnedSheet {
+  return typeof value === 'string' && (OWNED_SHEETS as readonly string[]).includes(value)
+}
+
 /** -1 for an unknown key, so a stale/retired stage never compares as
  *  "at or after" anything by accident. */
 export function bidStageOrder(key: string): number {
@@ -42,10 +58,10 @@ export function isAtOrAfterSubmitted(key: string): boolean {
 /** "Next Stage Requirements" banner — derived, not persisted (spec §10).
  *  Keyed by the CURRENT stage: what's needed to move past it. */
 export const BID_STAGE_REQUIREMENTS: Record<string, string[]> = {
-  solutioning: ['Technical solution finalized', 'Pre-bid queries submitted'],
-  qualification: ['Executive Go / No-Go sign-off'],
-  preBidQueries: ['Pre-bid query responses received'],
-  commercialProposal: ['Commercial proposal finalized', 'EMD/tender fee arranged'],
+  solutioning: ['Finalize technical solution', 'Submit pre-bid queries'],
+  qualification: ['Record executive Go / No-Go sign-off'],
+  preBidQueries: ['Receive pre-bid query responses'],
+  commercialProposal: ['Finalize commercial proposal', 'Arrange EMD/tender fee'],
   submitted: ['Await tender opening / evaluation'],
   goApproved: [],
   dropped: [],
@@ -147,9 +163,11 @@ export function applyFilterRules<T extends Record<string, unknown>>(
     // wrongly surface every bid that happens to have no owner assigned.
     if (target === null) return false
     const isCustom = rule.field.startsWith(CUSTOM_FIELD_PREFIX)
+    // The Opportunity ID column shows the human-readable code (the raw id only
+    // for a row that has none yet), so a filter on it matches what is shown.
     const cell = isCustom
       ? (row.customValues as Record<string, unknown> | undefined)?.[rule.field.slice(CUSTOM_FIELD_PREFIX.length)]
-      : row[rule.field]
+      : rule.field === 'opportunityId' ? (row.opportunityCode || row.opportunityId) : row[rule.field]
     return matchesTypedRule(types[rule.field] ?? 'text', cell, rule, target)
   }
   const matchNode = (row: T, node: FilterNode): boolean => {
@@ -182,7 +200,11 @@ export interface NewBidOpportunity {
   opportunityName: string
   gemTenderId?: string
   city?: string | null
+  referenceNo?: string | null
+  assignmentName?: string | null
   submissionDate?: string
+  /** One of OPPORTUNITY_TYPES (opportunityCode.ts); '' / absent = not set. */
+  opportunityType?: string
 }
 
 export const DEPARTMENT_REQUIRED_MESSAGE =

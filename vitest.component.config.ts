@@ -8,6 +8,12 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
 
+// Node 25+ ships a built-in `localStorage` global (Web Storage, enabled by default) that shadows
+// jsdom's and lacks `.clear()`, breaking component suites. Turn it off in the test workers.
+// Gated on the Node major: older Node (e.g. 20) rejects the unknown flag and would crash.
+const NODE_MAJOR = Number(process.versions.node.split('.')[0])
+const WORKER_EXEC_ARGV = NODE_MAJOR >= 25 ? ['--no-experimental-webstorage'] : []
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -21,5 +27,9 @@ export default defineConfig({
     // Heavy grid tests (virtualized table + userEvent) exceed the 5s default when the whole
     // suite runs in parallel; they pass alone in ~1-2s, so this only absorbs load, not hangs.
     testTimeout: 20000,
+    poolOptions: {
+      forks: { execArgv: WORKER_EXEC_ARGV },
+      threads: { execArgv: WORKER_EXEC_ARGV },
+    },
   },
 })

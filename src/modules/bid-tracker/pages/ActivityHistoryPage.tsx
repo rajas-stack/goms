@@ -2,6 +2,7 @@ import { Fragment, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
+import { PersonName } from '@/components/ui/PersonName'
 import {
   useBidCustomFields, useBidsForGrid, useCorrigendumBidMap, useOwnershipAssignments, useSalesPersons,
 } from '@/lib/api'
@@ -70,10 +71,11 @@ function ChangeLines({ item, showLabel }: { item: ActivityItem; showLabel: boole
   )
 }
 
-function Entry({ group, bidLabel, bidExists }: {
+function Entry({ group, bidLabel, bidExists, photoOf }: {
   group: ActivityGroup
   bidLabel: (bidId: string) => { code: string; name: string } | null
   bidExists: (bidId: string) => boolean
+  photoOf: (email: string | null, name: string) => string | null
 }) {
   const [first] = group.items
   const many = group.items.length > 1
@@ -104,7 +106,7 @@ function Entry({ group, bidLabel, bidExists }: {
           : <ChangeLines item={first} showLabel={first.kind === 'corrigendum'} />}
         {!many && first.note && <p className="mt-0.5 text-[12px] text-muted">{first.note}</p>}
         <p className="mt-1.5 flex flex-wrap items-center gap-x-1.5 text-[12px] text-muted">
-          <span>by <span className="font-medium text-ink-600">{group.byName}</span></span>
+          <span className="inline-flex min-w-0 items-center gap-1.5">by <PersonName person={{ name: group.byName, photoUrl: photoOf(first.by, group.byName) }} size="2xs" nameClassName="font-medium text-ink-600" /></span>
           <span aria-hidden>·</span>
           <time dateTime={group.at}>{formatWhen(group.at)}</time>
         </p>
@@ -141,6 +143,19 @@ export function ActivityHistoryPage() {
 
   const bidById = useMemo(() => new Map(bids.map((b) => [b.id, b])), [bids])
   const bidLabel = (id: string) => { const b = bidById.get(id); return b ? { code: b.bidCode, name: b.opportunityName } : null }
+
+  // The actor is an email (audit log) or a name (ownership history); resolve a
+  // face from the sales roster by email first, then by name — initials otherwise.
+  const photoLookup = useMemo(() => {
+    const byKey = new Map<string, string>()
+    for (const p of people) {
+      if (!p.photoUrl) continue
+      for (const key of [p.officialEmail, p.personalEmail, p.name]) if (key) byKey.set(key.trim().toLowerCase(), p.photoUrl)
+    }
+    return byKey
+  }, [people])
+  const photoOf = (email: string | null, name: string) =>
+    (email ? photoLookup.get(email.trim().toLowerCase()) : undefined) ?? photoLookup.get(name.trim().toLowerCase()) ?? null
 
   const items = useMemo(
     () => buildActivityItems(logs, assignments, { customFields, lookups, people, corrigendumBid }),
@@ -228,7 +243,7 @@ export function ActivityHistoryPage() {
               return (
                 <Fragment key={g.id}>
                   {newDay && <h3 className="mt-2 text-[12px] font-semibold uppercase tracking-wide text-muted first:mt-0">{dayHeading(g.at)}</h3>}
-                  <ul className="contents"><Entry group={g} bidLabel={bidLabel} bidExists={(id) => bidById.has(id)} /></ul>
+                  <ul className="contents"><Entry group={g} bidLabel={bidLabel} bidExists={(id) => bidById.has(id)} photoOf={photoOf} /></ul>
                 </Fragment>
               )
             })}

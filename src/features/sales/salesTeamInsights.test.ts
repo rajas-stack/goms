@@ -27,7 +27,7 @@ function ownership(overrides: Partial<OwnershipAssignment>): OwnershipAssignment
 }
 function opportunity(overrides: Partial<Opportunity>): Opportunity {
   return {
-    id: 'opp-1', departmentId: 'd1', stateCode: 1, stageKey: 'pipeline', closedOn: null,
+    id: 'opp-1', opportunityCode: '', opportunityType: '', departmentId: 'd1', stateCode: 1, stageKey: 'pipeline', closedOn: null,
     opportunityName: 'Deal', gemTenderId: '', publishDate: '', submissionDate: '', vertical: '',
     component: [], quantity: '', currency: 'INR', valueAmount: '', valueUnit: 'lakh',
     budgetKnown: '', emdAmount: '', emdUnit: '', salesPersonEmail: '', createdAt: '', createdBy: null,

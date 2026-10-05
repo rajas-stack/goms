@@ -568,7 +568,7 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
       expect(mobileInput).toHaveValue('9876543210')
     })
 
-    it('a landline local number field caps at 8 digits', async () => {
+    it('a landline local number accepts up to 8 digits and flags (not truncates) overlong input', async () => {
       stubApiHooks()
       const user = userEvent.setup()
       render(<Harness jurisdictionStateCode={21} />)
@@ -576,8 +576,13 @@ describe('DepartmentFields — per-row contact numbers (State -> Type -> Distric
       await addRowThroughDistrict(user, 'Khordha')
       const numberInput = screen.getByLabelText('Number')
 
-      await user.type(numberInput, '123456789')
+      await user.type(numberInput, '12345678')
       expect(numberInput).toHaveValue('12345678')
+      expect(numberInput).not.toHaveClass('border-crimson')
+      // Overlong input is preserved so validation rejects it, instead of silently truncating.
+      await user.type(numberInput, '9')
+      expect(numberInput).toHaveValue('123456789')
+      expect(numberInput).toHaveClass('border-crimson')
     })
   })
 

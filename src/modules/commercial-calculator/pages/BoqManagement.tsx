@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Icon } from '@/components/ui/Icon'
 import { Input, Select } from '@/components/ui/Field'
+import { PersonName } from '@/components/ui/PersonName'
 import { useBoqs } from '../api'
 import type { BoqStatus } from '../types'
 
@@ -67,7 +68,15 @@ export function BoqManagement() {
             {b.boqVersion > 1 && (
               <span className="shrink-0 rounded-full bg-ink-900/[0.06] px-1.5 py-0.5 text-[11px] font-medium text-ink-600">v{b.boqVersion}</span>
             )}
-            <span className="min-w-0 flex-1 truncate text-[13px] text-ink-900">{b.opportunityName} · {b.customerName}</span>
+            <span className="flex min-w-0 flex-1 items-center gap-1 text-[13px] text-ink-900">
+              <span className="min-w-0 shrink truncate">{b.opportunityName}</span>
+              {b.customerName && (
+                <>
+                  <span className="shrink-0 text-muted">·</span>
+                  <PersonName person={{ name: b.customerName }} size="2xs" className="max-w-[45%] shrink-0" />
+                </>
+              )}
+            </span>
             <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_STYLE[b.status]}`}>{STATUS_LABEL[b.status]}</span>
             <span className="shrink-0 text-[12px] font-medium text-ink-700">{b.currency} {b.grandTotal.toLocaleString()}</span>
           </button>

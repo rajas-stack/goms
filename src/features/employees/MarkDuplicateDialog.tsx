@@ -29,7 +29,7 @@ export function MarkDuplicateDialog({ open, employee, onClose }: {
   const options = useMemo(
     () => allEmployees
       .filter((e) => e.id !== employee.id && !e.vacant)
-      .map((e) => ({ value: e.id, label: `${e.name} · ${e.designation}` }))
+      .map((e) => ({ value: e.id, label: `${e.name} · ${e.designation}`, person: { name: e.name, photoUrl: e.photoUrl } }))
       .sort((a, b) => a.label.localeCompare(b.label)),
     [allEmployees, employee.id],
   )

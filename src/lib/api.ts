@@ -1,13 +1,13 @@
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { DepartmentChoice, NewBidOpportunity } from '@goms/domain'
+import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import {
   repository, type AddTimelineInput, type AssignOwnerInput, type CreateEmployeeInput, type CreateFollowUpInput,
-  type CreateNodeInput, type CreateOpportunityInput, type CreateSalesPersonInput, type ImportChildRow,
+  type CreateNodeInput, type CreateOpportunityInput, type CreateSalesPersonInput, type CreateDeliveryTeamMemberInput, type UpdateDeliveryTeamMemberPatch, type CreateOrgPersonInput, type UpdateOrgPersonPatch, type ImportChildRow,
   type ImportEmployeeRow, type MergeEmployeesInput, type TransferBookOfBusinessInput, type TransferInput,
   type TransferSalesPersonInput,
 } from '@/data/repository'
 import type {
-  Bid, BidMilestone, BidSavedView, Charge, Employee, FollowUp, HierNode, Opportunity, SalesPerson, SearchResult, Status,
+  Bid, BidMilestone, BidSavedView, Charge, DeliveryTeamKey, DeliveryTeamMember, Employee, FollowUp, HierNode, Opportunity, SalesPerson, SearchResult, Status,
   TimelineEvent, TimelineEventType,
 } from './types'
 
@@ -161,16 +161,19 @@ export function useBidMutations() {
   // Both entry points (the Bid Tracker's Create Bid dialog and the opportunity card) go through
   // this one mutation; `department` is only sent when the opportunity has none.
   const create = useMutation({
-    mutationFn: (a: { opportunityId: string; department?: DepartmentChoice }) => repository.createBid(a.opportunityId, a.department),
+    mutationFn: (a: { opportunityId: string; department?: DepartmentChoice; sheet?: OwnedSheet }) =>
+      repository.createBid(a.opportunityId, a.department, a.sheet),
     onSuccess: invalidate,
   })
   // Create the opportunity, its department and the bid in one go (Bid Tracker's Create Bid → new opportunity).
   const createWithNewOpportunity = useMutation({
-    mutationFn: (a: { opportunity: NewBidOpportunity; department: DepartmentChoice }) => repository.createBidForNewOpportunity(a.opportunity, a.department),
+    mutationFn: (a: { opportunity: NewBidOpportunity; department: DepartmentChoice; sheet?: OwnedSheet }) =>
+      repository.createBidForNewOpportunity(a.opportunity, a.department, a.sheet),
     onSuccess: () => { invalidate(); qc.invalidateQueries({ queryKey: ['opportunities'] }); qc.invalidateQueries({ queryKey: ['departments'] }) },
   })
+  // `sheet` in the patch moves the row to another Opportunity sheet.
   const update = useMutation({
-    mutationFn: (a: { id: string; patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>> }) =>
+    mutationFn: (a: { id: string; patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink' | 'sheet'>> }) =>
       repository.updateBid(a.id, a.patch),
     onSuccess: invalidate,
   })
@@ -373,6 +376,47 @@ export function useSetBidCustomValue() {
 
 export const useSalesPersons = () =>
   useQuery({ queryKey: qk.salesPersons, queryFn: () => repository.listSalesPersons() })
+export const useDeliveryTeamMembers = (team?: DeliveryTeamKey) =>
+  useQuery({ queryKey: ['deliveryTeamMembers', team ?? 'all'], queryFn: () => repository.listDeliveryTeamMembers(team) })
+
+export function useDeliveryTeamMemberMutations() {
+  const qc = useQueryClient()
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['deliveryTeamMembers'] })
+    qc.invalidateQueries({ queryKey: ['opportunities'] })
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+  }
+  const create = useMutation({ mutationFn: (input: CreateDeliveryTeamMemberInput) => repository.createDeliveryTeamMember(input), onSuccess: invalidate })
+  const update = useMutation({
+    mutationFn: (input: { id: string; patch: UpdateDeliveryTeamMemberPatch }) => repository.updateDeliveryTeamMember(input.id, input.patch),
+    onSuccess: invalidate,
+  })
+  const setStatus = useMutation({
+    mutationFn: (input: { id: string; status: DeliveryTeamMember['status'] }) => repository.setDeliveryTeamMemberStatus(input.id, input.status),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteDeliveryTeamMember(id), onSuccess: invalidate })
+  return { create, update, setStatus, remove }
+}
+
+export const useOrgPeople = () => useQuery({ queryKey: ['orgPeople'], queryFn: () => repository.listOrgPeople() })
+
+/** Org changes re-derive the Pre-sales / Bid / Legal rosters, so those refresh too. */
+export function useOrgPersonMutations() {
+  const qc = useQueryClient()
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['orgPeople'] })
+    qc.invalidateQueries({ queryKey: ['deliveryTeamMembers'] })
+    qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+  }
+  const create = useMutation({ mutationFn: (input: CreateOrgPersonInput) => repository.createOrgPerson(input), onSuccess: invalidate })
+  const update = useMutation({
+    mutationFn: (input: { id: string; patch: UpdateOrgPersonPatch }) => repository.updateOrgPerson(input.id, input.patch),
+    onSuccess: invalidate,
+  })
+  const remove = useMutation({ mutationFn: (id: string) => repository.deleteOrgPerson(id), onSuccess: invalidate })
+  return { create, update, remove }
+}
 export const useSalesPerson = (id: string | null) =>
   useQuery({ queryKey: qk.salesPerson(id ?? ''), queryFn: () => repository.getSalesPerson(id!), enabled: !!id })
 export const useSalesPostings = (id: string | null) =>

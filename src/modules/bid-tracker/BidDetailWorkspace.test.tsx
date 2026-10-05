@@ -38,8 +38,9 @@ describe('BidDetailWorkspace', () => {
     for (const tab of ['Overview', 'Milestones', 'Commercial & Files', 'Protected Values']) {
       expect(screen.getByRole('button', { name: tab })).toBeInTheDocument()
     }
-    // Solutioning's stage requirements, and the seeded submission deadline as the next milestone.
-    expect(screen.getByText(/Technical solution finalized/)).toBeInTheDocument()
+    // Requirements are stage guidance, not a claim that evidence was submitted.
+    expect(screen.getByText(/Finalize technical solution; Submit pre-bid queries/)).toBeInTheDocument()
+    expect(screen.getByText(/completion or submission is not verified here/i)).toBeInTheDocument()
     await waitFor(() => expect(screen.getByText(/Submission Deadline — 2099-01-15/)).toBeInTheDocument())
     expect(screen.getByText('Unassigned')).toBeInTheDocument()
   })

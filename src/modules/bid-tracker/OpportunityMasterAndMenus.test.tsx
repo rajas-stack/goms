@@ -62,14 +62,13 @@ describe('Master aggregates every sheet\'s columns', () => {
     expect(leafHeaders()).not.toContain('Contact 4')
     expect(leafHeaders()).not.toContain('Contact 7')
     first.unmount()
+    // Alpha / Beta live in Bid Tracker, so these sheets have no rows: wait for the columns instead.
     const second = renderSheet('pipeline-backup')
-    await screen.findByText('Alpha')
-    expect(leafHeaders()).toContain('Contact 4')
+    await waitFor(() => expect(leafHeaders()).toContain('Contact 4'))
     expect(leafHeaders()).not.toContain('Contact 1')
     second.unmount()
     renderSheet('campaign')
-    await screen.findByText('Alpha')
-    expect(leafHeaders()).toContain('Contact 7')
+    await waitFor(() => expect(leafHeaders()).toContain('Contact 7'))
     expect(leafHeaders()).not.toContain('Contact 4')
   })
 
@@ -121,7 +120,7 @@ describe('Master aggregates every sheet\'s columns', () => {
   it('only Master has the switcher; a column added through Master belongs to the sheet in view', async () => {
     await seed()
     const first = renderSheet('campaign')
-    await screen.findByText('Alpha')
+    await screen.findByTestId('bid-master-grid')
     expect(screen.queryByRole('combobox', { name: 'Sheet' })).not.toBeInTheDocument()
     first.unmount()
     renderSheet('master')
@@ -137,7 +136,7 @@ describe('Master aggregates every sheet\'s columns', () => {
   it('Manage columns on a sheet lists only that sheet\'s custom columns', async () => {
     await seed()
     renderSheet('pipeline-funnel')
-    await screen.findByText('Alpha')
+    await waitFor(() => expect(leafHeaders()).toContain('Contact 4'))
     await userEvent.click(screen.getByRole('button', { name: /^Manage columns/ }))
     const rows = await screen.findAllByTestId('custom-column-row')
     expect(rows.map((r) => r.textContent)).toEqual([expect.stringContaining('Contact 4')])
@@ -199,7 +198,7 @@ describe('Manage cell, archive button, right-click menus, drag to reorder', () =
     await waitFor(async () => expect((await repository.getBid(bid.id))!.status).toBe('active'))
   })
 
-  it('right-click on a cell offers open, edit, copy, filter, favourite, archive and delete', async () => {
+  it('right-click on a cell offers open, edit, copy, filter, move, favourite, archive and delete', async () => {
     const bid = await makeBid('Alpha')
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, { clipboard: { writeText } })
@@ -210,6 +209,7 @@ describe('Manage cell, archive button, right-click menus, drag to reorder', () =
     const menu = await screen.findByRole('menu')
     expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual([
       'Open details', 'Edit cell (unlock first)', 'Copy value', 'Filter: Opportunity / Mission is this value',
+      'Move to Pipeline · Funnel', 'Move to Pipeline · Backup', 'Move to Pipeline · Commits', 'Move to Campaign',
       'Add to favourites', 'Archive', 'Delete bid…',
     ])
     expect(within(menu).getByRole('menuitem', { name: /Edit cell/ })).toBeDisabled()

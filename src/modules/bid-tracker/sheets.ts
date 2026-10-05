@@ -1,6 +1,23 @@
-// The Opportunity module is a set of sheets, each the same Excel-style grid over the
-// same bids, each with its OWN saved views (system views appear on every sheet).
-export type SheetId = 'bidTracker' | 'pipeline-funnel' | 'pipeline-backup' | 'pipeline-commits' | 'campaign' | 'master'
+// The Opportunity module is a set of sheets, each the same Excel-style grid, each
+// with its OWN saved views (system views appear on every sheet). Every bid lives in
+// exactly ONE sheet (`Bid.sheet`); Master is the collective list of all of them.
+import { OWNED_SHEETS, OWNED_SHEET_LABELS, type OwnedSheet } from '@goms/domain'
+
+export type SheetId = OwnedSheet | 'master'
+export { OWNED_SHEETS, OWNED_SHEET_LABELS, type OwnedSheet }
+
+/** Does a row living in `rowSheet` show on `sheet`? Master shows every row. */
+export function rowInSheet(rowSheet: OwnedSheet | undefined, sheet: SheetId): boolean {
+  return sheet === 'master' || (rowSheet ?? 'bidTracker') === sheet
+}
+
+/** The toolbar's create button, worded for the sheet it files into. */
+export function createLabelFor(sheet: SheetId): string {
+  if (sheet === 'bidTracker') return 'Create Bid'
+  if (sheet === 'campaign') return 'Add to Campaign'
+  if (sheet === 'master') return 'Create'
+  return 'Add to Pipeline'
+}
 
 export const PIPELINE_TABS = [
   { value: 'funnel', label: 'Funnel', sheet: 'pipeline-funnel' as const },
@@ -15,6 +32,7 @@ export const OPPORTUNITY_TABS = [
   { value: 'pipeline', label: 'Pipeline', icon: 'TrendingUp', path: '/bid-tracker/pipeline/funnel' },
   { value: 'campaign', label: 'Campaign', icon: 'Send', path: '/bid-tracker/campaign' },
   { value: 'master', label: 'Master', icon: 'Database', path: '/bid-tracker/master' },
+  { value: 'dashboard', label: 'Dashboard', icon: 'BarChart3', path: '/bid-tracker/dashboard' },
 ] as const
 export type OpportunityTab = (typeof OPPORTUNITY_TABS)[number]['value']
 

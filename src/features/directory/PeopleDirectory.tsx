@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/Button'
 import { Combobox } from '@/components/ui/Combobox'
 import { MobileFilterBar } from '@/components/MobileFilterBar'
 import { DuplicatesPanel } from '@/features/employees/DuplicatesPanel'
-import { cn, initials } from '@/lib/utils'
+import { Avatar } from '@/components/ui/Avatar'
+import { cn } from '@/lib/utils'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import type { Employee, RelationshipStatus } from '@/lib/types'
 
@@ -82,9 +83,10 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
   }, [employees, deptById])
 
   const managers = useMemo(() => {
+    const photoById = new Map(employees.map((e) => [e.id, e.photoUrl] as const))
     const ids = new Set(employees.map((e) => e.managerId).filter((id): id is string => !!id))
     return [...ids]
-      .map((id) => ({ id, name: nameById.get(id) ?? 'Unknown' }))
+      .map((id) => ({ id, name: nameById.get(id) ?? 'Unknown', photoUrl: photoById.get(id) ?? null }))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [employees, nameById])
 
@@ -98,7 +100,7 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
     [designations],
   )
   const managerOptions = useMemo(
-    () => managers.map((m) => ({ value: m.id, label: m.name })),
+    () => managers.map((m) => ({ value: m.id, label: m.name, person: { name: m.name, photoUrl: m.photoUrl } })),
     [managers],
   )
 
@@ -273,13 +275,7 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
 
         {selectedEmp && !selectedEmp.vacant && (
           <div className="flex items-center gap-3 border-b border-line bg-panel/40 px-4 py-3">
-            {selectedEmp.photoUrl ? (
-              <img src={selectedEmp.photoUrl} alt={selectedEmp.name} className="h-14 w-14 shrink-0 rounded-xl object-cover" />
-            ) : (
-              <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-teal-100 font-display text-lg font-bold text-teal-600">
-                {initials(selectedEmp.name)}
-              </span>
-            )}
+            <Avatar person={{ name: selectedEmp.name, photoUrl: selectedEmp.photoUrl }} size="lg" className="font-display" />
             <div className="min-w-0">
               <p className="break-words text-sm font-semibold text-ink-900">{selectedEmp.name}</p>
               <p className="break-words text-xs text-muted">{selectedEmp.designation}</p>
@@ -359,16 +355,7 @@ function PersonRow({ employee: e, selected, onSelect }: { employee: Employee; se
         selected ? 'bg-ink-900 text-paper' : 'hover:bg-ink-900/[0.05]',
       )}
     >
-      {e.photoUrl ? (
-        <img src={e.photoUrl} alt={e.name} className="h-8 w-8 shrink-0 rounded-lg object-cover" />
-      ) : (
-        <span className={cn(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-mono text-[11px] font-semibold',
-          selected ? 'bg-indigo text-paper' : 'bg-teal-100 text-teal-600',
-        )}>
-          {initials(e.name)}
-        </span>
-      )}
+      <Avatar person={{ name: e.name, photoUrl: e.photoUrl }} size="sm" />
       <span className="min-w-0 flex-1">
         <span className={cn('block break-words text-[13px] font-medium', selected ? 'text-paper' : 'text-ink-900')}>{e.name}</span>
         <span className={cn('block break-words text-[11px]', selected ? 'text-paper/70' : 'text-muted')}>{e.designation}</span>

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { useRelatedRecords, useSearch } from '@/lib/api'
+import { useAllEmployees, useRelatedRecords, useSalesPersons, useSearch } from '@/lib/api'
 import { SEARCH_CATEGORIES, SEARCH_CATEGORY_MAP, type SearchCategoryColor } from '@/lib/search-categories'
 import type { SearchResult } from '@/lib/types'
 import { Icon } from './ui/Icon'
 import { Badge, CodeChip } from './ui/Badge'
+import { Avatar, type AvatarPerson } from './ui/Avatar'
 import { useMediaQuery } from '@/lib/useMediaQuery'
-import { cn, initials } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 
 const EXAMPLES = [
   'Connected officers', 'Vacant positions', 'Follow-ups due today',
@@ -52,6 +53,19 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
       .map((c) => ({ category: c, items: byCategory.get(c.key) ?? [] }))
       .filter((g) => g.items.length > 0)
   }, [results])
+
+  // Search results carry no photo, so the face is looked up from the (already
+  // cached) employee / sales-team lists; an unknown id falls back to initials.
+  const { data: employees = [] } = useAllEmployees()
+  const { data: salesPersons = [] } = useSalesPersons()
+  const photoByKey = useMemo(() => new Map<string, string | null>([
+    ...employees.map((e) => [`employee:${e.id}`, e.photoUrl] as const),
+    ...salesPersons.map((p) => [`salesPerson:${p.id}`, p.photoUrl] as const),
+  ]), [employees, salesPersons])
+  function personFor(r: SearchResult): AvatarPerson | null {
+    if (r.category !== 'employee' && r.category !== 'salesPerson') return null
+    return { name: r.title, photoUrl: photoByKey.get(resultKey(r)) }
+  }
 
   const flatRows = useMemo(() => grouped.flatMap((g) => g.items), [grouped])
   const rowIndex = useMemo(() => new Map(flatRows.map((r, i) => [resultKey(r), i])), [flatRows])
@@ -164,6 +178,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                   {g.items.map((r) => {
                     const i = rowIndex.get(resultKey(r)) ?? 0
                     const isExpanded = expanded != null && resultKey(expanded) === resultKey(r)
+                    const person = personFor(r)
                     return (
                       <div key={resultKey(r)}>
                         <div
@@ -176,15 +191,17 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                             i === active ? 'bg-ink-900/[0.06]' : 'hover:bg-ink-900/[0.03]',
                           )}
                         >
-                          <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', CATEGORY_CHIP[g.category.color])}>
-                            {/* Sales Team rows get an initials avatar — a
-                                person, not a category, is what's being
-                                identified here. Every other category keeps
-                                its icon unchanged. */}
-                            {g.category.key === 'salesPerson'
-                              ? <span className="text-[11px] font-semibold">{initials(r.title)}</span>
-                              : <Icon name={g.category.icon} size={15} />}
-                          </span>
+                          {/* Employee and Sales Team rows show the person's
+                              face — a person, not a category, is what's being
+                              identified here. Every other category keeps its
+                              icon unchanged. */}
+                          {person ? (
+                            <Avatar person={person} size="sm" />
+                          ) : (
+                            <span className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', CATEGORY_CHIP[g.category.color])}>
+                              <Icon name={g.category.icon} size={15} />
+                            </span>
+                          )}
                           <span className="min-w-0 flex-1">
                             <span className="block break-words text-sm font-medium text-ink-900">{r.title}</span>
                             <span className="block break-words text-xs text-muted">{r.subtitle}</span>
@@ -211,18 +228,23 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
                             ) : (
                               related.map((rel) => {
                                 const relCategory = SEARCH_CATEGORY_MAP[rel.category]
+                                const relPerson = personFor(rel)
                                 return (
                                   <button
                                     key={resultKey(rel)}
                                     onClick={() => go(rel)}
                                     className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-ink-900/[0.03]"
                                   >
-                                    <span className={cn(
-                                      'flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
-                                      relCategory ? CATEGORY_CHIP[relCategory.color] : 'bg-panel text-muted',
-                                    )}>
-                                      <Icon name={relCategory?.icon ?? 'Circle'} size={12} />
-                                    </span>
+                                    {relPerson ? (
+                                      <Avatar person={relPerson} size="xs" />
+                                    ) : (
+                                      <span className={cn(
+                                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-md',
+                                        relCategory ? CATEGORY_CHIP[relCategory.color] : 'bg-panel text-muted',
+                                      )}>
+                                        <Icon name={relCategory?.icon ?? 'Circle'} size={12} />
+                                      </span>
+                                    )}
                                     <span className="min-w-0 flex-1">
                                       <span className="block break-words text-xs font-medium text-ink-900">{rel.title}</span>
                                       <span className="block break-words text-[11px] text-muted">{rel.subtitle}</span>

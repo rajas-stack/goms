@@ -16,6 +16,9 @@ interface Props {
   /** When provided, typing a name with no match offers an inline "create new
    *  person" form (name + designation) instead of staying select-only. */
   onCreate?: (name: string, designation: string) => Promise<string>
+  /** A staged person whose record will be created by the owning form after its
+   *  parent entity exists; lets that selection survive draft restoration. */
+  pendingSelection?: { id: string; name: string; designation: string } | null
   createLabel?: (name: string) => string
   /** Include vacant seats (title, no incumbent) as selectable rows. Off by
    *  default — most callers (sales ownership, transfer targets) need a real
@@ -47,7 +50,7 @@ function personLabel(c: Employee): string {
  *  designation inline. Mirrors ManagerPicker's look. */
 export function EmployeePicker({
   candidates, value, onChange, placeholder = 'Search a person…', emptyLabel = '— None —',
-  onCreate, createLabel, includeVacant = false, unconfirmedHint,
+  onCreate, createLabel, includeVacant = false, unconfirmedHint, pendingSelection,
 }: Props) {
   const toast = useToast()
   const [query, setQuery] = useState('')
@@ -56,9 +59,13 @@ export function EmployeePicker({
   const [formName, setFormName] = useState('')
   const [formDesignation, setFormDesignation] = useState('')
   const [creating, setCreating] = useState(false)
+  const [createdSelection, setCreatedSelection] = useState<{ id: string; name: string; designation: string } | null>(null)
   const anchorRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
   const selected = candidates.find((c) => c.id === value)
+  const localSelection = createdSelection?.id === value
+    ? createdSelection
+    : pendingSelection?.id === value ? pendingSelection : null
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -86,6 +93,7 @@ export function EmployeePicker({
     setCreating(true)
     try {
       const id = await onCreate(name, designation)
+      setCreatedSelection({ id, name, designation })
       onChange(id)
       setQuery('')
       setFormOpen(false)
@@ -121,12 +129,15 @@ export function EmployeePicker({
     setFormOpen(false)
   }
 
-  if (selected) {
+  if (selected || localSelection) {
+    const name = selected?.name ?? localSelection!.name
+    const photoUrl = selected?.photoUrl ?? null
+    const vacant = selected?.vacant ?? false
     return (
       <div className="flex min-h-10 items-center gap-2 rounded-lg border border-line bg-white px-3 py-1.5">
-        <Avatar person={{ name: selected.name, photoUrl: selected.photoUrl, vacant: selected.vacant }} size="xs" />
+        <Avatar person={{ name, photoUrl, vacant }} size="xs" />
         <span className="min-w-0 flex-1 break-words text-sm text-ink-900">
-          {selected.vacant ? <>{personLabel(selected)} <span className="text-muted">· Vacant</span></> : <>{selected.name} · {selected.designation}</>}
+          {selected?.vacant ? <>{personLabel(selected)} <span className="text-muted">· Vacant</span></> : <>{name} · {selected?.designation ?? localSelection!.designation}</>}
         </span>
         <button type="button" onClick={() => onChange('')} className="text-muted hover:text-ink-900" aria-label="Clear selection">
           <Icon name="X" size={14} />

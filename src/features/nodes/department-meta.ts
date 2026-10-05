@@ -1,5 +1,6 @@
 import type { MultiSelectGroup } from '@/components/ui/MultiSelectDropdown'
 import type { Opportunity } from '@/lib/types'
+import { AMNEX_PRODUCTS } from '@goms/domain'
 
 /** Sales-ownership roles kept per department. Values are employee ids stored
  *  on the department node's metadata under these keys. */
@@ -22,15 +23,8 @@ export const WORK_COMPONENT_GROUPS: MultiSelectGroup[] = [
   },
   {
     label: 'AMNEX products',
-    options: [
-      'Golden Record', 'IPMP', 'Locomate',
-      'Syncnex', 'Rapidgo', 'XUP', 'Elbtros',
-      'Outline', 'Spectator', 'IIon', 'Ecokeeper', 'Spotlock',
-      'Agrogate', 'Agrogate Finance', 'Croptrack', 'Farmlive', 'Recloud',
-      'Nirikshak', 'Eargo', 'Veintex', 'Trackous', 'Portvein', 'Samarth', 'Dairynex',
-      'BlocSafe',
-      'Other',
-    ],
+    // AMNEX_PRODUCTS (@goms/domain) — also what the Opportunity ID's scope segment reads.
+    options: [...AMNEX_PRODUCTS, 'Other'],
   },
 ]
 
@@ -125,21 +119,8 @@ export function formatBudgetRange(w: Pick<Opportunity, 'emdAmount' | 'emdUnit'>)
   return `≈ ${Number(display.low.toFixed(2))}–${Number(display.high.toFixed(2))} ${workUnitLabel(display.unit)}`
 }
 
-const ABBREVIATION_STOPWORDS = new Set(['of', 'and', 'the', 'for', 'in', 'to', '&'])
-
-/** Auto-derived department abbreviation in the style of real ministry
- *  short names (MoSPI, DoT, …) — every word contributes its first letter,
- *  capitalized for a significant word and lowercase for a minor connector
- *  (of/and/the/for/in/to/&), e.g. "Department of National Agencies" →
- *  "DoNA". Used wherever a department's short name is shown and none has
- *  been entered by hand, so departments never need one typed in just to
- *  get a usable abbreviation. */
-export function abbreviateDepartmentName(name: string): string {
-  return name
-    .split(/[\s,]+/)
-    .filter(Boolean)
-    .map((w) => (ABBREVIATION_STOPWORDS.has(w.toLowerCase()) ? w[0].toLowerCase() : w[0].toUpperCase()))
-    .filter((c) => /[A-Za-z]/.test(c))
-    .join('')
-}
+/** Auto-derived department abbreviation (MoSPI, DoT, …). Lives in
+ *  @goms/domain because the Opportunity ID's client segment uses it on
+ *  both the frontend and the API. */
+export { abbreviateDepartmentName } from '@goms/domain'
 

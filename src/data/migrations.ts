@@ -1,7 +1,12 @@
+import { DEFAULT_OWNED_SHEET, isOwnedSheet } from '@goms/domain'
 import { uid } from '@/lib/utils'
 import { buildOwnershipFixture } from './ownership-fixture'
 import { buildSalesRoster, mergeMissingSalesRoster } from './sales-roster-seed'
 import { SALES_TEAM } from './sales-team'
+import { mergeTeamRosters } from './pre-sales-team'
+import { mergeOrgSeed, syncAllTeamsFromOrg, type OrgPerson } from './org-structure'
+import type { DeliveryTeamMember, HierNode, Opportunity } from '@/lib/types'
+import { assignMissingOpportunityCodes } from './opportunityCodes'
 import type { GormsData } from './seed'
 import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
 
@@ -50,8 +55,30 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *  v15 `bidCustomFields[].hasHeldValue` — the durable "has ever held a value"
  *      flag that gates hard deletion (spec §8.1). Backfilled from whether the
  *      column currently has any value rows.
+ *  v16 delivery-team roster and opportunity role references. Starts with an
+ *      empty non-Sales roster and null assignments; never guesses from Sales
+ *      ownership or legacy salesPersonEmail.
+ *  v17 `deliveryTeamMembers[].managerId` (reports-to, for the team org
+ *      charts). Backfilled to null — everyone starts as a root.
+ *  v18 `deliveryTeamMembers[].designation` backfilled to '', then the Pre-sales
+ *      roster (pre-sales-team.ts) topped up by name — same "add what's
+ *      missing, never overwrite" rule as v6's sales roster.
+ *  v19 Dharmesh Dhamecha's Bid Management group moves from the Pre-sales
+ *      roster to the Bid team (Shamik Joshi heading both); re-runs the same
+ *      idempotent roster merge, which relocates the seeded entries.
+ *  v20 Opportunity ID: `opportunities[].opportunityType` backfilled to '', and
+ *      every opportunity without an `opportunityCode` gets one (createdAt,
+ *      then id, order) from the new per-fiscal-year `opportunityCodeSequences`
+ *      counters — the same builder a newly created opportunity goes through
+ *      (opportunityCodes.ts). An existing code is never changed.
+ *  v21 Company Org Structure (`orgPeople`, org-structure.ts) seeded by name,
+ *      then the Pre-sales / Bid / Legal rosters re-derived from it (existing
+ *      member ids kept, so opportunity assignments still resolve).
+ *  v22 Sheet ownership: `bids[].sheet` — which Opportunity sheet a bid lives
+ *      in. Every existing bid was a Bid Tracker row, so it is backfilled to
+ *      'bidTracker'; a bid that already carries a known sheet keeps it.
  */
-export const SCHEMA_VERSION = 15
+export const SCHEMA_VERSION = 22
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -322,6 +349,60 @@ function toV15(data: SnapshotShape): SnapshotShape {
   }
 }
 
+function toV16(data: SnapshotShape): SnapshotShape {
+  const opportunities = asArray(data.opportunities).map((opportunity) => ({
+    ...opportunity,
+    geoSalesPersonId: opportunity.geoSalesPersonId ?? null,
+    buSalesPersonId: opportunity.buSalesPersonId ?? null,
+    preSalesPersonId: opportunity.preSalesPersonId ?? null,
+    legalPersonId: opportunity.legalPersonId ?? null,
+    bidTeamMemberId: opportunity.bidTeamMemberId ?? null,
+  }))
+  return { ...data, opportunities, deliveryTeamMembers: Array.isArray(data.deliveryTeamMembers) ? data.deliveryTeamMembers : [] }
+}
+
+/** v16 → v17. See `SCHEMA_VERSION` doc comment. */
+function toV17(data: SnapshotShape): SnapshotShape {
+  const deliveryTeamMembers = asArray(data.deliveryTeamMembers).map((member) => ({ ...member, managerId: member.managerId ?? null }))
+  return { ...data, deliveryTeamMembers }
+}
+
+/** v17 → v18. See `SCHEMA_VERSION` doc comment. */
+function toV18(data: SnapshotShape): SnapshotShape {
+  const backfilled = asArray(data.deliveryTeamMembers).map((member) => ({ ...member, designation: member.designation ?? '' }))
+  return { ...data, deliveryTeamMembers: mergeTeamRosters(backfilled as unknown as DeliveryTeamMember[]) }
+}
+
+/** v20 → v21. See `SCHEMA_VERSION` doc comment. */
+function toV21(data: SnapshotShape): SnapshotShape {
+  const orgPeople = mergeOrgSeed(asArray(data.orgPeople) as unknown as OrgPerson[])
+  const members = asArray(data.deliveryTeamMembers) as unknown as DeliveryTeamMember[]
+  return { ...data, orgPeople, deliveryTeamMembers: syncAllTeamsFromOrg(orgPeople, members) }
+}
+
+/** v21 → v22. See `SCHEMA_VERSION` doc comment. Idempotent. */
+function toV22(data: SnapshotShape): SnapshotShape {
+  if (!Array.isArray(data.bids)) return data
+  const bids = asArray(data.bids).map((b) => ({ ...b, sheet: isOwnedSheet(b.sheet) ? b.sheet : DEFAULT_OWNED_SHEET }))
+  return { ...data, bids }
+}
+
+/** v18 → v19. See `SCHEMA_VERSION` doc comment. */
+function toV19(data: SnapshotShape): SnapshotShape {
+  return { ...data, deliveryTeamMembers: mergeTeamRosters(asArray(data.deliveryTeamMembers) as unknown as DeliveryTeamMember[]) }
+}
+
+/** v19 → v20. See `SCHEMA_VERSION` doc comment. Idempotent: only code-less rows are touched. */
+function toV20(data: SnapshotShape): SnapshotShape {
+  const withType = asArray(data.opportunities).map((o) => ({ ...o, opportunityType: typeof o.opportunityType === 'string' ? o.opportunityType : '' }))
+  const sequences = (data.opportunityCodeSequences && typeof data.opportunityCodeSequences === 'object'
+    ? data.opportunityCodeSequences : {}) as Record<string, number>
+  const { opportunities, sequences: next } = assignMissingOpportunityCodes(
+    withType as unknown as Opportunity[], asArray(data.nodes) as unknown as HierNode[], sequences,
+  )
+  return { ...data, opportunities, opportunityCodeSequences: next }
+}
+
 /** v13 → v14. See `SCHEMA_VERSION` doc comment. Idempotent for the same
  *  reason as v13. */
 function toV14(data: SnapshotShape): SnapshotShape {
@@ -350,6 +431,13 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   13: toV13,
   14: toV14,
   15: toV15,
+  16: toV16,
+  17: toV17,
+  18: toV18,
+  19: toV19,
+  20: toV20,
+  21: toV21,
+  22: toV22,
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

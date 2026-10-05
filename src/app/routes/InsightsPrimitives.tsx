@@ -1,4 +1,6 @@
 import { Icon } from '@/components/ui/Icon'
+import { PersonName } from '@/components/ui/PersonName'
+import type { AvatarPerson } from '@/components/ui/Avatar'
 import { cn } from '@/lib/utils'
 
 export function StatCard({ icon, label, value, sub, tone }: {
@@ -65,11 +67,19 @@ export function LegendRow({ swatch, label, value, total }: { swatch: string; lab
   )
 }
 
-export function Bar({ label, value, max, barClass }: { label: string; value: number; max: number; barClass: string }) {
+/** `person` marks the label as a human's name — their face is shown beside it
+ *  (the label column widens to fit the avatar). */
+export function Bar({ label, value, max, barClass, person }: {
+  label: string; value: number; max: number; barClass: string; person?: AvatarPerson
+}) {
   const pct = max > 0 ? (value / max) * 100 : 0
   return (
     <div className="flex items-center gap-3">
-      <span className="w-20 shrink-0 text-[12px] capitalize text-muted">{label}</span>
+      {person ? (
+        <PersonName person={{ ...person, name: label }} size="2xs" className="w-32 shrink-0 text-[12px] text-muted" />
+      ) : (
+        <span className="w-20 shrink-0 text-[12px] capitalize text-muted">{label}</span>
+      )}
       <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-panel">
         <div className={cn('h-full rounded-full transition-all', barClass)} style={{ width: `${pct}%` }} />
       </div>

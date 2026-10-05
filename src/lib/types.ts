@@ -2,7 +2,7 @@
 // apps/api's hierarchy router) — re-imported and re-exported here so every
 // existing import path (`@/lib/types`) keeps working unchanged, including
 // this file's own later use of Domain/Status below.
-import type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue, FilterNode } from '@goms/domain'
+import type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue, FilterNode, OwnedSheet } from '@goms/domain'
 export type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue }
 
 export type RelationshipStatus = 'engaged' | 'developing' | 'dormant' | 'new'
@@ -137,6 +137,11 @@ export interface Employee {
  *  department and could not be aggregated without parsing every one. */
 export interface Opportunity {
   id: string
+  /** Human-readable Opportunity ID, e.g. FY27-Q2-DF-WEST-GJ-DST-RFP-DL-1
+   *  (@goms/domain opportunityCode.ts). Generated ONCE when the opportunity is
+   *  created and never changed afterwards. '' only for a row that has not been
+   *  given one yet (a legacy API row awaiting the backfill script). */
+  opportunityCode: string
   /** Owning department node. Real FK — was implicit containment. `null` only for an
    *  opportunity that has not been given one yet; Create Bid resolves it before a bid exists. */
   departmentId: string | null
@@ -154,11 +159,19 @@ export interface Opportunity {
   /** Client city — free text, feeds the Bid Tracker Master Grid's "City"
    *  column. `null`/absent for opportunities that predate it. */
   city?: string | null
+  /** Reference / Bid No — a bid or reference number distinct from `gemTenderId`.
+   *  `null`/absent for opportunities that predate it. */
+  referenceNo?: string | null
+  /** Name of assignment — the tender's own title for the work, distinct from
+   *  `opportunityName`. `null`/absent for opportunities that predate it. */
+  assignmentName?: string | null
   /** ISO date (YYYY-MM-DD) the tender/GEM listing was published. */
   publishDate: string
   /** ISO date (YYYY-MM-DD) the bid is due. */
   submissionDate: string
   vertical: string
+  /** RFP / RFQ / EOI / RFI / GeM / Tender / Direct (OPPORTUNITY_TYPES); '' = not set. */
+  opportunityType: string
   /** One or more component/product-line tags. */
   component: string[]
   quantity: string
@@ -179,6 +192,11 @@ export interface Opportunity {
    *  three go together so there is never a period with two answers to "who
    *  owns this". Until then it remains the only owner record. */
   salesPersonEmail: string
+  geoSalesPersonId?: string | null
+  buSalesPersonId?: string | null
+  preSalesPersonId?: string | null
+  legalPersonId?: string | null
+  bidTeamMemberId?: string | null
 
   createdAt: string
   createdBy: string | null
@@ -331,6 +349,24 @@ export interface SalesPosting {
   createdBy: string | null
 }
 
+export type DeliveryTeamKey = 'preSales' | 'legal' | 'bid'
+
+export interface DeliveryTeamMember {
+  id: string
+  team: DeliveryTeamKey
+  name: string
+  email: string
+  /** Job title shown on the roster and org chart ('' when not known). */
+  designation: string
+  status: 'active' | 'inactive'
+  /** Reports-to, within the same team. Null for the team's top of the org chart. */
+  managerId: string | null
+  /** The Org Structure person this member mirrors. When set, name, designation and
+   *  reports-to are derived from the org (see src/data/org-structure.ts) and edited there. */
+  orgPersonId?: string | null
+  createdAt: string
+}
+
 /** A commercial customer/account. New in Phase 2 — no prior in-memory
  *  behavior existed for this entity. */
 export interface Customer {
@@ -383,11 +419,16 @@ export interface Bid {
   status: 'active' | 'archived'
   dataConfidence: 'verified' | 'needs_review'
   tenderLink: string | null
+  /** The Opportunity sheet this row lives in (Master shows every sheet's rows). */
+  sheet: OwnedSheet
   archivedAt: string | null
   createdAt: string
   updatedAt: string
 }
 export interface BidGridRow extends Bid {
+  /** The opportunity's human-readable code — what the Opportunity ID column shows ('' if none yet). */
+  opportunityCode: string
+  opportunityType: string
   departmentId: string
   departmentName: string | null
   stateCode: number | null
@@ -400,6 +441,11 @@ export interface BidGridRow extends Bid {
   emdAmount: string
   emdUnit: string
   vertical: string
+  geoSalesPersonId: string | null
+  buSalesPersonId: string | null
+  preSalesPersonId: string | null
+  legalPersonId: string | null
+  bidTeamMemberId: string | null
   ownerEmail: string | null
   solutionLeadEmail: string | null
   documentCount: number

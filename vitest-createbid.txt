@@ -1,0 +1,8 @@
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90me:/goms/goms[39m
+
+[2mfilter:  [22m[33msrc/modules/bid-tracker/components/CreateBidDialog.test.tsx[39m
+[2minclude: [22m[33msrc/**/*.test.ts[39m
+[2mexclude:  [22m[33m**/*.integration.test.ts[2m, [22m**/node_modules/**[39m
+[31m
+No test files found, exiting with code 1[39m

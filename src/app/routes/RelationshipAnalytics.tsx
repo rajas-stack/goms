@@ -1,7 +1,9 @@
+import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { useRelationshipAnalytics } from '@/lib/api'
+import { useAllEmployees, useRelationshipAnalytics } from '@/lib/api'
 import { Icon } from '@/components/ui/Icon'
+import { PersonName } from '@/components/ui/PersonName'
 import { TIMELINE_META } from '@/lib/timeline-meta'
 import { QUALITY_DOT } from '@/lib/node-colors'
 import type { RelationshipQuality, RelationshipStatus } from '@/lib/types'
@@ -17,6 +19,9 @@ const STATUS_BAR: Record<RelationshipStatus, string> = {
 export function RelationshipAnalytics() {
   const navigate = useNavigate()
   const { data: a } = useRelationshipAnalytics()
+  // Interaction rows carry only the employee id + name; the face comes from the directory.
+  const { data: employees = [] } = useAllEmployees()
+  const photoById = useMemo(() => new Map(employees.map((e) => [e.id, e.photoUrl] as const)), [employees])
 
   const openPerson = (employeeId: string) =>
     navigate(`/directory?sel=${employeeId}&kind=employee`)
@@ -82,7 +87,7 @@ export function RelationshipAnalytics() {
               ) : (
                 <div className="space-y-1.5">
                   {a.upcomingMeetings.map((it, i) => (
-                    <InteractionRow key={`${it.employeeId}-${i}`} it={it} onClick={() => openPerson(it.employeeId)} />
+                    <InteractionRow key={`${it.employeeId}-${i}`} it={it} photoUrl={photoById.get(it.employeeId) ?? null} onClick={() => openPerson(it.employeeId)} />
                   ))}
                 </div>
               )}
@@ -95,7 +100,7 @@ export function RelationshipAnalytics() {
             ) : (
               <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                 {a.recentInteractions.map((it, i) => (
-                  <InteractionRow key={`${it.employeeId}-${i}`} it={it} onClick={() => openPerson(it.employeeId)} />
+                  <InteractionRow key={`${it.employeeId}-${i}`} it={it} photoUrl={photoById.get(it.employeeId) ?? null} onClick={() => openPerson(it.employeeId)} />
                 ))}
               </div>
             )}
@@ -106,7 +111,7 @@ export function RelationshipAnalytics() {
   )
 }
 
-function InteractionRow({ it, onClick }: { it: InteractionSummary; onClick: () => void }) {
+function InteractionRow({ it, photoUrl, onClick }: { it: InteractionSummary; photoUrl: string | null; onClick: () => void }) {
   const meta = TIMELINE_META[it.type]
   return (
     <button onClick={onClick} className="flex w-full items-center gap-3 rounded-lg border border-line px-3 py-2 text-left transition-colors hover:border-ink-600">
@@ -114,7 +119,7 @@ function InteractionRow({ it, onClick }: { it: InteractionSummary; onClick: () =
         <Icon name={meta.icon} size={14} className="text-ink-700" />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block break-words text-[13px] font-medium text-ink-900">{it.name}</span>
+        <PersonName person={{ name: it.name, photoUrl }} className="max-w-full text-[13px] font-medium text-ink-900" />
         <span className="block break-words text-[11px] text-muted">{it.title}</span>
       </span>
       <span className="shrink-0 text-[11px] text-muted">{it.date}</span>

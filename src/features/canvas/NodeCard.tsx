@@ -108,7 +108,14 @@ export const NodeCard = forwardRef<HTMLDivElement, Props>(
 
         {heads && heads.length > 0 && (
           <div className="flex items-center gap-1.5 break-words text-[11px] text-muted">
-            <Avatar person={heads[0]} size="xs" />
+            {/* Overlapping stack — one face per named head (the same two the text lists). */}
+            <span className="flex shrink-0 -space-x-1.5">
+              {heads.slice(0, 2).map((h, i) => (
+                <span key={`${h.name}-${i}`} className="flex rounded-full ring-2 ring-white">
+                  <Avatar person={h} size="xs" />
+                </span>
+              ))}
+            </span>
             <span>
               <span className="font-medium text-ink-700">{heads.length === 1 ? 'Head' : 'Heads'}:</span>{' '}
               {heads.slice(0, 2).map((h) => h.name).join(', ')}

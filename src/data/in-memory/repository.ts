@@ -1,7 +1,7 @@
 import type {
   ActionQueueEntry, AttendeeRef, Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue,
   BidDocument, BidGridRow, BidMilestone, BidMilestoneWithBid, CustomFieldType, CustomValue,
-  BidSavedView, Charge, Customer, Domain, DocumentCitation, Employee, FollowUp, HierNode, MergeAuditRecord,
+  BidSavedView, Charge, Customer, DeliveryTeamKey, DeliveryTeamMember, Domain, DocumentCitation, Employee, FollowUp, HierNode, MergeAuditRecord,
   MergeFieldResolution, Opportunity, OpportunityStageChange, OwnershipAssignment, PreferredComm, ProtectedValue,
   RelationshipQuality, RelationshipStatus,
   SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
@@ -19,11 +19,15 @@ import {
   SYSTEM_BID_VIEWS, SYSTEM_BID_VIEW_KEYS, type SystemBidViewFilterRule,
   coerceCustomValue, normalizeOptions, slugifyFieldKey,
   DEPARTMENT_REQUIRED_MESSAGE, type DepartmentChoice, type NewBidOpportunity,
+  allocateOpportunityCode, opportunityCodeParts,
+  DEFAULT_OWNED_SHEET, isOwnedSheet, type OwnedSheet,
 } from '@goms/domain'
 export { MERGEABLE_FIELDS, type MergeableField }
 import { coversDate } from '@/lib/intervals'
 import { tierRank } from '../sales-tiers'
 import { buildSeed, type GormsData } from '../seed'
+import { managerProblem, reportsBrokenByLevel, syncAllTeamsFromOrg, type OrgPerson } from '../org-structure'
+import { opportunityCodeInputFor } from '../opportunityCodes'
 import { clearSnapshot, loadSnapshot, scheduleSave } from '../persist'
 import {
   addBoqLineItemLogic, createBoqLogic, createBomItemLogic, createMasterLogic, createSkuLogic,
@@ -179,9 +183,13 @@ export interface CreateOpportunityInput {
   opportunityName: string
   gemTenderId?: string
   city?: string | null
+  referenceNo?: string | null
+  assignmentName?: string | null
   publishDate?: string
   submissionDate?: string
   vertical?: string
+  /** One of OPPORTUNITY_TYPES; defaults to '' (not set). */
+  opportunityType?: string
   component?: string[]
   quantity?: string
   currency?: string
@@ -191,9 +199,34 @@ export interface CreateOpportunityInput {
   emdAmount?: string
   emdUnit?: string
   salesPersonEmail?: string
+  geoSalesPersonId?: string | null
+  buSalesPersonId?: string | null
+  preSalesPersonId?: string | null
+  legalPersonId?: string | null
+  bidTeamMemberId?: string | null
   /** Defaults to `DEFAULT_STAGE_KEY`. */
   stageKey?: string
 }
+
+export interface CreateDeliveryTeamMemberInput {
+  team: DeliveryTeamKey
+  name: string
+  email?: string
+  designation?: string
+  managerId?: string | null
+}
+
+export type UpdateDeliveryTeamMemberPatch = Partial<Pick<DeliveryTeamMember, 'name' | 'email' | 'designation' | 'managerId'>>
+
+export interface CreateOrgPersonInput {
+  name: string
+  level: number
+  designation?: string
+  departments?: string[]
+  managerId?: string | null
+  email?: string
+}
+export type UpdateOrgPersonPatch = Partial<Pick<OrgPerson, 'name' | 'designation' | 'level' | 'departments' | 'managerId' | 'email' | 'status'>>
 
 export interface CreateSalesPersonInput {
   name: string
@@ -326,6 +359,16 @@ export interface Repository {
   createOpportunity(input: CreateOpportunityInput): Promise<Opportunity>
   updateOpportunity(id: string, patch: Partial<Opportunity>): Promise<Opportunity>
   deleteOpportunity(id: string): Promise<void>
+
+  listDeliveryTeamMembers(team?: DeliveryTeamKey): Promise<DeliveryTeamMember[]>
+  createDeliveryTeamMember(input: CreateDeliveryTeamMemberInput): Promise<DeliveryTeamMember>
+  updateDeliveryTeamMember(id: string, patch: UpdateDeliveryTeamMemberPatch): Promise<DeliveryTeamMember>
+  setDeliveryTeamMemberStatus(id: string, status: 'active' | 'inactive'): Promise<void>
+  deleteDeliveryTeamMember(id: string): Promise<void>
+  listOrgPeople(): Promise<OrgPerson[]>
+  createOrgPerson(input: CreateOrgPersonInput): Promise<OrgPerson>
+  updateOrgPerson(id: string, patch: UpdateOrgPersonPatch): Promise<OrgPerson>
+  deleteOrgPerson(id: string): Promise<void>
 
   /** The AMNEX sales roster, name-sorted. Includes every status — the UI
    *  filters, so a resigned person stays reachable from their history. */
@@ -486,11 +529,13 @@ export interface Repository {
   listBidsForGrid(filterRules?: SystemBidViewFilterRule[]): Promise<BidGridRow[]>
   getBid(id: string): Promise<Bid | null>
   getBidForOpportunity(opportunityId: string): Promise<Bid | null>
-  createBid(opportunityId: string, department?: DepartmentChoice): Promise<Bid>
+  /** `sheet`: the Opportunity sheet the new row lives in (default Bid Tracker). */
+  createBid(opportunityId: string, department?: DepartmentChoice, sheet?: OwnedSheet): Promise<Bid>
   /** Create Bid for an opportunity that does not exist yet: the opportunity, its department and the bid
    *  are created together (all-or-nothing), exactly as bids.create does server-side. */
-  createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice): Promise<Bid>
-  updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>): Promise<Bid>
+  createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice, sheet?: OwnedSheet): Promise<Bid>
+  /** `sheet` moves the row to another Opportunity sheet. */
+  updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink' | 'sheet'>>): Promise<Bid>
   archiveBid(id: string): Promise<Bid>
   markBidVerified(id: string): Promise<Bid>
   unarchiveBid(id: string): Promise<Bid>
@@ -567,6 +612,11 @@ const pendingBidUploads = new Map<string, {
   entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
 }>()
 
+/** A bid's sheet must be one it can live in (never 'master', never a typo). */
+function assertOwnedSheet(sheet: unknown): asserts sheet is OwnedSheet {
+  if (!isOwnedSheet(sheet)) throw new Error(`Unknown sheet: ${String(sheet)}`)
+}
+
 /** Parses opportunities.submissionDate the same way the backend's
  *  `bids.create` does (spec §4.5) — null for anything that doesn't parse. */
 function parseSubmissionDate(raw: string | null | undefined): string | null {
@@ -596,9 +646,12 @@ class InMemoryRepository implements Repository {
       ...data,
       opportunities: data.opportunities ?? [],
       opportunityStageChanges: data.opportunityStageChanges ?? [],
+      opportunityCodeSequences: data.opportunityCodeSequences ?? {},
       followUps: data.followUps ?? [],
       salesPersons: data.salesPersons ?? [],
       salesPostings: data.salesPostings ?? [],
+      deliveryTeamMembers: data.deliveryTeamMembers ?? [],
+      orgPeople: data.orgPeople ?? [],
       ownershipAssignments: data.ownershipAssignments ?? [],
       bids: data.bids ?? [],
       bidMilestones: data.bidMilestones ?? [],
@@ -1242,10 +1295,12 @@ class InMemoryRepository implements Repository {
   }
 
   async createOpportunity(input: CreateOpportunityInput) {
+    this.assertOpportunityTeamAssignments(input)
     const dept = this.data.nodes.find((n) => n.id === input.departmentId)
     const stageKey = input.stageKey ?? DEFAULT_STAGE_KEY
     const opp: Opportunity = {
       id: uid('opp'),
+      opportunityCode: '', // assigned below, once the row is complete
       departmentId: input.departmentId,
       stateCode: dept?.stateCode ?? null,
       stageKey,
@@ -1253,9 +1308,12 @@ class InMemoryRepository implements Repository {
       opportunityName: input.opportunityName,
       gemTenderId: input.gemTenderId ?? '',
       city: input.city ?? null,
+      referenceNo: input.referenceNo ?? null,
+      assignmentName: input.assignmentName ?? null,
       publishDate: input.publishDate ?? '',
       submissionDate: input.submissionDate ?? '',
       vertical: input.vertical ?? '',
+      opportunityType: input.opportunityType ?? '',
       component: input.component ?? [],
       quantity: input.quantity ?? '',
       currency: input.currency ?? 'INR',
@@ -1265,10 +1323,16 @@ class InMemoryRepository implements Repository {
       emdAmount: input.emdAmount ?? '',
       emdUnit: input.emdUnit ?? 'lakh',
       salesPersonEmail: input.salesPersonEmail ?? '',
+      geoSalesPersonId: input.geoSalesPersonId ?? null,
+      buSalesPersonId: input.buSalesPersonId ?? null,
+      preSalesPersonId: input.preSalesPersonId ?? null,
+      legalPersonId: input.legalPersonId ?? null,
+      bidTeamMemberId: input.bidTeamMemberId ?? null,
       createdAt: isoToday(),
       createdBy: null,
     }
     this.data.opportunities.push(opp)
+    this.assignOpportunityCode(opp)
     // The opening row of the stage log. Migrated opportunities deliberately
     // get none (their real history is unknown — see migrations.ts), so a
     // missing opening row means "pre-existing", not "lost".
@@ -1279,17 +1343,36 @@ class InMemoryRepository implements Repository {
     return opp
   }
 
+  /** Gives a just-created opportunity its Opportunity ID from the per-FY
+   *  counter (skipping any number an existing code of that FY already uses).
+   *  No-op once it has one — the code is locked from creation on. JS runs
+   *  this synchronously, so two creates can never draw the same number. */
+  private assignOpportunityCode(opp: Opportunity) {
+    if (opp.opportunityCode) return
+    const allocated = allocateOpportunityCode(
+      opportunityCodeParts(opportunityCodeInputFor(opp, this.data.nodes)),
+      this.data.opportunityCodeSequences ?? {},
+      this.data.opportunities.map((o) => o.opportunityCode),
+    )
+    opp.opportunityCode = allocated.code
+    this.data.opportunityCodeSequences = allocated.sequences
+  }
+
   async updateOpportunity(id: string, patch: Partial<Opportunity>) {
     const opp = this.data.opportunities.find((o) => o.id === id)!
+    if ('opportunityCode' in patch && patch.opportunityCode !== opp.opportunityCode) {
+      throw new Error('The Opportunity ID is generated when the opportunity is created and cannot be changed.')
+    }
+    this.assertOpportunityTeamAssignments(patch)
     const bidOfOpp = this.data.bids.find((b) => b.opportunityId === id)
     if (bidOfOpp) this.assertNotProtected(bidOfOpp.id, (['valueAmount', 'emdAmount', 'gemTenderId'] as const).filter((f) => f in patch))
     const previousStage = opp.stageKey
-    const before = { opportunityName: opp.opportunityName, city: opp.city, vertical: opp.vertical }
+    const before = { opportunityName: opp.opportunityName, city: opp.city, vertical: opp.vertical, opportunityType: opp.opportunityType }
     Object.assign(opp, patch)
     // Inline grid edits are part of the bid's history (mirrors opportunities.update).
     if (bidOfOpp) {
       let changed = false
-      for (const f of ['opportunityName', 'city', 'vertical'] as const) {
+      for (const f of ['opportunityName', 'city', 'vertical', 'opportunityType'] as const) {
         if (!(f in patch)) continue
         const was = String(before[f] ?? ''); const now = String(opp[f] ?? '')
         if (was === now) continue
@@ -1309,6 +1392,151 @@ class InMemoryRepository implements Repository {
       })
     }
     return opp
+  }
+
+  private assertOpportunityTeamAssignments(patch: Partial<Opportunity>): void {
+    const salesAssignments = ['geoSalesPersonId', 'buSalesPersonId'] as const
+    for (const key of salesAssignments) {
+      const id = patch[key]
+      if (id && !this.data.salesPersons.some((person) => person.id === id)) {
+        throw new Error('Choose a person from the Sales team.')
+      }
+    }
+    const teamAssignments: [keyof Opportunity, DeliveryTeamKey][] = [
+      ['preSalesPersonId', 'preSales'], ['legalPersonId', 'legal'], ['bidTeamMemberId', 'bid'],
+    ]
+    for (const [key, team] of teamAssignments) {
+      const id = patch[key]
+      if (typeof id !== 'string' || !id) continue
+      if (!this.data.deliveryTeamMembers.some((member) => member.id === id && member.team === team && member.status === 'active')) {
+        throw new Error(`Choose an active person from the ${team} team.`)
+      }
+    }
+  }
+
+  async listDeliveryTeamMembers(team?: DeliveryTeamKey): Promise<DeliveryTeamMember[]> {
+    return this.data.deliveryTeamMembers
+      .filter((member) => !team || member.team === team)
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  async createDeliveryTeamMember(input: CreateDeliveryTeamMemberInput): Promise<DeliveryTeamMember> {
+    const name = input.name.trim()
+    const email = input.email?.trim() ?? ''
+    if (!name) throw new Error('Enter a team member name.')
+    if (this.data.deliveryTeamMembers.some((member) => member.team === input.team && member.name.toLowerCase() === name.toLowerCase())) {
+      throw new Error('A person with this name is already on the team.')
+    }
+    const managerId = input.managerId || null
+    this.assertValidDeliveryManager(input.team, null, managerId)
+    const member: DeliveryTeamMember = {
+      id: uid('team'), team: input.team, name, email, designation: input.designation?.trim() ?? '', status: 'active', managerId, createdAt: isoToday(),
+    }
+    this.data.deliveryTeamMembers.push(member)
+    return member
+  }
+
+  async updateDeliveryTeamMember(id: string, patch: UpdateDeliveryTeamMemberPatch): Promise<DeliveryTeamMember> {
+    const member = this.data.deliveryTeamMembers.find((person) => person.id === id)
+    if (!member) throw new Error('Team member no longer exists.')
+    if (patch.managerId !== undefined) {
+      const managerId = patch.managerId || null
+      this.assertValidDeliveryManager(member.team, member.id, managerId)
+      member.managerId = managerId
+    }
+    if (patch.name !== undefined) member.name = patch.name.trim()
+    if (patch.email !== undefined) member.email = patch.email.trim()
+    if (patch.designation !== undefined) member.designation = patch.designation.trim()
+    return member
+  }
+
+  /** Reports-to must be someone on the same team, and must not make the chain circular. */
+  private assertValidDeliveryManager(team: DeliveryTeamKey, memberId: string | null, managerId: string | null) {
+    if (!managerId) return
+    const byId = new Map(this.data.deliveryTeamMembers.map((person) => [person.id, person]))
+    if (byId.get(managerId)?.team !== team) throw new Error('Choose a manager from the same team.')
+    for (let cursor: string | null = managerId; cursor; cursor = byId.get(cursor)?.managerId ?? null) {
+      if (cursor === memberId) throw new Error('That would make the reporting line circular.')
+    }
+  }
+
+  async setDeliveryTeamMemberStatus(id: string, status: DeliveryTeamMember['status']): Promise<void> {
+    const member = this.data.deliveryTeamMembers.find((person) => person.id === id)
+    if (member) member.status = status
+  }
+
+  async deleteDeliveryTeamMember(id: string): Promise<void> {
+    this.data.deliveryTeamMembers = this.data.deliveryTeamMembers
+      .filter((member) => member.id !== id)
+      .map((member) => (member.managerId === id ? { ...member, managerId: null } : member))
+    for (const opportunity of this.data.opportunities) {
+      if (opportunity.preSalesPersonId === id) opportunity.preSalesPersonId = null
+      if (opportunity.legalPersonId === id) opportunity.legalPersonId = null
+      if (opportunity.bidTeamMemberId === id) opportunity.bidTeamMemberId = null
+    }
+  }
+
+  // --- Org Structure: the source of truth the delivery-team rosters derive from ---
+
+  async listOrgPeople(): Promise<OrgPerson[]> {
+    return [...this.data.orgPeople].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
+  }
+
+  async createOrgPerson(input: CreateOrgPersonInput): Promise<OrgPerson> {
+    const name = input.name.trim()
+    if (!name) throw new Error('Enter the employee name.')
+    if (this.data.orgPeople.some((p) => p.name.trim().toLowerCase() === name.toLowerCase())) {
+      throw new Error('Someone with this name is already in the org.')
+    }
+    const person: OrgPerson = {
+      id: uid('org'), name, designation: input.designation?.trim() ?? '', level: input.level,
+      departments: [...new Set(input.departments ?? [])], managerId: input.managerId || null,
+      email: input.email?.trim() ?? '', status: 'active', createdAt: isoToday(),
+    }
+    const problem = managerProblem(person, person.managerId, [...this.data.orgPeople, person])
+    if (problem) throw new Error(problem)
+    this.data.orgPeople = [...this.data.orgPeople, person]
+    this.resyncTeamsFromOrg()
+    return person
+  }
+
+  async updateOrgPerson(id: string, patch: UpdateOrgPersonPatch): Promise<OrgPerson> {
+    const current = this.data.orgPeople.find((p) => p.id === id)
+    if (!current) throw new Error('This person is no longer in the org.')
+    const next: OrgPerson = {
+      ...current,
+      ...(patch.name !== undefined ? { name: patch.name.trim() } : {}),
+      ...(patch.designation !== undefined ? { designation: patch.designation.trim() } : {}),
+      ...(patch.email !== undefined ? { email: patch.email.trim() } : {}),
+      ...(patch.level !== undefined ? { level: patch.level } : {}),
+      ...(patch.departments !== undefined ? { departments: [...new Set(patch.departments)] } : {}),
+      ...(patch.managerId !== undefined ? { managerId: patch.managerId || null } : {}),
+      ...(patch.status !== undefined ? { status: patch.status } : {}),
+    }
+    if (!next.name) throw new Error('Enter the employee name.')
+    const people = this.data.orgPeople.map((p) => (p.id === id ? next : p))
+    const problem = managerProblem(next, next.managerId, people)
+    if (problem) throw new Error(problem)
+    const broken = reportsBrokenByLevel(id, next.level, people)
+    if (broken.length) throw new Error(`${broken.map((p) => p.name).join(', ')} would report to someone at their own level or below — move them first.`)
+    this.data.orgPeople = people
+    this.resyncTeamsFromOrg()
+    return next
+  }
+
+  /** Removes a person; their direct reports move up to that person's manager. */
+  async deleteOrgPerson(id: string): Promise<void> {
+    const person = this.data.orgPeople.find((p) => p.id === id)
+    if (!person) return
+    this.data.orgPeople = this.data.orgPeople
+      .filter((p) => p.id !== id)
+      .map((p) => (p.managerId === id ? { ...p, managerId: person.managerId } : p))
+    this.resyncTeamsFromOrg()
+  }
+
+  /** Pre-sales / Bid / Legal follow the org; their member ids are kept so assignments resolve. */
+  private resyncTeamsFromOrg() {
+    this.data.deliveryTeamMembers = syncAllTeamsFromOrg(this.data.orgPeople, this.data.deliveryTeamMembers)
   }
 
   async deleteOpportunity(id: string) {
@@ -1388,6 +1616,9 @@ class InMemoryRepository implements Repository {
         .sort((a, b) => a.dueDate.localeCompare(b.dueDate))[0]
       return {
         ...bid,
+        sheet: bid.sheet ?? DEFAULT_OWNED_SHEET,
+        opportunityCode: opp?.opportunityCode ?? '',
+        opportunityType: opp?.opportunityType ?? '',
         departmentId: opp?.departmentId ?? '',
         departmentName: this.data.nodes.find((n) => n.id === opp?.departmentId)?.name ?? null,
         stateCode: opp?.stateCode ?? null,
@@ -1400,6 +1631,11 @@ class InMemoryRepository implements Repository {
         emdAmount: opp?.emdAmount ?? '',
         emdUnit: opp?.emdUnit ?? '',
         vertical: opp?.vertical ?? '',
+        geoSalesPersonId: opp?.geoSalesPersonId ?? null,
+        buSalesPersonId: opp?.buSalesPersonId ?? null,
+        preSalesPersonId: opp?.preSalesPersonId ?? null,
+        legalPersonId: opp?.legalPersonId ?? null,
+        bidTeamMemberId: opp?.bidTeamMemberId ?? null,
         ownerEmail,
         solutionLeadEmail: emailOf(solutionLead?.salesPersonId),
         documentCount: this.data.bidDocuments.filter((d) => d.entityType === 'bid' && d.entityId === bid.id).length,
@@ -1490,19 +1726,23 @@ class InMemoryRepository implements Repository {
     })
   }
 
-  async createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice) {
+  async createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice, sheet: OwnedSheet = DEFAULT_OWNED_SHEET) {
     const name = opportunity.opportunityName.trim()
     if (!name) throw new Error('Enter the opportunity name.')
+    assertOwnedSheet(sheet)
     // Resolve (validate, then create) the department first; only then create the opportunity under it.
     const dept = await this.resolveDepartmentNode(department)
     const opp = await this.createOpportunity({
       departmentId: dept.id, opportunityName: name, gemTenderId: opportunity.gemTenderId?.trim(),
       city: opportunity.city?.trim() || null, submissionDate: opportunity.submissionDate?.trim(),
+      referenceNo: opportunity.referenceNo?.trim() || null, assignmentName: opportunity.assignmentName?.trim() || null,
+      opportunityType: opportunity.opportunityType?.trim() ?? '',
     })
-    return this.createBid(opp.id)
+    return this.createBid(opp.id, undefined, sheet)
   }
 
-  async createBid(opportunityId: string, department?: DepartmentChoice) {
+  async createBid(opportunityId: string, department?: DepartmentChoice, sheet: OwnedSheet = DEFAULT_OWNED_SHEET) {
+    assertOwnedSheet(sheet)
     const opp = this.data.opportunities.find((o) => o.id === opportunityId)
     if (!opp) throw new Error(`No such opportunity: ${opportunityId}`)
     if (this.data.bids.some((b) => b.opportunityId === opportunityId)) {
@@ -1519,6 +1759,7 @@ class InMemoryRepository implements Repository {
       status: 'active',
       dataConfidence: 'verified',
       tenderLink: null,
+      sheet,
       archivedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -1532,9 +1773,10 @@ class InMemoryRepository implements Repository {
     return bid
   }
 
-  async updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>>) {
+  async updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink' | 'sheet'>>) {
     const bid = this.requireBid(id)
     const next = { ...patch }
+    if (next.sheet !== undefined) assertOwnedSheet(next.sheet)
     const effectiveStageKey = next.stageKey ?? bid.stageKey
     if (next.decision === 'go' && !isAtOrAfterSubmitted(effectiveStageKey)) {
       throw new Error('Cannot mark Go before the bid reaches Submitted.')

@@ -9,6 +9,7 @@ import { Icon } from '@/components/ui/Icon'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Combobox, type ComboboxOption } from '@/components/ui/Combobox'
+import { PersonName } from '@/components/ui/PersonName'
 import { MobileFilterBar } from '@/components/MobileFilterBar'
 import { Input } from '@/components/ui/Field'
 import { TimelineEventDialog } from '@/features/employees/TimelineEventDialog'
@@ -285,7 +286,7 @@ function salesPersonOptions(
 ): ComboboxOption[] {
   return salesPersons
     .filter((p) => match(currentPostings[p.id]?.designation ?? ''))
-    .map((p) => ({ value: p.id, label: p.name }))
+    .map((p) => ({ value: p.id, label: p.name, person: p }))
     .sort((a, b) => a.label.localeCompare(b.label))
 }
 
@@ -315,9 +316,9 @@ function TimelineRow({ entry, employee, department, highlighted, onClick }: {
           {entry.attended === true && <Badge tone="emerald">Attended</Badge>}
           {entry.attended === false && <Badge tone="crimson">Not attended</Badge>}
         </span>
-        <span className="mt-0.5 block text-[11px] text-muted">
-          <span className="font-medium text-ink-700">{employee.name}</span>
-          {department && ` · ${department}`}
+        <span className="mt-0.5 flex min-w-0 items-center text-[11px] text-muted">
+          <PersonName person={employee} size="2xs" className="shrink-0" nameClassName="font-medium text-ink-700" />
+          {department && <span className="truncate">&nbsp;· {department}</span>}
         </span>
       </span>
       <span className="shrink-0 text-right text-[11px] text-muted">

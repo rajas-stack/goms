@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth'
 import { auth, googleProvider } from '@/lib/firebaseAuth'
+import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
 import { useAdminImportDomains } from '../api'
 
@@ -33,6 +34,18 @@ function isForbiddenError(error: unknown): boolean {
  *  (apps/api/src/auth/verifyAdminImportToken.ts). Not read from env: this is
  *  copy for a dead-end screen, not a security boundary. */
 const ADMIN_IMPORT_CONTACT_EMAIL = 'rajas@amnex.com'
+
+/** The signed-in Google account: its profile photo (initials from the display
+ *  name as fallback) beside the email, which stays the identifying text. */
+function AccountName({ user }: { user: User }) {
+  const email = user.email ?? ''
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5 align-middle">
+      <Avatar person={{ name: user.displayName || email, photoUrl: user.photoURL }} size="xs" />
+      <span className="truncate">{email}</span>
+    </span>
+  )
+}
 
 export type AdminImportAuthPhase = 'loading' | 'signedOut' | 'forbidden' | 'authorized'
 
@@ -86,7 +99,7 @@ export function AdminImportAuthGate({ children, onPhaseChange }: { children: Rea
         <div className="max-w-sm space-y-1.5">
           <p className="text-sm font-medium text-ink">You're signed in, but not authorized for this</p>
           <p className="text-sm text-muted">
-            {user.email} is a valid Google account, but it isn't on the Admin Data Import access list.
+            <AccountName user={user} /> is a valid Google account, but it isn't on the Admin Data Import access list.
             This is separate from your regular GovCore access, which is unaffected.
           </p>
         </div>
@@ -104,7 +117,7 @@ export function AdminImportAuthGate({ children, onPhaseChange }: { children: Rea
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-end gap-3 border-b border-line px-4 py-2 text-xs text-muted">
-        <span>Signed in as {user.email}</span>
+        <span className="inline-flex min-w-0 items-center gap-1.5">Signed in as <AccountName user={user} /></span>
         <Button variant="ghost" size="sm" onClick={() => auth && signOut(auth)}>Sign out</Button>
       </div>
       <div className="min-h-0 flex-1">{children}</div>

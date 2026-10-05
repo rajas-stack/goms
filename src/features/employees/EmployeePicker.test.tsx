@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -23,6 +24,37 @@ function makeEmployee(overrides: Partial<Employee> = {}): Employee {
 }
 
 describe('EmployeePicker — Avatar rollout (Task 9.1)', () => {
+  it('keeps a newly created selection visible before candidates refresh', async () => {
+    const user = userEvent.setup()
+    const onCreate = vi.fn().mockResolvedValue('pending-head-id')
+    // A real parent stores the new id as the value while `candidates` has not refreshed yet.
+    function Parent() {
+      const [value, setValue] = useState('')
+      return <EmployeePicker candidates={[]} value={value} onChange={setValue} onCreate={onCreate} />
+    }
+    render(<Parent />)
+
+    await user.type(screen.getByPlaceholderText('Search a person…'), 'New Head')
+    await user.click(await screen.findByRole('button', { name: /Create new person/ }))
+    await user.type(screen.getByPlaceholderText('e.g. Principal Secretary'), 'Secretary')
+    await user.click(screen.getByRole('button', { name: 'Create' }))
+
+    expect(await screen.findByText('New Head · Secretary')).toBeInTheDocument()
+  })
+
+  it('shows a restored pending selection before its employee record exists', () => {
+    render(
+      <EmployeePicker
+        candidates={[]}
+        value="pending-head-id"
+        onChange={() => {}}
+        pendingSelection={{ id: 'pending-head-id', name: 'Restored Head', designation: 'Director' }}
+      />,
+    )
+
+    expect(screen.getByText('Restored Head · Director')).toBeInTheDocument()
+  })
+
   it('selected chip renders a photo when the selected candidate has a photoUrl', () => {
     const jane = makeEmployee({ photoUrl: 'https://example.com/jane.jpg' })
     render(<EmployeePicker candidates={[jane]} value="emp-1" onChange={() => {}} />)

@@ -18,6 +18,7 @@ export function AccountMappingRail() {
   const { navExpanded } = useShell()
   const commercialActive = location.pathname.startsWith('/commercial-calculator')
   const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
+  const teamsActive = location.pathname.startsWith('/teams')
 
   return (
     <nav className="hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-line bg-panel py-4 lg:flex lg:w-16">
@@ -56,6 +57,18 @@ export function AccountMappingRail() {
           <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Opportunity</span>
         </button>
       )}
+      {/* `mt-auto` pins Teams to the bottom of the rail, apart from the work modules above. */}
+      <button
+        onClick={() => navigate('/teams')}
+        title="Teams"
+        className={cn(
+          'mt-auto flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors lg:w-14',
+          teamsActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600/70 hover:bg-white hover:text-ink-900',
+        )}
+      >
+        <Icon name="Users" size={18} />
+        <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Teams</span>
+      </button>
     </nav>
   )
 }

@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
-import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { Field, Input, Textarea } from '@/components/ui/Field'
+import { Combobox } from '@/components/ui/Combobox'
+import { Avatar } from '@/components/ui/Avatar'
 import { useToast } from '@/components/ui/Toast'
 import { useOwnedBy, useOwnershipMutations, useSalesPersons } from '@/lib/api'
 import { isoToday } from '@/lib/dates'
+import { salesPersonOption } from './salesPersonOption'
 import type { SalesPerson } from '@/lib/types'
 
 /** Bulk hand-off of everything a salesperson owns — departments, contacts,
@@ -86,17 +89,19 @@ export function TransferBookOfBusinessDialog({ open, person, onClose }: {
 
         {openOwned.length === 0 && (
           <p className="rounded-lg border border-dashed border-line px-3 py-2.5 text-[13px] text-muted">
+            {person && <Avatar person={person} size="2xs" className="mr-1 inline-flex align-middle" />}
             {person?.name} owns nothing as of today — there is nothing to transfer.
           </p>
         )}
 
         <Field label="Transfer to" required>
-          <Select value={toSalesPersonId} onChange={(e) => setToSalesPersonId(e.target.value)}>
-            <option value="">Select…</option>
-            {people.filter((p) => p.id !== person?.id).map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </Select>
+          <Combobox
+            value={toSalesPersonId}
+            onChange={setToSalesPersonId}
+            options={people.filter((p) => p.id !== person?.id).map(salesPersonOption)}
+            placeholder="Select…"
+            aria-label="Transfer to"
+          />
         </Field>
 
         <Field label="Effective date" required>
