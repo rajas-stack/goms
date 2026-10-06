@@ -62,7 +62,6 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
   }
 
   return (
-    <Gate allowed={allowed}>
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
@@ -74,10 +73,12 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
             className="pl-9"
           />
         </div>
-        <Button variant="primary" size="sm" onClick={openCreate}>
-          <Icon name="Plus" size={15} />
-          Add {def.singularLabel}
-        </Button>
+        <Gate allowed={allowed}>
+          <Button variant="primary" size="sm" onClick={openCreate}>
+            <Icon name="Plus" size={15} />
+            Add {def.singularLabel}
+          </Button>
+        </Gate>
       </div>
 
       {!isLoading && filtered.length === 0 && (
@@ -102,6 +103,7 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
               </div>
               {Boolean(row.description) && <div className="truncate text-[12px] text-muted">{String(row.description)}</div>}
             </div>
+            <Gate allowed={allowed}>
             {masterKey === 'productEditions' && (
               <Button size="sm" onClick={() => setManagingFeaturesFor(row as unknown as MasterRow)}>Features</Button>
             )}
@@ -139,6 +141,7 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
                 </>
               )}
             </Menu>
+            </Gate>
           </div>
         ))}
       </div>
@@ -167,6 +170,5 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
         />
       )}
     </div>
-    </Gate>
   )
 }

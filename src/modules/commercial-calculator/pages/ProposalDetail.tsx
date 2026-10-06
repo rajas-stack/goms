@@ -165,7 +165,6 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   }
 
   return (
-    <Gate allowed={allowed}>
     <div ref={scrollContainerRef} className="flex h-full flex-col overflow-y-auto">
       <div className="shrink-0 p-4 pb-0">
         <button
@@ -282,6 +281,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
 
       <div className="flex flex-col gap-6 p-4">
         <div id="section-details">
+          <Gate allowed={allowed}>
           <BoqDetailsSection
             boq={boq}
             boqs={boqs}
@@ -293,9 +293,11 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             preSalesList={preSalesList}
             update={update}
           />
+          </Gate>
         </div>
 
         <div id="section-lines">
+          <Gate allowed={allowed}>
           <LineItemsSection
             boq={boq}
             lines={lines}
@@ -308,6 +310,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             expandedLineId={expandedLineId}
             onToggleExpand={toggleExpandedLine}
           />
+          </Gate>
         </div>
 
         <div id="section-preview">
@@ -331,7 +334,6 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
         onConfirm={handleDelete}
       />
     </div>
-    </Gate>
   )
 }
 

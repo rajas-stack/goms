@@ -1,4 +1,4 @@
-import { Gate, useAllowed } from '@/lib/permissions'
+import { useAllowed } from '@/lib/permissions'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useCurrentPostings, useDepartments, useEmployeeMutations, useEmployeesUnder, useSalesPersons } from '@/lib/api'
 import { convertWorkAmount, formatBudgetRange, WORK_VALUE_UNITS } from '@/features/nodes/department-meta'
@@ -323,8 +323,19 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const stickyBarRef = useRef<HTMLDivElement>(null)
   useStickyScrollOffset(scrollContainerRef, stickyBarRef)
 
+  if (!allowed) {
+    return (
+      <div className="flex h-full items-center justify-center p-8 text-center">
+        <div>
+          <h1 className="text-lg font-semibold text-ink-900">You can't create BOQs</h1>
+          <p className="mt-1 text-sm text-muted">Your role can view BOQs but not create them.</p>
+          <button type="button" className="mt-3 text-sm text-teal-600 underline" onClick={onCancel}>Back</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <Gate allowed={allowed}>
     <div ref={scrollContainerRef} className="flex h-full flex-col overflow-y-auto">
       <div className="shrink-0 border-b border-line bg-white px-4 py-3">
         <h1 className="font-display text-lg font-semibold text-ink-900">Create BOQ</h1>
@@ -690,7 +701,6 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         </div>
       </div>
     </div>
-    </Gate>
   )
 }
 

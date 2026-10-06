@@ -94,7 +94,6 @@ export function SkuCatalog() {
   }
 
   return (
-    <Gate allowed={allowed}>
     <div className="flex h-full min-h-0 flex-col lg:flex-row">
       <div className="flex max-h-64 w-full shrink-0 flex-col gap-2 overflow-y-auto border-b border-line p-3 lg:h-auto lg:max-h-none lg:w-[380px] lg:border-b-0 lg:border-r">
         <div className="flex items-center gap-2">
@@ -102,9 +101,11 @@ export function SkuCatalog() {
             <Icon name="Search" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="SKU code or name…" className="pl-9" />
           </div>
-          <Button variant="primary" size="sm" onClick={() => { setEditing(null); setFormOpen(true) }} title="Add SKU">
-            <Icon name="Plus" size={15} />
-          </Button>
+          <Gate allowed={allowed}>
+            <Button variant="primary" size="sm" onClick={() => { setEditing(null); setFormOpen(true) }} title="Add SKU">
+              <Icon name="Plus" size={15} />
+            </Button>
+          </Gate>
         </div>
         <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
@@ -180,7 +181,6 @@ export function SkuCatalog() {
         />
       )}
     </div>
-    </Gate>
   )
 }
 
@@ -204,6 +204,7 @@ function SkuDetail({ sku, tab, onTabChange, usageCount, boqCount, categoryName, 
           <h2 className="font-mono text-lg font-semibold text-ink-900">{sku.skuCode}</h2>
           <p className="text-[13px] text-muted">{sku.name}</p>
         </div>
+        <Gate allowed={usePermissions().mayWrite('com.skus')}>
         <div className="flex gap-2">
           <Button size="sm" onClick={onEdit}><Icon name="Pencil" size={13} />Edit</Button>
           <Menu
@@ -229,6 +230,7 @@ function SkuDetail({ sku, tab, onTabChange, usageCount, boqCount, categoryName, 
             )}
           </Menu>
         </div>
+        </Gate>
       </div>
 
       <div className="grid grid-cols-2 gap-3 rounded-xl border border-line p-3 text-sm sm:grid-cols-5">
