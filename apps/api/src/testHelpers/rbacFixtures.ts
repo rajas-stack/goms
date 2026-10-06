@@ -80,6 +80,23 @@ export async function assignOwner(entityType: string, entityId: string, salesPer
   )
 }
 
+export async function addNode(domain: 'geo' | 'org' | 'sales' = 'org', label = 'node'): Promise<string> {
+  const { rows } = await pool.query(
+    `INSERT INTO hierarchy_nodes (domain, type_key, parent_id, state_code, name, sort_order, metadata)
+     VALUES ($1, $2, NULL, 24, $3, 0, '{}') RETURNING id`,
+    [domain, domain === 'geo' ? 'state' : 'department', `RBAC ${label}`],
+  )
+  return rows[0].id
+}
+
+export async function addEmployee(nodeId: string, label = 'emp'): Promise<string> {
+  const { rows } = await pool.query(
+    `INSERT INTO employees (code, name, designation, org_node_id) VALUES ($1, $2, 'Officer', $3) RETURNING id`,
+    [`RBAC-${randomUUID().slice(0, 8)}`, `RBAC ${label}`, nodeId],
+  )
+  return rows[0].id
+}
+
 export async function cleanupRbacFixtures(): Promise<void> {
   const ids = [...made.bids, ...made.opportunities]
   if (ids.length) {
@@ -96,6 +113,8 @@ export async function cleanupRbacFixtures(): Promise<void> {
   await pool.query(`DELETE FROM user_role_overrides WHERE email LIKE 'rbac-%'`)
   await pool.query(`DELETE FROM delivery_team_members WHERE name LIKE 'RBAC %'`)
   await pool.query(`DELETE FROM org_people WHERE name LIKE 'RBAC %'`)
+  await pool.query(`DELETE FROM employees WHERE name LIKE 'RBAC %'`)
+  await pool.query(`DELETE FROM hierarchy_nodes WHERE name LIKE 'RBAC %'`)
   await pool.query(`DELETE FROM sales_persons WHERE name LIKE 'RBAC %'`)
   clearUserFactsCache()
 }
