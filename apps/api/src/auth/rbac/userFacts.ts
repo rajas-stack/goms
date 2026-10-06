@@ -8,6 +8,19 @@ const cache = new Map<string, { at: number; facts: UserFacts }>()
 export const normalizeEmail = (email: string): string => email.trim().toLowerCase()
 export function clearUserFactsCache(): void { cache.clear() }
 
+/** derived ∪ override grants − override revokes, plus System Admin for allow-listed accounts, in ROLES order (spec §3.1, §3.4). */
+export function combineRoles(
+  derived: Iterable<Role>, overrides: { role: Role; effect: 'grant' | 'revoke' }[], adminAllowListed: boolean,
+): Role[] {
+  const roles = new Set<Role>(derived)
+  for (const { role, effect } of overrides) {
+    if (effect === 'grant') roles.add(role)
+    else roles.delete(role)
+  }
+  if (adminAllowListed) roles.add('system_admin')
+  return ROLES.filter((r) => roles.has(r))
+}
+
 /** Effective roles (spec §3.1): derived ∪ override grants − override revokes; ADMIN_ALLOWED_EMAILS members are then added
  *  as System Admin (spec §3.4), which no override can remove.
  *  Also resolves the caller's roster ids, which scope checks need. Cached per email for 60 s. */
@@ -17,6 +30,7 @@ export async function loadUserFacts(rawEmail: string): Promise<UserFacts> {
   if (hit && Date.now() - hit.at < TTL_MS) return hit.facts
 
   const roles = new Set<Role>()
+  let finalRoles: Role[] = []
   let salesPersonId: string | null = null
   let teamMemberIds: UserFacts['teamMemberIds'] = { presales: [], legal: [], bid: [] }
 
@@ -36,12 +50,7 @@ export async function loadUserFacts(rawEmail: string): Promise<UserFacts> {
     if (sales.rows[0]) { roles.add('sales'); salesPersonId = sales.rows[0].id }
 
     const overrides = await pool.query(`SELECT role, effect FROM user_role_overrides WHERE email = $1`, [email])
-    for (const { role, effect } of overrides.rows) {
-      if (effect === 'grant') roles.add(role as Role)
-      else roles.delete(role as Role)
-    }
-    // System Admin (spec §3.4): the admin allow-list is the only source, applied after the overrides so none can remove it.
-    if (isAllowListed(email, process.env.ADMIN_ALLOWED_EMAILS)) roles.add('system_admin')
+    finalRoles = combineRoles(roles, overrides.rows, isAllowListed(email, process.env.ADMIN_ALLOWED_EMAILS))
 
     const members = await pool.query(
       `SELECT m.id, m.team FROM delivery_team_members m
@@ -53,7 +62,7 @@ export async function loadUserFacts(rawEmail: string): Promise<UserFacts> {
     teamMemberIds = { presales: ids('preSales'), legal: ids('legal'), bid: ids('bid') }
   }
 
-  const facts: UserFacts = { email, roles: ROLES.filter((r) => roles.has(r)), salesPersonId, teamMemberIds }
+  const facts: UserFacts = { email, roles: finalRoles, salesPersonId, teamMemberIds }
   cache.set(email, { at: Date.now(), facts })
   return facts
 }

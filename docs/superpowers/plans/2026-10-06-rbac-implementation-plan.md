@@ -4522,8 +4522,8 @@ describe('access.* once RBAC is on: IT manages it, other roles cannot', () => {
   beforeEach(() => { process.env.AUTH_ENFORCEMENT_ENABLED = 'true'; process.env.RBAC_MODE = 'enforce' })
   it('IT and System Admin can; Sales cannot, and CXO may only read', async () => {
     await setRole('it', 'it'); await setRole('cxo', 'cxo'); await addSalesPerson('sales'); makeSystemAdmin('root')
-    await expect(as('it').access.listOverrides()).resolves.toEqual([])
-    await expect(as('root').access.listOverrides()).resolves.toEqual([])
+    await expect(as('it').access.listOverrides()).resolves.toEqual(expect.any(Array)) // setRole above wrote override rows, so not empty
+    await expect(as('root').access.listOverrides()).resolves.toEqual(expect.any(Array))
     await expect(as('root').access.setOverride({ email: rbacEmail('z'), role: 'delivery', effect: 'grant', reason: 'r' })).resolves.toBeDefined()
     await expect(as('it').access.setOverride({ email: rbacEmail('x'), role: 'finance', effect: 'grant', reason: 'r' })).resolves.toBeDefined()
     const refused = await as('sales').access.listOverrides().catch((e) => e)

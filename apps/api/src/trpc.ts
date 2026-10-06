@@ -135,6 +135,18 @@ export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   return next({ ctx })
 })
 
+/** For the access API (`access.*`). Overrides created while RBAC is `off` become live the moment it is enforced, so
+ *  this is gated regardless of RBAC_MODE: in `off` mode only ADMIN_ALLOWED_EMAILS members (the System Admins) may use it; in
+ *  shadow/enforce the registry's `admin.access` requirement applies (IT, or System Admin). */
+export const accessProcedure = protectedProcedure.use(({ ctx, next }) => {
+  if (rbacMode() === 'off' && authEnforced()) {
+    if (!ctx.user || !isAllowListed(ctx.user.email, process.env.ADMIN_ALLOWED_EMAILS)) {
+      throw new TRPCError({ code: 'FORBIDDEN', message: 'Your account is not authorized to manage access.' })
+    }
+  }
+  return next()
+})
+
 /** Unchanged from before, plus the same EMERGENCY_READ_ONLY gate every other
  *  mutation now has — Admin Data Import's own mutations (session.commit,
  *  commitGeographyLoad) must also stop during an incident. */
