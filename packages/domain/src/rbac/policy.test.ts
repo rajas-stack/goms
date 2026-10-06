@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { DERIVED_ROLE_DEPARTMENTS, FIELD_SETS, GRANTS, MODULES, SALES_ROLE_STATUSES, grantFor, validatePolicy } from './policy.js'
-import { EXCLUSIVE_ATOMS, W_ONLY_ATOMS } from './atoms.js'
-import { ROLES } from './types.js'
+import {
+  DERIVED_ROLE_DEPARTMENTS, FIELD_SETS, GRANTS, MODULES, SALES_ROLE_STATUSES, SYSTEM_ADMIN_VIEW_ONLY_MODULES, grantFor, validatePolicy,
+} from './policy.js'
+import { EXCLUSIVE_ATOMS, FROZEN_ATOMS, W_ONLY_ATOMS } from './atoms.js'
+import { FUNCTIONAL_ROLES, ROLES } from './types.js'
 
 describe('RBAC policy matrix', () => {
   it('has the 26 spec modules and exactly one derived module (the Master Grid)', () => {
@@ -44,6 +46,41 @@ describe('RBAC policy matrix', () => {
 
   it('derives Sales only from active and onLeave roster entries (plan gap A6): resigned and inactive do not count', () => {
     expect([...SALES_ROLE_STATUSES]).toEqual(['active', 'onLeave'])
+  })
+
+  it('adds System Admin as a ninth, allow-list-only role after the eight functional roles', () => {
+    expect([...FUNCTIONAL_ROLES]).toEqual(['sales', 'presales', 'bid', 'legal', 'cxo', 'delivery', 'it', 'finance'])
+    expect([...ROLES]).toEqual([...FUNCTIONAL_ROLES, 'system_admin'])
+    expect(Object.keys(DERIVED_ROLE_DEPARTMENTS)).not.toContain('system_admin')
+  })
+
+  it('gives System Admin W·all on every module, with create/delete everywhere except the three view-only modules', () => {
+    for (const module of Object.keys(GRANTS) as (keyof typeof GRANTS)[]) {
+      const g = grantFor(module, 'system_admin')
+      expect(g, module).toMatchObject({ level: 'W', scope: 'all', sets: [] })
+      const viewOnly = (SYSTEM_ADMIN_VIEW_ONLY_MODULES as readonly string[]).includes(module)
+      expect(g.create, `${module} create`).toBe(!viewOnly)
+      expect(g.delete, `${module} delete`).toBe(!viewOnly)
+    }
+    expect([...SYSTEM_ADMIN_VIEW_ONLY_MODULES].sort()).toEqual(['admin.audit', 'an.financial', 'an.operational'])
+  })
+
+  it('System Admin can create and delete wherever any functional role can (it is a strict superset)', () => {
+    for (const module of Object.keys(GRANTS) as (keyof typeof GRANTS)[]) {
+      for (const role of FUNCTIONAL_ROLES) {
+        const g = grantFor(module, role)
+        if (g.create) expect(grantFor(module, 'system_admin').create, `${module}/${role} create`).toBe(true)
+        if (g.delete) expect(grantFor(module, 'system_admin').delete, `${module}/${role} delete`).toBe(true)
+      }
+    }
+  })
+
+  it('freezes the Solution Lead atom: exclusive, in no partial set, and denied even to System Admin', () => {
+    expect([...FROZEN_ATOMS]).toEqual(['ownership.solutionLead'])
+    for (const atom of FROZEN_ATOMS) {
+      expect(EXCLUSIVE_ATOMS.has(atom)).toBe(true)
+      for (const atoms of Object.values(FIELD_SETS)) expect(atoms).not.toContain(atom)
+    }
   })
 
   it('keeps W-only atoms out of every partial set and pins the exclusive-atom list', () => {

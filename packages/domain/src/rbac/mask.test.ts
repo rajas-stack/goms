@@ -13,8 +13,8 @@ describe('SKU read masking', () => {
     expect(MASKED_ATOM_FIELDS['sku.costs']).toEqual(SKU_COST_FIELDS)
     expect([...SKU_FLOOR_FIELDS]).toEqual(['floorPrice', 'minimumAllowedPrice', 'internalPrice'])
   })
-  it('lets only Pre-sales, Finance and CXO read costs and floor prices', () => {
-    for (const role of ['presales', 'finance', 'cxo'] as const) {
+  it('lets only Pre-sales, Finance, CXO and System Admin read costs and floor prices', () => {
+    for (const role of ['presales', 'finance', 'cxo', 'system_admin'] as const) {
       expect(canReadAtom([role], 'sku.costs')).toBe(true)
       expect(canReadAtom([role], 'sku.floor')).toBe(true)
     }
@@ -31,6 +31,11 @@ describe('SKU read masking', () => {
   })
   it('returns the row untouched for an authorised role, with an empty maskedFields list', () => {
     const out = maskSkuRow(sku, ['presales'])
+    expect(out).toMatchObject(sku)
+    expect(out.maskedFields).toEqual([])
+  })
+  it('shows a System Admin every cost and floor-price field', () => {
+    const out = maskSkuRow(sku, ['system_admin'])
     expect(out).toMatchObject(sku)
     expect(out.maskedFields).toEqual([])
   })

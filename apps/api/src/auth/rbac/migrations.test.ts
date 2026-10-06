@@ -20,6 +20,7 @@ describe('user_role_overrides', () => {
   })
   it('rejects an unknown role, an unknown effect and an empty reason', async () => {
     await expect(insert('rbac-mig-b@amnex.com', 'admin')).rejects.toThrow(/check/i)
+    await expect(insert('rbac-mig-b@amnex.com', 'system_admin')).rejects.toThrow(/check/i) // System Admin comes only from ADMIN_ALLOWED_EMAILS
     await expect(insert('rbac-mig-b@amnex.com', 'cxo', 'allow')).rejects.toThrow(/check/i)
     await expect(insert('rbac-mig-b@amnex.com', 'cxo', 'grant', '   ')).rejects.toThrow(/check/i)
   })

@@ -11,6 +11,10 @@ export const EXCLUSIVE_ATOMS: ReadonlySet<string> = new Set([
   'sku.costs', 'sku.floor', 'sku.tax', 'master.taxClasses', 'master.currencies', 'boq.approve', 'ownership.solutionLead',
 ])
 
+/** Atoms NO role can edit, System Admin included (spec §3.4, §6.2): Solution Lead is a data-integrity freeze — replacing
+ *  a lead is two calls and only owners auto-close — not an access level. Every frozen atom is also exclusive. */
+export const FROZEN_ATOMS: ReadonlySet<string> = new Set(['ownership.solutionLead'])
+
 const ATOM_LABELS: Record<string, string> = {
   'opp.identity': 'the name, type, reference or tender link', 'opp.tenderId': 'the Tender ID', 'opp.client': 'the client, city or sector',
   'opp.value': 'the value fields', 'opp.emd': 'the EMD fields', 'opp.dates': 'the dates', 'opp.stage': 'the pipeline stage',

@@ -1,5 +1,5 @@
 import { W_ONLY_ATOMS } from './atoms.js'
-import { ROLES, type Grant, type Level, type Role, type Scope } from './types.js'
+import { FUNCTIONAL_ROLES, ROLES, type Grant, type Level, type Role, type Scope } from './types.js'
 
 export const MODULES = [
   { key: 'opp.bidTracker', label: 'Bid Tracker rows', group: 'Opportunity' },
@@ -61,10 +61,15 @@ export const DERIVED_ROLE_DEPARTMENTS = {
 /** `sales_persons.status` values that derive the Sales role (plan gap A6). `resigned` and `inactive` do not. */
 export const SALES_ROLE_STATUSES = ['active', 'onLeave'] as const
 
+/** Modules with no create/delete operation: System Admin is `W` on them but holds no create/delete grant, and the
+ *  audit trail stays append-only (spec §3.4). */
+export const SYSTEM_ADMIN_VIEW_ONLY_MODULES: readonly PolicyModuleKey[] = ['an.operational', 'an.financial', 'admin.audit']
+
 type Row = readonly [string, string, string, string, string, string, string, string]
 
-/** Cell grammar: LEVEL[/SCOPE[/SETS]] — columns in ROLES order:
- *  sales, presales, bid, legal, cxo, delivery, it, finance. Scope defaults to `all`. */
+/** Cell grammar: LEVEL[/SCOPE[/SETS]] — columns in FUNCTIONAL_ROLES order:
+ *  sales, presales, bid, legal, cxo, delivery, it, finance. Scope defaults to `all`.
+ *  System Admin has no column: buildGrants gives it W·all everywhere (spec §3.4). */
 const CELLS: Record<PolicyModuleKey, Row> = {
   'opp.bidTracker':     ['P/own/S1', 'P/asg/P1', 'W', 'P/asg/L1', 'P/all/X1', 'R', 'R', 'R'],
   'opp.pipeline':       ['W/own', 'P/asg/P1', 'R', 'R', 'R', 'R', 'R', 'R'],
@@ -131,13 +136,15 @@ function buildGrants(): Record<PolicyModuleKey, Record<Role, Grant>> {
   const out = {} as Record<PolicyModuleKey, Record<Role, Grant>>
   for (const module of Object.keys(CELLS) as PolicyModuleKey[]) {
     const byRole = {} as Record<Role, Grant>
-    ROLES.forEach((role, i) => {
+    FUNCTIONAL_ROLES.forEach((role, i) => {
       byRole[role] = {
         ...parseCell(CELLS[module][i]),
         create: CREATE_DELETE[module].create.includes(role),
         delete: CREATE_DELETE[module].delete.includes(role),
       }
     })
+    const operable = !SYSTEM_ADMIN_VIEW_ONLY_MODULES.includes(module)
+    byRole.system_admin = { level: 'W', scope: 'all', sets: [], create: operable, delete: operable }
     out[module] = byRole
   }
   return out
@@ -166,6 +173,11 @@ export function validatePolicy(): string[] {
       if (g.scope !== 'all' && g.level !== 'P' && g.level !== 'W') problems.push(`${at}: a scope only applies to P/W`)
       if (role === 'delivery' && (g.level === 'P' || g.level === 'W' || g.scope !== 'all' || g.create || g.delete)) {
         problems.push(`${at}: Delivery is read-only in v1`)
+      }
+      if (role === 'system_admin') {
+        const viewOnly = SYSTEM_ADMIN_VIEW_ONLY_MODULES.includes(module)
+        if (g.level !== 'W' || g.scope !== 'all' || g.sets.length > 0) problems.push(`${at}: System Admin must be W on scope all`)
+        if (g.create === viewOnly || g.delete === viewOnly) problems.push(`${at}: System Admin create/delete must be ${!viewOnly}`)
       }
     }
   }

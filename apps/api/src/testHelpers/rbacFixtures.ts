@@ -33,6 +33,13 @@ export async function addTeamMember(team: 'preSales' | 'legal' | 'bid', label: s
   return rows[0].id
 }
 
+/** Makes `rbac-<label>@amnex.com` a System Admin the only way the product does: through ADMIN_ALLOWED_EMAILS. */
+export function makeSystemAdmin(label: string): void {
+  const existing = (process.env.ADMIN_ALLOWED_EMAILS ?? '').split(',').map((e) => e.trim()).filter(Boolean)
+  process.env.ADMIN_ALLOWED_EMAILS = [...existing, rbacEmail(label)].join(',')
+  clearUserFactsCache()
+}
+
 /** Grants (or revokes) a role for `rbac-<label>@amnex.com` through the override table. */
 export async function setRole(label: string, role: Role, effect: 'grant' | 'revoke' = 'grant'): Promise<void> {
   await pool.query(
@@ -116,5 +123,6 @@ export async function cleanupRbacFixtures(): Promise<void> {
   await pool.query(`DELETE FROM employees WHERE name LIKE 'RBAC %'`)
   await pool.query(`DELETE FROM hierarchy_nodes WHERE name LIKE 'RBAC %'`)
   await pool.query(`DELETE FROM sales_persons WHERE name LIKE 'RBAC %'`)
+  delete process.env.ADMIN_ALLOWED_EMAILS // makeSystemAdmin() sets it
   clearUserFactsCache()
 }

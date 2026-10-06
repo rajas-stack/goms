@@ -1,8 +1,15 @@
-export const ROLES = ['sales', 'presales', 'bid', 'legal', 'cxo', 'delivery', 'it', 'finance'] as const
+/** The eight roles derived from the org chart / roster or granted by an override (spec §3.2, §3.3). */
+export const FUNCTIONAL_ROLES = ['sales', 'presales', 'bid', 'legal', 'cxo', 'delivery', 'it', 'finance'] as const
+export type FunctionalRole = (typeof FUNCTIONAL_ROLES)[number]
+
+/** Every role, `system_admin` last. System Admin is allow-list-only (`ADMIN_ALLOWED_EMAILS`, spec §3.4): never derived,
+ *  never an override — so overrides, the override API and the access UI use FUNCTIONAL_ROLES, not ROLES. */
+export const ROLES = [...FUNCTIONAL_ROLES, 'system_admin'] as const
 export type Role = (typeof ROLES)[number]
 
 export const ROLE_LABELS: Record<Role, string> = {
   sales: 'Sales', presales: 'Pre-sales', bid: 'Bid', legal: 'Legal', cxo: 'CXO', delivery: 'Delivery', it: 'IT', finance: 'Finance',
+  system_admin: 'System Admin',
 }
 
 export type Level = 'N' | 'R' | 'P' | 'W'

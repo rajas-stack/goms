@@ -2,6 +2,8 @@
 
 -- Per-person role overrides on top of the roles derived from org_people / sales_persons (RBAC spec §3.3).
 -- 'grant' adds a role (e.g. CEO/CFO/CE&TO -> cxo; every Finance, IT and Delivery user); 'revoke' removes a derived one.
+-- The eight functional roles only: system_admin is deliberately absent (spec §3.4) — System Admin comes only from
+-- ADMIN_ALLOWED_EMAILS, so it can be neither granted nor revoked through this table.
 CREATE TABLE user_role_overrides (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email      TEXT NOT NULL CHECK (email = lower(btrim(email)) AND length(email) BETWEEN 3 AND 254),

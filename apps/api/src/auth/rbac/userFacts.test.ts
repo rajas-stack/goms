@@ -86,10 +86,28 @@ describe('overrides', () => {
     for (const role of ['finance', 'it', 'delivery'] as const) await setRole(role, role)
     for (const role of ['finance', 'it', 'delivery'] as const) expect((await loadUserFacts(rbacEmail(role))).roles).toEqual([role])
   })
-  it('ADMIN_ALLOWED_EMAILS members always hold IT, even if an override revokes it', async () => {
+  it('ADMIN_ALLOWED_EMAILS members are System Admins (not IT), even if an override revokes IT', async () => {
     process.env.ADMIN_ALLOWED_EMAILS = `${rbacEmail('boss')}, other@amnex.com`
     await setRole('boss', 'it', 'revoke')
-    expect((await loadUserFacts(rbacEmail('boss'))).roles).toEqual(['it'])
+    expect((await loadUserFacts(rbacEmail('boss'))).roles).toEqual(['system_admin'])
+  })
+  it('System Admin is allow-list-only: nothing else produces it', async () => {
+    await addOrgPerson('lead', ['Leadership'])
+    await setRole('techie', 'it')
+    expect((await loadUserFacts(rbacEmail('lead'))).roles).toEqual(['cxo'])
+    expect((await loadUserFacts(rbacEmail('techie'))).roles).toEqual(['it'])
+    expect((await loadUserFacts(rbacEmail('stranger'))).roles).toEqual([])
+  })
+  it('matches the allow-list regardless of case and whitespace, and never for an empty login (Review Focus 6)', async () => {
+    process.env.ADMIN_ALLOWED_EMAILS = `  ${rbacEmail('boss').toUpperCase()} , `
+    expect((await loadUserFacts('  RBAC-BOSS@amnex.com ')).roles).toEqual(['system_admin'])
+    expect((await loadUserFacts('')).roles).toEqual([])
+  })
+  it('adds System Admin to whatever the person already holds, last in ROLES order', async () => {
+    process.env.ADMIN_ALLOWED_EMAILS = rbacEmail('boss')
+    await addOrgPerson('boss', ['Legal'])
+    await setRole('boss', 'finance')
+    expect((await loadUserFacts(rbacEmail('boss'))).roles).toEqual(['legal', 'finance', 'system_admin'])
   })
 })
 

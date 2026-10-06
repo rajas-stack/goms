@@ -8,7 +8,8 @@ const cache = new Map<string, { at: number; facts: UserFacts }>()
 export const normalizeEmail = (email: string): string => email.trim().toLowerCase()
 export function clearUserFactsCache(): void { cache.clear() }
 
-/** Effective roles (spec §3.1): derived ∪ override grants − override revokes; ADMIN_ALLOWED_EMAILS always adds IT.
+/** Effective roles (spec §3.1): derived ∪ override grants − override revokes; ADMIN_ALLOWED_EMAILS members are then added
+ *  as System Admin (spec §3.4), which no override can remove.
  *  Also resolves the caller's roster ids, which scope checks need. Cached per email for 60 s. */
 export async function loadUserFacts(rawEmail: string): Promise<UserFacts> {
   const email = normalizeEmail(rawEmail)
@@ -39,8 +40,8 @@ export async function loadUserFacts(rawEmail: string): Promise<UserFacts> {
       if (effect === 'grant') roles.add(role as Role)
       else roles.delete(role as Role)
     }
-    // Break-glass: allow-listed admins always hold IT and cannot be locked out through an override.
-    if (isAllowListed(email, process.env.ADMIN_ALLOWED_EMAILS)) roles.add('it')
+    // System Admin (spec §3.4): the admin allow-list is the only source, applied after the overrides so none can remove it.
+    if (isAllowListed(email, process.env.ADMIN_ALLOWED_EMAILS)) roles.add('system_admin')
 
     const members = await pool.query(
       `SELECT m.id, m.team FROM delivery_team_members m

@@ -1,4 +1,4 @@
-import { EXCLUSIVE_ATOMS } from './atoms.js'
+import { EXCLUSIVE_ATOMS, FROZEN_ATOMS } from './atoms.js'
 import { FIELD_SETS, GRANTS, type PolicyModuleKey } from './policy.js'
 import { maxLevel, type Level, type Role, type Scope, type ScopeFacts, type UserFacts } from './types.js'
 
@@ -10,10 +10,12 @@ export interface Access {
   atoms: ReadonlySet<string>
   create: boolean
   delete: boolean
+  /** System Admin (spec §3.4): every atom is editable except the frozen ones. */
+  unrestricted: boolean
 }
 
-const NO_ACCESS: Access = { level: 'N', all: false, atoms: new Set(), create: false, delete: false }
-const READ_ONLY: Access = { level: 'R', all: false, atoms: new Set(), create: false, delete: false }
+const NO_ACCESS: Access = { level: 'N', all: false, atoms: new Set(), create: false, delete: false, unrestricted: false }
+const READ_ONLY: Access = { level: 'R', all: false, atoms: new Set(), create: false, delete: false, unrestricted: false }
 
 /** Reading the key module grants read-only access to the listed modules (gap A2): BOQ screens look up SKUs and
  *  reference masters by id. The approval matrix is deliberately not implied. */
@@ -41,7 +43,9 @@ function rawAccess(user: UserFacts, module: PolicyModuleKey, row?: ScopeFacts): 
   const atoms = new Set<string>()
   let create = false
   let del = false
+  let unrestricted = false
   for (const role of user.roles) {
+    if (role === 'system_admin') unrestricted = true
     const grant = GRANTS[module][role]
     if (grant.level === 'N') continue
     level = maxLevel(level, 'R') // there is no row-level read scoping
@@ -55,7 +59,7 @@ function rawAccess(user: UserFacts, module: PolicyModuleKey, row?: ScopeFacts): 
     if (grant.create && (row ? applicable : true)) create = true
     if (grant.delete && applicable) del = true
   }
-  return { level, all, atoms, create, delete: del }
+  return { level, all, atoms, create, delete: del, unrestricted }
 }
 
 /** What `user` may do in `module`, optionally for one specific row. */
@@ -69,7 +73,10 @@ export function accessFor(user: UserFacts, module: PolicyModuleKey, row?: ScopeF
   return own
 }
 
-/** May this access edit `atom`? `W` covers everything except exclusive atoms, which only an explicit set grants. */
+/** May this access edit `atom`? Frozen atoms: never. System Admin: everything else. Otherwise `W` covers everything except
+ *  exclusive atoms, which only an explicit set grants. */
 export function allows(access: Access, atom: string): boolean {
+  if (FROZEN_ATOMS.has(atom)) return false
+  if (access.unrestricted) return true
   return access.atoms.has(atom) || (access.all && !EXCLUSIVE_ATOMS.has(atom))
 }

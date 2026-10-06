@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { accessFor, allows, inScope } from './evaluate.js'
+import { BID_PATCH_ATOMS, EXCLUSIVE_ATOMS, FROZEN_ATOMS, OPPORTUNITY_PATCH_ATOMS, W_ONLY_ATOMS } from './atoms.js'
+import { FIELD_SETS, GRANTS, SYSTEM_ADMIN_VIEW_ONLY_MODULES, type PolicyModuleKey } from './policy.js'
 import type { Role, ScopeFacts, UserFacts } from './types.js'
 
 const user = (roles: Role[], extra: Partial<UserFacts> = {}): UserFacts => ({
@@ -152,5 +154,48 @@ describe('baseline and implied reads', () => {
   })
   it('a role with no BOQ read gets no implied reads', () => {
     expect(accessFor(user(['legal']), 'com.skus').level).toBe('N')
+  })
+})
+
+describe('System Admin (spec §3.4)', () => {
+  const admin = (extra: Role[] = []) => user(['system_admin', ...extra])
+  const everyModule = Object.keys(GRANTS) as PolicyModuleKey[]
+
+  it('is W on every module and on every row, whoever owns it', () => {
+    for (const module of everyModule) {
+      const a = accessFor(admin(), module, row({ salesOwnerIds: ['someone-else'], createdBy: 'x@amnex.com' }))
+      expect(a.level, module).toBe('W')
+      expect(a.unrestricted, module).toBe(true)
+    }
+    expect(accessFor(admin(), 'opp.pipeline').level).toBe('W') // no row facts needed
+  })
+  it('may edit every atom — the exclusive ones included — except the frozen Solution Lead', () => {
+    const atoms = [
+      ...W_ONLY_ATOMS, ...EXCLUSIVE_ATOMS, ...Object.values(FIELD_SETS).flat(),
+      ...Object.values(OPPORTUNITY_PATCH_ATOMS), ...Object.values(BID_PATCH_ATOMS), 'bid.verify', 'bid.archive', 'ownership.assign',
+    ]
+    for (const atom of atoms) {
+      const expected = !FROZEN_ATOMS.has(atom)
+      expect(allows(accessFor(admin(), 'com.skus'), atom), atom).toBe(expected)
+      expect(allows(accessFor(admin(), 'opp.bidTracker', row()), atom), atom).toBe(expected)
+    }
+    expect(allows(accessFor(admin(), 'com.skus'), 'sku.costs')).toBe(true)
+    expect(allows(accessFor(admin(), 'com.masters'), 'master.currencies')).toBe(true)
+    expect(allows(accessFor(admin(), 'com.boqs'), 'boq.approve')).toBe(true)
+    expect(allows(accessFor(admin(), 'am.ownership', row()), 'ownership.assign')).toBe(true)
+    expect(allows(accessFor(admin(), 'am.ownership', row()), 'ownership.solutionLead')).toBe(false)
+  })
+  it('holds create and delete wherever the module has such operations, and not on the view-only modules', () => {
+    for (const module of everyModule) {
+      const viewOnly = SYSTEM_ADMIN_VIEW_ONLY_MODULES.includes(module)
+      const a = accessFor(admin(), module, row())
+      expect(a.create, `${module} create`).toBe(!viewOnly)
+      expect(a.delete, `${module} delete`).toBe(!viewOnly)
+    }
+  })
+  it('stays unrestricted next to other roles, and gives those roles nothing extra', () => {
+    expect(accessFor(admin(['sales', 'legal']), 'com.approvalMatrix').unrestricted).toBe(true)
+    expect(accessFor(user(['cxo']), 'com.boqs').unrestricted).toBe(false)
+    expect(allows(accessFor(user(['cxo']), 'com.skus'), 'sku.costs')).toBe(false)
   })
 })

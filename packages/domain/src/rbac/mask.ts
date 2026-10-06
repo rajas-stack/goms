@@ -12,8 +12,8 @@ export const MASKED_ATOM_FIELDS: Record<MaskedAtom, readonly string[]> = {
 
 /** Roles that may read each restricted atom (spec §7). */
 const MASKED_ATOM_READERS: Record<MaskedAtom, readonly Role[]> = {
-  'sku.costs': ['presales', 'finance', 'cxo'],
-  'sku.floor': ['presales', 'finance', 'cxo'],
+  'sku.costs': ['presales', 'finance', 'cxo', 'system_admin'],
+  'sku.floor': ['presales', 'finance', 'cxo', 'system_admin'],
 }
 
 export const isMaskedAtom = (atom: string): atom is MaskedAtom => atom in MASKED_ATOM_FIELDS
