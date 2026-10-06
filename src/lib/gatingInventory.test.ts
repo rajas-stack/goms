@@ -11,6 +11,7 @@ const GATED = new Set([
   'features/nodes/ConfirmDialog.tsx', 'features/nodes/MoveDialog.tsx', 'features/nodes/NodeFormDialog.tsx', 'features/nodes/WorksEditor.tsx',
   'features/org/OrgEmployees.tsx', 'features/sales/AssignOwnerDialog.tsx', 'features/sales/EditPostingDatesDialog.tsx',
   'features/sales/SalesPersonFormDialog.tsx', 'features/sales/TransferBookOfBusinessDialog.tsx', 'features/sales/TransferSalesPersonDialog.tsx',
+  'modules/admin-access/AccessManagement.tsx',
   'modules/bid-tracker/BidDetailWorkspace.tsx', 'modules/bid-tracker/GridSheet.tsx',
   'modules/bid-tracker/components/AddCustomColumnDialog.tsx', 'modules/bid-tracker/components/CorrigendumReviewDialog.tsx',
   'modules/bid-tracker/components/CreateBidDialog.tsx', 'modules/bid-tracker/components/CreateCorrigendumDialog.tsx',
