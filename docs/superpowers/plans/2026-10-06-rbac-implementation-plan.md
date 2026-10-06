@@ -2,26 +2,27 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Enforce the approved 8-role / 26-module RBAC policy on the server for every tRPC procedure, with field-level edit and read control, shipped dark behind `RBAC_MODE=off|shadow|enforce`.
+**Goal:** Enforce the approved 8-role (plus System Admin) / 26-module RBAC policy on the server for every tRPC procedure, with field-level edit and read control, shipped dark behind `RBAC_MODE=off|shadow|enforce`.
 
 **Architecture:** The policy (matrix, field atoms, masks) and its pure evaluators live in `@goms/domain` so server and UI share one source. One `PROCEDURE_POLICY` registry (`'router.procedure'` → requirements) is evaluated by a single tRPC middleware wired into `apps/api/src/trpc.ts`; a procedure with several requirements must pass **all** of them. Roles come from `org_people` / `sales_persons` plus a `user_role_overrides` table. SKU cost/floor masking runs in response hooks. The UI reads `auth.me` and reuses the same evaluators.
 
 **Tech Stack:** TypeScript (NodeNext ESM), tRPC 11.18, Fastify 5, Postgres via node-pg-migrate, Zod, Vitest 2 (real shared Postgres for API tests, `fileParallelism: false`), React 18 + TanStack Query, Firebase auth.
 
-**Spec:** [docs/superpowers/specs/2026-10-06-rbac-design.md](../specs/2026-10-06-rbac-design.md) (approved 2026-10-06 with two corrections: Solution Lead read-only for all roles; multi-requirement procedures must pass every requirement).
+**Spec:** [docs/superpowers/specs/2026-10-06-rbac-design.md](../specs/2026-10-06-rbac-design.md) (approved 2026-10-06 with two corrections: Solution Lead read-only for all roles; multi-requirement procedures must pass every requirement; amended the same day: Sales derives from `active`/`onLeave` only (A6), and a **System Admin** role is added, spec §3.4).
 
 ## Global Constraints
 
 Copied from the spec; every task inherits them.
 
-- Roles are exactly: `sales`, `presales`, `bid`, `legal`, `cxo`, `delivery`, `it`, `finance`. Levels are exactly `N`, `R`, `P` (explicit field-level edit), `W`.
+- Roles are exactly the eight functional roles `sales`, `presales`, `bid`, `legal`, `cxo`, `delivery`, `it`, `finance` (`FUNCTIONAL_ROLES`) plus `system_admin` (allow-list only). `ROLES` is the nine, `system_admin` last. Levels are exactly `N`, `R`, `P` (explicit field-level edit), `W`.
 - `RBAC_MODE` is `off` (default) | `shadow` | `enforce`, evaluated **only when `AUTH_ENFORCEMENT_ENABLED` is `"true"`**. `off` is an exact no-op: behavior, errors and the 18 currently-public queries are unchanged. `AUTH_ENFORCEMENT_ENABLED` and `READ_AUTH_ENFORCEMENT_ENABLED` are already `"true"` in dev and prod, so they must **not** be used to gate RBAC.
-- Role derivation is only: Pre-sales ← org dept `Pre-Sales`; Bid ← `Bid Management`; Legal ← `Legal`; CXO ← `Leadership`; Sales ← `sales_persons` (`status IN ('active','onLeave')` — `resigned` and `inactive` do not derive Sales; match on `lower(official_email)`). **Finance, IT and Delivery are override-only.** No other label (Business Units, Technology, Finance dept, Chairman's Office) maps to a role. CXO is additive and never removes functional roles.
+- Role derivation is only: Pre-sales ← org dept `Pre-Sales`; Bid ← `Bid Management`; Legal ← `Legal`; CXO ← `Leadership`; Sales ← `sales_persons` (`status IN ('active','onLeave')` — `resigned` and `inactive` do not derive Sales; match on `lower(official_email)`). **Finance, IT and Delivery are override-only; System Admin is allow-list-only (`ADMIN_ALLOWED_EMAILS`) and is never an override.** No other label (Business Units, Technology, Finance dept, Chairman's Office) maps to a role. CXO is additive and never removes functional roles.
 - Max level across effective roles; union of permitted fields and scopes. Rows outside every write scope fall back to Read. There is no row-level read scoping.
 - A procedure has one authorization requirement normally; a cross-module procedure declares several and **every one must pass**. Fail closed: an unregistered procedure, or a patch key with no atom, is denied.
-- Solution Lead is read-only for every role in v1: `ownership.assign` / `ownership.end` on `role='solutionLead'` are denied to everyone, including `W` roles.
-- SKU `sku.costs` (8 `SKU_COST_FIELDS`) and `sku.floor` (`floorPrice`, `minimumAllowedPrice`, `internalPrice`) are visible only to Pre-sales, Finance, CXO. Masked values are `null` plus `maskedFields: string[]`, never `0`. Server-side. The existing `SKU_SENSITIVE_FIELDS` change-reason rule stays.
-- Admin Data Import stays outside RBAC (own allow-list + `ADMIN_IMPORT_ENABLED`). `ADMIN_ALLOWED_EMAILS` members implicitly hold IT, cannot be revoked in the UI, and are the only gate on `access.*` while `RBAC_MODE=off`.
+- Solution Lead is read-only for every role in v1: `ownership.assign` / `ownership.end` on `role='solutionLead'` are denied to everyone, including `W` roles and System Admin.
+- SKU `sku.costs` (8 `SKU_COST_FIELDS`) and `sku.floor` (`floorPrice`, `minimumAllowedPrice`, `internalPrice`) are visible only to Pre-sales, Finance, CXO and System Admin. Masked values are `null` plus `maskedFields: string[]`, never `0`. Server-side. The existing `SKU_SENSITIVE_FIELDS` change-reason rule stays.
+- Admin Data Import stays outside RBAC (own allow-list + `ADMIN_IMPORT_ENABLED`). `ADMIN_ALLOWED_EMAILS` members are the **System Admins** (spec §3.4): unrestricted, replacing the earlier break-glass IT. They cannot be granted, revoked or removed through the UI or the override table, and they are the only gate on `access.*` while `RBAC_MODE=off`.
+- **System Admin** (spec §3.4): `W`·all on every policy module; every atom except the frozen Solution Lead atom (`FROZEN_ATOMS`), including the exclusive ones (SKU cost / floor / tax, tax-class and currency masters, BOQ approve); create/delete on every module with such operations (all but #23, #24, #26); reads masked SKU fields. Authentication, the `@amnex.com` check and `EMERGENCY_READ_ONLY` still apply to it, and Admin Data Import stays separate. Test accounts become System Admin only via `makeSystemAdmin(label)` (the allow-list), never via `setRole`.
 - Baseline (authenticated, zero roles): Geography read only; everything else None.
 - `console.log` JSON is the only log channel (the API has no Fastify logger). Shadow denials: `{"event":"rbac.would_deny", ...}`.
 - Commits: one local commit per task, message ends with the trailer `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`. **Never push or deploy without the user's explicit approval** (each push burns GitLab CI minutes; the prod flag flip needs its own separate approval).
@@ -36,6 +37,7 @@ Failure modes the spec implies but a straight reading of the tasks would not exe
 3. **Sales role without a roster row.** A Sales override on someone with no `sales_persons` row must read fine but never match `own`; the denial must say so clearly. [Tasks 3, 8]
 4. **Signed-out call to a newly-gated read.** Must fail `UNAUTHORIZED` (so the existing sign-in prompt appears), never an RBAC `FORBIDDEN` (which would show "no access"). [Task 13]
 5. **RBAC denial vs. sign-in dialog.** `authPromptLink` turns every `FORBIDDEN` into the "sign in with @amnex.com" dialog; an RBAC denial must carry a marker so it shows a normal error instead. [Tasks 6, 15]
+6. **System Admin membership.** It comes only from `ADMIN_ALLOWED_EMAILS` (case/whitespace-insensitive), wins over any override, can never be stored as an override (DB `CHECK`), and the access API refuses to set or remove overrides on those accounts. [Tasks 4, 5, 14]
 
 ## Spec gaps found while planning — need your sign-off
 
@@ -57,6 +59,22 @@ Informational consequences of the approved rules (no action needed, but expect t
 - **`boq.approve` and `ownership.solutionLead` are exclusive atoms.** `W` does not imply them; only an explicit `P` set grants `boq.approve` (CXO), and nothing grants `ownership.solutionLead`.
 - **Bid-less opportunities** (created from Account Mapping) are authorized as the `bidTracker` sheet.
 - **The grid today lets users edit Solution Lead** (`editable: 'solutionLead'` in `gridColumns.ts`, an end-then-assign two-call write). With `RBAC_MODE=off` that is unchanged; under RBAC it becomes read-only for everyone. Whether to also remove that write path outside RBAC is a separate decision.
+
+## Amendments applied 2026-10-06 (user directives after plan approval)
+
+| Change | Effect | Tasks |
+|---|---|---|
+| **A6 changed** | Sales derives only from `sales_persons.status IN ('active','onLeave')`; `resigned` and `inactive` do not. Shared constant `SALES_ROLE_STATUSES`. | 1, 5, 14 |
+| **System Admin role** (spec §3.4) | Ninth role `system_admin`. Membership is `ADMIN_ALLOWED_EMAILS` only (the two permanent accounts); never derived, never an override (DB `CHECK`), not removable through the UI. Unrestricted: `W`·all on every module, every atom except the frozen Solution Lead, create/delete wherever the module has such operations, reads masked SKU fields, full Role & Access and Audit access. Authentication and `EMERGENCY_READ_ONLY` still apply; Admin Data Import stays separate. Replaces the break-glass IT. | 1–5, 8–10, 14, 15, 17, 20, 21 |
+
+Judgment calls I made while writing the amendment (veto any of them and I will change it):
+
+1. **Solution Lead stays frozen even for System Admin.** Your standing rule is "read-only for every role", and the reason is data integrity (replacing a lead is two calls and only owners auto-close), not access level. A System Admin therefore cannot write it through RBAC.
+2. **No create/delete grant on the three view-only modules** (#23, #24, #26): no such operation exists, and the audit trail stays append-only. System Admin is still `W` on them.
+3. **System Admin replaces rather than adds to the break-glass IT**; IT is now only an ordinary override-granted role.
+4. **`system_admin` is not a valid override role** (the `user_role_overrides` `CHECK` keeps the eight functional roles), so the UI and API can neither grant nor revoke it.
+
+Operations prerequisite (not done by this plan): `ADMIN_ALLOWED_EMAILS` lists one account on goms-dev and none on goms-prod. Both environments need both System Admin accounts before RBAC is used; that is a Cloud Run configuration change needing your approval and Shubham's exact address.
 
 ## File Structure
 
@@ -107,7 +125,7 @@ Informational consequences of the approved rules (no action needed, but expect t
 - Modify: `vite.config.ts:16` (let the root vitest run the domain tests)
 
 **Interfaces:**
-- Produces: `ROLES`, `Role`, `Level`, `Scope`, `Grant`, `RbacMode`, `ModuleKey`, `PolicyModuleKey`, `MODULES`, `FIELD_SETS`, `GRANTS`, `grantFor(module, role)`, `validatePolicy(): string[]`, `DERIVED_ROLE_DEPARTMENTS`, `SALES_ROLE_STATUSES`, `W_ONLY_ATOMS`, `EXCLUSIVE_ATOMS`. Later tasks import all of these from `@goms/domain`.
+- Produces: `ROLES`, `Role`, `Level`, `Scope`, `Grant`, `RbacMode`, `ModuleKey`, `PolicyModuleKey`, `MODULES`, `FIELD_SETS`, `GRANTS`, `grantFor(module, role)`, `validatePolicy(): string[]`, `DERIVED_ROLE_DEPARTMENTS`, `SALES_ROLE_STATUSES`, `FUNCTIONAL_ROLES`, `FROZEN_ATOMS`, `SYSTEM_ADMIN_VIEW_ONLY_MODULES`, `W_ONLY_ATOMS`, `EXCLUSIVE_ATOMS`. Later tasks import all of these from `@goms/domain`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -115,9 +133,11 @@ Create `packages/domain/src/rbac/policy.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { DERIVED_ROLE_DEPARTMENTS, FIELD_SETS, GRANTS, MODULES, SALES_ROLE_STATUSES, grantFor, validatePolicy } from './policy.js'
-import { EXCLUSIVE_ATOMS, W_ONLY_ATOMS } from './atoms.js'
-import { ROLES } from './types.js'
+import {
+  DERIVED_ROLE_DEPARTMENTS, FIELD_SETS, GRANTS, MODULES, SALES_ROLE_STATUSES, SYSTEM_ADMIN_VIEW_ONLY_MODULES, grantFor, validatePolicy,
+} from './policy.js'
+import { EXCLUSIVE_ATOMS, FROZEN_ATOMS, W_ONLY_ATOMS } from './atoms.js'
+import { FUNCTIONAL_ROLES, ROLES } from './types.js'
 
 describe('RBAC policy matrix', () => {
   it('has the 26 spec modules and exactly one derived module (the Master Grid)', () => {
@@ -160,6 +180,41 @@ describe('RBAC policy matrix', () => {
 
   it('derives Sales only from active and onLeave roster entries (plan gap A6): resigned and inactive do not count', () => {
     expect([...SALES_ROLE_STATUSES]).toEqual(['active', 'onLeave'])
+  })
+
+  it('adds System Admin as a ninth, allow-list-only role after the eight functional roles', () => {
+    expect([...FUNCTIONAL_ROLES]).toEqual(['sales', 'presales', 'bid', 'legal', 'cxo', 'delivery', 'it', 'finance'])
+    expect([...ROLES]).toEqual([...FUNCTIONAL_ROLES, 'system_admin'])
+    expect(Object.keys(DERIVED_ROLE_DEPARTMENTS)).not.toContain('system_admin')
+  })
+
+  it('gives System Admin W·all on every module, with create/delete everywhere except the three view-only modules', () => {
+    for (const module of Object.keys(GRANTS) as (keyof typeof GRANTS)[]) {
+      const g = grantFor(module, 'system_admin')
+      expect(g, module).toMatchObject({ level: 'W', scope: 'all', sets: [] })
+      const viewOnly = (SYSTEM_ADMIN_VIEW_ONLY_MODULES as readonly string[]).includes(module)
+      expect(g.create, `${module} create`).toBe(!viewOnly)
+      expect(g.delete, `${module} delete`).toBe(!viewOnly)
+    }
+    expect([...SYSTEM_ADMIN_VIEW_ONLY_MODULES].sort()).toEqual(['admin.audit', 'an.financial', 'an.operational'])
+  })
+
+  it('System Admin can create and delete wherever any functional role can (it is a strict superset)', () => {
+    for (const module of Object.keys(GRANTS) as (keyof typeof GRANTS)[]) {
+      for (const role of FUNCTIONAL_ROLES) {
+        const g = grantFor(module, role)
+        if (g.create) expect(grantFor(module, 'system_admin').create, `${module}/${role} create`).toBe(true)
+        if (g.delete) expect(grantFor(module, 'system_admin').delete, `${module}/${role} delete`).toBe(true)
+      }
+    }
+  })
+
+  it('freezes the Solution Lead atom: exclusive, in no partial set, and denied even to System Admin', () => {
+    expect([...FROZEN_ATOMS]).toEqual(['ownership.solutionLead'])
+    for (const atom of FROZEN_ATOMS) {
+      expect(EXCLUSIVE_ATOMS.has(atom)).toBe(true)
+      for (const atoms of Object.values(FIELD_SETS)) expect(atoms).not.toContain(atom)
+    }
   })
 
   it('keeps W-only atoms out of every partial set and pins the exclusive-atom list', () => {
@@ -214,11 +269,18 @@ Edit `packages/domain/tsconfig.json`:
 Create `packages/domain/src/rbac/types.ts`:
 
 ```ts
-export const ROLES = ['sales', 'presales', 'bid', 'legal', 'cxo', 'delivery', 'it', 'finance'] as const
+/** The eight roles derived from the org chart / roster or granted by an override (spec §3.2, §3.3). */
+export const FUNCTIONAL_ROLES = ['sales', 'presales', 'bid', 'legal', 'cxo', 'delivery', 'it', 'finance'] as const
+export type FunctionalRole = (typeof FUNCTIONAL_ROLES)[number]
+
+/** Every role, `system_admin` last. System Admin is allow-list-only (`ADMIN_ALLOWED_EMAILS`, spec §3.4): never derived,
+ *  never an override — so overrides, the override API and the access UI use FUNCTIONAL_ROLES, not ROLES. */
+export const ROLES = [...FUNCTIONAL_ROLES, 'system_admin'] as const
 export type Role = (typeof ROLES)[number]
 
 export const ROLE_LABELS: Record<Role, string> = {
   sales: 'Sales', presales: 'Pre-sales', bid: 'Bid', legal: 'Legal', cxo: 'CXO', delivery: 'Delivery', it: 'IT', finance: 'Finance',
+  system_admin: 'System Admin',
 }
 
 export type Level = 'N' | 'R' | 'P' | 'W'
@@ -275,13 +337,17 @@ export const W_ONLY_ATOMS: readonly string[] = [
 export const EXCLUSIVE_ATOMS: ReadonlySet<string> = new Set([
   'sku.costs', 'sku.floor', 'sku.tax', 'master.taxClasses', 'master.currencies', 'boq.approve', 'ownership.solutionLead',
 ])
+
+/** Atoms NO role can edit, System Admin included (spec §3.4, §6.2): Solution Lead is a data-integrity freeze — replacing
+ *  a lead is two calls and only owners auto-close — not an access level. Every frozen atom is also exclusive. */
+export const FROZEN_ATOMS: ReadonlySet<string> = new Set(['ownership.solutionLead'])
 ```
 
 Create `packages/domain/src/rbac/policy.ts`:
 
 ```ts
 import { W_ONLY_ATOMS } from './atoms.js'
-import { ROLES, type Grant, type Level, type Role, type Scope } from './types.js'
+import { FUNCTIONAL_ROLES, ROLES, type Grant, type Level, type Role, type Scope } from './types.js'
 
 export const MODULES = [
   { key: 'opp.bidTracker', label: 'Bid Tracker rows', group: 'Opportunity' },
@@ -343,10 +409,15 @@ export const DERIVED_ROLE_DEPARTMENTS = {
 /** `sales_persons.status` values that derive the Sales role (plan gap A6). `resigned` and `inactive` do not. */
 export const SALES_ROLE_STATUSES = ['active', 'onLeave'] as const
 
+/** Modules with no create/delete operation: System Admin is `W` on them but holds no create/delete grant, and the
+ *  audit trail stays append-only (spec §3.4). */
+export const SYSTEM_ADMIN_VIEW_ONLY_MODULES: readonly PolicyModuleKey[] = ['an.operational', 'an.financial', 'admin.audit']
+
 type Row = readonly [string, string, string, string, string, string, string, string]
 
-/** Cell grammar: LEVEL[/SCOPE[/SETS]] — columns in ROLES order:
- *  sales, presales, bid, legal, cxo, delivery, it, finance. Scope defaults to `all`. */
+/** Cell grammar: LEVEL[/SCOPE[/SETS]] — columns in FUNCTIONAL_ROLES order:
+ *  sales, presales, bid, legal, cxo, delivery, it, finance. Scope defaults to `all`.
+ *  System Admin has no column: buildGrants gives it W·all everywhere (spec §3.4). */
 const CELLS: Record<PolicyModuleKey, Row> = {
   'opp.bidTracker':     ['P/own/S1', 'P/asg/P1', 'W', 'P/asg/L1', 'P/all/X1', 'R', 'R', 'R'],
   'opp.pipeline':       ['W/own', 'P/asg/P1', 'R', 'R', 'R', 'R', 'R', 'R'],
@@ -413,13 +484,15 @@ function buildGrants(): Record<PolicyModuleKey, Record<Role, Grant>> {
   const out = {} as Record<PolicyModuleKey, Record<Role, Grant>>
   for (const module of Object.keys(CELLS) as PolicyModuleKey[]) {
     const byRole = {} as Record<Role, Grant>
-    ROLES.forEach((role, i) => {
+    FUNCTIONAL_ROLES.forEach((role, i) => {
       byRole[role] = {
         ...parseCell(CELLS[module][i]),
         create: CREATE_DELETE[module].create.includes(role),
         delete: CREATE_DELETE[module].delete.includes(role),
       }
     })
+    const operable = !SYSTEM_ADMIN_VIEW_ONLY_MODULES.includes(module)
+    byRole.system_admin = { level: 'W', scope: 'all', sets: [], create: operable, delete: operable }
     out[module] = byRole
   }
   return out
@@ -448,6 +521,11 @@ export function validatePolicy(): string[] {
       if (g.scope !== 'all' && g.level !== 'P' && g.level !== 'W') problems.push(`${at}: a scope only applies to P/W`)
       if (role === 'delivery' && (g.level === 'P' || g.level === 'W' || g.scope !== 'all' || g.create || g.delete)) {
         problems.push(`${at}: Delivery is read-only in v1`)
+      }
+      if (role === 'system_admin') {
+        const viewOnly = SYSTEM_ADMIN_VIEW_ONLY_MODULES.includes(module)
+        if (g.level !== 'W' || g.scope !== 'all' || g.sets.length > 0) problems.push(`${at}: System Admin must be W on scope all`)
+        if (g.create === viewOnly || g.delete === viewOnly) problems.push(`${at}: System Admin create/delete must be ${!viewOnly}`)
       }
     }
   }
@@ -583,8 +661,8 @@ describe('SKU read masking', () => {
     expect(MASKED_ATOM_FIELDS['sku.costs']).toEqual(SKU_COST_FIELDS)
     expect([...SKU_FLOOR_FIELDS]).toEqual(['floorPrice', 'minimumAllowedPrice', 'internalPrice'])
   })
-  it('lets only Pre-sales, Finance and CXO read costs and floor prices', () => {
-    for (const role of ['presales', 'finance', 'cxo'] as const) {
+  it('lets only Pre-sales, Finance, CXO and System Admin read costs and floor prices', () => {
+    for (const role of ['presales', 'finance', 'cxo', 'system_admin'] as const) {
       expect(canReadAtom([role], 'sku.costs')).toBe(true)
       expect(canReadAtom([role], 'sku.floor')).toBe(true)
     }
@@ -601,6 +679,11 @@ describe('SKU read masking', () => {
   })
   it('returns the row untouched for an authorised role, with an empty maskedFields list', () => {
     const out = maskSkuRow(sku, ['presales'])
+    expect(out).toMatchObject(sku)
+    expect(out.maskedFields).toEqual([])
+  })
+  it('shows a System Admin every cost and floor-price field', () => {
+    const out = maskSkuRow(sku, ['system_admin'])
     expect(out).toMatchObject(sku)
     expect(out.maskedFields).toEqual([])
   })
@@ -738,8 +821,8 @@ export const MASKED_ATOM_FIELDS: Record<MaskedAtom, readonly string[]> = {
 
 /** Roles that may read each restricted atom (spec §7). */
 const MASKED_ATOM_READERS: Record<MaskedAtom, readonly Role[]> = {
-  'sku.costs': ['presales', 'finance', 'cxo'],
-  'sku.floor': ['presales', 'finance', 'cxo'],
+  'sku.costs': ['presales', 'finance', 'cxo', 'system_admin'],
+  'sku.floor': ['presales', 'finance', 'cxo', 'system_admin'],
 }
 
 export const isMaskedAtom = (atom: string): atom is MaskedAtom => atom in MASKED_ATOM_FIELDS
@@ -825,6 +908,8 @@ git commit -m "feat(rbac): field atoms, patch maps and SKU read masking" -m "Co-
 ```ts
 import { describe, expect, it } from 'vitest'
 import { accessFor, allows, inScope } from './evaluate.js'
+import { BID_PATCH_ATOMS, EXCLUSIVE_ATOMS, FROZEN_ATOMS, OPPORTUNITY_PATCH_ATOMS, W_ONLY_ATOMS } from './atoms.js'
+import { FIELD_SETS, GRANTS, SYSTEM_ADMIN_VIEW_ONLY_MODULES, type PolicyModuleKey } from './policy.js'
 import type { Role, ScopeFacts, UserFacts } from './types.js'
 
 const user = (roles: Role[], extra: Partial<UserFacts> = {}): UserFacts => ({
@@ -979,6 +1064,49 @@ describe('baseline and implied reads', () => {
     expect(accessFor(user(['legal']), 'com.skus').level).toBe('N')
   })
 })
+
+describe('System Admin (spec §3.4)', () => {
+  const admin = (extra: Role[] = []) => user(['system_admin', ...extra])
+  const everyModule = Object.keys(GRANTS) as PolicyModuleKey[]
+
+  it('is W on every module and on every row, whoever owns it', () => {
+    for (const module of everyModule) {
+      const a = accessFor(admin(), module, row({ salesOwnerIds: ['someone-else'], createdBy: 'x@amnex.com' }))
+      expect(a.level, module).toBe('W')
+      expect(a.unrestricted, module).toBe(true)
+    }
+    expect(accessFor(admin(), 'opp.pipeline').level).toBe('W') // no row facts needed
+  })
+  it('may edit every atom — the exclusive ones included — except the frozen Solution Lead', () => {
+    const atoms = [
+      ...W_ONLY_ATOMS, ...EXCLUSIVE_ATOMS, ...Object.values(FIELD_SETS).flat(),
+      ...Object.values(OPPORTUNITY_PATCH_ATOMS), ...Object.values(BID_PATCH_ATOMS), 'bid.verify', 'bid.archive', 'ownership.assign',
+    ]
+    for (const atom of atoms) {
+      const expected = !FROZEN_ATOMS.has(atom)
+      expect(allows(accessFor(admin(), 'com.skus'), atom), atom).toBe(expected)
+      expect(allows(accessFor(admin(), 'opp.bidTracker', row()), atom), atom).toBe(expected)
+    }
+    expect(allows(accessFor(admin(), 'com.skus'), 'sku.costs')).toBe(true)
+    expect(allows(accessFor(admin(), 'com.masters'), 'master.currencies')).toBe(true)
+    expect(allows(accessFor(admin(), 'com.boqs'), 'boq.approve')).toBe(true)
+    expect(allows(accessFor(admin(), 'am.ownership', row()), 'ownership.assign')).toBe(true)
+    expect(allows(accessFor(admin(), 'am.ownership', row()), 'ownership.solutionLead')).toBe(false)
+  })
+  it('holds create and delete wherever the module has such operations, and not on the view-only modules', () => {
+    for (const module of everyModule) {
+      const viewOnly = SYSTEM_ADMIN_VIEW_ONLY_MODULES.includes(module)
+      const a = accessFor(admin(), module, row())
+      expect(a.create, `${module} create`).toBe(!viewOnly)
+      expect(a.delete, `${module} delete`).toBe(!viewOnly)
+    }
+  })
+  it('stays unrestricted next to other roles, and gives those roles nothing extra', () => {
+    expect(accessFor(admin(['sales', 'legal']), 'com.approvalMatrix').unrestricted).toBe(true)
+    expect(accessFor(user(['cxo']), 'com.boqs').unrestricted).toBe(false)
+    expect(allows(accessFor(user(['cxo']), 'com.skus'), 'sku.costs')).toBe(false)
+  })
+})
 ```
 
 - [ ] **Step 2: Run to verify it fails**
@@ -991,7 +1119,7 @@ Expected: FAIL — `Failed to resolve import "./evaluate.js"`.
 Create `packages/domain/src/rbac/evaluate.ts`:
 
 ```ts
-import { EXCLUSIVE_ATOMS } from './atoms.js'
+import { EXCLUSIVE_ATOMS, FROZEN_ATOMS } from './atoms.js'
 import { FIELD_SETS, GRANTS, type PolicyModuleKey } from './policy.js'
 import { maxLevel, type Level, type Role, type Scope, type ScopeFacts, type UserFacts } from './types.js'
 
@@ -1003,10 +1131,12 @@ export interface Access {
   atoms: ReadonlySet<string>
   create: boolean
   delete: boolean
+  /** System Admin (spec §3.4): every atom is editable except the frozen ones. */
+  unrestricted: boolean
 }
 
-const NO_ACCESS: Access = { level: 'N', all: false, atoms: new Set(), create: false, delete: false }
-const READ_ONLY: Access = { level: 'R', all: false, atoms: new Set(), create: false, delete: false }
+const NO_ACCESS: Access = { level: 'N', all: false, atoms: new Set(), create: false, delete: false, unrestricted: false }
+const READ_ONLY: Access = { level: 'R', all: false, atoms: new Set(), create: false, delete: false, unrestricted: false }
 
 /** Reading the key module grants read-only access to the listed modules (gap A2): BOQ screens look up SKUs and
  *  reference masters by id. The approval matrix is deliberately not implied. */
@@ -1034,7 +1164,9 @@ function rawAccess(user: UserFacts, module: PolicyModuleKey, row?: ScopeFacts): 
   const atoms = new Set<string>()
   let create = false
   let del = false
+  let unrestricted = false
   for (const role of user.roles) {
+    if (role === 'system_admin') unrestricted = true
     const grant = GRANTS[module][role]
     if (grant.level === 'N') continue
     level = maxLevel(level, 'R') // there is no row-level read scoping
@@ -1048,7 +1180,7 @@ function rawAccess(user: UserFacts, module: PolicyModuleKey, row?: ScopeFacts): 
     if (grant.create && (row ? applicable : true)) create = true
     if (grant.delete && applicable) del = true
   }
-  return { level, all, atoms, create, delete: del }
+  return { level, all, atoms, create, delete: del, unrestricted }
 }
 
 /** What `user` may do in `module`, optionally for one specific row. */
@@ -1062,8 +1194,11 @@ export function accessFor(user: UserFacts, module: PolicyModuleKey, row?: ScopeF
   return own
 }
 
-/** May this access edit `atom`? `W` covers everything except exclusive atoms, which only an explicit set grants. */
+/** May this access edit `atom`? Frozen atoms: never. System Admin: everything else. Otherwise `W` covers everything except
+ *  exclusive atoms, which only an explicit set grants. */
 export function allows(access: Access, atom: string): boolean {
+  if (FROZEN_ATOMS.has(atom)) return false
+  if (access.unrestricted) return true
   return access.atoms.has(atom) || (access.all && !EXCLUSIVE_ATOMS.has(atom))
 }
 ```
@@ -1126,6 +1261,7 @@ describe('user_role_overrides', () => {
   })
   it('rejects an unknown role, an unknown effect and an empty reason', async () => {
     await expect(insert('rbac-mig-b@amnex.com', 'admin')).rejects.toThrow(/check/i)
+    await expect(insert('rbac-mig-b@amnex.com', 'system_admin')).rejects.toThrow(/check/i) // System Admin comes only from ADMIN_ALLOWED_EMAILS
     await expect(insert('rbac-mig-b@amnex.com', 'cxo', 'allow')).rejects.toThrow(/check/i)
     await expect(insert('rbac-mig-b@amnex.com', 'cxo', 'grant', '   ')).rejects.toThrow(/check/i)
   })
@@ -1162,6 +1298,8 @@ Expected: FAIL — `relation "user_role_overrides" does not exist`.
 
 -- Per-person role overrides on top of the roles derived from org_people / sales_persons (RBAC spec §3.3).
 -- 'grant' adds a role (e.g. CEO/CFO/CE&TO -> cxo; every Finance, IT and Delivery user); 'revoke' removes a derived one.
+-- The eight functional roles only: system_admin is deliberately absent (spec §3.4) — System Admin comes only from
+-- ADMIN_ALLOWED_EMAILS, so it can be neither granted nor revoked through this table.
 CREATE TABLE user_role_overrides (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email      TEXT NOT NULL CHECK (email = lower(btrim(email)) AND length(email) BETWEEN 3 AND 254),
@@ -1234,7 +1372,7 @@ git commit -m "feat(rbac): role-override table, created_by columns and email ind
   - `rbacMode(): RbacMode`
   - `normalizeEmail(email: string): string`
   - `loadUserFacts(email: string): Promise<UserFacts>` (60 s TTL cache) and `clearUserFactsCache(): void`
-  - Test fixtures: `rbacEmail(label)`, `addOrgPerson(label, departments, opts?)`, `addSalesPerson(label, status?, email?)`, `addTeamMember(team, label, email?)`, `setRole(label, role, effect?)`, `makeBid(opts?)`, `assignOwner(entityType, entityId, salesPersonId, role?)`, `cleanupRbacFixtures()`.
+  - Test fixtures: `rbacEmail(label)`, `makeSystemAdmin(label)`, `addOrgPerson(label, departments, opts?)`, `addSalesPerson(label, status?, email?)`, `addTeamMember(team, label, email?)`, `setRole(label, role, effect?)`, `makeBid(opts?)`, `assignOwner(entityType, entityId, salesPersonId, role?)`, `cleanupRbacFixtures()`.
 
 - [ ] **Step 1: Write the fixtures and the failing tests**
 
@@ -1274,6 +1412,13 @@ export async function addTeamMember(team: 'preSales' | 'legal' | 'bid', label: s
   )
   clearUserFactsCache()
   return rows[0].id
+}
+
+/** Makes `rbac-<label>@amnex.com` a System Admin the only way the product does: through ADMIN_ALLOWED_EMAILS. */
+export function makeSystemAdmin(label: string): void {
+  const existing = (process.env.ADMIN_ALLOWED_EMAILS ?? '').split(',').map((e) => e.trim()).filter(Boolean)
+  process.env.ADMIN_ALLOWED_EMAILS = [...existing, rbacEmail(label)].join(',')
+  clearUserFactsCache()
 }
 
 /** Grants (or revokes) a role for `rbac-<label>@amnex.com` through the override table. */
@@ -1340,6 +1485,7 @@ export async function cleanupRbacFixtures(): Promise<void> {
   await pool.query(`DELETE FROM delivery_team_members WHERE name LIKE 'RBAC %'`)
   await pool.query(`DELETE FROM org_people WHERE name LIKE 'RBAC %'`)
   await pool.query(`DELETE FROM sales_persons WHERE name LIKE 'RBAC %'`)
+  delete process.env.ADMIN_ALLOWED_EMAILS // makeSystemAdmin() sets it
   clearUserFactsCache()
 }
 ```
@@ -1464,10 +1610,28 @@ describe('overrides', () => {
     for (const role of ['finance', 'it', 'delivery'] as const) await setRole(role, role)
     for (const role of ['finance', 'it', 'delivery'] as const) expect((await loadUserFacts(rbacEmail(role))).roles).toEqual([role])
   })
-  it('ADMIN_ALLOWED_EMAILS members always hold IT, even if an override revokes it', async () => {
+  it('ADMIN_ALLOWED_EMAILS members are System Admins (not IT), even if an override revokes IT', async () => {
     process.env.ADMIN_ALLOWED_EMAILS = `${rbacEmail('boss')}, other@amnex.com`
     await setRole('boss', 'it', 'revoke')
-    expect((await loadUserFacts(rbacEmail('boss'))).roles).toEqual(['it'])
+    expect((await loadUserFacts(rbacEmail('boss'))).roles).toEqual(['system_admin'])
+  })
+  it('System Admin is allow-list-only: nothing else produces it', async () => {
+    await addOrgPerson('lead', ['Leadership'])
+    await setRole('techie', 'it')
+    expect((await loadUserFacts(rbacEmail('lead'))).roles).toEqual(['cxo'])
+    expect((await loadUserFacts(rbacEmail('techie'))).roles).toEqual(['it'])
+    expect((await loadUserFacts(rbacEmail('stranger'))).roles).toEqual([])
+  })
+  it('matches the allow-list regardless of case and whitespace, and never for an empty login (Review Focus 6)', async () => {
+    process.env.ADMIN_ALLOWED_EMAILS = `  ${rbacEmail('boss').toUpperCase()} , `
+    expect((await loadUserFacts('  RBAC-BOSS@amnex.com ')).roles).toEqual(['system_admin'])
+    expect((await loadUserFacts('')).roles).toEqual([])
+  })
+  it('adds System Admin to whatever the person already holds, last in ROLES order', async () => {
+    process.env.ADMIN_ALLOWED_EMAILS = rbacEmail('boss')
+    await addOrgPerson('boss', ['Legal'])
+    await setRole('boss', 'finance')
+    expect((await loadUserFacts(rbacEmail('boss'))).roles).toEqual(['legal', 'finance', 'system_admin'])
   })
 })
 
@@ -1539,7 +1703,8 @@ const cache = new Map<string, { at: number; facts: UserFacts }>()
 export const normalizeEmail = (email: string): string => email.trim().toLowerCase()
 export function clearUserFactsCache(): void { cache.clear() }
 
-/** Effective roles (spec §3.1): derived ∪ override grants − override revokes; ADMIN_ALLOWED_EMAILS always adds IT.
+/** Effective roles (spec §3.1): derived ∪ override grants − override revokes; ADMIN_ALLOWED_EMAILS members are then added
+ *  as System Admin (spec §3.4), which no override can remove.
  *  Also resolves the caller's roster ids, which scope checks need. Cached per email for 60 s. */
 export async function loadUserFacts(rawEmail: string): Promise<UserFacts> {
   const email = normalizeEmail(rawEmail)
@@ -1570,8 +1735,8 @@ export async function loadUserFacts(rawEmail: string): Promise<UserFacts> {
       if (effect === 'grant') roles.add(role as Role)
       else roles.delete(role as Role)
     }
-    // Break-glass: allow-listed admins always hold IT and cannot be locked out through an override.
-    if (isAllowListed(email, process.env.ADMIN_ALLOWED_EMAILS)) roles.add('it')
+    // System Admin (spec §3.4): the admin allow-list is the only source, applied after the overrides so none can remove it.
+    if (isAllowListed(email, process.env.ADMIN_ALLOWED_EMAILS)) roles.add('system_admin')
 
     const members = await pool.query(
       `SELECT m.id, m.team FROM delivery_team_members m
@@ -2452,7 +2617,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { appRouter } from '../../../index.js'
 import { pool } from '../../../db.js'
 import {
-  addSalesPerson, addTeamMember, assignOwner, cleanupRbacFixtures, makeBid, rbacEmail, setRole,
+  addSalesPerson, addTeamMember, assignOwner, cleanupRbacFixtures, makeBid, makeSystemAdmin, rbacEmail, setRole,
 } from '../../../testHelpers/rbacFixtures.js'
 import { decide } from '../decide.js'
 import { loadUserFacts } from '../userFacts.js'
@@ -2716,6 +2881,34 @@ describe('follow-ups, documents, protected values, columns, saved views', () => 
     expect(await denied('bid', 'bidSavedViews.create', { name: 'v', scope: 'global' })).toBe(false)
     expect(await denied('legal', 'bidSavedViews.update', { id: 'allBids', patch: { name: 'x' } })).toBe(false) // system views: the handler refuses
     expect(await denied('legal', 'bidSavedViews.update', { id: randomUUID(), patch: { scope: 'global' } })).toBe(true)
+  })
+})
+
+describe('System Admin (spec §3.4)', () => {
+  beforeEach(() => makeSystemAdmin('root'))
+
+  it('edits every field of every row, moves sheets, creates and deletes', async () => {
+    expect(await denied('root', 'bids.update', { id: own.bidId, patch: { stageKey: 'qualification', decision: 'go', sheet: 'campaign', tenderLink: 'x' } })).toBe(false)
+    expect(await denied('root', 'opportunities.update', { id: other.opportunityId, patch: { gemTenderId: 'x', opportunityName: 'y', submissionDate: '2030-01-01' } })).toBe(false)
+    expect(await denied('root', 'bids.create', { newOpportunity: { opportunityName: 'x' }, sheet: 'campaign', department: { mode: 'create', name: 'D', parent: { mode: 'create', name: 'P', stateCode: 24 } } })).toBe(false)
+    expect(await denied('root', 'bids.delete', { id: other.bidId })).toBe(false)
+    expect(await denied('root', 'bids.markVerified', { id: other.bidId })).toBe(false)
+    expect(await denied('root', 'bidCustomFields.create', {})).toBe(false)
+    expect(await denied('root', 'protectedValues.freeze', { entityType: 'bid', entityId: own.bidId, fieldKey: 'x' })).toBe(false)
+    expect(await denied('root', 'documents.requestUploadUrl', { entityType: 'bid', entityId: own.bidId, filename: 'a.pdf', contentType: 'application/pdf', sizeBytes: 10 })).toBe(false)
+  })
+  it('manages ownership of any entity, but Solution Lead stays read-only even for System Admin', async () => {
+    const assign = (entityType: string, entityId: string | null, role?: string) =>
+      ({ entityType, entityId, salesPersonId: randomUUID(), role, startDate: '2026-01-01' })
+    expect(await denied('root', 'ownership.assign', assign('opportunity', other.opportunityId))).toBe(false)
+    expect(await denied('root', 'ownership.assign', assign('bid', other.bidId, 'delegate'))).toBe(false)
+    expect(await denied('root', 'ownership.assign', assign('bid', own.bidId, 'solutionLead'))).toBe(true)
+    await assignOwner('bid', own.bidId!, salesId, 'solutionLead')
+    const { id } = (await pool.query(`SELECT id FROM ownership_assignments WHERE entity_id=$1 AND role='solutionLead'`, [own.bidId])).rows[0]
+    expect(await denied('root', 'ownership.end', { id, endDate: '2026-06-01' })).toBe(true)
+  })
+  it('still judges a patch key with no atom as unauthorisable — System Admin is not a bypass for malformed input', async () => {
+    expect(await denied('root', 'bids.update', { id: own.bidId, patch: { typo: 1 } })).toBe(true)
   })
 })
 ```
@@ -3045,7 +3238,7 @@ import { SEARCH_CATEGORIES } from '@goms/domain'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { pool } from '../../../db.js'
 import {
-  addEmployee, addNode, addSalesPerson, assignOwner, cleanupRbacFixtures, rbacEmail, setRole,
+  addEmployee, addNode, addSalesPerson, assignOwner, cleanupRbacFixtures, makeSystemAdmin, rbacEmail, setRole,
 } from '../../../testHelpers/rbacFixtures.js'
 import { decide } from '../decide.js'
 import { loadUserFacts } from '../userFacts.js'
@@ -3191,6 +3384,36 @@ describe('search and audit masks', () => {
     expect(await denied('sales', 'auditLogs.list', { entityType: 'contact' })).toBe(false)
     expect(await denied('legal', 'auditLogs.list', { entityType: 'sku' })).toBe(true)
     expect(await denied('legal', 'auditLogs.list', { entityType: 'widget' })).toBe(true) // unknown entity types need the global feed
+  })
+})
+
+describe('System Admin (spec §3.4)', () => {
+  beforeEach(() => makeSystemAdmin('root'))
+
+  it('administers contacts, departments, geography, the Sales Team, the org chart, customers and the audit feed', async () => {
+    expect(await denied('root', 'employees.merge', {})).toBe(false)
+    expect(await denied('root', 'employees.delete', { id: empId })).toBe(false)
+    expect(await denied('root', 'employees.transfers.transfer', {})).toBe(false)
+    expect(await denied('root', 'employees.timeline.add', {})).toBe(false)
+    expect(await denied('root', 'hierarchy.createNode', { domain: 'geo' })).toBe(false)
+    expect(await denied('root', 'hierarchy.deleteNode', { id: nodeId })).toBe(false)
+    expect(await denied('root', 'sales.update', { id: rivalId, patch: { officialEmail: 'x@amnex.com' } })).toBe(false)
+    expect(await denied('root', 'sales.setStatus', { id: rivalId, status: 'inactive' })).toBe(false)
+    expect(await denied('root', 'sales.create', {})).toBe(false)
+    expect(await denied('root', 'orgPeople.create', {})).toBe(false)
+    expect(await denied('root', 'orgPeople.delete', { id: randomUUID() })).toBe(false)
+    expect(await denied('root', 'customers.delete', { id: randomUUID() })).toBe(false)
+    expect(await denied('root', 'auditLogs.list', {})).toBe(false)
+    expect(await denied('root', 'search.relationshipAnalytics')).toBe(false)
+  })
+  it('sees unredacted roster data, unmasked SKU audit values and every search category', async () => {
+    const root = await facts('root')
+    const person = { id: salesId, name: 'A', officialEmail: 'a@amnex.com', personalEmail: 'p@x', mobile: '9', notes: 'n', photoUrl: null, status: 'active' }
+    expect(redactSalesRoster([person], root)).toEqual([person])
+    const entries = [{ entityType: 'sku', field: 'hardwareCost', oldValue: '1', newValue: '2' }]
+    expect(maskAuditList(entries, root)).toEqual(entries)
+    const results = [{ category: 'employee', id: '1' }, { category: 'meeting', id: '2' }, { category: 'salesPerson', id: '3' }]
+    expect((filterSearchResults(results, root) as unknown[]).length).toBe(3)
   })
 })
 ```
@@ -3408,7 +3631,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { appRouter } from '../../../index.js'
 import { pool } from '../../../db.js'
 import { contextForEmail } from '../../../testHelpers/authTestHelpers.js'
-import { cleanupRbacFixtures, rbacEmail, setRole } from '../../../testHelpers/rbacFixtures.js'
+import { cleanupRbacFixtures, makeSystemAdmin, rbacEmail, setRole } from '../../../testHelpers/rbacFixtures.js'
 import { decide } from '../decide.js'
 import { loadUserFacts } from '../userFacts.js'
 import { commercialPolicy } from './commercial.js'
@@ -3480,9 +3703,28 @@ describe('ownership of commercial data (decision 3)', () => {
     expect(await denied('legal', 'commercial.skus.list')).toBe(true)
     expect(await denied('delivery', 'commercial.boq.list')).toBe(true)
   })
-  it('only Pre-sales deletes commercial records', async () => {
+  it('only Pre-sales (and System Admin) delete commercial records', async () => {
     expect(await denied('presales', 'commercial.boq.delete', { id: 'x' })).toBe(false)
     expect(await denied('cxo', 'commercial.boq.delete', { id: 'x' })).toBe(true)
+  })
+})
+
+describe('System Admin (spec §3.4)', () => {
+  beforeEach(() => makeSystemAdmin('root'))
+
+  it('administers every commercial area: masters (incl. Finance-controlled and the approval matrix), SKUs, BOQs', async () => {
+    expect(await denied('root', 'commercial.masters.update', { key: 'taxClasses', id: 'x', patch: {} })).toBe(false)
+    expect(await denied('root', 'commercial.masters.update', { key: 'currencies', id: 'x', patch: {} })).toBe(false)
+    expect(await denied('root', 'commercial.masters.update', { key: 'approvalMatrix', id: 'x', patch: {} })).toBe(false)
+    expect(await denied('root', 'commercial.masters.delete', { key: 'verticals', id: 'x' })).toBe(false)
+    expect(await denied('root', 'commercial.skus.update', { id: 'x', patch: { hardwareCost: 1, floorPrice: 2, internalPrice: 3, taxClassId: 'y', listPrice: 5 } })).toBe(false)
+    expect(await denied('root', 'commercial.skus.delete', { id: 'x' })).toBe(false)
+    expect(await denied('root', 'commercial.boq.updateStatus', { id: 'x', nextStatus: 'approved', changeReason: 'ok' })).toBe(false)
+    expect(await denied('root', 'commercial.boq.updateLineItem', { id: 'x', patch: { approvalStatus: 'approved', quantity: 3 } })).toBe(false)
+    expect(await denied('root', 'commercial.boq.delete', { id: 'x' })).toBe(false)
+  })
+  it('still refuses a SKU patch key with no atom (not a bypass for malformed input)', async () => {
+    expect(await denied('root', 'commercial.boq.updateLineItem', { id: 'x', patch: 'nonsense' })).toBe(true)
   })
 })
 
@@ -3542,6 +3784,14 @@ describe('server-side read masking — sentinel golden test', () => {
 
   it.each(['presales', 'finance', 'cxo'])('%s sees real cost and floor-price values', async (label) => {
     const one = await as(label).commercial.skus.get({ id: skuId })
+    expect((one as any).hardwareCost).toBe(COST[4])
+    expect((one as any).floorPrice).toBe(FLOOR.floorPrice)
+    expect((one as any).maskedFields).toEqual([])
+  })
+
+  it('a System Admin sees real cost and floor-price values too', async () => {
+    makeSystemAdmin('root')
+    const one = await as('root').commercial.skus.get({ id: skuId })
     expect((one as any).hardwareCost).toBe(COST[4])
     expect((one as any).floorPrice).toBe(FLOOR.floorPrice)
     expect((one as any).maskedFields).toEqual([])
@@ -4186,11 +4436,11 @@ git commit -m "feat(rbac): route the 17 formerly-public queries through rbacRead
 - Create: `apps/api/src/auth/rbac/access.test.ts`
 
 **Interfaces:**
-- Consumes: Task 5 `loadUserFacts`, `clearUserFactsCache`; Task 1 `DERIVED_ROLE_DEPARTMENTS`, `SALES_ROLE_STATUSES`, `ROLES`.
+- Consumes: Task 5 `loadUserFacts`, `clearUserFactsCache`; Task 1 `DERIVED_ROLE_DEPARTMENTS`, `SALES_ROLE_STATUSES`, `ROLES`, `FUNCTIONAL_ROLES`; Task 5 fixture `makeSystemAdmin`.
 - Produces:
   - `combineRoles(derived: Iterable<Role>, overrides: {role: Role; effect: 'grant'|'revoke'}[], adminAllowListed: boolean): Role[]` (in `userFacts.ts`)
   - `auth.me` → `MyAccess = { mode: RbacMode; email: string | null; roles: Role[]; facts: { salesPersonId: string | null; teamMemberIds: UserFacts['teamMemberIds'] } | null }`
-  - `access.readiness` → `ReadinessRow[]` (`{ key; kind: 'org'|'sales'|'seen'; name; email; derivedRoles; overrides: {id;role;effect;reason}[]; effectiveRoles; warnings: ('no-email'|'no-role'|'duplicate-email')[]; lastSeenAt: string | null }`)
+  - `access.readiness` → `ReadinessRow[]` (`{ key; kind: 'org'|'sales'|'seen'|'admin'; name; email; derivedRoles; overrides: {id;role;effect;reason}[]; effectiveRoles; systemAdmin: boolean; warnings: ('no-email'|'no-role'|'duplicate-email')[]; lastSeenAt: string | null }`)
   - `access.listOverrides`, `access.setOverride({email, role, effect, reason})`, `access.removeOverride({id})`
   - `accessProcedure` (trpc.ts): with `RBAC_MODE=off` it requires membership of `ADMIN_ALLOWED_EMAILS`; otherwise the registry's `admin.access` requirement applies.
 
@@ -4203,7 +4453,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { appRouter } from '../../index.js'
 import { pool } from '../../db.js'
 import { contextForEmail } from '../../testHelpers/authTestHelpers.js'
-import { addOrgPerson, addSalesPerson, cleanupRbacFixtures, rbacEmail, setRole } from '../../testHelpers/rbacFixtures.js'
+import { addOrgPerson, addSalesPerson, cleanupRbacFixtures, makeSystemAdmin, rbacEmail, setRole } from '../../testHelpers/rbacFixtures.js'
 import { RbacDenial } from './denial.js'
 import { combineRoles, loadUserFacts } from './userFacts.js'
 
@@ -4217,9 +4467,10 @@ afterEach(async () => {
 })
 
 describe('combineRoles', () => {
-  it('derived ∪ grants − revokes, then the break-glass IT, in ROLES order', () => {
+  it('derived ∪ grants − revokes, then System Admin for allow-listed accounts, in ROLES order', () => {
     expect(combineRoles(['legal'], [{ role: 'cxo', effect: 'grant' }, { role: 'legal', effect: 'revoke' }], false)).toEqual(['cxo'])
-    expect(combineRoles([], [{ role: 'it', effect: 'revoke' }], true)).toEqual(['it'])
+    expect(combineRoles([], [{ role: 'it', effect: 'revoke' }], true)).toEqual(['system_admin'])
+    expect(combineRoles(['legal'], [], true)).toEqual(['legal', 'system_admin'])
     expect(combineRoles(['presales', 'sales'], [], false)).toEqual(['sales', 'presales'])
   })
 })
@@ -4254,13 +4505,25 @@ describe('access.* with RBAC off: only ADMIN_ALLOWED_EMAILS may use it', () => {
     await admin.access.removeOverride({ id: row.id })
     expect(await admin.access.listOverrides()).toEqual([])
   })
+  it('never lets System Admin be granted or revoked: not as a role, and not on an allow-listed account (Review Focus 6)', async () => {
+    const admin = as('admin')
+    await expect(admin.access.setOverride({ email: 'x@amnex.com', role: 'system_admin' as any, effect: 'grant', reason: 'r' })).rejects.toThrow()
+    await expect(admin.access.setOverride({ email: rbacEmail('admin'), role: 'it', effect: 'revoke', reason: 'r' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    await expect(admin.access.setOverride({ email: ` ${rbacEmail('ADMIN')} `, role: 'cxo', effect: 'grant', reason: 'r' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    await setRole('admin', 'delivery') // an override row that predates the allow-list entry
+    const [row] = await admin.access.listOverrides()
+    await expect(admin.access.removeOverride({ id: row.id })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    expect((await loadUserFacts(rbacEmail('admin'))).roles).toEqual(['delivery', 'system_admin'])
+  })
 })
 
 describe('access.* once RBAC is on: IT manages it, other roles cannot', () => {
   beforeEach(() => { process.env.AUTH_ENFORCEMENT_ENABLED = 'true'; process.env.RBAC_MODE = 'enforce' })
-  it('IT and the break-glass admin can; Sales cannot, and CXO may only read', async () => {
-    await setRole('it', 'it'); await setRole('cxo', 'cxo'); await addSalesPerson('sales')
+  it('IT and System Admin can; Sales cannot, and CXO may only read', async () => {
+    await setRole('it', 'it'); await setRole('cxo', 'cxo'); await addSalesPerson('sales'); makeSystemAdmin('root')
     await expect(as('it').access.listOverrides()).resolves.toEqual([])
+    await expect(as('root').access.listOverrides()).resolves.toEqual([])
+    await expect(as('root').access.setOverride({ email: rbacEmail('z'), role: 'delivery', effect: 'grant', reason: 'r' })).resolves.toBeDefined()
     await expect(as('it').access.setOverride({ email: rbacEmail('x'), role: 'finance', effect: 'grant', reason: 'r' })).resolves.toBeDefined()
     const refused = await as('sales').access.listOverrides().catch((e) => e)
     expect(refused.cause).toBeInstanceOf(RbacDenial)
@@ -4298,6 +4561,21 @@ describe('access.readiness', () => {
     expect(rows).toHaveLength(2)
     for (const r of rows) expect(r.warnings).toContain('duplicate-email')
   })
+  it('shows System Admin accounts as protected rows, even when they are in neither the org chart nor the roster', async () => {
+    makeSystemAdmin('founder')
+    const rows = await as('admin').access.readiness()
+    expect(rows.find((r) => r.email === rbacEmail('founder'))).toMatchObject({
+      kind: 'admin', systemAdmin: true, effectiveRoles: ['system_admin'], derivedRoles: [], warnings: [],
+    })
+    expect(rows.find((r) => r.email === rbacEmail('admin'))).toMatchObject({ systemAdmin: true })
+  })
+  it('marks an org person who is also allow-listed as a System Admin without listing them twice', async () => {
+    await addOrgPerson('both', ['Legal'])
+    makeSystemAdmin('both')
+    const rows = (await as('admin').access.readiness()).filter((r) => r.email === rbacEmail('both'))
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ kind: 'org', systemAdmin: true, derivedRoles: ['legal'], effectiveRoles: ['legal', 'system_admin'] })
+  })
   it('includes users who signed in and resolved to no role (from auth.me), with when they were last seen', async () => {
     process.env.RBAC_MODE = 'shadow'
     await as('stranger').auth.me()
@@ -4320,6 +4598,11 @@ describe('auth.me', () => {
       mode: 'enforce', email: rbacEmail('s'), roles: ['sales', 'bid'],
       facts: { salesPersonId: salesId, teamMemberIds: { presales: [], legal: [], bid: [] } },
     })
+  })
+  it('reports System Admin for an allow-listed account', async () => {
+    process.env.AUTH_ENFORCEMENT_ENABLED = 'true'; process.env.RBAC_MODE = 'enforce'
+    makeSystemAdmin('root')
+    await expect(as('root').auth.me()).resolves.toMatchObject({ mode: 'enforce', email: rbacEmail('root'), roles: ['system_admin'] })
   })
   it('rejects a signed-out caller with UNAUTHORIZED once RBAC is on', async () => {
     process.env.AUTH_ENFORCEMENT_ENABLED = 'true'; process.env.RBAC_MODE = 'shadow'
@@ -4358,7 +4641,7 @@ Apply locally: `cd apps/api && npm run migrate -- up`.
 In `apps/api/src/auth/rbac/userFacts.ts`, extract the role arithmetic (behavior unchanged — the Task 5 tests guard it) and use it inside `loadUserFacts`:
 
 ```ts
-/** derived ∪ override grants − override revokes, plus the break-glass IT, in ROLES order (spec §3.1). */
+/** derived ∪ override grants − override revokes, plus System Admin for allow-listed accounts, in ROLES order (spec §3.1, §3.4). */
 export function combineRoles(
   derived: Iterable<Role>, overrides: { role: Role; effect: 'grant' | 'revoke' }[], adminAllowListed: boolean,
 ): Role[] {
@@ -4367,7 +4650,7 @@ export function combineRoles(
     if (effect === 'grant') roles.add(role)
     else roles.delete(role)
   }
-  if (adminAllowListed) roles.add('it')
+  if (adminAllowListed) roles.add('system_admin')
   return ROLES.filter((r) => roles.has(r))
 }
 ```
@@ -4386,7 +4669,7 @@ In `apps/api/src/trpc.ts`, after `adminProcedure`:
 ```ts
 /** For the access API (`access.*`). Overrides created while RBAC is `off` become live the moment it is enforced, so
  *  this is gated regardless of RBAC_MODE: in `off` mode only ADMIN_ALLOWED_EMAILS members may use it; in
- *  shadow/enforce the registry's `admin.access` requirement applies (IT, or the same break-glass admins, who hold IT). */
+ *  shadow/enforce the registry's `admin.access` requirement applies (IT, or System Admin). */
 export const accessProcedure = protectedProcedure.use(({ ctx, next }) => {
   if (rbacMode() === 'off' && authEnforced()) {
     if (!ctx.user || !isAllowListed(ctx.user.email, process.env.ADMIN_ALLOWED_EMAILS)) {
@@ -4442,24 +4725,29 @@ export const authRouter = router({
 `apps/api/src/routers/access.ts`:
 
 ```ts
-import { DERIVED_ROLE_DEPARTMENTS, ROLES, SALES_ROLE_STATUSES, type Role } from '@goms/domain'
+import { DERIVED_ROLE_DEPARTMENTS, FUNCTIONAL_ROLES, SALES_ROLE_STATUSES, type Role } from '@goms/domain'
+import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 import { combineRoles, clearUserFactsCache, normalizeEmail } from '../auth/rbac/userFacts.js'
-import { isAllowListed } from '../auth/identity.js'
+import { isAllowListed, parseAllowList } from '../auth/identity.js'
 import { pool } from '../db.js'
 import { accessProcedure, router } from '../trpc.js'
 
-const roleSchema = z.enum(ROLES)
+const roleSchema = z.enum(FUNCTIONAL_ROLES) // System Admin is never an override (spec §3.4)
+const SYSTEM_ADMIN_MANAGED = 'System Admin accounts are managed through the protected admin allow-list.'
+const isSystemAdmin = (email: string): boolean => isAllowListed(email, process.env.ADMIN_ALLOWED_EMAILS)
 const emailSchema = z.string().trim().toLowerCase().email().max(254)
 
 export interface ReadinessRow {
   key: string
-  kind: 'org' | 'sales' | 'seen'
+  kind: 'org' | 'sales' | 'seen' | 'admin'
   name: string
   email: string
   derivedRoles: Role[]
   overrides: { id: string; role: Role; effect: 'grant' | 'revoke'; reason: string }[]
   effectiveRoles: Role[]
+  /** An account on the protected admin allow-list: unrestricted, and not editable here (spec §3.4). */
+  systemAdmin: boolean
   warnings: ('no-email' | 'no-role' | 'duplicate-email')[]
   lastSeenAt: string | null
 }
@@ -4477,6 +4765,7 @@ export const accessRouter = router({
   setOverride: accessProcedure
     .input(z.object({ email: emailSchema, role: roleSchema, effect: z.enum(['grant', 'revoke']), reason: z.string().trim().min(1).max(500) }))
     .mutation(async ({ input, ctx }) => {
+      if (isSystemAdmin(input.email)) throw new TRPCError({ code: 'BAD_REQUEST', message: SYSTEM_ADMIN_MANAGED })
       const { rows } = await pool.query(
         `INSERT INTO user_role_overrides (email, role, effect, reason, created_by) VALUES ($1,$2,$3,$4,$5)
          ON CONFLICT (email, role) DO UPDATE SET effect = EXCLUDED.effect, reason = EXCLUDED.reason, created_by = EXCLUDED.created_by, created_at = now()
@@ -4488,6 +4777,8 @@ export const accessRouter = router({
     }),
 
   removeOverride: accessProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+    const target = (await pool.query('SELECT email FROM user_role_overrides WHERE id=$1', [input.id])).rows[0]
+    if (target && isSystemAdmin(target.email)) throw new TRPCError({ code: 'BAD_REQUEST', message: SYSTEM_ADMIN_MANAGED })
     await pool.query('DELETE FROM user_role_overrides WHERE id=$1', [input.id])
     clearUserFactsCache()
   }),
@@ -4516,6 +4807,7 @@ export const accessRouter = router({
         derivedRoles: email ? derived : [],
         overrides: own.map((o) => ({ id: o.id, role: o.role, effect: o.effect, reason: o.reason })),
         effectiveRoles: effective,
+        systemAdmin: !!email && isAllowListed(email, adminList),
         warnings: [...(email ? [] : ['no-email' as const]), ...(effective.length === 0 ? ['no-role' as const] : [])],
         lastSeenAt: email ? seenAt(email) : null,
       }
@@ -4533,6 +4825,12 @@ export const accessRouter = router({
     const known = new Set(rows.map((r) => r.email).filter(Boolean))
     for (const s of seen.rows) {
       if (!known.has(s.email)) rows.push(make('seen', `seen:${s.email}`, s.email, s.email, []))
+    }
+
+    // System Admin accounts are always listed, even when they are in neither the org chart nor the roster (protected rows).
+    const listed = new Set(rows.map((r) => r.email).filter(Boolean))
+    for (const email of parseAllowList(adminList)) {
+      if (!listed.has(email)) rows.push(make('admin', `admin:${email}`, email, email, []))
     }
 
     const counts = new Map<string, number>()
@@ -4655,6 +4953,17 @@ describe('usePermissions', () => {
     expect(result.current.canEdit('opp.bidTracker', 'bid.stage', own)).toBe(false)
     expect(result.current.level('com.approvalMatrix')).toBe('N')
     expect(result.current.canReadAtom('sku.costs')).toBe(false)
+  })
+  it('treats a System Admin as unrestricted: W everywhere, every atom editable except the frozen Solution Lead, masked fields readable', () => {
+    const { result } = renderHook(() => usePermissions(), { wrapper: wrap({ mode: 'enforce', email: 'root@amnex.com', roles: ['system_admin'], facts }) })
+    const anyRow = { salesOwnerIds: [], createdBy: null, assigned: { presales: null, legal: null, bid: null } }
+    expect(result.current.level('com.skus')).toBe('W')
+    expect(result.current.level('admin.access')).toBe('W')
+    expect(result.current.can('com.skus', 'delete')).toBe(true)
+    expect(result.current.canEdit('com.skus', 'sku.costs')).toBe(true)
+    expect(result.current.canEdit('opp.bidTracker', 'bid.stage', anyRow)).toBe(true)
+    expect(result.current.canEdit('am.ownership', 'ownership.solutionLead', anyRow)).toBe(false)
+    expect(result.current.canReadAtom('sku.costs')).toBe(true)
   })
 })
 ```
@@ -4931,8 +5240,16 @@ describe('canEditCell', () => {
     expect(canEditCell(p, own, 'decision', me)).toBe(false)
     expect(canEditCell(p, row({ geoSalesPersonId: 'sp9' }), 'city', me)).toBe(false)
   })
-  it('Solution Lead is read-only for everyone, even a W role', () => {
+  it('Solution Lead is read-only for everyone, even a W role and System Admin', () => {
     expect(canEditCell(perms(['bid']), row(), 'solutionLeadEmail', me)).toBe(false)
+    expect(canEditCell(perms(['system_admin']), row(), 'solutionLeadEmail', me)).toBe(false)
+  })
+  it('System Admin edits every other cell, on any sheet and any row', () => {
+    const p = perms(['system_admin'])
+    for (const col of ['stageKey', 'decision', 'gemTenderId', 'opportunityName', 'custom:region', 'ownerEmail', 'dataConfidence']) {
+      expect(canEditCell(p, row(), col, me), col).toBe(true)
+    }
+    expect(canEditCell(p, row({ sheet: 'campaign', geoSalesPersonId: 'sp9' }), 'stageKey', me)).toBe(true)
   })
   it('CXO may edit only the decision cell', () => {
     const p = perms(['cxo'])
@@ -5205,7 +5522,7 @@ git commit -m "feat(rbac): hide create/edit/delete controls a role cannot use" -
 
 **Interfaces:**
 - Consumes: `access.readiness`, `access.listOverrides`, `access.setOverride`, `access.removeOverride` (Task 14), `usePermissions`.
-- Produces: a screen with (1) a readiness table (name, email, derived roles, overrides, effective roles, warning chips `No email` / `No role` / `Duplicate email`, last seen), filter "Needs attention", (2) an override form (email, role, grant/revoke, reason) and per-row remove, editable only when `can('admin.access','create')` (CXO sees it read-only).
+- Produces: a screen with (1) a readiness table (name, email, derived roles, overrides, effective roles, warning chips `No email` / `No role` / `Duplicate email`, last seen), filter "Needs attention", (2) an override form (email, role, grant/revoke, reason) and per-row remove, editable only when `can('admin.access','create')` (CXO sees it read-only). Rows with `systemAdmin: true` show a **System Admin (protected)** chip and no remove or override control, and the Role dropdown never offers System Admin (it lists `FUNCTIONAL_ROLES`).
 
 - [ ] **Step 1: Write the failing component test**
 
@@ -5264,6 +5581,22 @@ describe('AccessManagement', () => {
     await screen.findByText('Denish')
     expect(screen.queryByRole('button', { name: /save override/i })).not.toBeInTheDocument()
   })
+  it('shows System Admin accounts as protected, with no way to remove or override them', async () => {
+    vi.mocked(repository.getAccessReadiness).mockResolvedValueOnce([
+      { key: 'admin:root', kind: 'admin', name: 'root@amnex.com', email: 'root@amnex.com', derivedRoles: [], overrides: [], effectiveRoles: ['system_admin'], systemAdmin: true, warnings: [], lastSeenAt: null },
+    ] as any)
+    renderAs(['it'])
+    const row = (await screen.findByText('root@amnex.com', { selector: 'td' })).closest('tr')!
+    expect(within(row).getByText(/system admin \(protected\)/i)).toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
+  })
+  it('does not offer System Admin as a role to grant', async () => {
+    renderAs(['it'])
+    await screen.findByText('Denish')
+    const options = within(screen.getByLabelText('Role')).getAllByRole('option').map((o) => o.textContent)
+    expect(options).toContain('CXO')
+    expect(options).not.toContain('System Admin')
+  })
 })
 ```
 
@@ -5274,7 +5607,7 @@ Expected: FAIL — module missing.
 
 - [ ] **Step 3: Implement**
 
-Add the four repository methods (remote: `this.client.access.readiness.query()`, `listOverrides.query()`, `setOverride.mutate(input)`, `removeOverride.mutate({ id })`; in-memory: return `[]` / no-op). `src/modules/admin-access/api.ts` wraps them in `useAccessReadiness`, `useRoleOverrides`, `useRoleOverrideMutations` (invalidate `['accessReadiness']` and `['roleOverrides']` on success). `AccessManagement.tsx` renders the readiness table (`<table>` with the same classes as `ActionQueuePage`), a "Needs attention" toggle filtering rows with warnings, and — wrapped in `<Can module="admin.access" action="create">` — a form with labelled inputs **Email**, **Role** (`<select>` over `ROLES` with `ROLE_LABELS`), **Effect** (grant/revoke) and **Reason**, and a **Save override** button calling `setRoleOverride({ email, role, effect, reason })`; each override chip has a remove button inside `<Can module="admin.access" action="delete">`. Add the route `/admin/access` wrapped in `<RequireAccess anyOf={['admin.access']}>`, and a rail entry visible when `p.level('admin.access') !== 'N'`.
+Add the four repository methods (remote: `this.client.access.readiness.query()`, `listOverrides.query()`, `setOverride.mutate(input)`, `removeOverride.mutate({ id })`; in-memory: return `[]` / no-op). `src/modules/admin-access/api.ts` wraps them in `useAccessReadiness`, `useRoleOverrides`, `useRoleOverrideMutations` (invalidate `['accessReadiness']` and `['roleOverrides']` on success). `AccessManagement.tsx` renders the readiness table (`<table>` with the same classes as `ActionQueuePage`), a "Needs attention" toggle filtering rows with warnings, and — wrapped in `<Can module="admin.access" action="create">` — a form with labelled inputs **Email**, **Role** (`<select>` over `FUNCTIONAL_ROLES` with `ROLE_LABELS` — never System Admin), **Effect** (grant/revoke) and **Reason**, and a **Save override** button calling `setRoleOverride({ email, role, effect, reason })`; each override chip has a remove button inside `<Can module="admin.access" action="delete">`. A row with `systemAdmin: true` renders a **System Admin (protected)** chip and no override or remove control. Add the route `/admin/access` wrapped in `<RequireAccess anyOf={['admin.access']}>`, and a rail entry visible when `p.level('admin.access') !== 'N'`.
 
 - [ ] **Step 4: Run to verify it passes**
 
@@ -5316,7 +5649,7 @@ Run `terraform fmt -check infra/dev infra/prod` (Expected: no diff). Do **not** 
 
 - [ ] **Step 2: Write the runbook**
 
-`docs/superpowers/analysis/2026-10-rbac-rollout-runbook.md` must contain, concretely: (1) deploy sequence — migrations (`1790800000000`, `1790900000000`, `1791000000000`) via the `goms-migrate` job, API + hosting with `RBAC_MODE=off` (a no-op release); (2) backfill — fill `org_people.email` for every person, then create overrides in **Role & Access Management** for the CEO, CFO and CE&TO (CXO), every Finance / IT / Delivery user, and any Sales person missing a roster row, until the readiness view shows no `No email` / `No role` rows for people who should have access; (3) `RBAC_MODE=shadow` on goms-dev, and the Cloud Logging filter `jsonPayload.event="rbac.would_deny"` (group by `jsonPayload.email`, `jsonPayload.path`) to review denials for a few working days; (4) fix gaps (overrides, emails, matrix changes via code review), repeat; (5) `enforce` on goms-dev, click-through each role; (6) the same path for prod, **only after the user explicitly approves the prod flip**; (7) rollback = set `RBAC_MODE=off` (env-only revision change); (8) note the user-visible change at enforce: signed-out Home/Map show the sign-in prompt instead of loading.
+`docs/superpowers/analysis/2026-10-rbac-rollout-runbook.md` must contain, concretely: (0) **prerequisite** — `ADMIN_ALLOWED_EMAILS` must list both System Admin accounts in the target environment (goms-dev lists one account and goms-prod none today); this is a Cloud Run configuration change that needs explicit approval and Shubham's exact address, and it is **not** applied by this plan; System Admin accounts need no overrides or org emails and appear as protected rows in the readiness view; (1) deploy sequence — migrations (`1790800000000`, `1790900000000`, `1791000000000`) via the `goms-migrate` job, API + hosting with `RBAC_MODE=off` (a no-op release); (2) backfill — fill `org_people.email` for every person, then create overrides in **Role & Access Management** for the CEO, CFO and CE&TO (CXO), every Finance / IT / Delivery user, and any Sales person missing a roster row, until the readiness view shows no `No email` / `No role` rows for people who should have access; (3) `RBAC_MODE=shadow` on goms-dev, and the Cloud Logging filter `jsonPayload.event="rbac.would_deny"` (group by `jsonPayload.email`, `jsonPayload.path`) to review denials for a few working days; (4) fix gaps (overrides, emails, matrix changes via code review), repeat; (5) `enforce` on goms-dev, click-through each role; (6) the same path for prod, **only after the user explicitly approves the prod flip**; (7) rollback = set `RBAC_MODE=off` (env-only revision change); (8) note the user-visible change at enforce: signed-out Home/Map show the sign-in prompt instead of loading.
 
 - [ ] **Step 3: Full local verification**
 
@@ -5334,7 +5667,7 @@ Expected: all green, with `RBAC_MODE` unset (i.e. `off`) throughout — the suit
 
 - [ ] **Step 4: Prove each mode on a local server**
 
-Start the API locally (`cd apps/api && npm run dev`) with `AUTH_ENFORCEMENT_ENABLED=true`, then with `RBAC_MODE=shadow` and `RBAC_MODE=enforce`, and confirm with a signed-in browser session as a Sales user and an IT user: (a) shadow logs denials and blocks nothing, (b) enforce blocks a Sales user's stage edit with a normal "You don't have permission…" message and **no** sign-in dialog, (c) a signed-out visitor gets the sign-in prompt on Home. Use the headless Playwright approach already used for grid bugs for (b)/(c) if a manual click-through is not convenient.
+Start the API locally (`cd apps/api && npm run dev`) with `AUTH_ENFORCEMENT_ENABLED=true`, then with `RBAC_MODE=shadow` and `RBAC_MODE=enforce`, and confirm with a signed-in browser session as a Sales user and an IT user: (a) shadow logs denials and blocks nothing, (b) enforce blocks a Sales user's stage edit with a normal "You don't have permission…" message and **no** sign-in dialog, (c) a signed-out visitor gets the sign-in prompt on Home, (d) an account listed in the locally-set `ADMIN_ALLOWED_EMAILS` shows `system_admin` in `auth.me`, can edit a SKU cost and see it unmasked, and cannot be granted or stripped of the role from Role & Access Management. Use the headless Playwright approach already used for grid bugs for (b)/(c) if a manual click-through is not convenient.
 
 - [ ] **Step 5: Commit**
 
@@ -5362,6 +5695,8 @@ git commit -m "chore(rbac): RBAC_MODE flag (off) in dev and prod config, plus th
 | §11 `RBAC_MODE`, shadow log, migrations, sequence | 4, 6, 14, 21 |
 | §12 frontend + testing | 15–20; tests in every task |
 | Spec corrections 1 and 2 (Solution Lead; multi-requirement) | 3, 8, 11, 17, 19 |
+| §3.4 System Admin (allow-list-only, unrestricted, protected, not an override) | 1–5, 8–10, 14, 15, 17, 20, 21 |
+| A6 (Sales derives from `active`/`onLeave` only) | 1, 5, 14 |
 
 **Placeholder scan:** the only deliberately non-literal instructions are mechanical and bounded: Task 19's per-screen gating follows an explicit table and is enforced by a failing-then-passing inventory test; Task 18 step 3 lists the exact five edits and lets `tsc` enumerate consumers. Task 7's `lib/*` moves are verbatim relocations with the existing suites as the guard.
 
