@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed } from '@/lib/permissions'
 import { Dialog } from '@/components/ui/Dialog'
 import { FieldDiffReviewTable } from '@/components/FieldDiffReviewTable'
 import { useBidCorrigenda, useBidCorrigendaMutations } from '@/lib/api'
@@ -17,6 +18,9 @@ export function CorrigendumReviewDialog({ open = true, bidId, corrigendumId, onC
 }) {
   const { data: corrigenda = [] } = useBidCorrigenda(bidId)
   const { reviewChange } = useBidCorrigendaMutations(bidId)
+  // Legal may review (reject; accept only changes that rewrite nothing); the server checks every field the change touches.
+  const allowed = useAllowed('bid.corrigenda', 'update', 'corrigendum.review')
+  const refuse = () => Promise.reject(new Error(NO_PERMISSION_TITLE))
   const corrigendum = corrigenda.find((c) => c.id === corrigendumId)
   if (!corrigendum) return null
 
@@ -32,8 +36,8 @@ export function CorrigendumReviewDialog({ open = true, bidId, corrigendumId, onC
           currentValue: formatValue(c.currentValue), proposedValue: formatValue(c.proposedValue),
           decided: c.decision === 'pending' ? undefined : DECISION_LABEL[c.decision],
         }))}
-        onAccept={(id) => reviewChange.mutateAsync({ changeId: id, decision: 'accepted' })}
-        onReject={(id, reason) => reviewChange.mutateAsync({ changeId: id, decision: 'rejected', reason })}
+        onAccept={(id) => (allowed ? reviewChange.mutateAsync({ changeId: id, decision: 'accepted' }) : refuse())}
+        onReject={(id, reason) => (allowed ? reviewChange.mutateAsync({ changeId: id, decision: 'rejected', reason }) : refuse())}
       />
     </Dialog>
   )

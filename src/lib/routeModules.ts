@@ -22,3 +22,13 @@ export const NAV_MODULES = {
 export const OPPORTUNITY_TAB_MODULES: Record<string, PolicyModuleKey[]> = {
   'bid-tracker': ['opp.bidTracker'], pipeline: ['opp.pipeline'], campaign: ['opp.campaign'], master: ROW_MODULES, dashboard: ['an.operational'],
 }
+
+/** hierarchy_nodes.domain → the module that governs the node (mirrors the server's registry). */
+export function moduleForDomain(domain: string | undefined): PolicyModuleKey {
+  return domain === 'geo' ? 'am.geography' : domain === 'sales' ? 'team.sales' : 'am.departments'
+}
+
+/** Scope facts for a screen about one Sales Team person's row: "own" for exactly that person. */
+export function salesPersonRow(personId: string | null | undefined) {
+  return { salesOwnerIds: personId ? [personId] : [], createdBy: null, assigned: { presales: null, legal: null, bid: null } } as const
+}

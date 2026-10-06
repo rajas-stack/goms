@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed } from '@/lib/permissions'
 import { useEffect, useState } from 'react'
 import { hasOptions, type CustomFieldType } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
@@ -42,6 +43,7 @@ export function AddCustomColumnDialog({ open, onClose, onCreated, sheet }: {
   const [options, setOptions] = useState<string[]>(['', ''])
   const [error, setError] = useState<string | null>(null)
   const { create } = useBidCustomFieldMutations()
+  const allowed = useAllowed('bid.columns', 'create')
   const lookups = useEntityLookups()
   // What the cell pick-list will offer, straight from the saved Account Mapping / Sales Team records.
   const available = dataType === 'person' ? { n: lookups.persons.length, noun: 'sales people', where: 'the Sales Team' }
@@ -72,7 +74,7 @@ export function AddCustomColumnDialog({ open, onClose, onCreated, sheet }: {
       footer={(
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!name.trim() || create.isPending} onClick={submit}>Add column</Button>
+          <Button variant="primary" disabled={!name.trim() || create.isPending || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE} onClick={submit}>Add column</Button>
         </div>
       )}
     >

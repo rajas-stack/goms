@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed } from '@/lib/permissions'
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Combobox, type ComboboxOption } from '@/components/ui/Combobox'
@@ -22,6 +23,7 @@ const toOption = (p: OrgPerson): ComboboxOption => ({
 export function OrgEmployees() {
   const { data: people = [], isLoading } = useOrgPeople()
   const { create, update, remove } = useOrgPersonMutations()
+  const canEdit = useAllowed('team.org', 'update') // the org chart is Company Org Structure: CXO and System Admin write
   const [query, setQuery] = useState('')
   const [department, setDepartment] = useState('all')
   const [error, setError] = useState<string | null>(null)
@@ -42,6 +44,7 @@ export function OrgEmployees() {
 
   const run = async (action: () => Promise<unknown>, fallback: string) => {
     setError(null)
+    if (!canEdit) { setError(NO_PERMISSION_TITLE); return }
     try { await action() } catch (cause) { setError(cause instanceof Error ? cause.message : fallback) }
   }
 
@@ -99,7 +102,7 @@ export function OrgEmployees() {
         <Field label="Reports to">
           <Combobox value={draft.managerId} onChange={(v) => setDraft({ ...draft, managerId: v })} options={draftManagers.map(toOption)} placeholder={draftLevel === 0 ? 'Top of the company' : 'Choose a manager'} aria-label="New employee reports to" />
         </Field>
-        <Button variant="primary" disabled={!draft.name.trim() || create.isPending} onClick={addPerson}><Icon name="Plus" size={14} /> Add</Button>
+        <Button variant="primary" disabled={!draft.name.trim() || create.isPending || !canEdit} title={canEdit ? undefined : NO_PERMISSION_TITLE} onClick={addPerson}><Icon name="Plus" size={14} /> Add</Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -192,13 +195,13 @@ export function OrgEmployees() {
                   <td className="border-b border-line/70 px-3 py-1.5 text-right">
                     <div className="flex justify-end gap-1">
                       <Button
-                        variant="secondary" size="sm"
+                        variant="secondary" size="sm" disabled={!canEdit}
                         onClick={() => void run(() => update.mutateAsync({ id: p.id, patch: { status: p.status === 'active' ? 'inactive' : 'active' } }), 'Could not save.')}
                       >
                         {p.status === 'active' ? 'Deactivate' : 'Activate'}
                       </Button>
                       <Button
-                        variant="ghost" size="icon" aria-label={`Delete ${p.name}`} title="Delete (their reports move up to their manager)"
+                        variant="ghost" size="icon" disabled={!canEdit} aria-label={`Delete ${p.name}`} title="Delete (their reports move up to their manager)"
                         onClick={() => { if (window.confirm(`Delete ${p.name}? Their direct reports move up to ${managerName.get(p.managerId ?? '') ?? 'the top'}.`)) void run(() => remove.mutateAsync(p.id), 'Could not delete.') }}
                       >
                         <Icon name="Trash2" size={14} />

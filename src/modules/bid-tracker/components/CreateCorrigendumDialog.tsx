@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed } from '@/lib/permissions'
 import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
@@ -17,6 +18,7 @@ export function CreateCorrigendumDialog({ open = true, bidId, onClose }: { open?
   const { data: milestones = [] } = useBidMilestones(bidId)
   const { data: corrigenda = [] } = useBidCorrigenda(bidId)
   const { create } = useBidCorrigendaMutations(bidId)
+  const allowed = useAllowed('bid.corrigenda', 'create')
 
   const nextNumber = Math.max(0, ...corrigenda.map((c) => c.corrigendumNumber)) + 1
   const [numberText, setNumberText] = useState<string | null>(null) // null = the suggested next number
@@ -67,7 +69,7 @@ export function CreateCorrigendumDialog({ open = true, bidId, onClose }: { open?
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!valid || create.isPending} onClick={submit}>Create Corrigendum</Button>
+          <Button variant="primary" disabled={!valid || create.isPending || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE} onClick={submit}>Create Corrigendum</Button>
         </>
       }
     >

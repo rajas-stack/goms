@@ -1,3 +1,4 @@
+import { Gate, usePermissions } from '@/lib/permissions'
 import { useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
@@ -42,6 +43,8 @@ export function SkuCatalog() {
   const { data: allBomItems = [] } = useAllBomItems()
   const { data: allBoqLineItems = [] } = useAllBoqLineItems()
   const { create, update, remove } = useSkuMutations()
+  // Pre-sales edits SKUs; Finance edits cost / floor / tax fields only (the form and the server enforce the field).
+  const allowed = usePermissions().mayWrite('com.skus')
   const toast = useToast()
 
   const categoryName = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
@@ -91,6 +94,7 @@ export function SkuCatalog() {
   }
 
   return (
+    <Gate allowed={allowed}>
     <div className="flex h-full min-h-0 flex-col lg:flex-row">
       <div className="flex max-h-64 w-full shrink-0 flex-col gap-2 overflow-y-auto border-b border-line p-3 lg:h-auto lg:max-h-none lg:w-[380px] lg:border-b-0 lg:border-r">
         <div className="flex items-center gap-2">
@@ -176,6 +180,7 @@ export function SkuCatalog() {
         />
       )}
     </div>
+    </Gate>
   )
 }
 

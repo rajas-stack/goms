@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
 import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -65,6 +66,9 @@ export function MergeEmployeesDialog({ open, onClose, employeeA, employeeB, onMe
 }) {
   const toast = useToast()
   const { merge } = useEmployeeMutations()
+  const canUpdateContacts = useAllowed('am.contacts', 'update')
+  const canDeleteContacts = useAllowed('am.contacts', 'delete')
+  const allowed = canUpdateContacts && canDeleteContacts // a merge deletes a contact
   const { data: timelineA = [] } = useTimeline(employeeA.id)
   const { data: timelineB = [] } = useTimeline(employeeB.id)
   const { data: transfersA = [] } = useTransfers(employeeA.id)
@@ -159,7 +163,7 @@ export function MergeEmployeesDialog({ open, onClose, employeeA, employeeB, onMe
       footer={
         <>
           <Button onClick={onClose} disabled={merge.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={confirmMerge} disabled={merge.isPending}>
+          <Button variant="primary" onClick={confirmMerge} disabled={(merge.isPending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             <Icon name="GitMerge" size={14} /> {merge.isPending ? 'Merging…' : 'Merge contacts'}
           </Button>
         </>

@@ -1,3 +1,4 @@
+import { Gate, useAllowed } from '@/lib/permissions'
 import { useState } from 'react'
 import { slugifyFieldKey } from '@goms/domain'
 import { Badge } from '@/components/ui/Badge'
@@ -50,6 +51,7 @@ function MilestoneForm({ draft, onChange, labelEditable }: { draft: Draft; onCha
 export function MilestonesTab({ bidId }: { bidId: string }) {
   const { data: milestones = [], isLoading } = useBidMilestones(bidId)
   const { create, update, remove } = useBidMilestoneMutations(bidId)
+  const allowed = useAllowed('bid.milestones', 'update')
   const [editing, setEditing] = useState<{ id: string; draft: Draft } | null>(null)
   const [adding, setAdding] = useState<Draft | null>(null)
   const [error, setError] = useState<{ id: string; message: string } | null>(null)
@@ -88,6 +90,7 @@ export function MilestonesTab({ bidId }: { bidId: string }) {
 
   if (isLoading) return null
   return (
+    <Gate allowed={allowed}>
     <div className="space-y-3 p-4" data-testid="milestones-tab">
       {pending.map((c) => (
         <div key={c.id} role="note" className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-ink">
@@ -165,5 +168,6 @@ export function MilestonesTab({ bidId }: { bidId: string }) {
       {addingCorrigendum && <CreateCorrigendumDialog bidId={bidId} onClose={() => setAddingCorrigendum(false)} />}
       {reviewing && <CorrigendumReviewDialog bidId={bidId} corrigendumId={reviewing} onClose={() => setReviewing(null)} />}
     </div>
+    </Gate>
   )
 }

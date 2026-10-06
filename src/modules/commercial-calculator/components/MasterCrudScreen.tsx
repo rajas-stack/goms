@@ -1,3 +1,5 @@
+import { masterKeyAtom } from '@goms/domain'
+import { Gate, useAllowed } from '@/lib/permissions'
 import { useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
@@ -22,6 +24,8 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
   const def = MASTER_DEFS[masterKey]
   const { data: rows = [], isLoading } = useMasters(masterKey)
   const { create, update, setActive, remove } = useMasterMutations(masterKey)
+  // Reference masters: Pre-sales; tax classes and currencies: Finance; the approval matrix: CXO (per master key).
+  const allowed = useAllowed(masterKey === 'approvalMatrix' ? 'com.approvalMatrix' : 'com.masters', 'update', masterKeyAtom(masterKey))
   const toast = useToast()
 
   const [query, setQuery] = useState('')
@@ -58,6 +62,7 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
   }
 
   return (
+    <Gate allowed={allowed}>
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-3">
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
@@ -162,5 +167,6 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
         />
       )}
     </div>
+    </Gate>
   )
 }

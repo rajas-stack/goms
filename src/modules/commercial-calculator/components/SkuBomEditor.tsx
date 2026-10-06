@@ -1,3 +1,4 @@
+import { Gate, useAllowed } from '@/lib/permissions'
 import { useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
@@ -14,6 +15,7 @@ export function SkuBomEditor({ skuId }: { skuId: string }) {
   const { data: skus = [] } = useSkus()
   const { data: items = [] } = useBomItems(skuId)
   const { add, remove } = useBomMutations(skuId)
+  const allowed = useAllowed('com.skus', 'update', 'sku.other')
 
   const [componentSkuId, setComponentSkuId] = useState('')
   const [mandatory, setMandatory] = useState(true)
@@ -38,6 +40,7 @@ export function SkuBomEditor({ skuId }: { skuId: string }) {
   }
 
   return (
+    <Gate allowed={allowed}>
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-line p-3">
         <Field label="Component SKU" required>
@@ -90,6 +93,7 @@ export function SkuBomEditor({ skuId }: { skuId: string }) {
         </div>
       </div>
     </div>
+    </Gate>
   )
 }
 

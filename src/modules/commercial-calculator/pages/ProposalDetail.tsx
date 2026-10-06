@@ -1,3 +1,4 @@
+import { Gate, usePermissions } from '@/lib/permissions'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAllEmployees, useCurrentPostings, useDepartments, useSalesPersons } from '@/lib/api'
@@ -82,6 +83,8 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   const { data: bomItems = [] } = useAllBomItems()
   const { update, updateStatus, revise, duplicate, remove } = useBoqMutations()
   const lineMutations = useBoqLineItemMutations(boqId)
+  // Pre-sales edits BOQs; CXO may only approve / reject lines and BOQs (the server checks the field); Finance only reads.
+  const allowed = usePermissions().mayWrite('com.boqs')
   const toast = useToast()
   const navigate = useNavigate()
   const [deleting, setDeleting] = useState(false)
@@ -162,6 +165,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   }
 
   return (
+    <Gate allowed={allowed}>
     <div ref={scrollContainerRef} className="flex h-full flex-col overflow-y-auto">
       <div className="shrink-0 p-4 pb-0">
         <button
@@ -327,6 +331,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
         onConfirm={handleDelete}
       />
     </div>
+    </Gate>
   )
 }
 

@@ -1,3 +1,4 @@
+import { Gate, useAllowed } from '@/lib/permissions'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useCurrentPostings, useDepartments, useEmployeeMutations, useEmployeesUnder, useSalesPersons } from '@/lib/api'
 import { convertWorkAmount, formatBudgetRange, WORK_VALUE_UNITS } from '@/features/nodes/department-meta'
@@ -63,6 +64,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const { data: boqs = [] } = useBoqs()
   const { create, updateStatus } = useBoqMutations()
   const { create: createEmployee } = useEmployeeMutations()
+  const allowed = useAllowed('com.boqs', 'create')
   const toast = useToast()
 
   const [opportunityName, setOpportunityName] = useState('')
@@ -322,6 +324,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   useStickyScrollOffset(scrollContainerRef, stickyBarRef)
 
   return (
+    <Gate allowed={allowed}>
     <div ref={scrollContainerRef} className="flex h-full flex-col overflow-y-auto">
       <div className="shrink-0 border-b border-line bg-white px-4 py-3">
         <h1 className="font-display text-lg font-semibold text-ink-900">Create BOQ</h1>
@@ -687,6 +690,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         </div>
       </div>
     </div>
+    </Gate>
   )
 }
 

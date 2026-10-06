@@ -1,3 +1,4 @@
+import { Gate, useAllowed } from '@/lib/permissions'
 import { useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
@@ -37,6 +38,7 @@ export function HierarchyView() {
   const productMutations = useMasterMutations('products')
   const moduleMutations = useMasterMutations('modules')
   const featureMutations = useMasterMutations('features')
+  const allowed = useAllowed('com.masters', 'update', 'master.other')
   const mutationsByKey = {
     verticals: verticalMutations, products: productMutations, modules: moduleMutations, features: featureMutations,
   } as const
@@ -128,6 +130,7 @@ export function HierarchyView() {
   }
 
   return (
+    <Gate allowed={allowed}>
     <div className="flex h-full min-h-0 flex-col lg:flex-row">
       <div className="flex max-h-64 w-full shrink-0 flex-col overflow-y-auto border-b border-line p-2 lg:h-auto lg:max-h-none lg:w-[360px] lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between px-2 py-1.5">
@@ -204,6 +207,7 @@ export function HierarchyView() {
         />
       )}
     </div>
+    </Gate>
   )
 }
 

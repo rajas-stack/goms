@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed } from '@/lib/permissions'
 import { useEffect, useRef, useState } from 'react'
 import { useEmployee, useEmployeeMutations } from '@/lib/api'
 import { Button } from '@/components/ui/Button'
@@ -32,6 +33,7 @@ type Pending = { kind: 'new' } | { kind: 'front' | 'back'; cardId: string }
 export function VisitingCard({ employeeId }: { employeeId: string }) {
   const { data: emp } = useEmployee(employeeId)
   const { update } = useEmployeeMutations()
+  const allowed = useAllowed('am.contacts', 'update')
   const toast = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const pending = useRef<Pending | null>(null)
@@ -93,6 +95,7 @@ export function VisitingCard({ employeeId }: { employeeId: string }) {
   }
 
   async function save() {
+    if (!allowed) return
     setSaving(true)
     try {
       await update.mutateAsync({ id: emp!.id, patch: { visitingCards: draft } })
@@ -136,6 +139,7 @@ export function VisitingCard({ employeeId }: { employeeId: string }) {
           : 'No contact details found on the card')
         return
       }
+      if (!allowed) { toast(NO_PERMISSION_TITLE); return }
       await update.mutateAsync({ id: emp!.id, patch })
       toast(`Picked up ${keys.join(', ')}`)
     } catch (err) {
@@ -222,7 +226,7 @@ export function VisitingCard({ employeeId }: { employeeId: string }) {
           {dirty && (
             <Button size="sm" variant="ghost" onClick={discard} disabled={saving}>Discard</Button>
           )}
-          <Button size="sm" variant="primary" onClick={save} disabled={!dirty || saving}>
+          <Button size="sm" variant="primary" onClick={save} disabled={!dirty || saving || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             <Icon name="Check" size={14} /> {saving ? 'Saving…' : 'Save'}
           </Button>
         </div>

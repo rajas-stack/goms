@@ -1,3 +1,5 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
+import { moduleForDomain, salesPersonRow } from '@/lib/routeModules'
 import { useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -13,6 +15,7 @@ export function ConfirmDialog({ open, node, onClose, onDeleted }: {
 }) {
   const toast = useToast()
   const { remove } = useNodeMutations()
+  const allowed = useAllowed(moduleForDomain(node?.domain), 'delete')
   const [error, setError] = useState<string | null>(null)
 
   function close() { setError(null); onClose() }
@@ -23,7 +26,7 @@ export function ConfirmDialog({ open, node, onClose, onDeleted }: {
     try {
       await remove.mutateAsync(node.id)
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't delete — please try again.")
+      setError(e instanceof Error ? e.message : "Couldn't delete ï¿½ please try again.")
       return
     }
     toast(`Deleted ${node.name}`)
@@ -40,7 +43,7 @@ export function ConfirmDialog({ open, node, onClose, onDeleted }: {
       footer={
         <>
           <Button onClick={close} disabled={remove.isPending}>Keep</Button>
-          <Button variant="danger" onClick={confirm} disabled={remove.isPending}>
+          <Button variant="danger" onClick={confirm} disabled={(remove.isPending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             {remove.isPending ? 'Deletingâ€¦' : 'Delete permanently'}
           </Button>
         </>

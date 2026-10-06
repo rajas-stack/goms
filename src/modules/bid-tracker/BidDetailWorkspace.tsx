@@ -1,3 +1,5 @@
+import { Can } from '@/lib/permissions'
+import { sheetModule } from '@goms/domain'
 import { useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
@@ -73,6 +75,7 @@ export function BidDetailWorkspace() {
           <div className="text-[13px] text-muted">{[row.departmentName, row.city].filter(Boolean).join(' · ')}</div>
         )}
         <div className="mt-2 flex flex-wrap items-center gap-2">
+          <Can module={sheetModule(bid.sheet)} action="update" atom="bid.archive">
           <Button
             size="sm" disabled={archive.isPending || unarchive.isPending}
             onClick={async () => {
@@ -84,9 +87,12 @@ export function BidDetailWorkspace() {
           >
             <Icon name={bid.status === 'archived' ? 'ArchiveRestore' : 'Archive'} size={13} /> {bid.status === 'archived' ? 'Restore' : 'Archive'}
           </Button>
-          <Button size="sm" variant="danger" onClick={() => { setActionError(null); setConfirmDelete(true) }}>
-            <Icon name="Trash2" size={13} /> Delete bid
-          </Button>
+          </Can>
+          <Can module={sheetModule(bid.sheet)} action="delete">
+            <Button size="sm" variant="danger" onClick={() => { setActionError(null); setConfirmDelete(true) }}>
+              <Icon name="Trash2" size={13} /> Delete bid
+            </Button>
+          </Can>
           {actionError && <span role="alert" className="text-[12px] text-crimson">{actionError}</span>}
         </div>
       </div>

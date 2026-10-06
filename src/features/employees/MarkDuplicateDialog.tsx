@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
 import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -19,6 +20,7 @@ export function MarkDuplicateDialog({ open, employee, onClose }: {
 }) {
   const toast = useToast()
   const { update } = useEmployeeMutations()
+  const allowed = useAllowed('am.contacts', 'update')
   const { data: allEmployees = [] } = useAllEmployees()
   const [selected, setSelected] = useState('')
 
@@ -53,7 +55,7 @@ export function MarkDuplicateDialog({ open, employee, onClose }: {
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={save} disabled={!selected}>Mark as duplicate</Button>
+          <Button variant="primary" onClick={save} disabled={(!selected) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>Mark as duplicate</Button>
         </>
       }
     >

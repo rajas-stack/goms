@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
 import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -24,6 +25,7 @@ export function TransferBookOfBusinessDialog({ open, person, onClose }: {
   const { data: people = [] } = useSalesPersons()
   const { data: owned = [] } = useOwnedBy(person?.id ?? null, asOf)
   const { transferBookOfBusiness } = useOwnershipMutations()
+  const allowed = usePermissions().mayWrite('am.ownership')
 
   const [toSalesPersonId, setToSalesPersonId] = useState('')
   const [effectiveDate, setEffectiveDate] = useState(isoToday())
@@ -74,7 +76,7 @@ export function TransferBookOfBusinessDialog({ open, person, onClose }: {
       footer={
         <>
           <Button onClick={onClose} disabled={transferBookOfBusiness.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!canSubmit || transferBookOfBusiness.isPending}>
+          <Button variant="primary" onClick={submit} disabled={(!canSubmit || transferBookOfBusiness.isPending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             {transferBookOfBusiness.isPending ? 'Transferring…' : `Transfer ${openOwned.length} record${openOwned.length === 1 ? '' : 's'}`}
           </Button>
         </>
