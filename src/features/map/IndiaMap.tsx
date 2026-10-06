@@ -452,7 +452,7 @@ export function IndiaMap() {
             // teal-tint and white fills alike (paint the stroke first).
             style={{
               paintOrder: 'stroke',
-              stroke: connectedCountOf(selectedVisible.code) > 0 ? '#0F2942' : '#FAFAF7',
+              stroke: connectedCountOf(selectedVisible.code) > 0 ? 'rgb(var(--c-ink-900))' : 'rgb(var(--c-paper))',
               strokeWidth: 2.8,
               strokeLinejoin: 'round',
             }}

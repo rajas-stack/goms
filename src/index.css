@@ -3,8 +3,178 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  /* Theme tokens — RGB channels consumed by tailwind.config.ts's `c()`.
+     `.dark` is toggled on <html> by src/lib/theme.ts (and pre-paint by the
+     inline script in index.html, so a reload never flashes light). */
+  :root,
+  .light {
     color-scheme: light;
+    --c-ink: 26 35 50;
+    --c-ink-900: 15 41 66;
+    --c-ink-800: 20 49 76;
+    --c-ink-700: 30 58 95;
+    --c-ink-600: 43 74 112;
+    --c-paper: 250 250 247;
+    --c-panel: 241 243 247;
+    --c-line: 221 227 236;
+    --c-white: 255 255 255;
+    --c-muted: 92 107 128;
+    --c-scrim: 15 41 66;
+    --c-shadow: 15 41 66;
+    --c-edge: 183 194 208;
+
+    --c-grid-head: 244 247 250;
+    --c-grid-hover: 242 248 253;
+    --c-grid-selected: 228 241 251;
+    --c-grid-frozen: 251 253 255;
+    --c-grid-readonly: 243 246 249;
+    --c-grid-sorted: 234 244 252;
+    --c-grid-tab: 241 246 250;
+    --grid-sheet: linear-gradient(180deg, #f4f8fc 0%, #ebf2f9 100%);
+    --grid-bevel: inset 1px 1px 0 rgba(255, 255, 255, 0.95), inset -1px -1px 0 rgba(11, 43, 73, 0.07);
+    --grid-frozen-shadow: 3px 0 5px -2px rgba(11, 43, 73, 0.28);
+
+    --c-indigo: 91 110 232;
+    --c-indigo-600: 68 83 196;
+    --c-indigo-100: 231 234 252;
+    --c-teal: 42 127 111;
+    --c-teal-700: 15 118 110;
+    --c-teal-600: 34 105 91;
+    --c-teal-100: 221 238 233;
+    --c-crimson: 178 58 72;
+    --c-crimson-100: 246 224 227;
+    --c-blue: 47 111 191;
+    --c-blue-700: 29 78 216;
+    --c-blue-600: 36 90 158;
+    --c-blue-200: 191 219 254;
+    --c-blue-100: 222 233 246;
+    --c-blue-50: 239 246 255;
+    --c-purple: 122 90 201;
+    --c-purple-600: 98 71 168;
+    --c-purple-100: 235 228 247;
+    --c-emerald: 47 143 91;
+    --c-emerald-800: 6 95 70;
+    --c-emerald-700: 4 120 87;
+    --c-emerald-600: 38 116 74;
+    --c-emerald-200: 167 243 208;
+    --c-emerald-100: 220 239 227;
+    --c-emerald-50: 236 253 245;
+    --c-amber: 199 122 42;
+    --c-amber-900: 120 53 15;
+    --c-amber-800: 146 64 14;
+    --c-amber-700: 180 83 9;
+    --c-amber-600: 165 100 31;
+    --c-amber-500: 245 158 11;
+    --c-amber-400: 251 191 36;
+    --c-amber-200: 253 230 138;
+    --c-amber-100: 247 233 214;
+    --c-amber-50: 255 251 235;
+    --c-rose-700: 190 18 60;
+    --c-rose-50: 255 241 242;
+    --c-red-700: 185 28 28;
+    --c-red-600: 220 38 38;
+    --c-red-200: 254 202 202;
+    --c-red-50: 254 242 242;
+    --c-sky-800: 7 89 133;
+    --c-sky-700: 3 105 161;
+    --c-sky-50: 240 249 255;
+    --c-goms-navy: 11 43 73;
+    --c-goms-sky: 76 167 221;
+    --c-goms-green: 116 192 92;
+  }
+
+  /* Night: a deep "midnight ink" rather than pure black. Neutrals invert
+     (ink = light text, paper = dark canvas), so `bg-ink-900 text-paper`
+     primary buttons become light-on-dark automatically; accents are lifted
+     for contrast and their `-100`/`-50` tints become low-light washes. */
+  .dark {
+    color-scheme: dark;
+    --c-ink: 226 232 240;
+    --c-ink-900: 241 245 250;
+    --c-ink-800: 214 223 235;
+    --c-ink-700: 194 206 222;
+    --c-ink-600: 158 175 198;
+    --c-paper: 10 16 28;
+    --c-panel: 22 32 50;
+    --c-line: 36 50 74;
+    --c-white: 16 25 41;
+    --c-muted: 136 152 176;
+    --c-scrim: 2 6 14;
+    --c-shadow: 0 0 0;
+    --c-edge: 58 76 104;
+
+    --c-grid-head: 21 32 51;
+    --c-grid-hover: 26 42 66;
+    --c-grid-selected: 30 52 86;
+    --c-grid-frozen: 17 27 44;
+    --c-grid-readonly: 14 22 37;
+    --c-grid-sorted: 24 40 64;
+    --c-grid-tab: 15 24 40;
+    --grid-sheet: linear-gradient(180deg, #0d1626 0%, #0a121f 100%);
+    --grid-bevel: inset 1px 1px 0 rgba(255, 255, 255, 0.04), inset -1px -1px 0 rgba(0, 0, 0, 0.35);
+    --grid-frozen-shadow: 3px 0 6px -2px rgba(0, 0, 0, 0.6);
+
+    --c-indigo: 139 155 255;
+    --c-indigo-600: 165 177 255;
+    --c-indigo-100: 31 38 82;
+    --c-teal: 63 184 160;
+    --c-teal-700: 125 216 197;
+    --c-teal-600: 92 203 180;
+    --c-teal-100: 14 46 42;
+    --c-crimson: 240 112 127;
+    --c-crimson-100: 60 24 33;
+    --c-blue: 91 155 234;
+    --c-blue-700: 156 197 247;
+    --c-blue-600: 125 179 242;
+    --c-blue-200: 30 62 102;
+    --c-blue-100: 20 42 71;
+    --c-blue-50: 15 31 54;
+    --c-purple: 166 139 235;
+    --c-purple-600: 187 165 242;
+    --c-purple-100: 38 29 69;
+    --c-emerald: 76 194 133;
+    --c-emerald-800: 163 232 194;
+    --c-emerald-700: 134 223 175;
+    --c-emerald-600: 107 212 156;
+    --c-emerald-200: 27 77 51;
+    --c-emerald-100: 16 48 31;
+    --c-emerald-50: 13 37 25;
+    --c-amber: 230 160 85;
+    --c-amber-900: 251 227 196;
+    --c-amber-800: 248 212 166;
+    --c-amber-700: 245 197 138;
+    --c-amber-600: 240 181 114;
+    --c-amber-500: 242 174 61;
+    --c-amber-400: 245 194 77;
+    --c-amber-200: 92 66 22;
+    --c-amber-100: 58 40 18;
+    --c-amber-50: 42 30 15;
+    --c-rose-700: 251 141 165;
+    --c-rose-50: 45 18 25;
+    --c-red-700: 252 165 165;
+    --c-red-600: 248 113 113;
+    --c-red-200: 92 35 40;
+    --c-red-50: 45 20 22;
+    --c-sky-800: 166 216 245;
+    --c-sky-700: 124 196 240;
+    --c-sky-50: 14 34 51;
+    --c-goms-navy: 207 228 247;
+    --c-goms-sky: 93 182 234;
+    --c-goms-green: 134 207 110;
+  }
+
+  /* Applied by theme.ts for one frame-set while switching, when the View
+     Transitions API isn't available — a soft crossfade instead of a snap. */
+  .theme-fade,
+  .theme-fade *,
+  .theme-fade *::before,
+  .theme-fade *::after {
+    transition:
+      background-color 280ms ease,
+      border-color 280ms ease,
+      color 200ms ease,
+      fill 280ms ease,
+      stroke 280ms ease !important;
   }
   html,
   body,
@@ -23,9 +193,27 @@
     letter-spacing: -0.01em;
   }
   ::selection {
-    background: #14314c;
-    color: #fafaf7;
+    background: rgb(var(--c-ink-800));
+    color: rgb(var(--c-paper));
   }
+}
+
+/* Circular day/night reveal (theme.ts) — the new snapshot grows out of the
+   toggle that was clicked; the old one stays put underneath. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  z-index: 2;
+}
+
+/* The Amnex wordmark is dark navy on transparent. In night mode, invert
+   lightness while rotating hue back, so navy reads as a light blue and the
+   red mark stays red. */
+.dark .brand-logo {
+  filter: invert(1) hue-rotate(180deg) saturate(1.2);
 }
 
 @layer components {
@@ -46,21 +234,21 @@
 /* Survey-chart grid backdrop */
 .survey-grid {
   background-image:
-    linear-gradient(to right, rgba(15, 41, 66, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(15, 41, 66, 0.05) 1px, transparent 1px);
+    linear-gradient(to right, rgb(var(--c-ink-900) / 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(var(--c-ink-900) / 0.05) 1px, transparent 1px);
   background-size: 28px 28px;
 }
 
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: #c5cedb transparent;
+  scrollbar-color: rgb(var(--c-ink-600) / 0.35) transparent;
 }
 .scrollbar-thin::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: #c5cedb;
+  background: rgb(var(--c-ink-600) / 0.35);
   border-radius: 999px;
 }
 

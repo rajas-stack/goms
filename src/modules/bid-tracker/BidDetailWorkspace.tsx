@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { BID_SYNOPSIS_SECTIONS, type BidSynopsisSection } from '@goms/domain'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { useToast } from '@/components/ui/Toast'
 import { Icon } from '@/components/ui/Icon'
-import { Tabs } from '@/components/ui/Tabs'
 import { useBid, useBidMilestones, useBidMutations, useBidsForGrid } from '@/lib/api'
 import type { BidGridRow } from '@/lib/types'
 import { ATTENTION_OPTIONS } from './gridColumns'
@@ -13,12 +13,18 @@ import { CommercialAndFilesTab } from './pages/CommercialAndFilesTab'
 import { MilestonesTab } from './pages/MilestonesTab'
 import { OverviewTab } from './pages/OverviewTab'
 import { ProtectedValuesTab } from './pages/ProtectedValuesTab'
+import { SynopsisTab } from './synopsis/SynopsisTab'
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
-  { value: 'milestones', label: 'Milestones' },
-  { value: 'commercial', label: 'Commercial & Files' },
-  { value: 'protected', label: 'Protected Values' },
+  { value: 'scope', label: 'Scope of Work' },
+  { value: 'pq', label: 'PQ' },
+  { value: 'tq', label: 'TQ' },
+  { value: 'manpower', label: 'Manpower' },
+  { value: 'milestone', label: 'Milestone' },
+  { value: 'payment', label: 'Payment Terms' },
+  { value: 'boq', label: 'BoQ' },
+  { value: 'queries', label: 'Queries' },
 ] as const
 type Tab = (typeof TABS)[number]['value']
 
@@ -29,7 +35,12 @@ const ATTENTION_TONE: Record<BidGridRow['attentionFlag'], BadgeTone> = {
 export function BidDetailWorkspace() {
   const { bidId } = useParams()
   const [params, setParams] = useSearchParams()
-  const tab = (params.get('tab') as Tab | null) ?? 'overview'
+  const requested = params.get('tab') === 'milestones' ? 'milestone' : params.get('tab')
+  const tab: Tab = TABS.some(item => item.value === requested) ? requested as Tab : 'overview'
+  const [visited, setVisited] = useState<BidSynopsisSection[]>([])
+  useEffect(() => {
+    if (tab !== 'overview') setVisited(current => current.includes(tab) ? current : [...current, tab])
+  }, [tab])
   const { data: bid, isLoading } = useBid(bidId ?? null)
   const { data: milestones = [] } = useBidMilestones(bidId ?? null)
   // The grid row already joins the opportunity's name/department/city and the
@@ -90,17 +101,33 @@ export function BidDetailWorkspace() {
           {actionError && <span role="alert" className="text-[12px] text-crimson">{actionError}</span>}
         </div>
       </div>
-      <Tabs<Tab> value={tab} onChange={(v) => setParams({ tab: v })} tabs={TABS.map(({ value, label }) => ({ value, label }))} />
+      <div role="tablist" aria-label="Bid synopsis sections" className="flex shrink-0 overflow-x-auto border-b border-line bg-white px-2 scrollbar-thin">
+        {TABS.map(item => <button key={item.value} role="tab" id={`synopsis-tab-${item.value}`} aria-selected={tab === item.value}
+          aria-controls={`synopsis-panel-${item.value}`} onClick={() => setParams(current => { const next = new URLSearchParams(current); next.set('tab', item.value); return next })}
+          onKeyDown={event => {
+            const index = TABS.findIndex(value => value.value === item.value)
+            const target = event.key === 'ArrowRight' ? (index + 1) % TABS.length : event.key === 'ArrowLeft' ? (index - 1 + TABS.length) % TABS.length : event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 : -1
+            if (target < 0) return
+            event.preventDefault(); setParams({ tab: TABS[target].value }); document.getElementById(`synopsis-tab-${TABS[target].value}`)?.focus()
+          }} tabIndex={tab === item.value ? 0 : -1}
+          className={`shrink-0 whitespace-nowrap border-b-2 px-3 py-3 text-[13px] font-medium focus-visible:focus-ring ${tab === item.value ? 'border-blue text-ink-900' : 'border-transparent text-muted hover:bg-panel hover:text-ink'}`}>
+          {item.label}
+        </button>)}
+      </div>
       <div className="min-h-0 flex-1 overflow-auto">
-        {tab === 'overview' && <OverviewTab bid={bid} milestones={milestones} />}
-        {tab === 'milestones' && <MilestonesTab bidId={bid.id} />}
-        {tab === 'commercial' && (
-          <CommercialAndFilesTab
-            bidId={bid.id}
-            opportunity={row ?? { valueAmount: '', valueUnit: 'lakh', emdAmount: '', emdUnit: 'lakh' }}
-          />
-        )}
-        {tab === 'protected' && <ProtectedValuesTab bidId={bid.id} />}
+        {tab === 'overview' && <div role="tabpanel" id="synopsis-panel-overview" aria-labelledby="synopsis-tab-overview">
+          <OverviewTab bid={bid} milestones={milestones} />
+          <details className="border-t border-line"><summary className="cursor-pointer px-4 py-3 text-sm font-medium">Commercial Details &amp; Files</summary>
+            <CommercialAndFilesTab bidId={bid.id} opportunity={row ?? { valueAmount: '', valueUnit: 'lakh', emdAmount: '', emdUnit: 'lakh' }} />
+          </details>
+          <details className="border-t border-line"><summary className="cursor-pointer px-4 py-3 text-sm font-medium">Protected Values</summary><ProtectedValuesTab bidId={bid.id} /></details>
+        </div>}
+        {BID_SYNOPSIS_SECTIONS.filter(section => visited.includes(section) || tab === section).map(section => (
+          <div key={`${bid.id}:${section}`} role="tabpanel" id={`synopsis-panel-${section}`} aria-labelledby={`synopsis-tab-${section}`} hidden={tab !== section}>
+            <SynopsisTab bidId={bid.id} section={section} />
+            {section === 'milestone' && <details className="border-t border-line"><summary className="cursor-pointer px-4 py-3 text-sm font-medium">Tracked Dates &amp; Corrigenda</summary><MilestonesTab bidId={bid.id} /></details>}
+          </div>
+        ))}
       </div>
       <ConfirmDeleteDialog
         open={confirmDelete}

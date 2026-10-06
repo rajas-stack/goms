@@ -4,6 +4,7 @@ import { Icon } from './ui/Icon'
 import { Button } from './ui/Button'
 import { Tooltip } from './ui/Tooltip'
 import { AuthStatus } from './AuthStatus'
+import { OptionsMenu } from './theme/OptionsMenu'
 import { cn } from '@/lib/utils'
 import logo from '@/assets/amnex-logo.svg'
 
@@ -33,7 +34,7 @@ export function TopBar({ onOpenDrawer }: Props) {
         <Icon name="Menu" size={20} />
       </button>
       <Link to="/" aria-label="Amnex home" className="shrink-0">
-        <img src={logo} alt="Amnex" className="h-8 w-auto" />
+        <img src={logo} alt="Amnex" className="brand-logo h-8 w-auto" />
       </Link>
       {!isHome && (
         <div className="hidden min-w-0 items-center gap-2.5 sm:flex">
@@ -78,6 +79,7 @@ export function TopBar({ onOpenDrawer }: Props) {
       )}
 
       <div className={cn('flex shrink-0 items-center gap-2', hidesAccountMappingTools && 'ml-auto')}>
+        <OptionsMenu />
         <AuthStatus />
       </div>
     </header>

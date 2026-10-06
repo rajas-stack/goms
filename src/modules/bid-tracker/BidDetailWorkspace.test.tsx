@@ -30,14 +30,16 @@ describe('BidDetailWorkspace', () => {
     await resetLocalData()
   })
 
-  it('renders the header, the four detail tabs and the Overview by default', async () => {
+  it('renders the header, nine synopsis tabs and the Overview by default', async () => {
     const bid = await makeBid()
     renderAt(`/bid-tracker/bid/${bid.id}`)
     expect(await screen.findByRole('heading', { name: 'Smart Bus' })).toBeInTheDocument()
     expect(screen.getByText(bid.bidCode)).toBeInTheDocument()
-    for (const tab of ['Overview', 'Milestones', 'Commercial & Files', 'Protected Values']) {
-      expect(screen.getByRole('button', { name: tab })).toBeInTheDocument()
+    for (const tab of ['Overview', 'Scope of Work', 'PQ', 'TQ', 'Manpower', 'Milestone', 'Payment Terms', 'BoQ', 'Queries']) {
+      expect(screen.getByRole('tab', { name: tab })).toBeInTheDocument()
     }
+    expect(screen.queryByRole('tab', { name: 'Commercial & Files' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Protected Values' })).not.toBeInTheDocument()
     // Requirements are stage guidance, not a claim that evidence was submitted.
     expect(screen.getByText(/Finalize technical solution; Submit pre-bid queries/)).toBeInTheDocument()
     expect(screen.getByText(/completion or submission is not verified here/i)).toBeInTheDocument()

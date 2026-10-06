@@ -12,6 +12,7 @@ import { mergeTeamRosters } from './pre-sales-team'
 import { mergeOrgSeed, syncAllTeamsFromOrg, type OrgPerson } from './org-structure'
 import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
 import type { CommercialCalculatorData } from '@/modules/commercial-calculator/types'
+import type { BidSynopsis } from '@goms/domain'
 
 interface AdminState {
   st_code: number
@@ -66,6 +67,7 @@ for (const sd of subdistricts) {
 }
 
 export interface GormsData {
+  bidSynopsis: BidSynopsis[]
   nodes: HierNode[]
   employees: Employee[]
   externalIds: ExternalId[]
@@ -327,7 +329,7 @@ export function buildSeed(): GormsData {
     customers: [],
     orgPeople: mergeOrgSeed([]),
     deliveryTeamMembers: syncAllTeamsFromOrg(mergeOrgSeed([]), mergeTeamRosters([])),
-    bids: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
+    bids: [], bidSynopsis: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
     protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [],
     bidCustomFields: [], bidCustomFieldValues: [],
   }

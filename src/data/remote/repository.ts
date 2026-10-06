@@ -7,6 +7,7 @@
 // 2026-08-31 local-vs-GCP functional parity audit
 // (docs/superpowers/analysis/2026-08-31-goms-local-vs-gcp-functional-parity-audit.md).
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
+import type { BidSynopsis, BidSynopsisSection, SaveBidSynopsisInput } from '@goms/domain'
 import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
 import { authPromptLink } from './authPromptLink'
@@ -32,6 +33,10 @@ import type {
 } from '@/modules/commercial-calculator/types'
 
 export class RemoteRepository implements Partial<Repository> {
+  getBidSynopsis = (bidId: string, section: BidSynopsisSection): Promise<BidSynopsis | null> =>
+    this.client.bidSynopsis.get.query({ bidId, section }) as Promise<BidSynopsis | null>
+  saveBidSynopsis = (input: SaveBidSynopsisInput): Promise<BidSynopsis> =>
+    this.client.bidSynopsis.save.mutate(input) as Promise<BidSynopsis>
   private client = createTRPCClient<AppRouter>({
     links: [authPromptLink, httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`, headers: getAuthHeaders })],
   })

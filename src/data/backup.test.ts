@@ -8,7 +8,7 @@ function minimalGormsData(): GormsData {
     nodes: [], employees: [], externalIds: [], timeline: [], transfers: [], opportunities: [],
     opportunityStageChanges: [], opportunityCodeSequences: {}, followUps: [], salesPersons: [], salesPostings: [],
     ownershipAssignments: [], mergeAudit: [], customers: [], deliveryTeamMembers: [], orgPeople: [],
-    bids: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
+    bids: [], bidSynopsis: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
     protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [],
     bidCustomFields: [], bidCustomFieldValues: [],
     commercialCalculator: {} as GormsData['commercialCalculator'],

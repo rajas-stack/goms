@@ -77,8 +77,9 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *  v22 Sheet ownership: `bids[].sheet` — which Opportunity sheet a bid lives
  *      in. Every existing bid was a Bid Tracker row, so it is backfilled to
  *      'bidTracker'; a bid that already carries a known sheet keeps it.
+ *  v23 Per-bid editable synopsis documents, initially empty.
  */
-export const SCHEMA_VERSION = 22
+export const SCHEMA_VERSION = 23
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -438,6 +439,7 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   20: toV20,
   21: toV21,
   22: toV22,
+  23: data => ({ ...data, bidSynopsis: Array.isArray(data.bidSynopsis) ? data.bidSynopsis : [] }),
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

@@ -207,7 +207,7 @@ export function GeoMapView({
                     dominantBaseline="central"
                     fontSize={clickable ? 9 : 16}
                     className="pointer-events-none select-none font-sans font-medium fill-ink-900"
-                    style={{ paintOrder: 'stroke', stroke: '#FAFAF7', strokeWidth: 2.5, strokeLinejoin: 'round' }}
+                    style={{ paintOrder: 'stroke', stroke: 'rgb(var(--c-paper))', strokeWidth: 2.5, strokeLinejoin: 'round' }}
                   >
                     {f.name}
                   </text>

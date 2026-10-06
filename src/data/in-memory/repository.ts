@@ -7,6 +7,7 @@ import type {
   SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
 import { uid } from '@/lib/utils'
+import { validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type SaveBidSynopsisInput } from '@goms/domain'
 import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType } from '@/lib/node-types'
 import {
@@ -541,6 +542,8 @@ export interface Repository {
   unarchiveBid(id: string): Promise<Bid>
   deleteBid(id: string): Promise<void>
   listBidActionQueue(): Promise<ActionQueueEntry[]>
+  getBidSynopsis(bidId: string, section: BidSynopsisSection): Promise<BidSynopsis | null>
+  saveBidSynopsis(input: SaveBidSynopsisInput): Promise<BidSynopsis>
 
   listBidMilestones(bidId: string): Promise<BidMilestone[]>
   listAllBidMilestones(): Promise<BidMilestoneWithBid[]>
@@ -654,6 +657,7 @@ class InMemoryRepository implements Repository {
       orgPeople: data.orgPeople ?? [],
       ownershipAssignments: data.ownershipAssignments ?? [],
       bids: data.bids ?? [],
+      bidSynopsis: data.bidSynopsis ?? [],
       bidMilestones: data.bidMilestones ?? [],
       bidCorrigenda: data.bidCorrigenda ?? [],
       bidCorrigendumChanges: data.bidCorrigendumChanges ?? [],
@@ -1839,6 +1843,7 @@ class InMemoryRepository implements Repository {
     if (referenced) throw new Error('This bid has corrigenda, protected values, documents or follow-ups — archive it instead.')
     this.data.bids = this.data.bids.filter((b) => b.id !== id)
     this.data.bidMilestones = this.data.bidMilestones.filter((m) => m.bidId !== id)
+    this.data.bidSynopsis = this.data.bidSynopsis.filter((s) => s.bidId !== id)
     // Mirrors the backend's ON DELETE CASCADE on bid_custom_field_values.
     this.data.bidCustomFieldValues = this.data.bidCustomFieldValues.filter((v) => v.bidId !== id)
   }
@@ -1860,6 +1865,27 @@ class InMemoryRepository implements Repository {
       })
     }
     return out.sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  }
+
+  async getBidSynopsis(bidId: string, section: BidSynopsisSection): Promise<BidSynopsis | null> {
+    this.requireBid(bidId)
+    const record = this.data.bidSynopsis.find(s => s.bidId === bidId && s.section === section)
+    return record ? structuredClone(record) : null
+  }
+
+  async saveBidSynopsis(input: SaveBidSynopsisInput): Promise<BidSynopsis> {
+    const bid = this.requireBid(input.bidId)
+    validateSynopsisDocument(input.document)
+    const existing = this.data.bidSynopsis.find(s => s.bidId === input.bidId && s.section === input.section)
+    if ((existing?.revision ?? 0) !== input.expectedRevision) throw new Error('This section was changed elsewhere. Reload the saved version before saving again.')
+    const updated: BidSynopsis = {
+      bidId: input.bidId, section: input.section, document: structuredClone(input.document),
+      revision: input.expectedRevision + 1, updatedAt: new Date().toISOString(), updatedBy: null,
+    }
+    if (existing) Object.assign(existing, updated)
+    else this.data.bidSynopsis.push(updated)
+    bid.updatedAt = updated.updatedAt
+    return structuredClone(updated)
   }
 
   async listAllBidMilestones(): Promise<BidMilestoneWithBid[]> {
@@ -2985,6 +3011,9 @@ class InMemoryRepository implements Repository {
  *  snapshot after each of these resolves, so a new mutating method MUST be
  *  listed here or its effects won't survive a reload. */
 const MUTATOR_KEYS = [
+  'saveBidSynopsis',
+  'createDeliveryTeamMember', 'updateDeliveryTeamMember', 'setDeliveryTeamMemberStatus', 'deleteDeliveryTeamMember',
+  'createOrgPerson', 'updateOrgPerson', 'deleteOrgPerson',
   'createNode', 'updateNode', 'setNodeStatus', 'deleteNode', 'moveNode', 'duplicateNode',
   'reorderNode', 'importChildren', 'importEmployees',
   'createEmployee', 'updateEmployee', 'setManager', 'deleteEmployee', 'mergeEmployees',
@@ -3010,6 +3039,8 @@ const MUTATOR_KEYS = [
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
  *  "classified as a read" apart from "nobody classified it". */
 const READER_KEYS = [
+  'getBidSynopsis',
+  'listDeliveryTeamMembers', 'listOrgPeople',
   'listStates', 'getState', 'getNode', 'listChildren', 'listOrgRoots', 'listDepartments', 'listPostingNodes',
   'breadcrumb', 'childCount', 'geoRoot', 'childCounts',
   'listEmployeesUnder', 'listEmployeesDirect', 'listEmployeesByState', 'listAllEmployees',
