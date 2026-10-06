@@ -16,7 +16,7 @@ Copied from the spec; every task inherits them.
 
 - Roles are exactly: `sales`, `presales`, `bid`, `legal`, `cxo`, `delivery`, `it`, `finance`. Levels are exactly `N`, `R`, `P` (explicit field-level edit), `W`.
 - `RBAC_MODE` is `off` (default) | `shadow` | `enforce`, evaluated **only when `AUTH_ENFORCEMENT_ENABLED` is `"true"`**. `off` is an exact no-op: behavior, errors and the 18 currently-public queries are unchanged. `AUTH_ENFORCEMENT_ENABLED` and `READ_AUTH_ENFORCEMENT_ENABLED` are already `"true"` in dev and prod, so they must **not** be used to gate RBAC.
-- Role derivation is only: Pre-sales ← org dept `Pre-Sales`; Bid ← `Bid Management`; Legal ← `Legal`; CXO ← `Leadership`; Sales ← `sales_persons` (`status <> 'inactive'`, match on `lower(official_email)`). **Finance, IT and Delivery are override-only.** No other label (Business Units, Technology, Finance dept, Chairman's Office) maps to a role. CXO is additive and never removes functional roles.
+- Role derivation is only: Pre-sales ← org dept `Pre-Sales`; Bid ← `Bid Management`; Legal ← `Legal`; CXO ← `Leadership`; Sales ← `sales_persons` (`status IN ('active','onLeave')` — `resigned` and `inactive` do not derive Sales; match on `lower(official_email)`). **Finance, IT and Delivery are override-only.** No other label (Business Units, Technology, Finance dept, Chairman's Office) maps to a role. CXO is additive and never removes functional roles.
 - Max level across effective roles; union of permitted fields and scopes. Rows outside every write scope fall back to Read. There is no row-level read scoping.
 - A procedure has one authorization requirement normally; a cross-module procedure declares several and **every one must pass**. Fail closed: an unregistered procedure, or a patch key with no atom, is denied.
 - Solution Lead is read-only for every role in v1: `ownership.assign` / `ownership.end` on `role='solutionLead'` are denied to everyone, including `W` roles.
@@ -48,7 +48,7 @@ Planning against the real code exposed gaps the approved spec does not cover. **
 | A3 | **Saved views** are in no module. | Personal views: allowed for anyone who can read rows. Global views: need write on `bid.columns`. (Task 8) | Pick another owner module for global views. |
 | A4 | **Cross-module read lookups.** Search spans modules; owner badges use `ownership.resolve*`; owner/Geo-BU columns need salesperson names, but Legal/Delivery/Finance are `N` on Sales Team. | Search results are filtered per category→module. `ownership.resolve*` read passes if the user can read ownership **or** any row/contact/department module. `sales.listPersons/getPerson/currentPostings` pass for row readers but return a **redacted** projection (no personal email, mobile, notes) to roles without Sales Team read. (Tasks 9, 10) | Those roles see `FORBIDDEN` / blank names on rows. |
 | A5 | **Analytics modules have no server procedure** (the numbers are computed in the browser from data the user may legitimately read), except `search.relationshipAnalytics`. `an.financial` cannot be server-enforced without masking opportunity value (a spec non-goal). | `an.operational` enforced on `search.relationshipAnalytics`; `an.*` otherwise hide UI only. (Tasks 9, 16) | Accept UI-only, or add opportunity-value masking as new scope. |
-| A6 | **`resigned` Sales status.** `sales_persons.status` allows `active, onLeave, resigned, inactive`; the spec says `<> 'inactive'`, so `resigned` still derives Sales. | Implement as specified. (Task 5) | Change the SQL to `IN ('active','onLeave')`. |
+| A6 | **`resigned` Sales status.** `sales_persons.status` allows `active, onLeave, resigned, inactive`; the spec said `<> 'inactive'`, so a `resigned` salesperson would keep Sales. | **Changed by the user 2026-10-06 (not the original default):** Sales derives only from `status IN ('active','onLeave')`; `resigned` and `inactive` do not. The spec §3.2 is amended to match. Shared constant `SALES_ROLE_STATUSES`. (Tasks 1, 5, 14) | n/a — decided. |
 
 Informational consequences of the approved rules (no action needed, but expect them):
 
@@ -107,7 +107,7 @@ Informational consequences of the approved rules (no action needed, but expect t
 - Modify: `vite.config.ts:16` (let the root vitest run the domain tests)
 
 **Interfaces:**
-- Produces: `ROLES`, `Role`, `Level`, `Scope`, `Grant`, `RbacMode`, `ModuleKey`, `PolicyModuleKey`, `MODULES`, `FIELD_SETS`, `GRANTS`, `grantFor(module, role)`, `validatePolicy(): string[]`, `DERIVED_ROLE_DEPARTMENTS`, `W_ONLY_ATOMS`, `EXCLUSIVE_ATOMS`. Later tasks import all of these from `@goms/domain`.
+- Produces: `ROLES`, `Role`, `Level`, `Scope`, `Grant`, `RbacMode`, `ModuleKey`, `PolicyModuleKey`, `MODULES`, `FIELD_SETS`, `GRANTS`, `grantFor(module, role)`, `validatePolicy(): string[]`, `DERIVED_ROLE_DEPARTMENTS`, `SALES_ROLE_STATUSES`, `W_ONLY_ATOMS`, `EXCLUSIVE_ATOMS`. Later tasks import all of these from `@goms/domain`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -115,7 +115,7 @@ Create `packages/domain/src/rbac/policy.test.ts`:
 
 ```ts
 import { describe, expect, it } from 'vitest'
-import { DERIVED_ROLE_DEPARTMENTS, FIELD_SETS, GRANTS, MODULES, grantFor, validatePolicy } from './policy.js'
+import { DERIVED_ROLE_DEPARTMENTS, FIELD_SETS, GRANTS, MODULES, SALES_ROLE_STATUSES, grantFor, validatePolicy } from './policy.js'
 import { EXCLUSIVE_ATOMS, W_ONLY_ATOMS } from './atoms.js'
 import { ROLES } from './types.js'
 
@@ -156,6 +156,10 @@ describe('RBAC policy matrix', () => {
 
   it('derives roles only from the four decided departments; Finance, IT and Delivery are override-only', () => {
     expect(DERIVED_ROLE_DEPARTMENTS).toEqual({ presales: 'Pre-Sales', bid: 'Bid Management', legal: 'Legal', cxo: 'Leadership' })
+  })
+
+  it('derives Sales only from active and onLeave roster entries (plan gap A6): resigned and inactive do not count', () => {
+    expect([...SALES_ROLE_STATUSES]).toEqual(['active', 'onLeave'])
   })
 
   it('keeps W-only atoms out of every partial set and pins the exclusive-atom list', () => {
@@ -335,6 +339,9 @@ export const FIELD_SETS: Record<string, readonly string[]> = {
 export const DERIVED_ROLE_DEPARTMENTS = {
   presales: 'Pre-Sales', bid: 'Bid Management', legal: 'Legal', cxo: 'Leadership',
 } as const
+
+/** `sales_persons.status` values that derive the Sales role (plan gap A6). `resigned` and `inactive` do not. */
+export const SALES_ROLE_STATUSES = ['active', 'onLeave'] as const
 
 type Row = readonly [string, string, string, string, string, string, string, string]
 
@@ -1222,7 +1229,7 @@ git commit -m "feat(rbac): role-override table, created_by columns and email ind
 - Create: `apps/api/src/auth/rbac/mode.test.ts`, `apps/api/src/auth/rbac/userFacts.test.ts`
 
 **Interfaces:**
-- Consumes: `DERIVED_ROLE_DEPARTMENTS`, `ROLES`, `Role`, `UserFacts`, `RbacMode` from `@goms/domain`; `isAllowListed` from `../identity.js`.
+- Consumes: `DERIVED_ROLE_DEPARTMENTS`, `SALES_ROLE_STATUSES`, `ROLES`, `Role`, `UserFacts`, `RbacMode` from `@goms/domain`; `isAllowListed` from `../identity.js`.
 - Produces:
   - `rbacMode(): RbacMode`
   - `normalizeEmail(email: string): string`
@@ -1422,11 +1429,21 @@ describe('Sales role', () => {
     expect(facts.roles).toEqual(['sales'])
     expect(facts.salesPersonId).toBe(id)
   })
-  it('is withheld for inactive roster entries (resigned/onLeave still count — plan gap A6)', async () => {
+  it('derives Sales only for active and onLeave roster entries; resigned and inactive do not (plan gap A6)', async () => {
+    await addSalesPerson('active', 'active')
+    await addSalesPerson('onleave', 'onLeave')
     await addSalesPerson('inactive', 'inactive')
     await addSalesPerson('resigned', 'resigned')
+    expect((await loadUserFacts(rbacEmail('active'))).roles).toEqual(['sales'])
+    expect((await loadUserFacts(rbacEmail('onleave'))).roles).toEqual(['sales'])
     expect((await loadUserFacts(rbacEmail('inactive'))).roles).toEqual([])
-    expect((await loadUserFacts(rbacEmail('resigned'))).roles).toEqual(['sales'])
+    expect((await loadUserFacts(rbacEmail('resigned'))).roles).toEqual([])
+    expect((await loadUserFacts(rbacEmail('resigned'))).salesPersonId).toBeNull()
+  })
+  it('a resigned salesperson can still be granted Sales explicitly by an override', async () => {
+    await addSalesPerson('rg', 'resigned')
+    await setRole('rg', 'sales')
+    expect((await loadUserFacts(rbacEmail('rg'))).roles).toEqual(['sales'])
   })
   it('an override-granted Sales role without a roster row has no salesPersonId (Review Focus 3)', async () => {
     await setRole('norow', 'sales')
@@ -1512,7 +1529,7 @@ export function rbacMode(): RbacMode {
 `apps/api/src/auth/rbac/userFacts.ts`:
 
 ```ts
-import { DERIVED_ROLE_DEPARTMENTS, ROLES, type Role, type UserFacts } from '@goms/domain'
+import { DERIVED_ROLE_DEPARTMENTS, ROLES, SALES_ROLE_STATUSES, type Role, type UserFacts } from '@goms/domain'
 import { pool } from '../../db.js'
 import { isAllowListed } from '../identity.js'
 
@@ -1544,7 +1561,7 @@ export async function loadUserFacts(rawEmail: string): Promise<UserFacts> {
     }
 
     const sales = await pool.query(
-      `SELECT id FROM sales_persons WHERE status <> 'inactive' AND lower(btrim(official_email)) = $1 LIMIT 1`, [email],
+      `SELECT id FROM sales_persons WHERE status = ANY($2::text[]) AND lower(btrim(official_email)) = $1 LIMIT 1`, [email, [...SALES_ROLE_STATUSES]],
     )
     if (sales.rows[0]) { roles.add('sales'); salesPersonId = sales.rows[0].id }
 
@@ -4169,7 +4186,7 @@ git commit -m "feat(rbac): route the 17 formerly-public queries through rbacRead
 - Create: `apps/api/src/auth/rbac/access.test.ts`
 
 **Interfaces:**
-- Consumes: Task 5 `loadUserFacts`, `clearUserFactsCache`; Task 1 `DERIVED_ROLE_DEPARTMENTS`, `ROLES`.
+- Consumes: Task 5 `loadUserFacts`, `clearUserFactsCache`; Task 1 `DERIVED_ROLE_DEPARTMENTS`, `SALES_ROLE_STATUSES`, `ROLES`.
 - Produces:
   - `combineRoles(derived: Iterable<Role>, overrides: {role: Role; effect: 'grant'|'revoke'}[], adminAllowListed: boolean): Role[]` (in `userFacts.ts`)
   - `auth.me` → `MyAccess = { mode: RbacMode; email: string | null; roles: Role[]; facts: { salesPersonId: string | null; teamMemberIds: UserFacts['teamMemberIds'] } | null }`
@@ -4425,7 +4442,7 @@ export const authRouter = router({
 `apps/api/src/routers/access.ts`:
 
 ```ts
-import { DERIVED_ROLE_DEPARTMENTS, ROLES, type Role } from '@goms/domain'
+import { DERIVED_ROLE_DEPARTMENTS, ROLES, SALES_ROLE_STATUSES, type Role } from '@goms/domain'
 import { z } from 'zod'
 import { combineRoles, clearUserFactsCache, normalizeEmail } from '../auth/rbac/userFacts.js'
 import { isAllowListed } from '../auth/identity.js'
@@ -4511,7 +4528,7 @@ export const accessRouter = router({
       rows.push(make('org', `org:${p.id}`, p.name, p.email ?? '', derived))
     }
     for (const s of sales.rows) {
-      rows.push(make('sales', `sales:${s.id}`, s.name, s.official_email ?? '', s.status !== 'inactive' ? ['sales'] : []))
+      rows.push(make('sales', `sales:${s.id}`, s.name, s.official_email ?? '', (SALES_ROLE_STATUSES as readonly string[]).includes(s.status) ? ['sales'] : []))
     }
     const known = new Set(rows.map((r) => r.email).filter(Boolean))
     for (const s of seen.rows) {

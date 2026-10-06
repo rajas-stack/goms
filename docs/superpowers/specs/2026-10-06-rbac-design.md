@@ -38,7 +38,7 @@ Out of scope (§13): row-level *read* scoping, a DB-editable matrix, RBAC for Ad
 | Bid | same, department `Bid Management` |
 | Legal | same, department `Legal` |
 | CXO | same, department `Leadership` (+ overrides; the CEO, CFO and CE&TO are **explicit grants**, they are not in Leadership) |
-| Sales | `sales_persons.status <> 'inactive'` AND `lower(official_email)` = login (`sales_persons` is outside `org_people`) |
+| Sales | `sales_persons.status IN ('active','onLeave')` AND `lower(official_email)` = login (`sales_persons` is outside `org_people`). A `resigned` or `inactive` salesperson does **not** derive Sales |
 | Finance | **override-only** |
 | IT | **override-only** |
 | Delivery | **override-only** — explicitly *not* derived from Business Units |
