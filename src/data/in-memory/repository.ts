@@ -6,6 +6,7 @@ import type {
   RelationshipQuality, RelationshipStatus,
   SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
+import type { MyAccess } from '../../../apps/api/src/routers/auth'
 import { uid } from '@/lib/utils'
 import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType } from '@/lib/node-types'
@@ -285,6 +286,8 @@ export interface CreateFollowUpInput {
 /** All persistence flows through this interface. The in-memory implementation
  *  below can be replaced by a Supabase-backed one with no UI changes. */
 export interface Repository {
+  /** The caller's roles and roster facts (RBAC). The local store has no server: RBAC is off. */
+  getMyAccess(): Promise<MyAccess>
   listStates(): Promise<StateSummary[]>
   getState(code: number): Promise<HierNode | undefined>
   getNode(id: string): Promise<HierNode | undefined>
@@ -626,6 +629,8 @@ function parseSubmissionDate(raw: string | null | undefined): string | null {
 }
 
 class InMemoryRepository implements Repository {
+  async getMyAccess(): Promise<MyAccess> { return { mode: 'off', email: null, roles: [], facts: null } }
+
   private data: GormsData = buildSeed()
 
   constructor() {
@@ -3028,7 +3033,7 @@ const READER_KEYS = [
   'listCustomers', 'getCustomer',
   'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
   'listDocuments', 'listDocumentCitations', 'getDocumentDownloadUrl', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
-  'listDeliveryTeamMembers', 'listOrgPeople',
+  'listDeliveryTeamMembers', 'listOrgPeople', 'getMyAccess',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the

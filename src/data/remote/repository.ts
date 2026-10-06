@@ -9,6 +9,7 @@
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
+import type { MyAccess } from '../../../apps/api/src/routers/auth'
 import { authPromptLink } from './authPromptLink'
 import type { AppRouter } from '../../../apps/api/src/index'
 import type {
@@ -36,6 +37,8 @@ export class RemoteRepository implements Partial<Repository> {
   private client = createTRPCClient<AppRouter>({
     links: [authPromptLink, httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`, headers: getAuthHeaders })],
   })
+
+  getMyAccess = (): Promise<MyAccess> => this.client.auth.me.query()
 
   listCustomers = (): Promise<Customer[]> => this.client.customers.list.query()
   getCustomer = (id: string): Promise<Customer | null> => this.client.customers.get.query({ id })
