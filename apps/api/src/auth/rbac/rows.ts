@@ -79,11 +79,14 @@ export async function rowForFollowUp(id: unknown): Promise<{ entityType: string;
   if (!isUuid(id)) return null
   const row = (await pool.query(`SELECT entity_type, entity_id, assignee_id, created_by FROM follow_ups WHERE id=$1`, [id])).rows[0]
   if (!row) return null
-  const owners = row.entity_type === 'contact' ? await ownerIds([{ type: 'contact', id: row.entity_id }]) : []
+  const createdBy = lower(row.created_by)
+  // Spec §9.1: a recorded creator is the whole definition of "own"; assignee / contact owner apply only to legacy rows.
+  const legacy = createdBy === null
+  const owners = legacy && row.entity_type === 'contact' ? await ownerIds([{ type: 'contact', id: row.entity_id }]) : []
   return {
     entityType: row.entity_type,
     entityId: row.entity_id,
-    facts: { salesOwnerIds: [...owners, ...(row.assignee_id ? [row.assignee_id] : [])], createdBy: lower(row.created_by), assigned: NO_ASSIGNED },
+    facts: { salesOwnerIds: [...owners, ...(legacy && row.assignee_id ? [row.assignee_id] : [])], createdBy, assigned: NO_ASSIGNED },
   }
 }
 
@@ -91,10 +94,13 @@ export async function rowForTimelineEvent(id: unknown): Promise<ScopeFacts | nul
   if (!isUuid(id)) return null
   const row = (await pool.query(`SELECT employee_id, attendees, created_by FROM timeline_events WHERE id=$1`, [id])).rows[0]
   if (!row) return null
+  const createdBy = lower(row.created_by)
+  // Spec §9.1: a recorded creator is the whole definition of "own"; attendee / contact owner apply only to legacy rows.
+  if (createdBy !== null) return { salesOwnerIds: [], createdBy, assigned: NO_ASSIGNED }
   const attendees: unknown[] = Array.isArray(row.attendees) ? row.attendees : []
   const attendeeIds = attendees.map((a) => (typeof a === 'object' && a !== null ? (a as any).salesPersonId : null)).filter(Boolean) as string[]
   const owners = await ownerIds([{ type: 'contact', id: row.employee_id }])
-  return { salesOwnerIds: [...new Set([...attendeeIds, ...owners])], createdBy: lower(row.created_by), assigned: NO_ASSIGNED }
+  return { salesOwnerIds: [...new Set([...attendeeIds, ...owners])], createdBy, assigned: NO_ASSIGNED }
 }
 
 export async function rowForDocument(id: unknown): Promise<ScopeFacts | null> {

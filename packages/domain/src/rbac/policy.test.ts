@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  DERIVED_ROLE_DEPARTMENTS, FIELD_SETS, GRANTS, MODULES, SALES_ROLE_STATUSES, SYSTEM_ADMIN_VIEW_ONLY_MODULES, grantFor, validatePolicy,
+  DERIVED_ROLE_DEPARTMENTS, FIELD_SETS, GRANTS, MODULES, SALES_ROLE_STATUSES, grantFor, validatePolicy,
 } from './policy.js'
-import { EXCLUSIVE_ATOMS, FROZEN_ATOMS, W_ONLY_ATOMS } from './atoms.js'
+import { EXCLUSIVE_ATOMS, W_ONLY_ATOMS } from './atoms.js'
 import { FUNCTIONAL_ROLES, ROLES } from './types.js'
 
 describe('RBAC policy matrix', () => {
@@ -54,15 +54,10 @@ describe('RBAC policy matrix', () => {
     expect(Object.keys(DERIVED_ROLE_DEPARTMENTS)).not.toContain('system_admin')
   })
 
-  it('gives System Admin W·all on every module, with create/delete everywhere except the three view-only modules', () => {
+  it('gives System Admin W·all on every module with create AND delete on every module — nothing is carved out', () => {
     for (const module of Object.keys(GRANTS) as (keyof typeof GRANTS)[]) {
-      const g = grantFor(module, 'system_admin')
-      expect(g, module).toMatchObject({ level: 'W', scope: 'all', sets: [] })
-      const viewOnly = (SYSTEM_ADMIN_VIEW_ONLY_MODULES as readonly string[]).includes(module)
-      expect(g.create, `${module} create`).toBe(!viewOnly)
-      expect(g.delete, `${module} delete`).toBe(!viewOnly)
+      expect(grantFor(module, 'system_admin'), module).toEqual({ level: 'W', scope: 'all', sets: [], create: true, delete: true })
     }
-    expect([...SYSTEM_ADMIN_VIEW_ONLY_MODULES].sort()).toEqual(['admin.audit', 'an.financial', 'an.operational'])
   })
 
   it('System Admin can create and delete wherever any functional role can (it is a strict superset)', () => {
@@ -75,12 +70,9 @@ describe('RBAC policy matrix', () => {
     }
   })
 
-  it('freezes the Solution Lead atom: exclusive, in no partial set, and denied even to System Admin', () => {
-    expect([...FROZEN_ATOMS]).toEqual(['ownership.solutionLead'])
-    for (const atom of FROZEN_ATOMS) {
-      expect(EXCLUSIVE_ATOMS.has(atom)).toBe(true)
-      for (const atoms of Object.values(FIELD_SETS)) expect(atoms).not.toContain(atom)
-    }
+  it('keeps Solution Lead exclusive and in no partial set, so only System Admin can ever write it', () => {
+    expect(EXCLUSIVE_ATOMS.has('ownership.solutionLead')).toBe(true)
+    for (const atoms of Object.values(FIELD_SETS)) expect(atoms).not.toContain('ownership.solutionLead')
   })
 
   it('keeps W-only atoms out of every partial set and pins the exclusive-atom list', () => {

@@ -37,7 +37,7 @@ describe('usePermissions', () => {
     expect(result.current.level('com.approvalMatrix')).toBe('N')
     expect(result.current.canReadAtom('sku.costs')).toBe(false)
   })
-  it('treats a System Admin as unrestricted: W everywhere, every atom editable except the frozen Solution Lead, masked fields readable', () => {
+  it('treats a System Admin as unrestricted: W everywhere, every atom editable including Solution Lead, create/delete everywhere, masked fields readable', () => {
     const { result } = renderHook(() => usePermissions(), { wrapper: wrap({ mode: 'enforce', email: 'root@amnex.com', roles: ['system_admin'], facts }) })
     const anyRow = { salesOwnerIds: [], createdBy: null, assigned: { presales: null, legal: null, bid: null } }
     expect(result.current.level('com.skus')).toBe('W')
@@ -45,7 +45,9 @@ describe('usePermissions', () => {
     expect(result.current.can('com.skus', 'delete')).toBe(true)
     expect(result.current.canEdit('com.skus', 'sku.costs')).toBe(true)
     expect(result.current.canEdit('opp.bidTracker', 'bid.stage', anyRow)).toBe(true)
-    expect(result.current.canEdit('am.ownership', 'ownership.solutionLead', anyRow)).toBe(false)
+    expect(result.current.canEdit('am.ownership', 'ownership.solutionLead', anyRow)).toBe(true)
+    expect(result.current.can('admin.audit', 'delete')).toBe(true)
+    expect(result.current.can('an.financial', 'create')).toBe(true)
     expect(result.current.canReadAtom('sku.costs')).toBe(true)
   })
   it('mayWrite says whether the role could edit the module on SOME row (for screens that do not know the row)', () => {

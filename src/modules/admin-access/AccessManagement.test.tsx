@@ -60,6 +60,15 @@ describe('AccessManagement', () => {
     expect(within(row).getByText(/system admin \(protected\)/i)).toBeInTheDocument()
     expect(within(row).queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
   })
+  it('shows an ambiguous team member and a duplicate email as readable warnings', async () => {
+    vi.mocked(repository.getAccessReadiness).mockResolvedValueOnce([
+      { key: 'team:dup@amnex.com', kind: 'team', name: 'Pre-sales twin', email: 'dup@amnex.com', derivedRoles: [], overrides: [], effectiveRoles: [], warnings: ['no-role', 'duplicate-email', 'ambiguous-team-member'], lastSeenAt: null },
+    ] as any)
+    renderAs(['it'])
+    const row = (await screen.findByText('Pre-sales twin')).closest('tr')!
+    expect(within(row).getByText('Ambiguous team member')).toBeInTheDocument()
+    expect(within(row).getByText('Duplicate email')).toBeInTheDocument()
+  })
   it('does not offer System Admin as a role to grant', async () => {
     renderAs(['it'])
     await screen.findByText('Denish')

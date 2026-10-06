@@ -1,7 +1,7 @@
 import { DERIVED_ROLE_DEPARTMENTS, FUNCTIONAL_ROLES, SALES_ROLE_STATUSES, type Role } from '@goms/domain'
 import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
-import { combineRoles, clearUserFactsCache, normalizeEmail } from '../auth/rbac/userFacts.js'
+import { bindTeamMembers, combineRoles, clearUserFactsCache, normalizeEmail, type TeamCandidate } from '../auth/rbac/userFacts.js'
 import { isAllowListed, parseAllowList } from '../auth/identity.js'
 import { pool } from '../db.js'
 import { accessProcedure, router } from '../trpc.js'
@@ -13,7 +13,7 @@ const emailSchema = z.string().trim().toLowerCase().email().max(254)
 
 export interface ReadinessRow {
   key: string
-  kind: 'org' | 'sales' | 'seen' | 'admin'
+  kind: 'org' | 'sales' | 'seen' | 'admin' | 'team'
   name: string
   email: string
   derivedRoles: Role[]
@@ -21,7 +21,7 @@ export interface ReadinessRow {
   effectiveRoles: Role[]
   /** An account on the protected admin allow-list: unrestricted, and not editable here (spec §3.4). */
   systemAdmin: boolean
-  warnings: ('no-email' | 'no-role' | 'duplicate-email')[]
+  warnings: ('no-email' | 'no-role' | 'duplicate-email' | 'ambiguous-team-member')[]
   lastSeenAt: string | null
 }
 
@@ -60,11 +60,15 @@ export const accessRouter = router({
 
   /** Per person: derived roles, overrides, effective roles, and what needs fixing before RBAC can be enforced. */
   readiness: accessProcedure.query(async (): Promise<ReadinessRow[]> => {
-    const [org, sales, overrides, seen] = await Promise.all([
+    const [org, sales, overrides, seen, teamMembers] = await Promise.all([
       pool.query(`SELECT id, name, email, departments, status FROM org_people ORDER BY name`),
       pool.query(`SELECT id, name, official_email, status FROM sales_persons ORDER BY name`),
       pool.query(`SELECT * FROM user_role_overrides`),
       pool.query(`SELECT email, role_count, last_seen_at FROM rbac_seen_users`),
+      pool.query(
+        `SELECT m.id, m.team, m.name, lower(btrim(m.email)) AS own_email, lower(btrim(p.email)) AS org_email
+           FROM delivery_team_members m LEFT JOIN org_people p ON p.id = m.org_person_id WHERE m.status = 'active'`,
+      ),
     ])
     const adminList = process.env.ADMIN_ALLOWED_EMAILS
     const overridesOf = (email: string) => overrides.rows.filter((o) => o.email === email)
@@ -88,14 +92,29 @@ export const accessRouter = router({
       }
     }
 
+    // Mirrors loadUserFacts: an address shared by more than one ACTIVE org person derives no role for anyone.
+    const activeOrgByEmail = new Map<string, number>()
     for (const p of org.rows) {
-      const derived = p.status === 'active'
+      const email = normalizeEmail(p.email ?? '')
+      if (email && p.status === 'active') activeOrgByEmail.set(email, (activeOrgByEmail.get(email) ?? 0) + 1)
+    }
+    const orgAmbiguous = (email: string) => (activeOrgByEmail.get(email) ?? 0) > 1
+    for (const p of org.rows) {
+      const derived = p.status === 'active' && !orgAmbiguous(normalizeEmail(p.email ?? ''))
         ? (Object.entries(DERIVED_ROLE_DEPARTMENTS).filter(([, d]) => (p.departments as string[]).includes(d)).map(([r]) => r as Role))
         : []
       rows.push(make('org', `org:${p.id}`, p.name, p.email ?? '', derived))
     }
+    // Mirrors loadUserFacts: an address shared by more than one eligible roster row derives no Sales role for anyone.
+    const eligible = (s: { status: string }) => (SALES_ROLE_STATUSES as readonly string[]).includes(s.status)
+    const eligibleByEmail = new Map<string, number>()
     for (const s of sales.rows) {
-      rows.push(make('sales', `sales:${s.id}`, s.name, s.official_email ?? '', (SALES_ROLE_STATUSES as readonly string[]).includes(s.status) ? ['sales'] : []))
+      const email = normalizeEmail(s.official_email ?? '')
+      if (email && eligible(s)) eligibleByEmail.set(email, (eligibleByEmail.get(email) ?? 0) + 1)
+    }
+    for (const s of sales.rows) {
+      const ambiguous = (eligibleByEmail.get(normalizeEmail(s.official_email ?? '')) ?? 0) > 1
+      rows.push(make('sales', `sales:${s.id}`, s.name, s.official_email ?? '', eligible(s) && !ambiguous ? ['sales'] : []))
     }
     const known = new Set(rows.map((r) => r.email).filter(Boolean))
     for (const s of seen.rows) {
@@ -106,6 +125,24 @@ export const accessRouter = router({
     const listed = new Set(rows.map((r) => r.email).filter(Boolean))
     for (const email of parseAllowList(adminList)) {
       if (!listed.has(email)) rows.push(make('admin', `admin:${email}`, email, email, []))
+    }
+
+    // Delivery-team ambiguity (same rule as loadUserFacts): flagged on whoever holds that email, or listed on its own.
+    const memberEmails = new Set<string>()
+    for (const m of teamMembers.rows) for (const e of [m.own_email, m.org_email]) if (e) memberEmails.add(e)
+    const ambiguousTeamEmails = new Map<string, string>()
+    for (const email of memberEmails) {
+      const candidates: TeamCandidate[] = teamMembers.rows
+        .filter((m) => m.own_email === email || m.org_email === email)
+        .map((m) => ({ id: m.id as string, team: m.team as string, direct: m.own_email === email }))
+      if (bindTeamMembers(candidates, orgAmbiguous(email)).ambiguousTeams.length > 0) {
+        ambiguousTeamEmails.set(email, teamMembers.rows.find((m) => m.own_email === email)?.name ?? email)
+      }
+    }
+    for (const [email, name] of ambiguousTeamEmails) {
+      const holders = rows.filter((r) => r.email === email)
+      if (holders.length === 0) rows.push(make('team', `team:${email}`, name, email, []))
+      for (const r of rows.filter((x) => x.email === email)) r.warnings.push('ambiguous-team-member')
     }
 
     const counts = new Map<string, number>()

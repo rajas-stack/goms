@@ -1,5 +1,5 @@
 import {
-  accessFor, maskAuditEntry, maskSkuRow, redactSalesPerson, type PolicyModuleKey, type UserFacts,
+  accessFor, maskAuditEntry, ownEntry, maskSkuRow, redactSalesPerson, type PolicyModuleKey, type UserFacts,
 } from '@goms/domain'
 import { ROW_MODULES } from './helpers.js'
 import type { Check, Requirement } from './types.js'
@@ -16,7 +16,7 @@ export const SEARCH_CATEGORY_MODULES: Record<string, PolicyModuleKey[]> = {
 /** Removes search results (and related-record groups) whose category the caller cannot read. An unknown category is hidden. */
 export function filterSearchResults(data: unknown, user: UserFacts): unknown {
   const visible = (category: unknown) => {
-    const modules = typeof category === 'string' ? SEARCH_CATEGORY_MODULES[category] : undefined
+    const modules = ownEntry(SEARCH_CATEGORY_MODULES, category)
     return !!modules && modules.some((m) => canRead(user, m))
   }
   const walk = (value: unknown): unknown => {
@@ -47,7 +47,7 @@ const AUDIT_ENTITY_MODULES: Record<string, PolicyModuleKey[]> = {
 
 /** A scoped audit query follows the entity's module; the global feed (no entity type, or an unknown one) needs `admin.audit`. */
 export const auditReadRequirement: Requirement = (raw): Check => {
-  const modules = typeof raw?.entityType === 'string' ? AUDIT_ENTITY_MODULES[raw.entityType] : undefined
+  const modules = ownEntry(AUDIT_ENTITY_MODULES, raw?.entityType)
   return modules ? { module: modules[0], action: 'read', anyOf: modules } : { module: 'admin.audit', action: 'read' }
 }
 

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { appRouter } from '../../../index.js'
 import { pool } from '../../../db.js'
 import {
-  addSalesPerson, addTeamMember, assignOwner, cleanupRbacFixtures, makeBid, rbacEmail, setRole,
+  addSalesPerson, addTeamMember, assignOwner, cleanupRbacFixtures, makeBid, makeSystemAdmin, rbacEmail, setRole,
 } from '../../../testHelpers/rbacFixtures.js'
 import { decide } from '../decide.js'
 import { loadUserFacts } from '../userFacts.js'
@@ -190,13 +190,17 @@ describe('ownership', () => {
   const assign = (entityType: string, entityId: string | null, role?: string) =>
     ({ entityType, entityId, salesPersonId: randomUUID(), role, startDate: '2026-01-01' })
 
-  it('Solution Lead is read-only for EVERY role, including W roles', async () => {
-    for (const label of ['cxo', 'sales', 'bid', 'it']) {
+  it('Solution Lead is read-only for EVERY ordinary role, including W roles — only System Admin can write it', async () => {
+    for (const label of ['cxo', 'sales', 'bid', 'it', 'finance', 'delivery', 'pre', 'legal']) {
       expect(await denied(label, 'ownership.assign', assign('bid', own.bidId, 'solutionLead'))).toBe(true)
     }
     await assignOwner('bid', own.bidId!, salesId, 'solutionLead')
     const { id } = (await pool.query(`SELECT id FROM ownership_assignments WHERE entity_id=$1 AND role='solutionLead'`, [own.bidId])).rows[0]
     expect(await denied('cxo', 'ownership.end', { id, endDate: '2026-06-01' })).toBe(true)
+    makeSystemAdmin('root')
+    expect(await denied('root', 'ownership.assign', assign('bid', own.bidId, 'solutionLead'))).toBe(false)
+    expect(await denied('root', 'ownership.assign', assign('bid', other.bidId, 'solutionLead'))).toBe(false)
+    expect(await denied('root', 'ownership.end', { id, endDate: '2026-06-01' })).toBe(false)
   })
   it('Bid may assign the bid-level owner, but not an opportunity owner and not a delegate', async () => {
     expect(await denied('bid', 'ownership.assign', assign('bid', own.bidId))).toBe(false)

@@ -1,5 +1,5 @@
 import {
-  BID_PATCH_ATOMS, IGNORED_PATCH_KEYS, OPPORTUNITY_PATCH_ATOMS, isOwnedSheet, type ScopeFacts,
+  BID_PATCH_ATOMS, IGNORED_PATCH_KEYS, OPPORTUNITY_PATCH_ATOMS, isOwnedSheet, ownEntry, type ScopeFacts,
 } from '@goms/domain'
 import { pendingUploads } from '../../../lib/pendingUploads.js'
 import { DenyCall } from '../denial.js'
@@ -15,9 +15,9 @@ import type { Check, PolicyEntry, Requirement } from './types.js'
 const same = (paths: string[], ...requirements: Requirement[]): Record<string, PolicyEntry> =>
   Object.fromEntries(paths.map((p) => [p, { requirements }]))
 
-const bidPatch = (raw: any) => patchAtoms(raw?.patch, (k) => BID_PATCH_ATOMS[k] ?? null)
+const bidPatch = (raw: any) => patchAtoms(raw?.patch, (k) => ownEntry(BID_PATCH_ATOMS, k) ?? null)
 const oppPatch = (raw: any) =>
-  patchAtoms(raw?.patch, (k) => (IGNORED_PATCH_KEYS.has(k) ? undefined : OPPORTUNITY_PATCH_ATOMS[k] ?? null))
+  patchAtoms(raw?.patch, (k) => (IGNORED_PATCH_KEYS.has(k) ? undefined : ownEntry(OPPORTUNITY_PATCH_ATOMS, k) ?? null))
 
 // ---- bids ---------------------------------------------------------------------------------------------------
 
@@ -114,9 +114,9 @@ const followUpWrite = (action: 'update' | 'delete'): Requirement => async (raw) 
   return { module: 'am.followUps', action, row: followUp?.facts }
 }
 
-// ---- ownership: Solution Lead is frozen (read-only for every role in v1) ---------------------------------------------
+// ---- ownership: Solution Lead is read-only for every ordinary role in v1; only System Admin writes it ---------------
 
-/** Atoms for an ownership write. `ownership.solutionLead` is held by nobody, so it can never pass. */
+/** Atoms for an ownership write. `ownership.solutionLead` is exclusive and in no partial set, so only System Admin (unrestricted) passes. */
 export function ownershipAtoms(entityType: unknown, role: unknown): string[] {
   const r = role ?? 'owner'
   if (r === 'solutionLead') return ['ownership.solutionLead']

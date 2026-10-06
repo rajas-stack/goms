@@ -34,13 +34,15 @@ describe('canEditCell', () => {
     expect(canEditCell(p, own, 'decision', me)).toBe(false)
     expect(canEditCell(p, row({ geoSalesPersonId: 'sp9' }), 'city', me)).toBe(false)
   })
-  it('Solution Lead is read-only for everyone, even a W role and System Admin', () => {
-    expect(canEditCell(perms(['bid']), row(), 'solutionLeadEmail', me)).toBe(false)
-    expect(canEditCell(perms(['system_admin']), row(), 'solutionLeadEmail', me)).toBe(false)
+  it('Solution Lead is read-only for every ordinary role, even a W role — only System Admin edits it', () => {
+    for (const role of ['bid', 'cxo', 'it', 'sales', 'presales', 'legal', 'finance', 'delivery'] as const) {
+      expect(canEditCell(perms([role]), row(), 'solutionLeadEmail', me), role).toBe(false)
+    }
+    expect(canEditCell(perms(['system_admin']), row(), 'solutionLeadEmail', me)).toBe(true)
   })
-  it('System Admin edits every other cell, on any sheet and any row', () => {
+  it('System Admin edits every cell, on any sheet and any row', () => {
     const p = perms(['system_admin'])
-    for (const col of ['stageKey', 'decision', 'gemTenderId', 'opportunityName', 'custom:region', 'ownerEmail', 'dataConfidence']) {
+    for (const col of ['stageKey', 'decision', 'gemTenderId', 'opportunityName', 'custom:region', 'ownerEmail', 'solutionLeadEmail', 'dataConfidence']) {
       expect(canEditCell(p, row(), col, me), col).toBe(true)
     }
     expect(canEditCell(p, row({ sheet: 'campaign', geoSalesPersonId: 'sp9' }), 'stageKey', me)).toBe(true)

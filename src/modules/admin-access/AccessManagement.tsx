@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Can } from '@/lib/permissions'
 import { useAccessReadiness, useRoleOverrideMutations } from './api'
 
-const WARNING_LABEL = { 'no-email': 'No email', 'no-role': 'No role', 'duplicate-email': 'Duplicate email' } as const
+const WARNING_LABEL = { 'no-email': 'No email', 'no-role': 'No role', 'duplicate-email': 'Duplicate email', 'ambiguous-team-member': 'Ambiguous team member' } as const
 const roles = (list: Role[]) => (list.length ? list.map((r) => ROLE_LABELS[r]).join(', ') : '—')
 
 /** Role & Access Management (RBAC spec §3.3): who holds which role, what still needs fixing before RBAC is enforced,

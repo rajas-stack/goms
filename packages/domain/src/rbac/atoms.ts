@@ -6,14 +6,11 @@ export const W_ONLY_ATOMS: readonly string[] = [
 /** Atoms `W` does NOT imply: they are granted only by an explicit partial set, or by nobody.
  *  - sku.* / master.taxClasses / master.currencies: Finance-controlled commercial fields (spec §6.3).
  *  - boq.approve: BOQ approve/reject is CXO-only (spec §14.7).
- *  - ownership.solutionLead: Solution Lead is read-only for every role in v1 — no set contains it. */
+ *  - ownership.solutionLead: Solution Lead is read-only for every ordinary role in v1 — no set contains it. Only System Admin
+ *    (unrestricted, spec §3.4) can write it. */
 export const EXCLUSIVE_ATOMS: ReadonlySet<string> = new Set([
   'sku.costs', 'sku.floor', 'sku.tax', 'master.taxClasses', 'master.currencies', 'boq.approve', 'ownership.solutionLead',
 ])
-
-/** Atoms NO role can edit, System Admin included (spec §3.4, §6.2): Solution Lead is a data-integrity freeze — replacing
- *  a lead is two calls and only owners auto-close — not an access level. Every frozen atom is also exclusive. */
-export const FROZEN_ATOMS: ReadonlySet<string> = new Set(['ownership.solutionLead'])
 
 const ATOM_LABELS: Record<string, string> = {
   'opp.identity': 'the name, type, reference or tender link', 'opp.tenderId': 'the Tender ID', 'opp.client': 'the client, city or sector',
@@ -80,6 +77,12 @@ export function masterKeyAtom(key: string): string {
 /** `commercial.boq.updateLineItem` patch keys → atoms. */
 export function lineItemPatchAtom(key: string): string {
   return key === 'approvalStatus' || key === 'approverId' || key === 'approvalDate' || key === 'approvalRemarks' ? 'boq.approve' : 'boq.lines'
+}
+
+/** Own-property lookup for tables keyed by request-supplied strings. A plain `table[key]` also finds `constructor`,
+ *  `toString`, `__proto__`… on Object.prototype, which would turn a hostile key into a function where an atom is expected. */
+export function ownEntry<T>(table: Readonly<Record<string, T>>, key: unknown): T | undefined {
+  return typeof key === 'string' && Object.hasOwn(table, key) ? table[key] : undefined
 }
 
 /** Maps a patch object's keys to atoms. `undefined` from `resolve` ignores the key; `null` means the key has no

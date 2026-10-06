@@ -1,5 +1,5 @@
 import { TRPCError } from '@trpc/server'
-import type { RbacMode, UserFacts } from '@goms/domain'
+import { ownEntry, type RbacMode, type UserFacts } from '@goms/domain'
 import { isAmnexAccount, verifyFirebaseToken } from '../identity.js'
 import { decide } from './decide.js'
 import { RbacDenial } from './denial.js'
@@ -21,7 +21,7 @@ export async function evaluateCall(args: {
   ctx: { authHeader?: string; user?: { email: string } }
 }): Promise<CallOutcome> {
   const { mode, path, rawInput, ctx } = args
-  const entry = PROCEDURE_POLICY[path]
+  const entry = ownEntry(PROCEDURE_POLICY, path)
   if (entry?.kind) return { entry, user: null }
 
   let email = ctx.user?.email

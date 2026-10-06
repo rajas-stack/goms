@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   BID_PATCH_ATOMS, IGNORED_PATCH_KEYS, OPPORTUNITY_PATCH_ATOMS, atomsForPatch, lineItemPatchAtom, masterKeyAtom,
-  salesPersonPatchAtom, skuPatchAtom,
+  ownEntry, salesPersonPatchAtom, skuPatchAtom,
 } from './atoms.js'
 
 const opp = (k: string) => (IGNORED_PATCH_KEYS.has(k) ? undefined : OPPORTUNITY_PATCH_ATOMS[k] ?? null)
@@ -52,5 +52,20 @@ describe('atom maps', () => {
     expect(salesPersonPatchAtom('personalEmail')).toBe('sales.ownProfile')
     expect(salesPersonPatchAtom('officialEmail')).toBe('sales.roster')
     expect(salesPersonPatchAtom('status')).toBe('sales.roster')
+  })
+})
+
+describe('ownEntry — a lookup that cannot be fooled by Object.prototype', () => {
+  const table = { real: 'atom' } as Record<string, string>
+  it('finds own keys', () => { expect(ownEntry(table, 'real')).toBe('atom') })
+  it.each(['constructor', '__proto__', 'toString', 'hasOwnProperty', 'valueOf', 'isPrototypeOf'])('does not resolve inherited key %s', (key) => {
+    expect(ownEntry(table, key)).toBeUndefined()
+  })
+  it('is undefined for a non-string key', () => { expect(ownEntry(table, undefined)).toBeUndefined(); expect(ownEntry(table, 7)).toBeUndefined() })
+  it('closes the patch-key hole: a prototype-style key is "no atom" (fail closed), never a function', () => {
+    const resolve = (k: string) => ownEntry(BID_PATCH_ATOMS, k) ?? null
+    for (const key of ['constructor', 'toString', '__proto__']) {
+      expect(atomsForPatch(JSON.parse(`{"${key}": 1}`), resolve), key).toBeNull()
+    }
   })
 })

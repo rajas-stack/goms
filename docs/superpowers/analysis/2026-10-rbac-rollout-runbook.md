@@ -22,6 +22,10 @@ first override. Setting it is a Cloud Run configuration change (env-only revisio
 approval and the second account's exact address. The Admin Data Import list (`ADMIN_IMPORT_ALLOWED_EMAILS`) is separate and must not
 be reused or edited for this.
 
+**The exact two Google login addresses are not in this repository and must not be inferred** — in particular, do not copy them from `ADMIN_IMPORT_ALLOWED_EMAILS` (the Data Import list). They are to be confirmed by the project owner, character for character, before `ADMIN_ALLOWED_EMAILS` is changed in any environment.
+
+**What a System Admin can do (spec §3.4):** everything RBAC governs, with no carve-outs — write on all 25 modules and every record regardless of owner, creator or assignment; every field including SKU cost / floor price / tax class, the tax-class and currency masters, BOQ approve and **Solution Lead**; create and delete on every module; full Role & Access Management, Audit Logs and Operational / Financial analytics; unmasked SKU cost and floor price. It is still a role, not a bypass: a verified `@amnex.com` login, `EMERGENCY_READ_ONLY`, the locked Opportunity ID and the separate Admin Data Import allow-list all still apply.
+
 System Admin accounts need no overrides and no org-chart email: they appear as **System Admin (protected)** rows in Role & Access
 Management and cannot be granted, changed or removed there.
 
@@ -36,7 +40,7 @@ Management and cannot be granted, changed or removed there.
 1. Fill `org_people.email` for every person (the seed has none) and make sure every Sales person has a roster row with an official email.
 2. In **Role & Access Management** (`/admin/access`, usable while RBAC is off) create overrides for: the CEO, CFO and CE&TO (CXO), every Finance, IT and
    Delivery user, and anyone whose role cannot be derived. System Admin is never an override.
-3. Use **Needs attention** until no person who should have access shows `No email`, `No role` or `Duplicate email`. Users who signed in and resolved to
+3. Use **Needs attention** until no person who should have access shows `No email`, `No role` or `Duplicate email`. An email shared by two active Sales roster rows, two active org people, or two active members of one delivery team (case / spacing variants count) is **ambiguous and fails closed** (spec §3.2a): no Sales / org-derived role and no roster or team-member binding for that login until the duplicate is fixed. The readiness view shows `Duplicate email`, `No role` or `Ambiguous team member`, and the API logs `jsonPayload.event="rbac.ambiguous_identity"` (`jsonPayload.source` = `sales_persons` | `org_people` | `delivery_team_members`). An override can still grant a role but binds no person, so `own` / `asg` scopes stay empty. Users who signed in and resolved to
    no role appear once RBAC is in `shadow`/`enforce` (they are recorded by `auth.me`).
 
 ## 3. Shadow on goms-dev
@@ -58,7 +62,7 @@ Fix gaps through overrides, emails or reviewed code changes (the matrix is code,
 
 Set `RBAC_MODE=enforce`. Click through each role (Sales, Pre-sales, Bid, Legal, CXO, Delivery, IT, Finance) and a System Admin. Confirm: a Sales user's stage
 edit is refused with a normal "You don't have permission…" message and **no** sign-in dialog; SKU cost and floor price show "Restricted" for roles without them; a
-System Admin can do everything except write a Solution Lead.
+System Admin can do everything, Solution Lead write included (an ordinary W role such as Bid or CXO is still refused it).
 
 ## 6. Production
 
@@ -73,4 +77,4 @@ Set `RBAC_MODE=off` (an env-only revision change, the same mechanism as the othe
 - A signed-out visitor to Home or Map gets the existing sign-in prompt instead of the page loading (the 18 formerly-public queries now need a verified `@amnex.com` login). `health.check` stays public.
 - A signed-in user with no role sees "No role assigned" and Geography only.
 - Roles that cannot see SKU cost or floor price get `null` plus `maskedFields` from the server; margin and "Below Cost" are hidden for them.
-- Solution Lead is read-only for every role, System Admin included.
+- Solution Lead is read-only for every ordinary role; only a System Admin can write it.

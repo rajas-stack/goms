@@ -1,5 +1,5 @@
 import {
-  accessFor, allows, atomLabel, canReadAtom, isMaskedAtom, moduleLabel, type UserFacts,
+  accessFor, allows, atomLabel, canReadAtom, isMaskedAtom, moduleLabel, ownEntry, type UserFacts,
 } from '@goms/domain'
 import { DenyCall } from './denial.js'
 import { PROCEDURE_POLICY } from './registry/index.js'
@@ -33,7 +33,7 @@ export function evaluateCheck(check: Check, user: UserFacts): Denial | null {
 }
 
 export async function decide(path: string, raw: unknown, user: UserFacts): Promise<{ denial: Denial | null; entry: PolicyEntry | undefined }> {
-  const entry = PROCEDURE_POLICY[path]
+  const entry = ownEntry(PROCEDURE_POLICY, path)
   if (!entry) {
     return { entry, denial: { module: 'unregistered', action: 'call', message: `No access policy is registered for ${path}.` } }
   }

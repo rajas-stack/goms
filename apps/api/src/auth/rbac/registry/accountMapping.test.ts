@@ -101,18 +101,46 @@ describe('meetings and the Sales roster (own scope)', () => {
     expect(await denied('sales', 'employees.timeline.listAll')).toBe(false)
     for (const label of ['legal', 'it', 'finance']) expect(await denied(label, 'employees.timeline.listAll')).toBe(true)
   })
-  it('Sales edits a meeting it created or attends or whose contact it owns, not someone else\'s', async () => {
-    const mine = (await pool.query(
-      `INSERT INTO timeline_events (employee_id, type, title, date, created_by) VALUES ($1,'meeting','m','2026-01-01',$2) RETURNING id`, [empId, rbacEmail('sales')],
-    )).rows[0].id
-    const theirs = (await pool.query(
-      `INSERT INTO timeline_events (employee_id, type, title, date, created_by) VALUES ($1,'meeting','m','2026-01-01','rbac-rival@amnex.com') RETURNING id`, [empId],
-    )).rows[0].id
-    expect(await denied('sales', 'employees.timeline.update', { id: mine, patch: { title: 'x' } })).toBe(false)
-    expect(await denied('sales', 'employees.timeline.update', { id: theirs, patch: { title: 'x' } })).toBe(true)
-    expect(await denied('sales', 'employees.timeline.delete', { id: theirs })).toBe(true)
+  const meeting = async (createdBy: string | null, attendees: unknown[] = []) => (await pool.query(
+    `INSERT INTO timeline_events (employee_id, type, title, date, created_by, attendees) VALUES ($1,'meeting','m','2026-01-01',$2,$3::jsonb) RETURNING id`,
+    [empId, createdBy, JSON.stringify(attendees)],
+  )).rows[0].id as string
+  const followUp = async (createdBy: string | null, assigneeId: string | null = null) => (await pool.query(
+    `INSERT INTO follow_ups (entity_type, entity_id, assignee_id, due_date, status, note, created_by) VALUES ('contact',$1,$2,'2999-01-01','open','',$3) RETURNING id`,
+    [empId, assigneeId, createdBy],
+  )).rows[0].id as string
+  const editMeeting = (id: string) => denied('sales', 'employees.timeline.update', { id, patch: { title: 'x' } })
+
+  it('Sales edits a meeting it created, not someone else (spec §9.1: a recorded creator is the whole definition)', async () => {
+    expect(await editMeeting(await meeting(rbacEmail('sales')))).toBe(false)
+    expect(await denied('sales', 'employees.timeline.delete', { id: await meeting('rbac-rival@amnex.com') })).toBe(true)
+  })
+  it('a meeting with a recorded creator is NOT own through attendance or owning the contact', async () => {
     await assignOwner('contact', empId, salesId)
-    expect(await denied('sales', 'employees.timeline.update', { id: theirs, patch: { title: 'x' } })).toBe(false) // now owns the contact
+    const theirs = await meeting('rbac-rival@amnex.com', [{ salesPersonId: salesId }])
+    expect(await editMeeting(theirs)).toBe(true)
+    expect(await denied('sales', 'employees.timeline.delete', { id: theirs })).toBe(true)
+  })
+  it('only a legacy meeting (no creator) falls back to attendance, then to owning the contact', async () => {
+    expect(await editMeeting(await meeting(null))).toBe(true) // nobody linked
+    expect(await editMeeting(await meeting(null, [{ salesPersonId: rivalId }]))).toBe(true)
+    expect(await editMeeting(await meeting(null, [{ salesPersonId: salesId }]))).toBe(false)
+    const unlinked = await meeting(null)
+    await assignOwner('contact', empId, salesId)
+    expect(await editMeeting(unlinked)).toBe(false)
+  })
+  it('follow-ups follow the same definition: creator, else (legacy) assignee, else contact owner', async () => {
+    const fu = (id: string) => denied('sales', 'followUps.setStatus', { id, status: 'done' })
+    expect(await fu(await followUp(rbacEmail('sales')))).toBe(false)
+    expect(await fu(await followUp('rbac-rival@amnex.com', salesId))).toBe(true) // assigned to me, but created by someone else
+    expect(await fu(await followUp(null, rivalId))).toBe(true)
+    expect(await fu(await followUp(null, salesId))).toBe(false) // legacy: assignee
+    const legacyUnassigned = await followUp(null)
+    expect(await fu(legacyUnassigned)).toBe(true)
+    await assignOwner('contact', empId, salesId)
+    expect(await fu(legacyUnassigned)).toBe(false) // legacy: owns the contact
+    expect(await fu(await followUp('rbac-rival@amnex.com'))).toBe(true) // created by someone else: owning the contact is not enough
+    expect(await denied('sales', 'followUps.delete', { id: await followUp('rbac-rival@amnex.com', salesId) })).toBe(true)
   })
   it('Sales edits only its own roster profile fields; CXO edits the roster', async () => {
     expect(await denied('sales', 'sales.update', { id: salesId, patch: { mobile: '1', photoUrl: 'u' } })).toBe(false)

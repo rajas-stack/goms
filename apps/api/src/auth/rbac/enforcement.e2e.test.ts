@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto'
 import { TRPCError } from '@trpc/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { appRouter } from '../../index.js'
@@ -36,13 +35,14 @@ describe('the real router, RBAC_MODE=enforce', () => {
     const department = await addNode('org', 'dept')
     expect(await refused(as('it').employees.transfers.transfer({ employeeId: department, toNodeId: department, effectiveDate: '2026-01-01' } as any))).toBe(true)
   })
-  it('lets a System Admin through the real router, but still refuses a Solution Lead write and a signed-out call (spec §3.4)', async () => {
+  it('lets a System Admin through the real router — Solution Lead write included — and still refuses a signed-out call (spec §3.4)', async () => {
     makeSystemAdmin('root')
     const { opportunityId, bidId } = await makeBid({ withBid: true })
     await expect(as('root').opportunities.update({ id: opportunityId, patch: { city: 'Pune', gemTenderId: 'T-1' } })).resolves.toBeDefined()
-    expect(await refused(as('root').ownership.assign({
-      entityType: 'bid', entityId: bidId!, salesPersonId: randomUUID(), role: 'solutionLead', startDate: '2026-01-01',
-    } as any))).toBe(true)
+    const lead = await addSalesPerson('lead')
+    const args = { entityType: 'bid', entityId: bidId!, salesPersonId: lead, role: 'solutionLead', startDate: '2026-01-01' } as any
+    expect(await refused(as('bid').ownership.assign(args))).toBe(true) // an ordinary W role is still refused
+    await expect(as('root').ownership.assign(args)).resolves.toBeDefined()
     await expect(appRouter.createCaller({}).bids.listForGrid()).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
   })
 })

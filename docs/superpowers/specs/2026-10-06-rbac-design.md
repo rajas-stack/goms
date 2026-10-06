@@ -1,6 +1,6 @@
 # Role-Based Access Control (RBAC) Design
 
-**Status:** Approved for implementation (2026-10-06) with corrections: Solution Lead is read-only for every role; multi-requirement procedures must pass every requirement; Sales derives only from `active`/`onLeave` roster entries (§3.2); a **System Admin** role is added (§3.4).
+**Status:** Approved for implementation (2026-10-06) with corrections: Solution Lead is read-only for every ordinary role (System Admin alone can write it); multi-requirement procedures must pass every requirement; Sales derives only from `active`/`onLeave` roster entries (§3.2); a **System Admin** role is added (§3.4).
 **Date:** 2026-10-06
 **Basis:** a read-only inventory of all 178 tRPC procedures (`apps/api/src/routers`), the frontend routes and modules, the domain entities (`packages/domain`), the ownership/assignment logic, the org-chart seed (`1790700000000_org-people.sql`), and `infra/{dev,prod}/cloudrun.tf`. Decisions from the 2026-10-06 brainstorm are folded in; assumptions I made beyond those decisions are listed in §14 for confirmation.
 
@@ -38,13 +38,25 @@ Out of scope (§13): row-level *read* scoping, a DB-editable matrix, RBAC for Ad
 | Bid | same, department `Bid Management` |
 | Legal | same, department `Legal` |
 | CXO | same, department `Leadership` (+ overrides; the CEO, CFO and CE&TO are **explicit grants**, they are not in Leadership) |
-| Sales | `sales_persons.status IN ('active','onLeave')` AND `lower(official_email)` = login (`sales_persons` is outside `org_people`). A `resigned` or `inactive` salesperson does **not** derive Sales |
+| Sales | `sales_persons.status IN ('active','onLeave')` AND `lower(official_email)` = login (`sales_persons` is outside `org_people`). A `resigned` or `inactive` salesperson does **not** derive Sales. **Ambiguity fails closed** (see below) |
 | Finance | **override-only** |
 | IT | **override-only** |
 | Delivery | **override-only** — explicitly *not* derived from Business Units |
 | System Admin | **allow-list-only** — membership of `ADMIN_ALLOWED_EMAILS` (§3.4); never derived from the org chart and never storable as an override |
 
 No other label (Business Units, Technology, Finance, Chairman's Office…) is mapped to a role. A person with no email derives no roles. Finance and IT are override-only because the org chart holds one person each and no code maps those departments; this is flagged in §14.
+
+### 3.2a Ambiguous identities fail closed
+
+A login is matched to people by normalised (trimmed, lower-cased) email. When that match is **not unique**, nothing is picked and nothing is merged:
+
+| Source | Ambiguous when | Result |
+|---|---|---|
+| `sales_persons` | more than one `active`/`onLeave` row has the email (the unique index is exact-match, so case / spacing variants coexist) | no Sales role, no `salesPersonId` |
+| `org_people` | more than one `active` row has the email | no role derived from the org chart, and team members reached only through the org-person link are not bound |
+| `delivery_team_members` | more than one distinct `active` member **of the same team** matches (directly, or through the org-person link) | no member id bound for that team; other teams are unaffected (one person on two different teams is normal) |
+
+Each case logs `{event:"rbac.ambiguous_identity", source, email, message}` and shows in the readiness view (`Duplicate email`, `No role`, and `Ambiguous team member`, which also lists an email that belongs to no other row). An explicit role override may still **grant a role**, but never invents the person or team-member binding: an override-granted Sales / Pre-sales / Legal / Bid role on an ambiguous identity has no `own` / `asg` scope until the duplicate is fixed. Inactive duplicates do not count.
 
 ### 3.3 Overrides
 
@@ -73,8 +85,8 @@ Managed in **Role & Access Management** (IT and System Admin write; CXO reads). 
 - **Membership = `ADMIN_ALLOWED_EMAILS`**, the existing protected admin allow-list (matched case- and whitespace-insensitively). It is the single source of truth: System Admin is not derived from `org_people` or `sales_persons`, cannot be stored in `user_role_overrides` (database `CHECK`, §3.3) and cannot be edited in Role & Access Management. There are two permanent accounts: the project owner and Shubham. Their addresses are deployment configuration, not committed to the repository.
 - **They cannot be removed or revoked through the UI.** `access.setOverride` and `access.removeOverride` refuse any override that targets an allow-listed email ("System Admin accounts are managed through the protected admin allow-list."), and `loadUserFacts` adds System Admin *after* overrides are applied, so even a stray row could not remove it. The readiness view shows these accounts as **System Admin (protected)** with no remove control, including an account that is in neither the org chart nor the Sales roster. Changing the roster means changing the deployment variable and redeploying — an operations action outside the app.
 - **Authentication is still mandatory.** System Admin is a role, not a bypass: the verified `@amnex.com` login check, `EMERGENCY_READ_ONLY` and every other gate that runs before RBAC apply unchanged. An unauthenticated caller is never a System Admin, whatever the allow-list says.
-- **Permissions (unrestricted).** `W` with scope `all` on **every** policy module; every field atom, including those `W` does not normally imply (SKU cost / floor price / tax class, the tax-class and currency masters, BOQ approve); `create` and `delete` on every module that has such operations; full Role & Access Management and Audit Log access; and read of the masked SKU cost and floor-price fields (§7).
-- **Deliberate exceptions.** (a) **Solution Lead stays read-only for every role, System Admin included** — it is a data-integrity freeze (§6.2), not an access level. (b) The three view-only modules — #23 Operational analytics, #24 Financial analytics, #26 Audit Logs — carry no create/delete grant: no such operation exists and the audit trail stays append-only. (c) The Master Grid remains derived. (d) Admin Data Import keeps its own allow-list (§4); System Admin does not imply it. (e) The locked Opportunity ID stays locked for everyone (a handler rule).
+- **Permissions (unrestricted — no carve-outs).** `W` with scope `all` on **every** policy module (all 25) and so on every record, whoever owns, created or is assigned it; **every** field atom, including the exclusive ones `W` does not normally imply (SKU cost / floor price / tax class, the tax-class and currency masters, BOQ approve) and **Solution Lead**; `create` **and** `delete` on **every** module, with no module left out; full Role & Access Management, full Audit Logs and full Operational / Financial analytics; and read of the masked SKU cost and floor-price fields (§7). There is no atom, module, scope or operation that `allows()` / `accessFor()` refuses a System Admin. A test walks every registered procedure as a System Admin and fails if any is refused for lack of permission.
+- **What "unrestricted" does not mean.** (a) The Master Grid remains derived (it has no grant of its own; its cells follow the modules above, which System Admin holds in full). (b) Admin Data Import keeps its own allow-list (§4); System Admin does not imply it. (c) The locked Opportunity ID stays locked for everyone (a handler rule, not an access level). (d) Where a module has no create/delete *operation* (analytics, audit log), the grant exists but nothing consumes it; no procedure deletes audit entries. (e) Solution Lead stays read-only for **every other role** (§6.2); System Admin writing it goes through the same two-call replace flow as any assignment, with the same history rows.
 - **Normal RBAC rules apply to everyone else**; System Admin never reduces or alters another role's permissions. It **supersedes** the break-glass IT of the earlier draft: allow-listed accounts hold `system_admin` instead of `it`, and IT stays an ordinary override-granted role.
 
 ## 4. Modules (26)
@@ -123,7 +135,7 @@ A grant is `(role, module) → { level, scope, fieldSets, create, delete }`.
 - **fieldSets** (for `P`) — named sets of field atoms (§6). `W` means every atom.
 - **create / delete** — independent booleans. Invalid without level ≥ R (validated at policy load). A **create** is authorized by the `create` grant alone; the create payload is validated by the procedure's own schema and is not narrowed by `P` sets (otherwise a Create Bid by a `P` role could never supply its required fields).
 - **Merge across roles** (decision "max permission, union fields/scopes"): for a given row, take every grant whose scope contains the row; effective level = max; if any applicable grant is `W` → all atoms, else the union of the applicable `P` sets; `create`/`delete` = OR. Rows outside every write scope get `R` if any grant has level ≥ R.
-- **System Admin** is evaluated as *unrestricted* (§3.4): level `W`, scope `all`, every atom except the frozen Solution Lead atom, `create`/`delete` per the SA column of §10. Merging it with other roles is a no-op because it already holds the maximum.
+- **System Admin** is evaluated as *unrestricted* (§3.4): level `W`, scope `all`, every atom (exclusive atoms and Solution Lead included), `create` and `delete` on every module. Merging it with other roles is a no-op because it already holds the maximum.
 - **Fail closed:** a procedure with no registry entry, or a patch key with no atom, is denied. A test enforces registry completeness (§12).
 
 ## 6. Field-level model
@@ -171,7 +183,7 @@ Derived from `opportunities.patchShape`, `bids.update`'s patch, and the grid's c
 
 `bid.stage`, `bid.verify`, `bid.archive`, `bid.move`, `opp.tenderId`, `opp.dates`, `opp.stage` are never in a `P` set; only `W` roles hold them.
 
-**Solution Lead is read-only in v1, for every role.** There is no history-safe write mechanism: replacing a Solution Lead is two separate calls (end the incumbent, then assign the successor), and `ownership.assign` only auto-closes the previous holder for `role='owner'`. It therefore has no atom and is in no `P` set; under RBAC, `ownership.assign` and `ownership.end` on `role='solutionLead'` are denied to every role, including those holding `W` on #16 and System Admin. Solution Lead stays readable wherever its owning row is readable.
+**Solution Lead is read-only in v1, for every ordinary role.** There is no history-safe write mechanism: replacing a Solution Lead is two separate calls (end the incumbent, then assign the successor), and `ownership.assign` only auto-closes the previous holder for `role='owner'`. Its atom (`ownership.solutionLead`) is therefore exclusive and in no `P` set; under RBAC, `ownership.assign` and `ownership.end` on `role='solutionLead'` are denied to every functional role, including those holding `W` on #16. **System Admin alone may write it** (§3.4) — the unrestricted evaluator grants every atom — so a System Admin replacing a lead should use the grid's end-then-assign flow and accept the two-call caveat. Solution Lead stays readable wherever its owning row is readable.
 
 `DOC1`, `L2`, `X2` and `B1` contain **action atoms** (`doc.upload`, `corrigendum.review`, `boq.approve`, `ownership.bidEntity`) rather than data fields: `P` with an action atom means "may perform only these actions". Where such an action is a **create under a parent row** (a document on a bid), the grant's scope (`asg`) is evaluated against the parent row, and the `create` column of §10 supplies the create grant.
 
@@ -223,7 +235,8 @@ The inventory finds exactly 18 `publicProcedure` queries. `READ_AUTH_ENFORCEMENT
 - **Pure evaluators in `@goms/domain`**: `mergeGrants`, `canEdit(perms, rowFacts, atom)`, scope resolvers over supplied facts — shared by server (authoritative) and UI (hints).
 - **API** (`apps/api/src/auth/rbac/`): `roles.ts` (effective-role resolution + TTL cache), `facts.ts` (loads a user's identity facts), `guard.ts` (middleware factory), `mask.ts`, and the procedure registry.
 - **Registry:** `PROCEDURE_POLICY['router.proc'] = { requirements: Requirement[] }`, where `Requirement = { module | resolver, action: 'read'|'create'|'update'|'delete', atoms(input)?, scope?: entity resolver }`. Patch-based procedures map patch keys → atoms; others declare a fixed atom. Most procedures have exactly one requirement. A procedure that touches several modules lists one requirement per module and **all must pass** (logical AND, order-independent; the denial names the first failing module); an operation is never authorized against a single module when it also writes another. The inventory's cross-module procedures include: `bids.update` with `sheet` (source and destination sheet modules), `bids.create` when it creates a department (sheet module + `am.departments`), `employees.transfer` (`am.contacts` + `am.departments`), `bidMilestones.*` on the submission-deadline milestone (`bid.milestones` + the row's `opp.dates`), and `bidCorrigenda.reviewChange` when an accepted change rewrites the tender link or a milestone (`bid.corrigenda` + the affected field's module).
-- **System Admin in the evaluator:** `accessFor` marks a System Admin's access `unrestricted`, which makes `allows()` true for every atom except the frozen ones (`FROZEN_ATOMS`: Solution Lead). The same pure evaluator runs on the server and in the UI.
+- **System Admin in the evaluator:** `accessFor` marks a System Admin's access `unrestricted`, which makes `allows()` true for every atom, with no exception (there is no frozen-atom list). The same pure evaluator runs on the server and in the UI.
+- **Request-supplied keys are looked up as own properties only** (`ownEntry`): patch keys, audit entity types, search categories and procedure paths are never resolved through `Object.prototype`, so `constructor` / `__proto__` / `toString` are unknown keys (a patch containing one is refused, an unknown audit entity falls to the global feed's `admin.audit`), never an atom or a 500.
 - **Middleware order:** existing gates first (emergency read-only → authentication → `@amnex.com`), then RBAC. Denials throw `FORBIDDEN` naming what was refused ("You can't edit Tender ID"). A multi-field patch is all-or-nothing.
 - **Facts for scope** (resolved once per request): the user's `sales_persons.id` (via `official_email`); the user's `delivery_team_members.id` set (via `org_person_id` → `org_people.email`, else `delivery_team_members.email`); effective roles.
 
@@ -239,7 +252,7 @@ The inventory finds exactly 18 `publicProcedure` queries. `READ_AUTH_ENFORCEMENT
 
 **Delivery has no assignment slot**, so Delivery can hold no `own`/`asg` grants; its grants are read-only in v1.
 
-Migration adds nullable `created_by text` to `timeline_events` and `follow_ups` (set from `ctx.user.email` on create). Legacy rows resolve through the fallbacks above.
+Migration adds nullable `created_by text` to `timeline_events` and `follow_ups` (set from `ctx.user.email` on create). **A recorded creator is the whole definition of `own`** for those rows: attendee / assignee / contact-owner do not widen it. They apply only to legacy rows, where `created_by` is null.
 
 ## 10. Final matrix
 
@@ -274,7 +287,7 @@ Columns: **S** Sales, **Pr** Pre-sales, **B** Bid, **L** Legal, **X** CXO, **D**
 | 25 | Role & Access Management | N | N | N | N | R | N | W | N | W | I | I |
 | 26 | Audit Logs (global feed) | N | N | N | N | R | N | R | N | W | — | — |
 
-† Read with **cost and floor-price fields masked** (§7). **SA** (System Admin) is `W`·all on every module and additionally holds Create and Delete wherever the module has such operations — every module except #4, #23, #24 and #26 — omitted from the Create/Delete columns for brevity (§3.4). On #19, Pre-sales holds `W` except the two Finance-controlled masters (`taxClasses`, `currencies`), which are read-only for it. On #21, Pre-sales `W` excludes `F1` atoms after creation (§6.3). Reading #22 implies the reference-master reads in §8.
+† Read with **cost and floor-price fields masked** (§7). **SA** (System Admin) is `W`·all on every policy module and additionally holds Create **and** Delete on every one of them (including #23, #24 and #26) — omitted from the Create/Delete columns for brevity (§3.4). #4 is derived and has no grant of its own. On #19, Pre-sales holds `W` except the two Finance-controlled masters (`taxClasses`, `currencies`), which are read-only for it. On #21, Pre-sales `W` excludes `F1` atoms after creation (§6.3). Reading #22 implies the reference-master reads in §8.
 
 **Notes**
 - Rows 1–3: Bid's `W` on #1 is all rows; on #2/#3 it is read-only. Moving a row between sheets needs `bid.move` (W only) on both sheets.
@@ -308,9 +321,9 @@ The existing flags cannot gate this literally: `AUTH_ENFORCEMENT_ENABLED` and `R
 
 **Testing**
 - **Policy validity:** every module × role cell defined; `P` has sets; create/delete imply ≥ R; sets reference real atoms.
-- **Registry completeness:** a test fails if any router procedure lacks a `PROCEDURE_POLICY` entry (same pattern as the grid's guarded editable matrix).
+- **Registry completeness:** a test fails if any router procedure lacks a `PROCEDURE_POLICY` entry (same pattern as the grid's guarded editable matrix). A second, behavioural test proves each registered procedure is **mounted on a gated tier**: it swaps every entry for a probe requirement that refuses with a unique message and calls the procedure; one that skips the RBAC gate never produces that refusal and is reported. The probe is itself tested against a router containing a deliberately ungated procedure.
 - **Merge/scope:** unit tests for max/union, scope resolvers, the Delivery no-scope rule.
-- **System Admin:** policy validity (`W`·all on all 25 policy modules; create/delete everywhere except the three view-only modules); every atom allowed except the frozen Solution Lead; masked SKU fields readable; membership comes only from the allow-list (matched case-insensitively, wins over an override, never storable as an override, cannot be set or removed through the access API, shown as protected in the readiness view); authentication still required; no effect on other roles.
+- **System Admin:** policy validity (`W`·all with create **and** delete on all 25 policy modules); every atom allowed, Solution Lead and the exclusive atoms included; no registered procedure refused for lack of permission (a test walks the whole registry); masked SKU fields readable; membership comes only from the allow-list (matched case-insensitively, wins over an override, never storable as an override, cannot be set or removed through the access API, shown as protected in the readiness view); authentication still required; no effect on other roles.
 - **Per-role integration:** the real tRPC caller, one allow and one deny per module per role, including patch-key denial and sheet moves.
 - **Masking golden test:** sentinel cost values never reach a masked role via any SKU-returning procedure or either audit-log procedure.
 - **Public-query tests:** `off` → unauthenticated succeeds; `enforce` → unauthenticated rejected, per-role reads match §8.
@@ -330,7 +343,7 @@ Row-level read scoping; a DB-editable matrix; per-user custom permissions beyond
 5. **CXO can read cost and floor price** (as Approval Matrix owner); Sales, Bid, Legal, Delivery, IT cannot.
 6. **CXO gets the Go/No-Go decision field** (`X1`), based on `BID_STAGE_REQUIREMENTS` calling for "executive Go / No-Go sign-off".
 7. **BOQ approve/reject is CXO-only** (`X2`); Finance reviews and reads.
-8. **Bid may assign/end the bid-level owner** (`B1`); other ownership writes are Sales(own)/CXO. **Solution Lead is read-only for every role in v1** (see §6.2).
+8. **Bid may assign/end the bid-level owner** (`B1`); other ownership writes are Sales(own)/CXO. **Solution Lead is read-only for every ordinary role in v1; only System Admin may write it** (see §6.2).
 9. **No-role users** get Geography read only plus a "no role assigned" screen.
 10. **`RBAC_MODE` is a new flag** (§11) rather than reusing flags already on in prod.
 11. **Data Import stays under its own allow-list**, outside RBAC.
@@ -338,5 +351,5 @@ Row-level read scoping; a DB-editable matrix; per-user custom permissions beyond
 13. **Delete in #10/#11 is IT-only** (merge counts as delete); Sales can create and edit.
 14. **System Admin roster = `ADMIN_ALLOWED_EMAILS`** (two permanent accounts). It is not stored in the database and not editable in the UI. goms-dev lists one account today and goms-prod lists none, so both environments need both accounts before RBAC is turned on (§11).
 15. **System Admin replaces the break-glass IT:** allow-listed accounts hold `system_admin` (a superset) instead of `it`; IT remains an ordinary override-granted role.
-16. **Solution Lead stays frozen for System Admin** (a data-integrity freeze, not an access level), and **no create/delete grant on the view-only modules** #23, #24, #26 (no such operation exists; the audit trail stays append-only).
+16. **System Admin has no carve-outs** (corrected 2026-10-06): Solution Lead is writable by System Admin, and System Admin holds create/delete on every module including #23, #24, #26. (An earlier draft froze Solution Lead for System Admin and withheld create/delete on those three modules; both were reversed because the two System Admin accounts are intended to be unrestricted administrators.)
 17. **System Admin is not a bypass:** authentication, the `@amnex.com` check and `EMERGENCY_READ_ONLY` still apply, and Admin Data Import stays on its own allow-list.

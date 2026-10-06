@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { accessFor, allows, inScope } from './evaluate.js'
-import { BID_PATCH_ATOMS, EXCLUSIVE_ATOMS, FROZEN_ATOMS, OPPORTUNITY_PATCH_ATOMS, W_ONLY_ATOMS } from './atoms.js'
-import { FIELD_SETS, GRANTS, SYSTEM_ADMIN_VIEW_ONLY_MODULES, type PolicyModuleKey } from './policy.js'
-import type { Role, ScopeFacts, UserFacts } from './types.js'
+import { BID_PATCH_ATOMS, EXCLUSIVE_ATOMS, OPPORTUNITY_PATCH_ATOMS, W_ONLY_ATOMS } from './atoms.js'
+import { FIELD_SETS, GRANTS, type PolicyModuleKey } from './policy.js'
+import { FUNCTIONAL_ROLES, type Role, type ScopeFacts, type UserFacts } from './types.js'
 
 const user = (roles: Role[], extra: Partial<UserFacts> = {}): UserFacts => ({
   email: 'u@amnex.com', roles, salesPersonId: null, teamMemberIds: { presales: [], legal: [], bid: [] }, ...extra,
@@ -108,11 +108,16 @@ describe('exclusive and frozen atoms', () => {
     expect(allows(accessFor(user(['cxo']), 'com.boqs'), 'boq.approve')).toBe(true)
     expect(allows(accessFor(user(['cxo']), 'com.boqs'), 'boq.lines')).toBe(false)
   })
-  it('nobody — not even a W role — can write Solution Lead', () => {
+  it('no ordinary role — not even a W role — can write Solution Lead (only System Admin can)', () => {
     const cxo = accessFor(user(['cxo']), 'am.ownership', row())
     expect(cxo.level).toBe('W')
     expect(allows(cxo, 'ownership.assign')).toBe(true)
     expect(allows(cxo, 'ownership.solutionLead')).toBe(false)
+    for (const role of FUNCTIONAL_ROLES) {
+      for (const module of Object.keys(GRANTS) as PolicyModuleKey[]) {
+        expect(allows(accessFor(user([role]), module, row({ salesOwnerIds: ['s'], createdBy: 'u@amnex.com' })), 'ownership.solutionLead'), `${role} ${module}`).toBe(false)
+      }
+    }
   })
   it('Bid may assign the bid-level owner only', () => {
     const bid = accessFor(user(['bid']), 'am.ownership', row())
@@ -169,28 +174,26 @@ describe('System Admin (spec §3.4)', () => {
     }
     expect(accessFor(admin(), 'opp.pipeline').level).toBe('W') // no row facts needed
   })
-  it('may edit every atom — the exclusive ones included — except the frozen Solution Lead', () => {
+  it('may edit every atom — the exclusive ones and Solution Lead included — on every module and row', () => {
     const atoms = [
       ...W_ONLY_ATOMS, ...EXCLUSIVE_ATOMS, ...Object.values(FIELD_SETS).flat(),
       ...Object.values(OPPORTUNITY_PATCH_ATOMS), ...Object.values(BID_PATCH_ATOMS), 'bid.verify', 'bid.archive', 'ownership.assign',
+      'ownership.solutionLead', 'sku.other', 'master.other', 'boq.lines', 'sales.roster', 'some.future.atom',
     ]
-    for (const atom of atoms) {
-      const expected = !FROZEN_ATOMS.has(atom)
-      expect(allows(accessFor(admin(), 'com.skus'), atom), atom).toBe(expected)
-      expect(allows(accessFor(admin(), 'opp.bidTracker', row()), atom), atom).toBe(expected)
-    }
-    expect(allows(accessFor(admin(), 'com.skus'), 'sku.costs')).toBe(true)
-    expect(allows(accessFor(admin(), 'com.masters'), 'master.currencies')).toBe(true)
-    expect(allows(accessFor(admin(), 'com.boqs'), 'boq.approve')).toBe(true)
-    expect(allows(accessFor(admin(), 'am.ownership', row()), 'ownership.assign')).toBe(true)
-    expect(allows(accessFor(admin(), 'am.ownership', row()), 'ownership.solutionLead')).toBe(false)
-  })
-  it('holds create and delete wherever the module has such operations, and not on the view-only modules', () => {
     for (const module of everyModule) {
-      const viewOnly = SYSTEM_ADMIN_VIEW_ONLY_MODULES.includes(module)
+      for (const atom of atoms) {
+        expect(allows(accessFor(admin(), module, row()), atom), `${module} ${atom}`).toBe(true)
+        expect(allows(accessFor(admin(), module), atom), `${module} ${atom} (no row)`).toBe(true)
+      }
+    }
+    expect(allows(accessFor(admin(), 'am.ownership', row()), 'ownership.solutionLead')).toBe(true)
+    expect(allows(accessFor(admin(), 'am.ownership', row({ salesOwnerIds: ['x'] })), 'ownership.solutionLead')).toBe(true)
+  })
+  it('holds create and delete on every module, including analytics and the audit log', () => {
+    for (const module of everyModule) {
       const a = accessFor(admin(), module, row())
-      expect(a.create, `${module} create`).toBe(!viewOnly)
-      expect(a.delete, `${module} delete`).toBe(!viewOnly)
+      expect(a.create, `${module} create`).toBe(true)
+      expect(a.delete, `${module} delete`).toBe(true)
     }
   })
   it('stays unrestricted next to other roles, and gives those roles nothing extra', () => {

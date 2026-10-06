@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { appRouter } from '../../index.js'
 import { pool } from '../../db.js'
 import { contextForEmail } from '../../testHelpers/authTestHelpers.js'
-import { addOrgPerson, addSalesPerson, cleanupRbacFixtures, makeSystemAdmin, rbacEmail, setRole } from '../../testHelpers/rbacFixtures.js'
+import { addOrgPerson, addSalesPerson, addTeamMember, cleanupRbacFixtures, makeSystemAdmin, rbacEmail, setRole } from '../../testHelpers/rbacFixtures.js'
 import { RbacDenial } from './denial.js'
 import { combineRoles, loadUserFacts } from './userFacts.js'
 
@@ -126,6 +126,36 @@ describe('access.readiness', () => {
     const rows = (await as('admin').access.readiness()).filter((r) => r.name.startsWith('RBAC twin'))
     expect(rows).toHaveLength(2)
     for (const r of rows) expect(r.warnings).toContain('duplicate-email')
+  })
+  it('flags two roster rows sharing one email and shows neither as Sales — the server derives no role for an ambiguous address', async () => {
+    await addSalesPerson('rtwin1', 'active', rbacEmail('rtwin'))
+    await addSalesPerson('rtwin2', 'active', ` ${rbacEmail('rtwin').toUpperCase()}`)
+    const rows = (await as('admin').access.readiness()).filter((r) => r.name.startsWith('RBAC rtwin'))
+    expect(rows).toHaveLength(2)
+    for (const r of rows) expect(r).toMatchObject({ derivedRoles: [], effectiveRoles: [] })
+    for (const r of rows) expect(r.warnings).toEqual(expect.arrayContaining(['duplicate-email', 'no-role']))
+  })
+  it('shows two active org people sharing one email as ambiguous: no derived role for either', async () => {
+    await addOrgPerson('otwin1', ['Legal'], { email: rbacEmail('otwin') })
+    await addOrgPerson('otwin2', ['Leadership'], { email: ` ${rbacEmail('otwin').toUpperCase()}` })
+    const rows = (await as('admin').access.readiness()).filter((r) => r.name.startsWith('RBAC otwin'))
+    expect(rows).toHaveLength(2)
+    for (const r of rows) {
+      expect(r).toMatchObject({ derivedRoles: [], effectiveRoles: [] })
+      expect(r.warnings).toEqual(expect.arrayContaining(['duplicate-email', 'no-role']))
+    }
+  })
+  it('flags an email shared by two members of one delivery team on the person who has it, and lists it when nobody else does', async () => {
+    await addOrgPerson('tmperson', ['Pre-Sales'], { email: rbacEmail('tmdup') })
+    await addTeamMember('preSales', 'tmx1', rbacEmail('tmdup'))
+    await addTeamMember('preSales', 'tmx2', rbacEmail('tmdup').toUpperCase())
+    await addTeamMember('legal', 'tmy1', rbacEmail('tmorphan'))
+    await addTeamMember('legal', 'tmy2', ` ${rbacEmail('tmorphan')}`)
+    await addTeamMember('bid', 'tmz', rbacEmail('tmfine'))
+    const rows = await as('admin').access.readiness()
+    expect(rows.find((r) => r.name === 'RBAC tmperson')!.warnings).toContain('ambiguous-team-member')
+    expect(rows.find((r) => r.email === rbacEmail('tmorphan'))).toMatchObject({ kind: 'team', warnings: expect.arrayContaining(['ambiguous-team-member']) })
+    expect(rows.find((r) => r.email === rbacEmail('tmfine'))).toBeUndefined() // a clean team member needs no row
   })
   it('shows System Admin accounts as protected rows, even when they are in neither the org chart nor the roster', async () => {
     makeSystemAdmin('founder')

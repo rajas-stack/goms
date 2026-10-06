@@ -78,7 +78,7 @@ describe('other row kinds', () => {
     expect((await rowForOwnedEntity('opportunity', opportunityId))!.createdBy).toBe('rbac-x@amnex.com')
     expect(await rowForOwnedEntity('widget', bidId)).toBeNull()
   })
-  it('a contact follow-up carries its creator and its assignee as owners', async () => {
+  it('a contact follow-up with a creator carries only the creator; the assignee counts only on a legacy row (spec §9.1)', async () => {
     const assignee = await addSalesPerson('as')
     const emp = await pool.query(`SELECT id FROM employees LIMIT 1`)
     if (!emp.rows[0]) return // no seed data locally: nothing to attach a contact follow-up to
@@ -89,7 +89,11 @@ describe('other row kinds', () => {
     const row = (await rowForFollowUp(fu.rows[0].id))!
     expect(row.entityType).toBe('contact')
     expect(row.facts.createdBy).toBe('rbac-c@amnex.com')
-    expect(row.facts.salesOwnerIds).toContain(assignee)
+    expect(row.facts.salesOwnerIds).not.toContain(assignee)
+    await pool.query(`UPDATE follow_ups SET created_by = NULL WHERE id = $1`, [fu.rows[0].id])
+    const legacy = (await rowForFollowUp(fu.rows[0].id))!
+    expect(legacy.facts.createdBy).toBeNull()
+    expect(legacy.facts.salesOwnerIds).toContain(assignee)
   })
 })
 
