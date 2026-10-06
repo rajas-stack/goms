@@ -5536,10 +5536,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { describe, expect, it, vi } from 'vitest'
 import { PermissionsProvider } from '@/lib/permissions'
 
-const readiness = [
+// vi.mock is hoisted above plain consts, so the fixture must be hoisted with it
+const { readiness } = vi.hoisted(() => ({ readiness: [
   { key: 'org:1', kind: 'org', name: 'Denish', email: 'denish@amnex.com', derivedRoles: ['legal'], overrides: [], effectiveRoles: ['legal'], warnings: [], lastSeenAt: null },
   { key: 'org:2', kind: 'org', name: 'Nirav Shah', email: '', derivedRoles: [], overrides: [], effectiveRoles: [], warnings: ['no-email', 'no-role'], lastSeenAt: null },
-]
+] }))
 vi.mock('@/data/repository', () => ({
   repository: {
     getAccessReadiness: vi.fn().mockResolvedValue(readiness),

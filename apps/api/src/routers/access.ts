@@ -30,6 +30,8 @@ const toOverride = (r: any) => ({
   reason: r.reason as string, createdBy: r.created_by as string, createdAt: new Date(r.created_at).toISOString(),
 })
 
+export type RoleOverrideRow = ReturnType<typeof toOverride>
+
 export const accessRouter = router({
   listOverrides: accessProcedure.query(async () =>
     (await pool.query('SELECT * FROM user_role_overrides ORDER BY email, role')).rows.map(toOverride),

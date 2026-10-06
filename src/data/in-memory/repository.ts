@@ -1,3 +1,4 @@
+import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/routers/access'
 import type {
   ActionQueueEntry, AttendeeRef, Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue,
   BidDocument, BidGridRow, BidMilestone, BidMilestoneWithBid, CustomFieldType, CustomValue,
@@ -285,9 +286,16 @@ export interface CreateFollowUpInput {
 
 /** All persistence flows through this interface. The in-memory implementation
  *  below can be replaced by a Supabase-backed one with no UI changes. */
+export interface SetRoleOverrideInput { email: string; role: string; effect: 'grant' | 'revoke'; reason: string }
+
 export interface Repository {
   /** The caller's roles and roster facts (RBAC). The local store has no server: RBAC is off. */
   getMyAccess(): Promise<MyAccess>
+  /** Role & Access Management (RBAC). The local store has no server and no roles, so these are empty no-ops. */
+  getAccessReadiness(): Promise<ReadinessRow[]>
+  listRoleOverrides(): Promise<RoleOverrideRow[]>
+  setRoleOverride(input: SetRoleOverrideInput): Promise<void>
+  removeRoleOverride(id: string): Promise<void>
   listStates(): Promise<StateSummary[]>
   getState(code: number): Promise<HierNode | undefined>
   getNode(id: string): Promise<HierNode | undefined>
@@ -630,6 +638,10 @@ function parseSubmissionDate(raw: string | null | undefined): string | null {
 
 class InMemoryRepository implements Repository {
   async getMyAccess(): Promise<MyAccess> { return { mode: 'off', email: null, roles: [], facts: null } }
+  async getAccessReadiness(): Promise<ReadinessRow[]> { return [] }
+  async listRoleOverrides(): Promise<RoleOverrideRow[]> { return [] }
+  async setRoleOverride(): Promise<void> {}
+  async removeRoleOverride(): Promise<void> {}
 
   private data: GormsData = buildSeed()
 
@@ -3011,7 +3023,7 @@ const MUTATOR_KEYS = [
   'createBidCustomField', 'updateBidCustomField', 'reorderBidCustomFields', 'archiveBidCustomField',
   'unarchiveBidCustomField', 'deleteBidCustomField', 'setBidCustomValue',
   'createDeliveryTeamMember', 'updateDeliveryTeamMember', 'setDeliveryTeamMemberStatus', 'deleteDeliveryTeamMember',
-  'createOrgPerson', 'updateOrgPerson', 'deleteOrgPerson',
+  'createOrgPerson', 'updateOrgPerson', 'deleteOrgPerson', 'setRoleOverride', 'removeRoleOverride',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -3033,7 +3045,7 @@ const READER_KEYS = [
   'listCustomers', 'getCustomer',
   'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
   'listDocuments', 'listDocumentCitations', 'getDocumentDownloadUrl', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
-  'listDeliveryTeamMembers', 'listOrgPeople', 'getMyAccess',
+  'listDeliveryTeamMembers', 'listOrgPeople', 'getMyAccess', 'getAccessReadiness', 'listRoleOverrides',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the

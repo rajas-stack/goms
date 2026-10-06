@@ -6,6 +6,7 @@
 // through. Confirmed complete against the full interface as of the
 // 2026-08-31 local-vs-GCP functional parity audit
 // (docs/superpowers/analysis/2026-08-31-goms-local-vs-gcp-functional-parity-audit.md).
+import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/routers/access'
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
@@ -17,7 +18,7 @@ import type {
   ImportChildRow, ImportEmployeeRow, MergeEmployeesInput, TransferInput,
   CreateSalesPersonInput, CreateDeliveryTeamMemberInput, UpdateDeliveryTeamMemberPatch, CreateOrgPersonInput, UpdateOrgPersonPatch, TransferSalesPersonInput, StateSummary,
   CreateOpportunityInput, AssignOwnerInput, TransferBookOfBusinessInput, CreateFollowUpInput,
-  RelationshipAnalytics,
+  RelationshipAnalytics, SetRoleOverrideInput,
 } from '../repository'
 import type { OwnerResolution } from '@/data/ownership'
 import type { OrgPerson } from '@/data/org-structure'
@@ -39,6 +40,10 @@ export class RemoteRepository implements Partial<Repository> {
   })
 
   getMyAccess = (): Promise<MyAccess> => this.client.auth.me.query()
+  getAccessReadiness = (): Promise<ReadinessRow[]> => this.client.access.readiness.query()
+  listRoleOverrides = (): Promise<RoleOverrideRow[]> => this.client.access.listOverrides.query()
+  setRoleOverride = async (input: SetRoleOverrideInput): Promise<void> => { await this.client.access.setOverride.mutate(input as never) }
+  removeRoleOverride = (id: string): Promise<void> => this.client.access.removeOverride.mutate({ id })
 
   listCustomers = (): Promise<Customer[]> => this.client.customers.list.query()
   getCustomer = (id: string): Promise<Customer | null> => this.client.customers.get.query({ id })

@@ -35,6 +35,9 @@ const GeographyLoadPanel = lazy(() =>
 const AdminImportAuthGate = lazy(() =>
   import('@/modules/admin-data-import/auth/AdminImportAuthGate').then((m) => ({ default: m.AdminImportAuthGate })),
 )
+const AccessManagement = lazy(() =>
+  import('@/modules/admin-access/AccessManagement').then((m) => ({ default: m.AccessManagement })),
+)
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
 // Admin Data Import is gated behind its own env flag — unset/false by
@@ -92,6 +95,7 @@ export const router = createBrowserRouter([
       { path: '/commercial-calculator', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
       { path: '/commercial-calculator/:section', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
       { path: '/commercial-calculator/boq/:boqId', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
+      { path: '/admin/access', element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><AccessManagement /></RequireAccess> },
       ...bidTrackerRoutes,
       ...adminImportRoutes,
       { path: '*', element: <NotFound /> },
