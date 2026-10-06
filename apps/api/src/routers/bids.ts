@@ -9,7 +9,7 @@ import {
   computeAttentionFlag, applyFilterRules, buildOwnerMap, type CustomFieldType, type CustomValue, type OwnedSheet,
 } from '@goms/domain'
 import { applyStageChange, insertOpportunity } from './opportunities.js'
-import { loadOwnershipContext } from './ownership.js'
+import { loadOwnershipContext } from '../lib/ownershipContext.js'
 import { writeAuditLog } from '../lib/auditLog.js'
 import { assignOpportunityCode } from '../lib/opportunityCode.js'
 import { departmentChoiceSchema, newBidOpportunitySchema, resolveBidDepartment } from '../lib/opportunityDepartment.js'
