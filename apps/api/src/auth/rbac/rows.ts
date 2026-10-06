@@ -1,18 +1,9 @@
-import {
-  DEFAULT_OWNED_SHEET, activeDelegate, effectiveOwner, isOwnedSheet, type OwnedSheet, type PolicyModuleKey, type ScopeFacts,
-} from '@goms/domain'
+import { activeDelegate, effectiveOwner, sheetModule, type RowModule, type ScopeFacts } from '@goms/domain'
 import { pool } from '../../db.js'
 import { loadOwnershipContext } from '../../lib/ownershipContext.js'
 
-export type RowModule = Extract<PolicyModuleKey, 'opp.bidTracker' | 'opp.pipeline' | 'opp.campaign'>
-
-export const SHEET_MODULE: Record<OwnedSheet, RowModule> = {
-  bidTracker: 'opp.bidTracker',
-  'pipeline-funnel': 'opp.pipeline', 'pipeline-backup': 'opp.pipeline', 'pipeline-commits': 'opp.pipeline',
-  campaign: 'opp.campaign',
-}
-/** Unknown or absent sheet (a bid-less opportunity) is authorised as Bid Tracker. */
-export const sheetModule = (sheet: unknown): RowModule => SHEET_MODULE[isOwnedSheet(sheet) ? sheet : DEFAULT_OWNED_SHEET]
+// The sheet → module table is shared with the grid (UI) and lives in @goms/domain.
+export { SHEET_MODULE, sheetModule, type RowModule } from '@goms/domain'
 
 export interface RowTarget { module: RowModule; bidId: string | null; opportunityId: string; facts: ScopeFacts }
 

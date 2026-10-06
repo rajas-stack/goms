@@ -33,6 +33,8 @@ const dayAfter = (isoDate: string) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 import { cn } from '@/lib/utils'
+import { useMyAccess } from '@/lib/api'
+import { usePermissions } from '@/lib/permissions'
 import type { BidGridRow } from '@/lib/types'
 import {
   ATTENTION_OPTIONS, CUSTOM_GROUP, GRID_GROUPS, cellValue, editValue, columnIdFromOrderToken, columnWidth, compareTyped, defaultVisibleColumnIds, formatCurrency, formatValueText,
@@ -45,6 +47,7 @@ import {
   type MasterScope, type OwnedSheet, type SheetId,
 } from '../sheets'
 import { useEntityLookups } from '../useEntityLookups'
+import { canEditCell as roleAllowsCell } from '../gridPermissions'
 import { AddCustomColumnDialog } from './AddCustomColumnDialog'
 import { ColumnHeaderMenu } from './ColumnHeaderMenu'
 import { CreateBidDialog } from './CreateBidDialog'
@@ -234,18 +237,21 @@ export function MasterGrid(props: MasterGridProps) {
   // Frozen (pinned) columns: chosen per column from its header menu, remembered in this browser.
   const [frozenIds, setFrozenIds] = useState<string[]>(() => loadFrozen(props.sheet ?? 'bidTracker'))
 
-  // Per-column locks, per sheet, remembered in this browser — an interim switch
-  // until role-based access decides who may edit what. A column is editable when
-  // the grid is unlocked AND the column is: editable columns start open (and can
-  // be locked), `unlockable` ones start locked (and can be opened); the rest have
-  // no write path and stay locked.
+  // Per-column locks, per sheet, remembered in this browser. Who may edit what is decided by the user's role
+  // (RBAC): with RBAC enforced a cell is editable only when the grid is unlocked, the column has a write path, the
+  // role allows that field on THIS row, and the user has not locked the column themselves. While RBAC is off the
+  // original browser switch still applies: editable columns start open (and can be locked), `unlockable` ones start
+  // locked (and can be opened); the rest have no write path and stay locked.
+  const perms = usePermissions()
+  const { data: access } = useMyAccess()
+  const me = { email: access?.email ?? '', salesPersonId: access?.facts?.salesPersonId ?? null }
   const [columnLocks, setColumnLocks] = useState<ColumnLocks>(() => loadColumnLocks(props.sheet ?? 'bidTracker'))
   const effectiveMeta = (meta: GridColumnMeta): GridColumnMeta => {
     if (columnLocks.locked.includes(meta.id)) return { ...meta, editable: undefined }
-    if (!meta.editable && meta.unlockable && columnLocks.unlocked.includes(meta.id)) return { ...meta, editable: meta.unlockable }
+    if (!meta.editable && meta.unlockable && (perms.enforced || columnLocks.unlocked.includes(meta.id))) return { ...meta, editable: meta.unlockable }
     return meta
   }
-  const canLockColumn = (meta: GridColumnMeta) => !!(meta.editable || meta.unlockable)
+  const canLockColumn = (meta: GridColumnMeta) => !!(meta.editable || (meta.unlockable && !perms.enforced))
   const isColumnOpen = (meta: GridColumnMeta) => !!effectiveMeta(meta).editable
   const toggleColumnLock = (meta: GridColumnMeta) => setColumnLocks((cur) => {
     const open = !!effectiveMeta(meta).editable
@@ -720,8 +726,9 @@ export function MasterGrid(props: MasterGridProps) {
     !frozen.left.has(meta.id) && frozen.width + columnWidth(meta) > scrollerWidth * MAX_FROZEN_SHARE
       ? 'No room to freeze more — unfreeze another column first.'
       : null
-  // Editable only while unlocked; locked, every cell is read/navigate-only.
-  const canEditCell = (meta: GridColumnMeta) => unlocked && isColumnOpen(meta)
+  // Editable only while unlocked; locked, every cell is read/navigate-only. With RBAC enforced the role must also
+  // allow this field on this row (the server stays the authority).
+  const canEditCell = (row: BidGridRow, meta: GridColumnMeta) => unlocked && isColumnOpen(meta) && roleAllowsCell(perms, row, meta.id, me)
   // --- right-click menus ----------------------------------------------------------
   const openCellMenu = (e: React.MouseEvent, row: BidGridRow, meta: GridColumnMeta) => {
     e.preventDefault()
@@ -730,13 +737,13 @@ export function MasterGrid(props: MasterGridProps) {
       ? (meta.options?.find((o) => o.value === v)?.label ?? String(v ?? ''))
       : formatValueText(meta, v, lookups)
     const archived = row.status === 'archived'
-    const editable = canEditCell(meta)
+    const editable = canEditCell(row, meta)
     const root = toRoot(rules)
     const groups: MenuEntry[][] = [
       [
         { label: 'Open details', icon: 'ExternalLink', onSelect: () => navigate(`/bid-tracker/bid/${row.id}`) },
         {
-          label: editable ? 'Edit cell' : (unlocked ? 'Edit cell (read-only column)' : 'Edit cell (unlock first)'), icon: 'Pencil', disabled: !editable,
+          label: editable ? 'Edit cell' : (unlocked ? (isColumnOpen(meta) ? 'Edit cell (not allowed for your role)' : 'Edit cell (read-only column)') : 'Edit cell (unlock first)'), icon: 'Pencil', disabled: !editable,
           onSelect: () => document.querySelector<HTMLElement>(`[data-cell="${row.id}:${meta.id}"] [data-editable-cell]`)?.click(),
         },
         { label: 'Copy value', icon: 'Copy', disabled: !text, onSelect: () => { void navigator.clipboard?.writeText(text) } },
@@ -777,7 +784,7 @@ export function MasterGrid(props: MasterGridProps) {
     ]
     setMenu({ x: e.clientX, y: e.clientY, title: `${meta.header} column`, groups })
   }
-  const cellBg = (meta: GridColumnMeta) => (!unlocked || isColumnOpen(meta) ? EDITABLE_BG : READONLY_BG)
+  const cellBg = (row: BidGridRow, meta: GridColumnMeta) => (!unlocked || (isColumnOpen(meta) && roleAllowsCell(perms, row, meta.id, me)) ? EDITABLE_BG : READONLY_BG)
 
   // --- spreadsheet keyboard: arrows / Tab / Shift+Tab move the active cell -------
   /** Focus a cell's editor-box (or its read-only box), scrolling it into the virtual window first. */
@@ -1045,7 +1052,7 @@ export function MasterGrid(props: MasterGridProps) {
                   </td>
                   {row.getVisibleCells().map((cell) => {
                     const meta = cell.column.columnDef.meta as GridColumnMeta
-                    const display = renderCell(row.original, meta, !canEditCell(meta))
+                    const display = renderCell(row.original, meta, !canEditCell(row.original, meta))
                     const isFrozen = frozen.left.has(meta.id)
                     return (
                       <td
@@ -1057,10 +1064,10 @@ export function MasterGrid(props: MasterGridProps) {
                         }}
                         title={unlocked && !isColumnOpen(meta)
                           ? [meta.readOnlyReason ?? 'Column locked', canLockColumn(meta) && 'unlock the column from its header to edit'].filter(Boolean).join(' — ')
-                          : undefined}
+                          : unlocked && !canEditCell(row.original, meta) ? 'Your role cannot edit this field on this row' : undefined}
                         className={cn(
                           'relative overflow-hidden whitespace-nowrap border-b border-r border-line/70 p-0 transition-colors duration-150',
-                          cellBg(meta),
+                          cellBg(row.original, meta),
                           isFrozen && FROZEN_BG,
                           isSelected && SELECTED_BG,
                           rightAligned(meta) && 'text-right',
@@ -1069,7 +1076,7 @@ export function MasterGrid(props: MasterGridProps) {
                           flashId === meta.id && 'bg-goms-green/20',
                         )}
                       >
-                        {canEditCell(meta) ? (
+                        {canEditCell(row.original, meta) ? (
                           <EditableCell
                             col={effectiveMeta(meta)} value={editValue(row.original, meta)} display={display} lookups={lookups}
                             externalError={cellErrors[`${row.original.id}:${meta.id}`]}
