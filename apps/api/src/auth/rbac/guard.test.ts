@@ -107,6 +107,13 @@ describe('mode enforce', () => {
 })
 
 describe('mode shadow', () => {
+  it('does not apply response masks — shadow blocks and changes nothing (review finding 2)', async () => {
+    enforce('shadow')
+    await setRole('pre', 'presales')
+    await setRole('sales', 'sales')
+    await addSalesPerson('sales')
+    await expect(as('sales').masked()).resolves.toEqual({ secret: 1, shown: 2 })
+  })
   it('logs a would-be denial as JSON and lets the call through', async () => {
     enforce('shadow')
     await setRole('lawyer', 'legal')

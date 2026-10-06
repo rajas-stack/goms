@@ -1,4 +1,4 @@
-import { salesPersonPatchAtom, type PolicyModuleKey } from '@goms/domain'
+import { NODE_TYPE_MAP, salesPersonPatchAtom, type PolicyModuleKey } from '@goms/domain'
 import { DenyCall } from '../denial.js'
 import { domainOfNode, rowForSalesPerson, rowForTimelineEvent } from '../rows.js'
 import { patchAtoms } from './builders.js'
@@ -18,6 +18,32 @@ function moduleForDomain(domain: unknown): PolicyModuleKey {
 }
 const nodeAction = (action: 'read' | 'create' | 'update' | 'delete', pick: (raw: any) => unknown): Requirement =>
   async (raw) => ({ module: moduleForDomain(await domainOfNode(pick(raw))), action })
+
+/** A node is created in the domain its TYPE belongs to, under a parent of that same domain. The client-supplied `domain`
+ *  alone is never trusted: otherwise a role that may create departments could create geography by claiming `org` (review finding 4). */
+const nodeCreate: Requirement = async (raw) => {
+  const domain = raw?.domain
+  const module = moduleForDomain(domain)
+  if (raw?.typeKey !== undefined) {
+    const type = typeof raw.typeKey === 'string' ? NODE_TYPE_MAP[raw.typeKey] : undefined
+    if (!type || type.domain !== domain) throw new DenyCall('That node type does not belong to this part of the hierarchy.')
+  }
+  if (raw?.parentId) {
+    const parentDomain = await domainOfNode(raw.parentId)
+    if (parentDomain !== null && parentDomain !== domain) throw new DenyCall('A node cannot be created under a parent in a different part of the hierarchy.')
+  }
+  return { module, action: 'create' }
+}
+
+/** Moving a node keeps it inside its own domain (review finding 4). */
+const nodeMove: Requirement = async (raw) => {
+  const domain = await domainOfNode(raw?.id)
+  if (raw?.newParentId) {
+    const target = await domainOfNode(raw.newParentId)
+    if (target !== null && domain !== null && target !== domain) throw new DenyCall('A node cannot be moved into a different part of the hierarchy.')
+  }
+  return { module: moduleForDomain(domain), action: 'update' }
+}
 
 const meetingWrite = (action: 'update' | 'delete'): Requirement => async (raw) => ({
   module: 'am.meetings', action, row: (await rowForTimelineEvent(raw?.id)) ?? undefined,
@@ -41,7 +67,8 @@ export const accountMappingPolicy: Record<string, PolicyEntry> = {
   'employees.import': { requirements: [create('am.contacts')] },
   ...same(['employees.update', 'employees.setManager', 'employees.addCharge', 'employees.removeCharge'], write('am.contacts')),
   'employees.delete': { requirements: [remove('am.contacts')] },
-  'employees.merge': { requirements: [write('am.contacts'), remove('am.contacts')] },
+  // A merge counts as a delete (spec §14.13): IT holds contact delete but only reads contacts, so it must not also need write.
+  'employees.merge': { requirements: [remove('am.contacts')] },
   'employees.transfers.transfer': { requirements: [write('am.contacts'), write('am.departments')] },
 
   // ---- Meetings
@@ -59,11 +86,11 @@ export const accountMappingPolicy: Record<string, PolicyEntry> = {
   'hierarchy.childCount': { requirements: [nodeAction('read', (r) => r?.id)] },
   'hierarchy.childCounts': { requirements: [nodeAction('read', (r) => r?.parentId)] },
   'hierarchy.moveTargets': { requirements: [nodeAction('read', (r) => r?.nodeId)] },
-  'hierarchy.createNode': { requirements: [(raw) => ({ module: moduleForDomain(raw?.domain), action: 'create' })] },
+  'hierarchy.createNode': { requirements: [nodeCreate] },
   'hierarchy.duplicateNode': { requirements: [nodeAction('create', (r) => r?.id)] },
   'hierarchy.importChildren': { requirements: [nodeAction('create', (r) => r?.parentId)] },
   ...same(['hierarchy.updateNode', 'hierarchy.setNodeStatus'], nodeAction('update', (r) => r?.id)),
-  'hierarchy.moveNode': { requirements: [nodeAction('update', (r) => r?.id)] },
+  'hierarchy.moveNode': { requirements: [nodeMove] },
   'hierarchy.reorderNode': { requirements: [nodeAction('update', (r) => r?.id)] },
   'hierarchy.deleteNode': { requirements: [nodeAction('delete', (r) => r?.id)] },
 

@@ -23,7 +23,7 @@ export function rowScopeFacts(row: BidGridRow, myEmail: string, mySalesPersonId:
   for (const id of [row.geoSalesPersonId, row.buSalesPersonId]) if (id) ids.add(id)
   return {
     salesOwnerIds: [...ids],
-    createdBy: (row as any).createdBy ?? null,
+    createdBy: row.createdBy ?? null,
     assigned: { presales: row.preSalesPersonId ?? null, legal: row.legalPersonId ?? null, bid: row.bidTeamMemberId ?? null },
   }
 }

@@ -19,7 +19,16 @@ export const authRouter = router({
   me: publicProcedure.query(async ({ ctx }): Promise<MyAccess> => {
     const mode = rbacMode()
     if (mode === 'off') return { mode, email: ctx.user?.email ?? null, roles: [], facts: null }
-    const verified = ctx.user ?? (await verifyFirebaseToken(ctx.authHeader))
+    let verified = ctx.user
+    if (!verified) {
+      try {
+        verified = await verifyFirebaseToken(ctx.authHeader)
+      } catch (e) {
+        // `shadow` changes nothing for the browser: a signed-out visitor is not prompted to sign in. At `enforce` they are.
+        if (mode === 'shadow') return { mode: 'off', email: null, roles: [], facts: null }
+        throw e
+      }
+    }
     if (!isAmnexAccount(verified.email)) {
       throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
     }

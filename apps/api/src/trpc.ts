@@ -49,7 +49,8 @@ const rbacGate = t.middleware(async ({ ctx, path, getRawInput, next }) => {
   if (mode === 'off') return next()
   const { entry, user } = await evaluateCall({ mode, path, rawInput: await getRawInput(), ctx })
   const result = await next()
-  if (result.ok && entry?.mask && user) return { ...result, data: entry.mask(result.data, user) }
+  // Masks change what a caller sees, so — like a denial — they are applied only at `enforce`; `shadow` changes nothing.
+  if (mode === 'enforce' && result.ok && entry?.mask && user) return { ...result, data: entry.mask(result.data, user) }
   return result
 })
 
@@ -138,12 +139,16 @@ export const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
 /** For the access API (`access.*`). Overrides created while RBAC is `off` become live the moment it is enforced, so
  *  this is gated regardless of RBAC_MODE: in `off` mode only ADMIN_ALLOWED_EMAILS members (the System Admins) may use it; in
  *  shadow/enforce the registry's `admin.access` requirement applies (IT, or System Admin). */
-export const accessProcedure = protectedProcedure.use(({ ctx, next }) => {
-  if (rbacMode() === 'off' && authEnforced()) {
+export const accessProcedure = protectedProcedure.use(async ({ ctx, path, getRawInput, next }) => {
+  const mode = rbacMode()
+  if (mode === 'off' && authEnforced()) {
     if (!ctx.user || !isAllowListed(ctx.user.email, process.env.ADMIN_ALLOWED_EMAILS)) {
       throw new TRPCError({ code: 'FORBIDDEN', message: 'Your account is not authorized to manage access.' })
     }
   }
+  // `shadow` only logs for every other procedure, but an override written during shadow becomes a live role the moment
+  // RBAC is enforced — so here the decision is applied in shadow too (spec §3.3).
+  if (mode === 'shadow') await evaluateCall({ mode: 'enforce', path, rawInput: await getRawInput(), ctx })
   return next()
 })
 

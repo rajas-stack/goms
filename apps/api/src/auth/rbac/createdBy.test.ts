@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { appRouter } from '../../index.js'
 import { pool } from '../../db.js'
-import { addEmployee, addNode, cleanupRbacFixtures, trackOpportunity } from '../../testHelpers/rbacFixtures.js'
+import { addEmployee, addNode, cleanupRbacFixtures, makeBid, trackOpportunity } from '../../testHelpers/rbacFixtures.js'
 
 beforeEach(cleanupRbacFixtures)
 afterEach(cleanupRbacFixtures)
@@ -21,6 +21,11 @@ describe('created_by (gap A1)', () => {
     const opp = await appRouter.createCaller({}).opportunities.create({ departmentId: department, opportunityName: 'RBAC anon' })
     trackOpportunity(opp.id)
     expect((await pool.query('SELECT created_by FROM opportunities WHERE id=$1', [opp.id])).rows[0].created_by).toBeNull()
+  })
+  it('the grid rows carry the creator, so the UI can tell which rows a Sales user created (review finding 7)', async () => {
+    const { bidId } = await makeBid({ createdBy: 'RBAC-Maker@Amnex.com' })
+    const rows = await appRouter.createCaller({}).bids.listForGrid()
+    expect(rows.find((r: any) => r.id === bidId)).toMatchObject({ createdBy: 'rbac-maker@amnex.com' })
   })
   it('followUps.create records the creator', async () => {
     const created = await as('rbac-maker@amnex.com').followUps.create({ entityType: 'contact', entityId: randomUUID(), dueDate: '2030-01-01' })

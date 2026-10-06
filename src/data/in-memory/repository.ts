@@ -1636,6 +1636,7 @@ class InMemoryRepository implements Repository {
         sheet: bid.sheet ?? DEFAULT_OWNED_SHEET,
         opportunityCode: opp?.opportunityCode ?? '',
         opportunityType: opp?.opportunityType ?? '',
+        createdBy: null, // the local store has no sign-in, so no creator
         departmentId: opp?.departmentId ?? '',
         departmentName: this.data.nodes.find((n) => n.id === opp?.departmentId)?.name ?? null,
         stateCode: opp?.stateCode ?? null,

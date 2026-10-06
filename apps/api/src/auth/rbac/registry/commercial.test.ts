@@ -75,6 +75,13 @@ describe('ownership of commercial data (decision 3)', () => {
     expect(await denied('legal', 'commercial.skus.list')).toBe(true)
     expect(await denied('delivery', 'commercial.boq.list')).toBe(true)
   })
+  it('tax classes and currencies are Finance-controlled all the way: Pre-sales cannot delete them (review finding 6)', async () => {
+    expect(await denied('presales', 'commercial.masters.delete', { key: 'taxClasses', id: 'x' })).toBe(true)
+    expect(await denied('presales', 'commercial.masters.delete', { key: 'currencies', id: 'x' })).toBe(true)
+    expect(await denied('finance', 'commercial.masters.delete', { key: 'currencies', id: 'x' })).toBe(false)
+    expect(await denied('presales', 'commercial.masters.delete', { key: 'verticals', id: 'x' })).toBe(false)
+    expect(await denied('finance', 'commercial.masters.delete', { key: 'verticals', id: 'x' })).toBe(true)
+  })
   it('only Pre-sales (and System Admin) delete commercial records', async () => {
     expect(await denied('presales', 'commercial.boq.delete', { id: 'x' })).toBe(false)
     expect(await denied('cxo', 'commercial.boq.delete', { id: 'x' })).toBe(true)

@@ -23,7 +23,8 @@ const OPEN: Permissions = {
 const Ctx = createContext<Permissions>(OPEN)
 
 function build(access: MyAccess | undefined): Permissions {
-  if (!access || access.mode === 'off' || !access.facts) return OPEN
+  // `shadow` only logs on the server, so the UI behaves exactly as it does with RBAC off until `enforce`.
+  if (!access || access.mode !== 'enforce' || !access.facts) return OPEN
   const user: UserFacts = { email: access.email ?? '', roles: access.roles, ...access.facts }
   return {
     enforced: true,

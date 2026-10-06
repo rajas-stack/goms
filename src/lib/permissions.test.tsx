@@ -22,6 +22,11 @@ describe('usePermissions', () => {
       expect(result.current.canReadAtom('sku.costs')).toBe(true)
     }
   })
+  it('treats shadow like off: it only logs on the server, so the UI must hide nothing (review finding 2)', () => {
+    const { result } = renderHook(() => usePermissions(), { wrapper: wrap({ mode: 'shadow', email: 's@amnex.com', roles: [], facts }) })
+    expect(result.current.enforced).toBe(false)
+    expect(result.current.level('com.approvalMatrix')).toBe('W')
+  })
   it('evaluates the shared policy for a Sales user, row by row', () => {
     const { result } = renderHook(() => usePermissions(), { wrapper: wrap({ mode: 'enforce', email: 's@amnex.com', roles: ['sales'], facts }) })
     const own = { salesOwnerIds: ['sp1'], createdBy: null, assigned: { presales: null, legal: null, bid: null } }

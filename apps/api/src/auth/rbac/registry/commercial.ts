@@ -12,7 +12,14 @@ const masterModule = (key: unknown): PolicyModuleKey => (key === 'approvalMatrix
 
 const masterRead: Requirement = (raw) => ({ module: masterModule(raw?.key), action: 'read' })
 const masterCreate: Requirement = (raw) => ({ module: masterModule(raw?.key), action: 'create' })
-const masterDelete: Requirement = (raw) => ({ module: masterModule(raw?.key), action: 'delete' })
+// Tax classes and currencies are Finance-controlled (spec §6.3): Pre-sales may not delete them, so deleting one needs the same
+// field right as editing one. Every other master keeps the ordinary delete grant.
+const masterDelete: Requirement = (raw) => {
+  const atom = masterKeyAtom(String(raw?.key))
+  return atom === 'master.taxClasses' || atom === 'master.currencies'
+    ? { module: 'com.masters', action: 'update', atoms: [atom] }
+    : { module: masterModule(raw?.key), action: 'delete' }
+}
 const masterWrite: Requirement = (raw) => ({ module: masterModule(raw?.key), action: 'update', atoms: [masterKeyAtom(String(raw?.key))] })
 
 const skuUpdate: Requirement = (raw) => ({ module: 'com.skus', action: 'update', atoms: patchAtoms(raw?.patch, skuPatchAtom) })

@@ -54,6 +54,7 @@ describe('People & Contacts vs Customer Departments vs Company Org Structure are
     expect(await denied('sales', 'employees.delete', { id: empId })).toBe(true)
     expect(await denied('it', 'employees.delete', { id: empId })).toBe(false)
     expect(await denied('sales', 'employees.merge', {})).toBe(true)
+    expect(await denied('it', 'employees.merge', {})).toBe(false) // merge counts as a delete, which IT holds (review finding 5)
     expect(await denied('sales', 'hierarchy.deleteNode', { id: nodeId })).toBe(true)
     expect(await denied('it', 'hierarchy.deleteNode', { id: nodeId })).toBe(false)
   })
@@ -70,6 +71,17 @@ describe('hierarchy: one router, three domains', () => {
     expect(await denied('sales', 'hierarchy.createNode', { domain: 'org' })).toBe(false)
     expect(await denied('it', 'hierarchy.updateNode', { id: geoId, patch: {} })).toBe(false)
     expect(await denied('sales', 'hierarchy.updateNode', { id: geoId, patch: {} })).toBe(true)
+  })
+  it('the node TYPE decides the domain, never just the client-supplied one (review finding 4)', async () => {
+    // Sales may create departments but not geography: claiming domain 'org' for a geography type must not work
+    expect(await denied('sales', 'hierarchy.createNode', { domain: 'org', typeKey: 'district', parentId: geoId })).toBe(true)
+    expect(await denied('sales', 'hierarchy.createNode', { domain: 'org', typeKey: 'branch', parentId: geoId })).toBe(true) // org type under a geo parent
+    expect(await denied('sales', 'hierarchy.createNode', { domain: 'org', typeKey: 'branch', parentId: nodeId })).toBe(false)
+    expect(await denied('sales', 'hierarchy.createNode', { domain: 'org', typeKey: 'no-such-type', parentId: nodeId })).toBe(true)
+    expect(await denied('it', 'hierarchy.createNode', { domain: 'geo', typeKey: 'district', parentId: geoId })).toBe(false)
+    // moving a node must stay inside its own domain
+    expect(await denied('sales', 'hierarchy.moveNode', { id: nodeId, newParentId: geoId })).toBe(true)
+    expect(await denied('sales', 'hierarchy.moveNode', { id: nodeId, newParentId: null })).toBe(false)
   })
   it('refuses an unknown domain or a missing node rather than guessing', async () => {
     expect(await denied('cxo', 'hierarchy.createNode', { domain: 'moon' })).toBe(true)

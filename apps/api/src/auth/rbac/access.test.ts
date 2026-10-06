@@ -66,6 +66,23 @@ describe('access.* with RBAC off: only ADMIN_ALLOWED_EMAILS may use it', () => {
   })
 })
 
+describe('access.* in shadow: the generic gate only logs, but this API must still refuse (overrides go live at enforce)', () => {
+  beforeEach(() => { process.env.AUTH_ENFORCEMENT_ENABLED = 'true'; process.env.RBAC_MODE = 'shadow' })
+  it('refuses an ordinary signed-in user — they cannot give themselves a role', async () => {
+    await addSalesPerson('sales')
+    const err = await as('sales').access.setOverride({ email: rbacEmail('sales'), role: 'cxo', effect: 'grant', reason: 'x' }).catch((e) => e)
+    expect(err.code).toBe('FORBIDDEN')
+    expect(await pool.query(`SELECT 1 FROM user_role_overrides WHERE email=$1`, [rbacEmail('sales')])).toMatchObject({ rowCount: 0 })
+    await expect(as('sales').access.listOverrides()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    await expect(as('sales').access.readiness()).rejects.toMatchObject({ code: 'FORBIDDEN' })
+  })
+  it('still lets IT and a System Admin manage overrides', async () => {
+    await setRole('it', 'it'); makeSystemAdmin('root')
+    await expect(as('it').access.listOverrides()).resolves.toEqual(expect.any(Array))
+    await expect(as('root').access.setOverride({ email: rbacEmail('z'), role: 'delivery', effect: 'grant', reason: 'r' })).resolves.toBeDefined()
+  })
+})
+
 describe('access.* once RBAC is on: IT manages it, other roles cannot', () => {
   beforeEach(() => { process.env.AUTH_ENFORCEMENT_ENABLED = 'true'; process.env.RBAC_MODE = 'enforce' })
   it('IT and System Admin can; Sales cannot, and CXO may only read', async () => {
@@ -153,8 +170,12 @@ describe('auth.me', () => {
     makeSystemAdmin('root')
     await expect(as('root').auth.me()).resolves.toMatchObject({ mode: 'enforce', email: rbacEmail('root'), roles: ['system_admin'] })
   })
-  it('rejects a signed-out caller with UNAUTHORIZED once RBAC is on', async () => {
-    process.env.AUTH_ENFORCEMENT_ENABLED = 'true'; process.env.RBAC_MODE = 'shadow'
+  it('rejects a signed-out caller with UNAUTHORIZED at enforce', async () => {
+    process.env.AUTH_ENFORCEMENT_ENABLED = 'true'; process.env.RBAC_MODE = 'enforce'
     await expect(appRouter.createCaller({}).auth.me()).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+  })
+  it('in shadow a signed-out caller is NOT prompted to sign in: shadow changes nothing for the browser (review finding 2)', async () => {
+    process.env.AUTH_ENFORCEMENT_ENABLED = 'true'; process.env.RBAC_MODE = 'shadow'
+    await expect(appRouter.createCaller({}).auth.me()).resolves.toEqual({ mode: 'off', email: null, roles: [], facts: null })
   })
 })

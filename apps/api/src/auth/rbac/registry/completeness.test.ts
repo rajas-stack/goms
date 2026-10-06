@@ -29,7 +29,7 @@ describe('PROCEDURE_POLICY completeness', () => {
 
 describe('cross-module procedures declare every module they touch (spec §9)', () => {
   it.each([
-    'bids.update', 'bids.create', 'employees.transfers.transfer', 'employees.merge',
+    'bids.update', 'bids.create', 'employees.transfers.transfer',
     'bidMilestones.create', 'bidMilestones.update', 'bidMilestones.delete', 'bidCorrigenda.reviewChange',
   ])('%s has more than one requirement', (path) => {
     expect(PROCEDURE_POLICY[path].requirements.length).toBeGreaterThan(1)
