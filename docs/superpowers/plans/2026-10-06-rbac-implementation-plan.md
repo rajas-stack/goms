@@ -3752,6 +3752,7 @@ describe('server-side read masking — sentinel golden test', () => {
     const currency = await m('currencies', { code: 'INR', name: 'Rupee', description: '', symbol: '₹', decimalPlaces: 2, exchangeRate: 1, isBaseCurrency: true })
     const taxClass = await m('taxClasses', { code: 'GST18', name: 'GST', description: '', ratePct: 18 })
     const billingType = await m('billingTypes', { code: 'OT', name: 'One-Time', description: '' })
+    await m('productEditions', { code: 'STD', name: 'Standard', description: '' }) // skus.create resolves "the" standard edition by this code
     const sku = await off.commercial.skus.create({
       name: 'Sentinel', categoryId: category.id, featureId: feature.id, uomId: uom.id, currencyId: currency.id, taxClassId: taxClass.id,
       billingTypeId: billingType.id, activeFrom: '2026-01-01', activeTill: null,

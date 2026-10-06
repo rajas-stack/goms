@@ -1,5 +1,5 @@
 import {
-  accessFor, maskAuditEntry, redactSalesPerson, type PolicyModuleKey, type UserFacts,
+  accessFor, maskAuditEntry, maskSkuRow, redactSalesPerson, type PolicyModuleKey, type UserFacts,
 } from '@goms/domain'
 import { ROW_MODULES } from './helpers.js'
 import type { Check, Requirement } from './types.js'
@@ -49,4 +49,10 @@ const AUDIT_ENTITY_MODULES: Record<string, PolicyModuleKey[]> = {
 export const auditReadRequirement: Requirement = (raw): Check => {
   const modules = typeof raw?.entityType === 'string' ? AUDIT_ENTITY_MODULES[raw.entityType] : undefined
   return modules ? { module: modules[0], action: 'read', anyOf: modules } : { module: 'admin.audit', action: 'read' }
+}
+
+/** Hides restricted SKU fields in any SKU-shaped response (a row, or an array of rows). */
+export function maskSkuResponse(data: unknown, user: UserFacts): unknown {
+  if (Array.isArray(data)) return data.map((row) => (isRecord(row) ? maskSkuRow(row, user.roles) : row))
+  return isRecord(data) ? maskSkuRow(data, user.roles) : data
 }
