@@ -1,7 +1,7 @@
 # GOMS Android app as a thin native shell around the hosted web app — design
 
-**Status:** Draft for review (2026-10-06). Design and implementation plan only; nothing has been built, installed or changed in `android/`.
-**Related:** [Google OAuth login design](2026-10-06-google-oauth-login-design.md) — preserved unchanged except one optional, additive item (§6.4). [RBAC design](2026-10-06-rbac-design.md) — untouched.
+**Status:** Updated 2026-10-06 for review. Q1, Q3 and Q4 are decided (§10); **Q2 is OPEN** and gates only the production APK (§8, §10). Design and implementation plan only; nothing has been built, installed or changed in `android/`.
+**Related:** [Google OAuth login design](2026-10-06-google-oauth-login-design.md) — preserved unchanged except one additive, approved item (§6.4: a per-environment `OAUTH_APP_SCHEME`). Implementation: [OAuth implementation plan](../plans/2026-10-06-google-oauth-login-implementation-plan.md), which owns the OAuth code and the native tasks derived from this design. [RBAC design](2026-10-06-rbac-design.md) — untouched.
 
 ## 1. Purpose and scope
 
@@ -77,12 +77,12 @@ F2 means there is exactly one Capacitor mechanism that gives a remote page the b
 ### 4.3 Keeping the two honest: a capability contract
 The web is deployed to a fleet of old and new APKs at once, so the web must never assume a native feature exists.
 
-- The shell appends `GOMSShell/<versionCode>` to the WebView user agent (`setAppendedUserAgentString`). The server can log it; the web reads it synchronously.
+- The shell appends `GOMSShell/<versionCode> GOMSScheme/<scheme>` to the WebView user agent (`setAppendedUserAgentString`). The server can log it; the web reads it synchronously (`shellVersion()`, `shellScheme()`).
 - New `src/lib/nativeShell.ts` exposes `isGomsShell()`, `shellVersion()`, `hasCapability(name)` (`Capacitor.isPluginAvailable` plus a version table), and is the only place native availability is decided. Features that need a native capability use `hasCapability`, never `isNativePlatform()` directly (existing uses are migrated in P2).
-- Hosting serves `/shell-manifest.json` (`Cache-Control: no-cache`): `{ "latest": { versionCode, versionName, apkUrl, sha256 }, "minSupported": <versionCode> }`.
+- Hosting serves `/shell-manifest.json` (`Cache-Control: no-cache`): `{ "latest": { versionCode, versionName, sha256, where }, "minSupported": <versionCode> }`. The file is **public** (Hosting), and APKs are distributed privately (§10 Q3), so it carries **no direct APK link**: `where` is human-readable text naming the internal location (e.g. "Internal share → GOMS → Android"), and `sha256` lets the installer verify the file they fetched.
   - Installed `versionCode` < `latest`: a dismissible "Update available" banner.
   - Installed < `minSupported`: a blocking "Update required" screen (used when a web release depends on a native capability or a security fix).
-  - Because this is data on Hosting, shipping a new APK is: publish the APK, then bump the manifest. No APK is needed to *announce* an APK.
+  - Because this is data on Hosting, shipping a new APK is: publish the APK to the private location, then bump the manifest. No APK is needed to *announce* an APK.
 - Ordering rule: **native first, web second.** Roll the APK out (and bump `latest`), then ship the web release that uses it, gated by `hasCapability`. Only raise `minSupported` once adoption is acceptable.
 - `docs/` gets a short release-matrix page (this section) so a developer can answer "does this need an APK?" from the file list of the change.
 
@@ -115,9 +115,11 @@ The web is deployed to a fleet of old and new APKs at once, so the web must neve
 | Flavor | `applicationId` | `GOMS_ORIGIN` (exact, https, no path) | Deep-link scheme |
 |---|---|---|---|
 | `prod` | `com.gorms.app` | `https://goms-prod.web.app` | `com.gorms.app` |
-| `dev` | `com.gorms.app.dev` (installs beside prod) | `https://goms-dev.firebaseapp.com` | see §6.4 |
+| `dev` | `com.gorms.app.dev` (installs beside prod) | `https://goms-dev.firebaseapp.com` | `com.gorms.app.dev` |
 
 The origin must equal the origin registered as the Google OAuth redirect host. The site's other Hosting aliases (e.g. `goms-prod.firebaseapp.com`) serve identical content but are **not** allowlisted; if a link points at one, it opens in the system browser, never in the WebView. `debug` builds use the `dev` flavor; there is no flavor or build type that reads an origin from `capacitor.config`.
+
+Each flavor owns its **own** deep-link scheme (Q1). Prod and dev APKs can therefore be installed together, and a deep link can only ever reach the app it was issued for: the dev API emits `com.gorms.app.dev://auth…`, the prod API emits `com.gorms.app://auth…`, and each manifest's intent filter and each app's handler accept only their own scheme.
 
 ### 5.2 Navigation policy (`NavigationPolicy`, a plain-Java class, unit-tested without Android)
 
@@ -131,7 +133,7 @@ The origin must equal the origin registered as the Google OAuth redirect host. T
 | `https` to any other host (including `accounts.google.com`, other Hosting aliases, look-alike hosts such as `goms-prod.web.app.evil.com`) | `OPEN_EXTERNAL_BROWSER` |
 | `http` | `BLOCK` (cleartext disabled app-wide) |
 | `mailto:`, `tel:` | `HAND_TO_SYSTEM_APP` |
-| `com.gorms.app://auth…` | not a WebView navigation; handled by the activity intent (§6) |
+| `<flavor scheme>://auth…` (`com.gorms.app` / `com.gorms.app.dev`) | not a WebView navigation; handled by the activity intent (§6) |
 | `intent:`, `file:`, `content:`, `javascript:`, `data:` as main frame, `android-app:`, any unknown scheme | `BLOCK` |
 | `blob:` / `data:` for downloads/exports the page itself created | allowed only when the initiating document is the pinned origin |
 
@@ -154,8 +156,8 @@ Host comparison is on the parsed `URI` authority (lower-cased, default port norm
 ### 6.1 Flow
 1. Web code (running on the pinned origin) calls `Browser.open({ url: GOMS_ORIGIN + '/api/oauth/google/start?client=app' })`. `nativeShell.openOAuth()` builds the URL from the pinned origin it reads from the shell, never from a page-supplied value.
 2. The system browser (Custom Tab) runs Google sign-in; Google redirects to the HTTPS callback on the same Hosting origin; the API callback page issues `com.gorms.app://auth?code=<one-time code>`.
-3. Android routes the deep link to `MainActivity` (`singleTask`, so the existing instance resumes). `@capacitor/app` fires `appUrlOpen` in the already-loaded hosted page.
-4. The handler accepts **only** `com.gorms.app://auth` with exactly one `code` parameter matching the code format (base64url, fixed length), ignores everything else, strips nothing into logs, and `POST`s `/api/oauth/exchange` with `{ code, client: 'app' }` (same-origin request).
+3. Android routes the deep link to the flavor's `MainActivity` (`singleTask`, so the existing instance resumes). `@capacitor/app` fires `appUrlOpen` in the already-loaded hosted page.
+4. The handler accepts **only** `<this flavor's scheme>://auth` (the scheme is read from the shell's user-agent token, §4.3) with exactly one `code` parameter matching the code format (base64url, fixed length), or exactly one `error` parameter from the fixed reason list; it ignores everything else, strips nothing into logs, and `POST`s `/api/oauth/exchange` with `{ code, client: 'app' }` (same-origin request).
 5. Tokens go to Android-backed secure storage through a `SessionStore` adapter in `session.ts` (web uses `localStorage`; the shell uses the secure-storage plugin when `hasCapability('secureStorage')`).
 
 ### 6.2 What the shell must not do
@@ -166,8 +168,8 @@ Host comparison is on the parsed `URI` authority (lower-cased, default port norm
 ### 6.3 Why same-origin is an improvement
 In the old local-origin model the app ran at `https://localhost` and needed `CORS_ALLOWED_ORIGINS` to admit it (OAuth spec §5.2 bullet 4). With the hosted origin (F9) that entry is **not needed**; the plan verifies the shell's API calls work with `https://localhost` absent from the list.
 
-### 6.4 One optional additive OAuth item (needs your decision, §10 Q1)
-So that a dev APK and a prod APK can be installed side by side, the API callback page would read the app scheme from an optional `OAUTH_APP_SCHEME` env var (default `com.gorms.app`). With it unset, behaviour is identical to the finalized spec. If side-by-side installs are not wanted, the dev flavor reuses `com.gorms.app` and this item is dropped.
+### 6.4 The one additive OAuth item: `OAUTH_APP_SCHEME` (approved, Q1)
+So that dev and prod APKs install side by side, the API callback page reads the app scheme from an environment variable, `OAUTH_APP_SCHEME`, set per API deployment (`com.gorms.app` on prod, `com.gorms.app.dev` on dev). Unset, it defaults to `com.gorms.app`, so behaviour is identical to the finalized OAuth spec. The value is validated against a fixed allow-list (`com.gorms.app`, `com.gorms.app.dev`); anything else makes the callback answer a generic 503 and is logged by variable name only. It changes nothing in the OAuth security model: same one-time code, same HTTPS callback, same client binding. The Google OAuth client keeps one redirect URI per environment host; the scheme is not part of it.
 
 ## 7. Security model
 
@@ -187,7 +189,7 @@ The shell trades "native bridge only for code in the APK" for "native bridge for
 Residual risk accepted by choosing A over D: code served by the GOMS origin has plugin access. If that is unacceptable, D is the alternative, at the cost described in §3.
 
 ## 8. Behaviour changes users will see
-- **Existing installs:** the app's web origin changes from `https://localhost` to the hosted origin. WebView storage (localStorage/IndexedDB, any local-mode data, saved drafts) does **not** carry over, and users sign in again. Same `applicationId` and signing key means it installs as an upgrade (versionCode > 1). See §10 Q2.
+- **Existing installs (Q2 is OPEN):** the prod flavor keeps `applicationId = com.gorms.app`, so installing it over an existing APK is an upgrade, and the app's web origin changes from `https://localhost` to the hosted origin. WebView storage (IndexedDB database `gorms`, localStorage, any local-mode data) does **not** carry over, and users sign in again. Whether anything stranded matters is undecided: see §10 Q2. **The dev flavor installs beside the old app under a different `applicationId`, so it cannot strand anything; Q2 therefore gates only the production APK release.**
 - The Android app now always shows the exact web release currently on Hosting, including a new feature the moment it is deployed to prod. Features not yet ready must be flagged off on the web as they are today (`VITE_*_ENABLED`).
 - First launch offline shows the local "Can't reach GOMS" page.
 
@@ -196,21 +198,21 @@ Residual risk accepted by choosing A over D: code served by the GOMS origin has 
 Each phase is independently verifiable. Native phases ship in the same APK; web phases ship via normal deploys. Per the project's rules, each env change, secret and deploy is its own approval.
 
 **P0 — Prerequisites**
-- Confirm §10 Q1-Q3. Confirm the OAuth plan covers `@capacitor/browser`, the secure-storage plugin and the `appUrlOpen` handler (they are owned there; this plan consumes them).
+- Q1, Q3 and Q4 are decided (§10); Q2 is open and gates only the production APK (P5). The OAuth implementation plan owns `@capacitor/browser`, the secure-storage plugin, the `appUrlOpen` handler, `OAUTH_APP_SCHEME` and the native tasks below; this document is their design.
 
 **P1 — Native shell (one APK, `dev` flavor first)**
-- `android/app/build.gradle`: `productFlavors { dev, prod }` with `applicationId` suffix, `buildConfigField GOMS_ORIGIN`, `manifestPlaceholders` for the scheme; `versionCode` bump; release signing as already documented.
-- `MainActivity.java`: build the pinned `CapConfig`, validate origin, append `GOMSShell/<versionCode>` UA, install `GomsWebViewClient`.
+- `android/app/build.gradle`: `productFlavors { dev, prod }` with `applicationId` suffix (dev), `buildConfigField GOMS_ORIGIN`, a `GOMS_SCHEME` field and `manifestPlaceholders` for each flavor's own scheme; `versionCode` bump; release signing as already documented.
+- `MainActivity.java`: build the pinned `CapConfig`, validate origin, append the `GOMSShell/<versionCode> GOMSScheme/<scheme>` UA token, install `GomsWebViewClient`.
 - New `NavigationPolicy.java`, `GomsWebViewClient.java`.
-- `AndroidManifest.xml`: deep-link intent filter (`VIEW`, `DEFAULT`, `BROWSABLE`, scheme from placeholder, host `auth`), `allowBackup=false`, `usesCleartextTraffic=false`, `networkSecurityConfig`, `dataExtractionRules`.
+- `AndroidManifest.xml`: deep-link intent filter (`VIEW`, `DEFAULT`, `BROWSABLE`, scheme from the per-flavor placeholder, host `auth`), `allowBackup=false`, `usesCleartextTraffic=false`, `networkSecurityConfig`, `dataExtractionRules`.
 - `res/xml/network_security_config.xml`, `data_extraction_rules.xml`.
 - `android-shell/www/offline.html`; `capacitor.config.ts`: `webDir: 'android-shell/www'`, `errorPath: 'offline.html'`, **no `server` block**.
 - JUnit tests for `NavigationPolicy` (the table in §5.2, plus the look-alike matrix in §7).
 
 **P2 — Web changes (normal web release; works in browsers, and in old APKs because everything is feature-gated)**
 - `src/lib/nativeShell.ts` (+ tests): UA parsing, `hasCapability`, version table; migrate `AppLayout.tsx` and `file-export.ts` from `Capacitor.isNativePlatform()` to it.
-- `public/shell-manifest.json` (initially `latest == minSupported == installed`), update-banner and update-required components wired into the app layout, with tests.
-- `firebase.json`: `Cache-Control: no-cache` for `shell-manifest.json`; CSP in report-only mode.
+- `public/shell-manifest.json` (initially `latest == minSupported == installed`, no APK link, §4.3), update-banner and update-required components wired into the app layout, with tests.
+- `firebase.json`: `Cache-Control: no-cache` for `shell-manifest.json`; CSP in **report-only** mode for one release (Q4), with a report destination so real violations can be reviewed (see Q4 in §10).
 - `session.ts` `SessionStore` adapter hook (the OAuth plan supplies the secure-storage implementation).
 
 **P3 — Guards and docs**
@@ -224,20 +226,33 @@ Each phase is independently verifiable. Native phases ship in the same APK; web 
 - `adb shell dumpsys package` confirms the deep-link filter; `chrome://inspect` is refused on the release build.
 
 **P5 — Rollout**
-- Dev APK to a few devices; then CSP to enforce; then prod flavor APK, `shell-manifest.json` bumped, sideload instructions. Prod only after dev passes and with its own approval, consistent with the OAuth spec §7.
+- Dev APK to a few devices. CSP stays report-only for one release and is enforced only after the collected violation reports are reviewed (Q4). The **production APK is gated by Q2**: no prod APK reaches an existing install until Q2 is resolved (and, if any install is "Keep", until its export is done). Then prod flavor APK, `shell-manifest.json` bumped, private distribution (Q3). Prod only after dev passes and with its own approval, consistent with the OAuth spec §7.
 
 **Rollback**
 - Web: redeploy the previous Hosting release (existing procedure); installed apps follow on next load.
 - Native: users keep the previous APK; `minSupported` is lowered or `latest` pointed back. A bad shell cannot be fixed remotely except by changing what the pinned origin serves (e.g. the update-required screen), which is why §5.3 keeps the shell logic small.
 
-## 10. Open decisions
+## 10. Decisions
 
-1. **Side-by-side dev and prod installs?** Recommend yes (`com.gorms.app.dev`), which needs the optional `OAUTH_APP_SCHEME` item in §6.4. If no, dev and prod share the `com.gorms.app` scheme and cannot be installed together.
-2. **Do any existing installs hold local-mode data (IndexedDB) that users need?** The repo's default build is local-mode; if installed APKs were built that way, moving to the hosted origin strands that data. If every install is in connected mode (the API holds the data), nothing is lost but drafts. Please confirm which.
-3. **Where is the APK hosted for sideloading** (Hosting `/downloads`, a GCS bucket, an internal share)? This only sets `apkUrl` in `shell-manifest.json`. Recommend a private GCS object or internal share rather than the public Hosting site.
-4. **CSP enforcement date.** Recommend one release in report-only mode first; the real script/connect sources need to be inventoried from the built `dist` and from Firebase/Google endpoints still in use during OAuth cut-over (`AUTH_PROVIDER=both`).
+| # | Question | Status | Decision / next step |
+|---|---|---|---|
+| Q1 | Side-by-side dev and prod installs? | **Decided: yes** | `com.gorms.app` (prod) and `com.gorms.app.dev` (dev), each with its own OAuth app scheme: `com.gorms.app` and `com.gorms.app.dev`. Needs the API setting `OAUTH_APP_SCHEME` (§6.4). Different `applicationId`s also mean the dev APK never touches an existing install's data. |
+| Q2 | Do any existing installs hold local-mode data or drafts that must survive the move to the hosted origin? | **OPEN** | Not decided and not assumed from the repo. Investigation procedure below. Gates only the production APK. |
+| Q3 | Where are APKs distributed? | **Decided** | A private GCS location or internal share. Not public Hosting. Consequence: `shell-manifest.json` is public, so it carries no APK link, only version, hash and a human-readable `where` (§4.3). |
+| Q4 | CSP rollout | **Decided** | Report-only for one release. Enforce only after the actual violation reports are reviewed and the required script/connect sources are confirmed (list to inventory from the built `dist`; during `AUTH_PROVIDER=both` it must also cover Firebase endpoints; the server-side OAuth flow itself adds no browser-side Google host). |
+
+**What Q4 needs that is not decided yet:** report-only CSP is useful only if the reports are collected somewhere. The proposal is a small, rate-limited, unauthenticated report endpoint that writes each report to Cloud Logging (no storage, no personal data beyond what the browser includes). It is a new API route and is listed as its own item in the implementation plan so it can be approved or replaced (for example by a third-party collector) before it is built.
+
+### Q2 — how it will be resolved (procedure approved; results pending)
+- **Fact that bounds the question:** local-mode data is written to IndexedDB (database `gorms`, object store `snapshot`, key `data`) only after a change is made in the app; an install that was only browsed has no saved snapshot. Form drafts are `sessionStorage` and do not survive a restart. `localStorage` holds only preferences.
+- **Install register:** per install, who holds it, device, install date, which APK/build, and whether it was built with `VITE_API_BASE_URL` (a build without it is local mode).
+- **Per-device check without tools:** what the app shows (connected badge vs straight to the map), anything hand-entered, any real use after 2026-08-24, optionally an **Export** of people/bids to CSV compared with a fresh seed.
+- **Per-device check over USB (debug builds only):** `adb shell run-as com.gorms.app ls -l --time-style=long-iso app_webview/Default/IndexedDB/` and the `Local Storage/leveldb` directory. No `https_localhost_*.indexeddb.leveldb` directory means no snapshot was ever saved.
+- **Per-install outcome, exactly one of:** **Nothing to keep** · **Keep** · **Unknown**.
+- **Effect on this design:** if any install is **Keep**, a pre-upgrade CSV export of that install's data (people, bids) becomes a mandatory gate before its prod APK upgrade; **Unknown** keeps Q2 open and keeps the production APK blocked; all **Nothing to keep** closes Q2 and the gate is removed. Until then the rollout checklist carries the conditional gate.
 
 ## 11. Spec self-check
 - Every "new APK" item in your list maps to §4.1; every "no APK" item maps to §4.2, including the callback page HTML, which is API-served.
 - `server.url` is not used as a config-file shortcut (§3, P3 guard); the remote origin is set in native code per flavor, because F2 shows no other Capacitor mechanism gives a remote origin the bridge.
-- The OAuth architecture is unchanged except the optional, additive §6.4.
+- The OAuth architecture is unchanged except the additive, approved §6.4 (`OAUTH_APP_SCHEME`).
+- Q2 is the only open decision; it gates the production APK only, because the dev flavor installs beside existing apps.

@@ -4,11 +4,13 @@
 
 **Goal:** Add a server-side Google OAuth login (web + Android) that issues GOMS-signed Bearer sessions, behind `AUTH_PROVIDER=firebase|both|oauth`, so the verified `@amnex.com` email feeds RBAC exactly as the Firebase email does today.
 
-**Architecture:** A new `apps/api/src/auth/oauth/` module owns the Google authorization-code flow (state + PKCE + nonce toward Google), a one-time GOMS exchange code, rotating refresh tokens stored hashed in Postgres (atomic compare-and-set), and a 15-minute HS256 access JWT. `verifyIdentity` replaces `verifyFirebaseToken` at its six call sites and returns the same `{uid, email}`, so RBAC, allow-lists and Admin Data Import are untouched. On the client a small `src/lib/auth/` facade hides Firebase vs. the new session; `VITE_AUTH_PROVIDER` picks one at build time.
+**Architecture:** A new `apps/api/src/auth/oauth/` module owns the Google authorization-code flow (state + PKCE + nonce toward Google), a one-time GOMS exchange code, rotating refresh tokens stored hashed in Postgres (atomic compare-and-set), and a 15-minute HS256 access JWT. `verifyIdentity` replaces `verifyFirebaseToken` at its six call sites and returns the same `{uid, email}`, so RBAC, allow-lists and Admin Data Import are untouched. On the client a small `src/lib/auth/` facade hides Firebase vs. the new session; `VITE_AUTH_PROVIDER` picks one at build time. On Android the app is a **thin shell that loads the hosted GOMS web app** (approved thin-shell architecture): sign-in runs in the system browser, returns through the HTTPS callback and a per-flavor deep link, and tokens live in Android secure storage. Native work for that shell is in Phase C; a normal web deploy updates installed apps without a new APK.
 
 **Tech Stack:** TypeScript (NodeNext ESM), Fastify 5, tRPC 11, Postgres via node-pg-migrate, `jose` 6 (new), Vitest 2 (real shared Postgres for API tests, `fileParallelism: false`), React 18, Vite, Capacitor 8 (`@capacitor/browser`, `@aparajita/capacitor-secure-storage`, new).
 
 **Spec:** [docs/superpowers/specs/2026-10-06-google-oauth-login-design.md](../specs/2026-10-06-google-oauth-login-design.md) (final, approved 2026-10-06). Read it first; this plan implements it and argues from it.
+
+**Android shell design:** [docs/superpowers/specs/2026-10-06-android-thin-shell-design.md](../specs/2026-10-06-android-thin-shell-design.md) (approved architecture; Q1, Q3, Q4 decided, **Q2 OPEN**). Phase C implements its native part. The OAuth security model is unchanged; the one additive item is the per-environment `OAUTH_APP_SCHEME` (thin-shell §6.4).
 
 ## Global Constraints
 
@@ -23,9 +25,14 @@ Copied from the spec / the owner's instructions. Every task's requirements inclu
 - **Do not put RBAC roles/permissions in JWT claims.** Access-token claims are exactly `iss=goms`, `aud=goms-api`, `sub=<uid>`, `email`, `sid` (= `family_id`), `iat`, `exp`.
 - Access token **15 minutes**, refresh token **30 days** (rotating, reuse detection). Both configurable (`AUTH_ACCESS_TTL_SECONDS`, `AUTH_REFRESH_TTL_DAYS`).
 - Google side: server-side `state`, PKCE (S256), `nonce`, **exact** redirect-URI match, `iss` ∈ {`https://accounts.google.com`, `accounts.google.com`}, `aud` = client id, `exp`, `email_verified === true`, `@amnex.com` enforced **server-side** (`hd=amnex.com` is only a hint). `alg` must be `RS256`.
-- Sessions travel as `Authorization: Bearer`; no cookies. Android refresh token lives in secure storage, web refresh token in `localStorage`, access token only in memory.
+- Sessions travel as `Authorization: Bearer`; no cookies. Android refresh token lives in Android-backed secure storage, web refresh token in `localStorage`, access token only in memory. **Inside the Android shell tokens are never written to WebView `localStorage`, cookies or Capacitor Preferences, and there is no `localStorage` fallback**: if secure storage is unavailable the shell refuses sign-in and asks the user to update the app.
 - Web: single-flight refresh within a tab **and** `navigator.locks` across tabs.
 - Secrets (`GOOGLE_OAUTH_CLIENT_SECRET`, `AUTH_SESSION_SECRET`) never reach git, the browser bundle, logs or error responses. OAuth failures return generic messages / reason codes only.
+- **Android thin shell:** the production app loads the hosted GOMS origin; it does not bundle a second copy of the React app. Capacitor's development-only `server.url` is **never** used as a shortcut: `capacitor.config.ts` and the generated `capacitor.config.json` contain no `server` block, `server.url`, `cleartext`, wildcard `allowNavigation` or `androidScheme: http` (a guard test fails the build otherwise, Task 15). The remote origin is a per-flavor **compile-time constant** (`BuildConfig.GOMS_ORIGIN`) validated at start, and an exact-origin navigation policy decides what the WebView may load.
+- The WebView only ever shows the pinned origin. Google sign-in runs **only in the system browser**; `/api/oauth/**` main-frame navigations are never loaded in the WebView.
+- Prod and dev APKs install side by side: `applicationId` `com.gorms.app` / `com.gorms.app.dev`, deep-link scheme `com.gorms.app` / `com.gorms.app.dev` (per-environment API setting `OAUTH_APP_SCHEME`, allow-list of exactly those two). Never an arbitrary scheme.
+- **Native first, web second.** Web code decides native availability only through `hasCapability` (Task 11), never `Capacitor.isNativePlatform()`.
+- **Q2 (stranded local data in existing installs) is OPEN** and gates only the production APK; this plan does not decide it and the dev flavor cannot affect an existing install.
 - Local/dev environment values, Secret Manager, migrations, deploys and Android builds are **separate approvals** (see the rollout checklist). **Executing this plan writes code and runs only local tests; it does not touch goms-dev or goms-prod.**
 - The three local-only RBAC rules still apply while implementing: do not push to GitLab, do not touch `ADMIN_ALLOWED_EMAILS` / `RBAC_MODE`, never run API tests against anything but the local test DB.
 
@@ -35,7 +42,43 @@ Copied from the spec / the owner's instructions. Every task's requirements inclu
 2. OAuth route failures redirect (web) or deep-link (app) with a **reason code only** (`state`, `domain`, `unverified`, `google`, `denied`), never details.
 3. The oauth session shows the **email** as the display name and a generic avatar (the spec's token/response contract carries no name or photo). Adding profile data would need a spec change; not done.
 4. Refresh-token expiry is sliding (each rotation issues a generation valid for a fresh 30 days).
-5. Custom-scheme deep links (`com.gorms.app://auth`) are used for the Android return (spec D6). Any app can register the same scheme; the 60-second single-use exchange code is the control. Verified Android App Links would be stronger and are noted as a future hardening, not built here.
+5. Custom-scheme deep links (`<scheme>://auth`) are used for the Android return (spec D6). Any app can register the same scheme; the 60-second single-use exchange code is the control, and each flavor accepts only its own scheme. Verified Android App Links would be stronger and are noted as a future hardening, not built here.
+6. **`OAUTH_APP_SCHEME`** (API env, approved with Q1): the scheme the callback page deep-links to. Default `com.gorms.app`; allow-list `com.gorms.app`, `com.gorms.app.dev`; set per API deployment (dev API `com.gorms.app.dev`). It is additive to the OAuth spec and changes none of its security properties.
+7. **`src/lib/nativeShell.ts`** (`isGomsShell`, `shellVersion`, `shellScheme`, `hasCapability`) is created here in Task 11 because the OAuth client needs it first. If the thin-shell web phase (P2) has already created it, reuse that file and only add what is missing. Migrating `AppLayout.tsx` / `file-export.ts` off `Capacitor.isNativePlatform()`, the update banner, `shell-manifest.json` and the CSP report-only header are thin-shell P2 items and are **not** in this plan.
+8. The Android web code reads its API/origin from `window.location.origin` (the WebView can only ever be on the pinned origin), never from a value the page supplies.
+
+## Android thin shell: native changes and the release boundary
+
+The shell loads the hosted web app, so most OAuth work ships as a normal web or API release. Only the items in the first table need a new APK.
+
+**Native Android changes required (new APK)**
+
+| # | Change | Why OAuth needs it | Where |
+|---|---|---|---|
+| N1 | Gradle `prod` / `dev` flavors: `applicationId` (`com.gorms.app` / `com.gorms.app.dev`), per-flavor `GOMS_ORIGIN`, `GOMS_SCHEME`, manifest placeholder `gomsScheme`; `versionCode` 2 | Pins the one origin the WebView may show; lets dev and prod coexist with separate deep-link schemes | `android/app/build.gradle` |
+| N2 | `MainActivity` builds the pinned `CapConfig` in native code (`setServerUrl(GOMS_ORIGIN)`, no allow-navigation, error page, UA token `GOMSShell/<versionCode> GOMSScheme/<scheme>`); refuses to start on an invalid origin | Gives the hosted page the Capacitor bridge (the only mechanism that does) without any editable `server.url` | `MainActivity.java` |
+| N3 | `NavigationPolicy` (pure Java) + `GomsWebViewClient` | Exact-origin navigation: Google and every other host leave the WebView; `/api/oauth/**` is never loaded in it; look-alike hosts, `http`, `intent:`, `file:` are blocked | new Java files + JUnit tests |
+| N4 | Manifest: deep-link intent filter `${gomsScheme}://auth`, `allowBackup=false`, `usesCleartextTraffic=false`, network security config, data-extraction rules | Receives the one-time code; keeps tokens out of backups; no cleartext | `AndroidManifest.xml`, `res/xml/*` |
+| N5 | Plugins `@capacitor/browser` and `@aparajita/capacitor-secure-storage` (with `@capacitor/app` already present) | System-browser sign-in; Keystore-backed refresh-token storage; `appUrlOpen` | `package.json`, Gradle autolink via `cap sync` |
+| N6 | `webDir` becomes `android-shell/www` containing only `offline.html`; `capacitor.config.ts` has no `server` block | No second copy of the React app in the APK; offline page when the origin is unreachable | `capacitor.config.ts`, `android-shell/www/offline.html` |
+| N7 | Dev flavor resources (`app_name` "GORMS Dev") | Tell the two apps apart on one device | `android/app/src/dev/res/values/strings.xml` |
+
+**Web or API release only (no APK rebuild)**
+
+| Change | Release |
+|---|---|
+| Everything under `src/` (OAuth client, session, `nativeShell.ts`, sign-in UI, bootstrap) | Hosting deploy |
+| `/api/oauth/*` routes, the callback page HTML, `verifyIdentity`, migration, the **value** of `OAUTH_APP_SCHEME` within the allow-list | API deploy / env-only revision |
+| `AUTH_PROVIDER`, secrets, `VITE_AUTH_PROVIDER` | env / build variables |
+| `firebase.json` headers (CSP report-only → enforce), `shell-manifest.json` | Hosting deploy |
+
+**Rules that keep the two honest**
+- Changing the deep-link **scheme or host**, the pinned origin, the navigation policy, a plugin, the manifest or permissions is a native release. Changing what the callback page *contains* (not the scheme) is not.
+- Ordering: **native first, web second.** The web build that depends on `secureStorage` / `browser` / `appLinks` is gated by `hasCapability`; an older shell that lacks them gets "update the app" at sign-in, never a degraded token store.
+- Existing installs: the prod flavor upgrades `com.gorms.app` in place and moves its origin from `https://localhost` to the hosted site, which strands WebView storage. **Q2 is open**, so no prod APK is released to an existing install until it is resolved (conditional gate in the rollout checklist). The dev flavor has a different `applicationId`, installs beside the old app, and cannot strand anything.
+- No CORS entry: the shell is same-origin with the API, so `https://localhost` is **not** added to `CORS_ALLOWED_ORIGINS`.
+
+---
 
 ## Review Focus
 
@@ -47,7 +90,11 @@ Failure modes the spec implies but no feature task would otherwise exercise, mos
 4. **Signing in with a non-`@amnex.com` or unverified Google account** → no exchange code is ever created; the UI shows a clear "not an @amnex.com account" message, not a blank dialog. (Tasks 6, 7, 12.)
 5. **`return_to` tricks**: absolute URLs, `//host`, backslashes, control characters, existing query/hash, `auth_code` already present. (Tasks 2, 7, 12.)
 
-Known residual risks, accepted by the spec and recorded in the plan: custom-scheme hijack on Android (decision 5); access tokens are not individually revocable (≤15 min).
+6. **Inside the shell, an old or incomplete APK must fail closed**: no secure storage ⇒ sign-in refuses with "update the app" and nothing is written to `localStorage`. (Tasks 11, 13.)
+7. **Look-alike and hostile navigations** in the WebView (`goms-prod.web.app.evil.com`, `user@host` tricks, other ports, `http`, `intent:`, `/api/oauth/*` paths including encoded and dot-segment forms). (Task 14 JUnit.)
+8. **Deep-link input**: another flavor's scheme, extra or repeated parameters, wrong code format, unknown error reason. (Task 13.)
+
+Known residual risks, accepted by the spec and recorded in the plan: custom-scheme hijack on Android (decision 5); access tokens are not individually revocable (≤15 min); the hosted origin has plugin access in the shell (thin-shell §7; CSP report-only → enforce is the web-side control and is outside this plan).
 
 ---
 
@@ -65,6 +112,7 @@ Known residual risks, accepted by the spec and recorded in the plan: custom-sche
 - `apps/api/src/auth/oauth/googleClient.ts` — `GoogleGateway`, `buildAuthUrl`, `verifyGoogleIdToken`, real `googleGateway`.
 - `apps/api/src/auth/oauth/routes.ts` — Fastify routes under `/api/oauth/`.
 - `apps/api/src/testHelpers/oauthTestHelpers.ts` — env, DB cleanup, GOMS context, fake Google.
+- (`config.ts` also exports `appScheme()` / `APP_SCHEMES`; `routes.ts` uses them for the app callback page.)
 - Tests next to each module (`*.test.ts`).
 
 **API — modify**
@@ -74,10 +122,14 @@ Known residual risks, accepted by the spec and recorded in the plan: custom-sche
 - `apps/api/package.json` — `jose`.
 
 **Client — create**
-- `src/lib/auth/types.ts`, `firebaseProvider.ts`, `oauthProvider.ts`, `authApi.ts` (picks the provider), `session.ts`, `authFetch.ts`, `bootstrap.ts`, `native.ts`, `stores.ts`, `useAuthUser.ts`, `index.ts` (re-exports) (+ `*.test.ts[x]`).
+- `src/lib/auth/types.ts`, `firebaseProvider.ts`, `oauthProvider.ts`, `authApi.ts` (picks the provider), `session.ts`, `authFetch.ts`, `bootstrap.ts`, `native.ts` (Android only, lazy-loaded), `stores.ts`, `errors.ts`, `useAuthUser.ts`, `index.ts` (re-exports); `src/lib/nativeShell.ts`; `src/lib/shell/androidConfigGuard.test.ts` (+ `*.test.ts[x]`).
+
+**Android native — create/modify (Phase C)**
+- Create: `android/app/src/main/java/com/gorms/app/NavigationPolicy.java`, `GomsWebViewClient.java`; `android/app/src/test/java/com/gorms/app/NavigationPolicyTest.java`; `android/app/src/main/res/xml/network_security_config.xml`, `data_extraction_rules.xml`; `android/app/src/dev/res/values/strings.xml`; `android-shell/www/offline.html`.
+- Modify: `android/app/build.gradle`, `android/app/src/main/AndroidManifest.xml`, `android/app/src/main/java/com/gorms/app/MainActivity.java`, `capacitor.config.ts`, `android/README.md`.
 
 **Client — modify**
-- `src/data/remote/authHeaders.ts`, `src/data/remote/repository.ts` (`fetch`), `src/modules/admin-data-import/api.ts`, `src/components/AuthStatus.tsx`, `src/components/AuthPromptDialog.tsx`, `src/modules/admin-data-import/auth/AdminImportAuthGate.tsx`, `src/modules/admin-data-import/AdminImportModal.tsx`, `src/lib/authPrompt.ts`, `src/main.tsx`, `src/vite-env.d.ts`, `.env.example`, `package.json`, `android/app/src/main/AndroidManifest.xml`.
+- `src/data/remote/authHeaders.ts`, `src/data/remote/repository.ts` (`fetch`), `src/modules/admin-data-import/api.ts`, `src/components/AuthStatus.tsx`, `src/components/AuthPromptDialog.tsx`, `src/modules/admin-data-import/auth/AdminImportAuthGate.tsx`, `src/modules/admin-data-import/AdminImportModal.tsx`, `src/lib/authPrompt.ts`, `src/main.tsx`, `src/vite-env.d.ts`, `.env.example`, `package.json`.
 
 **Docs/config — create/modify**
 - `apps/api/.env.oauth.example`, `.gitignore` (exception), `.env.example`.
@@ -86,7 +138,7 @@ Known residual risks, accepted by the spec and recorded in the plan: custom-sche
 
 ## Execution environment (read before Task 0)
 
-- Implement on branch **`feat/google-oauth`** in a **separate worktree** (`../goms-oauth`). The main working folder must stay on `feat/rbac` at `d31f9dd9` (it is the deployed dev commit).
+- Implement on branch **`feat/google-oauth`** in a **separate worktree** (`../goms-oauth`). The main working folder must stay on `feat/rbac` (the dev deployment is commit `d31f9dd9`; later commits on that branch are docs only).
 - All API tests run against the **local** Postgres (`apps/api/.env` → `localhost`). Task 0 adds a guard that aborts on any non-local `DATABASE_URL`.
 - Define once per shell:
 
@@ -106,6 +158,7 @@ apitest() { (cd apps/api && set -a && . ./.env && set +a && case "$DATABASE_URL"
 cd /c/Users/rajas.saji/Desktop/goms
 git worktree add ../goms-oauth feat/google-oauth
 cd ../goms-oauth && git log --oneline -3
+# One branch can be checked out in only one worktree: if ../goms-oauth-docs still exists, run `git worktree remove ../goms-oauth-docs` first.
 ```
 Expected: top commits are the two spec commits, then `d31f9dd9`.
 
@@ -268,6 +321,7 @@ git commit -m "feat(oauth): additive migration for auth_flows, auth_exchange_cod
 **Interfaces:**
 - Produces (used by every later API task):
   - `type AuthProvider = 'firebase' | 'both' | 'oauth'`; `authProvider(): AuthProvider`; `oauthEnabled(): boolean` (provider ≠ firebase); `gomsAccepted(): boolean` (≠ firebase); `firebaseAccepted(): boolean` (≠ oauth).
+  - `APP_SCHEMES = ['com.gorms.app', 'com.gorms.app.dev'] as const`; `appScheme(): (typeof APP_SCHEMES)[number]` (from `OAUTH_APP_SCHEME`, default `com.gorms.app`, throws `OAuthConfigError` for anything outside the allow-list).
   - `class OAuthConfigError extends Error`; `sessionKey(): Uint8Array` (≥ 32 bytes or throws); `interface OAuthConfig { clientId; clientSecret; redirectUri; webOrigin; accessTtlSeconds; refreshTtlDays }`; `oauthConfig(): OAuthConfig`.
   - `randomToken(bytes = 32): string` (base64url); `sha256Hex(v: string): string`; `pkceChallenge(verifier: string): string`.
   - `type ClientKind = 'web' | 'app'`; `parseClient(raw: unknown): ClientKind | null`; `safeReturnTo(raw: unknown): string`; `webRedirectUrl(webOrigin: string, returnTo: string, params: Record<string, string>): string`.
@@ -332,10 +386,10 @@ describe('webRedirectUrl', () => {
 ```ts
 // apps/api/src/auth/oauth/config.test.ts
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { OAuthConfigError, authProvider, firebaseAccepted, gomsAccepted, oauthConfig, oauthEnabled, sessionKey } from './config.js'
+import { APP_SCHEMES, OAuthConfigError, appScheme, authProvider, firebaseAccepted, gomsAccepted, oauthConfig, oauthEnabled, sessionKey } from './config.js'
 
 const KEYS = ['AUTH_PROVIDER', 'GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_OAUTH_REDIRECT_URI', 'AUTH_SESSION_SECRET',
-  'OAUTH_WEB_ORIGIN', 'AUTH_ACCESS_TTL_SECONDS', 'AUTH_REFRESH_TTL_DAYS', 'CORS_ALLOWED_ORIGINS']
+  'OAUTH_WEB_ORIGIN', 'AUTH_ACCESS_TTL_SECONDS', 'AUTH_REFRESH_TTL_DAYS', 'CORS_ALLOWED_ORIGINS', 'OAUTH_APP_SCHEME']
 afterEach(() => { for (const k of KEYS) delete process.env[k]; vi.restoreAllMocks() })
 const full = () => {
   process.env.GOOGLE_OAUTH_CLIENT_ID = 'cid.apps.googleusercontent.com'
@@ -411,6 +465,22 @@ describe('oauthConfig', () => {
     expect(oauthConfig().webOrigin).toBe('https://evil.example') // an operator-approved origin is allowed
   })
 })
+
+describe('appScheme (per-environment deep-link scheme, Q1)', () => {
+  it('defaults to the prod scheme so an unset variable changes nothing', () => {
+    expect(appScheme()).toBe('com.gorms.app')
+    process.env.OAUTH_APP_SCHEME = '  '
+    expect(appScheme()).toBe('com.gorms.app')
+  })
+  it('accepts exactly the two allowed schemes', () => {
+    expect([...APP_SCHEMES]).toEqual(['com.gorms.app', 'com.gorms.app.dev'])
+    for (const v of APP_SCHEMES) { process.env.OAUTH_APP_SCHEME = v; expect(appScheme()).toBe(v) }
+  })
+  it.each(['evil.app', 'com.gorms.app.staging', 'COM.GORMS.APP', 'javascript', 'com.gorms.app://', 'https'])('refuses %s (never an arbitrary scheme)', (v) => {
+    process.env.OAUTH_APP_SCHEME = v
+    expect(() => appScheme()).toThrow(OAuthConfigError)
+  })
+})
 ```
 
 - [ ] **Step 2: Run to verify they fail**
@@ -479,6 +549,16 @@ export const gomsAccepted = (): boolean => authProvider() !== 'firebase'
 export const firebaseAccepted = (): boolean => authProvider() !== 'oauth'
 
 export class OAuthConfigError extends Error {}
+
+/** The deep-link scheme this API deployment hands the Android app (thin-shell design §6.4). A fixed allow-list: the dev API sets
+ *  `com.gorms.app.dev`, prod leaves it unset. Anything else is a configuration error, never passed through. */
+export const APP_SCHEMES = ['com.gorms.app', 'com.gorms.app.dev'] as const
+export function appScheme(): (typeof APP_SCHEMES)[number] {
+  const raw = (process.env.OAUTH_APP_SCHEME ?? '').trim()
+  if (raw === '') return 'com.gorms.app'
+  if ((APP_SCHEMES as readonly string[]).includes(raw)) return raw as (typeof APP_SCHEMES)[number]
+  throw new OAuthConfigError('OAUTH_APP_SCHEME is not an allowed value')
+}
 
 /** HS256 signing key. Needed to verify GOMS tokens in `both`/`oauth`, so it does not require the Google credentials. */
 export function sessionKey(): Uint8Array {
@@ -583,7 +663,7 @@ import type { AuthProvider } from '../auth/oauth/config.js'
 
 export const TEST_SESSION_SECRET = 'test-session-secret-0123456789-abcdefghijklmnopqrstuvwxyz'
 const KEYS = ['AUTH_PROVIDER', 'GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_OAUTH_REDIRECT_URI', 'AUTH_SESSION_SECRET',
-  'OAUTH_WEB_ORIGIN', 'AUTH_ACCESS_TTL_SECONDS', 'AUTH_REFRESH_TTL_DAYS']
+  'OAUTH_WEB_ORIGIN', 'AUTH_ACCESS_TTL_SECONDS', 'AUTH_REFRESH_TTL_DAYS', 'OAUTH_APP_SCHEME']
 
 /** A complete, fake OAuth environment. Nothing here is a real credential. */
 export function useOauthEnv(provider: AuthProvider = 'both'): void {
@@ -1543,6 +1623,21 @@ describe('full APP flow', () => {
     const ex = await post('/api/oauth/exchange', { code: m![1], client: 'app' })
     expect(ex.statusCode).toBe(200)
   })
+  it('the dev API deep-links to the DEV scheme and never to the prod one (side-by-side installs, Q1)', async () => {
+    process.env.OAUTH_APP_SCHEME = 'com.gorms.app.dev'
+    const s = await start('app')
+    const cb = await callback(s.state)
+    expect(cb.body).toMatch(/com\.gorms\.app\.dev:\/\/auth\?code=[A-Za-z0-9_-]{43}/)
+    expect(cb.body).not.toMatch(/com\.gorms\.app:\/\/auth/)
+  })
+  it('an unsupported OAUTH_APP_SCHEME is a generic 503 and issues no code', async () => {
+    process.env.OAUTH_APP_SCHEME = 'evil.app'
+    const s = await start('app')
+    const cb = await callback(s.state)
+    expect(cb.statusCode).toBe(503)
+    expect(cb.body).not.toMatch(/evil|OAUTH_APP_SCHEME/)
+    expect((await pool.query('SELECT count(*)::int AS n FROM auth_exchange_codes')).rows[0].n).toBe(0)
+  })
   it('an app code cannot be redeemed as web (and vice versa)', async () => {
     const s = await start('app'); const code = (await callback(s.state)).body.match(/code=([A-Za-z0-9_-]{43})/)![1]
     expect((await post('/api/oauth/exchange', { code, client: 'web' })).statusCode).toBe(401)
@@ -1637,7 +1732,7 @@ Expected: FAIL (`buildApp` has no `oauth` option / routes missing — the 404 te
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { signAccessToken } from './accessToken.js'
-import { OAuthConfigError, oauthConfig, oauthEnabled } from './config.js'
+import { OAuthConfigError, appScheme, oauthConfig, oauthEnabled } from './config.js'
 import { createExchangeCode, redeemExchangeCode } from './exchangeCodes.js'
 import { consumeFlow, createFlow } from './flows.js'
 import { GoogleAuthError, buildAuthUrl, type GoogleGateway } from './googleClient.js'
@@ -1646,7 +1741,6 @@ import { SessionError, revokeFamilyByRefreshToken, rotateRefreshToken, startSess
 
 export interface OAuthDeps { google: GoogleGateway }
 
-const SCHEME = 'com.gorms.app'
 type Reason = 'state' | 'domain' | 'unverified' | 'google' | 'denied'
 const reasonFor = (e: unknown): Reason => {
   if (e instanceof GoogleAuthError) return e.reason === 'domain' ? 'domain' : e.reason === 'unverified' ? 'unverified' : 'google'
@@ -1656,10 +1750,10 @@ const reasonFor = (e: unknown): Reason => {
 const noStore = (reply: FastifyReply) => reply.header('Cache-Control', 'no-store').header('Pragma', 'no-cache').header('Referrer-Policy', 'no-referrer')
 const notFound = (reply: FastifyReply) => reply.code(404).send({ error: 'Not found' })
 
-/** The page an Android Custom Tab lands on. A meta refresh plus a visible link (browsers may refuse an unprompted custom-scheme
+/** The page an Android Custom Tab lands on. `scheme` is this deployment's own app scheme (`appScheme()`), so a dev API can only open the dev app. A meta refresh plus a visible link (browsers may refuse an unprompted custom-scheme
  *  redirect). It carries a one-time code or a reason code — never a token. Values are base64url or a fixed word, so no escaping is needed. */
-function appPage(query: string): string {
-  const href = `${SCHEME}://auth?${query}`
+function appPage(scheme: string, query: string): string {
+  const href = `${scheme}://auth?${query}`
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">`
     + `<meta http-equiv="refresh" content="0;url=${href}"><title>Return to GOMS</title>`
     + `<style>body{font:16px system-ui;margin:2rem;text-align:center}a{display:inline-block;margin-top:1rem;padding:.8rem 1.4rem;background:#111;color:#fff;border-radius:.5rem;text-decoration:none}</style>`
@@ -1686,7 +1780,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
   }
 
   function fail(reply: FastifyReply, client: ClientKind, reason: Reason) {
-    if (client === 'app') return reply.code(200).type('text/html; charset=utf-8').send(appPage(`error=${reason}`))
+    if (client === 'app') return reply.code(200).type('text/html; charset=utf-8').send(appPage(appScheme(), `error=${reason}`))
     return reply.code(302).header('Location', webRedirectUrl(oauthConfig().webOrigin, '/', { auth_error: reason })).send()
   }
 
@@ -1701,6 +1795,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
   app.get('/api/oauth/google/callback', limited, guarded(async (req, reply) => {
     const flow = await consumeFlow(req.query?.state)
     if (!flow) return fail(reply, 'web', 'state') // unknown, replayed or expired; we cannot know which client it was
+    if (flow.client === 'app') appScheme() // validate the deployment's scheme BEFORE anything is issued (throws -> generic 503)
     if (typeof req.query?.error === 'string') return fail(reply, flow.client, 'denied')
     const code = req.query?.code
     if (typeof code !== 'string' || code.length === 0 || code.length > 2048) return fail(reply, flow.client, 'google')
@@ -1714,7 +1809,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
     }
     // Only now, after every Google check, does anything exist: a one-time code. No session or token yet.
     const exchange = await createExchangeCode({ uid: `g:${claims.sub}`, email: claims.email, familyId: randomUUID(), client: flow.client })
-    if (flow.client === 'app') return reply.code(200).type('text/html; charset=utf-8').send(appPage(`code=${exchange}`))
+    if (flow.client === 'app') return reply.code(200).type('text/html; charset=utf-8').send(appPage(appScheme(), `code=${exchange}`))
     return reply.code(302).header('Location', webRedirectUrl(oauthConfig().webOrigin, flow.returnTo, { auth_code: exchange })).send()
   }))
 
@@ -2504,18 +2599,61 @@ git commit -m "feat(oauth): client session core with single-flight, navigator.lo
 
 ---
 
-### Task 11: OAuth provider, 401 refresh-and-retry fetch, web sign-in
+### Task 11: OAuth provider, `nativeShell`, 401 refresh-and-retry fetch, web sign-in
 
 **Files:**
-- Create: `src/lib/auth/authFetch.ts`, `src/lib/auth/oauthProvider.ts`
-- Modify: `src/lib/auth/authApi.ts` (select the provider)
-- Test: `src/lib/auth/authFetch.test.ts`, `src/lib/auth/oauthProvider.test.ts`
+- Create: `src/lib/nativeShell.ts`, `src/lib/auth/errors.ts`, `src/lib/auth/authFetch.ts`, `src/lib/auth/oauthProvider.ts`
+- Modify: `src/lib/auth/stores.ts`, `src/lib/auth/authApi.ts` (select the provider)
+- Test: `src/lib/nativeShell.test.ts`, `src/lib/auth/authFetch.test.ts`, `src/lib/auth/stores.test.ts`, `src/lib/auth/oauthProvider.test.ts`
 
 **Interfaces:**
-- Consumes: `createSession`, `createLocalStorageStore`, `AuthProviderApi`.
-- Produces: `createAuthFetch(session: { forceRefresh(): Promise<string | null> }, baseFetch?: typeof fetch): typeof fetch`; `oauthProvider: AuthProviderApi` (+ exported `session`); `authApi` now selects by `AUTH_KIND`. Native pieces (`openNativeSignIn`, secure store, deep links) are stubbed to the web path here and completed in Task 13.
+- Consumes: `createSession`, `createLocalStorageStore`, `TokenStore`, `AuthProviderApi`.
+- Produces:
+  - `shellVersion(ua?): number | null`, `shellScheme(ua?): 'com.gorms.app' | 'com.gorms.app.dev' | null`, `isGomsShell(ua?): boolean`, `hasCapability(name: 'secureStorage' | 'browser' | 'appLinks', ua?, isPluginAvailable?): boolean`, `KNOWN_SHELL_SCHEMES` (the only place the web decides native availability, thin-shell §4.3).
+  - `class ShellUpdateRequiredError extends Error` (`message === 'shell_update_required'`).
+  - `createNativeStore(): TokenStore` (lazy), `createShellUpdateRequiredStore(): TokenStore`, `selectTokenStore(o: { inShell: boolean; secureStorage: boolean }): TokenStore`.
+  - `createAuthFetch(session: { forceRefresh(): Promise<string | null> }, baseFetch?: typeof fetch): typeof fetch`; `oauthProvider: AuthProviderApi` (+ exported `session`, `inShell`); `authApi` selects by `AUTH_KIND`. The in-shell sign-in and deep-link bootstrap are added in Task 13.
 
 - [ ] **Step 1: Write the failing tests**
+
+```ts
+// src/lib/nativeShell.test.ts
+import { describe, expect, it } from 'vitest'
+import { KNOWN_SHELL_SCHEMES, hasCapability, isGomsShell, shellScheme, shellVersion } from './nativeShell'
+
+const CHROME = 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/126 Mobile Safari/537.36'
+const SHELL2_PROD = `${CHROME} GOMSShell/2 GOMSScheme/com.gorms.app`
+const SHELL2_DEV = `${CHROME} GOMSShell/2 GOMSScheme/com.gorms.app.dev`
+
+describe('shell detection (a plain browser and an old APK are not the shell)', () => {
+  it('reads the version and scheme the native shell appends to the user agent', () => {
+    expect(shellVersion(SHELL2_PROD)).toBe(2); expect(shellScheme(SHELL2_PROD)).toBe('com.gorms.app'); expect(isGomsShell(SHELL2_PROD)).toBe(true)
+    expect(shellScheme(SHELL2_DEV)).toBe('com.gorms.app.dev')
+  })
+  it('is null / false for a browser, the old bundled-app APK (no token) and garbage', () => {
+    for (const ua of [CHROME, '', 'GOMSShell/', 'GOMSShell/x', 'XGOMSShell/2']) { expect(shellVersion(ua)).toBeNull(); expect(isGomsShell(ua)).toBe(false) }
+  })
+  it('only knows the two real schemes', () => {
+    expect([...KNOWN_SHELL_SCHEMES]).toEqual(['com.gorms.app', 'com.gorms.app.dev'])
+    expect(shellScheme(`${CHROME} GOMSShell/2 GOMSScheme/evil.app`)).toBeNull()
+    expect(shellScheme(`${CHROME} GOMSShell/2`)).toBeNull()
+  })
+})
+
+describe('hasCapability needs BOTH a shell new enough AND the plugin actually present', () => {
+  const plugins = (...names: string[]) => (p: string) => names.includes(p)
+  it('true only when version >= since and the plugin is available', () => {
+    expect(hasCapability('secureStorage', SHELL2_PROD, plugins('SecureStorage'))).toBe(true)
+    expect(hasCapability('browser', SHELL2_PROD, plugins('Browser'))).toBe(true)
+    expect(hasCapability('appLinks', SHELL2_PROD, plugins('App'))).toBe(true)
+  })
+  it('false for a missing plugin, an older shell, or no shell at all', () => {
+    expect(hasCapability('secureStorage', SHELL2_PROD, plugins())).toBe(false)
+    expect(hasCapability('secureStorage', `${CHROME} GOMSShell/1 GOMSScheme/com.gorms.app`, plugins('SecureStorage'))).toBe(false)
+    expect(hasCapability('secureStorage', CHROME, plugins('SecureStorage'))).toBe(false)
+  })
+})
+```
 
 ```ts
 // src/lib/auth/authFetch.test.ts
@@ -2561,23 +2699,65 @@ describe('createAuthFetch', () => {
 ```
 
 ```ts
+// src/lib/auth/stores.test.ts
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const { native } = vi.hoisted(() => ({ native: { value: null as string | null } }))
+vi.mock('./native', () => ({
+  createSecureTokenStore: () => ({ get: async () => native.value, set: async (t: string) => { native.value = t }, clear: async () => { native.value = null } }),
+}))
+import { ShellUpdateRequiredError } from './errors'
+import { selectTokenStore } from './stores'
+
+afterEach(() => { native.value = null; vi.unstubAllGlobals() })
+const stubLocalStorage = () => {
+  const data = new Map<string, string>()
+  vi.stubGlobal('localStorage', { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v), removeItem: (k: string) => void data.delete(k) })
+  return data
+}
+
+describe('selectTokenStore', () => {
+  it('a plain browser keeps the refresh token in localStorage', async () => {
+    const data = stubLocalStorage()
+    const store = selectTokenStore({ inShell: false, secureStorage: false })
+    await store.set('R'); expect([...data.values()]).toEqual(['R'])
+  })
+  it('inside the shell with secure storage, tokens go to the secure store and NEVER to localStorage', async () => {
+    const data = stubLocalStorage()
+    const store = selectTokenStore({ inShell: true, secureStorage: true })
+    await store.set('R'); expect(native.value).toBe('R'); expect(await store.get()).toBe('R'); expect(data.size).toBe(0)
+    await store.clear(); expect(native.value).toBeNull()
+  })
+  it('inside an old shell WITHOUT secure storage there is no fallback: set throws, nothing is written anywhere', async () => {
+    const data = stubLocalStorage()
+    const store = selectTokenStore({ inShell: true, secureStorage: false })
+    await expect(store.set('R')).rejects.toBeInstanceOf(ShellUpdateRequiredError)
+    expect(await store.get()).toBeNull(); expect(data.size).toBe(0); expect(native.value).toBeNull()
+    await expect(store.clear()).resolves.toBeUndefined()
+  })
+})
+```
+
+```ts
 // src/lib/auth/oauthProvider.test.ts
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ES imports are hoisted above plain statements, so the globals the module reads at load time must be stubbed inside vi.hoisted.
 const { env } = vi.hoisted(() => {
   const assign = vi.fn()
-  vi.stubGlobal('window', { location: { pathname: '/sales/roster', search: '?a=1', href: 'https://goms.test/sales/roster?a=1', assign }, history: { replaceState: vi.fn(), state: null } })
+  vi.stubGlobal('window', { location: { pathname: '/sales/roster', search: '?a=1', href: 'https://goms.test/sales/roster?a=1', origin: 'https://goms.test', assign }, history: { replaceState: vi.fn(), state: null } })
   vi.stubEnv('VITE_API_BASE_URL', 'https://goms.test/')
   return { env: { assign } }
 })
-vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => false } }))
-import { oauthProvider } from './oauthProvider'
+vi.mock('@capacitor/core', () => ({ Capacitor: { isPluginAvailable: () => false } }))
+import { inShell, oauthProvider } from './oauthProvider'
 
 beforeEach(() => env.assign.mockReset())
 
-describe('oauthProvider (web)', () => {
-  it('is configured whenever an API base URL is set', () => { expect(oauthProvider.configured).toBe(true); expect(oauthProvider.kind).toBe('oauth') })
+describe('oauthProvider (plain browser)', () => {
+  it('is not the shell, and is configured whenever an API base URL is set', () => {
+    expect(inShell).toBe(false); expect(oauthProvider.configured).toBe(true); expect(oauthProvider.kind).toBe('oauth')
+  })
   it('signIn navigates to /start with client=web and the CURRENT path as return_to (relative only)', async () => {
     await oauthProvider.signIn()
     const url = new URL(env.assign.mock.calls[0][0])
@@ -2593,10 +2773,78 @@ describe('oauthProvider (web)', () => {
 
 - [ ] **Step 2: Run to verify they fail**
 
-Run: `npx vitest run src/lib/auth/authFetch.test.ts src/lib/auth/oauthProvider.test.ts`
+Run: `npx vitest run src/lib/nativeShell.test.ts src/lib/auth/authFetch.test.ts src/lib/auth/stores.test.ts src/lib/auth/oauthProvider.test.ts`
 Expected: FAIL (modules not found).
 
 - [ ] **Step 3: Implement**
+
+```ts
+// src/lib/nativeShell.ts
+import { Capacitor } from '@capacitor/core'
+
+/** The ONE place the web app decides whether it runs inside the GOMS Android shell and what that shell can do (thin-shell design
+ *  §4.3). Other code must not call `Capacitor.isNativePlatform()` to decide native availability. If the thin-shell web phase already
+ *  created this file, keep its API and add only what is missing. */
+export const KNOWN_SHELL_SCHEMES = ['com.gorms.app', 'com.gorms.app.dev'] as const
+export type ShellCapability = 'secureStorage' | 'browser' | 'appLinks'
+
+/** `since` = the first shell versionCode that contains the native pieces; `plugin` = the Capacitor plugin that must also be present. */
+const CAPABILITIES: Record<ShellCapability, { since: number; plugin: string }> = {
+  secureStorage: { since: 2, plugin: 'SecureStorage' },
+  browser: { since: 2, plugin: 'Browser' },
+  appLinks: { since: 2, plugin: 'App' },
+}
+const currentUa = (): string => (typeof navigator === 'undefined' ? '' : navigator.userAgent)
+
+export function shellVersion(ua: string = currentUa()): number | null {
+  const m = /(?:^|\s)GOMSShell\/(\d+)(?:\s|$)/.exec(ua)
+  return m ? Number(m[1]) : null
+}
+export function shellScheme(ua: string = currentUa()): (typeof KNOWN_SHELL_SCHEMES)[number] | null {
+  const m = /(?:^|\s)GOMSScheme\/([a-z0-9.]+)(?:\s|$)/.exec(ua)
+  return m && (KNOWN_SHELL_SCHEMES as readonly string[]).includes(m[1]) ? (m[1] as (typeof KNOWN_SHELL_SCHEMES)[number]) : null
+}
+export const isGomsShell = (ua?: string): boolean => shellVersion(ua) !== null
+
+export function hasCapability(
+  name: ShellCapability, ua: string = currentUa(), isPluginAvailable: (plugin: string) => boolean = (p) => Capacitor.isPluginAvailable(p),
+): boolean {
+  const version = shellVersion(ua)
+  const c = CAPABILITIES[name]
+  return version !== null && version >= c.since && isPluginAvailable(c.plugin)
+}
+```
+
+```ts
+// src/lib/auth/errors.ts
+/** Thrown inside the Android shell when the installed APK predates the native pieces sign-in needs (secure storage, system browser,
+ *  deep links). The shell never falls back to localStorage; the user must update the app. */
+export class ShellUpdateRequiredError extends Error {
+  constructor() { super('shell_update_required'); this.name = 'ShellUpdateRequiredError' }
+}
+```
+
+Append to `src/lib/auth/stores.ts`:
+
+```ts
+import { ShellUpdateRequiredError } from './errors'
+
+/** Android: the platform keystore. Each call loads `./native` on demand, so the web bundle and node tests never import the plugins eagerly. */
+export function createNativeStore(): TokenStore {
+  const real = () => import('./native').then((m) => m.createSecureTokenStore())
+  return { get: async () => (await real()).get(), set: async (t) => (await real()).set(t), clear: async () => (await real()).clear() }
+}
+
+/** An old shell without secure storage: refuse to hold a token at all. Never localStorage. */
+export function createShellUpdateRequiredStore(): TokenStore {
+  return { async get() { return null }, async set() { throw new ShellUpdateRequiredError() }, async clear() {} }
+}
+
+export function selectTokenStore(o: { inShell: boolean; secureStorage: boolean }): TokenStore {
+  if (!o.inShell) return createLocalStorageStore()
+  return o.secureStorage ? createNativeStore() : createShellUpdateRequiredStore()
+}
+```
 
 ```ts
 // src/lib/auth/authFetch.ts
@@ -2617,20 +2865,21 @@ export function createAuthFetch(session: { forceRefresh(): Promise<string | null
 
 ```ts
 // src/lib/auth/oauthProvider.ts
-import { Capacitor } from '@capacitor/core'
+import { hasCapability, isGomsShell } from '@/lib/nativeShell'
 import { createAuthFetch } from './authFetch'
-import { createSession } from './session'
-import { createLocalStorageStore } from './stores'
+import { createSession, type LockManagerLike } from './session'
+import { selectTokenStore } from './stores'
 import type { AuthProviderApi } from './types'
 
 const apiBase = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '').replace(/\/$/, '')
-export const isNative = Capacitor.isNativePlatform()
+/** True only inside the GOMS Android shell (user-agent token set by native code), never merely "some Capacitor webview". */
+export const inShell = isGomsShell()
 
 export const session = createSession({
   apiBase,
   fetchFn: (...args) => fetch(...args),
-  store: createLocalStorageStore(), // replaced by secure storage on Android in Task 13
-  locks: typeof navigator !== 'undefined' && 'locks' in navigator ? (navigator.locks as unknown as import('./session').LockManagerLike) : null,
+  store: selectTokenStore({ inShell, secureStorage: hasCapability('secureStorage') }),
+  locks: typeof navigator !== 'undefined' && 'locks' in navigator ? (navigator.locks as unknown as LockManagerLike) : null,
   now: () => Date.now(),
 })
 
@@ -2643,18 +2892,18 @@ export const oauthProvider: AuthProviderApi = {
   kind: 'oauth',
   get configured() { return apiBase !== '' },
   subscribe: (cb) => session.subscribe((u, loading) => cb(u ? { email: u.email, displayName: null, photoUrl: null } : null, loading)),
-  async signIn() { window.location.assign(webSignInUrl()) },
+  async signIn() { window.location.assign(webSignInUrl()) }, // the in-shell (system browser) path is added in Task 13
   signOut: () => session.signOut(),
   async getAuthorizationHeaders() {
     const token = await session.getAccessToken()
     return token ? { Authorization: `Bearer ${token}` } : {}
   },
   fetch: createAuthFetch(session),
-  async bootstrap() { await session.init() }, // replaced by the full bootstrap in Task 12
+  async bootstrap() { await session.init() }, // replaced by the full bootstrap in Tasks 12 and 13
 }
 ```
 
-`src/lib/auth/authApi.ts` — replace the `authApi` line:
+`src/lib/auth/authApi.ts` — replace the `authApi` line (and import `oauthProvider`):
 
 ```ts
 import { oauthProvider } from './oauthProvider'
@@ -2662,12 +2911,12 @@ import { oauthProvider } from './oauthProvider'
 export const authApi: AuthProviderApi = AUTH_KIND === 'oauth' ? oauthProvider : firebaseProvider
 ```
 
-> Bundle note: `oauthProvider` is imported in every build, but with `VITE_AUTH_PROVIDER` unset it is never *used*; `createSession` runs but touches no network and no storage until `init()`/`signIn()`. Confirm in Task 15 that a default build performs **no** request to `/api/oauth/*`.
+> Bundle note: `oauthProvider` is imported in every build, but with `VITE_AUTH_PROVIDER` unset it is never *used*; `createSession` runs but touches no network and no storage until `init()`/`signIn()`. Task 17 proves a default build performs **no** request to `/api/oauth/*`.
 
 - [ ] **Step 4: Run to verify they pass and nothing regressed**
 
 ```bash
-npx vitest run src/lib/auth
+npx vitest run src/lib
 npx tsc -b
 npx vitest run --config vitest.component.config.ts src/components src/modules/admin-data-import
 ```
@@ -2676,8 +2925,8 @@ Expected: PASS; with `VITE_AUTH_PROVIDER` unset every existing component test st
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/lib/auth
-git commit -m "feat(oauth): OAuth client provider with one-shot 401 refresh-and-retry"
+git add src/lib/nativeShell.ts src/lib/nativeShell.test.ts src/lib/auth
+git commit -m "feat(oauth): OAuth client provider, nativeShell capabilities and 401 refresh-and-retry (no shell token fallback)"
 ```
 
 ---
@@ -2841,16 +3090,23 @@ git commit -m "feat(oauth): web handoff — consume auth_code, replaceState, sur
 
 ---
 
-### Task 13: Android — system-browser sign-in, deep link, secure storage
+### Task 13: Android shell — web-side sign-in (system browser, deep link, secure storage)
+
+This is the **web** half of the shell integration; it ships with the hosted web app. The native half is Task 14. The code runs inside the WebView on the pinned origin, where the Capacitor bridge exists only because native code made that origin the bridge's app URL (Task 14).
 
 **Files:**
-- Modify: `package.json` / `package-lock.json` (dependencies), `android/app/src/main/AndroidManifest.xml`, `src/lib/auth/oauthProvider.ts`, `src/lib/auth/bootstrap.ts`
+- Modify: `package.json` / `package-lock.json` (dependencies), `src/lib/auth/oauthProvider.ts`, `src/lib/auth/bootstrap.ts`, `src/components/AuthPromptDialog.tsx`
 - Create: `src/lib/auth/native.ts`
-- Test: `src/lib/auth/native.test.ts`
+- Test: `src/lib/auth/native.test.ts`; extend `src/lib/auth/bootstrap.test.ts`, `src/components/AuthPromptDialog.test.tsx`
 
 **Interfaces:**
-- Consumes: `session.redeem(code, 'app')`, `TokenStore`.
-- Produces: `parseAuthDeepLink(url: string): { code?: string; error?: string } | null` (only `com.gorms.app://auth…`); `openNativeSignIn(apiBase: string): Promise<void>`; `listenForAuthDeepLinks(handler: (r: { code?: string; error?: string }) => Promise<void>): Promise<void>` (warm links **and** the cold-start launch URL); `createSecureTokenStore(key?: string): TokenStore`.
+- Consumes: `session.redeem(code, 'app')`, `TokenStore`, `shellScheme()`, `hasCapability()`, `ShellUpdateRequiredError`, `setPendingAuthReason`.
+- Produces:
+  - `parseAuthDeepLink(url: string, scheme: string | null): { code?: string } | { error?: string } | null` — accepts ONLY `<scheme>://auth` with exactly one `code` (43 base64url chars) or exactly one `error` from the fixed reason list; `scheme` must be this app's own scheme.
+  - `openNativeSignIn(origin?: string): Promise<void>` — opens `<origin>/api/oauth/google/start?client=app` in the system browser; `origin` defaults to `window.location.origin` and is refused unless it equals it.
+  - `listenForAuthDeepLinks(scheme: string, handler: (r: { code?: string; error?: string }) => Promise<void>): Promise<void>` — warm links and the cold-start launch URL.
+  - `createSecureTokenStore(key?: string): TokenStore`.
+  - `bootstrapNativeAuth(session, scheme): Promise<void>` in `bootstrap.ts`.
 
 - [ ] **Step 1: Install and verify the plugin APIs**
 
@@ -2858,9 +3114,9 @@ git commit -m "feat(oauth): web handoff — consume auth_code, replaceState, sur
 npm install @capacitor/browser@^8.0.5 @aparajita/capacitor-secure-storage@^8.0.1
 sed -n 1,80p node_modules/@aparajita/capacitor-secure-storage/README.md
 ```
-Confirm in the README the exact method names and return types of `SecureStorage.get/set/remove` (expected: `set(key, value)`, `get(key)` → value or `null`, `remove(key)`). **If they differ, adapt `createSecureTokenStore` below** — the unit test mocks the module, so a wrong signature would only surface on a device. Also read the plugin's Android section for minSdk / Gradle requirements and compare with `android/variables.gradle`.
+Confirm in the README the exact method names and return types of `SecureStorage.get/set/remove` (expected: `set(key, value)`, `get(key)` → value or `null`, `remove(key)`) and the registered plugin name (`hasCapability` expects `SecureStorage`; `@capacitor/browser` registers `Browser`, `@capacitor/app` registers `App`). **If any differ, adapt `createSecureTokenStore` and the `CAPABILITIES` plugin names** — the unit tests mock these modules, so a wrong signature would otherwise only surface on a device. Also read the plugin's Android section for minSdk / Gradle requirements and compare with `android/variables.gradle` (minSdk 24).
 
-- [ ] **Step 2: Write the failing test**
+- [ ] **Step 2: Write the failing tests**
 
 ```ts
 // src/lib/auth/native.test.ts
@@ -2879,46 +3135,67 @@ vi.mock('@aparajita/capacitor-secure-storage', () => ({
 }))
 import { createSecureTokenStore, listenForAuthDeepLinks, openNativeSignIn, parseAuthDeepLink } from './native'
 
-beforeEach(() => { cap.open.mockReset(); cap.close.mockClear(); cap.listener = null; cap.launchUrl = null; cap.store.clear() })
+const CODE = 'A'.repeat(43)
+beforeEach(() => {
+  cap.open.mockReset(); cap.close.mockClear(); cap.listener = null; cap.launchUrl = null; cap.store.clear()
+  vi.stubGlobal('window', { location: { origin: 'https://goms-dev.firebaseapp.com' } })
+})
 
-describe('parseAuthDeepLink', () => {
-  it('reads a code or an error from com.gorms.app://auth', () => {
-    expect(parseAuthDeepLink('com.gorms.app://auth?code=ABC')).toEqual({ code: 'ABC' })
-    expect(parseAuthDeepLink('com.gorms.app://auth?error=domain')).toEqual({ error: 'domain' })
+describe('parseAuthDeepLink — strict, and only for THIS flavor\'s own scheme', () => {
+  it('reads a well-formed code or a known error reason', () => {
+    expect(parseAuthDeepLink(`com.gorms.app://auth?code=${CODE}`, 'com.gorms.app')).toEqual({ code: CODE })
+    expect(parseAuthDeepLink('com.gorms.app.dev://auth?error=domain', 'com.gorms.app.dev')).toEqual({ error: 'domain' })
   })
-  it.each(['https://evil.example/auth?code=ABC', 'com.gorms.app://other?code=ABC', 'com.other.app://auth?code=ABC', 'not a url', 'com.gorms.app://auth'])('ignores %s', (u) => {
-    expect(parseAuthDeepLink(u)).toBeNull()
+  it('the dev app ignores a prod link and the prod app ignores a dev link (side-by-side installs)', () => {
+    expect(parseAuthDeepLink(`com.gorms.app://auth?code=${CODE}`, 'com.gorms.app.dev')).toBeNull()
+    expect(parseAuthDeepLink(`com.gorms.app.dev://auth?code=${CODE}`, 'com.gorms.app')).toBeNull()
   })
+  it.each([
+    `https://evil.example/auth?code=${CODE}`, `com.gorms.app://other?code=${CODE}`, `com.other.app://auth?code=${CODE}`, 'not a url', 'com.gorms.app://auth',
+    'com.gorms.app://auth?code=ABC',                                   // wrong length
+    `com.gorms.app://auth?code=${'A'.repeat(42)}!`,                    // wrong alphabet
+    `com.gorms.app://auth?code=${CODE}&code=${CODE}`,                  // repeated
+    `com.gorms.app://auth?code=${CODE}&x=1`,                           // extra parameter
+    `com.gorms.app://auth?code=${CODE}&error=domain`,                  // both
+    'com.gorms.app://auth?error=anything-else',                        // unknown reason
+    `com.gorms.app://auth/extra?code=${CODE}`, `com.gorms.app://auth?code=${CODE}#frag`, `com.gorms.app://user@auth?code=${CODE}`,
+  ])('ignores %s', (u) => { expect(parseAuthDeepLink(u, 'com.gorms.app')).toBeNull() })
+  it('ignores everything when the shell reports no scheme', () => { expect(parseAuthDeepLink(`com.gorms.app://auth?code=${CODE}`, null)).toBeNull() })
 })
 
 describe('openNativeSignIn', () => {
-  it('opens the system browser at /start?client=app', async () => {
-    await openNativeSignIn('https://goms-dev.firebaseapp.com')
+  it('opens the system browser at /start?client=app on the page\'s own (pinned) origin', async () => {
+    await openNativeSignIn()
     expect(cap.open).toHaveBeenCalledWith({ url: 'https://goms-dev.firebaseapp.com/api/oauth/google/start?client=app' })
+  })
+  it('refuses any origin other than the page\'s own', async () => {
+    await expect(openNativeSignIn('https://evil.example')).rejects.toThrow()
+    expect(cap.open).not.toHaveBeenCalled()
   })
 })
 
 describe('listenForAuthDeepLinks', () => {
-  it('handles a warm deep link, closes the browser, and ignores unrelated URLs', async () => {
+  it('handles a warm deep link, closes the browser, and ignores unrelated or foreign-scheme URLs', async () => {
     const handler = vi.fn(async () => {})
-    await listenForAuthDeepLinks(handler)
+    await listenForAuthDeepLinks('com.gorms.app.dev', handler)
     cap.listener!({ url: 'https://elsewhere.example/' })
+    cap.listener!({ url: `com.gorms.app://auth?code=${CODE}` }) // the OTHER flavor's scheme
     expect(handler).not.toHaveBeenCalled()
-    cap.listener!({ url: 'com.gorms.app://auth?code=ABC' })
-    await vi.waitFor(() => expect(handler).toHaveBeenCalledWith({ code: 'ABC' }))
+    cap.listener!({ url: `com.gorms.app.dev://auth?code=${CODE}` })
+    await vi.waitFor(() => expect(handler).toHaveBeenCalledWith({ code: CODE }))
     expect(cap.close).toHaveBeenCalled()
   })
   it('also handles the link that cold-started the app', async () => {
-    cap.launchUrl = { url: 'com.gorms.app://auth?code=COLD' }
+    cap.launchUrl = { url: `com.gorms.app://auth?code=${'B'.repeat(43)}` }
     const handler = vi.fn(async () => {})
-    await listenForAuthDeepLinks(handler)
-    expect(handler).toHaveBeenCalledWith({ code: 'COLD' })
+    await listenForAuthDeepLinks('com.gorms.app', handler)
+    expect(handler).toHaveBeenCalledWith({ code: 'B'.repeat(43) })
   })
-  it('never logs the code', async () => {
+  it('never logs the code, even when the handler fails', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {}); const err = vi.spyOn(console, 'error').mockImplementation(() => {})
-    cap.launchUrl = { url: 'com.gorms.app://auth?code=SECRETCODE' }
-    await listenForAuthDeepLinks(async () => { throw new Error('boom') })
-    expect(JSON.stringify([...log.mock.calls, ...err.mock.calls])).not.toContain('SECRETCODE')
+    cap.launchUrl = { url: `com.gorms.app://auth?code=${'S'.repeat(43)}` }
+    await listenForAuthDeepLinks('com.gorms.app', async () => { throw new Error('boom') })
+    expect(JSON.stringify([...log.mock.calls, ...err.mock.calls])).not.toContain('S'.repeat(43))
   })
 })
 
@@ -2932,10 +3209,38 @@ describe('createSecureTokenStore', () => {
 })
 ```
 
-- [ ] **Step 3: Run to verify it fails**
+Add to `src/lib/auth/bootstrap.test.ts`:
 
-Run: `npx vitest run src/lib/auth/native.test.ts`
-Expected: FAIL (module not found).
+```ts
+describe('bootstrapNativeAuth', () => {
+  it('registers the deep-link listener for THIS flavor\'s scheme BEFORE restoring the stored session, and redeems an app code', async () => {
+    const order: string[] = []
+    const listen = vi.fn(async (_scheme: string, handler: (r: { code?: string; error?: string }) => Promise<void>) => { order.push('listen'); await handler({ code: 'C'.repeat(43) }) })
+    vi.doMock('./native', () => ({ listenForAuthDeepLinks: listen }))
+    const { bootstrapNativeAuth } = await import('./bootstrap')
+    const session = { redeem: vi.fn(async () => { order.push('redeem') }), init: vi.fn(async () => { order.push('init') }) }
+    await bootstrapNativeAuth(session, 'com.gorms.app.dev')
+    expect(listen).toHaveBeenCalledWith('com.gorms.app.dev', expect.any(Function))
+    expect(session.redeem).toHaveBeenCalledWith('C'.repeat(43), 'app')
+    expect(order).toEqual(['listen', 'redeem', 'init'])
+  })
+  it('an error deep link becomes a sign-in prompt: domain/unverified -> forbidden, others -> unauthorized', async () => {
+    let handler!: (r: { code?: string; error?: string }) => Promise<void>
+    vi.doMock('./native', () => ({ listenForAuthDeepLinks: async (_s: string, h: typeof handler) => { handler = h } }))
+    const { bootstrapNativeAuth } = await import('./bootstrap')
+    await bootstrapNativeAuth({ redeem: vi.fn(), init: vi.fn(async () => {}) }, 'com.gorms.app')
+    await handler({ error: 'domain' }); expect(prompt.pending).toHaveBeenLastCalledWith('forbidden')
+    await handler({ error: 'google' }); expect(prompt.pending).toHaveBeenLastCalledWith('unauthorized')
+  })
+})
+```
+
+Add to `src/components/AuthPromptDialog.test.tsx` (follow the file's mocking style): clicking **Sign in with Google** when `authApi.signIn` rejects with `ShellUpdateRequiredError` shows `This version of the GOMS app can't sign you in. Update the app and try again.` and not the generic `Sign-in failed. Try again.`; any other rejection still shows the generic text.
+
+- [ ] **Step 3: Run to verify they fail**
+
+Run: `npx vitest run src/lib/auth/native.test.ts src/lib/auth/bootstrap.test.ts` and `npx vitest run --config vitest.component.config.ts src/components/AuthPromptDialog.test.tsx`
+Expected: FAIL.
 
 - [ ] **Step 4: Implement**
 
@@ -2946,27 +3251,40 @@ import { Browser } from '@capacitor/browser'
 import { SecureStorage } from '@aparajita/capacitor-secure-storage'
 import type { TokenStore } from './session'
 
-const SCHEME = 'com.gorms.app:'
+const CODE_FORMAT = /^[A-Za-z0-9_-]{43}$/
+const ERROR_REASONS = new Set(['state', 'domain', 'unverified', 'google', 'denied'])
 
-/** Accepts ONLY com.gorms.app://auth?…; anything else (another scheme, another host, no parameters) is ignored. */
-export function parseAuthDeepLink(url: string): { code?: string; error?: string } | null {
+/** Accepts ONLY `<scheme>://auth` for this app's own scheme, carrying exactly one `code` (43 base64url chars) or exactly one known
+ *  `error`. Anything else — another flavor's scheme, extra/repeated parameters, a fragment, a path — is ignored. */
+export function parseAuthDeepLink(url: string, scheme: string | null): { code?: string; error?: string } | null {
+  if (!scheme) return null
   let u: URL
   try { u = new URL(url) } catch { return null }
-  if (u.protocol !== SCHEME || u.host !== 'auth') return null
-  const code = u.searchParams.get('code') ?? undefined
-  const error = u.searchParams.get('error') ?? undefined
-  if (code === undefined && error === undefined) return null
-  return code !== undefined ? { code } : { error }
+  if (u.protocol !== `${scheme}:` || u.host !== 'auth' || u.username || u.password || u.hash) return null
+  if (u.pathname !== '' && u.pathname !== '/') return null
+  const keys = [...u.searchParams.keys()]
+  if (keys.length !== 1) return null
+  const key = keys[0]
+  const values = u.searchParams.getAll(key)
+  if (values.length !== 1) return null
+  if (key === 'code' && CODE_FORMAT.test(values[0])) return { code: values[0] }
+  if (key === 'error' && ERROR_REASONS.has(values[0])) return { error: values[0] }
+  return null
 }
 
-export async function openNativeSignIn(apiBase: string): Promise<void> {
-  await Browser.open({ url: `${apiBase}/api/oauth/google/start?client=app` })
+/** The sign-in URL is built from the page's own origin — the WebView can only ever be on the pinned origin — never from a value the
+ *  page was handed. */
+export async function openNativeSignIn(origin: string = window.location.origin): Promise<void> {
+  const url = new URL('/api/oauth/google/start', origin)
+  url.searchParams.set('client', 'app')
+  if (url.origin !== window.location.origin) throw new Error('Unexpected sign-in origin')
+  await Browser.open({ url: url.toString() })
 }
 
 /** Registers once at startup. Handles links delivered while the app runs AND the link that launched it. The code is never logged. */
-export async function listenForAuthDeepLinks(handler: (r: { code?: string; error?: string }) => Promise<void>): Promise<void> {
+export async function listenForAuthDeepLinks(scheme: string, handler: (r: { code?: string; error?: string }) => Promise<void>): Promise<void> {
   const handle = async (url: string) => {
-    const parsed = parseAuthDeepLink(url)
+    const parsed = parseAuthDeepLink(url, scheme)
     if (!parsed) return
     try { await Browser.close() } catch { /* already closed */ }
     try { await handler(parsed) } catch { console.error('Sign-in could not be completed.') }
@@ -2976,7 +3294,7 @@ export async function listenForAuthDeepLinks(handler: (r: { code?: string; error
   if (launch?.url) await handle(launch.url)
 }
 
-/** The refresh token lives in the platform keystore (Android Keystore-backed), never in localStorage. */
+/** The refresh token lives in the platform keystore (Android Keystore-backed), never in WebView localStorage. */
 export function createSecureTokenStore(key = 'goms.auth.refresh'): TokenStore {
   return {
     async get() { try { const v = await SecureStorage.get(key); return typeof v === 'string' ? v : null } catch { return null } },
@@ -2986,70 +3304,661 @@ export function createSecureTokenStore(key = 'goms.auth.refresh'): TokenStore {
 }
 ```
 
-The Capacitor plugins are imported **lazily** so a web or unit-test environment never loads them. Add to `src/lib/auth/stores.ts`:
+`src/lib/auth/bootstrap.ts` — add (the plugins load lazily, so the browser build never imports them):
 
 ```ts
-/** Android: the platform keystore. Each call loads `./native` on demand, so the web bundle and node tests never import the plugins eagerly. */
-export function createNativeStore(): TokenStore {
-  const real = () => import('./native').then((m) => m.createSecureTokenStore())
-  return { get: async () => (await real()).get(), set: async (t) => (await real()).set(t), clear: async () => (await real()).clear() }
-}
-```
-
-`src/lib/auth/oauthProvider.ts` — use it, and open the system browser lazily:
-
-```ts
-import { createLocalStorageStore, createNativeStore } from './stores'
-// store: isNative ? createNativeStore() : createLocalStorageStore(),
-// async signIn() { if (isNative) await (await import('./native')).openNativeSignIn(apiBase); else window.location.assign(webSignInUrl()) },
-```
-
-`src/lib/auth/bootstrap.ts` — add a native branch used by `oauthProvider.bootstrap`:
-
-```ts
-export async function bootstrapNativeAuth(session: { redeem(code: string, client: 'web' | 'app'): Promise<void>; init(): Promise<void> }): Promise<void> {
+export async function bootstrapNativeAuth(
+  session: { redeem(code: string, client: 'web' | 'app'): Promise<void>; init(): Promise<void> }, scheme: string,
+): Promise<void> {
   const { listenForAuthDeepLinks } = await import('./native')
-  await listenForAuthDeepLinks(async ({ code, error }) => {
+  await listenForAuthDeepLinks(scheme, async ({ code, error }) => {
     if (error) setPendingAuthReason(error === 'domain' || error === 'unverified' ? 'forbidden' : 'unauthorized')
     if (code) await session.redeem(code, 'app')
   })
   await session.init()
 }
 ```
-and `oauthProvider.bootstrap = () => (isNative ? bootstrapNativeAuth(session) : bootstrapAuth(session, window))`. (Add a short test to `bootstrap.test.ts` asserting the native branch registers the listener before `init`.)
 
-`android/app/src/main/AndroidManifest.xml` — add inside the existing `<activity …MainActivity>` (the activity already has `launchMode="singleTask"`, which delivers the link to the running instance):
+`src/lib/auth/oauthProvider.ts` — complete the in-shell paths:
 
-```xml
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-                <data android:scheme="com.gorms.app" android:host="auth" />
-            </intent-filter>
+```ts
+import { shellScheme } from '@/lib/nativeShell'
+import { ShellUpdateRequiredError } from './errors'
+import { bootstrapAuth, bootstrapNativeAuth } from './bootstrap'
+
+// signIn:
+async signIn() {
+  if (!inShell) { window.location.assign(webSignInUrl()); return }
+  // Inside the shell a missing native piece means an old APK: refuse (no degraded token storage) and ask for an update.
+  if (!(hasCapability('browser') && hasCapability('appLinks') && hasCapability('secureStorage'))) throw new ShellUpdateRequiredError()
+  await (await import('./native')).openNativeSignIn()
+},
+// bootstrap:
+bootstrap: () => {
+  if (!inShell) return bootstrapAuth(session, window)
+  const scheme = shellScheme()
+  // An old shell, or one that reports no scheme, cannot receive a deep link: stay signed out; signIn() tells the user to update.
+  if (!scheme || !hasCapability('appLinks') || !hasCapability('secureStorage')) return Promise.resolve()
+  return bootstrapNativeAuth(session, scheme)
+},
 ```
 
-- [ ] **Step 5: Run to verify**
+`src/components/AuthPromptDialog.tsx` — keep one error state but distinguish the update case: store the caught error; render `This version of the GOMS app can't sign you in. Update the app and try again.` when `err instanceof ShellUpdateRequiredError`, else the existing `Sign-in failed. Try again.`
+
+- [ ] **Step 5: Run to verify they pass**
 
 ```bash
 npx vitest run src/lib/auth
+npx vitest run --config vitest.component.config.ts src/components/AuthPromptDialog.test.tsx
 npx tsc -b
-npx cap sync android
 ```
-Expected: tests PASS; `tsc` clean; `cap sync` lists `@capacitor/browser` and `@aparajita/capacitor-secure-storage` as Android plugins and exits 0. (No device build here — that is rollout approval #6.)
+Expected: PASS. Do **not** run `npx cap sync` here; the native project is Task 14's.
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add package.json package-lock.json android src/lib/auth
-git commit -m "feat(oauth): Android system-browser sign-in, com.gorms.app deep link and secure token storage"
+git add package.json package-lock.json src/lib/auth src/components/AuthPromptDialog.tsx src/components/AuthPromptDialog.test.tsx
+git commit -m "feat(oauth): Android shell sign-in on the web side — system browser, strict per-flavor deep link, secure token storage"
 ```
 
 ---
 
-## Phase C — Configuration, verification
+## Phase C — Android thin shell (native)
 
-### Task 14: Local development configuration and docs
+These tasks change `android/` and the shell's configuration. They are a **native release**: they need a new APK and cannot be delivered by a web deploy. They do not change the OAuth security model.
+
+### Task 14: Native Android shell — pinned origin, navigation policy, manifest, flavors
+
+**Files:**
+- Create: `android/app/src/main/java/com/gorms/app/NavigationPolicy.java`, `GomsWebViewClient.java`, `android/app/src/test/java/com/gorms/app/NavigationPolicyTest.java`, `android/app/src/main/res/xml/network_security_config.xml`, `android/app/src/main/res/xml/data_extraction_rules.xml`, `android/app/src/dev/res/values/strings.xml`, `android-shell/www/offline.html`
+- Modify: `android/app/build.gradle`, `android/app/src/main/AndroidManifest.xml`, `android/app/src/main/java/com/gorms/app/MainActivity.java`, `capacitor.config.ts`, `android/README.md`
+
+**Interfaces:**
+- Produces (Java): `NavigationPolicy(String pinnedOrigin)` (throws `IllegalArgumentException` unless it is an exact `https` origin with no path) and `Decision decide(String url, boolean isMainFrame)` returning `LOAD_IN_WEBVIEW | OPEN_EXTERNAL_BROWSER | HAND_TO_CUSTOM_TAB | HAND_TO_SYSTEM_APP | BLOCK`. `BuildConfig.GOMS_ORIGIN`, `BuildConfig.GOMS_SCHEME` per flavor.
+- Consumed by the web side: the user-agent token `GOMSShell/<versionCode> GOMSScheme/<scheme>` (Task 11 `nativeShell.ts`), the deep link `<scheme>://auth?...` (Task 13), the Capacitor bridge on the pinned origin.
+- Release type: **native (new APK)**. Nothing here is delivered by a web deploy.
+
+- [ ] **Step 1: Write the failing JUnit test** (the policy is plain Java, so it runs on the JVM without Android)
+
+```java
+// android/app/src/test/java/com/gorms/app/NavigationPolicyTest.java
+package com.gorms.app;
+
+import static com.gorms.app.NavigationPolicy.Decision.BLOCK;
+import static com.gorms.app.NavigationPolicy.Decision.HAND_TO_CUSTOM_TAB;
+import static com.gorms.app.NavigationPolicy.Decision.HAND_TO_SYSTEM_APP;
+import static com.gorms.app.NavigationPolicy.Decision.LOAD_IN_WEBVIEW;
+import static com.gorms.app.NavigationPolicy.Decision.OPEN_EXTERNAL_BROWSER;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.fail;
+
+import org.junit.Test;
+
+public class NavigationPolicyTest {
+    private final NavigationPolicy p = new NavigationPolicy("https://goms-prod.web.app");
+
+    private NavigationPolicy.Decision d(String url) { return p.decide(url, true); }
+
+    @Test public void loadsThePinnedOriginOnly() {
+        assertEquals(LOAD_IN_WEBVIEW, d("https://goms-prod.web.app/"));
+        assertEquals(LOAD_IN_WEBVIEW, d("https://goms-prod.web.app/sales/roster?a=1#top"));
+        assertEquals(LOAD_IN_WEBVIEW, d("HTTPS://GOMS-PROD.WEB.APP/x"));          // case-insensitive scheme and host
+        assertEquals(LOAD_IN_WEBVIEW, d("https://goms-prod.web.app:443/x"));      // default port normalised
+    }
+
+    @Test public void googleSignInStartGoesToTheBrowserNeverTheWebView() {
+        assertEquals(HAND_TO_CUSTOM_TAB, d("https://goms-prod.web.app/api/oauth/google/start?client=app"));
+        assertEquals(BLOCK, d("https://goms-prod.web.app/api/oauth/google/start?client=web"));
+        assertEquals(BLOCK, d("https://goms-prod.web.app/api/oauth/google/start"));
+        assertEquals(BLOCK, d("https://goms-prod.web.app/api/oauth/google/start?client=app&client=web"));
+    }
+
+    @Test public void everyOtherOauthPathIsBlockedIncludingEncodedAndDotSegmentForms() {
+        for (String path : new String[] {
+            "/api/oauth/google/callback?code=x&state=y", "/api/oauth/exchange", "/api/oauth/refresh", "/api/oauth", "/api/oauth/",
+            "/api/%6Fauth/google/callback", "/x/../api/oauth/google/callback", "//api/oauth/google/callback", "/API/OAuth/google/callback" }) {
+            assertEquals(path, BLOCK, d("https://goms-prod.web.app" + path));
+        }
+        assertEquals(LOAD_IN_WEBVIEW, d("https://goms-prod.web.app/api/trpc/health.check")); // ordinary API calls are not navigations we block
+    }
+
+    @Test public void otherHostsLeaveTheApp() {
+        for (String url : new String[] {
+            "https://accounts.google.com/o/oauth2/v2/auth", "https://goms-prod.firebaseapp.com/", "https://goms-prod.web.app.evil.com/",
+            "https://evil.com/goms-prod.web.app", "https://goms-prod.web.app@evil.com/", "https://evil.com@goms-prod.web.app/",
+            "https://goms-prod.web.app:8443/", "https://goms-prod.web.app./", "https://goms-dev.firebaseapp.com/" }) {
+            assertEquals(url, OPEN_EXTERNAL_BROWSER, d(url));
+        }
+    }
+
+    @Test public void cleartextAndDangerousSchemesAreBlocked() {
+        for (String url : new String[] {
+            "http://goms-prod.web.app/", "intent://x#Intent;end", "file:///sdcard/x.html", "content://x/y", "javascript:alert(1)",
+            "data:text/html,hi", "blob:https://goms-prod.web.app/abc", "android-app://com.x", "foo://bar", "", "not a url", null }) {
+            assertEquals(String.valueOf(url), BLOCK, d(url));
+        }
+    }
+
+    @Test public void mailAndPhoneGoToTheSystem() {
+        assertEquals(HAND_TO_SYSTEM_APP, d("mailto:a@amnex.com"));
+        assertEquals(HAND_TO_SYSTEM_APP, d("tel:+911234567890"));
+    }
+
+    @Test public void subFramesNeverLoadForeignContent() {
+        assertEquals(BLOCK, p.decide("https://evil.example/", false));
+        assertEquals(BLOCK, p.decide("https://goms-prod.web.app/api/oauth/google/start?client=app", false));
+        assertEquals(LOAD_IN_WEBVIEW, p.decide("https://goms-prod.web.app/embed", false));
+    }
+
+    @Test public void theDevOriginIsPinnedIndependently() {
+        NavigationPolicy dev = new NavigationPolicy("https://goms-dev.firebaseapp.com");
+        assertEquals(LOAD_IN_WEBVIEW, dev.decide("https://goms-dev.firebaseapp.com/x", true));
+        assertEquals(OPEN_EXTERNAL_BROWSER, dev.decide("https://goms-prod.web.app/x", true));
+    }
+
+    @Test public void refusesToBeBuiltFromAnythingButAnExactHttpsOrigin() {
+        for (String bad : new String[] {
+            "http://goms-prod.web.app", "https://goms-prod.web.app/path", "https://goms-prod.web.app/", "https://*.web.app", "https://user@goms-prod.web.app",
+            "https://goms-prod.web.app?x=1", "https://goms-prod.web.app#f", "", "goms-prod.web.app", null }) {
+            try { new NavigationPolicy(bad); fail("accepted " + bad); } catch (IllegalArgumentException expected) { /* ok */ }
+        }
+    }
+}
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+Run: `cd android && ./gradlew :app:testDevDebugUnitTest --tests com.gorms.app.NavigationPolicyTest`
+Expected: FAIL to compile — `NavigationPolicy` and the `dev` flavor do not exist yet. (Needs the Android SDK path in `android/local.properties` and network access for Gradle dependencies. If the SDK is unavailable, say so in the task report: the policy is plain Java and can be run with `javac` + the JUnit 4.13.2 jar as a fallback.)
+
+- [ ] **Step 3: Implement the policy**
+
+```java
+// android/app/src/main/java/com/gorms/app/NavigationPolicy.java
+package com.gorms.app;
+
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.Locale;
+
+/** Decides what the WebView may do with a URL. Plain Java (no Android types) so it is unit-tested on the JVM. Host comparison is on the
+ *  parsed authority, never startsWith/contains. */
+public final class NavigationPolicy {
+    public enum Decision { LOAD_IN_WEBVIEW, OPEN_EXTERNAL_BROWSER, HAND_TO_CUSTOM_TAB, HAND_TO_SYSTEM_APP, BLOCK }
+
+    private final String host;
+    private final int port;
+
+    public NavigationPolicy(String pinnedOrigin) {
+        URI o = parse(pinnedOrigin);
+        boolean exact = o != null
+            && "https".equals(lower(o.getScheme()))
+            && o.getHost() != null
+            && !o.getHost().contains("*")
+            && o.getRawUserInfo() == null
+            && (o.getRawPath() == null || o.getRawPath().isEmpty())
+            && o.getRawQuery() == null
+            && o.getRawFragment() == null;
+        if (!exact) throw new IllegalArgumentException("GOMS_ORIGIN must be an exact https origin with no path");
+        this.host = o.getHost().toLowerCase(Locale.ROOT);
+        this.port = effectivePort(o);
+    }
+
+    public Decision decide(String url, boolean isMainFrame) {
+        URI u = parse(url);
+        if (u == null) return Decision.BLOCK;
+        String scheme = lower(u.getScheme());
+        if (scheme == null) return Decision.BLOCK;
+        switch (scheme) {
+            case "https": return decideHttps(u, isMainFrame);
+            case "mailto":
+            case "tel": return isMainFrame ? Decision.HAND_TO_SYSTEM_APP : Decision.BLOCK;
+            default: return Decision.BLOCK; // http, intent, file, content, javascript, data, blob, android-app, anything unknown
+        }
+    }
+
+    private Decision decideHttps(URI u, boolean isMainFrame) {
+        String h = u.getHost();
+        boolean pinned = h != null && h.toLowerCase(Locale.ROOT).equals(host) && effectivePort(u) == port && u.getRawUserInfo() == null;
+        if (!pinned) return isMainFrame ? Decision.OPEN_EXTERNAL_BROWSER : Decision.BLOCK;
+        String decoded = u.normalize().getPath();
+        if (decoded == null) return Decision.BLOCK;
+        String path = decoded.replaceAll("/+", "/").toLowerCase(Locale.ROOT);
+        if (path.equals("/api/oauth") || path.startsWith("/api/oauth/")) {
+            boolean start = path.equals("/api/oauth/google/start") && hasSingleParam(u.getRawQuery(), "client", "app");
+            return start && isMainFrame ? Decision.HAND_TO_CUSTOM_TAB : Decision.BLOCK; // callbacks are reached only from the browser
+        }
+        return Decision.LOAD_IN_WEBVIEW;
+    }
+
+    private static boolean hasSingleParam(String rawQuery, String key, String value) {
+        if (rawQuery == null) return false;
+        int count = 0;
+        boolean matches = false;
+        for (String pair : rawQuery.split("&")) {
+            int eq = pair.indexOf('=');
+            String k = eq < 0 ? pair : pair.substring(0, eq);
+            String v = eq < 0 ? "" : pair.substring(eq + 1);
+            if (k.equals(key)) { count++; matches = v.equals(value); }
+        }
+        return count == 1 && matches;
+    }
+
+    private static int effectivePort(URI u) { return u.getPort() == -1 ? 443 : u.getPort(); }
+    private static String lower(String s) { return s == null ? null : s.toLowerCase(Locale.ROOT); }
+    private static URI parse(String s) {
+        if (s == null || s.isEmpty()) return null;
+        try { return new URI(s); } catch (URISyntaxException e) { return null; }
+    }
+}
+```
+
+- [ ] **Step 4: Gradle flavors, BuildConfig, per-flavor scheme** — edit `android/app/build.gradle`:
+
+Inside `android { ... }`, after `compileSdk = rootProject.ext.compileSdkVersion`, add:
+
+```groovy
+    buildFeatures {
+        buildConfig = true
+    }
+    flavorDimensions "env"
+    productFlavors {
+        prod {
+            dimension "env"
+            buildConfigField "String", "GOMS_ORIGIN", "\"https://goms-prod.web.app\""
+            buildConfigField "String", "GOMS_SCHEME", "\"com.gorms.app\""
+            manifestPlaceholders = [gomsScheme: "com.gorms.app"]
+        }
+        dev {
+            dimension "env"
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+            buildConfigField "String", "GOMS_ORIGIN", "\"https://goms-dev.firebaseapp.com\""
+            buildConfigField "String", "GOMS_SCHEME", "\"com.gorms.app.dev\""
+            manifestPlaceholders = [gomsScheme: "com.gorms.app.dev"]
+        }
+    }
+```
+and in `defaultConfig`: `versionCode 1` → `versionCode 2`; `versionName "1.0"` → `versionName "2.0"`. `applicationId "com.gorms.app"` stays (the dev flavor appends `.dev`). Create `android/app/src/dev/res/values/strings.xml`:
+
+```xml
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">GORMS Dev</string>
+    <string name="title_activity_main">GORMS Dev</string>
+    <string name="custom_url_scheme">com.gorms.app.dev</string>
+</resources>
+```
+
+- [ ] **Step 5: `MainActivity`, `GomsWebViewClient`, manifest and resources**
+
+```java
+// android/app/src/main/java/com/gorms/app/MainActivity.java
+package com.gorms.app;
+
+import android.util.Log;
+import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.CapConfig;
+
+public class MainActivity extends BridgeActivity {
+    @Override
+    protected void load() {
+        NavigationPolicy policy;
+        try {
+            policy = new NavigationPolicy(BuildConfig.GOMS_ORIGIN); // refuses anything but an exact https origin
+        } catch (IllegalArgumentException e) {
+            Log.e("GOMS", "Invalid pinned origin; refusing to start the WebView");
+            finish();
+            return;
+        }
+        // The remote origin is set HERE, in native code, from a compile-time per-flavor constant — never from capacitor.config.*.
+        config = new CapConfig.Builder(this)
+            .setServerUrl(BuildConfig.GOMS_ORIGIN)
+            .setAllowNavigation(new String[0])
+            .setErrorPath("offline.html")
+            .setAllowMixedContent(false)
+            .setAppendedUserAgentString("GOMSShell/" + BuildConfig.VERSION_CODE + " GOMSScheme/" + BuildConfig.GOMS_SCHEME)
+            .setWebContentsDebuggingEnabled(BuildConfig.DEBUG && "dev".equals(BuildConfig.FLAVOR))
+            .create();
+        super.load();
+        bridge.setWebViewClient(new GomsWebViewClient(bridge, policy, this, BuildConfig.GOMS_ORIGIN));
+    }
+}
+```
+
+```java
+// android/app/src/main/java/com/gorms/app/GomsWebViewClient.java
+package com.gorms.app;
+
+import android.app.Activity;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
+import android.net.Uri;
+import android.webkit.RenderProcessGoneDetail;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebView;
+import com.getcapacitor.Bridge;
+import com.getcapacitor.BridgeWebViewClient;
+
+/** Enforces NavigationPolicy for every main-frame navigation. SSL errors are never overridden to proceed (the default cancels). */
+public class GomsWebViewClient extends BridgeWebViewClient {
+    private final Bridge bridge;
+    private final NavigationPolicy policy;
+    private final Activity activity;
+    private final String origin;
+
+    public GomsWebViewClient(Bridge bridge, NavigationPolicy policy, Activity activity, String origin) {
+        super(bridge);
+        this.bridge = bridge;
+        this.policy = policy;
+        this.activity = activity;
+        this.origin = origin;
+    }
+
+    @Override
+    public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+        Uri url = request.getUrl();
+        switch (policy.decide(url.toString(), request.isForMainFrame())) {
+            case LOAD_IN_WEBVIEW: return false;
+            case OPEN_EXTERNAL_BROWSER:
+            case HAND_TO_CUSTOM_TAB: open(url); return true;     // the system browser; Google never renders inside the WebView
+            case HAND_TO_SYSTEM_APP: open(url); return true;
+            default: return true;                                  // BLOCK
+        }
+    }
+
+    @Override
+    public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+        if (!request.isForMainFrame()) return;
+        String errorUrl = bridge.getErrorUrl();                    // local offline.html (resolved against the local origin)
+        if (errorUrl != null) view.loadUrl(errorUrl + "#" + origin);
+    }
+
+    @Override
+    public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+        activity.recreate();
+        return true;
+    }
+
+    private void open(Uri uri) {
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, uri);
+            i.addCategory(Intent.CATEGORY_BROWSABLE);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            activity.startActivity(i);
+        } catch (ActivityNotFoundException ignored) { /* nothing can handle it: drop it */ }
+    }
+}
+```
+
+Replace `android/app/src/main/AndroidManifest.xml` with:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:name=".MainActivity"
+            android:label="@string/title_activity_main"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- OAuth return: <flavor scheme>://auth?code=...  (com.gorms.app for prod, com.gorms.app.dev for dev) -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${gomsScheme}" android:host="auth" />
+            </intent-filter>
+
+        </activity>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+</manifest>
+```
+
+```xml
+<!-- android/app/src/main/res/xml/network_security_config.xml : system CAs only, no cleartext, no user-added CAs, no pinning -->
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
+```
+
+```xml
+<!-- android/app/src/main/res/xml/data_extraction_rules.xml : nothing leaves the device by backup or transfer -->
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+        <exclude domain="file" path="." />
+        <exclude domain="database" path="." />
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="external" path="." />
+    </device-transfer>
+</data-extraction-rules>
+```
+
+- [ ] **Step 6: Offline page and `capacitor.config.ts`**
+
+`android-shell/www/offline.html` — the only bundled UI; no network, no remote assets; "Try again" navigates to the origin passed in the URL fragment, but only if it is one of the two known GOMS origins:
+
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>GORMS</title>
+  <style>
+    body { font: 16px system-ui, sans-serif; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; text-align: center; background: #fff; color: #111; }
+    main { padding: 2rem; max-width: 22rem; }
+    h1 { font-size: 1.25rem; margin: 0 0 .5rem; }
+    p { color: #555; margin: 0 0 1.5rem; }
+    button { font: inherit; padding: .8rem 1.4rem; border: 0; border-radius: .5rem; background: #111; color: #fff; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Can't reach GORMS</h1>
+    <p>Check your connection, then try again.</p>
+    <button id="retry" type="button">Try again</button>
+  </main>
+  <script>
+    document.getElementById('retry').addEventListener('click', function () {
+      var origin = location.hash.slice(1);
+      if (/^https:\/\/goms-(dev\.firebaseapp\.com|prod\.web\.app)$/.test(origin)) location.replace(origin + '/');
+    });
+  </script>
+</body>
+</html>
+```
+
+`capacitor.config.ts` becomes (note: **no `server` block**):
+
+```ts
+import type { CapacitorConfig } from '@capacitor/cli';
+
+// The Android app is a thin shell that loads the hosted GOMS origin. That origin is a per-flavor compile-time constant in native code
+// (android/app/build.gradle -> BuildConfig.GOMS_ORIGIN, applied in MainActivity). Do NOT add a `server` block, `server.url`, cleartext
+// or allowNavigation here: a guard test fails the build if any appear. Only the offline page is bundled.
+const config: CapacitorConfig = {
+  appId: 'com.gorms.app',
+  appName: 'GORMS',
+  webDir: 'android-shell/www',
+};
+
+export default config;
+```
+
+`android/README.md` — replace the "Everyday development build" section with: the web app is **not** synced into the APK any more (`webDir` is only `android-shell/www`); build with `cd android && ./gradlew assembleDevDebug` (dev flavor, installs as `com.gorms.app.dev`) or `assembleProdRelease` (prod flavor); `npx cap sync android` is needed only after adding or upgrading a Capacitor plugin; a normal Hosting deploy updates installed apps; the release-boundary table from this plan's section is copied under "Does this change need a new APK?".
+
+- [ ] **Step 7: Run to verify**
+
+```bash
+cd android && ./gradlew :app:testDevDebugUnitTest --tests com.gorms.app.NavigationPolicyTest      # JUnit: PASS
+cd android && ./gradlew :app:assembleDevDebug :app:assembleProdDebug                              # compile only; do not install or distribute
+rm -rf android/app/src/main/assets/public && npx cap sync android                                  # generated, git-ignored; now copies only the offline page
+```
+Expected: JUnit PASS; both flavors compile; `cap sync` lists `@capacitor/app`, `browser`, `filesystem`, `share`, secure storage and `android/app/src/main/assets/public` contains only `offline.html`. (A device run — loading the hosted dev origin, bridge present, deep link, offline page — is manual validation, below.)
+
+- [ ] **Step 8: Commit** (native release)
+
+```bash
+git add android android-shell capacitor.config.ts
+git commit -m "feat(android): thin shell — pinned per-flavor origin, navigation policy, deep-link manifest, side-by-side dev/prod"
+```
+
+---
+
+### Task 15: Shell configuration guards (a native or config change that drifts fails the build)
+
+**Files:**
+- Create: `src/lib/shell/androidConfigGuard.test.ts`
+- Modify: `apps/api/src/auth/oauth/config.ts` is read, not changed.
+
+**Interfaces:** Consumes the files from Task 14, `KNOWN_SHELL_SCHEMES` (Task 11) and `APP_SCHEMES` (Task 2).
+
+- [ ] **Step 1: Write the guard test** (it fails if anyone reintroduces a `server.url` shortcut, edits an origin, or lets the three scheme lists drift apart)
+
+```ts
+// src/lib/shell/androidConfigGuard.test.ts
+import { existsSync, readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+import { KNOWN_SHELL_SCHEMES } from '../nativeShell'
+
+const read = (p: string) => readFileSync(p, 'utf8')
+const stripComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s\/\/.*$/gm, '')
+const flavor = (gradle: string, name: string) => {
+  const block = new RegExp(`\\b${name}\\s*\\{([^}]*)\\}`).exec(gradle)?.[1] ?? ''
+  const field = (n: string) => new RegExp(`"${n}",\\s*"\\\\"([^"\\\\]+)\\\\""`).exec(block)?.[1]
+  return { origin: field('GOMS_ORIGIN'), scheme: field('GOMS_SCHEME'), placeholder: /gomsScheme:\s*"([^"]+)"/.exec(block)?.[1], suffix: /applicationIdSuffix\s+"([^"]+)"/.exec(block)?.[1] }
+}
+
+describe('capacitor config: no remote shortcut, only the offline page is bundled', () => {
+  const src = stripComments(read('capacitor.config.ts'))
+  it('has no server block, url, cleartext, allowNavigation or http scheme', () => {
+    expect(src).not.toMatch(/\bserver\s*:/)
+    expect(src).not.toMatch(/\bcleartext\b/i)
+    expect(src).not.toMatch(/allowNavigation/)
+    expect(src).not.toMatch(/androidScheme\s*:\s*['"]http['"]/)
+  })
+  it('bundles android-shell/www and nothing else', () => { expect(src).toMatch(/webDir:\s*'android-shell\/www'/) })
+  it('the generated config copied into the APK has no server block either (when present)', () => {
+    const generated = 'android/app/src/main/assets/capacitor.config.json'
+    if (!existsSync(generated)) return
+    const json = JSON.parse(read(generated))
+    expect(json.server).toBeUndefined()
+    expect(json.webDir).toBe('android-shell/www')
+  })
+})
+
+describe('Gradle flavors', () => {
+  const gradle = read('android/app/build.gradle')
+  const prod = flavor(gradle, 'prod'), dev = flavor(gradle, 'dev')
+  it('pins exact https origins with no path', () => {
+    expect(prod.origin).toBe('https://goms-prod.web.app')
+    expect(dev.origin).toBe('https://goms-dev.firebaseapp.com')
+    for (const o of [prod.origin!, dev.origin!]) { const u = new URL(o); expect(u.protocol).toBe('https:'); expect(u.pathname).toBe('/'); expect(`${u.origin}`).toBe(o) }
+  })
+  it('each origin is the host of the Google OAuth callback registered for that environment', () => {
+    expect(new URL('/api/oauth/google/callback', prod.origin).origin).toBe(prod.origin)
+    expect(new URL('/api/oauth/google/callback', dev.origin).origin).toBe(dev.origin)
+  })
+  it('prod and dev install side by side with their OWN applicationId and scheme', () => {
+    expect(prod.suffix).toBeUndefined(); expect(dev.suffix).toBe('.dev')
+    expect(prod.scheme).toBe('com.gorms.app'); expect(dev.scheme).toBe('com.gorms.app.dev')
+    expect(prod.placeholder).toBe(prod.scheme); expect(dev.placeholder).toBe(dev.scheme)
+    expect(read('android/app/build.gradle')).toMatch(/applicationId\s+"com\.gorms\.app"/)
+  })
+  it('the three scheme lists agree: Gradle flavors, the web shell detector and the API allow-list', () => {
+    const api = /APP_SCHEMES\s*=\s*\[([^\]]+)\]/.exec(read('apps/api/src/auth/oauth/config.ts'))?.[1].match(/'([^']+)'/g)?.map((x) => x.slice(1, -1))
+    expect([...KNOWN_SHELL_SCHEMES].sort()).toEqual([prod.scheme, dev.scheme].sort())
+    expect(api?.slice().sort()).toEqual([prod.scheme, dev.scheme].sort())
+  })
+})
+
+describe('manifest hardening', () => {
+  const manifest = read('android/app/src/main/AndroidManifest.xml')
+  it('takes its deep-link scheme from the flavor placeholder, never a literal', () => {
+    expect(manifest).toMatch(/android:scheme="\$\{gomsScheme\}"\s+android:host="auth"/)
+    expect(manifest).not.toMatch(/android:scheme="com\.gorms\.app/)
+  })
+  it('disables backup and cleartext and names the security configs', () => {
+    expect(manifest).toMatch(/android:allowBackup="false"/)
+    expect(manifest).toMatch(/android:usesCleartextTraffic="false"/)
+    expect(manifest).toMatch(/android:networkSecurityConfig="@xml\/network_security_config"/)
+    expect(manifest).toMatch(/android:dataExtractionRules="@xml\/data_extraction_rules"/)
+  })
+  it('declares no permission beyond INTERNET', () => {
+    expect([...manifest.matchAll(/<uses-permission android:name="([^"]+)"/g)].map((m) => m[1])).toEqual(['android.permission.INTERNET'])
+  })
+})
+```
+
+- [ ] **Step 2: Run to verify** (it passes only once Task 14's files exist; run it first with Task 14's gradle/manifest reverted to see it fail)
+
+```bash
+npx vitest run src/lib/shell
+```
+Expected before Task 14's edits: FAIL (no flavors / literal scheme). After: PASS.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/lib/shell
+git commit -m "test(android): guard against server.url shortcuts and flavor/scheme drift"
+```
+
+---
+
+## Phase D — Configuration, verification
+
+### Task 16: Local development configuration and docs
 
 **Files:**
 - Create: `apps/api/.env.oauth.example`
@@ -3085,6 +3994,10 @@ AUTH_SESSION_SECRET=
 
 # firebase (default, OAuth routes answer 404) | both | oauth
 AUTH_PROVIDER=both
+
+# The Android app's deep-link scheme this API hands out. Unset = com.gorms.app (prod). The DEV API sets com.gorms.app.dev.
+# Only those two values are accepted.
+# OAUTH_APP_SCHEME=com.gorms.app.dev
 ```
 
 - [ ] **Step 3: Document the frontend variable in `.env.example`**
@@ -3119,7 +4032,7 @@ git commit -m "docs(oauth): local development configuration for the OAuth flow"
 
 ---
 
-### Task 15: Full verification and the no-op proof
+### Task 17: Full verification and the no-op proof
 
 **Files:** none (verification only; fix anything it finds in the owning task's files).
 
@@ -3131,6 +4044,8 @@ npx vitest run                            # unit: baseline 65 / 686 + new
 npx vitest run --config vitest.component.config.ts   # component: baseline 93 / 714 + new
 (cd apps/api && npx tsc -p tsconfig.json --noEmit)
 npm run build                             # tsc -b && vite build
+(cd android && ./gradlew :app:testDevDebugUnitTest :app:assembleDevDebug :app:assembleProdDebug)   # JUnit + compile only (needs the Android SDK)
+npx vitest run src/lib/shell              # guard tests: no server.url shortcut, flavor/scheme drift
 ```
 Expected: all green; counts ≥ baseline; build exit 0. Any pre-existing test that needed editing must be listed in the final report with the reason.
 
@@ -3206,6 +4121,8 @@ Verify without reading values: `gcloud secrets versions list goms-auth-session-s
 | Code | Route traffic back to the previous Cloud Run revision (`gcloud run services update-traffic … --to-revisions=<prev>=100`) | Pre-OAuth API. The three new tables are unused, harmless. |
 | Data | `npx node-pg-migrate down` through the `goms-migrate` job drops the three OAuth tables | Only OAuth session data is lost; nothing else references them. Take a Cloud SQL backup first (as in the RBAC deploy). |
 | Secrets | Disable the secret versions | The routes answer 503 (misconfigured), never leak. |
+| Android web side | Roll back the Hosting release (installed shells follow on next load) | No APK involved. |
+| Android native | Keep the previous APK file; the dev flavor is a separate app and can simply be uninstalled | A bad shell cannot be fixed remotely except by what the pinned origin serves, which is why the shell logic is kept small. |
 
 ---
 
@@ -3213,21 +4130,25 @@ Verify without reading values: `gcloud secrets versions list goms-auth-session-s
 
 **Local web** (own Google account on the owner's `.env.oauth`): (1) Sign in → returns to the page you were on, address bar shows no `auth_code`, `localStorage['goms.auth.refresh']` exists, no access token in storage. (2) Reload → still signed in. (3) Sign out → returns to signed-out; refresh token cleared. (4) A non-`@amnex.com` Google account → "isn't an @amnex.com account" dialog, nothing stored. (5) Edit `AUTH_ACCESS_TTL_SECONDS=60`, wait → next action refreshes silently (Network tab shows one `/api/oauth/refresh`). (6) Open two tabs, idle past expiry, trigger both at once → both stay signed in (cross-tab lock). (7) Copy the refresh token, sign out in the UI, replay it with `curl -X POST …/api/oauth/refresh` → 401. (8) Admin Data Import still gated by `ADMIN_IMPORT_ALLOWED_EMAILS`.
 **Dev web** (after approvals #1–#5): repeat 1–8 on `goms-dev.firebaseapp.com`; additionally confirm a Firebase-signed-in browser (old build tab) keeps working while `AUTH_PROVIDER=both`.
-**Android** (after approval #6): install the dev APK → Sign in opens the system browser → Google → "Open GOMS" returns to the app (auto or via the button) → signed in; kill and reopen the app → still signed in (secure storage); airplane mode then reopen → still signed in (offline ≠ revoked); sign out; a non-amnex account shows the forbidden message; verify the browser does not stay open behind the app.
+**Android** (after approval #6; dev flavor on a test device — it installs beside any existing GORMS app and cannot touch its data): (1) `adb install` the dev APK; the app loads the **hosted dev origin**, `window.Capacitor` exists, the user agent contains `GOMSShell/2 GOMSScheme/com.gorms.app.dev`. (2) A trivial visible web change deployed to dev Hosting appears after relaunch **with the same installed APK**. (3) Sign in → system browser → Google → "Open GOMS" (auto or button) → back in the app, signed in; nothing sign-in-related in WebView `localStorage`. (4) Kill and reopen → still signed in (secure storage); airplane mode then reopen → still signed in (offline ≠ revoked) and the offline page shows "Try again" for an unreachable origin and recovers. (5) Sign out; non-amnex account shows the forbidden message. (6) Links: another host opens the browser; `http://`, `intent:` and a look-alike host do not load in the WebView; `/api/oauth/google/callback` typed into the WebView is blocked. (7) Install the **prod** flavor beside it (separate app, separate scheme): a dev deep link does not open prod and vice versa. (8) Old-shell simulation: a build without the secure-storage plugin refuses sign-in with "Update the app" and writes nothing to storage. (9) `adb shell dumpsys package com.gorms.app.dev` shows the `com.gorms.app.dev://auth` filter; `chrome://inspect` is refused on a release build. (10) Back button closes overlays, then navigates, then exits; export/share still work.
 
 ---
 
 ## Staging / rollout checklist — each item is a **separate approval**
 
-Nothing below is performed by executing Tasks 0–15. Production is not part of this plan.
+Nothing below is performed by executing Tasks 0–17. Production is not part of this plan.
+
+**Open decision carried into the rollout: Q2 (stranded local data in existing installs) is OPEN.** It gates only the *production* APK (item 7). Inventory procedure: install register + per-device check (no tools, or `adb run-as` on debug builds) with one outcome per install — **Nothing to keep / Keep / Unknown**. Gate: any **Keep** requires its CSV export before that device is upgraded; any **Unknown** keeps Q2 open and the production APK blocked.
 
 1. **Secret Manager secrets** — create `goms-google-oauth-client-secret` and `goms-auth-session-secret` in `goms-dev`; grant the runtime service account `secretAccessor` (commands above). *Precondition:* the owner confirms `.env.oauth` holds the intended client; the Google console lists the dev redirect URI. *Verify:* version listing; no value printed.
 2. **Migration** — build the API image from the reviewed commit (Cloud Build from a `git archive`), take an on-demand Cloud SQL backup, point `goms-migrate` at the image and run it; confirm `pgmigrations` gains exactly `1791100000000_oauth-sessions`; row counts of all existing tables unchanged. *Rollback:* migrate down (above).
-3. **Dev API configuration** — one env-only revision on the **current** image: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_REDIRECT_URI=https://goms-dev.firebaseapp.com/api/oauth/google/callback`, `--update-secrets` for the two secrets, `AUTH_PROVIDER=firebase` stated explicitly, and — only if the Android origin check below says so — the Capacitor origin (`https://localhost`) appended to `CORS_ALLOWED_ORIGINS`. Old code ignores all of it, so this is a no-op. *Verify:* revision ready; `auth.me` unchanged.
-4. **Dev frontend configuration** — decide the build variables for the dev hosting build: `VITE_AUTH_PROVIDER=oauth` (all other dev variables exactly as in `.gitlab-ci.yml`'s `deploy-dev`); record the current Hosting version id for rollback. No deploy yet.
+3. **Dev API configuration** — one env-only revision on the **current** image: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_REDIRECT_URI=https://goms-dev.firebaseapp.com/api/oauth/google/callback`, **`OAUTH_APP_SCHEME=com.gorms.app.dev`**, `--update-secrets` for the two secrets, and `AUTH_PROVIDER=firebase` stated explicitly. **No CORS change**: the shell is same-origin with the API, so `https://localhost` is *not* added to `CORS_ALLOWED_ORIGINS`. Old code ignores all of it, so this is a no-op. *Verify:* revision ready; `auth.me` unchanged.
+4. **Dev frontend configuration** — decide the build variables for the dev hosting build: `VITE_AUTH_PROVIDER=oauth` (all other dev variables exactly as in `.gitlab-ci.yml`'s `deploy-dev`; `VITE_API_BASE_URL` stays the hosted dev origin); record the current Hosting version id for rollback. No deploy yet.
 5. **Dev deployment** — three gated sub-steps, each needing its own yes: **5a** deploy the new API image with `AUTH_PROVIDER=firebase` (no-op proof: health, Firebase sign-in, RBAC smoke, `/api/oauth/*` → 404); **5b** flip `AUTH_PROVIDER=both` (env-only) and smoke-test OAuth routes with curl; **5c** deploy the Hosting build from approval 4 and run the dev web manual validation. Dev's `RBAC_MODE` is not touched at any point.
-6. **Android dev build and testing** — confirm the Capacitor WebView origin (`https://localhost`) against `CORS_ALLOWED_ORIGINS`; build a dev APK with `VITE_API_BASE_URL=https://goms-dev.firebaseapp.com` and `VITE_AUTH_PROVIDER=oauth`; install on a test device; run the Android manual validation.
-7. **Later: production rollout** — **out of scope for this plan.** It requires its own spec addendum and plan (prod secrets, prod redirect URI in the Google client, prod `AUTH_PROVIDER` staging, prod frontend/Android release) and its own approvals. Cutover of dev from `both` to `oauth`, and any removal of Firebase code, are likewise later, separately approved changes.
+6. **Android dev build and testing** — **native first, web second**: build the **dev flavor** APK (`com.gorms.app.dev`, pinned to `https://goms-dev.firebaseapp.com`, versionCode 2) per Task 14 and install it on a test device; it installs beside, and cannot affect, any existing GORMS app. Distribution is a **private** GCS object or internal share (never public Hosting). Run the Android manual validation. Needs 5a and 5b in place for sign-in to work; the hosted web (5c) is feature-gated by `hasCapability`.
+7. **Later: production rollout** — **out of scope for this plan.** It requires its own spec addendum and plan (prod secrets, prod redirect URI in the Google client, prod `OAUTH_APP_SCHEME` left unset, prod `AUTH_PROVIDER` staging, prod frontend and the **production APK**) and its own approvals, and the prod APK additionally requires **Q2 resolved** (the conditional gate above). Cutover of dev from `both` to `oauth`, and any removal of Firebase code, are likewise later, separately approved changes.
+
+**Owned by the thin-shell plan, not this one:** `shell-manifest.json` (public, no APK link, private distribution text only), the update-available / update-required UI, migrating `AppLayout.tsx` and `file-export.ts` to `hasCapability`, and the CSP header (report-only for one release, a report-collection endpoint, enforce only after reviewing real reports; during `AUTH_PROVIDER=both` its `connect-src` must still allow the Firebase endpoints, and the server-side OAuth flow adds no browser-side Google host).
 
 ---
 
@@ -3240,7 +4161,10 @@ Nothing below is performed by executing Tasks 0–15. Production is not part of 
 | Google ID-token validation (JWKS, iss, aud, exp, nonce, email_verified, `@amnex.com`, RS256 only) | 6 |
 | GOMS exchange code: random, hashed, 60 s, atomic single use, bound to identity/family/client; **not** PKCE-bound | 1, 4, 7 |
 | Web handoff `?auth_code=` + `history.replaceState` before any await | 7 (redirect), 12 |
-| Android system browser + `com.gorms.app://auth` deep link + secure storage | 7 (app page), 13 |
+| Android system browser + per-flavor deep link + secure storage, loaded from the hosted origin | 7 (app page, `OAUTH_APP_SCHEME`), 11 (`nativeShell`), 13 (web side), 14 (native shell), 15 (guards) |
+| Thin shell: no `server.url` shortcut, pinned per-flavor origin, exact-origin navigation policy, side-by-side dev/prod | 14, 15 |
+| Web-only vs native release boundary; native first, web second; Q2 gates the production APK | boundary section, rollout checklist |
+| No `localStorage` fallback inside the shell; old APK fails closed | 11 (`selectTokenStore`), 13 |
 | `auth_flows` / `auth_exchange_codes` / `auth_sessions` additive migration | 1 |
 | Access JWT 15 min HS256, claims exactly iss/aud/sub/email/sid/iat/exp, no RBAC | 3 |
 | Refresh rotation = one atomic compare-and-set; reuse revokes the family; concurrent test on real Postgres | 5, 7 |
@@ -3248,9 +4172,9 @@ Nothing below is performed by executing Tasks 0–15. Production is not part of 
 | Web single-flight + `navigator.locks`; offline ≠ revoked | 10 |
 | `verifyIdentity` seam + `AUTH_PROVIDER` modes; RBAC/Admin Import unchanged | 8 |
 | Bearer tokens, no cookies, tokens never in URLs | 7, 10, 11, 12 |
-| `AUTH_PROVIDER=firebase` default and no-op first deploy; no Firebase removal | 2, 7, 8, 9, 15 |
+| `AUTH_PROVIDER=firebase` default and no-op first deploy; no Firebase removal | 2, 7, 8, 9, 17 |
 | Client auth/session changes behind `VITE_AUTH_PROVIDER` | 9, 11 |
 | Dependencies (`jose`, `@capacitor/browser`, secure storage) | 3, 13 |
-| Secret Manager, local dev config, rollback, manual validation, 7-item approval checklist | sections above, 14 |
+| Secret Manager, local dev config, rollback, manual validation, 7-item approval checklist | sections above, 16 |
 
-**Deliberately not in this plan:** production; Firebase removal; profile name/photo for OAuth sessions (spec change needed); verified Android App Links; RBAC changes.
+**Deliberately not in this plan:** production; Firebase removal; profile name/photo for OAuth sessions (spec change needed); verified Android App Links; RBAC changes; the thin-shell web items (update banner, `shell-manifest.json`, CSP, `AppLayout`/`file-export` migration); deciding Q2.
