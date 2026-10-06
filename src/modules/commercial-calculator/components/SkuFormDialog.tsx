@@ -13,6 +13,9 @@ import {
   PRICING_LEVEL_KEYS, PRICING_LEVEL_LABEL, sellingPriceForDiscountPct, sellingPriceForMargin, validateSellingPrice,
 } from '../pricing-levels-logic'
 import { isoToday } from '@/lib/dates'
+import { usePermissions } from '@/lib/permissions'
+import { skuPatchAtom } from '@goms/domain'
+import { canComputeMargin } from '../restricted'
 import type { CommercialSku, CreateSkuInput, PricingLevelKey, SkuPricingLevelSetting } from '../types'
 
 type Values = {
@@ -37,6 +40,8 @@ const LEVEL_PRICE_FIELD: Record<PricingLevelKey, LevelPriceField> = {
   government: 'governmentPrice', enterprise: 'enterprisePrice', corporate: 'corporatePrice',
 }
 
+/** A cost / floor-price field the server hid from this role arrives as `null` (RBAC spec §7). The form works in plain
+ *  numbers, so those show as 0 here — but they are never sent back: see `submit`. */
 function defaults(existing: CommercialSku | null): Values {
   if (existing) {
     return {
@@ -44,13 +49,13 @@ function defaults(existing: CommercialSku | null): Values {
       uomId: existing.uomId, currencyId: existing.currencyId, taxClassId: existing.taxClassId,
       billingTypeId: existing.billingTypeId, activeFrom: existing.activeFrom, activeTill: existing.activeTill ?? '',
       lifecycleStatus: existing.lifecycleStatus, isSellable: existing.isSellable,
-      baseSoftwareCost: existing.baseSoftwareCost, implementationCostPerMM: existing.implementationCostPerMM,
-      integrationCost: existing.integrationCost, thirdPartyCost: existing.thirdPartyCost,
-      hardwareCost: existing.hardwareCost, cloudCost: existing.cloudCost, supportCost: existing.supportCost,
-      trainingCost: existing.trainingCost, internalPrice: existing.internalPrice, floorPrice: existing.floorPrice,
+      baseSoftwareCost: existing.baseSoftwareCost ?? 0, implementationCostPerMM: existing.implementationCostPerMM ?? 0,
+      integrationCost: existing.integrationCost ?? 0, thirdPartyCost: existing.thirdPartyCost ?? 0,
+      hardwareCost: existing.hardwareCost ?? 0, cloudCost: existing.cloudCost ?? 0, supportCost: existing.supportCost ?? 0,
+      trainingCost: existing.trainingCost ?? 0, internalPrice: existing.internalPrice ?? 0, floorPrice: existing.floorPrice ?? 0,
       partnerPrice: existing.partnerPrice, governmentPrice: existing.governmentPrice,
       enterprisePrice: existing.enterprisePrice, corporatePrice: existing.corporatePrice, listPrice: existing.listPrice,
-      minimumAllowedPrice: existing.minimumAllowedPrice, maximumDiscountPercent: existing.maximumDiscountPercent,
+      minimumAllowedPrice: existing.minimumAllowedPrice ?? 0, maximumDiscountPercent: existing.maximumDiscountPercent,
       selectedPricingLevels: existing.selectedPricingLevels,
     }
   }
@@ -79,6 +84,7 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
   editing: CommercialSku | null
   onSubmit: (input: CreateSkuInput | Partial<CommercialSku>, changeReason?: string) => Promise<void>
 }) {
+  const perms = usePermissions()
   const [values, setValues] = useState<Values>(() => defaults(editing))
   const [changeReason, setChangeReason] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -122,10 +128,17 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
     setPending(true)
     setError(null)
     try {
-      await onSubmit(
-        { ...values, activeTill: values.activeTill || null } as never,
-        touchedSensitiveField ? changeReason : undefined,
-      )
+      const body: Record<string, unknown> = { ...values, activeTill: values.activeTill || null }
+      // With RBAC enforced an update carries only the fields this role may edit and can actually see: a hidden
+      // (masked) value is shown as 0 above and must never be written back, and a patch key the role may not edit
+      // would be refused by the server (a Pre-sales user cannot edit costs; Finance edits only cost / floor / tax).
+      if (editing && perms.enforced) {
+        const hidden = new Set(editing.maskedFields ?? [])
+        for (const key of Object.keys(body)) {
+          if (hidden.has(key) || !perms.canEdit('com.skus', skuPatchAtom(key))) delete body[key]
+        }
+      }
+      await onSubmit(body as never, touchedSensitiveField ? changeReason : undefined)
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save.')
@@ -343,8 +356,15 @@ function SkuPricingLevelCard({ sku, entry, sellingPrice, onSellingPriceChange, o
   const [open, setOpen] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [priceDraft, setPriceDraft] = useState(sellingPrice === 0 ? '' : String(roundMoney(sellingPrice)))
-  const currentMargin = marginPctForSellingPrice(sku, [], new Map(), sellingPrice)
-  const [marginDraft, setMarginDraft] = useState(sellingPrice === 0 ? '' : currentMargin.toFixed(1))
+  const perms = usePermissions()
+  const priceField = LEVEL_PRICE_FIELD[entry.level]
+  // A hidden level price (internal / floor for a role without that atom) is shown as Restricted and never edited;
+  // a role that can read it but not edit it (Pre-sales on floor price) sees it read-only. Hidden cost ⇒ no margin.
+  const restricted = !!sku.maskedFields?.includes(priceField)
+  const readOnly = restricted || (perms.enforced && !perms.canEdit('com.skus', skuPatchAtom(priceField)))
+  const marginVisible = canComputeMargin([sku])
+  const currentMargin = marginVisible ? marginPctForSellingPrice(sku, [], new Map(), sellingPrice) : 0
+  const [marginDraft, setMarginDraft] = useState(sellingPrice === 0 || !marginVisible ? '' : currentMargin.toFixed(1))
   const discountPct = discountPctForSellingPrice(sku.listPrice, sellingPrice)
   const [discountDraft, setDiscountDraft] = useState(sellingPrice === 0 ? '' : discountPct.toFixed(1))
   const label = PRICING_LEVEL_LABEL[entry.level]
@@ -405,20 +425,22 @@ function SkuPricingLevelCard({ sku, entry, sellingPrice, onSellingPriceChange, o
           <Field label={`${label} Selling Price`}>
             <Input
               type="number"
-              value={priceDraft}
+              value={restricted ? '' : priceDraft}
               onChange={(e) => setPriceDraft(e.target.value)}
               onBlur={commitPrice}
-              placeholder={`e.g. ${sku.listPrice}`}
+              disabled={readOnly}
+              placeholder={restricted ? 'Restricted' : `e.g. ${sku.listPrice}`}
               aria-label={`${label} Selling Price`}
             />
           </Field>
           <Field label={`${label} Discount %`}>
             <Input
               type="number"
-              value={discountDraft}
+              value={restricted ? '' : discountDraft}
               onChange={(e) => setDiscountDraft(e.target.value)}
               onBlur={commitDiscount}
-              placeholder="e.g. 20"
+              disabled={readOnly}
+              placeholder={restricted ? 'Restricted' : 'e.g. 20'}
               aria-label={`${label} Discount %`}
             />
           </Field>
@@ -432,14 +454,19 @@ function SkuPricingLevelCard({ sku, entry, sellingPrice, onSellingPriceChange, o
             />
           </Field>
           <Field label={`${label} Margin %`}>
-            <Input
-              type="number"
-              value={marginDraft}
-              onChange={(e) => setMarginDraft(e.target.value)}
-              onBlur={commitMargin}
-              placeholder="e.g. 20"
-              aria-label={`${label} Margin`}
-            />
+            {marginVisible && !restricted ? (
+              <Input
+                type="number"
+                value={marginDraft}
+                onChange={(e) => setMarginDraft(e.target.value)}
+                onBlur={commitMargin}
+                disabled={readOnly}
+                placeholder="e.g. 20"
+                aria-label={`${label} Margin`}
+              />
+            ) : (
+              <p className="flex h-10 items-center rounded-lg border border-line bg-panel px-3 text-sm text-muted">Restricted</p>
+            )}
           </Field>
         </div>
       )}

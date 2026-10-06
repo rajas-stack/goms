@@ -11,6 +11,7 @@ import {
   sellingPriceForMargin, skuPriceForLevel, upsertPricingLevel, validateSellingPrice,
 } from '../pricing-levels-logic'
 import { roundMoney } from '../format'
+import { canComputeMargin } from '../restricted'
 import type { CommercialBomItem, CommercialSku, LinePricingLevel, PricingLevelKey } from '../types'
 
 interface Props {
@@ -147,7 +148,8 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, open, onExpa
 }) {
   const [error, setError] = useState<string | null>(null)
   const [priceDraft, setPriceDraft] = useState(entry.sellingPrice === null ? '' : String(roundMoney(entry.sellingPrice)))
-  const currentMargin = entry.sellingPrice === null ? null : marginPctForSellingPrice(sku, bomItems, skusById, entry.sellingPrice)
+  const marginVisible = canComputeMargin([sku]) // hidden cost ⇒ margin cannot be computed (RBAC spec §7)
+  const currentMargin = entry.sellingPrice === null || !marginVisible ? null : marginPctForSellingPrice(sku, bomItems, skusById, entry.sellingPrice)
   const [marginDraft, setMarginDraft] = useState(currentMargin === null ? '' : currentMargin.toFixed(1))
   const discountPct = entry.sellingPrice === null ? null : discountPctForSellingPrice(sku.listPrice, entry.sellingPrice)
   const [discountDraft, setDiscountDraft] = useState(discountPct === null ? '' : discountPct.toFixed(1))
@@ -161,7 +163,7 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, open, onExpa
   useEffect(() => {
     setPriceDraft(entry.sellingPrice === null ? '' : String(roundMoney(entry.sellingPrice)))
     setDiscountDraft(entry.sellingPrice === null ? '' : discountPctForSellingPrice(sku.listPrice, entry.sellingPrice).toFixed(1))
-    setMarginDraft(entry.sellingPrice === null ? '' : marginPctForSellingPrice(sku, bomItems, skusById, entry.sellingPrice).toFixed(1))
+    setMarginDraft(entry.sellingPrice === null || !marginVisible ? '' : marginPctForSellingPrice(sku, bomItems, skusById, entry.sellingPrice).toFixed(1))
     setError(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry.sellingPrice])
@@ -234,7 +236,7 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, open, onExpa
               onChange={(e) => { setPriceDraft(e.target.value); setError(null) }}
               onBlur={commitPrice}
               onKeyDown={commitOnEnter}
-              placeholder={`e.g. ${skuPriceForLevel(sku, entry.level)}`}
+              placeholder={`e.g. ${skuPriceForLevel(sku, entry.level) ?? 'Restricted'}`}
               aria-label={`${label} Selling Price`}
             />
           </Field>
@@ -255,15 +257,19 @@ function PricingLevelCard({ sku, bomItems, skusById, entry, active, open, onExpa
             </p>
           </Field>
           <Field label={`${label} Margin %`}>
-            <Input
-              type="number"
-              value={marginDraft}
-              onChange={(e) => { setMarginDraft(e.target.value); setError(null) }}
-              onBlur={commitMargin}
-              onKeyDown={commitOnEnter}
-              placeholder="e.g. 20"
-              aria-label={`${label} Margin`}
-            />
+            {marginVisible ? (
+              <Input
+                type="number"
+                value={marginDraft}
+                onChange={(e) => { setMarginDraft(e.target.value); setError(null) }}
+                onBlur={commitMargin}
+                onKeyDown={commitOnEnter}
+                placeholder="e.g. 20"
+                aria-label={`${label} Margin`}
+              />
+            ) : (
+              <p className="flex h-10 items-center rounded-lg border border-line bg-panel px-3 text-sm text-muted">Restricted</p>
+            )}
           </Field>
         </div>
       )}

@@ -104,26 +104,28 @@ export interface CommercialSku {
   isSellable: boolean
   displayOrder: number
 
-  // Cost Management — PCS-020..025
-  baseSoftwareCost: number
-  implementationCostPerMM: number
-  integrationCost: number
-  thirdPartyCost: number
-  hardwareCost: number
-  cloudCost: number
-  supportCost: number
-  trainingCost: number
+  // Cost Management — PCS-020..025. `null` = hidden from this role by the server (RBAC spec §7); never `0`.
+  baseSoftwareCost: number | null
+  implementationCostPerMM: number | null
+  integrationCost: number | null
+  thirdPartyCost: number | null
+  hardwareCost: number | null
+  cloudCost: number | null
+  supportCost: number | null
+  trainingCost: number | null
 
   // Pricing Levels — PCS-026/027, all in this SKU's currency
-  internalPrice: number
-  floorPrice: number
+  internalPrice: number | null
+  floorPrice: number | null
   partnerPrice: number
   governmentPrice: number
   enterprisePrice: number
   corporatePrice: number
   listPrice: number
 
-  minimumAllowedPrice: number
+  minimumAllowedPrice: number | null
+  /** Fields the server hid from this caller (RBAC); absent or empty when everything is visible. */
+  maskedFields?: string[]
   /** Fallback ceiling used only when a line has no active pricing level
    *  (or a level with no per-level override — see `SkuPricingLevelSetting`
    *  below) — never a shared/global cap once a level defines its own. */

@@ -28,7 +28,8 @@ export function BoqWorkspaceHeader({
   statusLabel: string
   customerName: string
   lineCount: number
-  marginPct: number
+  /** `null` = the SKUs' costs are hidden from this role (RBAC): shown as "Restricted". */
+  marginPct: number | null
   grandTotal: number
   currencyCode: string
   onPreview: () => void
@@ -52,8 +53,8 @@ export function BoqWorkspaceHeader({
       <span className="text-muted">Lines <span className="font-medium text-ink-900">{lineCount}</span></span>
       <span className="text-muted">
         Margin{' '}
-        <span className={isNegativeMargin(marginPct) ? 'font-medium text-rose-700' : 'font-medium text-ink-900'}>
-          {formatPercent(marginPct)}{isNegativeMargin(marginPct) ? ' — Below Cost' : ''}
+        <span className={marginPct !== null && isNegativeMargin(marginPct) ? 'font-medium text-rose-700' : 'font-medium text-ink-900'}>
+          {marginPct === null ? 'Restricted' : `${formatPercent(marginPct)}${isNegativeMargin(marginPct) ? ' — Below Cost' : ''}`}
         </span>
       </span>
       <span className="text-muted">

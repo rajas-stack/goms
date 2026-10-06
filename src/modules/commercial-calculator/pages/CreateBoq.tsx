@@ -19,6 +19,7 @@ import { formatPercent, isNegativeMargin } from '../format'
 import { useBoqWorkspaceShortcuts } from '../use-boq-workspace-shortcuts'
 import { useStickyScrollOffset } from '../use-sticky-scroll-offset'
 import { BOQ_WORKSPACE_SECTIONS, BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
+import { canComputeMargin } from '../restricted'
 import { SkuLinePicker } from '../components/SkuLinePicker'
 import { SkuSearchBar } from '../components/SkuSearchBar'
 import { SellingPriceSection } from '../components/SellingPriceSection'
@@ -337,7 +338,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         statusLabel="Draft"
         customerName={customerName}
         lineCount={lines.length}
-        marginPct={marginPreview}
+        marginPct={canComputeMargin(skus) ? marginPreview : null}
         grandTotal={grandTotal}
         currencyCode={effectiveCurrencyCode}
         onPreview={() => {
@@ -666,8 +667,8 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                 </table>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-4 text-sm">
-                <span className={isNegativeMargin(marginPreview) ? 'font-medium text-rose-700' : 'text-muted'}>
-                  Margin {formatPercent(marginPreview)}{isNegativeMargin(marginPreview) ? ' — Below Cost' : ''}
+                <span className={canComputeMargin(skus) && isNegativeMargin(marginPreview) ? 'font-medium text-rose-700' : 'text-muted'}>
+                  {canComputeMargin(skus) ? `Margin ${formatPercent(marginPreview)}${isNegativeMargin(marginPreview) ? ' — Below Cost' : ''}` : 'Margin Restricted'}
                 </span>
                 <span className="font-semibold text-ink-900">
                   Grand Total: {effectiveCurrencyCode} {grandTotal.toLocaleString()}

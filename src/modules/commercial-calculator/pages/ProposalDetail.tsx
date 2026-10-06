@@ -24,6 +24,7 @@ import { useBoqWorkspaceShortcuts } from '../use-boq-workspace-shortcuts'
 import { useStickyScrollOffset } from '../use-sticky-scroll-offset'
 import type { BulkPricingResult } from '../pricing-levels-logic'
 import { BOQ_WORKSPACE_SECTIONS, BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
+import { canComputeMargin } from '../restricted'
 import { SkuLinePicker } from '../components/SkuLinePicker'
 import { SkuSearchBar } from '../components/SkuSearchBar'
 import { SellingPriceSection } from '../components/SellingPriceSection'
@@ -227,8 +228,8 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
           <div><div className="text-[11px] uppercase text-muted">Grand Total</div>{boq.currency} {boq.grandTotal.toLocaleString()}</div>
           <div>
             <div className="text-[11px] uppercase text-muted">Margin</div>
-            <span className={isNegativeMargin(margin) ? 'text-rose-700' : undefined}>
-              {formatPercent(margin)}{isNegativeMargin(margin) ? ' — Below Cost' : ''}
+            <span className={canComputeMargin(skus) && isNegativeMargin(margin) ? 'text-rose-700' : undefined}>
+              {canComputeMargin(skus) ? `${formatPercent(margin)}${isNegativeMargin(margin) ? ' — Below Cost' : ''}` : 'Restricted'}
             </span>
           </div>
         </div>
@@ -244,7 +245,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
         statusLabel={STATUS_LABEL[boq.status]}
         customerName={boq.customerName}
         lineCount={lines.length}
-        marginPct={margin}
+        marginPct={canComputeMargin(skus) ? margin : null}
         grandTotal={boq.grandTotal}
         currencyCode={boq.currency}
         onPreview={() => {
