@@ -8,6 +8,7 @@ import {
   rowForOwnedEntity, rowForSalesPerson, savedViewScope, sheetModule,
 } from '../rows.js'
 import { bidRow, oppRow, patchAtoms } from './builders.js'
+import { maskGridRows } from './rowVisibility.js'
 import { ROW_MODULES, create, read, readRows, remove, write } from './helpers.js'
 import type { Check, PolicyEntry, Requirement } from './types.js'
 
@@ -135,10 +136,12 @@ const bookOfBusinessTransfer: Requirement = async (raw) => ({
 export const opportunityPolicy: Record<string, PolicyEntry> = {
   // reads: any role that can read at least one of the three sheet modules
   ...same([
-    'bids.listForGrid', 'bids.get', 'bids.getForOpportunity', 'bids.actionQueue.list',
+    'bids.get', 'bids.getForOpportunity', 'bids.actionQueue.list',
     'opportunities.list', 'opportunities.listByDepartment', 'opportunities.get', 'opportunities.listStageChanges',
     'bidCustomFields.valuesForBid', 'bidSavedViews.list', 'bidSavedViews.get',
   ], readRows),
+
+  'bids.listForGrid': { requirements: [readRows], mask: maskGridRows },
 
   'bids.create': { requirements: [sheetCreate, departmentCreate] },
   'bids.update': { requirements: [bidRow('update', (r) => r?.id, bidPatch), sheetMove] },

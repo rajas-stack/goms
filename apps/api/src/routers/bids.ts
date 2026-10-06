@@ -248,7 +248,7 @@ export const bidsRouter = router({
         let opportunityId = input.opportunityId
         if (input.newOpportunity) {
           if (!input.department) throw new TRPCError({ code: 'BAD_REQUEST', message: DEPARTMENT_REQUIRED_MESSAGE })
-          opportunityId = (await insertOpportunity(client, { ...input.newOpportunity, departmentId: null }, { deferCode: true })).id
+          opportunityId = (await insertOpportunity(client, { ...input.newOpportunity, departmentId: null }, { deferCode: true, createdBy: ctx.user?.email })).id
         }
         if (!opportunityId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose an existing opportunity or describe a new one.' })
         await resolveBidDepartment(client, opportunityId, input.department, ctx.user?.email)

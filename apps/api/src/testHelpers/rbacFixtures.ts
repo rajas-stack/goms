@@ -104,6 +104,9 @@ export async function addEmployee(nodeId: string, label = 'emp'): Promise<string
   return rows[0].id
 }
 
+/** Registers an opportunity created through the router so cleanup removes it (and its stage changes). */
+export function trackOpportunity(id: string): void { made.opportunities.push(id) }
+
 export async function cleanupRbacFixtures(): Promise<void> {
   const ids = [...made.bids, ...made.opportunities]
   if (ids.length) {
@@ -111,6 +114,7 @@ export async function cleanupRbacFixtures(): Promise<void> {
     await pool.query('DELETE FROM follow_ups WHERE entity_id = ANY($1::uuid[])', [ids])
     await pool.query('DELETE FROM bid_milestones WHERE bid_id = ANY($1::uuid[])', [made.bids])
     await pool.query('DELETE FROM bids WHERE id = ANY($1::uuid[])', [made.bids])
+    await pool.query('DELETE FROM opportunity_stage_changes WHERE opportunity_id = ANY($1::uuid[])', [made.opportunities])
     await pool.query('DELETE FROM opportunities WHERE id = ANY($1::uuid[])', [made.opportunities])
   }
   made.bids.length = 0

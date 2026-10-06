@@ -141,7 +141,7 @@ async function validateTeamAssignments(client: any, input: Record<string, unknow
 export async function insertOpportunity(
   client: { query: (text: string, values?: any[]) => Promise<{ rows: any[] }> },
   input: Omit<z.infer<typeof createOpportunitySchema>, 'departmentId'> & { departmentId: string | null },
-  options: { deferCode?: boolean } = {},
+  options: { deferCode?: boolean; createdBy?: string | null } = {},
 ) {
   const dept = input.departmentId
     ? (await client.query('SELECT state_code FROM hierarchy_nodes WHERE id=$1', [input.departmentId])).rows[0]
@@ -155,8 +155,8 @@ export async function insertOpportunity(
        publish_date, submission_date, vertical, component, quantity, currency, value_amount,
        value_unit, budget_known, emd_amount, emd_unit, sales_person_email, city, reference_no, assignment_name,
        geo_sales_person_id, bu_sales_person_id, pre_sales_person_id, legal_person_id, bid_team_member_id,
-       opportunity_type
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+       opportunity_type, created_by
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28)
      RETURNING *`,
     [
       input.departmentId, dept?.state_code ?? null, stageKey, closedOn, input.opportunityName,
@@ -166,6 +166,7 @@ export async function insertOpportunity(
       input.salesPersonEmail ?? '', input.city ?? null, input.referenceNo ?? null, input.assignmentName ?? null,
       input.geoSalesPersonId ?? null, input.buSalesPersonId ?? null, input.preSalesPersonId ?? null,
       input.legalPersonId ?? null, input.bidTeamMemberId ?? null, input.opportunityType ?? '',
+      options.createdBy ? options.createdBy.trim().toLowerCase() : null,
     ],
   )
   const opp = result.rows[0]
@@ -201,11 +202,11 @@ export const opportunitiesRouter = router({
   }),
   create: protectedProcedure
     .input(createOpportunitySchema)
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
-        const opp = await insertOpportunity(client, input)
+        const opp = await insertOpportunity(client, input, { createdBy: ctx.user?.email })
         await client.query('COMMIT')
         return toOpportunity(opp)
       } catch (e) {
