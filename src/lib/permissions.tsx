@@ -45,6 +45,12 @@ export function PermissionsProvider({ children, access }: { children: ReactNode;
 
 export const usePermissions = (): Permissions => useContext(Ctx)
 
+/** True when RBAC is off, or the user can read at least one of `modules`. For hiding navigation entries. */
+export function useCanReadAny(modules: readonly PolicyModuleKey[]): boolean {
+  const p = usePermissions()
+  return !p.enforced || modules.some((m) => p.level(m) !== 'N')
+}
+
 /** Renders children only when the action is allowed (or when `fallback` is given, renders that instead). */
 export function Can({
   module, action = 'update', atom, row, fallback = null, children,

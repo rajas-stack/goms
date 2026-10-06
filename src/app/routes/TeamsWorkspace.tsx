@@ -1,3 +1,4 @@
+import { usePermissions } from '@/lib/permissions'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -223,12 +224,15 @@ function DeliveryTeam({ team, label, section }: { team: DeliveryTeamKey; label: 
 export function TeamsWorkspace() {
   const { team: teamParam, section } = useParams()
   const navigate = useNavigate()
-  const tab = TABS.find((t) => t.value === teamParam) ?? TABS[0]
+  const perms = usePermissions()
+  // Org Structure and the delivery teams follow Company Org Structure; the Sales tab follows the Sales Team.
+  const tabs = TABS.filter((t) => !perms.enforced || perms.level(t.value === 'sales' ? 'team.sales' : 'team.org') !== 'N')
+  const tab = tabs.find((t) => t.value === teamParam) ?? tabs[0] ?? TABS[0]
 
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 bg-paper/70 px-3 pt-2 sm:px-6">
-        <Tabs tabs={TABS} value={tab.value} onChange={(value) => navigate(`/teams/${value}`)} />
+        <Tabs tabs={tabs} value={tab.value} onChange={(value) => navigate(`/teams/${value}`)} />
       </div>
       <div className="min-h-0 flex-1">
         {tab.value === 'org' ? <OrgStructureChart />

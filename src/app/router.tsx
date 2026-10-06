@@ -3,6 +3,8 @@ import { createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './AppLayout'
 import { GlobalErrorScreen } from './routes/GlobalErrorScreen'
 import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
+import { RequireAccess } from '@/components/NoAccess'
+import { NAV_MODULES } from '@/lib/routeModules'
 
 const Home = lazy(() => import('./routes/Home').then((m) => ({ default: m.Home })))
 const Landing = lazy(() => import('./routes/Landing').then((m) => ({ default: m.Landing })))
@@ -53,18 +55,21 @@ const adminImportRoutes =
       ]
     : []
 
+/** The Opportunity module opens for any role that can read at least one sheet (its tabs then follow their own sheet). */
+const Opp = ({ children }: { children: React.ReactNode }) => <RequireAccess anyOf={NAV_MODULES.opportunity}>{children}</RequireAccess>
+
 // Bid Tracker is dark-launched behind its own build flag, same convention as
 // the admin-import routes above: absent from the router entirely when off.
 const bidTrackerRoutes = isBidTrackerEnabled()
   ? [
-      { path: '/bid-tracker', element: <OpportunityWorkspace tab="bid-tracker" /> },
-      { path: '/bid-tracker/bid/:bidId', element: <BidDetailWorkspace /> },
-      { path: '/bid-tracker/pipeline', element: <OpportunityWorkspace tab="pipeline" /> },
-      { path: '/bid-tracker/pipeline/:tab', element: <OpportunityWorkspace tab="pipeline" /> },
-      { path: '/bid-tracker/campaign', element: <OpportunityWorkspace tab="campaign" /> },
-      { path: '/bid-tracker/master', element: <OpportunityWorkspace tab="master" /> },
-      { path: '/bid-tracker/dashboard', element: <OpportunityWorkspace tab="dashboard" /> },
-      { path: '/bid-tracker/:section', element: <OpportunityWorkspace tab="bid-tracker" /> },
+      { path: '/bid-tracker', element: <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp> },
+      { path: '/bid-tracker/bid/:bidId', element: <Opp><BidDetailWorkspace /></Opp> },
+      { path: '/bid-tracker/pipeline', element: <Opp><OpportunityWorkspace tab="pipeline" /></Opp> },
+      { path: '/bid-tracker/pipeline/:tab', element: <Opp><OpportunityWorkspace tab="pipeline" /></Opp> },
+      { path: '/bid-tracker/campaign', element: <Opp><OpportunityWorkspace tab="campaign" /></Opp> },
+      { path: '/bid-tracker/master', element: <Opp><OpportunityWorkspace tab="master" /></Opp> },
+      { path: '/bid-tracker/dashboard', element: <Opp><OpportunityWorkspace tab="dashboard" /></Opp> },
+      { path: '/bid-tracker/:section', element: <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp> },
     ]
   : []
 
@@ -74,19 +79,19 @@ export const router = createBrowserRouter([
     errorElement: <GlobalErrorScreen />,
     children: [
       { path: '/', element: <Home /> },
-      { path: '/map', element: <Landing /> },
-      { path: '/state/:code', element: <StateWorkspace /> },
-      { path: '/directory', element: <Directory /> },
-      { path: '/analytics', element: <Insights /> },
-      { path: '/meetings', element: <Meetings /> },
-      { path: '/sales', element: <SalesWorkspace /> },
-      { path: '/sales/:section', element: <SalesWorkspace /> },
-      { path: '/teams', element: <TeamsWorkspace /> },
-      { path: '/teams/:team', element: <TeamsWorkspace /> },
-      { path: '/teams/:team/:section', element: <TeamsWorkspace /> },
-      { path: '/commercial-calculator', element: <CommercialCalculatorWorkspace /> },
-      { path: '/commercial-calculator/:section', element: <CommercialCalculatorWorkspace /> },
-      { path: '/commercial-calculator/boq/:boqId', element: <CommercialCalculatorWorkspace /> },
+      { path: '/map', element: <RequireAccess anyOf={NAV_MODULES.map}><Landing /></RequireAccess> },
+      { path: '/state/:code', element: <RequireAccess anyOf={NAV_MODULES.map}><StateWorkspace /></RequireAccess> },
+      { path: '/directory', element: <RequireAccess anyOf={NAV_MODULES.directory}><Directory /></RequireAccess> },
+      { path: '/analytics', element: <RequireAccess anyOf={NAV_MODULES.insights}><Insights /></RequireAccess> },
+      { path: '/meetings', element: <RequireAccess anyOf={NAV_MODULES.meetings}><Meetings /></RequireAccess> },
+      { path: '/sales', element: <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess> },
+      { path: '/sales/:section', element: <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess> },
+      { path: '/teams', element: <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess> },
+      { path: '/teams/:team', element: <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess> },
+      { path: '/teams/:team/:section', element: <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess> },
+      { path: '/commercial-calculator', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
+      { path: '/commercial-calculator/:section', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
+      { path: '/commercial-calculator/boq/:boqId', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
       ...bidTrackerRoutes,
       ...adminImportRoutes,
       { path: '*', element: <NotFound /> },
