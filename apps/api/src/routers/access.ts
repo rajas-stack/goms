@@ -4,7 +4,8 @@ import { z } from 'zod'
 import { bindTeamMembers, combineRoles, clearUserFactsCache, normalizeEmail, type TeamCandidate } from '../auth/rbac/userFacts.js'
 import { isAllowListed, parseAllowList } from '../auth/identity.js'
 import { pool } from '../db.js'
-import { accessProcedure, router } from '../trpc.js'
+import { isSystemAdminEmail } from '../auth/rbac/systemAdminOnly.js'
+import { accessProcedure, router, systemAdminProcedure } from '../trpc.js'
 
 const roleSchema = z.enum(FUNCTIONAL_ROLES) // System Admin is never an override (spec §3.4)
 const SYSTEM_ADMIN_MANAGED = 'System Admin accounts are managed through the protected admin allow-list.'
@@ -37,7 +38,8 @@ export const accessRouter = router({
     (await pool.query('SELECT * FROM user_role_overrides ORDER BY email, role')).rows.map(toOverride),
   ),
 
-  setOverride: accessProcedure
+  /** System Admin only (SYSTEM_ADMIN_ONLY): the matrix lets IT write here, but overrides are not IT's to manage. */
+  setOverride: systemAdminProcedure
     .input(z.object({ email: emailSchema, role: roleSchema, effect: z.enum(['grant', 'revoke']), reason: z.string().trim().min(1).max(500) }))
     .mutation(async ({ input, ctx }) => {
       if (isSystemAdmin(input.email)) throw new TRPCError({ code: 'BAD_REQUEST', message: SYSTEM_ADMIN_MANAGED })
@@ -51,7 +53,7 @@ export const accessRouter = router({
       return toOverride(rows[0])
     }),
 
-  removeOverride: accessProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  removeOverride: systemAdminProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
     const target = (await pool.query('SELECT email FROM user_role_overrides WHERE id=$1', [input.id])).rows[0]
     if (target && isSystemAdmin(target.email)) throw new TRPCError({ code: 'BAD_REQUEST', message: SYSTEM_ADMIN_MANAGED })
     await pool.query('DELETE FROM user_role_overrides WHERE id=$1', [input.id])

@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server'
 import type { PoolClient } from 'pg'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { EMAIL_BINDING_MESSAGE, emailChanges, requireSystemAdmin } from '../auth/rbac/systemAdminOnly.js'
 
 // Org Structure: the company chart. Pre-Sales / Bid / Legal rosters are mirrored from it by the
 // sync_delivery_teams_from_org() SQL function, which every mutation runs in the same transaction.
@@ -90,7 +91,9 @@ export const orgPeopleRouter = router({
     departments: departments.optional(),
     managerId: z.string().uuid().nullable().optional(),
     email: z.string().trim().max(254).optional(),
-  })).mutation(({ input }) => inOrgTransaction(async (client) => {
+  })).mutation(({ input, ctx }) => inOrgTransaction(async (client) => {
+    // The email is what derives this person's role (SYSTEM_ADMIN_ONLY, every RBAC mode): adding one needs a System Admin.
+    if (emailChanges(input.email, '')) requireSystemAdmin(ctx, EMAIL_BINDING_MESSAGE, 'orgPeople.create#email')
     if (await nameTaken(client, input.name, null)) throw new TRPCError({ code: 'CONFLICT', message: 'Someone with this name is already in the org.' })
     const people = await loadPeople(client)
     const problem = managerProblem({ id: '', level: input.level }, input.managerId ?? null, people)
@@ -114,10 +117,12 @@ export const orgPeopleRouter = router({
       managerId: z.string().uuid().nullable().optional(),
       status: z.enum(['active', 'inactive']).optional(),
     }),
-  })).mutation(({ input }) => inOrgTransaction(async (client) => {
+  })).mutation(({ input, ctx }) => inOrgTransaction(async (client) => {
     const current = (await client.query('SELECT * FROM org_people WHERE id=$1 FOR UPDATE', [input.id])).rows[0]
     if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'This person is no longer in the org.' })
     const p = input.patch
+    // Changing the stored email (trimmed, case-insensitive) needs a System Admin; re-saving the same one does not.
+    if (emailChanges(p.email, current.email)) requireSystemAdmin(ctx, EMAIL_BINDING_MESSAGE, 'orgPeople.update#email')
     const next = {
       name: p.name ?? current.name,
       designation: p.designation ?? current.designation,

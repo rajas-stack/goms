@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { EMAIL_BINDING_MESSAGE, emailChanges, requireSystemAdmin } from '../auth/rbac/systemAdminOnly.js'
 
 const teamSchema = z.enum(['preSales', 'legal', 'bid'])
 
@@ -61,7 +62,9 @@ export const deliveryTeamsRouter = router({
     email: z.string().trim().max(254).optional(),
     designation: z.string().trim().max(200).optional(),
     managerId: z.string().uuid().nullable().optional(),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ input, ctx }) => {
+    // A member's email binds a login to their team assignments (SYSTEM_ADMIN_ONLY, every RBAC mode): adding one needs a System Admin.
+    if (emailChanges(input.email, '')) requireSystemAdmin(ctx, EMAIL_BINDING_MESSAGE, 'deliveryTeams.create#email')
     await assertValidManager(input.team, null, input.managerId ?? null)
     try {
       const result = await pool.query(
@@ -84,7 +87,12 @@ export const deliveryTeamsRouter = router({
       designation: z.string().trim().max(200).optional(),
       managerId: z.string().uuid().nullable().optional(),
     }),
-  })).mutation(async ({ input }) => {
+  })).mutation(async ({ input, ctx }) => {
+    // Changing the stored email (trimmed, case-insensitive) needs a System Admin; re-saving the same one does not.
+    if (input.patch.email !== undefined) {
+      const stored = (await pool.query('SELECT email FROM delivery_team_members WHERE id=$1', [input.id])).rows[0]?.email
+      if (emailChanges(input.patch.email, stored)) requireSystemAdmin(ctx, EMAIL_BINDING_MESSAGE, 'deliveryTeams.update#email')
+    }
     const fields = Object.keys(input.patch)
     if (!fields.length) return oneMember(input.id)
     if (input.patch.managerId !== undefined) {
