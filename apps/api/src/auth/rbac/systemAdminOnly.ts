@@ -3,8 +3,9 @@ import { TRPCError } from '@trpc/server'
 import { isAllowListed } from '../identity.js'
 import { RbacDenial } from './denial.js'
 
-/** System Admin membership is env-only: `ADMIN_ALLOWED_EMAILS` (RBAC spec §3.4). This is the one place the access router,
- *  the System-Admin-only guards and the effective-permissions view ask the question; nothing here can write the list. */
+/** System Admin membership is env-only: `ADMIN_ALLOWED_EMAILS` (RBAC spec §3.4). `isSystemAdminEmail` is the shared "is this address a
+ *  System Admin?" question for the override writers (routers/access.ts) and the System-Admin-only guards below; userFacts.ts,
+ *  trpc.ts and the readiness list read the same variable through the same `isAllowListed` parser. Nothing here can write the list. */
 export const isSystemAdminEmail = (email: string): boolean => isAllowListed(email, process.env.ADMIN_ALLOWED_EMAILS)
 
 export interface SystemAdminOnlyRule {
@@ -55,6 +56,8 @@ export const SYSTEM_ADMIN_ONLY: readonly SystemAdminOnlyRule[] = [
 ]
 
 export const EMAIL_BINDING_MESSAGE = 'Only a System Admin can set or change an email address.'
+export const ORG_SYNC_EMAIL_MESSAGE =
+  "This change would link an existing team member to this person and replace the member's email address, which only a System Admin can do."
 
 /** The caller of a procedure, as tRPC's context carries them (set only when auth is enforced). */
 export interface CallerContext { user?: { email: string } }
@@ -66,13 +69,16 @@ export const isSystemAdminCaller = (ctx: CallerContext): boolean => !!ctx.user &
  *  (the convention of `adminProcedure` / `accessProcedure`); deployed environments always enforce auth. */
 const authEnforced = (): boolean => process.env.AUTH_ENFORCEMENT_ENABLED === 'true'
 
+/** True when the System Admin rules bind this caller: auth is enforced and they are not on the allow-list. */
+export const lacksSystemAdmin = (ctx: CallerContext): boolean => authEnforced() && !isSystemAdminCaller(ctx)
+
 /**
  * Throws FORBIDDEN unless the caller is a System Admin (a no-op when auth is not enforced). The error carries an
  * `RbacDenial`, so the browser shows an ordinary "no permission" message instead of the "sign in with your @amnex.com
  * account" prompt that every other FORBIDDEN triggers. `target` (a rule id) fills in which module / action was refused.
  */
 export function requireSystemAdmin(ctx: CallerContext, message = 'Only a System Admin can do this.', target?: string): void {
-  if (!authEnforced() || isSystemAdminCaller(ctx)) return
+  if (!lacksSystemAdmin(ctx)) return
   const rule = SYSTEM_ADMIN_ONLY.find((r) => r.id === target)
   throw new TRPCError({
     code: 'FORBIDDEN', message,

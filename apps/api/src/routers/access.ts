@@ -12,7 +12,6 @@ import { accessProcedure, router, systemAdminProcedure } from '../trpc.js'
 
 const roleSchema = z.enum(FUNCTIONAL_ROLES) // System Admin is never an override (spec §3.4)
 const SYSTEM_ADMIN_MANAGED = 'System Admin accounts are managed through the protected admin allow-list.'
-const isSystemAdmin = (email: string): boolean => isAllowListed(email, process.env.ADMIN_ALLOWED_EMAILS)
 const emailSchema = z.string().trim().toLowerCase().email().max(254)
 
 export interface ReadinessRow {
@@ -67,7 +66,7 @@ export const accessRouter = router({
   setOverride: systemAdminProcedure
     .input(z.object({ email: emailSchema, role: roleSchema, effect: z.enum(['grant', 'revoke']), reason: z.string().trim().min(1).max(500) }))
     .mutation(async ({ input, ctx }) => {
-      if (isSystemAdmin(input.email)) throw new TRPCError({ code: 'BAD_REQUEST', message: SYSTEM_ADMIN_MANAGED })
+      if (isSystemAdminEmail(input.email)) throw new TRPCError({ code: 'BAD_REQUEST', message: SYSTEM_ADMIN_MANAGED })
       const actor = normalizeEmail(ctx.user?.email ?? 'unknown')
       const row = await inOverrideTransaction(async (client) => {
         const existing = (await client.query('SELECT * FROM user_role_overrides WHERE email=$1 AND role=$2', [input.email, input.role])).rows[0]
@@ -100,7 +99,7 @@ export const accessRouter = router({
     await inOverrideTransaction(async (client) => {
       const target = (await client.query('SELECT * FROM user_role_overrides WHERE id=$1 FOR UPDATE', [input.id])).rows[0]
       if (!target) return
-      if (isSystemAdmin(target.email)) throw new TRPCError({ code: 'BAD_REQUEST', message: SYSTEM_ADMIN_MANAGED })
+      if (isSystemAdminEmail(target.email)) throw new TRPCError({ code: 'BAD_REQUEST', message: SYSTEM_ADMIN_MANAGED })
       await client.query('DELETE FROM user_role_overrides WHERE id=$1', [input.id])
       // One row keeps the whole removed state: the old effect (old_value -> empty) and the old reason.
       await writeAuditLog(client, {
