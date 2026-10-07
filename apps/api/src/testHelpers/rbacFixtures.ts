@@ -122,6 +122,7 @@ export async function cleanupRbacFixtures(): Promise<void> {
   await pool.query(`DELETE FROM follow_ups WHERE created_by LIKE 'rbac-%'`)
   await pool.query(`DELETE FROM timeline_events WHERE created_by LIKE 'rbac-%'`)
   await pool.query(`DELETE FROM user_role_overrides WHERE email LIKE 'rbac-%'`)
+  await pool.query(`DELETE FROM commercial_audit_logs WHERE entity_type = 'role_override' AND entity_id LIKE 'rbac-%'`) // access.setOverride / removeOverride log here
   await pool.query(`DELETE FROM delivery_team_members WHERE name LIKE 'RBAC %'`)
   await pool.query(`DELETE FROM org_people WHERE name LIKE 'RBAC %'`)
   await pool.query(`DELETE FROM employees WHERE name LIKE 'RBAC %'`)
