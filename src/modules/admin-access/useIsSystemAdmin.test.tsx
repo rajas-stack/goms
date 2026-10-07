@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
 import { PermissionsProvider } from '@/lib/permissions'
-import { useIsSystemAdmin, useSystemAdminStatus } from './useIsSystemAdmin'
+import { useCanEditEmailBinding, useIsSystemAdmin, useSystemAdminStatus } from './useIsSystemAdmin'
 
 const facts = { salesPersonId: null, teamMemberIds: { presales: [], legal: [], bid: [] } }
 const wrap = (access: any) => ({ children }: { children: ReactNode }) => (
@@ -39,5 +39,18 @@ describe('useIsSystemAdmin (UX only: the server decides every write)', () => {
   it('is false and unknown until auth.me has answered', () => {
     const { result } = renderHook(() => ({ is: useIsSystemAdmin(true), status: useSystemAdminStatus(true) }), { wrapper: wrap(undefined) })
     expect(result.current).toEqual({ is: false, status: 'unknown' })
+  })
+})
+
+describe('useCanEditEmailBinding (offer an email field as editable?)', () => {
+  it.each(['enforce', 'shadow'] as const)('is true for a System Admin in %s, and false once the server reported someone else', (mode) => {
+    expect(renderHook(() => useCanEditEmailBinding(), { wrapper: wrap(me(mode, ['system_admin'])) }).result.current).toBe(true)
+    for (const role of ['cxo', 'it', 'sales']) {
+      expect(renderHook(() => useCanEditEmailBinding(), { wrapper: wrap(me(mode, [role])) }).result.current, `${mode}/${role}`).toBe(false)
+    }
+  })
+  it('stays true when the browser cannot tell (RBAC off, or auth.me not answered): the server refuses anyone else', () => {
+    expect(renderHook(() => useCanEditEmailBinding(), { wrapper: wrap(me('off', [])) }).result.current).toBe(true)
+    expect(renderHook(() => useCanEditEmailBinding(), { wrapper: wrap(undefined) }).result.current).toBe(true)
   })
 })

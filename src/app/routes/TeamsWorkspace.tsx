@@ -10,6 +10,8 @@ import { PersonName } from '@/components/ui/PersonName'
 import { Combobox, type ComboboxOption } from '@/components/ui/Combobox'
 import { Tabs } from '@/components/ui/Tabs'
 import { useDeliveryTeamMemberMutations, useDeliveryTeamMembers, useOpportunities } from '@/lib/api'
+import { normalizeEmail } from '@/lib/inputNormalization'
+import { EMAIL_BINDING_HELP, useCanEditEmailBinding } from '@/modules/admin-access/useIsSystemAdmin'
 import { PIPELINE_STAGE_MAP } from '@/data/pipeline-stages'
 import type { DeliveryTeamKey, DeliveryTeamMember, Opportunity } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -63,13 +65,33 @@ function reportsUnder(id: string, members: DeliveryTeamMember[]): Set<string> {
 /** A delivery team's roster. Members mirrored from Org Structure (most of them)
  *  are read-only here — their reports-to, designation and membership come from
  *  the org, edited in Teams → Employees. Anyone added by hand before the org
- *  existed (no org link) keeps the old inline controls. */
-function TeamRoster({ team }: { team: DeliveryTeamKey }) {
+ *  existed (no org link) keeps the old inline controls.
+ *
+ *  A hand-added member's email binds their login to their team assignments, so changing it is System Admin only: the server
+ *  refuses it from anyone else in every RBAC mode. The field is editable for a System Admin (and while the browser cannot tell
+ *  who is one) and plain text for everyone else; that is a convenience, not the boundary. Org-linked members take their email
+ *  from the org person (Teams → Employees). */
+export function TeamRoster({ team }: { team: DeliveryTeamKey }) {
   const { data: members = [], isLoading } = useDeliveryTeamMembers(team)
   const { update, setStatus, remove } = useDeliveryTeamMemberMutations()
+  const emailEditable = useCanEditEmailBinding()
   const [error, setError] = useState<string | null>(null)
+  const [emailResets, setEmailResets] = useState(0) // bumped when an email change is refused, so the field shows the stored value again
   const activeMembers = members.filter((member) => member.status === 'active')
   const nameOf = new Map(members.map((member) => [member.id, member]))
+
+  /** Only sent when it actually changed (the server compares trimmed and case-insensitively); a refusal is shown as the server worded it. */
+  async function changeEmail(member: DeliveryTeamMember, raw: string) {
+    const next = normalizeEmail(raw, true)
+    if (next.toLowerCase() === (member.email ?? '').trim().toLowerCase()) return
+    setError(null)
+    try {
+      await update.mutateAsync({ id: member.id, patch: { email: next } })
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not change the email.')
+      setEmailResets((n) => n + 1)
+    }
+  }
 
   async function changeManager(id: string, nextManagerId: string) {
     setError(null)
@@ -87,6 +109,9 @@ function TeamRoster({ team }: { team: DeliveryTeamKey }) {
         <span>This roster follows the company Org Structure. Add people, set levels and reports-to in Employees.</span>
         <Link to="/teams/employees" className="ml-auto font-semibold underline underline-offset-2">Open Employees</Link>
       </div>
+      {members.some((member) => !member.orgPersonId) && (
+        <p className="text-[11px] text-muted"><span className="font-medium text-ink-700">Email.</span> <span>{EMAIL_BINDING_HELP}</span></p>
+      )}
       {error && <p role="alert" className="text-[12px] text-crimson">{error}</p>}
       <div className="min-h-0 flex-1 overflow-y-auto">
         {isLoading ? <p className="text-sm text-muted">Loading roster…</p> : members.length === 0 ? (
@@ -98,7 +123,8 @@ function TeamRoster({ team }: { team: DeliveryTeamKey }) {
               const managerOptions = activeMembers.filter((person) => !blocked.has(person.id) || person.id === member.managerId)
               return (
               <li key={member.id} className="flex min-h-12 flex-wrap items-center gap-3 px-3 py-2">
-                <PersonName person={member} size="sm" subtitle={[member.designation, member.email].filter(Boolean).join(' · ') || undefined} className="flex-1" nameClassName="text-sm font-medium text-ink-900" />
+                {/* A hand-added member's email has its own control below; an org-linked member's follows the org person. */}
+                <PersonName person={member} size="sm" subtitle={[member.designation, member.orgPersonId ? member.email : ''].filter(Boolean).join(' · ') || undefined} className="flex-1" nameClassName="text-sm font-medium text-ink-900" />
                 {member.orgPersonId ? (
                   <span className="flex w-56 items-center gap-1.5 text-[12px] text-muted" title="Set in Teams → Employees">
                     {member.managerId && nameOf.get(member.managerId)
@@ -116,6 +142,14 @@ function TeamRoster({ team }: { team: DeliveryTeamKey }) {
                     className="w-56"
                   />
                 )}
+                {!member.orgPersonId && (emailEditable ? (
+                  <Input
+                    key={`${member.id}:${member.email}:${emailResets}`} type="email"
+                    aria-label={`${member.name} email`} defaultValue={member.email} placeholder="Email" className="h-8 w-56"
+                    onBlur={(event) => void changeEmail(member, event.target.value)}
+                    onKeyDown={(event) => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur() }}
+                  />
+                ) : <span className="w-56 truncate text-[12px] text-muted" title={EMAIL_BINDING_HELP}>{member.email || '—'}</span>)}
                 <Badge tone={member.status === 'active' ? 'emerald' : 'gray'}>{member.status === 'active' ? 'Active' : 'Inactive'}</Badge>
                 {!member.orgPersonId && (
                   <>

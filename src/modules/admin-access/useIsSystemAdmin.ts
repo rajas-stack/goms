@@ -24,3 +24,14 @@ export const useSystemAdminStatus = (readinessSucceeded = false): SystemAdminSta
 
 /** True only when the viewer is known to be a System Admin. UX only: see {@link systemAdminStatus}. */
 export const useIsSystemAdmin = (readinessSucceeded = false): boolean => useSystemAdminStatus(readinessSucceeded) === 'yes'
+
+/**
+ * Should an email-binding field (org person / team member email) be offered as editable? Yes for a System Admin AND while the
+ * browser cannot tell (RBAC off, `auth.me` not answered): hiding it then would take the field away from the very System Admins
+ * who need it, and the server refuses a change from anyone else in every RBAC mode and the screen shows that refusal. A
+ * viewer the server reported as NOT a System Admin (shadow / enforce) gets read-only text. UX only, like useIsSystemAdmin.
+ */
+export const useCanEditEmailBinding = (): boolean => useSystemAdminStatus() !== 'no'
+
+/** Shown next to every email-binding field. */
+export const EMAIL_BINDING_HELP = "Used to derive this person's role. Only System Admins can change it."

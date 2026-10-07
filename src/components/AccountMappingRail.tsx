@@ -3,7 +3,8 @@ import { useShell } from '@/app/AppLayout'
 import { Icon } from './ui/Icon'
 import { cn } from '@/lib/utils'
 import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
-import { useCanReadAny, usePermissions } from '@/lib/permissions'
+import { useShowAccessNav } from '@/lib/accessNav'
+import { useCanReadAny } from '@/lib/permissions'
 import { NAV_MODULES } from '@/lib/routeModules'
 
 /** The app's persistent navigation element — a slim left rail with one button
@@ -25,9 +26,10 @@ export function AccountMappingRail() {
   const canCommercial = useCanReadAny(NAV_MODULES.commercial)
   const canOpportunity = useCanReadAny(NAV_MODULES.opportunity)
   const canTeams = useCanReadAny(NAV_MODULES.teams)
-  // Only offered once RBAC is enforced and the role can open it; while RBAC is off the screen is reachable at /admin/access.
-  const perms = usePermissions()
-  const canAccess = perms.enforced && perms.level('admin.access') !== 'N'
+  // Enforce: only when the role can open it. Off / shadow: any signed-in user (the screen itself says "Only System Admins can
+  // manage access" to anyone the server refuses). Link visibility is NOT authorization; see useShowAccessNav. Shared with the
+  // mobile drawer so the two cannot disagree.
+  const canAccess = useShowAccessNav()
   const accessActive = location.pathname.startsWith('/admin/access')
 
   return (
