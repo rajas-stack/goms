@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
 import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -23,6 +24,7 @@ export function AssignOwnerDialog({ open, entityType, entityId, entityLabel, onC
   const toast = useToast()
   const { data: people = [] } = useSalesPersons()
   const { assign } = useOwnershipMutations()
+  const allowed = usePermissions().mayWrite('am.ownership')
 
   const [salesPersonId, setSalesPersonId] = useState('')
   const [role, setRole] = useState('owner')
@@ -76,7 +78,7 @@ export function AssignOwnerDialog({ open, entityType, entityId, entityLabel, onC
       footer={
         <>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!canSubmit || assign.isPending}>
+          <Button variant="primary" onClick={submit} disabled={(!canSubmit || assign.isPending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             {assign.isPending ? 'Saving…' : role === 'delegate' ? 'Add delegate' : 'Assign'}
           </Button>
         </>

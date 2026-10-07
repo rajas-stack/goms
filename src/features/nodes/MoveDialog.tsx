@@ -1,3 +1,5 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
+import { moduleForDomain, salesPersonRow } from '@/lib/routeModules'
 import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -17,6 +19,7 @@ export function MoveDialog({ open, node, stateCode, onClose }: {
 }) {
   const toast = useToast()
   const { move } = useNodeMutations()
+  const allowed = useAllowed(moduleForDomain(node?.domain), 'update')
   const { data: targets = [] } = useMoveTargets(node?.id ?? null)
   const [pick, setPick] = useState<string | null>(null)
   // Picking a target and confirming the move are two separate steps —
@@ -52,7 +55,7 @@ export function MoveDialog({ open, node, stateCode, onClose }: {
         footer={
           <>
             <Button onClick={() => setConfirming(false)} disabled={move.isPending}>Back</Button>
-            <Button variant="primary" onClick={submit} disabled={move.isPending}>
+            <Button variant="primary" onClick={submit} disabled={(move.isPending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
               {move.isPending ? 'Moving…' : 'Move here'}
             </Button>
           </>
@@ -75,7 +78,7 @@ export function MoveDialog({ open, node, stateCode, onClose }: {
       footer={
         <>
           <Button onClick={onClose} disabled={move.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={() => setConfirming(true)} disabled={pick === null || move.isPending}>
+          <Button variant="primary" onClick={() => setConfirming(true)} disabled={(pick === null || move.isPending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             Move here
           </Button>
         </>

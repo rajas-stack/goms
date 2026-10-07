@@ -1,3 +1,5 @@
+import { usePermissions } from '@/lib/permissions'
+import { moduleForDomain } from '@/lib/routeModules'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { CanvasProvider, useCanvas, elbowPath, type Edge } from './canvasContext'
 import { useCanvasViewport } from './useCanvasViewport'
@@ -41,6 +43,7 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
   const { data: stateEmployees = [] } = useEmployeesByState(stateCode)
   const { data: selectedNode } = useNode(ws.selection?.kind === 'node' ? ws.selection.id : null)
   const { remove: removeEmployee } = useEmployeeMutations()
+  const perms = usePermissions()
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
@@ -342,8 +345,8 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
         case 'Delete': case 'Backspace':
           if (!ws.selection) return
           e.preventDefault()
-          if (ws.selection.kind === 'node' && selectedNode) ws.deleteNode(selectedNode)
-          else if (ws.selection.kind === 'employee') setEmployeeToDelete(ws.selection.id)
+          if (ws.selection.kind === 'node' && selectedNode) { if (perms.can(moduleForDomain(selectedNode.domain), 'delete')) ws.deleteNode(selectedNode) }
+          else if (ws.selection.kind === 'employee') { if (perms.can('am.contacts', 'delete')) setEmployeeToDelete(ws.selection.id) }
           break
         default:
           break
@@ -352,7 +355,7 @@ function CanvasStage({ domain, stateCode, version }: { domain: CanvasView; state
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ws.selection, selectedNode, removeEmployee, orgRoots, transform.scale])
+  }, [ws.selection, selectedNode, removeEmployee, orgRoots, transform.scale, perms])
 
   const rootItems: CanvasItem[] = domain === 'geo'
     ? (stateNode ? [{ kind: 'node', node: stateNode }] : [])

@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
 import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -18,6 +19,9 @@ export function SelectEmployeeDialog({ open, orgNode, onClose }: {
 }) {
   const toast = useToast()
   const { transfer } = useEmployeeMutations()
+  const canUpdateContacts = useAllowed('am.contacts', 'update')
+  const canUpdateDepartments = useAllowed('am.departments', 'update')
+  const allowed = canUpdateContacts && canUpdateDepartments // re-posting touches both
   const { data: allEmployees = [] } = useAllEmployees()
 
   const [employeeId, setEmployeeId] = useState('')
@@ -67,7 +71,7 @@ export function SelectEmployeeDialog({ open, orgNode, onClose }: {
       footer={
         <>
           <Button onClick={onClose} disabled={transfer.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!employeeId || transfer.isPending}>
+          <Button variant="primary" onClick={submit} disabled={(!employeeId || transfer.isPending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             {transfer.isPending ? 'Moving…' : 'Move here'}
           </Button>
         </>

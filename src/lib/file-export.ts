@@ -3,9 +3,8 @@ import { Directory, Encoding, Filesystem } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
 
 /** Saves `content` as `fileName`, on whichever platform this is running on.
- *  Extracted from csv.ts so a second format (JSON backups, see
- *  src/data/backup.ts) reuses the exact same platform branching instead of a
- *  second copy of it.
+ *  Extracted from csv.ts so other export formats can reuse the exact same
+ *  platform branching instead of a second copy of it.
  *
  *  Two entirely different mechanisms depending on platform: a browser tab
  *  has no filesystem access, so the classic `blob:` URL + synthetic

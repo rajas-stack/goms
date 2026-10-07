@@ -1,3 +1,4 @@
+import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/routers/access'
 import type {
   ActionQueueEntry, AttendeeRef, Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue,
   BidDocument, BidGridRow, BidMilestone, BidMilestoneWithBid, CustomFieldType, CustomValue,
@@ -6,6 +7,7 @@ import type {
   RelationshipQuality, RelationshipStatus,
   SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
+import type { MyAccess } from '../../../apps/api/src/routers/auth'
 import { uid } from '@/lib/utils'
 import { validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type SaveBidSynopsisInput } from '@goms/domain'
 import { isoToday } from '@/lib/dates'
@@ -285,7 +287,16 @@ export interface CreateFollowUpInput {
 
 /** All persistence flows through this interface. The in-memory implementation
  *  below can be replaced by a Supabase-backed one with no UI changes. */
+export interface SetRoleOverrideInput { email: string; role: string; effect: 'grant' | 'revoke'; reason: string }
+
 export interface Repository {
+  /** The caller's roles and roster facts (RBAC). The local store has no server: RBAC is off. */
+  getMyAccess(): Promise<MyAccess>
+  /** Role & Access Management (RBAC). The local store has no server and no roles, so these are empty no-ops. */
+  getAccessReadiness(): Promise<ReadinessRow[]>
+  listRoleOverrides(): Promise<RoleOverrideRow[]>
+  setRoleOverride(input: SetRoleOverrideInput): Promise<void>
+  removeRoleOverride(id: string): Promise<void>
   listStates(): Promise<StateSummary[]>
   getState(code: number): Promise<HierNode | undefined>
   getNode(id: string): Promise<HierNode | undefined>
@@ -629,6 +640,12 @@ function parseSubmissionDate(raw: string | null | undefined): string | null {
 }
 
 class InMemoryRepository implements Repository {
+  async getMyAccess(): Promise<MyAccess> { return { mode: 'off', email: null, roles: [], facts: null } }
+  async getAccessReadiness(): Promise<ReadinessRow[]> { return [] }
+  async listRoleOverrides(): Promise<RoleOverrideRow[]> { return [] }
+  async setRoleOverride(): Promise<void> {}
+  async removeRoleOverride(): Promise<void> {}
+
   private data: GormsData = buildSeed()
 
   constructor() {
@@ -1623,6 +1640,7 @@ class InMemoryRepository implements Repository {
         sheet: bid.sheet ?? DEFAULT_OWNED_SHEET,
         opportunityCode: opp?.opportunityCode ?? '',
         opportunityType: opp?.opportunityType ?? '',
+        createdBy: null, // the local store has no sign-in, so no creator
         departmentId: opp?.departmentId ?? '',
         departmentName: this.data.nodes.find((n) => n.id === opp?.departmentId)?.name ?? null,
         stateCode: opp?.stateCode ?? null,
@@ -3034,6 +3052,8 @@ const MUTATOR_KEYS = [
   'createBidSavedView', 'updateBidSavedView', 'deleteBidSavedView',
   'createBidCustomField', 'updateBidCustomField', 'reorderBidCustomFields', 'archiveBidCustomField',
   'unarchiveBidCustomField', 'deleteBidCustomField', 'setBidCustomValue',
+  'createDeliveryTeamMember', 'updateDeliveryTeamMember', 'setDeliveryTeamMemberStatus', 'deleteDeliveryTeamMember',
+  'createOrgPerson', 'updateOrgPerson', 'deleteOrgPerson', 'setRoleOverride', 'removeRoleOverride',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -3057,6 +3077,7 @@ const READER_KEYS = [
   'listCustomers', 'getCustomer',
   'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
   'listDocuments', 'listDocumentCitations', 'getDocumentDownloadUrl', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
+  'listDeliveryTeamMembers', 'listOrgPeople', 'getMyAccess', 'getAccessReadiness', 'listRoleOverrides',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the
@@ -3084,14 +3105,13 @@ export async function resetLocalData(): Promise<void> {
   impl.hydrate(buildSeed())
 }
 
-/** The full store, serializable as-is for a JSON backup — see
- *  src/data/backup.ts. Not part of `Repository`: read-only introspection of
- *  the whole store, not a per-entity domain operation. */
+/** The full store, serializable as-is. Not part of `Repository`: read-only
+ *  introspection of the whole store, not a per-entity domain operation. */
 export function getFullSnapshot(): GormsData {
   return impl.snapshot()
 }
 
-/** Replaces the whole store with a restored backup and persists it, the
+/** Replaces the whole store with a restored snapshot and persists it, the
  *  same way any other mutation would — but bypassing the `Repository` proxy
  *  since this isn't a per-entity domain operation either. Callers must
  *  invalidate their own query cache afterward; this module has no

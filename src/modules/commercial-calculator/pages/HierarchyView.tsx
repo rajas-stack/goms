@@ -1,3 +1,4 @@
+import { Gate, useAllowed } from '@/lib/permissions'
 import { useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
@@ -37,6 +38,7 @@ export function HierarchyView() {
   const productMutations = useMasterMutations('products')
   const moduleMutations = useMasterMutations('modules')
   const featureMutations = useMasterMutations('features')
+  const allowed = useAllowed('com.masters', 'update', 'master.other')
   const mutationsByKey = {
     verticals: verticalMutations, products: productMutations, modules: moduleMutations, features: featureMutations,
   } as const
@@ -132,9 +134,11 @@ export function HierarchyView() {
       <div className="flex max-h-64 w-full shrink-0 flex-col overflow-y-auto border-b border-line p-2 lg:h-auto lg:max-h-none lg:w-[360px] lg:border-b-0 lg:border-r">
         <div className="flex items-center justify-between px-2 py-1.5">
           <span className="text-[12px] font-semibold uppercase tracking-wide text-muted">Vertical → Product → Module → Feature</span>
-          <Button size="icon" title="Add Vertical" onClick={() => setFormState({ masterKey: 'verticals', editing: null })}>
-            <Icon name="Plus" size={14} />
-          </Button>
+          <Gate allowed={allowed}>
+            <Button size="icon" title="Add Vertical" onClick={() => setFormState({ masterKey: 'verticals', editing: null })}>
+              <Icon name="Plus" size={14} />
+            </Button>
+          </Gate>
         </div>
         {verticals.length === 0 && <p className="px-3 py-4 text-[13px] text-muted">No verticals yet — add one to start the hierarchy.</p>}
         {verticals.map((v) => (
@@ -225,11 +229,12 @@ function ChildList({ title, items, onAdd }: {
   items: { id: string; code: string; name: string; onClick: () => void }[]
   onAdd: () => void
 }) {
+  const allowed = useAllowed('com.masters', 'update', 'master.other')
   return (
     <div className="rounded-xl border border-line p-3">
       <div className="mb-2 flex items-center justify-between">
         <span className="text-[12px] font-semibold uppercase tracking-wide text-muted">{title} ({items.length})</span>
-        <Button size="sm" onClick={onAdd}><Icon name="Plus" size={13} />Add</Button>
+        <Gate allowed={allowed}><Button size="sm" onClick={onAdd}><Icon name="Plus" size={13} />Add</Button></Gate>
       </div>
       {items.length === 0 ? (
         <p className="text-[13px] text-muted">None yet.</p>
@@ -271,6 +276,7 @@ function DetailsPane({
           <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">{MASTER_DEFS[selection.type].singularLabel}</div>
           <h2 className="text-lg font-semibold text-ink-900">{row.name}</h2>
         </div>
+        <Gate allowed={useAllowed('com.masters', 'update', 'master.other')}>
         <div className="flex gap-2">
           <Button size="sm" onClick={() => onEdit(selection.type, row)}><Icon name="Pencil" size={13} />Edit</Button>
           <Menu
@@ -296,6 +302,7 @@ function DetailsPane({
             )}
           </Menu>
         </div>
+        </Gate>
       </div>
 
       <div className="grid grid-cols-2 gap-4 rounded-xl border border-line p-3">

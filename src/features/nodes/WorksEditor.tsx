@@ -1,3 +1,4 @@
+import { useAllowed, usePermissions } from '@/lib/permissions'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -24,7 +25,8 @@ function CreateBidButton({ opportunityId, onError }: { opportunityId: string; on
   const { data: bid, isLoading } = useBidForOpportunity(opportunityId)
   const { create } = useBidMutations()
   const navigate = useNavigate()
-  if (isLoading || bid) return null
+  const allowed = useAllowed('opp.bidTracker', 'create')
+  if (isLoading || bid || !allowed) return null
 
   async function handleCreate(e: React.MouseEvent) {
     e.stopPropagation()
@@ -61,6 +63,12 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
   const ws = useWorkspace()
   const { create, update, remove } = useOpportunityMutations()
   const { assign } = useOwnershipMutations()
+  const perms = usePermissions()
+  // Opportunities from Account Mapping are authorised as Bid Tracker rows; the server decides per row.
+  const canEditWork = perms.mayWrite('opp.bidTracker')
+  const canCreateWork = perms.can('opp.bidTracker', 'create')
+  const canDeleteWork = perms.can('opp.bidTracker', 'delete')
+  const canAssign = perms.mayWrite('am.ownership')
   const { data: people = [] } = useSalesPersons()
   const oppIds = opportunities.map((w) => w.id)
   const { data: owners = {} } = useResolvedOwners('opportunity', oppIds, isoToday())
@@ -162,22 +170,22 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                     </span>
                   )}
                   {isBidTrackerEnabled() && <CreateBidButton opportunityId={w.id} onError={(message) => setCreateBidError(message ? { id: w.id, message } : null)} />}
-                  <button
+                  {canEditWork && <button
                     type="button"
                     aria-label="Edit opportunity"
                     onClick={(e) => { e.stopPropagation(); openEdit(w) }}
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-ink-900/[0.06] hover:text-ink"
                   >
                     <Icon name="Pencil" size={13} />
-                  </button>
-                  <button
+                  </button>}
+                  {canDeleteWork && <button
                     type="button"
                     aria-label="Remove opportunity"
                     onClick={(e) => { e.stopPropagation(); setRemoving(w) }}
                     className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-crimson-100 hover:text-crimson"
                   >
                     <Icon name="Trash2" size={13} />
-                  </button>
+                  </button>}
                 </div>
 
                 {createBidError?.id === w.id && <p role="alert" className="border-t border-line px-2.5 py-1.5 text-[12px] text-crimson">{createBidError.message}</p>}
@@ -203,9 +211,11 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
                 {expanded && (
                   <div className="border-t border-line px-2.5 py-2 flex items-center justify-between gap-2">
                     <span className="text-[11px] uppercase tracking-wide text-muted">AMNEX ownership</span>
-                    <Button size="sm" onClick={() => setAssignFor(w)}>
-                      {owners[w.id] ? 'Reassign' : 'Assign'}
-                    </Button>
+                    {canAssign && (
+                      <Button size="sm" onClick={() => setAssignFor(w)}>
+                        {owners[w.id] ? 'Reassign' : 'Assign'}
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
@@ -213,7 +223,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
           })}
         </div>
       )}
-      <Button size="sm" onClick={openCreate}><Icon name="Plus" size={14} /> Create Opportunity</Button>
+      {canCreateWork && <Button size="sm" onClick={openCreate}><Icon name="Plus" size={14} /> Create Opportunity</Button>}
 
       <WorkFormDialog
         open={dialogOpen}

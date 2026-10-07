@@ -206,6 +206,14 @@ resource "google_cloud_run_v2_service" "goms_api" {
         name  = "READ_AUTH_ENFORCEMENT_ENABLED"
         value = "true"
       }
+      # RBAC (docs/superpowers/specs/2026-10-06-rbac-design.md). "off" is an exact no-op; "shadow" logs would-be
+      # denials ({"event":"rbac.would_deny"}) without blocking; "enforce" applies them. Only meaningful while
+      # AUTH_ENFORCEMENT_ENABLED is "true". Flip per environment, dev first; the prod flip needs its own approval.
+      # ADMIN_ALLOWED_EMAILS (the two System Admin accounts) must be set for the environment before this leaves "off".
+      env {
+        name  = "RBAC_MODE"
+        value = "off"
+      }
       env {
         name  = "ATTACHMENTS_BUCKET"
         value = google_storage_bucket.attachments.name

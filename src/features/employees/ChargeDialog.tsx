@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
 import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -20,6 +21,7 @@ export function ChargeDialog({ open, employeeId, onClose }: {
 }) {
   const toast = useToast()
   const { addCharge } = useEmployeeMutations()
+  const allowed = useAllowed('am.contacts', 'update')
   const [form, setForm] = useState(emptyForm)
 
   const draftKey = employeeId ? `charge:${employeeId}` : null
@@ -57,7 +59,7 @@ export function ChargeDialog({ open, employeeId, onClose }: {
       footer={
         <>
           <Button onClick={onClose} disabled={addCharge.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!form.title.trim() || addCharge.isPending}>
+          <Button variant="primary" onClick={submit} disabled={(!form.title.trim() || addCharge.isPending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             {addCharge.isPending ? 'Adding…' : 'Add charge'}
           </Button>
         </>

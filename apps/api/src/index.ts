@@ -20,6 +20,9 @@ import { bidCustomFieldsRouter } from './routers/bidCustomFields.js'
 import { auditLogsRouter } from './routers/auditLogs.js'
 import { deliveryTeamsRouter } from './routers/deliveryTeams.js'
 import { bidSynopsisRouter } from './routers/bidSynopsis.js'
+import { orgPeopleRouter } from './routers/orgPeople.js'
+import { authRouter } from './routers/auth.js'
+import { accessRouter } from './routers/access.js'
 
 export const appRouter = router({
   health: healthRouter, customers: customersRouter, hierarchy: hierarchyRouter,
@@ -31,5 +34,7 @@ export const appRouter = router({
   bidCustomFields: bidCustomFieldsRouter,
   deliveryTeams: deliveryTeamsRouter,
   bidSynopsis: bidSynopsisRouter,
+  orgPeople: orgPeopleRouter,
+  auth: authRouter, access: accessRouter,
 })
 export type AppRouter = typeof appRouter

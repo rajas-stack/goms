@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { ToastProvider } from '@/components/ui/Toast'
 import { ProposalDetail } from './ProposalDetail'
+import { PermissionsProvider } from '@/lib/permissions'
 import * as api from '../api'
 import * as libApi from '@/lib/api'
 import type { CommercialBoq, CommercialBoqLineItem, CommercialSku } from '../types'
@@ -51,6 +52,8 @@ function renderProposalDetail(opts: {
   lines?: CommercialBoqLineItem[]
   skus?: CommercialSku[]
   postings?: Record<string, { designation?: string; managerId?: string | null }>
+  /** Inject a signed-in role (RBAC enforced); omitted = RBAC off. */
+  roles?: string[]
 } = {}) {
   const theBoq = opts.boq ?? boq()
   const updateMutateAsync = vi.fn().mockResolvedValue(theBoq)
@@ -111,14 +114,31 @@ function renderProposalDetail(opts: {
     ...render(
       <MemoryRouter>
         <QueryClientProvider client={qc}>
-          <ToastProvider>
-            <ProposalDetail boqId={theBoq.id} />
-          </ToastProvider>
+          <PermissionsProvider access={opts.roles ? ({ mode: 'enforce', email: 'u@amnex.com', roles: opts.roles, facts: { salesPersonId: null, teamMemberIds: { presales: [], legal: [], bid: [] } } } as never) : undefined}>
+            <ToastProvider>
+              <ProposalDetail boqId={theBoq.id} />
+            </ToastProvider>
+          </PermissionsProvider>
         </QueryClientProvider>
       </MemoryRouter>,
     ),
   }
 }
+
+describe('ProposalDetail — read-only roles (RBAC review finding 3)', () => {
+  it('a role that can only read a BOQ can still navigate and read; only the editing sections are disabled', () => {
+    renderProposalDetail({ roles: ['finance'] }) // Finance: Read on BOQs
+    const back = screen.getByRole('button', { name: /back to boq management/i })
+    expect(back).toBeEnabled()
+    expect(back.closest('fieldset[disabled]')).toBeNull() // navigation is never inside a disabled gate
+    expect(document.querySelector('fieldset[disabled]')).not.toBeNull() // the editing sections are
+  })
+  it('with RBAC off nothing is disabled', () => {
+    renderProposalDetail()
+    expect(screen.getByRole('button', { name: /back to boq management/i })).toBeEnabled()
+    expect(document.querySelector('fieldset[disabled]')).toBeNull()
+  })
+})
 
 describe('ProposalDetail — no tab navigation', () => {
   it('does not render an Overview/Approvals/Preview tab strip', () => {

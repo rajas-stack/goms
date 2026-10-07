@@ -1,3 +1,4 @@
+import { Gate, usePermissions } from '@/lib/permissions'
 import { useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
@@ -10,6 +11,7 @@ import { useAllBomItems, useAllBoqLineItems, useAuditLogs, useMasters, useSkuMut
 import { SkuFormDialog } from '../components/SkuFormDialog'
 import { SkuBomEditor } from '../components/SkuBomEditor'
 import { computeSkuMarginPercent } from '../repository-logic'
+import { canComputeMargin, formatRestricted } from '../restricted'
 import { marginPctForSellingPrice, PRICING_LEVEL_LABEL } from '../pricing-levels-logic'
 import { formatPercent } from '../format'
 import type { CommercialBomItem, CommercialSku, CreateSkuInput, PricingLevelKey } from '../types'
@@ -41,6 +43,8 @@ export function SkuCatalog() {
   const { data: allBomItems = [] } = useAllBomItems()
   const { data: allBoqLineItems = [] } = useAllBoqLineItems()
   const { create, update, remove } = useSkuMutations()
+  // Pre-sales edits SKUs; Finance edits cost / floor / tax fields only (the form and the server enforce the field).
+  const allowed = usePermissions().mayWrite('com.skus')
   const toast = useToast()
 
   const categoryName = useMemo(() => new Map(categories.map((c) => [c.id, c.name])), [categories])
@@ -97,9 +101,11 @@ export function SkuCatalog() {
             <Icon name="Search" size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="SKU code or name…" className="pl-9" />
           </div>
-          <Button variant="primary" size="sm" onClick={() => { setEditing(null); setFormOpen(true) }} title="Add SKU">
-            <Icon name="Plus" size={15} />
-          </Button>
+          <Gate allowed={allowed}>
+            <Button variant="primary" size="sm" onClick={() => { setEditing(null); setFormOpen(true) }} title="Add SKU">
+              <Icon name="Plus" size={15} />
+            </Button>
+          </Gate>
         </div>
         <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="">All statuses</option>
@@ -132,7 +138,7 @@ export function SkuCatalog() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted">
               <span>{categoryName.get(sku.categoryId) ?? '—'}</span>
               <span>List {sku.listPrice.toLocaleString()}</span>
-              <span>Margin {formatPercent(computeSkuMarginPercent(sku, allBomItems, skusById))}</span>
+              <span>Margin {canComputeMargin([sku]) ? formatPercent(computeSkuMarginPercent(sku, allBomItems, skusById)) : 'Restricted'}</span>
               <span>{usageCountBySku.get(sku.id) ?? 0} BOM refs</span>
               <span>{boqCountBySku.get(sku.id)?.size ?? 0} BOQs</span>
             </div>
@@ -198,6 +204,7 @@ function SkuDetail({ sku, tab, onTabChange, usageCount, boqCount, categoryName, 
           <h2 className="font-mono text-lg font-semibold text-ink-900">{sku.skuCode}</h2>
           <p className="text-[13px] text-muted">{sku.name}</p>
         </div>
+        <Gate allowed={usePermissions().mayWrite('com.skus')}>
         <div className="flex gap-2">
           <Button size="sm" onClick={onEdit}><Icon name="Pencil" size={13} />Edit</Button>
           <Menu
@@ -223,12 +230,13 @@ function SkuDetail({ sku, tab, onTabChange, usageCount, boqCount, categoryName, 
             )}
           </Menu>
         </div>
+        </Gate>
       </div>
 
       <div className="grid grid-cols-2 gap-3 rounded-xl border border-line p-3 text-sm sm:grid-cols-5">
         <DetailField label="Status" value={sku.lifecycleStatus} />
         <DetailField label="List Price" value={sku.listPrice.toLocaleString()} />
-        <DetailField label="Margin" value={formatPercent(computeSkuMarginPercent(sku, bomItems, skusById))} />
+        <DetailField label="Margin" value={canComputeMargin([sku]) ? formatPercent(computeSkuMarginPercent(sku, bomItems, skusById)) : 'Restricted'} />
         <DetailField label="Used in BOMs" value={String(usageCount)} />
         <DetailField label="Used in BOQs" value={String(boqCount)} />
       </div>
@@ -304,14 +312,15 @@ function PricingTab({ sku, bomItems, skusById }: { sku: CommercialSku; bomItems:
       ) : (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {sku.selectedPricingLevels.map((entry) => {
-            const sellingPrice = sku[LEVEL_PRICE[entry.level]] as number
-            const margin = marginPctForSellingPrice(sku, bomItems, skusById, sellingPrice)
+            const levelPrice = sku[LEVEL_PRICE[entry.level]] as number | null
+            const sellingPrice = levelPrice ?? 0
+            const margin = canComputeMargin([sku]) ? marginPctForSellingPrice(sku, bomItems, skusById, sellingPrice) : null
             return (
               <div key={entry.level} className="flex flex-col gap-2 rounded-xl border border-line p-3">
                 <div className="text-[12px] font-semibold text-ink-900">{PRICING_LEVEL_LABEL[entry.level]}</div>
-                <DetailField label="Selling Price" value={sellingPrice.toLocaleString()} />
+                <DetailField label="Selling Price" value={formatRestricted(levelPrice, (n) => n.toLocaleString())} />
                 <DetailField label="Maximum Discount %" value={`${entry.maximumDiscountPercent}%`} />
-                <DetailField label="Margin" value={formatPercent(margin)} />
+                <DetailField label="Margin" value={margin === null ? 'Restricted' : formatPercent(margin)} />
               </div>
             )
           })}

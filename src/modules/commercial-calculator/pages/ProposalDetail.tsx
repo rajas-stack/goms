@@ -1,3 +1,4 @@
+import { Gate, usePermissions } from '@/lib/permissions'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAllEmployees, useCurrentPostings, useDepartments, useSalesPersons } from '@/lib/api'
@@ -24,6 +25,7 @@ import { useBoqWorkspaceShortcuts } from '../use-boq-workspace-shortcuts'
 import { useStickyScrollOffset } from '../use-sticky-scroll-offset'
 import type { BulkPricingResult } from '../pricing-levels-logic'
 import { BOQ_WORKSPACE_SECTIONS, BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
+import { canComputeMargin } from '../restricted'
 import { SkuLinePicker } from '../components/SkuLinePicker'
 import { SkuSearchBar } from '../components/SkuSearchBar'
 import { SellingPriceSection } from '../components/SellingPriceSection'
@@ -81,6 +83,8 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
   const { data: bomItems = [] } = useAllBomItems()
   const { update, updateStatus, revise, duplicate, remove } = useBoqMutations()
   const lineMutations = useBoqLineItemMutations(boqId)
+  // Pre-sales edits BOQs; CXO may only approve / reject lines and BOQs (the server checks the field); Finance only reads.
+  const allowed = usePermissions().mayWrite('com.boqs')
   const toast = useToast()
   const navigate = useNavigate()
   const [deleting, setDeleting] = useState(false)
@@ -227,8 +231,8 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
           <div><div className="text-[11px] uppercase text-muted">Grand Total</div>{boq.currency} {boq.grandTotal.toLocaleString()}</div>
           <div>
             <div className="text-[11px] uppercase text-muted">Margin</div>
-            <span className={isNegativeMargin(margin) ? 'text-rose-700' : undefined}>
-              {formatPercent(margin)}{isNegativeMargin(margin) ? ' — Below Cost' : ''}
+            <span className={canComputeMargin(skus) && isNegativeMargin(margin) ? 'text-rose-700' : undefined}>
+              {canComputeMargin(skus) ? `${formatPercent(margin)}${isNegativeMargin(margin) ? ' — Below Cost' : ''}` : 'Restricted'}
             </span>
           </div>
         </div>
@@ -244,7 +248,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
         statusLabel={STATUS_LABEL[boq.status]}
         customerName={boq.customerName}
         lineCount={lines.length}
-        marginPct={margin}
+        marginPct={canComputeMargin(skus) ? margin : null}
         grandTotal={boq.grandTotal}
         currencyCode={boq.currency}
         onPreview={() => {
@@ -277,6 +281,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
 
       <div className="flex flex-col gap-6 p-4">
         <div id="section-details">
+          <Gate allowed={allowed}>
           <BoqDetailsSection
             boq={boq}
             boqs={boqs}
@@ -288,9 +293,11 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             preSalesList={preSalesList}
             update={update}
           />
+          </Gate>
         </div>
 
         <div id="section-lines">
+          <Gate allowed={allowed}>
           <LineItemsSection
             boq={boq}
             lines={lines}
@@ -303,6 +310,7 @@ export function ProposalDetail({ boqId }: { boqId: string }) {
             expandedLineId={expandedLineId}
             onToggleExpand={toggleExpandedLine}
           />
+          </Gate>
         </div>
 
         <div id="section-preview">

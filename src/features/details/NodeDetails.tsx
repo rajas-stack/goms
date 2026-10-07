@@ -1,3 +1,5 @@
+import { Can } from '@/lib/permissions'
+import { moduleForDomain } from '@/lib/routeModules'
 import { motion } from 'framer-motion'
 import {
   useAllEmployees, useBreadcrumb, useChildren, useEmployeesUnder, useNode, useNodeMutations,
@@ -145,7 +147,9 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
               <Icon name="Plus" size={14} /> Add {childType.label.toLowerCase()}
             </Button>
           )}
-          <Button size="sm" onClick={() => ws.editNode(node)}><Icon name="Pencil" size={14} /> Edit</Button>
+          <Can module={moduleForDomain(node.domain)} action="update">
+            <Button size="sm" onClick={() => ws.editNode(node)}><Icon name="Pencil" size={14} /> Edit</Button>
+          </Can>
 
           {/* Destructive / structural actions tucked into an overflow menu so they can't be hit by accident */}
           <Menu
@@ -167,24 +171,30 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
             {(close) => (
               <>
                 {node.parentId !== undefined && (
-                  <MenuItem icon={<Icon name="MoveRight" size={15} />} onClick={() => { close(); ws.moveNode(node) }}>
-                    Move
-                  </MenuItem>
+                  <Can module={moduleForDomain(node.domain)} action="update">
+                    <MenuItem icon={<Icon name="MoveRight" size={15} />} onClick={() => { close(); ws.moveNode(node) }}>
+                      Move
+                    </MenuItem>
+                  </Can>
                 )}
-                <MenuItem
-                  icon={<Icon name={archived ? 'ArchiveRestore' : 'Archive'} size={15} />}
-                  onClick={async () => {
-                    close()
-                    await setStatus.mutateAsync({ id: node.id, status: archived ? 'active' : 'archived' })
-                    toast(archived ? 'Restored' : 'Archived')
-                  }}
-                >
-                  {archived ? 'Restore' : 'Archive'}
-                </MenuItem>
+                <Can module={moduleForDomain(node.domain)} action="update">
+                  <MenuItem
+                    icon={<Icon name={archived ? 'ArchiveRestore' : 'Archive'} size={15} />}
+                    onClick={async () => {
+                      close()
+                      await setStatus.mutateAsync({ id: node.id, status: archived ? 'active' : 'archived' })
+                      toast(archived ? 'Restored' : 'Archived')
+                    }}
+                  >
+                    {archived ? 'Restore' : 'Archive'}
+                  </MenuItem>
+                </Can>
                 <MenuDivider />
-                <MenuItem icon={<Icon name="Trash2" size={15} />} danger onClick={() => { close(); ws.deleteNode(node) }}>
-                  Delete
-                </MenuItem>
+                <Can module={moduleForDomain(node.domain)} action="delete">
+                  <MenuItem icon={<Icon name="Trash2" size={15} />} danger onClick={() => { close(); ws.deleteNode(node) }}>
+                    Delete
+                  </MenuItem>
+                </Can>
               </>
             )}
           </Menu>

@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed } from '@/lib/permissions'
 import { useEffect, useRef, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -142,6 +143,9 @@ export function ImportDialog({ open, onClose, signedInAs, onSignOut }: Props) {
   const toast = useToast()
   const { importChildren } = useNodeMutations()
   const { importEmployees } = useEmployeeMutations()
+  const canImportNodes = useAllowed('am.departments', 'create')
+  const canImportContacts = useAllowed('am.contacts', 'create')
+  const allowed = canImportNodes || canImportContacts
   const { data: states = [] } = useStates()
   const [mode, setMode] = useState<Mode>('nodes')
   const [stateCode, setStateCode] = useState<number | null>(null)
@@ -225,7 +229,7 @@ export function ImportDialog({ open, onClose, signedInAs, onSignOut }: Props) {
       footer={
         <>
           <Button onClick={() => { reset(); onClose() }} disabled={isPending}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!parentId || rows.length === 0 || isPending}>
+          <Button variant="primary" onClick={submit} disabled={!parentId || rows.length === 0 || isPending || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             {isPending ? 'Importing…' : `Import ${rows.length > 0 ? `${rows.length} rows` : ''}`}
           </Button>
         </>

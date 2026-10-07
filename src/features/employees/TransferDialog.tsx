@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
 import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -21,6 +22,9 @@ export function TransferDialog({ open, employee, onClose }: {
 }) {
   const toast = useToast()
   const { transfer } = useEmployeeMutations()
+  const canUpdateContacts = useAllowed('am.contacts', 'update')
+  const canUpdateDepartments = useAllowed('am.departments', 'update')
+  const allowed = canUpdateContacts && canUpdateDepartments // re-posting touches both
   const { data: currentPosting } = useNode(employee?.orgNodeId ?? null)
   const { data: currentChain = [] } = useBreadcrumb(employee?.orgNodeId ?? null)
   const stateCode = currentPosting?.stateCode ?? null
@@ -104,7 +108,7 @@ export function TransferDialog({ open, employee, onClose }: {
       footer={
         <>
           <Button onClick={onClose} disabled={transfer.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!form.toOrgNodeId || transfer.isPending}>
+          <Button variant="primary" onClick={submit} disabled={(!form.toOrgNodeId || transfer.isPending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             {transfer.isPending ? 'Recording…' : 'Record transfer'}
           </Button>
         </>

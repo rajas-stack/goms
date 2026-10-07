@@ -129,7 +129,7 @@ resource "google_cloud_run_v2_service" "goms_api" {
         value = "goms-dev-auth" # the dev-only project, NOT goms-prod
       }
       env {
-        name  = "ADMIN_IMPORT_ALLOWED_EMAILS"
+        name = "ADMIN_IMPORT_ALLOWED_EMAILS"
         # Reconciled 2026-09-04 to match the live out-of-band addition of
         # shubham16@amnex.com (added directly via gcloud at some point after
         # this file was last touched, per `terraform plan`'s drift detection
@@ -175,6 +175,14 @@ resource "google_cloud_run_v2_service" "goms_api" {
       env {
         name  = "READ_AUTH_ENFORCEMENT_ENABLED"
         value = "true"
+      }
+      # RBAC (docs/superpowers/specs/2026-10-06-rbac-design.md). "off" is an exact no-op; "shadow" logs would-be
+      # denials ({"event":"rbac.would_deny"}) without blocking; "enforce" applies them. Only meaningful while
+      # AUTH_ENFORCEMENT_ENABLED is "true". Flip per environment, dev first; the prod flip needs its own approval.
+      # ADMIN_ALLOWED_EMAILS (the two System Admin accounts) must be set for the environment before this leaves "off".
+      env {
+        name  = "RBAC_MODE"
+        value = "off"
       }
       env {
         name  = "ATTACHMENTS_BUCKET"

@@ -1,3 +1,4 @@
+import { Gate, useAllowed } from '@/lib/permissions'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -20,6 +21,7 @@ export const PROTECTABLE_FIELDS = [
 export function ProtectedValuesTab({ bidId }: { bidId: string }) {
   const { data: values = [] } = useProtectedValues('bid', bidId)
   const { freeze, unfreeze } = useProtectedValueMutations('bid', bidId)
+  const allowed = useAllowed('bid.protected', 'update')
   const [unfreezing, setUnfreezing] = useState<string | null>(null)
   const [reason, setReason] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -32,6 +34,7 @@ export function ProtectedValuesTab({ bidId }: { bidId: string }) {
   }
 
   return (
+    <Gate allowed={allowed}>
     <div className="p-4" data-testid="protected-values-tab">
       <p className="mb-4 text-sm text-muted">
         Protect Value: freeze specific facts to prevent accidental overrides during team edits, imports or corrigenda.
@@ -75,5 +78,6 @@ export function ProtectedValuesTab({ bidId }: { bidId: string }) {
         )
       })}
     </div>
+    </Gate>
   )
 }

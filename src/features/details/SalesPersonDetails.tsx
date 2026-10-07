@@ -1,3 +1,5 @@
+import { Can } from '@/lib/permissions'
+import { salesPersonRow } from '@/lib/routeModules'
 import { useState, type ReactNode } from 'react'
 import { motion } from 'framer-motion'
 import {
@@ -128,9 +130,11 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
           <p className="break-words text-[13px] leading-snug text-muted">{current?.designation || 'No current posting'}</p>
         </div>
         <div className="ml-auto flex shrink-0 items-center gap-2">
-        <Tooltip label={unlocked ? 'Edit' : 'Unlock editing to make changes'}>
-          <Button size="sm" disabled={!unlocked} onClick={() => setEditOpen(true)}><Icon name="Pencil" size={14} /> Edit</Button>
-        </Tooltip>
+        <Can module="team.sales" action="update" atom="sales.ownProfile" row={salesPersonRow(person.id)}>
+          <Tooltip label={unlocked ? 'Edit' : 'Unlock editing to make changes'}>
+            <Button size="sm" disabled={!unlocked} onClick={() => setEditOpen(true)}><Icon name="Pencil" size={14} /> Edit</Button>
+          </Tooltip>
+        </Can>
         <Menu
           align="end"
           trigger={({ open, toggle }) => (
@@ -147,6 +151,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
         >
           {(close) => (
             <>
+              <Can module="team.sales" action="update">
               <MenuGroupLabel>Career</MenuGroupLabel>
               <MenuItem
                 icon={<Icon name="ArrowLeftRight" size={15} />}
@@ -154,8 +159,10 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
               >
                 Change posting
               </MenuItem>
+              </Can>
 
               <MenuDivider />
+              <Can module="am.ownership" action="update" atom="ownership.assign" row={salesPersonRow(person.id)}>
               <MenuGroupLabel>Ownership</MenuGroupLabel>
               <MenuItem
                 icon={<Icon name="Briefcase" size={15} />}
@@ -163,8 +170,10 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
               >
                 Transfer book of business
               </MenuItem>
+              </Can>
 
               <MenuDivider />
+              <Can module="team.sales" action="update">
               <MenuGroupLabel>Status</MenuGroupLabel>
               {(['active', 'onLeave', 'resigned', 'inactive'] as const)
                 .filter((s) => s !== person.status)
@@ -187,8 +196,10 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
                     Mark {STATUS_LABEL[s]}
                   </MenuItem>
                 ))}
+              </Can>
 
               <MenuDivider />
+              <Can module="team.sales" action="delete">
               <MenuGroupLabel>Danger Zone</MenuGroupLabel>
               <MenuItem
                 icon={<Icon name="Trash2" size={15} />}
@@ -197,6 +208,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
               >
                 Remove
               </MenuItem>
+              </Can>
             </>
           )}
         </Menu>
@@ -277,11 +289,13 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
         <div className="mb-2 flex items-center justify-between gap-2">
           <h3 className="text-[13px] font-semibold text-ink-900">Posting</h3>
           {editable && (
-            <Tooltip label={unlocked ? 'Edit effective dates' : 'Unlock editing to change dates'}>
-              <Button size="sm" variant="ghost" disabled={!unlocked} onClick={() => setDatesOpen(true)}>
-                <Icon name="CalendarClock" size={14} /> Edit dates
-              </Button>
-            </Tooltip>
+            <Can module="team.sales" action="update">
+              <Tooltip label={unlocked ? 'Edit effective dates' : 'Unlock editing to change dates'}>
+                <Button size="sm" variant="ghost" disabled={!unlocked} onClick={() => setDatesOpen(true)}>
+                  <Icon name="CalendarClock" size={14} /> Edit dates
+                </Button>
+              </Tooltip>
+            </Can>
           )}
         </div>
         {!current ? (

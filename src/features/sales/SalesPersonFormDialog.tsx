@@ -1,3 +1,5 @@
+import { NO_PERMISSION_TITLE, useAllowed } from '@/lib/permissions'
+import { salesPersonRow } from '@/lib/routeModules'
 import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -28,6 +30,11 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
   const { data: people = [] } = useSalesPersons()
   const { data: currentPostings = {} } = useCurrentPostings()
   const { create, update, updatePostingManager } = useSalesPersonMutations()
+  // Sales may edit only photo / mobile / personal email on their OWN row; everything else is roster administration.
+  const canCreate = useAllowed('team.sales', 'create')
+  const canUpdate = useAllowed('team.sales', 'update')
+  const canEditOwnProfile = useAllowed('team.sales', 'update', 'sales.ownProfile', salesPersonRow(personId))
+  const allowed = personId ? canUpdate || canEditOwnProfile : canCreate
   const editing = personId ? people.find((p) => p.id === personId) : undefined
 
   const [name, setName] = useState('')
@@ -127,7 +134,8 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
           <Button
             variant="primary"
             onClick={submit}
-            disabled={!canSubmit || create.isPending || update.isPending || updatePostingManager.isPending}
+            disabled={!canSubmit || create.isPending || update.isPending || updatePostingManager.isPending || !allowed}
+            title={allowed ? undefined : NO_PERMISSION_TITLE}
           >
             {editing ? 'Save changes' : 'Add'}
           </Button>

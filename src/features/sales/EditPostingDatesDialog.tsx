@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
 import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -28,6 +29,7 @@ export function EditPostingDatesDialog({ open, person, posting, onClose }: {
 }) {
   const toast = useToast()
   const { updatePostingDates } = useSalesPersonMutations()
+  const allowed = useAllowed('team.sales', 'update')
   const [startDate, setStartDate] = useState('')
   const [lastDay, setLastDay] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -77,7 +79,7 @@ export function EditPostingDatesDialog({ open, person, posting, onClose }: {
       footer={
         <>
           <Button onClick={onClose} disabled={updatePostingDates.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!canSubmit}>
+          <Button variant="primary" onClick={submit} disabled={(!canSubmit) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             {updatePostingDates.isPending ? 'Saving…' : ending ? 'End posting & save' : 'Save dates'}
           </Button>
         </>

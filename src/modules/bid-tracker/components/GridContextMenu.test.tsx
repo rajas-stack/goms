@@ -60,4 +60,27 @@ describe('GridContextMenu opened by a real contextmenu event', () => {
     await flush()
     expect(document.querySelector('[data-testid=grid-context-menu]')).toBeNull()
   })
+
+  // Root cause 2: the grid scrolls on its own (settling after a sheet switch, virtualizer, scroll-into-view).
+  // A catch-all `scroll` listener closed the menu the instant it opened; only user scrolling should.
+  it('survives a programmatic scroll event right after opening', async () => {
+    createRoot(host).render(<Harness />)
+    await flush()
+    rightClick(host.querySelector('[data-testid=cell]')!)
+    await flush()
+    host.dispatchEvent(new Event('scroll', { bubbles: false }))
+    document.body.dispatchEvent(new Event('scroll'))
+    await flush()
+    expect(document.querySelector('[data-testid=grid-context-menu]')).not.toBeNull()
+  })
+
+  it('still closes when the user scrolls (wheel)', async () => {
+    createRoot(host).render(<Harness />)
+    await flush()
+    rightClick(host.querySelector('[data-testid=cell]')!)
+    await flush()
+    document.body.dispatchEvent(new WheelEvent('wheel', { bubbles: true }))
+    await flush()
+    expect(document.querySelector('[data-testid=grid-context-menu]')).toBeNull()
+  })
 })

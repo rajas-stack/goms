@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
+import { rbacReadProcedure, protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isForeignKeyViolation, isUniqueViolation } from '../db-errors.js'
 import { writeAuditLog, listAuditLogs } from '../lib/auditLog.js'
@@ -69,14 +69,14 @@ async function oneMaster(key: string, id: string) {
 }
 
 const commercialMastersRouter = router({
-  list: publicProcedure
+  list: rbacReadProcedure
     .input(z.object({ key: masterKeySchema }))
     .query(async ({ input }) => {
       const result = await pool.query('SELECT * FROM commercial_masters WHERE master_key=$1 ORDER BY display_order', [input.key])
       return result.rows.map(toMaster)
     }),
 
-  get: publicProcedure
+  get: rbacReadProcedure
     .input(z.object({ key: masterKeySchema, id: z.string().uuid() }))
     .query(({ input }) => oneMaster(input.key, input.id)),
 
@@ -268,7 +268,7 @@ const commercialMastersRouter = router({
       }
     }),
 
-  listEditionFeatures: publicProcedure
+  listEditionFeatures: rbacReadProcedure
     .input(z.object({ editionId: z.string().uuid() }))
     .query(async ({ input }) => {
       const result = await pool.query('SELECT * FROM edition_features WHERE edition_id=$1 ORDER BY display_order', [input.editionId])
@@ -604,12 +604,12 @@ const commercialSkusRouter = router({
 // --- Commercial BOM (spec §6.4/§14) ----------------------------------------
 
 const commercialBomRouter = router({
-  listForSku: publicProcedure.input(z.object({ parentSkuId: z.string().uuid() })).query(async ({ input }) => {
+  listForSku: rbacReadProcedure.input(z.object({ parentSkuId: z.string().uuid() })).query(async ({ input }) => {
     const result = await pool.query('SELECT * FROM commercial_bom_items WHERE parent_sku_id=$1', [input.parentSkuId])
     return result.rows.map(toBomItem)
   }),
 
-  listAll: publicProcedure.query(async () => {
+  listAll: rbacReadProcedure.query(async () => {
     const result = await pool.query('SELECT * FROM commercial_bom_items')
     return result.rows.map(toBomItem)
   }),

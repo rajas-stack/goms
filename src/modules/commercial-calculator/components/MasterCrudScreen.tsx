@@ -1,3 +1,5 @@
+import { masterKeyAtom } from '@goms/domain'
+import { Gate, useAllowed } from '@/lib/permissions'
 import { useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
 import { Button } from '@/components/ui/Button'
@@ -22,6 +24,8 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
   const def = MASTER_DEFS[masterKey]
   const { data: rows = [], isLoading } = useMasters(masterKey)
   const { create, update, setActive, remove } = useMasterMutations(masterKey)
+  // Reference masters: Pre-sales; tax classes and currencies: Finance; the approval matrix: CXO (per master key).
+  const allowed = useAllowed(masterKey === 'approvalMatrix' ? 'com.approvalMatrix' : 'com.masters', 'update', masterKeyAtom(masterKey))
   const toast = useToast()
 
   const [query, setQuery] = useState('')
@@ -69,10 +73,12 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
             className="pl-9"
           />
         </div>
-        <Button variant="primary" size="sm" onClick={openCreate}>
-          <Icon name="Plus" size={15} />
-          Add {def.singularLabel}
-        </Button>
+        <Gate allowed={allowed}>
+          <Button variant="primary" size="sm" onClick={openCreate}>
+            <Icon name="Plus" size={15} />
+            Add {def.singularLabel}
+          </Button>
+        </Gate>
       </div>
 
       {!isLoading && filtered.length === 0 && (
@@ -97,6 +103,7 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
               </div>
               {Boolean(row.description) && <div className="truncate text-[12px] text-muted">{String(row.description)}</div>}
             </div>
+            <Gate allowed={allowed}>
             {masterKey === 'productEditions' && (
               <Button size="sm" onClick={() => setManagingFeaturesFor(row as unknown as MasterRow)}>Features</Button>
             )}
@@ -134,6 +141,7 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
                 </>
               )}
             </Menu>
+            </Gate>
           </div>
         ))}
       </div>

@@ -11,6 +11,9 @@ import type {
   TimelineEvent, TimelineEventType,
 } from './types'
 
+export const useMyAccess = () =>
+  useQuery({ queryKey: ['myAccess'], queryFn: () => repository.getMyAccess(), staleTime: 60_000, retry: false })
+
 const qk = {
   states: ['states'] as const,
   state: (code: number) => ['state', code] as const,

@@ -9,7 +9,7 @@ import {
   computeAttentionFlag, applyFilterRules, buildOwnerMap, type CustomFieldType, type CustomValue, type OwnedSheet,
 } from '@goms/domain'
 import { applyStageChange, insertOpportunity } from './opportunities.js'
-import { loadOwnershipContext } from './ownership.js'
+import { loadOwnershipContext } from '../lib/ownershipContext.js'
 import { writeAuditLog } from '../lib/auditLog.js'
 import { assignOpportunityCode } from '../lib/opportunityCode.js'
 import { departmentChoiceSchema, newBidOpportunitySchema, resolveBidDepartment } from '../lib/opportunityDepartment.js'
@@ -102,7 +102,7 @@ export const bidsRouter = router({
       const [gridResult, corrigendaPendingResult, { assignments, ctx: ownershipCtx }, customFieldsResult, customValuesResult] = await Promise.all([
         pool.query(`
              SELECT b.*, o.opportunity_code, o.opportunity_type, o.department_id, o.state_code, o.city, o.opportunity_name, o.gem_tender_id, o.submission_date,
-               o.geo_sales_person_id, o.bu_sales_person_id, o.pre_sales_person_id, o.legal_person_id, o.bid_team_member_id,
+               o.geo_sales_person_id, o.bu_sales_person_id, o.pre_sales_person_id, o.legal_person_id, o.bid_team_member_id, o.created_by,
                  o.value_amount, o.value_unit, o.emd_amount, o.emd_unit, o.vertical,
                  dept.name AS department_name,
                  doc_counts.document_count,
@@ -204,7 +204,7 @@ export const bidsRouter = router({
           valueUnit: r.value_unit, emdAmount: r.emd_amount, emdUnit: r.emd_unit, vertical: r.vertical,
           geoSalesPersonId: r.geo_sales_person_id ?? null, buSalesPersonId: r.bu_sales_person_id ?? null,
           preSalesPersonId: r.pre_sales_person_id ?? null, legalPersonId: r.legal_person_id ?? null,
-          bidTeamMemberId: r.bid_team_member_id ?? null,
+          bidTeamMemberId: r.bid_team_member_id ?? null, createdBy: r.created_by ? String(r.created_by).trim().toLowerCase() : null,
           ownerEmail: owner ? (emailById.get(owner.salesPersonId) ?? null) : null,
           solutionLeadEmail: r.solution_lead_sales_person_id ? (emailById.get(r.solution_lead_sales_person_id) ?? null) : null,
           documentCount: r.document_count ?? 0,
@@ -248,7 +248,7 @@ export const bidsRouter = router({
         let opportunityId = input.opportunityId
         if (input.newOpportunity) {
           if (!input.department) throw new TRPCError({ code: 'BAD_REQUEST', message: DEPARTMENT_REQUIRED_MESSAGE })
-          opportunityId = (await insertOpportunity(client, { ...input.newOpportunity, departmentId: null }, { deferCode: true })).id
+          opportunityId = (await insertOpportunity(client, { ...input.newOpportunity, departmentId: null }, { deferCode: true, createdBy: ctx.user?.email })).id
         }
         if (!opportunityId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose an existing opportunity or describe a new one.' })
         await resolveBidDepartment(client, opportunityId, input.department, ctx.user?.email)

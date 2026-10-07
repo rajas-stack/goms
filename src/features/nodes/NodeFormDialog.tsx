@@ -1,3 +1,5 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
+import { moduleForDomain, salesPersonRow } from '@/lib/routeModules'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -35,6 +37,7 @@ interface Props {
 export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepartment, initialTypeKey, onClose, onSaved }: Props) {
   const toast = useToast()
   const { create, update, remove: removeNode } = useNodeMutations()
+  const allowed = useAllowed(moduleForDomain((parent ?? node)?.domain), mode === 'create' ? 'create' : 'update')
   const { create: createEmployee } = useEmployeeMutations()
 
   const childOptions = useMemo(() => (parent ? childTypesOf(parent.typeKey) : []), [parent])
@@ -194,7 +197,7 @@ export function NodeFormDialog({ open, mode, stateCode, parent, node, createDepa
       footer={
         <>
           <Button onClick={onClose} disabled={create.isPending || update.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!name.trim() || create.isPending || update.isPending || createEmployee.isPending}>
+          <Button variant="primary" onClick={submit} disabled={(!name.trim() || create.isPending || update.isPending || createEmployee.isPending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             {mode === 'edit'
               ? (update.isPending ? 'Saving…' : 'Save changes')
               : (create.isPending ? 'Creating…' : `Create ${typeLabel.toLowerCase()}`)}

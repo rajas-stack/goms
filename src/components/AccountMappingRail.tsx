@@ -3,6 +3,8 @@ import { useShell } from '@/app/AppLayout'
 import { Icon } from './ui/Icon'
 import { cn } from '@/lib/utils'
 import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
+import { useCanReadAny, usePermissions } from '@/lib/permissions'
+import { NAV_MODULES } from '@/lib/routeModules'
 
 /** The app's persistent navigation element — a slim left rail with one button
  *  per top-level module (Account Mapping, Commercial Calculator — spec §5).
@@ -19,10 +21,18 @@ export function AccountMappingRail() {
   const commercialActive = location.pathname.startsWith('/commercial-calculator')
   const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
   const teamsActive = location.pathname.startsWith('/teams')
+  const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping)
+  const canCommercial = useCanReadAny(NAV_MODULES.commercial)
+  const canOpportunity = useCanReadAny(NAV_MODULES.opportunity)
+  const canTeams = useCanReadAny(NAV_MODULES.teams)
+  // Only offered once RBAC is enforced and the role can open it; while RBAC is off the screen is reachable at /admin/access.
+  const perms = usePermissions()
+  const canAccess = perms.enforced && perms.level('admin.access') !== 'N'
+  const accessActive = location.pathname.startsWith('/admin/access')
 
   return (
     <nav className="hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-line bg-panel py-4 lg:flex lg:w-16">
-      <button
+      {canAccountMapping && <button
         onClick={() => navigate('/map')}
         title="Account Mapping"
         className={cn(
@@ -32,8 +42,8 @@ export function AccountMappingRail() {
       >
         <Icon name="Map" size={18} />
         <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Account Mapping</span>
-      </button>
-      <button
+      </button>}
+      {canCommercial && <button
         onClick={() => navigate('/commercial-calculator')}
         title="Commercial Calculator"
         className={cn(
@@ -43,8 +53,8 @@ export function AccountMappingRail() {
       >
         <Icon name="Calculator" size={18} />
         <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Commercial Calculator</span>
-      </button>
-      {isBidTrackerEnabled() && (
+      </button>}
+      {isBidTrackerEnabled() && canOpportunity && (
         <button
           onClick={() => navigate('/bid-tracker')}
           title="Opportunity"
@@ -57,8 +67,19 @@ export function AccountMappingRail() {
           <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Opportunity</span>
         </button>
       )}
+      {canAccess && <button
+        onClick={() => navigate('/admin/access')}
+        title="Role & Access"
+        className={cn(
+          'flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors lg:w-14',
+          accessActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600/70 hover:bg-white hover:text-ink-900',
+        )}
+      >
+        <Icon name="Lock" size={18} />
+        <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Role &amp; Access</span>
+      </button>}
       {/* `mt-auto` pins Teams to the bottom of the rail, apart from the work modules above. */}
-      <button
+      {canTeams && <button
         onClick={() => navigate('/teams')}
         title="Teams"
         className={cn(
@@ -68,7 +89,7 @@ export function AccountMappingRail() {
       >
         <Icon name="Users" size={18} />
         <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Teams</span>
-      </button>
+      </button>}
     </nav>
   )
 }

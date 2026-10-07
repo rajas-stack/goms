@@ -5,6 +5,7 @@ import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
 import { ALLOWED_DOCUMENT_CONTENT_TYPES, MAX_DOCUMENT_SIZE_BYTES, getSignedUploadUrl, getSignedDownloadUrl, getObjectMetadata, moveObject, deleteObject } from '../lib/gcs.js'
+import { pendingUploads } from '../lib/pendingUploads.js'
 
 export function toDocument(row: any) {
   return {
@@ -23,7 +24,7 @@ function sanitizeFilename(name: string): string {
 // app's scale (spec §2) and this feature's short-lived (10-minute signed
 // URL) window — an uploadId that's never confirmed simply expires here on
 // process restart, same lifetime class as the signed URL itself.
-export const pendingUploads = new Map<string, { entityType: string; entityId: string; filename: string; version: string; pendingPath: string; canonicalPath: string }>()
+export { pendingUploads }
 
 function toCitation(row: any) {
   return { id: row.id, documentId: row.document_id, pageLabel: row.page_label, quoteText: row.quote_text, fieldRef: row.field_ref, createdAt: row.created_at }

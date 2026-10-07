@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed } from '@/lib/permissions'
 import { useEffect, useMemo, useState } from 'react'
 import { pruneFilterNodes, type FilterNode } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
@@ -32,6 +33,9 @@ export function CreateSavedViewDialog({ open, onClose, sheet, initialFilterRules
   const [rules, setRules] = useState<FilterNode[]>(initialFilterRules)
   const [error, setError] = useState<string | null>(null)
   const { create } = useBidSavedViewMutations()
+  // A personal view needs only read access to the rows; a global one needs the right to manage columns (plan gap A3).
+  const canGlobal = useAllowed('bid.columns', 'update')
+  const allowed = scope === 'personal' || canGlobal
   const { data: customFields = [] } = useBidCustomFields()
   const lookups = useEntityLookups()
   const filterable = useMemo(() => resolveColumns(customFields).filter((c) => c.type !== null), [customFields])
@@ -62,7 +66,7 @@ export function CreateSavedViewDialog({ open, onClose, sheet, initialFilterRules
       footer={(
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={!name.trim() || create.isPending} onClick={submit}>Create View</Button>
+          <Button variant="primary" disabled={!name.trim() || create.isPending || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE} onClick={submit}>Create View</Button>
         </div>
       )}
     >

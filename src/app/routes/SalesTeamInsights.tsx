@@ -1,3 +1,4 @@
+import { Can } from '@/lib/permissions'
 import { useMemo } from 'react'
 import {
   useAllTimelineEvents, useCurrentPostings, useOpenFollowUps, useOpportunities,
@@ -145,6 +146,7 @@ export function SalesTeamInsights() {
             )}
           </Panel>
 
+          <Can module="an.financial" action="read">
           <Panel title={<span className="flex items-center gap-2">Pipeline value by salesperson <ConfidenceTag /></span>} icon="TrendingUp">
             <p className="mb-3 text-[11px] text-muted">Grouped by value unit — lakh and crore rows are never summed into one figure.</p>
             {data.pipelineValue.byPerson.length === 0 ? (
@@ -165,6 +167,7 @@ export function SalesTeamInsights() {
               </div>
             )}
           </Panel>
+          </Can>
         </section>
 
         <Panel title={<span className="flex items-center gap-2">Activity volume by salesperson <ConfidenceTag /></span>} icon="Handshake">

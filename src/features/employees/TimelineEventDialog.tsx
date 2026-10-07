@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
 import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -51,6 +52,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
 }) {
   const toast = useToast()
   const { addTimelineEvent, updateTimelineEvent } = useEmployeeMutations()
+  const allowed = useAllowed('am.meetings', existingEvent ? 'update' : 'create')
   const { data: allEmployees = [] } = useAllEmployees()
   const { data: salesPersons = [] } = useSalesPersons()
   const [pickedEmployeeId, setPickedEmployeeId] = useState<string | null>(null)
@@ -201,7 +203,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
       footer={
         <>
           <Button onClick={onClose} disabled={pending}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!form.title.trim() || pending}>
+          <Button variant="primary" onClick={submit} disabled={(!form.title.trim() || pending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             {existingEvent ? (pending ? 'Saving…' : 'Save changes') : (pending ? 'Adding…' : 'Add entry')}
           </Button>
         </>
