@@ -312,8 +312,10 @@ describe('Master Grid refinement', () => {
       expect(screen.getAllByTitle('Frozen column')).toHaveLength(2)
       // The last frozen column carries the divider from the scrolling area.
       expect(second.className).toContain('border-r-2')
-      expect(second.style.boxShadow).toContain('rgba')
+      // The shadow colour comes from the theme (--grid-frozen-shadow, defined for light and dark in index.css).
+      expect(second.style.boxShadow).toContain('var(--grid-frozen-shadow)')
       expect(first.className).not.toContain('border-r-2')
+      expect(first.style.boxShadow).not.toContain('--grid-frozen-shadow')
 
       await userEvent.click(screen.getByRole('button', { name: 'Tender ID column menu' }))
       await userEvent.click(screen.getByRole('menuitem', { name: 'Unfreeze column' }))
