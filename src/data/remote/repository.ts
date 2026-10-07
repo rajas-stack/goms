@@ -11,6 +11,7 @@ import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
 import type { MyAccess } from '../../../apps/api/src/routers/auth'
+import type { EffectivePermissions, OverrideHistoryFilter, OverrideHistoryRow, PermissionMatrix, UnmatchedOverride } from '../accessTypes'
 import { authPromptLink } from './authPromptLink'
 import type { AppRouter } from '../../../apps/api/src/index'
 import type {
@@ -44,6 +45,10 @@ export class RemoteRepository implements Partial<Repository> {
   listRoleOverrides = (): Promise<RoleOverrideRow[]> => this.client.access.listOverrides.query()
   setRoleOverride = async (input: SetRoleOverrideInput): Promise<void> => { await this.client.access.setOverride.mutate(input as never) }
   removeRoleOverride = (id: string): Promise<void> => this.client.access.removeOverride.mutate({ id })
+  listUnmatchedOverrides = (): Promise<UnmatchedOverride[]> => this.client.access.unmatchedOverrides.query()
+  listOverrideHistory = (filter?: OverrideHistoryFilter): Promise<OverrideHistoryRow[]> => this.client.access.overrideHistory.query(filter)
+  getPermissionMatrix = (): Promise<PermissionMatrix> => this.client.access.permissionMatrix.query()
+  getEffectivePermissions = (email: string): Promise<EffectivePermissions> => this.client.access.effectivePermissions.query({ email })
 
   listCustomers = (): Promise<Customer[]> => this.client.customers.list.query()
   getCustomer = (id: string): Promise<Customer | null> => this.client.customers.get.query({ id })

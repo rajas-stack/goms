@@ -1,6 +1,6 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react'
 import {
-  accessFor, allows, canReadAtom as domainCanReadAtom, GRANTS, type Level, type MaskedAtom, type PolicyModuleKey, type ScopeFacts, type UserFacts,
+  accessFor, allows, canReadAtom as domainCanReadAtom, GRANTS, type Level, type MaskedAtom, type PolicyModuleKey, type RbacMode, type ScopeFacts, type UserFacts,
 } from '@goms/domain'
 import type { MyAccess } from '../../apps/api/src/routers/auth'
 import { useMyAccess } from './api'
@@ -15,6 +15,11 @@ export interface Permissions {
   canReadAtom(atom: MaskedAtom): boolean
   /** Could this role edit the module on SOME row? For screens that do not know the row (the server decides per row). */
   mayWrite(module: PolicyModuleKey): boolean
+  /** What `auth.me` reported as the RBAC mode; undefined until it has answered (or when it failed). UX only. */
+  mode?: RbacMode
+  /** `auth.me` reported this caller as a System Admin. Only known in `shadow` / `enforce` (with RBAC off the server reports no
+   *  roles). UX ONLY, like every other flag here: the server is the authorization boundary (see useIsSystemAdmin). */
+  systemAdmin?: boolean
 }
 
 const OPEN: Permissions = {
@@ -23,10 +28,13 @@ const OPEN: Permissions = {
 const Ctx = createContext<Permissions>(OPEN)
 
 function build(access: MyAccess | undefined): Permissions {
+  if (!access) return OPEN
+  const reported = { mode: access.mode, systemAdmin: access.mode !== 'off' && access.roles.includes('system_admin') }
   // `shadow` only logs on the server, so the UI behaves exactly as it does with RBAC off until `enforce`.
-  if (!access || access.mode !== 'enforce' || !access.facts) return OPEN
+  if (access.mode !== 'enforce' || !access.facts) return { ...OPEN, ...reported }
   const user: UserFacts = { email: access.email ?? '', roles: access.roles, ...access.facts }
   return {
+    ...reported,
     enforced: true,
     roles: user.roles,
     level: (m) => accessFor(user, m).level,

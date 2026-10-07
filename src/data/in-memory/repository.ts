@@ -8,6 +8,7 @@ import type {
   SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
 import type { MyAccess } from '../../../apps/api/src/routers/auth'
+import type { EffectivePermissions, OverrideHistoryFilter, OverrideHistoryRow, PermissionMatrix, UnmatchedOverride } from '../accessTypes'
 import { uid } from '@/lib/utils'
 import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType } from '@/lib/node-types'
@@ -296,6 +297,14 @@ export interface Repository {
   listRoleOverrides(): Promise<RoleOverrideRow[]>
   setRoleOverride(input: SetRoleOverrideInput): Promise<void>
   removeRoleOverride(id: string): Promise<void>
+  /** Overrides whose email matches no person row; only a System Admin can remove one. */
+  listUnmatchedOverrides(): Promise<UnmatchedOverride[]>
+  /** The audit trail of override changes, newest first, optionally for one email / role. */
+  listOverrideHistory(filter?: OverrideHistoryFilter): Promise<OverrideHistoryRow[]>
+  /** The role x module matrix, computed by the server from the same policy it enforces. */
+  getPermissionMatrix(): Promise<PermissionMatrix>
+  /** What one person can do per module, computed by the server (never in the browser). */
+  getEffectivePermissions(email: string): Promise<EffectivePermissions>
   listStates(): Promise<StateSummary[]>
   getState(code: number): Promise<HierNode | undefined>
   getNode(id: string): Promise<HierNode | undefined>
@@ -642,6 +651,11 @@ class InMemoryRepository implements Repository {
   async listRoleOverrides(): Promise<RoleOverrideRow[]> { return [] }
   async setRoleOverride(): Promise<void> {}
   async removeRoleOverride(): Promise<void> {}
+  async listUnmatchedOverrides(): Promise<UnmatchedOverride[]> { return [] }
+  async listOverrideHistory(): Promise<OverrideHistoryRow[]> { return [] }
+  // No server, no policy: an empty matrix (the screen shows its empty state) and a person with no permissions.
+  async getPermissionMatrix(): Promise<PermissionMatrix> { return { roles: [], modules: [], grants: {}, fieldSets: {}, restrictions: [] } as unknown as PermissionMatrix }
+  async getEffectivePermissions(email: string): Promise<EffectivePermissions> { return { email, roles: [], systemAdmin: false, modules: [], notes: [] } }
 
   private data: GormsData = buildSeed()
 
@@ -3047,6 +3061,7 @@ const READER_KEYS = [
   'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
   'listDocuments', 'listDocumentCitations', 'getDocumentDownloadUrl', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
   'listDeliveryTeamMembers', 'listOrgPeople', 'getMyAccess', 'getAccessReadiness', 'listRoleOverrides',
+  'listUnmatchedOverrides', 'listOverrideHistory', 'getPermissionMatrix', 'getEffectivePermissions',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the
