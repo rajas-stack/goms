@@ -17,6 +17,8 @@ export const adminPolicy: Record<string, PolicyEntry> = {
   'access.readiness': { requirements: [read('admin.access')] },
   'access.unmatchedOverrides': { requirements: [read('admin.access')] },
   'access.overrideHistory': { requirements: [read('admin.access')] },
+  'access.permissionMatrix': { requirements: [read('admin.access')] },
+  'access.effectivePermissions': { requirements: [read('admin.access')] },
   'access.setOverride': { requirements: [write('admin.access')] },
   'access.removeOverride': { requirements: [remove('admin.access')] },
 }

@@ -2,7 +2,8 @@ import { DERIVED_ROLE_DEPARTMENTS, FUNCTIONAL_ROLES, SALES_ROLE_STATUSES, type R
 import { TRPCError } from '@trpc/server'
 import type { PoolClient } from 'pg'
 import { z } from 'zod'
-import { bindTeamMembers, combineRoles, clearUserFactsCache, normalizeEmail, type TeamCandidate } from '../auth/rbac/userFacts.js'
+import { buildPermissionMatrix, describeEffectivePermissions } from '../auth/rbac/permissionView.js'
+import { bindTeamMembers, combineRoles, clearUserFactsCache, loadUserFacts, normalizeEmail, type TeamCandidate } from '../auth/rbac/userFacts.js'
 import { isAllowListed, parseAllowList } from '../auth/identity.js'
 import { pool } from '../db.js'
 import { toAuditLog, writeAuditLog } from '../lib/auditLog.js'
@@ -136,6 +137,16 @@ export const accessRouter = router({
         return { ...entry, email: entry.entityId.slice(0, cut), role: entry.entityId.slice(cut + 1) }
       })
     }),
+
+  /** The role x module permission matrix, the named field sets and the System Admin only restrictions: read-only, derived from the
+   *  domain package (GRANTS / FIELD_SETS) and SYSTEM_ADMIN_ONLY, the same sources the server enforces. */
+  permissionMatrix: accessProcedure.query(() => buildPermissionMatrix()),
+
+  /** What one person can do per module, from the server's own loadUserFacts + accessFor (never computed in the browser).
+   *  Only a boolean says whether they are a System Admin; the allow-list itself is never returned. */
+  effectivePermissions: accessProcedure
+    .input(z.object({ email: emailSchema }))
+    .query(async ({ input }) => describeEffectivePermissions(await loadUserFacts(input.email))),
 
   /** Per person: derived roles, overrides, effective roles, and what needs fixing before RBAC can be enforced. */
   readiness: accessProcedure.query(async (): Promise<ReadinessRow[]> => (await buildReadiness()).rows),
