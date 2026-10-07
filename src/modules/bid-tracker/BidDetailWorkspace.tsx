@@ -129,7 +129,7 @@ export function BidDetailWorkspace() {
         </div>}
         {BID_SYNOPSIS_SECTIONS.filter(section => visited.includes(section) || tab === section).map(section => (
           <div key={`${bid.id}:${section}`} role="tabpanel" id={`synopsis-panel-${section}`} aria-labelledby={`synopsis-tab-${section}`} hidden={tab !== section}>
-            <SynopsisTab bidId={bid.id} section={section} />
+            <SynopsisTab bidId={bid.id} section={section} module={sheetModule(bid.sheet)} />
             {section === 'milestone' && <details className="border-t border-line"><summary className="cursor-pointer px-4 py-3 text-sm font-medium">Tracked Dates &amp; Corrigenda</summary><MilestonesTab bidId={bid.id} /></details>}
           </div>
         ))}

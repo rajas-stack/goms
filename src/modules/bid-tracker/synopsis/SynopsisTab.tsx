@@ -7,9 +7,10 @@ import {
   RotateCcw, Check, Loader2, type LucideIcon,
 } from 'lucide-react'
 import { read, utils, writeFileXLSX, type WorkBook } from 'xlsx'
-import { validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type SynopsisNode } from '@goms/domain'
+import { validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type PolicyModuleKey, type SynopsisNode } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
+import { Can, useAllowed } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { useSaveSynopsis, useSynopsis } from './api'
 import { createTable, documentToWorksheet, SECTION_LABELS, starterDocument, worksheetToDocument } from './documents'
@@ -125,18 +126,21 @@ function readDraft(key: string): Draft | null {
   } catch { return null }
 }
 
-export function SynopsisTab({ bidId, section }: { bidId: string; section: BidSynopsisSection }) {
+/** `module` is the sheet module the bid lives on: saving a section needs full write access there (the server's rule for
+ *  `bidSynopsis.save`); reading follows the bid detail view. Without it the section opens as a read-only document. */
+export function SynopsisTab({ bidId, section, module }: { bidId: string; section: BidSynopsisSection; module: PolicyModuleKey }) {
   const query = useSynopsis(bidId, section)
   if (query.isLoading) return <div role="status" className="p-6 text-sm text-muted">Loading {SECTION_LABELS[section]}...</div>
   if (query.isError) return <div role="alert" className="space-y-2 p-6 text-sm text-crimson"><p>{query.error.message}</p><Button size="sm" onClick={() => query.refetch()}>Retry</Button></div>
-  return <SynopsisDocumentEditor key={`${bidId}:${section}`} bidId={bidId} section={section} saved={query.data ?? null} onReload={() => query.refetch()} />
+  return <SynopsisDocumentEditor key={`${bidId}:${section}`} bidId={bidId} section={section} saved={query.data ?? null} module={module} onReload={() => query.refetch()} />
 }
 
-function SynopsisDocumentEditor({ bidId, section, saved, onReload }: {
-  bidId: string; section: BidSynopsisSection; saved: BidSynopsis | null; onReload: () => Promise<{ data?: BidSynopsis | null; error?: unknown }>
+function SynopsisDocumentEditor({ bidId, section, saved, module, onReload }: {
+  bidId: string; section: BidSynopsisSection; saved: BidSynopsis | null; module: PolicyModuleKey; onReload: () => Promise<{ data?: BidSynopsis | null; error?: unknown }>
 }) {
   const draftKey = `goms:synopsis:${import.meta.env.VITE_API_BASE_URL || 'local'}:${bidId}:${section}`
-  const [initial] = useState(() => readDraft(draftKey))
+  const canEdit = useAllowed(module, 'update')
+  const [initial] = useState(() => (canEdit ? readDraft(draftKey) : null))
   const revision = useRef(initial?.revision ?? saved?.revision ?? 0)
   const savedJson = useRef(JSON.stringify(saved?.document ?? starterDocument(section)))
   const [dirty, setDirty] = useState(!!initial && JSON.stringify(initial.document) !== savedJson.current)
@@ -153,7 +157,7 @@ function SynopsisDocumentEditor({ bidId, section, saved, onReload }: {
   const upload = useRef<HTMLInputElement>(null)
   const save = useSaveSynopsis()
   const editor = useEditor({
-    extensions: synopsisExtensions(), content: initial?.document ?? saved?.document ?? starterDocument(section),
+    editable: canEdit, extensions: synopsisExtensions(), content: initial?.document ?? saved?.document ?? starterDocument(section),
     editorProps: { attributes: { role: 'textbox', 'aria-label': `${SECTION_LABELS[section]} document`, 'aria-multiline': 'true', spellcheck: 'true' } },
     onUpdate: ({ editor }) => {
       const document = editor.getJSON() as SynopsisNode
@@ -167,7 +171,7 @@ function SynopsisDocumentEditor({ bidId, section, saved, onReload }: {
     },
   })
 
-  useEffect(() => { editor?.setEditable(!readOnly) }, [editor, readOnly])
+  useEffect(() => { editor?.setEditable(canEdit && !readOnly) }, [editor, readOnly, canEdit])
   useEffect(() => {
     if (!dirty) return
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
@@ -245,20 +249,26 @@ function SynopsisDocumentEditor({ bidId, section, saved, onReload }: {
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
-        <Button size="sm" onClick={() => setReadOnly(!readOnly)}>{readOnly ? <Pencil size={14} /> : <Eye size={14} />}{readOnly ? 'Edit' : 'Preview'}</Button>
+        <Can module={module} action="update" fallback={<span className="text-[12px] text-muted">View only</span>}>
+          <Button size="sm" onClick={() => setReadOnly(!readOnly)}>{readOnly ? <Pencil size={14} /> : <Eye size={14} />}{readOnly ? 'Edit' : 'Preview'}</Button>
+        </Can>
         <Tool icon={RotateCcw} label="Reload saved section" disabled={save.isPending} onClick={() => void reload()} />
-        <Tool icon={Upload} label="Import Excel sheet" disabled={readOnly || save.isPending} onClick={() => upload.current?.click()} />
+        <Can module={module} action="update">
+          <Tool icon={Upload} label="Import Excel sheet" disabled={readOnly || save.isPending} onClick={() => upload.current?.click()} />
+        </Can>
         <Tool icon={Download} label="Export Excel" onClick={exportDocument} />
-        <Button size="sm" variant="primary" disabled={save.isPending || (!dirty && !!saved)} onClick={() => void saveDocument()}><Save size={14} /> Save</Button>
-        <input ref={upload} type="file" accept=".xlsx,.xls" aria-label="Excel workbook" className="hidden" onChange={event => {
-          const file = event.target.files?.[0]; if (file) void loadWorkbook(file); event.target.value = ''
-        }} />
+        <Can module={module} action="update">
+          <Button size="sm" variant="primary" disabled={save.isPending || (!dirty && !!saved)} onClick={() => void saveDocument()}><Save size={14} /> Save</Button>
+          <input ref={upload} type="file" accept=".xlsx,.xls" aria-label="Excel workbook" className="hidden" onChange={event => {
+            const file = event.target.files?.[0]; if (file) void loadWorkbook(file); event.target.value = ''
+          }} />
+        </Can>
       </div>
     </div>
     {initial && dirty && <div className="px-4 pb-2 text-[12px] text-amber">Unsaved draft restored.</div>}
     {error && <div role="alert" className="border-y border-red-200 bg-red-50 px-4 py-2 text-[13px] text-crimson">{error}</div>}
     {draftWarning && <div role="alert" className="px-4 py-2 text-[12px] text-amber">{draftWarning}</div>}
-    {!readOnly && <Toolbar editor={editor} onInsert={() => setInserting(true)} onError={setError} />}
+    {!readOnly && <Can module={module} action="update"><Toolbar editor={editor} onInsert={() => setInserting(true)} onError={setError} /></Can>}
     <div className="synopsis-editor min-w-0 bg-white"><EditorContent editor={editor} /></div>
     <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-line px-4 py-2 text-[11px] text-muted">
       <span>{section === 'scope' ? 'Scope document' : 'RFP synopsis'}</span>
