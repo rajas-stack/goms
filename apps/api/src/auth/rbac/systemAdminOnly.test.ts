@@ -125,7 +125,7 @@ describe.each(MODES)('override management with RBAC %s: System Admin only', (mod
     })
   }
   it('still refuses a System Admin target / role, even from a System Admin', async () => {
-    await expect(as('root').access.setOverride({ ...payload, role: 'system_admin' as any })).rejects.toThrow()
+    await expect(as('root').access.setOverride({ ...payload, role: 'system_admin' as any })).rejects.toMatchObject({ code: 'BAD_REQUEST' }) // zod: system_admin is not a role the API accepts
     await expect(as('root').access.setOverride({ ...payload, email: rbacEmail('root'), role: 'it', effect: 'revoke' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
     expect(await rows()).toEqual([])
   })
@@ -232,6 +232,137 @@ describe.each(MODES)('email bindings with RBAC %s: only a System Admin may chang
   })
 })
 
+describe.each(MODES)('the org sync cannot rebind a team member email for a non-System-Admin (RBAC %s)', (mode) => {
+  beforeEach(async () => { setMode(mode); await setRole('cxo', 'cxo') })
+
+  const member = async (id: string) => (await pool.query(`SELECT email, org_person_id, name FROM delivery_team_members WHERE id=$1`, [id])).rows[0]
+  const personName = async (id: string) => (await pool.query(`SELECT name, departments FROM org_people WHERE id=$1`, [id])).rows[0]
+
+  it('a rename onto the name of an unlinked member is refused (FORBIDDEN, RBAC denial) and rolls EVERYTHING back', async () => {
+    const alice = await addTeamMember('legal', 'alice', rbacEmail('alice-own'))
+    const bob = await addOrgPerson('bob', ['Legal'], { email: rbacEmail('bob-org') })
+    const err = await as('cxo').orgPeople.update({ id: bob, patch: { name: 'RBAC alice', designation: 'Counsel' } }).catch((e) => e)
+    expect(err).toMatchObject({ code: 'FORBIDDEN' })
+    expect(err.message).toMatch(NOT_SA)
+    expect(err.cause).toBeInstanceOf(RbacDenial)
+    expect(await member(alice)).toMatchObject({ email: rbacEmail('alice-own'), org_person_id: null, name: 'RBAC alice' })
+    expect(await personName(bob)).toMatchObject({ name: 'RBAC bob' }) // the rename itself did not stick
+    expect((await pool.query(`SELECT designation FROM org_people WHERE id=$1`, [bob])).rows[0].designation).toBe('') // nor the other fields
+    expect((await pool.query(`SELECT 1 FROM delivery_team_members WHERE org_person_id=$1`, [bob])).rowCount).toBe(0) // no mirrored row survived
+  })
+  it('adding the matching department to a namesake who has an email is refused the same way', async () => {
+    const alice = await addTeamMember('bid', 'alice', rbacEmail('alice-own'))
+    const namesake = await addOrgPerson('alice', ['Finance'], { email: rbacEmail('alice-org') })
+    await expect(as('cxo').orgPeople.update({ id: namesake, patch: { departments: ['Finance', 'Bid Management'] } })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+    expect(await member(alice)).toMatchObject({ email: rbacEmail('alice-own'), org_person_id: null })
+    expect((await personName(namesake)).departments).toEqual(['Finance'])
+  })
+  it('creating a person who collides with an unlinked member is fine: create cannot carry an email for a non-System-Admin', async () => {
+    const alice = await addTeamMember('legal', 'alice', rbacEmail('alice-own'))
+    const created = await as('cxo').orgPeople.create({ name: 'RBAC alice', level: 4, departments: ['Legal'] })
+    expect(await member(alice)).toMatchObject({ email: rbacEmail('alice-own'), org_person_id: created.id }) // the designed name mirroring, email kept
+  })
+  it('the SAME operation as a System Admin succeeds and syncs (the member now mirrors the person, email included)', async () => {
+    const alice = await addTeamMember('legal', 'alice', rbacEmail('alice-own'))
+    const bob = await addOrgPerson('bob', ['Legal'], { email: rbacEmail('bob-org') })
+    await expect(as('root').orgPeople.update({ id: bob, patch: { name: 'RBAC alice' } })).resolves.toMatchObject({ name: 'RBAC alice' })
+    expect(await member(alice)).toMatchObject({ email: rbacEmail('bob-org'), org_person_id: bob })
+  })
+  it('an ordinary rename / department edit by a non-System-Admin still works and leaves existing member emails alone', async () => {
+    const alice = await addTeamMember('legal', 'alice', rbacEmail('alice-own'))
+    const bob = await addOrgPerson('bob', [], { email: rbacEmail('bob-org') })
+    await expect(as('cxo').orgPeople.update({ id: bob, patch: { name: 'RBAC bobby', departments: ['Legal'] } })).resolves.toMatchObject({ name: 'RBAC bobby' })
+    expect(await member(alice)).toMatchObject({ email: rbacEmail('alice-own'), org_person_id: null })
+    expect((await pool.query(`SELECT email FROM delivery_team_members WHERE org_person_id=$1 AND team='legal'`, [bob])).rows).toEqual([{ email: rbacEmail('bob-org') }]) // a NEW row mirrors bobby
+    await expect(as('cxo').orgPeople.update({ id: bob, patch: { designation: 'Head of Legal' } })).resolves.toMatchObject({ designation: 'Head of Legal' })
+  })
+  it('linking an unlinked namesake to a person WITHOUT an email is the designed mirroring: allowed, and the member keeps its email', async () => {
+    const carol = await addTeamMember('legal', 'carol', rbacEmail('carol-own'))
+    const person = await addOrgPerson('carolx', ['Legal'], { email: '' })
+    await expect(as('cxo').orgPeople.update({ id: person, patch: { name: 'RBAC carol' } })).resolves.toMatchObject({ name: 'RBAC carol' })
+    expect(await member(carol)).toMatchObject({ email: rbacEmail('carol-own'), org_person_id: person })
+  })
+})
+
+describe('the org-sync email guard is a no-op when auth is not enforced (existing convention: no identity exists)', () => {
+  it('lets the namesake rename through, exactly as before', async () => {
+    const alice = await addTeamMember('legal', 'alice', rbacEmail('alice-own'))
+    const bob = await addOrgPerson('bob', ['Legal'], { email: rbacEmail('bob-org') })
+    const caller = appRouter.createCaller({ user: { email: 'tester@amnex.com' } } as any)
+    await expect(caller.orgPeople.update({ id: bob, patch: { name: 'RBAC alice' } })).resolves.toMatchObject({ name: 'RBAC alice' })
+    expect((await pool.query(`SELECT email FROM delivery_team_members WHERE id=$1`, [alice])).rows[0].email).toBe(rbacEmail('bob-org'))
+  })
+})
+
+describe.each(MODES)('an email that is "unchanged" is persisted as STORED, never as the caller typed it (RBAC %s)', (mode) => {
+  beforeEach(async () => { setMode(mode); await setRole('cxo', 'cxo') })
+  const KELVIN = 'rbac-Kelvin@amnex.com' // U+212A KELVIN SIGN lowercases to ASCII "k" in JS, so it "equals" rbac-kelvin@amnex.com
+  const stored = async (table: 'org_people' | 'delivery_team_members', id: string) =>
+    (await pool.query(`SELECT email FROM ${table} WHERE id=$1`, [id])).rows[0].email as string
+  const VARIANTS = [
+    ['the Kelvin sign look-alike', KELVIN, 'rbac-kelvin@amnex.com'],
+    ['another letter case', 'RBAC-Kelvin@AMNEX.com', 'rbac-kelvin@amnex.com'],
+    ['a lower-case rewrite of a stored mixed-case address', 'rbac-mixed@amnex.com', 'Rbac-Mixed@amnex.com'],
+  ]
+
+  it('the look-alike really compares equal (so this is the case that needs the guard)', () => {
+    expect(KELVIN.toLowerCase()).toBe('rbac-kelvin@amnex.com')
+    expect(KELVIN).not.toBe('rbac-kelvin@amnex.com')
+  })
+  it.each(VARIANTS)('org people: %s is stored byte-for-byte as it was', async (_label, typed, storedValue) => {
+    const id = await addOrgPerson('kelv', [], { email: storedValue })
+    await expect(as('cxo').orgPeople.update({ id, patch: { email: typed, designation: 'D' } })).resolves.toMatchObject({ designation: 'D', email: storedValue })
+    expect(await stored('org_people', id)).toBe(storedValue)
+  })
+  it.each(VARIANTS)('team members: %s is stored byte-for-byte as it was', async (_label, typed, storedValue) => {
+    const id = await addTeamMember('legal', 'kelv', storedValue)
+    await expect(as('cxo').deliveryTeams.update({ id, patch: { email: typed, designation: 'D' } })).resolves.toMatchObject({ designation: 'D', email: storedValue })
+    expect(await stored('delivery_team_members', id)).toBe(storedValue)
+  })
+  it('a real change by the System Admin is still stored exactly as typed', async () => {
+    const id = await addOrgPerson('kelv', [], { email: 'rbac-kelvin@amnex.com' })
+    await as('root').orgPeople.update({ id, patch: { email: 'rbac-Changed@amnex.com' } })
+    expect(await stored('org_people', id)).toBe('rbac-Changed@amnex.com')
+    const member = await addTeamMember('bid', 'kelv', 'rbac-kelvin@amnex.com')
+    await as('root').deliveryTeams.update({ id: member, patch: { email: 'rbac-Changed@amnex.com' } })
+    expect(await stored('delivery_team_members', member)).toBe('rbac-Changed@amnex.com')
+  })
+})
+
+describe('deliveryTeams.update reads, checks and writes the email under one row lock', () => {
+  beforeEach(async () => { setMode('enforce'); await setRole('cxo', 'cxo') })
+
+  it('a non-System-Admin "unchanged" re-save cannot revert a System Admin change that commits while it waits', async () => {
+    const id = await addTeamMember('legal', 'racer', rbacEmail('before'))
+    const admin = await pool.connect()
+    try {
+      await admin.query('BEGIN')
+      await admin.query(`UPDATE delivery_team_members SET email=$2 WHERE id=$1`, [id, rbacEmail('after')]) // the System Admin's change, not yet committed
+      const resave = as('cxo').deliveryTeams.update({ id, patch: { email: rbacEmail('before'), designation: 'Late' } }).catch((e) => e)
+      for (let i = 0; i < 100; i++) { // wait until the re-save is really blocked on the row lock
+        const waiting = await pool.query(`SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query ILIKE '%delivery_team_members%' AND pid <> pg_backend_pid()`)
+        if (waiting.rowCount) break
+        await new Promise((resolve) => setTimeout(resolve, 50))
+      }
+      await admin.query('COMMIT')
+      const outcome = await resave
+      expect(outcome).toMatchObject({ code: 'FORBIDDEN' }) // against the committed value the "same" email is now a change
+    } finally {
+      admin.release()
+    }
+    expect((await pool.query(`SELECT email, designation FROM delivery_team_members WHERE id=$1`, [id])).rows[0]).toMatchObject({ email: rbacEmail('after'), designation: '' })
+  })
+  it('keeps the existing behaviour for a missing member, a no-op patch and a manager change', async () => {
+    await expect(as('cxo').deliveryTeams.update({ id: randomUUID(), patch: { designation: 'x' } })).resolves.toBeNull()
+    const a = await addTeamMember('legal', 'lead'), b = await addTeamMember('legal', 'report')
+    await expect(as('cxo').deliveryTeams.update({ id: a, patch: {} })).resolves.toMatchObject({ id: a })
+    await expect(as('cxo').deliveryTeams.update({ id: b, patch: { managerId: a } })).resolves.toMatchObject({ managerId: a })
+    await expect(as('cxo').deliveryTeams.update({ id: a, patch: { managerId: b } })).rejects.toMatchObject({ code: 'BAD_REQUEST' }) // circular
+    await expect(as('cxo').deliveryTeams.update({ id: randomUUID(), patch: { managerId: a } })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    await expect(as('cxo').deliveryTeams.update({ id: b, patch: { name: 'RBAC lead' } })).rejects.toMatchObject({ code: 'CONFLICT' }) // same name on the team
+  })
+})
+
 describe('the email rule is a no-op when auth is not enforced (existing convention: no identity exists)', () => {
   it('lets an unauthenticated-mode caller change an email, exactly as before', async () => {
     const id = await addOrgPerson('legacy', [])
@@ -275,7 +406,7 @@ describe('System Admin can never be created through override or email management
     expect((await loadUserFacts(rbacEmail('tmhijack'))).roles).toEqual([])
   })
   it('setOverride still refuses system_admin as a role and an allow-listed account as a target, for the System Admin too', async () => {
-    await expect(as('root').access.setOverride({ email: rbacEmail('x'), role: 'system_admin' as any, effect: 'grant', reason: 'r' })).rejects.toThrow()
+    await expect(as('root').access.setOverride({ email: rbacEmail('x'), role: 'system_admin' as any, effect: 'grant', reason: 'r' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
     await expect(as('root').access.setOverride({ email: rbacEmail('root'), role: 'cxo', effect: 'grant', reason: 'r' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
     await setRole('root', 'delivery') // a row that predates the allow-list entry
     const [row] = (await pool.query(`SELECT id FROM user_role_overrides WHERE email=$1`, [rbacEmail('root')])).rows
