@@ -6,7 +6,7 @@ import { buildPermissionMatrix, describeEffectivePermissions } from '../auth/rba
 import { bindTeamMembers, combineRoles, clearUserFactsCache, loadUserFacts, normalizeEmail, type TeamCandidate } from '../auth/rbac/userFacts.js'
 import { isAllowListed, parseAllowList } from '../auth/identity.js'
 import { pool } from '../db.js'
-import { toAuditLog, writeAuditLog } from '../lib/auditLog.js'
+import { ROLE_OVERRIDE_ENTITY, toAuditLog, writeAuditLog } from '../lib/auditLog.js'
 import { isSystemAdminEmail } from '../auth/rbac/systemAdminOnly.js'
 import { accessProcedure, router, systemAdminProcedure } from '../trpc.js'
 
@@ -36,7 +36,7 @@ const toOverride = (r: any) => ({
 
 export type RoleOverrideRow = ReturnType<typeof toOverride>
 
-const AUDIT_ENTITY = 'role_override'
+const AUDIT_ENTITY = ROLE_OVERRIDE_ENTITY
 const overrideEntityId = (email: string, role: string): string => `${email}|${role}`
 
 /** Override writes are serialised (the table is tiny and written by System Admins only), so the read that decides which audit
@@ -119,8 +119,9 @@ export const accessRouter = router({
     return overrides.filter((o) => !attached.has(o.id)).map(toOverride)
   }),
 
-  /** Audit trail of override changes (who, when, what, why), newest first. It outlives the override itself: removed overrides
-   *  stay in it. Newest 1000 events at most. */
+  /** Audit trail of override changes (who, when, what, why), newest first (events of the same instant: by field, then id, so the
+   *  order and the 1000-event cut are stable). It outlives the override itself: removed overrides stay in it. This is the ONLY
+   *  reader of these rows: the generic audit feed (lib/auditLog.ts listAuditLogs) excludes the `role_override` entity type. */
   overrideHistory: accessProcedure
     .input(z.object({ email: emailSchema.optional(), role: z.string().trim().min(1).max(40).optional() }).optional())
     .query(async ({ input }) => {
@@ -128,7 +129,7 @@ export const accessRouter = router({
       const { rows } = await pool.query(
         `SELECT * FROM commercial_audit_logs
           WHERE entity_type = $1 AND ($2::text IS NULL OR split_part(entity_id, '|', 1) = $2) AND ($3::text IS NULL OR split_part(entity_id, '|', 2) = $3)
-          ORDER BY changed_at DESC, field LIMIT 1000`,
+          ORDER BY changed_at DESC, field, id LIMIT 1000`,
         [AUDIT_ENTITY, input?.email ?? null, input?.role ?? null],
       )
       return rows.map((row) => {

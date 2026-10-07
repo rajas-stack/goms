@@ -114,6 +114,17 @@ describe('access.overrideHistory', () => {
     expect(new Date(history[0].changedAt).getTime()).toBeGreaterThanOrEqual(new Date(history[2].changedAt).getTime())
     expect(await overrideRows()).toEqual([]) // the override is gone; its history is not
   })
+  it('orders events that share an instant deterministically (changed_at DESC, field, then id), so a LIMIT cuts the same rows every time', async () => {
+    const ids = ['00000000-0000-4000-8000-00000000000c', '00000000-0000-4000-8000-00000000000a', '00000000-0000-4000-8000-00000000000b']
+    for (const id of ids) { // inserted out of id order, all at the same instant, same entity and field
+      await pool.query(
+        `INSERT INTO commercial_audit_logs (id, entity_type, entity_id, field, old_value, new_value, reason, action, changed_at, changed_by)
+         VALUES ($1,'role_override',$2,'effect','grant','','r','remove','2026-01-01T00:00:00Z',$3)`, [id, entityId('finance'), rbacEmail('root')],
+      )
+    }
+    const history = await as('cxo').access.overrideHistory({ email: TARGET, role: 'finance' })
+    expect(history.map((h) => h.id)).toEqual([...ids].sort())
+  })
   it('filters by email, by role, by both, and returns everything with no filter', async () => {
     const other = rbacEmail('other')
     await as('root').access.setOverride({ email: TARGET, role: 'finance', effect: 'grant', reason: 'r' })
@@ -139,7 +150,7 @@ describe('access.overrideHistory', () => {
 describe('refused attempts write no audit row', () => {
   it('a System Admin target or the system_admin role', async () => {
     await expect(as('root').access.setOverride({ email: rbacEmail('root'), role: 'cxo', effect: 'grant', reason: 'r' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
-    await expect(as('root').access.setOverride({ email: TARGET, role: 'system_admin' as any, effect: 'grant', reason: 'r' })).rejects.toThrow()
+    await expect(as('root').access.setOverride({ email: TARGET, role: 'system_admin' as any, effect: 'grant', reason: 'r' })).rejects.toMatchObject({ code: 'BAD_REQUEST' }) // zod: system_admin is not a role the API accepts
     await setRole('root', 'delivery') // an override row that predates the allow-list entry
     const [row] = await overrideRows(rbacEmail('root'))
     await expect(as('root').access.removeOverride({ id: row.id })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
@@ -268,5 +279,77 @@ describe('who may read the new queries', () => {
       expect(entry.requirements).toHaveLength(1)
       expect(await entry.requirements[0]({}, {} as any)).toMatchObject({ module: 'admin.access', action: 'read' })
     }
+  })
+})
+
+describe.each(['off', 'shadow', 'enforce'] as const)('the generic audit feed never exposes role_override rows (RBAC %s, read auth on)', (mode) => {
+  const SECRET_REASON = 'confidential justification'
+  type Caller = ReturnType<typeof as>
+  // Every generic reader of commercial_audit_logs, with every filter shape the routers accept.
+  const FEEDS: [string, (c: Caller) => Promise<any[]>][] = [
+    ['auditLogs.list()', (c) => c.auditLogs.list()],
+    ['auditLogs.list({})', (c) => c.auditLogs.list({})],
+    ['auditLogs.list({ entityId })', (c) => c.auditLogs.list({ entityId: entityId('finance') })],
+    ['commercial.auditLogs.list()', (c) => c.commercial.auditLogs.list()],
+    ['commercial.auditLogs.list({ entityId })', (c) => c.commercial.auditLogs.list({ entityId: entityId('finance') })],
+  ]
+  const EXPLICIT: [string, (c: Caller) => Promise<any[]>][] = [
+    ['auditLogs.list({ entityType: role_override })', (c) => c.auditLogs.list({ entityType: 'role_override' })],
+    ['auditLogs.list({ entityType, entityId })', (c) => c.auditLogs.list({ entityType: 'role_override', entityId: entityId('finance') })],
+    ['commercial.auditLogs.list({ entityType: role_override })', (c) => c.commercial.auditLogs.list({ entityType: 'role_override' })],
+  ]
+  const callers = ['root', 'it', 'cxo', 'sales'] // a System Admin, the roles that read the global feed, and a caller who cannot
+
+  beforeEach(async () => {
+    process.env.READ_AUTH_ENFORCEMENT_ENABLED = 'true' // production: RBAC_MODE=off with read auth enforced
+    if (mode === 'off') delete process.env.RBAC_MODE; else process.env.RBAC_MODE = mode
+    const created = await as('root').access.setOverride({ email: TARGET, role: 'finance', effect: 'grant', reason: SECRET_REASON })
+    await sleep(5)
+    await as('root').access.setOverride({ email: TARGET, role: 'finance', effect: 'revoke', reason: SECRET_REASON })
+    await sleep(5)
+    await as('root').access.setOverride({ email: TARGET, role: 'legal', effect: 'grant', reason: SECRET_REASON })
+    await as('root').access.removeOverride({ id: created.id })
+    await pool.query(
+      `INSERT INTO commercial_audit_logs (entity_type, entity_id, field, old_value, new_value, reason, action) VALUES ('rbacprobe', 'rbac-probe', 'f', 'a', 'b', 'r', 'update')`,
+    )
+  })
+  afterEach(async () => {
+    delete process.env.READ_AUTH_ENFORCEMENT_ENABLED
+    await pool.query(`DELETE FROM commercial_audit_logs WHERE entity_type = 'rbacprobe'`)
+  })
+
+  const exposes = (rows: any) => {
+    const text = JSON.stringify(rows)
+    return Array.isArray(rows) && (rows.some((r) => r.entityType === 'role_override') || text.includes(TARGET) || text.includes(SECRET_REASON))
+  }
+
+  it('the fixture really wrote override audit rows (so the checks below are not vacuous)', async () => {
+    expect((await auditRows()).map((r) => r.action).sort()).toEqual(['create', 'create', 'remove', 'update'])
+    expect((await as('root').auditLogs.list({ entityType: 'rbacprobe' })).map((r) => r.entityId)).toEqual(['rbac-probe'])
+  })
+  for (const [label, feed] of FEEDS) {
+    it.each(callers)(`${label}: no role_override row, target email or reason for %s`, async (who) => {
+      const outcome = await feed(as(who)).catch((e: any) => e) // some callers are refused by RBAC in enforce; either way nothing leaks
+      expect(exposes(outcome), String(outcome?.message ?? '')).toBe(false)
+      expect(JSON.stringify(outcome)).not.toContain(rbacEmail('root')) // the actor either
+    })
+  }
+  it.each([['auditLogs.list()'], ['commercial.auditLogs.list()']])('%s still returns the other entity types to a caller who may read the feed', async (label) => {
+    const feed = FEEDS.find(([l]) => l === label)![1]
+    expect((await feed(as('root'))).map((r) => r.entityId)).toContain('rbac-probe')
+  })
+  for (const [label, feed] of EXPLICIT) {
+    it.each(callers)(`${label}: an explicit request for the override entity type is refused for %s`, async (who) => {
+      const refused = await feed(as(who)).catch((e: any) => e)
+      expect(refused).toMatchObject({ code: 'FORBIDDEN' })
+      expect(refused.cause).toBeInstanceOf(RbacDenial) // a permission message in the browser, not the sign-in prompt
+      expect(exposes(refused)).toBe(false)
+    })
+  }
+  it('access.overrideHistory remains the only reader: a System Admin gets every event, newest first', async () => {
+    const history = await as('root').access.overrideHistory({ email: TARGET })
+    expect(history.map((h) => `${h.action}:${h.role}:${h.field}`)).toEqual(expect.arrayContaining(['create:finance:effect', 'update:finance:effect', 'create:legal:effect', 'remove:finance:effect']))
+    expect(history.every((h) => h.reason === SECRET_REASON)).toBe(true)
+    expect(history.length).toBeGreaterThanOrEqual(4)
   })
 })
