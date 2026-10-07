@@ -57,6 +57,18 @@ describe('PermissionMatrix', () => {
     expect(within(moduleRow('Pipeline rows')).queryByText(/system admin only/i)).not.toBeInTheDocument()
   })
 
+  it('shows a dash for a cell the payload does not carry, instead of crashing the screen', async () => {
+    const data = matrixFixture()
+    delete (data.grants['opp.pipeline'] as Record<string, unknown>).bid // one missing cell
+    delete (data.grants as Record<string, unknown>)['com.skus'] // a whole module row missing
+    vi.mocked(repository.getPermissionMatrix).mockResolvedValue(data)
+    renderMatrix()
+    await screen.findByRole('table', { name: /permission matrix/i })
+    expect(cellOf(moduleRow('Pipeline rows'), 'Bid')).toHaveTextContent('—')
+    expect(cellOf(moduleRow('Pipeline rows'), 'Sales')).toHaveTextContent('Read + edit all · own rows only') // the rest still renders
+    expect(cellOf(moduleRow('SKU catalog & BOM'), 'Sales')).toHaveTextContent('—')
+  })
+
   it('lists the named field sets so a cell like "(F1)" can be read', async () => {
     vi.mocked(repository.getPermissionMatrix).mockResolvedValue(matrixFixture())
     renderMatrix()

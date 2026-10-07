@@ -44,7 +44,8 @@ export function PermissionMatrix() {
                       {restricted && <span className="block text-[10px] font-normal text-amber-800">Some actions System Admin only</span>}
                     </th>
                     {roles.map((r) => {
-                      const g = data.grants[m.key][r.key]
+                      const g = data.grants?.[m.key]?.[r.key]
+                      if (!g) return <td key={r.key} className="px-2 py-1.5 text-muted">—</td> // a cell the payload does not carry: say so rather than crash
                       return (
                         <td key={r.key} className="px-2 py-1.5">
                           <span className={cn(LEVEL_TONE[g.level])}>{levelText(g.level, g.scope, g.sets)}</span>

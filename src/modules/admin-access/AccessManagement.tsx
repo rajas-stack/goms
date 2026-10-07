@@ -146,7 +146,7 @@ export function AccessManagement() {
                         <span key={o.id} className="mr-1 inline-flex items-center gap-1 rounded-full bg-panel px-2 py-0.5 text-[11px]" title={overrideTitle(o)}>
                           {o.effect === 'grant' ? '+' : '−'} {ROLE_LABELS[o.role]}
                           {canManage && !r.systemAdmin && (
-                            <button type="button" aria-label={`Remove ${ROLE_LABELS[o.role]} override`} className="text-muted hover:text-crimson"
+                            <button type="button" aria-label={`Remove ${ROLE_LABELS[o.role]} override for ${r.name || r.email}`} className="text-muted hover:text-crimson"
                               onClick={() => setRemoving({ id: o.id, email: r.email, role: o.role, effect: o.effect })}>×</button>
                           )}
                         </span>

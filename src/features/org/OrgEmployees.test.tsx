@@ -105,6 +105,51 @@ describe('OrgEmployees — email (System Admin only; the server enforces it)', (
     expect(await screen.findByLabelText('Asha Rao email')).toHaveValue('asha@amnex.com')
   })
 
+  it('does not send an email with no @, shows a message and puts the stored email back', async () => {
+    renderAs(as('enforce', 'system_admin'))
+    const input = await screen.findByLabelText('Asha Rao email')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'not an email')
+    await userEvent.tab()
+    expect(repository.updateOrgPerson).not.toHaveBeenCalled()
+    expect(await screen.findByRole('alert')).toHaveTextContent(/needs an @/i)
+    expect(await screen.findByLabelText('Asha Rao email')).toHaveValue('asha@amnex.com')
+  })
+
+  it('asks before clearing an email (it unbinds the derived role): cancel keeps it, OK sends the clear', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderAs(as('enforce', 'system_admin'))
+    let input = await screen.findByLabelText('Asha Rao email')
+    await userEvent.clear(input)
+    await userEvent.tab()
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/Asha Rao/))
+    expect(repository.updateOrgPerson).not.toHaveBeenCalled()
+    input = await screen.findByLabelText('Asha Rao email')
+    expect(input).toHaveValue('asha@amnex.com')
+
+    confirm.mockReturnValue(true)
+    await userEvent.clear(input)
+    await userEvent.tab()
+    expect(repository.updateOrgPerson).toHaveBeenCalledWith('p1', { email: '' })
+    confirm.mockRestore()
+  })
+
+  it('a refused edit in one row does not reset another row unsaved email input', async () => {
+    let refuse!: (e: Error) => void
+    vi.mocked(repository.updateOrgPerson).mockImplementation(() => new Promise((_, reject) => { refuse = reject }) as never)
+    renderAs(as('enforce', 'system_admin'))
+    const a = await screen.findByLabelText('Asha Rao email')
+    await userEvent.clear(a)
+    await userEvent.type(a, 'someone.else@amnex.com')
+    await userEvent.tab() // row A's save is now in flight
+    const b = screen.getByLabelText('Bala Iyer email')
+    await userEvent.type(b, 'bala@amnex')
+    refuse(Object.assign(new Error(SERVER_REFUSAL), { data: { code: 'FORBIDDEN', rbacDenied: true } }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(SERVER_REFUSAL)
+    expect(await screen.findByLabelText('Asha Rao email')).toHaveValue('asha@amnex.com') // A is put back
+    expect(screen.getByLabelText('Bala Iyer email')).toHaveValue('bala@amnex') // B keeps what was typed
+  })
+
   it('lets a System Admin add a person with an email, and sends no email when none is typed', async () => {
     renderAs(as('enforce', 'system_admin'))
     await screen.findByText('Asha Rao')

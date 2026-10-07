@@ -35,3 +35,9 @@ export const useCanEditEmailBinding = (): boolean => useSystemAdminStatus() !== 
 
 /** Shown next to every email-binding field. */
 export const EMAIL_BINDING_HELP = "Used to derive this person's role. Only System Admins can change it."
+
+/** Shown when a typed email has no "@" (the stored value is put back). */
+export const EMAIL_FORMAT_MESSAGE = 'That does not look like an email address (it needs an @). The stored email was kept.'
+/** Clearing an email unbinds the person from the role it derives, so the clear is confirmed. */
+export const clearEmailConfirmText = (name: string): string =>
+  `Clear ${name}'s email? Their role is derived from it, so they will lose the role (and any team assignments) that email gave them until an email is set again.`

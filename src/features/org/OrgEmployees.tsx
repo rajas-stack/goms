@@ -8,7 +8,7 @@ import { PersonName } from '@/components/ui/PersonName'
 import { useOrgPeople, useOrgPersonMutations } from '@/lib/api'
 import { normalizeEmail } from '@/lib/inputNormalization'
 import { cn } from '@/lib/utils'
-import { EMAIL_BINDING_HELP, useCanEditEmailBinding } from '@/modules/admin-access/useIsSystemAdmin'
+import { EMAIL_BINDING_HELP, EMAIL_FORMAT_MESSAGE, clearEmailConfirmText, useCanEditEmailBinding } from '@/modules/admin-access/useIsSystemAdmin'
 import {
   ORG_DEPARTMENTS, ORG_LEVELS, eligibleManagers, levelLabel, managerProblem, reportsBrokenByLevel, type OrgPerson,
 } from '@/data/org-structure'
@@ -34,7 +34,8 @@ export function OrgEmployees() {
   const [query, setQuery] = useState('')
   const [department, setDepartment] = useState('all')
   const [error, setError] = useState<string | null>(null)
-  const [emailResets, setEmailResets] = useState(0) // bumped when an email change is refused, so the field shows the stored value again
+  const [emailResets, setEmailResets] = useState<Record<string, number>>({}) // per row id, bumped when that row's email change is refused so its field shows the stored value again; other rows' unsaved input is untouched
+  const resetEmailField = (id: string) => setEmailResets((r) => ({ ...r, [id]: (r[id] ?? 0) + 1 }))
   const [draft, setDraft] = useState({ name: '', designation: '', level: '4', department: 'Pre-Sales', managerId: '', email: '' })
 
   const departments = useMemo(
@@ -61,7 +62,15 @@ export function OrgEmployees() {
     const next = normalizeEmail(raw, true)
     // Unchanged (the server compares trimmed and case-insensitively): nothing to send, and nothing for it to refuse.
     if (next.toLowerCase() === (person.email ?? '').trim().toLowerCase()) return
-    if (!(await run(() => update.mutateAsync({ id: person.id, patch: { email: next } }), 'Could not save the email.'))) setEmailResets((n) => n + 1)
+    // A light check before anything is sent (the server stays the boundary): a typed email needs an @.
+    if (next && !next.includes('@')) {
+      setError(EMAIL_FORMAT_MESSAGE)
+      resetEmailField(person.id)
+      return
+    }
+    // Clearing unbinds the person from the role their email derives, so it is confirmed first.
+    if (!next && !window.confirm(clearEmailConfirmText(person.name))) { resetEmailField(person.id); return }
+    if (!(await run(() => update.mutateAsync({ id: person.id, patch: { email: next } }), 'Could not save the email.'))) resetEmailField(person.id)
   }
 
   const changeLevel = (person: OrgPerson, level: number) => {
@@ -182,7 +191,7 @@ export function OrgEmployees() {
                   <td className="border-b border-line/70 px-3 py-1.5">
                     {emailEditable ? (
                       <Input
-                        key={`${p.id}:${p.email}:${emailResets}`} type="email"
+                        key={`${p.id}:${p.email}:${emailResets[p.id] ?? 0}`} type="email"
                         aria-label={`${p.name} email`} defaultValue={p.email} placeholder="—" className="h-8"
                         onBlur={(e) => void changeEmail(p, e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}

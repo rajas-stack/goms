@@ -163,6 +163,14 @@ describe('AccessManagement: removing an override', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Remove' }))
     expect(repository.removeRoleOverride).toHaveBeenCalledWith('o1')
   })
+  it('words each chip remove button with the person, so the labels are unique across rows', async () => {
+    const twoChips = [withChip[0], { ...readiness[1], overrides: [{ ...chipOverride, id: 'o2' }], effectiveRoles: ['finance'] }]
+    vi.mocked(repository.getAccessReadiness).mockResolvedValue(twoChips as any)
+    renderAs(['system_admin'])
+    await screen.findByText('Denish')
+    const labels = screen.getAllByRole('button', { name: /^remove finance override for /i }).map((b) => b.getAttribute('aria-label'))
+    expect(labels).toEqual(['Remove Finance override for Denish', 'Remove Finance override for Nirav Shah'])
+  })
   it('does nothing when the confirmation is cancelled', async () => {
     vi.mocked(repository.getAccessReadiness).mockResolvedValue(withChip as any)
     renderAs(['system_admin'])

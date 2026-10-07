@@ -28,7 +28,10 @@ export const authPromptLink: TRPCLink<AppRouter> = () => {
         error(err) {
           const data = (err as { data?: { code?: string; rbacDenied?: boolean } } | null)?.data
           // An RBAC denial means "signed in, but not allowed" — the sign-in dialog would be wrong and misleading.
-          if (!data?.rbacDenied && (data?.code === 'UNAUTHORIZED' || data?.code === 'FORBIDDEN')) {
+          // With RBAC off the access router's own allow-list check throws a plain FORBIDDEN (no rbacDenied); the Role & Access screen
+          // renders its own "Only System Admins" message, and "needs an @amnex.com account" would be wrong for a signed-in user.
+          const accessScreenRefusal = data?.code === 'FORBIDDEN' && typeof op.path === 'string' && op.path.startsWith('access.')
+          if (!data?.rbacDenied && !accessScreenRefusal && (data?.code === 'UNAUTHORIZED' || data?.code === 'FORBIDDEN')) {
             notifyAuthRequired(data.code === 'FORBIDDEN' ? 'forbidden' : 'unauthorized')
           }
           observer.error(err)

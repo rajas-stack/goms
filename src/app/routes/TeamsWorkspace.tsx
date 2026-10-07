@@ -11,7 +11,7 @@ import { Combobox, type ComboboxOption } from '@/components/ui/Combobox'
 import { Tabs } from '@/components/ui/Tabs'
 import { useDeliveryTeamMemberMutations, useDeliveryTeamMembers, useOpportunities } from '@/lib/api'
 import { normalizeEmail } from '@/lib/inputNormalization'
-import { EMAIL_BINDING_HELP, useCanEditEmailBinding } from '@/modules/admin-access/useIsSystemAdmin'
+import { EMAIL_BINDING_HELP, EMAIL_FORMAT_MESSAGE, clearEmailConfirmText, useCanEditEmailBinding } from '@/modules/admin-access/useIsSystemAdmin'
 import { PIPELINE_STAGE_MAP } from '@/data/pipeline-stages'
 import type { DeliveryTeamKey, DeliveryTeamMember, Opportunity } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -76,7 +76,8 @@ export function TeamRoster({ team }: { team: DeliveryTeamKey }) {
   const { update, setStatus, remove } = useDeliveryTeamMemberMutations()
   const emailEditable = useCanEditEmailBinding()
   const [error, setError] = useState<string | null>(null)
-  const [emailResets, setEmailResets] = useState(0) // bumped when an email change is refused, so the field shows the stored value again
+  const [emailResets, setEmailResets] = useState<Record<string, number>>({}) // per member id, bumped when that row's email change is refused so its field shows the stored value again; other rows' unsaved input is untouched
+  const resetEmailField = (id: string) => setEmailResets((r) => ({ ...r, [id]: (r[id] ?? 0) + 1 }))
   const activeMembers = members.filter((member) => member.status === 'active')
   const nameOf = new Map(members.map((member) => [member.id, member]))
 
@@ -84,12 +85,20 @@ export function TeamRoster({ team }: { team: DeliveryTeamKey }) {
   async function changeEmail(member: DeliveryTeamMember, raw: string) {
     const next = normalizeEmail(raw, true)
     if (next.toLowerCase() === (member.email ?? '').trim().toLowerCase()) return
+    // A light check before anything is sent (the server stays the boundary): a typed email needs an @.
+    if (next && !next.includes('@')) {
+      setError(EMAIL_FORMAT_MESSAGE)
+      resetEmailField(member.id)
+      return
+    }
+    // Clearing unbinds the member from the team assignments their email derives, so it is confirmed first.
+    if (!next && !window.confirm(clearEmailConfirmText(member.name))) { resetEmailField(member.id); return }
     setError(null)
     try {
       await update.mutateAsync({ id: member.id, patch: { email: next } })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not change the email.')
-      setEmailResets((n) => n + 1)
+      resetEmailField(member.id)
     }
   }
 
@@ -144,7 +153,7 @@ export function TeamRoster({ team }: { team: DeliveryTeamKey }) {
                 )}
                 {!member.orgPersonId && (emailEditable ? (
                   <Input
-                    key={`${member.id}:${member.email}:${emailResets}`} type="email"
+                    key={`${member.id}:${member.email}:${emailResets[member.id] ?? 0}`} type="email"
                     aria-label={`${member.name} email`} defaultValue={member.email} placeholder="Email" className="h-8 w-56"
                     onBlur={(event) => void changeEmail(member, event.target.value)}
                     onKeyDown={(event) => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur() }}

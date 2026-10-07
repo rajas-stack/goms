@@ -96,6 +96,53 @@ describe('TeamRoster — member email (System Admin only; the server enforces it
     expect(await screen.findByLabelText('Hand Added email')).toHaveValue('hand@amnex.com')
   })
 
+  it('does not send an email with no @, shows a message and puts the stored email back', async () => {
+    renderAs(as('enforce', 'system_admin'))
+    const input = await screen.findByLabelText('Hand Added email')
+    await userEvent.clear(input)
+    await userEvent.type(input, 'not an email')
+    await userEvent.tab()
+    expect(repository.updateDeliveryTeamMember).not.toHaveBeenCalled()
+    expect(await screen.findByRole('alert')).toHaveTextContent(/needs an @/i)
+    expect(await screen.findByLabelText('Hand Added email')).toHaveValue('hand@amnex.com')
+  })
+
+  it('asks before clearing an email: cancel keeps it, OK sends the clear', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    renderAs(as('enforce', 'system_admin'))
+    let input = await screen.findByLabelText('Hand Added email')
+    await userEvent.clear(input)
+    await userEvent.tab()
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/Hand Added/))
+    expect(repository.updateDeliveryTeamMember).not.toHaveBeenCalled()
+    input = await screen.findByLabelText('Hand Added email')
+    expect(input).toHaveValue('hand@amnex.com')
+
+    confirm.mockReturnValue(true)
+    await userEvent.clear(input)
+    await userEvent.tab()
+    expect(repository.updateDeliveryTeamMember).toHaveBeenCalledWith('m1', { email: '' })
+    confirm.mockRestore()
+  })
+
+  it('a refused edit in one row does not reset another row unsaved email input', async () => {
+    const hand2 = { ...members[0], id: 'm4', name: 'Second Hand', email: 'second@amnex.com' }
+    vi.mocked(repository.listDeliveryTeamMembers).mockResolvedValue([members[0], hand2] as never)
+    let refuse!: (e: Error) => void
+    vi.mocked(repository.updateDeliveryTeamMember).mockImplementation(() => new Promise((_, reject) => { refuse = reject }) as never)
+    renderAs(as('enforce', 'system_admin'))
+    const a = await screen.findByLabelText('Hand Added email')
+    await userEvent.clear(a)
+    await userEvent.type(a, 'someone.else@amnex.com')
+    await userEvent.tab() // row A's save is now in flight
+    const b = screen.getByLabelText('Second Hand email')
+    await userEvent.type(b, '.x')
+    refuse(Object.assign(new Error(SERVER_REFUSAL), { data: { code: 'FORBIDDEN', rbacDenied: true } }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(SERVER_REFUSAL)
+    expect(await screen.findByLabelText('Hand Added email')).toHaveValue('hand@amnex.com')
+    expect(screen.getByLabelText('Second Hand email')).toHaveValue('second@amnex.com.x')
+  })
+
   it('shows no email helper when every member follows the org', async () => {
     vi.mocked(repository.listDeliveryTeamMembers).mockResolvedValue([members[1]] as never)
     renderAs(as('enforce', 'cxo'))
