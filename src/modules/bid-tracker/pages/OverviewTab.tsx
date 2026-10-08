@@ -3,10 +3,12 @@ import { BID_STAGE_MAP, BID_STAGE_REQUIREMENTS } from '@goms/domain'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { PersonName } from '@/components/ui/PersonName'
 import { useBidCorrigenda, useBidMutations, useFollowUpMutations, useFollowUps, useResolvedOwners, useSalesPersons } from '@/lib/api'
 import { isoToday } from '@/lib/dates'
 import type { Bid, BidMilestone } from '@/lib/types'
+import { CorrigendaSection } from '../corrigenda/CorrigendaSection'
 
 const DATA_CONFIDENCE_LABEL: Record<Bid['dataConfidence'], string> = { verified: 'Verified', needs_review: 'Needs Review' }
 
@@ -120,8 +122,8 @@ export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMile
           />
           <label className="flex items-center gap-1 text-[13px] text-muted">
             Due Date
-            <input
-              type="date" aria-label="Due Date" value={dueDate} onChange={(e) => setDueDate(e.target.value)}
+            <FriendlyDateInput
+              aria-label="Due Date" value={dueDate} onChange={setDueDate} floatingFeedback wrapperClassName="w-[10rem]"
               className="h-8 rounded-lg border border-line bg-white px-2 text-[13px] text-ink focus-visible:focus-ring"
             />
           </label>
@@ -137,6 +139,7 @@ export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMile
         </div>
         {actionError && <div role="alert" className="pt-1 text-[12px] text-crimson">{actionError}</div>}
       </div>
+      <CorrigendaSection bidId={bid.id} />
     </div>
     </Gate>
   )

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Checkbox } from '@/components/ui/Checkbox'
 import { Collapsible } from '@/components/ui/Collapsible'
 import { Field, Input, Select } from '@/components/ui/Field'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { Icon } from '@/components/ui/Icon'
 import { Menu } from '@/components/ui/Menu'
 import { useMasters } from '../api'
@@ -220,8 +221,8 @@ export function SkuFormDialog({ open, onClose, editing, onSubmit }: {
                 {billingTypes.map((b) => <option key={b.id} value={b.id}>{b.code} — {b.name}</option>)}
               </Select>
             </Field>
-            <Field label="Active From"><Input type="date" value={values.activeFrom} onChange={(e) => set('activeFrom', e.target.value)} /></Field>
-            <Field label="Active Till" hint="Leave blank for open-ended."><Input type="date" value={values.activeTill} onChange={(e) => set('activeTill', e.target.value)} /></Field>
+            <Field label="Active From"><FriendlyDateInput value={values.activeFrom} onChange={(v) => set('activeFrom', v)} /></Field>
+            <Field label="Active Till" hint="Leave blank for open-ended."><FriendlyDateInput value={values.activeTill} onChange={(v) => set('activeTill', v)} /></Field>
             <Field label="Lifecycle Status">
               <Select value={values.lifecycleStatus} onChange={(e) => set('lifecycleStatus', e.target.value as CommercialSku['lifecycleStatus'])}>
                 <option value="draft">Draft</option>

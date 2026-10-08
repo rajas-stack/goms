@@ -73,13 +73,13 @@ const SELECT_COL_WIDTH = 40
 // bevel (light top-left edge, soft dark bottom-right edge), so the grid reads as
 // raised tiles while staying see-through. Frozen cells stay opaque (FROZEN_BG)
 // because scrolling content slides underneath them.
-const EDITABLE_BG = 'bg-white/70 group-hover/row:bg-[#F2F8FD]/85'
-const READONLY_BG = 'bg-[#F3F6F9]/60 group-hover/row:bg-[#F2F8FD]/85'
-const SELECTED_BG = 'bg-[#E4F1FB]/90'
-const FROZEN_BG = 'bg-[#FBFDFF]'
-const SHEET_BG = 'bg-[linear-gradient(180deg,#F4F8FC_0%,#EBF2F9_100%)]'
-const CELL_BEVEL = 'inset 1px 1px 0 rgba(255,255,255,0.95), inset -1px -1px 0 rgba(11,43,73,0.07)'
-const FROZEN_SHADOW = '3px 0 5px -2px rgba(11,43,73,0.28)'
+const EDITABLE_BG = 'bg-white/70 group-hover/row:bg-grid-hover/85'
+const READONLY_BG = 'bg-grid-readonly/60 group-hover/row:bg-grid-hover/85'
+const SELECTED_BG = 'bg-grid-selected/90'
+const FROZEN_BG = 'bg-grid-frozen'
+const SHEET_BG = 'bg-[image:var(--grid-sheet)]'
+const CELL_BEVEL = 'var(--grid-bevel)'
+const FROZEN_SHADOW = 'var(--grid-frozen-shadow)'
 /** Frozen columns may take at most this share of the visible width, so the
  *  scrolling part of the sheet never disappears (matters most on a phone). */
 const MAX_FROZEN_SHARE = 0.6
@@ -764,7 +764,7 @@ export function MasterGrid(props: MasterGridProps) {
         { label: 'Delete bid…', icon: 'Trash2', danger: true, onSelect: () => deleteBid(row) },
       ],
     ]
-    setMenu({ x: e.clientX, y: e.clientY, title: `${row.bidCode} · ${meta.header}`, groups })
+    setMenu({ x: e.clientX, y: e.clientY, title: `${row.opportunityName} · ${meta.header}`, groups })
   }
   const openHeaderMenu = (e: React.MouseEvent, column: { getIsSorted: () => false | 'asc' | 'desc'; getCanSort: () => boolean; toggleSorting: (desc?: boolean, multi?: boolean) => void; clearSorting: () => void }, meta: GridColumnMeta) => {
     e.preventDefault()
@@ -905,7 +905,7 @@ export function MasterGrid(props: MasterGridProps) {
             <tr>
               <th
                 scope="col" rowSpan={2} style={{ left: 0 }}
-                className="sticky z-10 border-b border-line bg-[#F4F7FA] px-0 text-center"
+                className="sticky z-10 border-b border-line bg-grid-head px-0 text-center"
               >
                 <div className="flex justify-center">
                   <Checkbox
@@ -919,7 +919,7 @@ export function MasterGrid(props: MasterGridProps) {
                   key={i} colSpan={run.span} scope="colgroup"
                   style={run.frozen ? { left: run.left } : undefined}
                   className={cn(
-                    'h-6 overflow-hidden whitespace-nowrap border-l border-line first:border-l-0 bg-[#F4F7FA] px-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.08em] text-goms-navy/70',
+                    'h-6 overflow-hidden whitespace-nowrap border-l border-line first:border-l-0 bg-grid-head px-2 text-left text-[10.5px] font-semibold uppercase tracking-[0.08em] text-goms-navy/70',
                     run.frozen && 'sticky z-10',
                   )}
                 >
@@ -958,7 +958,7 @@ export function MasterGrid(props: MasterGridProps) {
                       onDragEnd={() => { setDragId(null); setDragOverId(null) }}
                       className={cn(
                         'group/th h-9 border-b border-line pl-3 pr-1 text-left transition-colors duration-700',
-                        sorted ? 'bg-[#EAF4FC]' : 'bg-white',
+                        sorted ? 'bg-grid-sorted' : 'bg-white',
                         flashId === meta.id && 'bg-goms-green/25',
                         isFrozen && 'sticky z-10',
                         frozen.lastId === meta.id && 'border-r-2 border-r-goms-navy/25',

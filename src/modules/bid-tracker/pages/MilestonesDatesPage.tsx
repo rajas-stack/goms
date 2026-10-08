@@ -32,7 +32,7 @@ export function MilestonesDatesPage() {
               key={m.id} className="cursor-pointer hover:bg-ink-900/[0.03]"
               onClick={() => navigate(`/bid-tracker/bid/${m.bidId}?tab=milestones`)}
             >
-              <td className="border-b border-line px-3 py-2">{m.opportunityName} <span className="text-xs text-muted">{m.bidCode}</span></td>
+              <td className="border-b border-line px-3 py-2">{m.opportunityName}</td>
               <td className="border-b border-line px-3 py-2">{m.label}</td>
               <td className="border-b border-line px-3 py-2 tabular-nums">{formatDue(m.dueAt)}</td>
               <td className="border-b border-line px-3 py-2">{m.venue ?? '—'}</td>

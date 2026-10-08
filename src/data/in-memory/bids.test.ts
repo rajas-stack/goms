@@ -58,14 +58,15 @@ describe('InMemoryRepository Bid Tracker', () => {
     expect((await repository.getBid(bid.id))!.dataConfidence).toBe('verified')
   })
 
-  it('refuses to accept a change to a frozen field', async () => {
+  // Protection is switched off (PROTECTED_VALUES_ENFORCED = false): a freeze record never blocks.
+  it('accepts a change even when a freeze record exists', async () => {
     const { bid } = await newBid()
     const cor = await repository.createBidCorrigendum({
       bidId: bid.id, corrigendumNumber: 1,
       changes: [{ fieldKey: 'submissionDeadline', currentValue: 'a', proposedValue: 'b' }],
     })
     await repository.freezeValue('bid', bid.id, 'submissionDeadline')
-    await expect(repository.reviewCorrigendumChange({ changeId: cor.changes[0].id, decision: 'accepted' })).rejects.toThrow(/frozen/)
+    await expect(repository.reviewCorrigendumChange({ changeId: cor.changes[0].id, decision: 'accepted' })).resolves.toBeTruthy()
   })
 
   it('deleteBid is blocked once the bid has a corrigendum; archive still works', async () => {

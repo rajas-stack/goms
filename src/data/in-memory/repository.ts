@@ -9,6 +9,8 @@ import type {
 } from '@/lib/types'
 import type { MyAccess } from '../../../apps/api/src/routers/auth'
 import { uid } from '@/lib/utils'
+import { PROTECTED_VALUES_ENFORCED, validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type SaveBidSynopsisInput } from '@goms/domain'
+import { assertUniqueTenderWebsiteName, normalizeTenderWebsiteInput, type TenderWebsite, type TenderWebsiteInput, type TenderDscEmployee } from '@goms/domain'
 import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType } from '@/lib/node-types'
 import {
@@ -45,6 +47,10 @@ import type {
   CreateBoqInput, CreateBoqLineItemInput, CreateBomItemInput, CreateMasterInput, CreateSkuInput, MasterEntityKey,
   MasterRowMap, ProductEditionFeature, UpdateBoqInput,
 } from '@/modules/commercial-calculator/types'
+import {
+  changeDetails, normalizeChange, normalizeRegister, patchRegister,
+  type CreateCorrigendumInput, type UpdateCorrigendumRegisterInput,
+} from '@/modules/bid-tracker/corrigenda/model'
 
 export interface StateSummary {
   code: number
@@ -552,6 +558,16 @@ export interface Repository {
   unarchiveBid(id: string): Promise<Bid>
   deleteBid(id: string): Promise<void>
   listBidActionQueue(): Promise<ActionQueueEntry[]>
+  getBidSynopsis(bidId: string, section: BidSynopsisSection): Promise<BidSynopsis | null>
+  saveBidSynopsis(input: SaveBidSynopsisInput): Promise<BidSynopsis>
+
+  /** Tender portals managed in Settings, offered in a bid's General tab. */
+  listTenderWebsites(): Promise<TenderWebsite[]>
+  listTenderDscEmployees(): Promise<TenderDscEmployee[]>
+  createTenderWebsite(input: TenderWebsiteInput): Promise<TenderWebsite>
+  updateTenderWebsite(id: string, input: TenderWebsiteInput): Promise<TenderWebsite>
+  setTenderWebsiteEditingLock(id: string, locked: boolean): Promise<TenderWebsite>
+  deleteTenderWebsite(id: string): Promise<void>
 
   listBidMilestones(bidId: string): Promise<BidMilestone[]>
   listAllBidMilestones(): Promise<BidMilestoneWithBid[]>
@@ -563,10 +579,9 @@ export interface Repository {
   deleteBidMilestone(id: string): Promise<void>
 
   listBidCorrigenda(bidId: string): Promise<BidCorrigendum[]>
-  createBidCorrigendum(input: {
-    bidId: string; corrigendumNumber: number; sourceDocumentId?: string
-    changes: { fieldKey: string; currentValue: string; proposedValue: string }[]
-  }): Promise<BidCorrigendum>
+  createBidCorrigendum(input: CreateCorrigendumInput): Promise<BidCorrigendum>
+  /** Edits the register fields only — changes are append-only and never rewritten. */
+  updateBidCorrigendumRegister(input: UpdateCorrigendumRegisterInput): Promise<BidCorrigendum>
   reviewCorrigendumChange(input: { changeId: string; decision: 'accepted' | 'rejected'; reason?: string }): Promise<BidCorrigendumChange>
 
   listProtectedValues(entityType: string, entityId: string): Promise<ProtectedValue[]>
@@ -671,6 +686,7 @@ class InMemoryRepository implements Repository {
       orgPeople: data.orgPeople ?? [],
       ownershipAssignments: data.ownershipAssignments ?? [],
       bids: data.bids ?? [],
+      bidSynopsis: data.bidSynopsis ?? [],
       bidMilestones: data.bidMilestones ?? [],
       bidCorrigenda: data.bidCorrigenda ?? [],
       bidCorrigendumChanges: data.bidCorrigendumChanges ?? [],
@@ -680,6 +696,7 @@ class InMemoryRepository implements Repository {
       bidSavedViews: data.bidSavedViews ?? [],
       bidCustomFields: data.bidCustomFields ?? [],
       bidCustomFieldValues: data.bidCustomFieldValues ?? [],
+      tenderWebsites: data.tenderWebsites ?? [],
     }
     // `mergeAudit` postdates some locally persisted snapshots (the static
     // type says it's always there, but a snapshot saved before this field
@@ -1548,6 +1565,7 @@ class InMemoryRepository implements Repository {
     this.data.orgPeople = this.data.orgPeople
       .filter((p) => p.id !== id)
       .map((p) => (p.managerId === id ? { ...p, managerId: person.managerId } : p))
+    this.data.tenderWebsites = this.data.tenderWebsites.map(site => site.dscEmployeeId === id ? { ...site, dscEmployeeId: null } : site)
     this.resyncTeamsFromOrg()
   }
 
@@ -1577,6 +1595,7 @@ class InMemoryRepository implements Repository {
   /** Mirrors the API's assertFieldsNotProtected (spec §13): a frozen field on a
    *  bid rejects direct edits until it is unfrozen. */
   private assertNotProtected(bidId: string, fieldKeys: string[]) {
+    if (!PROTECTED_VALUES_ENFORCED) return
     const frozen = this.data.protectedValues.find(
       (p) => p.entityType === 'bid' && p.entityId === bidId && p.frozen && fieldKeys.includes(p.fieldKey),
     )
@@ -1589,8 +1608,13 @@ class InMemoryRepository implements Repository {
     return bid
   }
 
+  /** Returns fresh, normalized copies: a snapshot saved before the Corrigendum
+   *  Part 1 register/clause fields existed reads back with their defaults. */
   private joinCorrigendum(c: Omit<BidCorrigendum, 'changes'>): BidCorrigendum {
-    return { ...c, changes: this.data.bidCorrigendumChanges.filter((ch) => ch.corrigendumId === c.id) }
+    return {
+      ...c, ...normalizeRegister(c),
+      changes: this.data.bidCorrigendumChanges.filter((ch) => ch.corrigendumId === c.id).map((ch) => normalizeChange(ch)),
+    }
   }
 
   async listBidsForGrid(filterRules: SystemBidViewFilterRule[] = []) {
@@ -1851,12 +1875,13 @@ class InMemoryRepository implements Repository {
     this.requireBid(id)
     const referenced =
       this.data.bidCorrigenda.some((c) => c.bidId === id)
-      || this.data.protectedValues.some((p) => p.entityType === 'bid' && p.entityId === id)
+      || (PROTECTED_VALUES_ENFORCED && this.data.protectedValues.some((p) => p.entityType === 'bid' && p.entityId === id))
       || this.data.bidDocuments.some((d) => d.entityType === 'bid' && d.entityId === id)
       || this.data.followUps.some((f) => f.entityType === 'bid' && f.entityId === id)
     if (referenced) throw new Error('This bid has corrigenda, protected values, documents or follow-ups — archive it instead.')
     this.data.bids = this.data.bids.filter((b) => b.id !== id)
     this.data.bidMilestones = this.data.bidMilestones.filter((m) => m.bidId !== id)
+    this.data.bidSynopsis = this.data.bidSynopsis.filter((s) => s.bidId !== id)
     // Mirrors the backend's ON DELETE CASCADE on bid_custom_field_values.
     this.data.bidCustomFieldValues = this.data.bidCustomFieldValues.filter((v) => v.bidId !== id)
   }
@@ -1878,6 +1903,76 @@ class InMemoryRepository implements Repository {
       })
     }
     return out.sort((a, b) => a.dueDate.localeCompare(b.dueDate))
+  }
+
+  async getBidSynopsis(bidId: string, section: BidSynopsisSection): Promise<BidSynopsis | null> {
+    this.requireBid(bidId)
+    const record = this.data.bidSynopsis.find(s => s.bidId === bidId && s.section === section)
+    return record ? structuredClone(record) : null
+  }
+
+  async saveBidSynopsis(input: SaveBidSynopsisInput): Promise<BidSynopsis> {
+    const bid = this.requireBid(input.bidId)
+    validateSynopsisDocument(input.document)
+    const existing = this.data.bidSynopsis.find(s => s.bidId === input.bidId && s.section === input.section)
+    if ((existing?.revision ?? 0) !== input.expectedRevision) throw new Error('This section was changed elsewhere. Reload the saved version before saving again.')
+    const updated: BidSynopsis = {
+      bidId: input.bidId, section: input.section, document: structuredClone(input.document),
+      revision: input.expectedRevision + 1, updatedAt: new Date().toISOString(), updatedBy: null,
+    }
+    if (existing) Object.assign(existing, updated)
+    else this.data.bidSynopsis.push(updated)
+    bid.updatedAt = updated.updatedAt
+    return structuredClone(updated)
+  }
+
+  async listTenderWebsites(): Promise<TenderWebsite[]> {
+    return [...this.data.tenderWebsites].sort((a, b) => a.name.localeCompare(b.name)).map(site => ({ ...site }))
+  }
+
+  async listTenderDscEmployees(): Promise<TenderDscEmployee[]> {
+    return (await this.listOrgPeople()).filter(person => person.status === 'active' && [0, 1, 2].includes(person.level))
+      .map(({ id, name, level }) => ({ id, name, level }))
+  }
+
+  private async validateTenderDsc(employeeId: string | null | undefined) {
+    if (employeeId && !(await this.listTenderDscEmployees()).some(person => person.id === employeeId)) {
+      throw new Error('Select an active employee at L0, L1, or L2 for DSC.')
+    }
+  }
+
+  async createTenderWebsite(input: TenderWebsiteInput): Promise<TenderWebsite> {
+    const clean = normalizeTenderWebsiteInput(input)
+    assertUniqueTenderWebsiteName(this.data.tenderWebsites, clean.name)
+    await this.validateTenderDsc(clean.dscEmployeeId)
+    const now = new Date().toISOString()
+    const site: TenderWebsite = { id: uid('tws'), ...clean, createdAt: now, updatedAt: now }
+    this.data.tenderWebsites = [...this.data.tenderWebsites, site]
+    return { ...site }
+  }
+
+  async updateTenderWebsite(id: string, input: TenderWebsiteInput): Promise<TenderWebsite> {
+    const existing = this.data.tenderWebsites.find(site => site.id === id)
+    if (!existing) throw new Error('That website no longer exists.')
+    if (existing.editingLocked) throw new Error('Unlock editing before changing this website.')
+    const clean = normalizeTenderWebsiteInput(input)
+    assertUniqueTenderWebsiteName(this.data.tenderWebsites, clean.name, id)
+    if (clean.dscEmployeeId !== existing.dscEmployeeId) await this.validateTenderDsc(clean.dscEmployeeId)
+    const updated: TenderWebsite = { ...existing, ...clean, updatedAt: new Date().toISOString() }
+    this.data.tenderWebsites = this.data.tenderWebsites.map(site => (site.id === id ? updated : site))
+    return { ...updated }
+  }
+
+  async deleteTenderWebsite(id: string): Promise<void> {
+    this.data.tenderWebsites = this.data.tenderWebsites.filter(site => site.id !== id)
+  }
+
+  async setTenderWebsiteEditingLock(id: string, locked: boolean): Promise<TenderWebsite> {
+    const existing = this.data.tenderWebsites.find(site => site.id === id)
+    if (!existing) throw new Error('That website no longer exists.')
+    const updated = { ...existing, editingLocked: locked, updatedAt: new Date().toISOString() }
+    this.data.tenderWebsites = this.data.tenderWebsites.map(site => site.id === id ? updated : site)
+    return { ...updated }
   }
 
   async listAllBidMilestones(): Promise<BidMilestoneWithBid[]> {
@@ -1947,17 +2042,19 @@ class InMemoryRepository implements Repository {
       .map((c) => this.joinCorrigendum(c))
   }
 
-  async createBidCorrigendum(input: {
-    bidId: string; corrigendumNumber: number; sourceDocumentId?: string
-    changes: { fieldKey: string; currentValue: string; proposedValue: string }[]
-  }) {
+  async createBidCorrigendum(input: CreateCorrigendumInput) {
     const bid = this.requireBid(input.bidId)
+    if (!Number.isInteger(input.corrigendumNumber) || input.corrigendumNumber < 1) throw new Error('Corrigendum number must be a positive whole number.')
     if (!input.changes.length) throw new Error('A corrigendum needs at least one change.')
     if (this.data.bidCorrigenda.some((c) => c.bidId === input.bidId && c.corrigendumNumber === input.corrigendumNumber)) {
       throw new Error(`Corrigendum ${input.corrigendumNumber} already exists for this bid.`)
     }
+    const keys = input.changes.map((ch) => ch.fieldKey.trim())
+    if (keys.some((k) => !k)) throw new Error('Every change needs a clause or field key.')
+    if (new Set(keys).size !== keys.length) throw new Error('Each clause can change only once per corrigendum.')
     for (const ch of input.changes) {
-      if (ch.fieldKey === 'tenderLink') continue
+      // Clause changes are tracked for history only; field changes must target a real slot.
+      if (ch.kind === 'clause' || ch.fieldKey === 'tenderLink') continue
       if (!this.data.bidMilestones.some((m) => m.bidId === input.bidId && m.key === ch.fieldKey)) {
         throw new Error(`Unknown field "${ch.fieldKey}" — create its milestone slot first.`)
       }
@@ -1965,17 +2062,26 @@ class InMemoryRepository implements Repository {
     const corrigendum: Omit<BidCorrigendum, 'changes'> = {
       id: uid('cor'), bidId: input.bidId, corrigendumNumber: input.corrigendumNumber,
       sourceDocumentId: input.sourceDocumentId ?? null, detectedAt: new Date().toISOString(),
-      reviewedAt: null, reviewedBy: null, status: 'pending_review',
+      reviewedAt: null, reviewedBy: null, status: 'pending_review', ...normalizeRegister(input.register),
     }
-    this.data.bidCorrigenda.push(corrigendum)
-    for (const ch of input.changes) {
-      this.data.bidCorrigendumChanges.push({
-        id: uid('cch'), corrigendumId: corrigendum.id, ...ch, decision: 'pending', decidedAt: null, decidedBy: null,
-      })
-    }
+    const changes = input.changes.map((ch) => ({
+      id: uid('cch'), corrigendumId: corrigendum.id, fieldKey: ch.fieldKey.trim(),
+      currentValue: ch.currentValue, proposedValue: ch.proposedValue,
+      decision: 'pending' as const, decidedAt: null, decidedBy: null, ...changeDetails({ ...ch, fieldKey: ch.fieldKey.trim() }),
+    }))
+    this.data.bidCorrigenda = [...this.data.bidCorrigenda, corrigendum]
+    this.data.bidCorrigendumChanges = [...this.data.bidCorrigendumChanges, ...changes]
     bid.dataConfidence = 'needs_review'
     bid.updatedAt = new Date().toISOString()
     return this.joinCorrigendum(corrigendum)
+  }
+
+  async updateBidCorrigendumRegister(input: UpdateCorrigendumRegisterInput) {
+    const existing = this.data.bidCorrigenda.find((c) => c.id === input.corrigendumId)
+    if (!existing) throw new Error(`No such corrigendum: ${input.corrigendumId}`)
+    const updated = { ...existing, ...patchRegister(normalizeRegister(existing), input.patch) }
+    this.data.bidCorrigenda = this.data.bidCorrigenda.map((c) => (c.id === existing.id ? updated : c))
+    return this.joinCorrigendum(updated)
   }
 
   async reviewCorrigendumChange(input: { changeId: string; decision: 'accepted' | 'rejected'; reason?: string }) {
@@ -1986,11 +2092,13 @@ class InMemoryRepository implements Repository {
     const now = new Date().toISOString()
 
     if (input.decision === 'accepted') {
-      const frozen = this.data.protectedValues.some(
+      const frozen = PROTECTED_VALUES_ENFORCED && this.data.protectedValues.some(
         (p) => p.entityType === 'bid' && p.entityId === bid.id && p.fieldKey === change.fieldKey && p.frozen,
       )
       if (frozen) throw new Error(`"${change.fieldKey}" is frozen — unfreeze it before accepting this change.`)
-      if (change.fieldKey === 'tenderLink') {
+      if (normalizeChange(change).kind === 'clause') {
+        // A tender clause has no bid field to write — accepting just records the decision.
+      } else if (change.fieldKey === 'tenderLink') {
         bid.tenderLink = change.proposedValue
         bid.updatedAt = now
       } else {
@@ -2019,7 +2127,7 @@ class InMemoryRepository implements Repository {
       corrigendum.reviewedAt = now
       // Like the API, resolving every change does NOT clear needs_review — a person confirms it via markBidVerified.
     }
-    return change
+    return normalizeChange(change)
   }
 
   async listProtectedValues(entityType: string, entityId: string) {
@@ -3003,6 +3111,10 @@ class InMemoryRepository implements Repository {
  *  snapshot after each of these resolves, so a new mutating method MUST be
  *  listed here or its effects won't survive a reload. */
 const MUTATOR_KEYS = [
+  'saveBidSynopsis',
+  'createTenderWebsite', 'updateTenderWebsite', 'deleteTenderWebsite', 'setTenderWebsiteEditingLock',
+  'createDeliveryTeamMember', 'updateDeliveryTeamMember', 'setDeliveryTeamMemberStatus', 'deleteDeliveryTeamMember',
+  'createOrgPerson', 'updateOrgPerson', 'deleteOrgPerson',
   'createNode', 'updateNode', 'setNodeStatus', 'deleteNode', 'moveNode', 'duplicateNode',
   'reorderNode', 'importChildren', 'importEmployees',
   'createEmployee', 'updateEmployee', 'setManager', 'deleteEmployee', 'mergeEmployees',
@@ -3018,7 +3130,7 @@ const MUTATOR_KEYS = [
   'createCustomer', 'updateCustomer', 'deleteCustomer',
   'createBid', 'createBidForNewOpportunity', 'updateBid', 'archiveBid', 'markBidVerified', 'unarchiveBid', 'deleteBid',
   'createBidMilestone', 'updateBidMilestone', 'deleteBidMilestone',
-  'createBidCorrigendum', 'reviewCorrigendumChange', 'freezeValue', 'unfreezeValue',
+  'createBidCorrigendum', 'updateBidCorrigendumRegister', 'reviewCorrigendumChange', 'freezeValue', 'unfreezeValue',
   'requestDocumentUploadUrl', 'confirmDocumentUpload', 'deleteDocument', 'createDocumentCitation', 'deleteDocumentCitation',
   'createBidSavedView', 'updateBidSavedView', 'deleteBidSavedView',
   'createBidCustomField', 'updateBidCustomField', 'reorderBidCustomFields', 'archiveBidCustomField',
@@ -3030,6 +3142,8 @@ const MUTATOR_KEYS = [
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
  *  "classified as a read" apart from "nobody classified it". */
 const READER_KEYS = [
+  'getBidSynopsis', 'listTenderWebsites', 'listTenderDscEmployees',
+  'listDeliveryTeamMembers', 'listOrgPeople',
   'listStates', 'getState', 'getNode', 'listChildren', 'listOrgRoots', 'listDepartments', 'listPostingNodes',
   'breadcrumb', 'childCount', 'geoRoot', 'childCounts',
   'listEmployeesUnder', 'listEmployeesDirect', 'listEmployeesByState', 'listAllEmployees',
@@ -3072,6 +3186,22 @@ export async function bootstrapRepository(): Promise<void> {
 export async function resetLocalData(): Promise<void> {
   await clearSnapshot()
   impl.hydrate(buildSeed())
+}
+
+/** The full store, serializable as-is. Not part of `Repository`: read-only
+ *  introspection of the whole store, not a per-entity domain operation. */
+export function getFullSnapshot(): GormsData {
+  return impl.snapshot()
+}
+
+/** Replaces the whole store with a restored snapshot and persists it, the
+ *  same way any other mutation would — but bypassing the `Repository` proxy
+ *  since this isn't a per-entity domain operation either. Callers must
+ *  invalidate their own query cache afterward; this module has no
+ *  dependency on React Query. */
+export function restoreFromBackup(data: GormsData): void {
+  impl.hydrate(data)
+  scheduleSave(() => impl.snapshot())
 }
 
 /** The store, wrapped so that every mutation schedules a save. A proxy rather

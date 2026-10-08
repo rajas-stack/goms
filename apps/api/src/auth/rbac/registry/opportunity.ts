@@ -139,6 +139,7 @@ export const opportunityPolicy: Record<string, PolicyEntry> = {
     'bids.get', 'bids.getForOpportunity', 'bids.actionQueue.list',
     'opportunities.list', 'opportunities.listByDepartment', 'opportunities.get', 'opportunities.listStageChanges',
     'bidCustomFields.valuesForBid', 'bidSavedViews.list', 'bidSavedViews.get',
+    'bidSynopsis.get',
   ], readRows),
 
   'bids.listForGrid': { requirements: [readRows], mask: maskGridRows },
@@ -160,6 +161,7 @@ export const opportunityPolicy: Record<string, PolicyEntry> = {
 
   'bidCorrigenda.listForBid': { requirements: [read('bid.corrigenda')] },
   'bidCorrigenda.create': { requirements: [create('bid.corrigenda')] },
+  'bidCorrigenda.updateRegister': { requirements: [write('bid.corrigenda')] },
   'bidCorrigenda.reviewChange': {
     requirements: [write('bid.corrigenda', ['corrigendum.review']), corrigendumTenderLink, corrigendumMilestone, corrigendumSubmissionDate],
   },
@@ -169,6 +171,16 @@ export const opportunityPolicy: Record<string, PolicyEntry> = {
   ...same(['bidCustomFields.update', 'bidCustomFields.reorder', 'bidCustomFields.archive', 'bidCustomFields.unarchive'], write('bid.columns')),
   'bidCustomFields.delete': { requirements: [remove('bid.columns')] },
   'bidCustomFields.setValue': { requirements: [bidRow('update', (r) => r?.bidId, () => ['bid.custom'])] },
+
+  // Synopsis sections are free-form bid content with no field atom of their own, so saving needs full write access to
+  // the bid's row (no atom list = `access.all`), the strictest existing rule. Reads follow the bid detail view.
+  'bidSynopsis.save': { requirements: [bidRow('update', (r) => r?.bidId)] },
+
+  // Shared tender-portal setup follows the existing bid configuration permissions.
+  ...same(['tenderWebsites.list', 'tenderWebsites.dscEmployees'], readRows),
+  'tenderWebsites.create': { requirements: [create('bid.columns')] },
+  ...same(['tenderWebsites.update', 'tenderWebsites.setEditingLock'], write('bid.columns')),
+  'tenderWebsites.delete': { requirements: [remove('bid.columns')] },
 
   ...same(['bidSavedViews.create', 'bidSavedViews.update', 'bidSavedViews.delete'], savedViewWrite),
 

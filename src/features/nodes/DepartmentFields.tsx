@@ -1,5 +1,6 @@
 import { Field, Input } from '@/components/ui/Field'
 import { Button } from '@/components/ui/Button'
+import { PhotoUploadField } from '@/components/ui/PhotoUploadField'
 import { EmployeePicker } from '@/features/employees/EmployeePicker'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
 import { ContactNumberRow } from './ContactNumberRow'
@@ -85,6 +86,15 @@ export function DepartmentFields({ meta, setMeta, onShortNameChange, employees, 
 
   return (
     <>
+      <PhotoUploadField
+        label="Department logo"
+        hint="Shown beside the department on bids. Upload, or click here and press Ctrl+V to paste."
+        placeholderIcon="Landmark"
+        fit="contain"
+        photoUrl={meta.logoUrl || null}
+        onChange={(dataUrl) => set('logoUrl', dataUrl ?? '')}
+      />
+
       <Field label="Short name">
         <Input value={meta.shortName ?? ''} onChange={(e) => onShortNameChange(e.target.value)} placeholder="e.g. RDD, NHI, GUDI" />
       </Field>

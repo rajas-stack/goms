@@ -1,9 +1,15 @@
 import { TRPCError } from '@trpc/server'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { appRouter } from '../../../index.js'
 import { ungatedProcedures } from '../../../testHelpers/probeGuard.js'
 import { protectedProcedure, protectedReadProcedure, publicProcedure, rbacReadProcedure, router } from '../../../trpc.js'
 import { PROCEDURE_POLICY } from './index.js'
+
+// The probe checks middleware wiring, not database-derived roles. Its sentinel
+// requirement must be reachable even without a provisioned PostgreSQL database.
+vi.mock('../userFacts.js', () => ({
+  loadUserFacts: async (email: string) => ({ email, roles: [], salesPersonId: null, teamMemberIds: { presales: [], legal: [], bid: [] } }),
+}))
 
 const paths = Object.keys((appRouter as any)._def.procedures) as string[]
 

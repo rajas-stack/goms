@@ -172,7 +172,7 @@ describe('TimelineEventDialog — edit mode (Task 8.4)', () => {
     render(<TimelineEventDialog open employeeId="emp-1" existingEvent={existingEvent} onClose={vi.fn()} />)
 
     expect(screen.getByLabelText(/^title$/i)).toHaveValue('Budget review')
-    expect(screen.getByLabelText(/^date$/i)).toHaveValue('2026-01-01')
+    expect(screen.getByLabelText(/^date$/i)).toHaveValue('01 Jan 2026') // the shared date field shows the stored 2026-01-01 readably
     expect(screen.getByLabelText(/^time$/i)).toHaveValue('14:00')
     expect(screen.getByLabelText(/^note/i)).toHaveValue('Some note')
     expect(screen.getByLabelText(/^agenda/i)).toHaveValue('Discuss Q1 budget')

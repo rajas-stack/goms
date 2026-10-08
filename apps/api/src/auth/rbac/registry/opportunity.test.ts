@@ -37,13 +37,14 @@ beforeEach(async () => {
 afterEach(cleanupRbacFixtures)
 
 describe('registry coverage for this area', () => {
-  it('registers exactly the 63 opportunity / bid procedures', () => {
+  it('registers exactly the 65 opportunity / bid procedures', () => {
     expect(Object.keys(opportunityPolicy).sort()).toEqual([
       'bidCorrigenda.create', 'bidCorrigenda.listForBid', 'bidCorrigenda.reviewChange',
       'bidCustomFields.archive', 'bidCustomFields.create', 'bidCustomFields.delete', 'bidCustomFields.list', 'bidCustomFields.reorder',
       'bidCustomFields.setValue', 'bidCustomFields.unarchive', 'bidCustomFields.update', 'bidCustomFields.valuesForBid',
       'bidMilestones.create', 'bidMilestones.delete', 'bidMilestones.listAll', 'bidMilestones.listForBid', 'bidMilestones.update',
       'bidSavedViews.create', 'bidSavedViews.delete', 'bidSavedViews.get', 'bidSavedViews.list', 'bidSavedViews.update',
+      'bidSynopsis.get', 'bidSynopsis.save',
       'bids.actionQueue.list', 'bids.archive', 'bids.create', 'bids.delete', 'bids.get', 'bids.getForOpportunity', 'bids.listForGrid',
       'bids.markVerified', 'bids.unarchive', 'bids.update',
       'documents.citations.create', 'documents.citations.delete', 'documents.citations.list', 'documents.confirmUpload', 'documents.delete',
@@ -167,6 +168,12 @@ describe('milestones and corrigenda (cross-module)', () => {
     const id = await submissionMilestone(own.bidId!)
     expect(await denied('bid', 'bidMilestones.update', { id, patch: { label: 'x' } })).toBe(false)
     expect(await denied('sales', 'bidMilestones.update', { id, patch: { label: 'x' } })).toBe(true)
+  })
+  it('synopsis: any role that can read the bid reads it; only a full-row writer (Bid) saves it', async () => {
+    const raw = { bidId: own.bidId, section: 'pq' }
+    for (const label of ['sales', 'pre', 'legal', 'bid']) expect(await denied(label, 'bidSynopsis.get', raw)).toBe(false)
+    expect(await denied('bid', 'bidSynopsis.save', raw)).toBe(false)
+    for (const label of ['sales', 'pre', 'legal']) expect(await denied(label, 'bidSynopsis.save', raw)).toBe(true)
   })
   it('moving the Submission Deadline of a bid on another sheet also needs opp.dates there', async () => {
     const onTracker = await submissionMilestone(own.bidId!)

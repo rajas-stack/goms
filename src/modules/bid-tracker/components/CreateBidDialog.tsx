@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { DEFAULT_OWNED_SHEET, OPPORTUNITY_TYPES, OWNED_SHEETS, OWNED_SHEET_LABELS, type DepartmentChoice, type OwnedSheet } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Combobox } from '@/components/ui/Combobox'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { Dialog } from '@/components/ui/Dialog'
 import { Input, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
@@ -12,7 +13,6 @@ import type { HierNode, Opportunity } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { NodeFormDialog } from '@/features/nodes/NodeFormDialog'
 import { OpportunityCodePreview } from '@/features/opportunities/OpportunityCodePreview'
-import { formatCapturedDate, parseFriendlyDate } from '../dateInput'
 import type { SheetId } from '../sheets'
 
 const MAX_SHOWN = 50
@@ -109,9 +109,7 @@ function CreateBidFlow({ onClose, presetId, sheet, newDepartmentId, onRequestCre
   const [newAssignment, setNewAssignment] = useState('')
   const [newType, setNewType] = useState('')
   const [newDue, setNewDue] = useState('')
-  const [newDueText, setNewDueText] = useState('')
-  const parsedDuePreview = useMemo(() => formatCapturedDate(newDueText), [newDueText])
-  const invalidDue = !!newDueText.trim() && !newDue
+  const [invalidDue, setInvalidDue] = useState(false)
   const [existingId, setExistingId] = useState('')
 
   useEffect(() => {
@@ -210,28 +208,17 @@ function CreateBidFlow({ onClose, presetId, sheet, newDepartmentId, onRequestCre
               </label>
               <label className="flex flex-col gap-1">
                 <span className="text-[12px] font-medium text-muted">Bid submission deadline</span>
-                <Input
+                <FriendlyDateInput
+                  format="iso"
                   aria-label="Submission date and time"
-                  aria-describedby={invalidDue ? 'new-opp-due-hint new-opp-due-error' : 'new-opp-due-hint'}
-                  type="text"
-                  placeholder="e.g. 13th May 2026 3pm or 13/5/26 15:00"
-                  value={newDueText}
-                  onChange={(e) => {
-                    setNewDueText(e.target.value)
-                    const parsed = parseFriendlyDate(e.target.value)
-                    if (parsed) {
-                      setNewDue(parsed.toISOString())
-                    } else {
-                      setNewDue('')
-                    }
+                  aria-describedby="new-opp-due-hint"
+                  showPicker={false}
+                  value={newDue}
+                  onChange={(next, { invalid }) => {
+                    setNewDue(next)
+                    setInvalidDue(invalid)
                   }}
                 />
-                {newDueText && parsedDuePreview && (
-                  <div className="rounded border border-dashed border-goms-sky bg-goms-sky/[0.06] px-2 py-1 text-[11px] text-goms-navy">
-                    Captured: {parsedDuePreview}
-                  </div>
-                )}
-                {invalidDue && <span id="new-opp-due-error" role="alert" className="text-[11px] text-crimson">Enter a valid date and time, or clear the field.</span>}
               </label>
             </div>
             <p id="new-opp-due-hint" className="-mt-1 text-[11px] text-muted">Paste any common format. It will be captured instantly and can be edited again before you create the opportunity and bid.</p>

@@ -137,6 +137,9 @@ function fromAuditLog(log: CommercialAuditLog, ctx: FeedContext): ActivityItem |
       return { ...base, kind: 'edit', title: verbFor(label, c), changes: [c], note: log.reason || undefined, bidId }
     }
     case 'bidCorrigendum': {
+      if (log.action === 'corrigendum_register_updated') {
+        return { ...base, kind: 'corrigendum', title: 'Corrigendum register updated', changes: [], note: log.reason || undefined, bidId }
+      }
       const label = fieldLabel(log.field)
       const accepted = log.action === 'corrigendum_accepted'
       return {

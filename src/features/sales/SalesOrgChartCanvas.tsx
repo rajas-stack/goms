@@ -160,7 +160,7 @@ function SalesOrgChartStage({ version }: { version: number }) {
       >
         <svg data-testid="sales-org-chart-connectors" className="pointer-events-none absolute left-0 top-0 overflow-visible" width={1} height={1}>
           {edges.map((e) => (
-            <path key={e.key} d={elbowPath(e)} fill="none" stroke="#B7C2D0" strokeWidth={1.5} />
+            <path key={e.key} d={elbowPath(e)} fill="none" className="stroke-edge" strokeWidth={1.5} />
           ))}
         </svg>
         {tree.roots.map((person) => (

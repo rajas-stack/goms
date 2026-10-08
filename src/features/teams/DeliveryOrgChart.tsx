@@ -201,7 +201,7 @@ function Stage({ people: members, isLoading = false, emptyMessage, version }: { 
         style={{ transform: `translate(${transform.x}px, ${transform.y}px) scale(${transform.scale})`, transformOrigin: '0 0' }}
       >
         <svg className="pointer-events-none absolute left-0 top-0 overflow-visible" width={1} height={1}>
-          {edges.map((edge) => <path key={edge.key} d={elbowPath(edge)} fill="none" stroke="#B7C2D0" strokeWidth={1.5} />)}
+          {edges.map((edge) => <path key={edge.key} d={elbowPath(edge)} fill="none" className="stroke-edge" strokeWidth={1.5} />)}
         </svg>
         {tree.roots.map((member) => <Branch key={member.id} member={member} depth={1} parentKey={null} tree={tree} />)}
       </div>

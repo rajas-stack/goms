@@ -21,7 +21,7 @@ export function SavedViewTabs({ sheet, activeViewId, onChange, onCreateNew, onDe
   const { data: views = [], isLoading } = useBidSavedViews(sheet)
   if (isLoading) return null
   return (
-    <div className="flex items-center gap-1 overflow-x-auto border-b border-line bg-[#F1F6FA] px-3 py-1" data-testid="saved-view-tabs">
+    <div className="flex items-center gap-1 overflow-x-auto border-b border-line bg-grid-tab px-3 py-1" data-testid="saved-view-tabs">
       <span className="mr-1 shrink-0 text-[12px] font-semibold text-muted">Views</span>
       {views.map((v) => {
         const active = v.id === activeViewId

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Textarea } from '@/components/ui/Field'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { Combobox } from '@/components/ui/Combobox'
 import { Avatar } from '@/components/ui/Avatar'
 import { useToast } from '@/components/ui/Toast'
@@ -107,7 +108,7 @@ export function TransferBookOfBusinessDialog({ open, person, onClose }: {
         </Field>
 
         <Field label="Effective date" required>
-          <Input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} />
+          <FriendlyDateInput value={effectiveDate} onChange={setEffectiveDate} />
         </Field>
 
         <Field label="Note" hint="e.g. On indefinite leave, resigned">

@@ -6,22 +6,19 @@ import { isUniqueViolation } from '../db-errors.js'
 import { assertFieldsNotProtected } from '../lib/protectedValues.js'
 import { syncSubmissionDeadlineToOpportunity } from './bidMilestones.js'
 import { writeAuditLog } from '../lib/auditLog.js'
+import {
+  REGISTER_COLUMNS, changeDefaults, changeSchema, registerSchema, toBidCorrigendum, toChange, type RegisterPatch,
+} from './bidCorrigendaSchema.js'
 
-export function toChange(row: any) {
-  return {
-    id: row.id, corrigendumId: row.corrigendum_id, fieldKey: row.field_key, currentValue: row.current_value,
-    proposedValue: row.proposed_value, decision: row.decision, decidedAt: row.decided_at, decidedBy: row.decided_by,
-  }
-}
+export { toBidCorrigendum, toChange } from './bidCorrigendaSchema.js'
 
-export function toBidCorrigendum(row: any, changes: any[]) {
+/** Parameterised SET list for the register keys present in `patch`. Column
+ *  names come only from REGISTER_COLUMNS, never from input. */
+function registerAssignments(patch: RegisterPatch, firstParam: number) {
+  const keys = (Object.keys(patch) as (keyof RegisterPatch)[]).filter((k) => patch[k] !== undefined)
   return {
-    id: row.id, bidId: row.bid_id, corrigendumNumber: row.corrigendum_number, sourceDocumentId: row.source_document_id,
-    detectedAt: row.detected_at, reviewedAt: row.reviewed_at, reviewedBy: row.reviewed_by,
-    // Derived, not stored (spec §12) — flips to 'reviewed' the instant the
-    // last pending change is resolved, no separate manual step.
-    status: changes.some((c) => c.decision === 'pending') ? 'pending_review' : 'reviewed',
-    changes: changes.map(toChange),
+    sql: keys.map((k, i) => `${REGISTER_COLUMNS[k]}=$${firstParam + i}`),
+    params: keys.map((k) => patch[k]),
   }
 }
 
@@ -39,7 +36,8 @@ export const bidCorrigendaRouter = router({
   create: protectedProcedure
     .input(z.object({
       bidId: z.string().uuid(), corrigendumNumber: z.number().int().positive(), sourceDocumentId: z.string().uuid().optional(),
-      changes: z.array(z.object({ fieldKey: z.string().min(1), currentValue: z.string(), proposedValue: z.string() })).min(1),
+      register: registerSchema.optional(),
+      changes: z.array(changeSchema).min(1).max(200),
     }))
     .mutation(async ({ input }) => {
       const client = await pool.connect()
@@ -62,8 +60,12 @@ export const bidCorrigendaRouter = router({
         // the one supported bids column — reject clearly at creation time
         // rather than letting an unrecognized key silently do nothing later
         // at review time (this plan's Review Focus item).
+        if (new Set(input.changes.map((c) => c.fieldKey)).size !== input.changes.length) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Each clause can change only once per corrigendum.' })
+        }
         for (const change of input.changes) {
-          if (change.fieldKey === 'tenderLink') continue
+          // Clause changes are history-only; field changes must target a real slot.
+          if (change.kind === 'clause' || change.fieldKey === 'tenderLink') continue
           const milestone = await client.query('SELECT 1 FROM bid_milestones WHERE bid_id=$1 AND key=$2', [input.bidId, change.fieldKey])
           if (!milestone.rows.length) {
             throw new TRPCError({ code: 'BAD_REQUEST', message: `Unknown field "${change.fieldKey}" — create its milestone slot first.` })
@@ -80,11 +82,23 @@ export const bidCorrigendaRouter = router({
           if (isUniqueViolation(e)) throw new TRPCError({ code: 'CONFLICT', message: `Corrigendum ${input.corrigendumNumber} already exists for this bid.` })
           throw e
         }
+        if (input.register && Object.keys(input.register).length) {
+          const set = registerAssignments(input.register, 2)
+          if (set.sql.length) {
+            corrigendum = (await client.query(
+              `UPDATE bid_corrigenda SET ${set.sql.join(', ')} WHERE id=$1 RETURNING *`, [corrigendum.id, ...set.params],
+            )).rows[0]
+          }
+        }
         const changeRows = []
         for (const change of input.changes) {
+          const d = changeDefaults(change)
           changeRows.push((await client.query(
-            `INSERT INTO bid_corrigendum_changes (corrigendum_id, field_key, current_value, proposed_value) VALUES ($1,$2,$3,$4) RETURNING *`,
-            [corrigendum.id, change.fieldKey, change.currentValue, change.proposedValue],
+            `INSERT INTO bid_corrigendum_changes
+               (corrigendum_id, field_key, current_value, proposed_value, kind, clause_title, affected_module, classification, impact_level, source_ref)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+            [corrigendum.id, change.fieldKey, change.currentValue, change.proposedValue,
+              d.kind, d.clauseTitle, d.affectedModule, d.classification, d.impactLevel, d.sourceRef],
           )).rows[0])
         }
         // Spec §17 — a new corrigendum with any pending change downgrades confidence.
@@ -100,6 +114,25 @@ export const bidCorrigendaRouter = router({
       }
     }),
 
+  /** Register fields only — change rows are append-only and never rewritten. */
+  updateRegister: protectedProcedure
+    .input(z.object({ corrigendumId: z.string().uuid(), patch: registerSchema }))
+    .mutation(async ({ input, ctx }) => {
+      const set = registerAssignments(input.patch, 2)
+      const row = set.sql.length
+        ? (await pool.query(`UPDATE bid_corrigenda SET ${set.sql.join(', ')} WHERE id=$1 RETURNING *`, [input.corrigendumId, ...set.params])).rows[0]
+        : (await pool.query('SELECT * FROM bid_corrigenda WHERE id=$1', [input.corrigendumId])).rows[0]
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND' })
+      if (set.sql.length) {
+        await writeAuditLog(pool, {
+          entityType: 'bidCorrigendum', entityId: row.id, field: 'register', oldValue: '', newValue: JSON.stringify(input.patch),
+          reason: '', action: 'corrigendum_register_updated', changedBy: ctx.user?.email,
+        })
+      }
+      const changes = (await pool.query('SELECT * FROM bid_corrigendum_changes WHERE corrigendum_id=$1 ORDER BY created_at', [row.id])).rows
+      return toBidCorrigendum(row, changes)
+    }),
+
   reviewChange: protectedProcedure
     .input(z.object({ changeId: z.string().uuid(), decision: z.enum(['accepted', 'rejected']), reason: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
@@ -110,7 +143,8 @@ export const bidCorrigendaRouter = router({
         if (!change) throw new TRPCError({ code: 'NOT_FOUND' })
         const corrigendum = (await client.query('SELECT * FROM bid_corrigenda WHERE id=$1', [change.corrigendum_id])).rows[0]
 
-        if (input.decision === 'accepted') {
+        // A tender clause has no bid field to write — accepting just records the decision.
+        if (input.decision === 'accepted' && change.kind !== 'clause') {
           await assertFieldsNotProtected(client, 'bid', corrigendum.bid_id, [change.field_key])
           if (change.field_key === 'tenderLink') {
             await client.query('UPDATE bids SET tender_link=$1, updated_at=now() WHERE id=$2', [change.proposed_value, corrigendum.bid_id])

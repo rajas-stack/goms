@@ -12,6 +12,13 @@ const StateWorkspace = lazy(() => import('./routes/StateWorkspace').then((m) => 
 const Directory = lazy(() => import('./routes/Directory').then((m) => ({ default: m.Directory })))
 const Insights = lazy(() => import('./routes/Insights').then((m) => ({ default: m.Insights })))
 const Meetings = lazy(() => import('./routes/Meetings').then((m) => ({ default: m.Meetings })))
+const SettingsPage = lazy(() => import('./routes/SettingsPage').then((m) => ({ default: m.SettingsPage })))
+const DmsSettingsPage = lazy(() => import('./routes/DmsSettingsPage').then((m) => ({ default: m.DmsSettingsPage })))
+const DmsConnectionPage = lazy(() => import('./routes/DmsConnectionPage').then((m) => ({ default: m.DmsConnectionPage })))
+const DmsDocumentsPage = lazy(() => import('./routes/DmsDocumentsPage').then((m) => ({ default: m.DmsDocumentsPage })))
+const TenderWebsitesSettingsPage = lazy(() =>
+  import('./routes/TenderWebsitesSettingsPage').then((m) => ({ default: m.TenderWebsitesSettingsPage })),
+)
 const SalesWorkspace = lazy(() => import('./routes/SalesWorkspace').then((m) => ({ default: m.SalesWorkspace })))
 const TeamsWorkspace = lazy(() => import('./routes/TeamsWorkspace').then((m) => ({ default: m.TeamsWorkspace })))
 const CommercialCalculatorWorkspace = lazy(() =>
@@ -96,6 +103,12 @@ export const router = createBrowserRouter([
       { path: '/commercial-calculator/:section', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
       { path: '/commercial-calculator/boq/:boqId', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
       { path: '/admin/access', element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><AccessManagement /></RequireAccess> },
+      { path: '/settings', element: <SettingsPage /> },
+      { path: '/settings/dms', element: <DmsSettingsPage /> },
+      { path: '/settings/dms/new', element: <DmsConnectionPage /> },
+      { path: '/settings/dms/:connectionId', element: <DmsConnectionPage /> },
+      { path: '/documents/:module', element: <DmsDocumentsPage /> },
+      { path: '/settings/tender-websites', element: <TenderWebsitesSettingsPage /> },
       ...bidTrackerRoutes,
       ...adminImportRoutes,
       { path: '*', element: <NotFound /> },

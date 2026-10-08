@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { useToast } from '@/components/ui/Toast'
 import { useAllEmployees, useEmployeeMutations } from '@/lib/api'
 import { isoToday } from '@/data/repository'
@@ -88,7 +89,7 @@ export function SelectEmployeeDialog({ open, orgNode, onClose }: {
                 <Input value={designation} onChange={(e) => setDesignation(e.target.value)} placeholder={employee.designation} />
               </Field>
               <Field label="Effective date">
-                <Input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} />
+                <FriendlyDateInput value={effectiveDate} onChange={setEffectiveDate} />
               </Field>
               <Field label="Reason">
                 <Select value={reason} onChange={(e) => setReason(e.target.value)}>

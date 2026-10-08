@@ -6,20 +6,26 @@ import { useEffect, type RefObject } from 'react'
  *  Focuses the first item on open so arrow keys work immediately; Enter/
  *  Space activation is native `<button>` behavior, so it needs no handling
  *  here. */
-export function useMenuKeyboardNav(open: boolean, containerRef: RefObject<HTMLElement | null>) {
+export function useMenuKeyboardNav(
+  open: boolean,
+  containerRef: RefObject<HTMLElement | null>,
+  /** Which descendants are navigable — widen it for menus that also hold
+   *  `menuitemradio`/`menuitemcheckbox` controls. */
+  itemSelector = '[role="menuitem"]',
+) {
   useEffect(() => {
     if (!open) return
     const id = requestAnimationFrame(() => {
-      containerRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus()
+      containerRef.current?.querySelector<HTMLButtonElement>(`${itemSelector}:not(:disabled)`)?.focus()
     })
     return () => cancelAnimationFrame(id)
-  }, [open, containerRef])
+  }, [open, containerRef, itemSelector])
 
   useEffect(() => {
     if (!open) return
 
     function items(): HTMLButtonElement[] {
-      return Array.from(containerRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [])
+      return Array.from(containerRef.current?.querySelectorAll<HTMLButtonElement>(`${itemSelector}:not(:disabled)`) ?? [])
     }
     function focusAt(els: HTMLButtonElement[], i: number) {
       if (els.length === 0) return
@@ -37,5 +43,5 @@ export function useMenuKeyboardNav(open: boolean, containerRef: RefObject<HTMLEl
 
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
-  }, [open, containerRef])
+  }, [open, containerRef, itemSelector])
 }

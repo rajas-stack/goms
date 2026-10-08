@@ -1,6 +1,6 @@
 import {
   Globe, Landmark, MapPin, Map, Home, Building2, GitBranch, Layers, DoorOpen, Boxes,
-  Search, Plus, Pencil, Trash2, Archive, ArchiveRestore, Copy, ChevronRight, ChevronDown, ChevronUp,
+  Search, Plus, Pencil, Trash2, Archive, ArchiveRestore, Copy, ChevronRight, ChevronLeft, ChevronDown, ChevronUp,
   X, Upload, Download, Users, User, Mail, Phone, ExternalLink, ArrowLeft, Command, CornerDownLeft,
   Network, MoreHorizontal, Check, Hash, Building, FileSpreadsheet, Sparkles, MoveRight,
   Maximize, ChevronsDown, ChevronsUp, Eye, EyeOff, Keyboard, Camera, IdCard, UserPlus, Calendar,
@@ -8,13 +8,15 @@ import {
   GripVertical, BarChart3, PieChart, UserX, UserCheck, Briefcase, Handshake, CalendarClock,
   Circle, CircleDot, CircleAlert, Link2, Send, Flag, ArrowUp, ArrowDown, Type, Menu, List, SlidersHorizontal,
   RotateCcw, Loader2, GitMerge, Calculator, Lock, Unlock, Printer, Settings, TriangleAlert, Database,
-  LogIn, LogOut, ChevronsUpDown, ArrowRight, Brackets, Pin, PinOff, ShieldCheck, History,
+  LogIn, LogOut, ChevronsUpDown, ArrowRight, Brackets, Pin, PinOff, ShieldCheck, History, Sun, Moon, Monitor, Palette,
+  Lightbulb, ClipboardCheck, MessageSquareText, CalendarDays, EllipsisVertical, CircleCheck, Diamond,
   type LucideIcon,
 } from 'lucide-react'
 
 const REGISTRY: Record<string, LucideIcon> = {
+  Lightbulb, ClipboardCheck, MessageSquareText, CalendarDays, EllipsisVertical, CircleCheck, Diamond,
   Globe, Landmark, MapPin, Map, Home, Building2, GitBranch, Layers, DoorOpen, Boxes,
-  Search, Plus, Pencil, Trash2, Archive, ArchiveRestore, Copy, ChevronRight, ChevronDown, ChevronUp,
+  Search, Plus, Pencil, Trash2, Archive, ArchiveRestore, Copy, ChevronRight, ChevronLeft, ChevronDown, ChevronUp,
   X, Upload, Download, Users, User, Mail, Phone, ExternalLink, ArrowLeft, Command, CornerDownLeft,
   Network, MoreHorizontal, Check, Hash, Building, FileSpreadsheet, Sparkles, MoveRight,
   Maximize, ChevronsDown, ChevronsUp, Eye, EyeOff, Keyboard, Camera, IdCard, UserPlus, Calendar,
@@ -22,7 +24,7 @@ const REGISTRY: Record<string, LucideIcon> = {
   GripVertical, BarChart3, PieChart, UserX, UserCheck, Briefcase, Handshake, CalendarClock,
   Circle, CircleDot, CircleAlert, Link2, Send, Flag, ArrowUp, ArrowDown, Type, Menu, List, SlidersHorizontal,
   RotateCcw, Loader: Loader2, GitMerge, Calculator, Lock, Unlock, Printer, Settings, TriangleAlert, Database,
-  LogIn, LogOut, ChevronsUpDown, ArrowRight, Brackets, Pin, PinOff, ShieldCheck, History,
+  LogIn, LogOut, ChevronsUpDown, ArrowRight, Brackets, Pin, PinOff, ShieldCheck, History, Sun, Moon, Monitor, Palette,
 }
 
 export function Icon({ name, className, size = 16 }: { name: string; className?: string; size?: number }) {

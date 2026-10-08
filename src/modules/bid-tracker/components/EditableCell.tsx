@@ -137,8 +137,8 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
           // (focused) cell gets the spreadsheet's 2px selection rectangle.
           'flex h-[35px] w-full min-w-0 cursor-cell items-center gap-1 px-3 outline-none',
           'shadow-[inset_0_0_0_1px_rgba(76,167,221,0.35)] hover:shadow-[inset_0_0_0_1px_rgba(76,167,221,0.95)]',
-          'focus:shadow-[inset_0_0_0_2px_#0B2B49] focus:bg-[#F2F8FD]',
-          externalError && 'text-crimson shadow-[inset_0_0_0_1px_#B23A48]',
+          'focus:shadow-[inset_0_0_0_2px_rgb(var(--c-goms-navy))] focus:bg-grid-hover',
+          externalError && 'text-crimson shadow-[inset_0_0_0_1px_rgb(var(--c-crimson))]',
         )}
         onClick={(e) => { e.stopPropagation(); start() }}
         onKeyDown={(e) => {

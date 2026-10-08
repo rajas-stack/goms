@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input } from '@/components/ui/Field'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { useToast } from '@/components/ui/Toast'
 import { useSalesPersonMutations } from '@/lib/api'
 import { displayEndDate } from '@/lib/intervals'
@@ -87,10 +88,10 @@ export function EditPostingDatesDialog({ open, person, posting, onClose }: {
     >
       <div className="space-y-3">
         <Field label="Effective from" required>
-          <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <FriendlyDateInput value={startDate} onChange={setStartDate} />
         </Field>
         <Field label="Effective to" hint="The last day in this posting. Leave blank for Present (current).">
-          <Input type="date" value={lastDay} min={startDate || undefined} onChange={(e) => setLastDay(e.target.value)} />
+          <FriendlyDateInput value={lastDay} min={startDate || undefined} onChange={setLastDay} />
         </Field>
 
         {ending && (

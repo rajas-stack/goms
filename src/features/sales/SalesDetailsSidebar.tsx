@@ -126,7 +126,7 @@ export function SalesDetailsSidebar({ containerRef }: { containerRef: React.RefO
               key="scrim"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               onClick={hide}
-              className="fixed inset-0 z-[44] bg-ink-900/30"
+              className="fixed inset-0 z-[44] bg-scrim/40"
             />
             <motion.aside
               key="drawer"

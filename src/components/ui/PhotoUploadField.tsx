@@ -10,11 +10,14 @@ import { resizeProfilePhoto } from '@/lib/resizeProfilePhoto'
  *  separate asset store), same convention as `visitingCards` — which is why
  *  every image is downscaled (max 512px, JPEG) before it reaches `onChange`:
  *  the data URL rides along in every list response. */
-export function PhotoUploadField({ photoUrl, onChange, label = 'Profile Picture', hint = 'Upload, or click here and press Ctrl+V to paste an image.' }: {
+export function PhotoUploadField({ photoUrl, onChange, label = 'Profile Picture', hint = 'Upload, or click here and press Ctrl+V to paste an image.', placeholderIcon = 'User', fit = 'cover' }: {
   photoUrl: string | null
   onChange: (dataUrl: string | null) => void
   label?: string
   hint?: string
+  placeholderIcon?: string
+  /** `contain` keeps a logo's full artwork visible instead of cropping it. */
+  fit?: 'cover' | 'contain'
 }) {
   const photoRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
@@ -51,11 +54,11 @@ export function PhotoUploadField({ photoUrl, onChange, label = 'Profile Picture'
       <div className="flex items-center gap-3" tabIndex={0} onPaste={onPhotoPaste} data-testid="profile-photo-dropzone">
         {photoUrl ? (
           <span className="relative">
-            <img src={photoUrl} alt="" className="h-14 w-14 rounded-xl object-cover" />
+            <img src={photoUrl} alt="" className={`h-14 w-14 rounded-xl ${fit === 'contain' ? 'border border-line bg-white object-contain p-1' : 'object-cover'}`} />
             <button
               type="button"
               onClick={() => onChange(null)}
-              aria-label="Remove profile picture"
+              aria-label={`Remove ${label.toLowerCase()}`}
               className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full border border-line bg-white text-muted shadow-sm hover:text-crimson"
             >
               <Icon name="X" size={11} />
@@ -63,7 +66,7 @@ export function PhotoUploadField({ photoUrl, onChange, label = 'Profile Picture'
           </span>
         ) : (
           <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-panel text-muted">
-            <Icon name="User" size={18} />
+            <Icon name={placeholderIcon} size={18} />
           </span>
         )}
         <Button size="sm" onClick={() => photoRef.current?.click()}>

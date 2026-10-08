@@ -3,6 +3,9 @@
 // existing import path (`@/lib/types`) keeps working unchanged, including
 // this file's own later use of Domain/Status below.
 import type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue, FilterNode, OwnedSheet } from '@goms/domain'
+import type {
+  CorrigendumAffectedModule, CorrigendumChangeClassification, CorrigendumChangeKind, CorrigendumImpactLevel, CorrigendumReviewStatus,
+} from '@goms/domain'
 export type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue }
 
 export type RelationshipStatus = 'engaged' | 'developing' | 'dormant' | 'new'
@@ -471,11 +474,41 @@ export interface BidMilestone {
   createdAt: string; updatedAt: string
 }
 export interface BidMilestoneWithBid extends BidMilestone { bidCode: string; opportunityName: string }
-export interface BidCorrigendumChange {
+/** Clause-level detail of one corrigendum change (Corrigendum Part 1). A
+ *  change row is append-only: `currentValue` is the text BEFORE this
+ *  corrigendum and `proposedValue` the text after, so the original tender is
+ *  always recoverable from the earliest change of a clause. */
+export interface CorrigendumChangeDetails {
+  kind: CorrigendumChangeKind
+  clauseTitle: string
+  affectedModule: CorrigendumAffectedModule
+  classification: CorrigendumChangeClassification
+  impactLevel: CorrigendumImpactLevel
+  /** Where in the corrigendum document the change is stated (page/clause). */
+  sourceRef: string
+}
+export interface BidCorrigendumChange extends CorrigendumChangeDetails {
   id: string; corrigendumId: string; fieldKey: string; currentValue: string; proposedValue: string
   decision: 'pending' | 'accepted' | 'rejected'; decidedAt: string | null; decidedBy: string | null
 }
-export interface BidCorrigendum {
+/** The corrigendum register row. Dates are plain `YYYY-MM-DD`. Number of
+ *  changes and open actions are derived (see corrigendumStats), never stored. */
+export interface CorrigendumRegister {
+  publishedDate: string | null
+  receivedDate: string | null
+  effectiveDate: string | null
+  affectedSections: CorrigendumAffectedModule[]
+  impactLevel: CorrigendumImpactLevel
+  technicalImpact: boolean
+  commercialImpact: boolean
+  bidDateImpact: boolean
+  submissionDateImpact: boolean
+  /** A DeliveryTeamMember id. */
+  reviewOwnerId: string | null
+  reviewStatus: CorrigendumReviewStatus
+  remarks: string
+}
+export interface BidCorrigendum extends CorrigendumRegister {
   id: string; bidId: string; corrigendumNumber: number; sourceDocumentId: string | null
   detectedAt: string; reviewedAt: string | null; reviewedBy: string | null
   status: 'pending_review' | 'reviewed'; changes: BidCorrigendumChange[]

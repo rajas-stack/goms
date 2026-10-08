@@ -8,6 +8,8 @@
 // (docs/superpowers/analysis/2026-08-31-goms-local-vs-gcp-functional-parity-audit.md).
 import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/routers/access'
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
+import type { BidSynopsis, BidSynopsisSection, SaveBidSynopsisInput } from '@goms/domain'
+import type { TenderWebsite, TenderWebsiteInput } from '@goms/domain'
 import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
 import type { MyAccess } from '../../../apps/api/src/routers/auth'
@@ -33,8 +35,20 @@ import type {
   MasterEntityKey, MasterRowMap, CreateMasterInput, ProductEditionFeature,
   CommercialBoq, CommercialBoqLineItem, CommercialAuditLog, CreateBoqInput, UpdateBoqInput, CreateBoqLineItemInput, BoqStatus,
 } from '@/modules/commercial-calculator/types'
+import type { CreateCorrigendumInput, UpdateCorrigendumRegisterInput } from '@/modules/bid-tracker/corrigenda/model'
 
 export class RemoteRepository implements Partial<Repository> {
+  getBidSynopsis = (bidId: string, section: BidSynopsisSection): Promise<BidSynopsis | null> =>
+    this.client.bidSynopsis.get.query({ bidId, section }) as Promise<BidSynopsis | null>
+  saveBidSynopsis = (input: SaveBidSynopsisInput): Promise<BidSynopsis> =>
+    this.client.bidSynopsis.save.mutate(input) as Promise<BidSynopsis>
+  listTenderWebsites = (): Promise<TenderWebsite[]> => this.client.tenderWebsites.list.query()
+  listTenderDscEmployees = () => this.client.tenderWebsites.dscEmployees.query()
+  createTenderWebsite = (input: TenderWebsiteInput): Promise<TenderWebsite> => this.client.tenderWebsites.create.mutate(input)
+  updateTenderWebsite = (id: string, input: TenderWebsiteInput): Promise<TenderWebsite> =>
+    this.client.tenderWebsites.update.mutate({ id, ...input })
+  deleteTenderWebsite = async (id: string): Promise<void> => { await this.client.tenderWebsites.delete.mutate({ id }) }
+  setTenderWebsiteEditingLock = (id: string, locked: boolean): Promise<TenderWebsite> => this.client.tenderWebsites.setEditingLock.mutate({ id, locked })
   private client = createTRPCClient<AppRouter>({
     links: [authPromptLink, httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`, headers: getAuthHeaders })],
   })
@@ -284,10 +298,10 @@ export class RemoteRepository implements Partial<Repository> {
 
   listBidCorrigenda = (bidId: string): Promise<BidCorrigendum[]> =>
     this.client.bidCorrigenda.listForBid.query({ bidId }) as unknown as Promise<BidCorrigendum[]>
-  createBidCorrigendum = (input: {
-    bidId: string; corrigendumNumber: number; sourceDocumentId?: string
-    changes: { fieldKey: string; currentValue: string; proposedValue: string }[]
-  }): Promise<BidCorrigendum> => this.client.bidCorrigenda.create.mutate(input) as unknown as Promise<BidCorrigendum>
+  createBidCorrigendum = (input: CreateCorrigendumInput): Promise<BidCorrigendum> =>
+    this.client.bidCorrigenda.create.mutate(input) as unknown as Promise<BidCorrigendum>
+  updateBidCorrigendumRegister = (input: UpdateCorrigendumRegisterInput): Promise<BidCorrigendum> =>
+    this.client.bidCorrigenda.updateRegister.mutate(input) as unknown as Promise<BidCorrigendum>
   reviewCorrigendumChange = (
     input: { changeId: string; decision: 'accepted' | 'rejected'; reason?: string },
   ): Promise<BidCorrigendumChange> =>

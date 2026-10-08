@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { slugifyFieldKey } from '@goms/domain'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { Icon } from '@/components/ui/Icon'
 import { useBidCorrigenda, useBidMilestoneMutations, useBidMilestones } from '@/lib/api'
 import type { BidMilestone } from '@/lib/types'
@@ -32,7 +33,7 @@ function MilestoneForm({ draft, onChange, labelEditable }: { draft: Draft; onCha
         </label>
       )}
       <label className="text-[12px] text-muted">Date &amp; time
-        <input aria-label="Date and time" type="datetime-local" className={field} value={draft.dueAt} onChange={(e) => onChange({ ...draft, dueAt: e.target.value })} />
+        <FriendlyDateInput format="datetime-local" aria-label="Date and time" className={field} value={draft.dueAt} onChange={(v) => onChange({ ...draft, dueAt: v })} />
       </label>
       <label className="text-[12px] text-muted">Venue
         <input aria-label="Venue" className={field} value={draft.venue} onChange={(e) => onChange({ ...draft, venue: e.target.value })} />

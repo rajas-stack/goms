@@ -139,7 +139,7 @@ export function OrgEmployees() {
       <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-line bg-white">
         {isLoading ? <p className="p-4 text-sm text-muted">Loading employees…</p> : (
           <table className="w-full min-w-[960px] border-separate border-spacing-0 text-[13px]">
-            <thead className="sticky top-0 z-10 bg-[#F4F7FA] text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">
+            <thead className="sticky top-0 z-10 bg-grid-head text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">
               <tr>
                 <th className="border-b border-line px-3 py-2">Employee</th>
                 <th className="w-24 border-b border-line px-3 py-2">Level</th>
@@ -151,7 +151,7 @@ export function OrgEmployees() {
             </thead>
             <tbody>
               {rows.map((p) => (
-                <tr key={p.id} className={cn('hover:bg-[#F2F8FD]', p.status === 'inactive' && 'opacity-60')}>
+                <tr key={p.id} className={cn('hover:bg-grid-hover', p.status === 'inactive' && 'opacity-60')}>
                   <td className="border-b border-line/70 px-3 py-1.5"><PersonName person={p} size="sm" nameClassName="font-medium text-ink-900" /></td>
                   <td className="border-b border-line/70 px-3 py-1.5">
                     <Select aria-label={`${p.name} level`} value={String(p.level)} onChange={(e) => changeLevel(p, Number(e.target.value))} className="h-8">

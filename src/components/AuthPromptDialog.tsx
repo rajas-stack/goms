@@ -54,7 +54,7 @@ export function AuthPromptDialog() {
   }
 
   return (
-    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/50">
       <div className="w-full max-w-sm space-y-4 rounded-xl bg-paper p-6 shadow-lg">
         {reason === 'forbidden' ? (
           <>
