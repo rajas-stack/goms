@@ -82,7 +82,7 @@ export function TopBar({ onOpenDrawer }: Props) {
 
       <div className="flex shrink-0 items-center gap-2">
         {hasDms && <Link to={`/documents/${dmsModule}`} aria-label="Documents" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-white px-2.5 text-xs font-medium text-ink hover:bg-panel"><Icon name="FileText" size={15} /><span className="hidden sm:inline">Documents</span></Link>}
-        <AuthStatus includeOptions />
+        <AuthStatus />
       </div>
     </header>
   )
