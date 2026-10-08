@@ -15,9 +15,12 @@ interface Props {
   submitLabel: string
   onSubmit: (input: TenderWebsiteInput) => Promise<unknown>
   onCancel?: () => void
+  /** Accessible name of the create form, e.g. "Add tender website". */
+  formLabel?: string
+  namePlaceholder?: string
 }
 
-export function TenderWebsiteForm({ existing, editing, busy, submitLabel, onSubmit, onCancel }: Props) {
+export function TenderWebsiteForm({ existing, editing, busy, submitLabel, onSubmit, onCancel, formLabel = 'Add tender website', namePlaceholder = 'Name, e.g. E-Proc' }: Props) {
   const errorId = useId()
   const prefix = useId()
   const { data: employees = [], isLoading, isError, refetch } = useTenderDscEmployees()
@@ -90,11 +93,11 @@ export function TenderWebsiteForm({ existing, editing, busy, submitLabel, onSubm
 
   return (
     <>
-      <form onSubmit={submit} className="flex flex-col gap-3" aria-label={editing ? `Edit ${editing.name}` : 'Add tender website'}>
+      <form onSubmit={submit} className="flex flex-col gap-3" aria-label={editing ? `Edit ${editing.name}` : formLabel}>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor={`${prefix}-name`} className="mb-1 block text-[13px] font-medium">Name</label>
-            <Input id={`${prefix}-name`} aria-label="Website name" placeholder="Name, e.g. E-Proc" value={name} maxLength={100}
+            <Input id={`${prefix}-name`} aria-label="Website name" placeholder={namePlaceholder} value={name} maxLength={100}
               aria-describedby={error ? errorId : undefined} disabled={disabled} onChange={event => setName(event.target.value)} />
           </div>
           <div>

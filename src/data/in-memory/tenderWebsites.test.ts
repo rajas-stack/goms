@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { isHttpUrl } from '@goms/domain'
-import { repository, resetLocalData } from '@/data/repository'
+import { getFullSnapshot, repository, resetLocalData, restoreFromBackup } from '@/data/repository'
 
 describe('tender websites (local store)', () => {
   beforeEach(async () => { await resetLocalData() })
@@ -29,6 +29,34 @@ describe('tender websites (local store)', () => {
     await repository.createTenderWebsite({ name: 'E-Proc', url: 'https://eproc.example.gov.in' })
     await expect(repository.createTenderWebsite({ name: 'e-proc', url: 'https://other.example.com' })).rejects.toThrow(/already exists/)
     expect(await repository.listTenderWebsites()).toHaveLength(1)
+  })
+
+  it('keeps document verification sites separate from tender websites', async () => {
+    await repository.createTenderWebsite({ name: 'E-Proc', url: 'https://eproc.example.gov.in' })
+    const gst = await repository.createTenderWebsite({ kind: 'verification', name: 'GST', url: 'https://services.gst.gov.in' })
+    expect(gst.kind).toBe('verification')
+    expect((await repository.listTenderWebsites()).map(site => site.name)).toEqual(['E-Proc'])
+    expect((await repository.listTenderWebsites('tender')).map(site => site.kind)).toEqual(['tender'])
+    expect((await repository.listTenderWebsites('verification')).map(site => site.name)).toEqual(['GST'])
+    const renamed = await repository.updateTenderWebsite(gst.id, { kind: 'tender', name: 'GST portal', url: gst.url })
+    expect(renamed.kind).toBe('verification') // never moves between Settings pages
+    expect(await repository.listTenderWebsites()).toHaveLength(1)
+  })
+
+  it('scopes unique names to each kind', async () => {
+    await repository.createTenderWebsite({ name: 'MCA', url: 'https://www.mca.gov.in' })
+    await expect(repository.createTenderWebsite({ kind: 'verification', name: 'mca', url: 'https://www.mca.gov.in/verify' })).resolves.toMatchObject({ kind: 'verification' })
+    await expect(repository.createTenderWebsite({ kind: 'verification', name: ' MCA ', url: 'https://other.example' })).rejects.toThrow(/already exists/)
+    const udyam = await repository.createTenderWebsite({ kind: 'verification', name: 'Udyam', url: 'https://udyamregistration.gov.in' })
+    await expect(repository.updateTenderWebsite(udyam.id, { name: 'MCA', url: udyam.url })).rejects.toThrow(/already exists/)
+    await expect(repository.createTenderWebsite({ kind: 'other' as never, name: 'X', url: 'https://x.example' })).rejects.toThrow(/Unknown website type/)
+  })
+
+  it('treats websites saved before kinds existed as tender websites', async () => {
+    const snapshot = getFullSnapshot()
+    restoreFromBackup({ ...snapshot, tenderWebsites: [{ id: 'tws_old', name: 'Old portal', url: 'https://old.example', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' }] })
+    expect(await repository.listTenderWebsites()).toEqual([expect.objectContaining({ id: 'tws_old', kind: 'tender' })])
+    expect(await repository.listTenderWebsites('verification')).toEqual([])
   })
 
   it('persists the edit lock and prevents changes until editing is unlocked', async () => {

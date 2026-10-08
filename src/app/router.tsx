@@ -19,6 +19,9 @@ const DmsDocumentsPage = lazy(() => import('./routes/DmsDocumentsPage').then((m)
 const TenderWebsitesSettingsPage = lazy(() =>
   import('./routes/TenderWebsitesSettingsPage').then((m) => ({ default: m.TenderWebsitesSettingsPage })),
 )
+const DocumentVerificationsSettingsPage = lazy(() =>
+  import('./routes/TenderWebsitesSettingsPage').then((m) => ({ default: m.DocumentVerificationsSettingsPage })),
+)
 const SalesWorkspace = lazy(() => import('./routes/SalesWorkspace').then((m) => ({ default: m.SalesWorkspace })))
 const TeamsWorkspace = lazy(() => import('./routes/TeamsWorkspace').then((m) => ({ default: m.TeamsWorkspace })))
 const CommercialCalculatorWorkspace = lazy(() =>
@@ -109,6 +112,7 @@ export const router = createBrowserRouter([
       { path: '/settings/dms/:connectionId', element: <DmsConnectionPage /> },
       { path: '/documents/:module', element: <DmsDocumentsPage /> },
       { path: '/settings/tender-websites', element: <TenderWebsitesSettingsPage /> },
+      { path: '/settings/document-verifications', element: <DocumentVerificationsSettingsPage /> },
       ...bidTrackerRoutes,
       ...adminImportRoutes,
       { path: '*', element: <NotFound /> },

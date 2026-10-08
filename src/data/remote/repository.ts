@@ -9,7 +9,7 @@
 import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/routers/access'
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import type { BidSynopsis, BidSynopsisSection, SaveBidSynopsisInput } from '@goms/domain'
-import type { TenderWebsite, TenderWebsiteInput } from '@goms/domain'
+import type { TenderWebsite, TenderWebsiteInput, TenderWebsiteKind } from '@goms/domain'
 import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
 import type { MyAccess } from '../../../apps/api/src/routers/auth'
@@ -42,7 +42,7 @@ export class RemoteRepository implements Partial<Repository> {
     this.client.bidSynopsis.get.query({ bidId, section }) as Promise<BidSynopsis | null>
   saveBidSynopsis = (input: SaveBidSynopsisInput): Promise<BidSynopsis> =>
     this.client.bidSynopsis.save.mutate(input) as Promise<BidSynopsis>
-  listTenderWebsites = (): Promise<TenderWebsite[]> => this.client.tenderWebsites.list.query()
+  listTenderWebsites = (kind: TenderWebsiteKind = 'tender'): Promise<TenderWebsite[]> => this.client.tenderWebsites.list.query({ kind })
   listTenderDscEmployees = () => this.client.tenderWebsites.dscEmployees.query()
   createTenderWebsite = (input: TenderWebsiteInput): Promise<TenderWebsite> => this.client.tenderWebsites.create.mutate(input)
   updateTenderWebsite = (id: string, input: TenderWebsiteInput): Promise<TenderWebsite> =>

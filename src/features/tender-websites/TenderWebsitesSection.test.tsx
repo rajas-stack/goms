@@ -3,6 +3,8 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { repository, resetLocalData } from '@/data/repository'
+import type { TenderWebsiteKind } from '@goms/domain'
+import { WebsitesField } from '@/modules/bid-tracker/synopsis/WebsitesField'
 import { TenderWebsitesSection } from './TenderWebsitesSection'
 import { lockCredentials } from './credentialLock'
 
@@ -15,9 +17,9 @@ vi.mock('./credentialLock', () => ({
   }),
 }))
 
-function renderSection() {
+function renderSection(kind?: TenderWebsiteKind) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  return render(<QueryClientProvider client={qc}><TenderWebsitesSection /></QueryClientProvider>)
+  return render(<QueryClientProvider client={qc}><TenderWebsitesSection kind={kind} /></QueryClientProvider>)
 }
 
 async function openCreate() {
@@ -40,6 +42,68 @@ describe('TenderWebsitesSection', () => {
     expect(link).toHaveAttribute('rel', 'noopener noreferrer')
     expect(await repository.listTenderWebsites()).toHaveLength(1)
     expect(screen.queryByLabelText('Website name')).not.toBeInTheDocument()
+  })
+
+  it('creates a document verification site that stays off the tender list and the General tab dropdown', async () => {
+    await repository.createTenderWebsite({ name: 'E-Proc', url: 'https://eproc.example.gov.in' })
+    const { unmount } = renderSection('verification')
+    expect(await screen.findByText(/No verification sites yet/)).toBeInTheDocument()
+    await openCreate()
+    const dialog = screen.getByRole('dialog', { name: 'Create document verification site' })
+    const form = within(dialog).getByRole('form', { name: 'Add document verification site' })
+    await userEvent.type(within(form).getByLabelText('Website name'), 'GST')
+    await userEvent.type(within(form).getByLabelText('Website link'), 'https://services.gst.gov.in')
+    await userEvent.click(within(form).getByRole('button', { name: 'Create' }))
+    const list = await screen.findByRole('list', { name: 'Saved document verification sites' })
+    expect(within(list).getByRole('link', { name: /GST/ })).toHaveAttribute('href', 'https://services.gst.gov.in')
+    expect(within(list).queryByRole('link', { name: /E-Proc/ })).not.toBeInTheDocument()
+    expect((await repository.listTenderWebsites('verification'))[0]).toMatchObject({ name: 'GST', kind: 'verification' })
+    unmount()
+
+    renderSection('tender')
+    const tenders = await screen.findByRole('list', { name: 'Saved tender websites' })
+    expect(within(tenders).getByRole('link', { name: /E-Proc/ })).toBeInTheDocument()
+    expect(within(tenders).queryByRole('link', { name: /GST/ })).not.toBeInTheDocument()
+  })
+
+  it('offers only tender websites in the General tab dropdown', async () => {
+    await repository.createTenderWebsite({ name: 'E-Proc', url: 'https://eproc.example.gov.in' })
+    await repository.createTenderWebsite({ kind: 'verification', name: 'Udyam', url: 'https://udyamregistration.gov.in' })
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={qc}><WebsitesField id="w" label="Websites" value="" onChange={() => undefined} /></QueryClientProvider>)
+    await userEvent.click(await screen.findByRole('button', { name: /Choose websites/ }))
+    expect(await screen.findByRole('checkbox', { name: 'E-Proc' })).toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: 'Udyam' })).not.toBeInTheDocument()
+  })
+
+  it('allows the same name on the verification page as a tender website, but not twice on one page', async () => {
+    await repository.createTenderWebsite({ name: 'MCA', url: 'https://www.mca.gov.in' })
+    await repository.createTenderWebsite({ kind: 'verification', name: 'ISO check', url: 'https://iso.example' })
+    renderSection('verification')
+    await openCreate()
+    await userEvent.type(await screen.findByLabelText('Website name'), 'iso check')
+    await userEvent.type(screen.getByLabelText('Website link'), 'https://iso.example/2')
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/already exists/)
+    await userEvent.clear(screen.getByLabelText('Website name'))
+    await userEvent.type(screen.getByLabelText('Website name'), 'MCA')
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+    expect(await screen.findByRole('link', { name: /MCA/ })).toBeInTheDocument()
+    expect((await repository.listTenderWebsites('verification')).map(site => site.name)).toEqual(['ISO check', 'MCA'])
+  })
+
+  it('uses the compact editing lock switch on each row', async () => {
+    await repository.createTenderWebsite({ kind: 'verification', name: 'GST', url: 'https://services.gst.gov.in' })
+    renderSection('verification')
+    const toggle = await screen.findByRole('button', { name: 'Lock editing for GST' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    expect(toggle).toHaveAttribute('title', 'Lock editing for GST')
+    expect(toggle).toHaveClass('lock-switch--compact')
+    expect(toggle).not.toHaveTextContent(/Unlocked|Locked/)
+    await userEvent.click(toggle)
+    const locked = await screen.findByRole('button', { name: 'Unlock editing for GST' })
+    expect(locked).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Edit GST' })).toBeDisabled()
   })
 
   it('refuses a link that is not http(s)', async () => {

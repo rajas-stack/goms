@@ -61,7 +61,7 @@ function defaultStage(milestones: Milestone[]): string | null {
 function Legend() {
   const item = 'flex items-center gap-2'
   return (
-    <ul aria-label="Legend" className="neu-raised flex flex-wrap items-center gap-x-7 gap-y-2 rounded-2xl px-5 py-3 text-[13px] text-ink-700">
+    <ul aria-label="Legend" className="neu-raised flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-xl px-4 py-2 text-[11px] text-ink-700">
       <li className={item}><Dot className="bg-blue" />Planned</li>
       <li className={item}><Dot className="bg-emerald" />Actual</li>
       <li className={item}><Dot className="bg-edge" />Upcoming</li>
@@ -69,7 +69,7 @@ function Legend() {
       <li className={item}><span aria-hidden className="w-6 border-t-2 border-dashed border-blue/60" />Planned dependency</li>
       <li className={item}><span aria-hidden className="w-6 border-t-2 border-dashed border-crimson/70" />Delayed dependency</li>
       <li className={item}><Diamond className="border-2 border-ink-900" />Milestone</li>
-      <li className={item}><Icon name="TriangleAlert" size={14} className="text-crimson" />Issue</li>
+      <li className={item}><Icon name="TriangleAlert" size={12} className="text-crimson" />Issue</li>
       <li className={item}><span aria-hidden className="h-4 border-l-2 border-dashed border-ink-900" />Today</li>
     </ul>
   )
@@ -139,13 +139,13 @@ export function OpportunityTimeline({ timeline, today = isoToday(), isClosed = !
   const rangeEnd = formatTimelineDate(whole ? timeline.endDate : fromDay(Math.round(vp.view.startDay + vp.view.spanDays)))
 
   return (
-    <section aria-label="Opportunity lifecycle timeline" className={cn('min-w-0 space-y-4 rounded-3xl bg-panel/50 p-4 sm:p-5', className)}>
+    <section aria-label="Opportunity lifecycle timeline" className={cn('min-w-0 space-y-3 rounded-2xl bg-panel/50 p-3 sm:p-4', className)}>
       <TimelineHeader rangeStart={rangeStart} rangeEnd={rangeEnd} endEstimated={!!timeline.endDateEstimated} outcome={timeline.outcome}
         zoom={vp.zoom} onZoom={zoomTo} onToday={goToday} onStep={vp.step} />
 
       <StageCards milestones={milestones} today={today} selectedId={stage?.id ?? null} highlightedId={highlightedId} onSelect={selectStage} />
 
-      <div className="neu-raised flex rounded-2xl p-4">
+      <div className="neu-raised flex rounded-xl p-2.5">
         <GanttLabels />
         <div
           ref={frameRef}
@@ -178,9 +178,9 @@ export function OpportunityTimeline({ timeline, today = isoToday(), isClosed = !
         {issue && (
           <motion.div key="issue" role="region" aria-label="Timeline details" data-testid="timeline-detail"
             initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.15 }}
-            className="neu-raised relative rounded-2xl p-4 pr-12">
+            className="neu-raised relative rounded-xl p-3 pr-11">
             <button type="button" onClick={() => setIssue(null)} aria-label="Close details"
-              className="neu-raised-sm absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:text-ink focus-visible:focus-ring">
+              className="neu-raised-sm absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-lg text-muted hover:text-ink focus-visible:focus-ring">
               <Icon name="X" size={14} />
             </button>
             {issueContent(issue)}

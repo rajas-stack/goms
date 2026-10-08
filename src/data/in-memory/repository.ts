@@ -10,7 +10,7 @@ import type {
 import type { MyAccess } from '../../../apps/api/src/routers/auth'
 import { uid } from '@/lib/utils'
 import { PROTECTED_VALUES_ENFORCED, validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type SaveBidSynopsisInput } from '@goms/domain'
-import { assertUniqueTenderWebsiteName, normalizeTenderWebsiteInput, type TenderWebsite, type TenderWebsiteInput, type TenderDscEmployee } from '@goms/domain'
+import { assertUniqueTenderWebsiteName, normalizeTenderWebsiteInput, tenderWebsiteKind, type TenderWebsite, type TenderWebsiteInput, type TenderWebsiteKind, type TenderDscEmployee } from '@goms/domain'
 import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType } from '@/lib/node-types'
 import {
@@ -562,7 +562,8 @@ export interface Repository {
   saveBidSynopsis(input: SaveBidSynopsisInput): Promise<BidSynopsis>
 
   /** Tender portals managed in Settings, offered in a bid's General tab. */
-  listTenderWebsites(): Promise<TenderWebsite[]>
+  /** Websites on one Settings page; defaults to the tender portals. */
+  listTenderWebsites(kind?: TenderWebsiteKind): Promise<TenderWebsite[]>
   listTenderDscEmployees(): Promise<TenderDscEmployee[]>
   createTenderWebsite(input: TenderWebsiteInput): Promise<TenderWebsite>
   updateTenderWebsite(id: string, input: TenderWebsiteInput): Promise<TenderWebsite>
@@ -696,7 +697,8 @@ class InMemoryRepository implements Repository {
       bidSavedViews: data.bidSavedViews ?? [],
       bidCustomFields: data.bidCustomFields ?? [],
       bidCustomFieldValues: data.bidCustomFieldValues ?? [],
-      tenderWebsites: data.tenderWebsites ?? [],
+      // Websites saved before Settings had a verification page are tender portals.
+      tenderWebsites: (data.tenderWebsites ?? []).map(site => ({ ...site, kind: tenderWebsiteKind(site) })),
     }
     // `mergeAudit` postdates some locally persisted snapshots (the static
     // type says it's always there, but a snapshot saved before this field
@@ -1926,8 +1928,8 @@ class InMemoryRepository implements Repository {
     return structuredClone(updated)
   }
 
-  async listTenderWebsites(): Promise<TenderWebsite[]> {
-    return [...this.data.tenderWebsites].sort((a, b) => a.name.localeCompare(b.name)).map(site => ({ ...site }))
+  async listTenderWebsites(kind: TenderWebsiteKind = 'tender'): Promise<TenderWebsite[]> {
+    return this.data.tenderWebsites.filter(site => tenderWebsiteKind(site) === kind).sort((a, b) => a.name.localeCompare(b.name)).map(site => ({ ...site }))
   }
 
   async listTenderDscEmployees(): Promise<TenderDscEmployee[]> {
@@ -1943,10 +1945,11 @@ class InMemoryRepository implements Repository {
 
   async createTenderWebsite(input: TenderWebsiteInput): Promise<TenderWebsite> {
     const clean = normalizeTenderWebsiteInput(input)
-    assertUniqueTenderWebsiteName(this.data.tenderWebsites, clean.name)
+    const kind = clean.kind ?? 'tender'
+    assertUniqueTenderWebsiteName(this.data.tenderWebsites, clean.name, undefined, kind)
     await this.validateTenderDsc(clean.dscEmployeeId)
     const now = new Date().toISOString()
-    const site: TenderWebsite = { id: uid('tws'), ...clean, createdAt: now, updatedAt: now }
+    const site: TenderWebsite = { id: uid('tws'), ...clean, kind, createdAt: now, updatedAt: now }
     this.data.tenderWebsites = [...this.data.tenderWebsites, site]
     return { ...site }
   }
@@ -1956,9 +1959,10 @@ class InMemoryRepository implements Repository {
     if (!existing) throw new Error('That website no longer exists.')
     if (existing.editingLocked) throw new Error('Unlock editing before changing this website.')
     const clean = normalizeTenderWebsiteInput(input)
-    assertUniqueTenderWebsiteName(this.data.tenderWebsites, clean.name, id)
+    const kind = tenderWebsiteKind(existing) // a website never moves between Settings pages
+    assertUniqueTenderWebsiteName(this.data.tenderWebsites, clean.name, id, kind)
     if (clean.dscEmployeeId !== existing.dscEmployeeId) await this.validateTenderDsc(clean.dscEmployeeId)
-    const updated: TenderWebsite = { ...existing, ...clean, updatedAt: new Date().toISOString() }
+    const updated: TenderWebsite = { ...existing, ...clean, kind, updatedAt: new Date().toISOString() }
     this.data.tenderWebsites = this.data.tenderWebsites.map(site => (site.id === id ? updated : site))
     return { ...updated }
   }

@@ -32,12 +32,12 @@ export const SEVERITY_CLASS: Record<TimelineEventSeverity, string> = {
 
 /** Gantt grid geometry (px). */
 export const GANTT = {
-  monthH: 34,
-  dayH: 30,
-  headerH: 64,
-  rowH: 58,
-  milestoneH: 92,
-  totalH: 64 + 58 * 2 + 92,
+  monthH: 26,
+  dayH: 22,
+  headerH: 48,
+  rowH: 40,
+  milestoneH: 66,
+  totalH: 48 + 40 * 2 + 66,
   /** Below this many px per day, the day row switches to weekly / monthly ticks. */
-  dayMinPx: 24,
+  dayMinPx: 20,
 } as const

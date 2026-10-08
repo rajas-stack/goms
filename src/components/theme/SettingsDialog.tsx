@@ -1,6 +1,7 @@
 import { Dialog } from '@/components/ui/Dialog'
 import { Icon } from '@/components/ui/Icon'
 import { Link } from 'react-router-dom'
+import { WEBSITE_KIND_COPY, type WebsiteKindCopy } from '@/features/tender-websites/websiteKinds'
 
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
@@ -10,10 +11,13 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   )
 }
 
+const websitePage = ({ route, icon, title, hint }: WebsiteKindCopy) => ({ to: route, icon, title, hint })
+
 const SETTINGS_PAGES = [
   { to: '/settings/dms', icon: 'FileText', title: 'DMS Settings', hint: 'Document storage, Google Drive, and provider setup' },
-  { to: '/settings/tender-websites', icon: 'Globe', title: 'Tender websites', hint: 'Portals for bidding documents and corrigenda, offered in a bid\'s General tab' },
-] as const
+  websitePage(WEBSITE_KIND_COPY.tender),
+  websitePage(WEBSITE_KIND_COPY.verification),
+]
 
 export function SettingsMenu({ onNavigate }: { onNavigate?: () => void }) {
   return (
