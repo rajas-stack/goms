@@ -27,4 +27,12 @@ describe('tender credential locks', () => {
     expect(a.iv).not.toBe(b.iv)
     expect(a.ciphertext).not.toBe(b.ciphertext)
   })
+
+  it('preserves the credentials when rotating the passphrase and rejects the previous key', async () => {
+    const credentials = { userId: 'portal-user', password: 'portal-secret' }
+    const original = await lockCredentials(credentials, 'original passphrase')
+    const rotated = await lockCredentials(await unlockCredentials(original, 'original passphrase'), 'replacement passphrase')
+    expect(await unlockCredentials(rotated, 'replacement passphrase')).toEqual(credentials)
+    await expect(unlockCredentials(rotated, 'original passphrase')).rejects.toThrow(/Check the passphrase/)
+  })
 })

@@ -1,5 +1,6 @@
+import { Can } from '@/lib/permissions'
+import { BID_SYNOPSIS_SECTIONS, sheetModule, type BidSynopsisSection } from '@goms/domain'
 import { useEffect, useState } from 'react'
-import { BID_SYNOPSIS_SECTIONS, type BidSynopsisSection } from '@goms/domain'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -99,6 +100,7 @@ export function BidDetailWorkspace() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Can module={sheetModule(bid.sheet)} action="update" atom="bid.archive">
             <Button
               size="sm" disabled={archive.isPending || unarchive.isPending}
               onClick={async () => {
@@ -110,9 +112,12 @@ export function BidDetailWorkspace() {
             >
               <Icon name={bid.status === 'archived' ? 'ArchiveRestore' : 'Archive'} size={13} /> {bid.status === 'archived' ? 'Restore' : 'Archive'}
             </Button>
+            </Can>
+            <Can module={sheetModule(bid.sheet)} action="delete">
             <Button size="sm" variant="danger" onClick={() => { setActionError(null); setConfirmDelete(true) }}>
               <Icon name="Trash2" size={13} /> Delete bid
             </Button>
+            </Can>
             {actionError && <span role="alert" className="text-[12px] text-crimson">{actionError}</span>}
           </div>
         </div>
@@ -140,7 +145,7 @@ export function BidDetailWorkspace() {
         </div>}
         {BID_SYNOPSIS_SECTIONS.filter(section => visited.includes(section) || tab === section).map(section => (
           <div key={`${bid.id}:${section}`} role="tabpanel" id={`synopsis-panel-${section}`} aria-labelledby={`synopsis-tab-${section}`} hidden={tab !== section}>
-            {section === 'general' ? <GeneralTab bidId={bid.id} /> : section === 'scope' ? <SynopsisTab bidId={bid.id} section={section} /> : <GridTab bidId={bid.id} section={section} />}
+            {section === 'general' ? <GeneralTab bidId={bid.id} module={sheetModule(bid.sheet)} /> : section === 'scope' ? <SynopsisTab bidId={bid.id} section={section} module={sheetModule(bid.sheet)} /> : <GridTab bidId={bid.id} section={section} module={sheetModule(bid.sheet)} />}
             {section === 'milestone' && <details className="border-t border-line"><summary className="cursor-pointer px-4 py-3 text-sm font-medium">Tracked Dates &amp; Corrigenda</summary><MilestonesTab bidId={bid.id} /></details>}
           </div>
         ))}

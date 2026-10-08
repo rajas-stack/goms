@@ -141,11 +141,25 @@ export function generateSkuCode(data: CommercialCalculatorData, featureId: strin
   return buildSkuCode(vertical.code, product.code, mod.code, feature.code, feature.status)
 }
 
+type CostFields = Parameters<typeof skuTotalUnitCostCore>[0]
+
+/** A SKU whose cost fields the server hid (`null`, RBAC spec §7) counts them as 0 here, only so these helpers still
+ *  type-check. A figure derived from them is NOT real: callers check `canComputeMargin` first and show "Restricted"
+ *  instead (restricted.ts). */
+function zeroFilled(sku: CommercialSku): CommercialSku & CostFields {
+  const filled = { ...sku } as CommercialSku & Record<string, unknown>
+  for (const field of SKU_COST_FIELDS) filled[field] = sku[field] ?? 0
+  return filled as CommercialSku & CostFields
+}
+function zeroFilledMap(skusById: Map<string, CommercialSku>): Map<string, CommercialSku & CostFields> {
+  return new Map([...skusById].map(([id, sku]) => [id, zeroFilled(sku)]))
+}
+
 /** Sum of the 8 cost fields — shared by SKU-level and BOQ-level margin.
  *  Delegates to `@goms/domain` (Phase 6) — the backend BOQ router shares this
  *  exact rollup. */
 export function skuTotalUnitCost(sku: CommercialSku): number {
-  return skuTotalUnitCostCore(sku)
+  return skuTotalUnitCostCore(zeroFilled(sku))
 }
 
 /** BOM Option B (cost rollup): a SKU's fully-loaded unit cost is its own
@@ -159,7 +173,7 @@ export function skuTotalUnitCost(sku: CommercialSku): number {
 export function skuTotalUnitCostWithBom(
   sku: CommercialSku, bomItems: CommercialBomItem[], skusById: Map<string, CommercialSku>,
 ): number {
-  return skuTotalUnitCostWithBomCore(sku, bomItems, skusById)
+  return skuTotalUnitCostWithBomCore(zeroFilled(sku), bomItems, zeroFilledMap(skusById))
 }
 
 /** `bomItems`/`skusById` are optional so existing call sites that don't have
@@ -510,7 +524,8 @@ export function addBoqLineItemLogic(
   // absolute charge for a resolved pricing level (§4.2) — applying
   // `discountPct` on top of that would discount it a second time.
   const postDiscountPrice = effectiveUnitPrice(input.unitPrice, discountPct, isAbsolutePrice)
-  if (postDiscountPrice < sku.minimumAllowedPrice) {
+  // A hidden (`null`) floor is enforced by the server, which can see it — nothing to compare against here.
+  if (sku.minimumAllowedPrice !== null && postDiscountPrice < sku.minimumAllowedPrice) {
     throw new Error(`Discounted unit price (${postDiscountPrice.toFixed(2)}) is below this SKU's minimum allowed price (${sku.minimumAllowedPrice}).`)
   }
   const taxPct = data.masters.taxClasses.find((t) => t.id === sku.taxClassId)?.ratePct ?? 0
@@ -563,7 +578,7 @@ export function updateBoqLineItemLogic(
   // level (§4.2) — applying `discountPct` on top of that would discount it a
   // second time, same as `addBoqLineItemLogic`'s floor check.
   const postDiscountPrice = effectiveUnitPrice(unitPrice, discountPct, isAbsolutePrice)
-  if (postDiscountPrice < sku.minimumAllowedPrice) {
+  if (sku.minimumAllowedPrice !== null && postDiscountPrice < sku.minimumAllowedPrice) {
     throw new Error(`Discounted unit price (${postDiscountPrice.toFixed(2)}) is below this SKU's minimum allowed price (${sku.minimumAllowedPrice}).`)
   }
 
@@ -776,7 +791,7 @@ export function computeBoqMarginPercent(
   boq: CommercialBoq, lines: CommercialBoqLineItem[], skusById: Map<string, CommercialSku>, currencies: Currency[],
   bomItems: CommercialBomItem[] = [],
 ): number {
-  return computeBoqMarginPercentCore(lines, skusById, bomItems, (sku: CommercialSku) => skuToBoqConversionFactor(currencies, boq.currency, sku))
+  return computeBoqMarginPercentCore(lines, zeroFilledMap(skusById), bomItems, (sku: CommercialSku) => skuToBoqConversionFactor(currencies, boq.currency, sku))
 }
 
 // --- Audit log (spec §6.6, §15) --------------------------------------------

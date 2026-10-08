@@ -1,3 +1,4 @@
+import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/routers/access'
 import type {
   ActionQueueEntry, AttendeeRef, Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue,
   BidDocument, BidGridRow, BidMilestone, BidMilestoneWithBid, CustomFieldType, CustomValue,
@@ -6,6 +7,7 @@ import type {
   RelationshipQuality, RelationshipStatus,
   SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
 } from '@/lib/types'
+import type { MyAccess } from '../../../apps/api/src/routers/auth'
 import { uid } from '@/lib/utils'
 import { PROTECTED_VALUES_ENFORCED, validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type SaveBidSynopsisInput } from '@goms/domain'
 import { assertUniqueTenderWebsiteName, normalizeTenderWebsiteInput, type TenderWebsite, type TenderWebsiteInput, type TenderDscEmployee } from '@goms/domain'
@@ -290,7 +292,16 @@ export interface CreateFollowUpInput {
 
 /** All persistence flows through this interface. The in-memory implementation
  *  below can be replaced by a Supabase-backed one with no UI changes. */
+export interface SetRoleOverrideInput { email: string; role: string; effect: 'grant' | 'revoke'; reason: string }
+
 export interface Repository {
+  /** The caller's roles and roster facts (RBAC). The local store has no server: RBAC is off. */
+  getMyAccess(): Promise<MyAccess>
+  /** Role & Access Management (RBAC). The local store has no server and no roles, so these are empty no-ops. */
+  getAccessReadiness(): Promise<ReadinessRow[]>
+  listRoleOverrides(): Promise<RoleOverrideRow[]>
+  setRoleOverride(input: SetRoleOverrideInput): Promise<void>
+  removeRoleOverride(id: string): Promise<void>
   listStates(): Promise<StateSummary[]>
   getState(code: number): Promise<HierNode | undefined>
   getNode(id: string): Promise<HierNode | undefined>
@@ -555,6 +566,7 @@ export interface Repository {
   listTenderDscEmployees(): Promise<TenderDscEmployee[]>
   createTenderWebsite(input: TenderWebsiteInput): Promise<TenderWebsite>
   updateTenderWebsite(id: string, input: TenderWebsiteInput): Promise<TenderWebsite>
+  setTenderWebsiteEditingLock(id: string, locked: boolean): Promise<TenderWebsite>
   deleteTenderWebsite(id: string): Promise<void>
 
   listBidMilestones(bidId: string): Promise<BidMilestone[]>
@@ -640,6 +652,12 @@ function parseSubmissionDate(raw: string | null | undefined): string | null {
 }
 
 class InMemoryRepository implements Repository {
+  async getMyAccess(): Promise<MyAccess> { return { mode: 'off', email: null, roles: [], facts: null } }
+  async getAccessReadiness(): Promise<ReadinessRow[]> { return [] }
+  async listRoleOverrides(): Promise<RoleOverrideRow[]> { return [] }
+  async setRoleOverride(): Promise<void> {}
+  async removeRoleOverride(): Promise<void> {}
+
   private data: GormsData = buildSeed()
 
   constructor() {
@@ -1642,6 +1660,7 @@ class InMemoryRepository implements Repository {
         sheet: bid.sheet ?? DEFAULT_OWNED_SHEET,
         opportunityCode: opp?.opportunityCode ?? '',
         opportunityType: opp?.opportunityType ?? '',
+        createdBy: null, // the local store has no sign-in, so no creator
         departmentId: opp?.departmentId ?? '',
         departmentName: this.data.nodes.find((n) => n.id === opp?.departmentId)?.name ?? null,
         stateCode: opp?.stateCode ?? null,
@@ -1935,6 +1954,7 @@ class InMemoryRepository implements Repository {
   async updateTenderWebsite(id: string, input: TenderWebsiteInput): Promise<TenderWebsite> {
     const existing = this.data.tenderWebsites.find(site => site.id === id)
     if (!existing) throw new Error('That website no longer exists.')
+    if (existing.editingLocked) throw new Error('Unlock editing before changing this website.')
     const clean = normalizeTenderWebsiteInput(input)
     assertUniqueTenderWebsiteName(this.data.tenderWebsites, clean.name, id)
     if (clean.dscEmployeeId !== existing.dscEmployeeId) await this.validateTenderDsc(clean.dscEmployeeId)
@@ -1945,6 +1965,14 @@ class InMemoryRepository implements Repository {
 
   async deleteTenderWebsite(id: string): Promise<void> {
     this.data.tenderWebsites = this.data.tenderWebsites.filter(site => site.id !== id)
+  }
+
+  async setTenderWebsiteEditingLock(id: string, locked: boolean): Promise<TenderWebsite> {
+    const existing = this.data.tenderWebsites.find(site => site.id === id)
+    if (!existing) throw new Error('That website no longer exists.')
+    const updated = { ...existing, editingLocked: locked, updatedAt: new Date().toISOString() }
+    this.data.tenderWebsites = this.data.tenderWebsites.map(site => site.id === id ? updated : site)
+    return { ...updated }
   }
 
   async listAllBidMilestones(): Promise<BidMilestoneWithBid[]> {
@@ -3084,7 +3112,7 @@ class InMemoryRepository implements Repository {
  *  listed here or its effects won't survive a reload. */
 const MUTATOR_KEYS = [
   'saveBidSynopsis',
-  'createTenderWebsite', 'updateTenderWebsite', 'deleteTenderWebsite',
+  'createTenderWebsite', 'updateTenderWebsite', 'deleteTenderWebsite', 'setTenderWebsiteEditingLock',
   'createDeliveryTeamMember', 'updateDeliveryTeamMember', 'setDeliveryTeamMemberStatus', 'deleteDeliveryTeamMember',
   'createOrgPerson', 'updateOrgPerson', 'deleteOrgPerson',
   'createNode', 'updateNode', 'setNodeStatus', 'deleteNode', 'moveNode', 'duplicateNode',
@@ -3107,6 +3135,8 @@ const MUTATOR_KEYS = [
   'createBidSavedView', 'updateBidSavedView', 'deleteBidSavedView',
   'createBidCustomField', 'updateBidCustomField', 'reorderBidCustomFields', 'archiveBidCustomField',
   'unarchiveBidCustomField', 'deleteBidCustomField', 'setBidCustomValue',
+  'createDeliveryTeamMember', 'updateDeliveryTeamMember', 'setDeliveryTeamMemberStatus', 'deleteDeliveryTeamMember',
+  'createOrgPerson', 'updateOrgPerson', 'deleteOrgPerson', 'setRoleOverride', 'removeRoleOverride',
 ] as const
 
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
@@ -3130,6 +3160,7 @@ const READER_KEYS = [
   'listCustomers', 'getCustomer',
   'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
   'listDocuments', 'listDocumentCitations', 'getDocumentDownloadUrl', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
+  'listDeliveryTeamMembers', 'listOrgPeople', 'getMyAccess', 'getAccessReadiness', 'listRoleOverrides',
 ] as const
 
 // Adding a method to `Repository` without classifying it above breaks the
@@ -3157,14 +3188,13 @@ export async function resetLocalData(): Promise<void> {
   impl.hydrate(buildSeed())
 }
 
-/** The full store, serializable as-is for a JSON backup — see
- *  src/data/backup.ts. Not part of `Repository`: read-only introspection of
- *  the whole store, not a per-entity domain operation. */
+/** The full store, serializable as-is. Not part of `Repository`: read-only
+ *  introspection of the whole store, not a per-entity domain operation. */
 export function getFullSnapshot(): GormsData {
   return impl.snapshot()
 }
 
-/** Replaces the whole store with a restored backup and persists it, the
+/** Replaces the whole store with a restored snapshot and persists it, the
  *  same way any other mutation would — but bypassing the `Repository` proxy
  *  since this isn't a per-entity domain operation either. Callers must
  *  invalidate their own query cache afterward; this module has no

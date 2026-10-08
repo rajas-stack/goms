@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
 import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -24,6 +25,7 @@ export function TransferSalesPersonDialog({ open, person, onClose }: {
   const { data: people = [] } = useSalesPersons()
   const { data: postings = [] } = useSalesPostings(person?.id ?? null)
   const { transfer } = useSalesPersonMutations()
+  const allowed = useAllowed('team.sales', 'update')
   const current = postings.find((p) => p.endDate === null)
 
   const [designation, setDesignation] = useState('')
@@ -70,7 +72,7 @@ export function TransferSalesPersonDialog({ open, person, onClose }: {
       footer={
         <>
           <Button onClick={onClose} disabled={transfer.isPending}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!canSubmit || transfer.isPending}>
+          <Button variant="primary" onClick={submit} disabled={(!canSubmit || transfer.isPending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             {transfer.isPending ? 'Recording…' : 'Record transfer'}
           </Button>
         </>

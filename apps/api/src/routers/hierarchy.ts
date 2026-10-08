@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { publicProcedure, protectedProcedure, router } from '../trpc.js'
+import { rbacReadProcedure, protectedProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isForeignKeyViolation } from '../db-errors.js'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType, type HierNode } from '@goms/domain'
@@ -49,7 +49,7 @@ async function fetchBreadcrumb(id: string): Promise<HierNode[]> {
 }
 
 export const hierarchyRouter = router({
-  listStates: publicProcedure.query(async () => {
+  listStates: rbacReadProcedure.query(async () => {
     const states = (await pool.query(`SELECT * FROM hierarchy_nodes WHERE type_key = 'state'`)).rows.map(toNode)
     const out = []
     for (const s of states) {
@@ -76,21 +76,21 @@ export const hierarchyRouter = router({
     return out.sort((a, b) => a.name.localeCompare(b.name))
   }),
 
-  getState: publicProcedure.input(z.object({ code: z.number() })).query(async ({ input }) => {
+  getState: rbacReadProcedure.input(z.object({ code: z.number() })).query(async ({ input }) => {
     const result = await pool.query(`SELECT * FROM hierarchy_nodes WHERE type_key = 'state' AND state_code = $1`, [input.code])
     return result.rows[0] ? toNode(result.rows[0]) : null
   }),
 
-  getNode: publicProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+  getNode: rbacReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
     const result = await pool.query(`SELECT * FROM hierarchy_nodes WHERE id = $1`, [input.id])
     return result.rows[0] ? toNode(result.rows[0]) : null
   }),
 
-  listChildren: publicProcedure.input(z.object({ parentId: z.string().uuid() })).query(({ input }) =>
+  listChildren: rbacReadProcedure.input(z.object({ parentId: z.string().uuid() })).query(({ input }) =>
     activeChildren(input.parentId)
   ),
 
-  listOrgRoots: publicProcedure.input(z.object({ stateCode: z.number() })).query(async ({ input }) => {
+  listOrgRoots: rbacReadProcedure.input(z.object({ stateCode: z.number() })).query(async ({ input }) => {
     const result = await pool.query(
       `SELECT * FROM hierarchy_nodes WHERE domain='org' AND type_key='department' AND parent_id IS NULL AND state_code=$1 AND status='active' ORDER BY sort_order`,
       [input.stateCode],
@@ -98,7 +98,7 @@ export const hierarchyRouter = router({
     return result.rows.map(toNode)
   }),
 
-  listDepartments: publicProcedure.query(async () => {
+  listDepartments: rbacReadProcedure.query(async () => {
     const result = await pool.query(
       `SELECT * FROM hierarchy_nodes WHERE domain='org' AND type_key='department' AND status='active'
        ORDER BY COALESCE(state_code, 0), name`,
@@ -106,7 +106,7 @@ export const hierarchyRouter = router({
     return result.rows.map(toNode)
   }),
 
-  listPostingNodes: publicProcedure.input(z.object({ stateCode: z.number() })).query(async ({ input }) => {
+  listPostingNodes: rbacReadProcedure.input(z.object({ stateCode: z.number() })).query(async ({ input }) => {
     const result = await pool.query(
       `SELECT * FROM hierarchy_nodes
        WHERE domain='org' AND type_key = ANY($1) AND state_code=$2 AND status='active' ORDER BY name`,
@@ -115,21 +115,21 @@ export const hierarchyRouter = router({
     return result.rows.map(toNode)
   }),
 
-  breadcrumb: publicProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) =>
+  breadcrumb: rbacReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) =>
     fetchBreadcrumb(input.id)
   ),
 
-  childCount: publicProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+  childCount: rbacReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
     const result = await pool.query(`SELECT COUNT(*)::int AS n FROM hierarchy_nodes WHERE parent_id=$1 AND status='active'`, [input.id])
     return result.rows[0].n
   }),
 
-  geoRoot: publicProcedure.query(async () => {
+  geoRoot: rbacReadProcedure.query(async () => {
     const result = await pool.query(`SELECT * FROM hierarchy_nodes WHERE type_key='country'`)
     return result.rows[0] ? toNode(result.rows[0]) : null
   }),
 
-  childCounts: publicProcedure.input(z.object({ parentId: z.string().uuid() })).query(async ({ input }) => {
+  childCounts: rbacReadProcedure.input(z.object({ parentId: z.string().uuid() })).query(async ({ input }) => {
     const children = await activeChildren(input.parentId)
     const out: Record<string, number> = {}
     for (const c of children) {
@@ -360,7 +360,7 @@ export const hierarchyRouter = router({
       return toInsert.length
     }),
 
-  moveTargets: publicProcedure.input(z.object({ nodeId: z.string().uuid() })).query(async ({ input }) => {
+  moveTargets: rbacReadProcedure.input(z.object({ nodeId: z.string().uuid() })).query(async ({ input }) => {
     const nodeResult = await pool.query(`SELECT * FROM hierarchy_nodes WHERE id=$1`, [input.nodeId])
     const node = nodeResult.rows[0]
     if (!node) return []

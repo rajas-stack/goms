@@ -6,6 +6,8 @@ import { BidTrackerWorkspace } from './BidTrackerWorkspace'
 import { GridSheet } from './GridSheet'
 import { DashboardPage } from './pages/DashboardPage'
 import { OPPORTUNITY_TABS, PIPELINE_TABS, type OpportunityTab, type PipelineTab } from './sheets'
+import { usePermissions } from '@/lib/permissions'
+import { OPPORTUNITY_TAB_MODULES } from '@/lib/routeModules'
 
 /** The Opportunity module: Bid Tracker, Pipeline (Funnel / Backup / Commits),
  *  Campaign, Master and Dashboard. Laid out like Account Mapping's Map / Directory /
@@ -16,12 +18,16 @@ export function OpportunityWorkspace({ tab }: { tab: OpportunityTab }) {
   const { tab: pipelineParam } = useParams()
   const navigate = useNavigate()
   const pipeline = PIPELINE_TABS.find((t) => t.value === pipelineParam)
+  const perms = usePermissions()
+  // A tab follows its sheet's read permission; a direct hit on a hidden tab lands on the first visible one.
+  const visibleTabs = OPPORTUNITY_TABS.filter((t) => !perms.enforced || (OPPORTUNITY_TAB_MODULES[t.value] ?? []).some((m) => perms.level(m) !== 'N'))
+  if (perms.enforced && visibleTabs.length > 0 && !visibleTabs.some((t) => t.value === tab)) return <Navigate to={visibleTabs[0].path} replace />
   if (tab === 'pipeline' && !pipeline) return <Navigate to="/bid-tracker/pipeline/funnel" replace />
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <nav aria-label="Opportunity sheets" className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line bg-paper/70 px-3 py-1.5">
-        {OPPORTUNITY_TABS.map((t) => (
+        {visibleTabs.map((t) => (
           <NavLink key={t.value} to={t.path} end={t.value === 'bid-tracker'} title={t.label} className="flex-none">
             {() => (
               <div

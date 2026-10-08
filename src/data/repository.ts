@@ -18,7 +18,7 @@ export type {
   MergeableField, MergeEmployeesInput, TransferInput, CreateOpportunityInput,
   CreateSalesPersonInput, TransferSalesPersonInput, TransferBookOfBusinessInput,
   AssignOwnerInput, CreateFollowUpInput, CreateCustomerInput, CreateDeliveryTeamMemberInput,
-  UpdateDeliveryTeamMemberPatch, CreateOrgPersonInput, UpdateOrgPersonPatch,
+  UpdateDeliveryTeamMemberPatch, CreateOrgPersonInput, UpdateOrgPersonPatch, SetRoleOverrideInput,
 } from './in-memory/repository'
 
 export {

@@ -1,3 +1,4 @@
+import { Gate, usePermissions } from '@/lib/permissions'
 import { BID_STAGE_MAP, BID_STAGE_REQUIREMENTS } from '@goms/domain'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
@@ -46,6 +47,9 @@ export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMile
   }
   const { data: followUps = [] } = useFollowUps('bid', bid.id)
   const { create: createFollowUp, setStatus, remove: removeFollowUp } = useFollowUpMutations()
+  // Next actions and verification belong to the bid's sheet; the server decides per row.
+  const perms = usePermissions()
+  const allowed = perms.mayWrite('opp.bidTracker') || perms.mayWrite('opp.pipeline') || perms.mayWrite('opp.campaign')
   const [note, setNote] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [actionError, setActionError] = useState<string | null>(null)
@@ -57,6 +61,7 @@ export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMile
   const ownerPerson = owner ? people.find((p) => p.id === owner.salesPersonId) : undefined
 
   return (
+    <Gate allowed={allowed}>
     <div className="space-y-5 p-4">
       {requirements.length > 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-ink" role="note">
@@ -136,5 +141,6 @@ export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMile
       </div>
       <CorrigendaSection bidId={bid.id} />
     </div>
+    </Gate>
   )
 }

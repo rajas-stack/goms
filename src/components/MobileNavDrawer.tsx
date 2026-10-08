@@ -5,6 +5,8 @@ import { useShell } from '@/app/AppLayout'
 import { Icon } from './ui/Icon'
 import { cn } from '@/lib/utils'
 import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
+import { useCanReadAny } from '@/lib/permissions'
+import { NAV_MODULES } from '@/lib/routeModules'
 
 interface Props {
   open: boolean
@@ -24,6 +26,10 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const commercialActive = location.pathname.startsWith('/commercial-calculator')
   const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
   const teamsActive = location.pathname.startsWith('/teams')
+  const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping)
+  const canCommercial = useCanReadAny(NAV_MODULES.commercial)
+  const canOpportunity = useCanReadAny(NAV_MODULES.opportunity)
+  const canTeams = useCanReadAny(NAV_MODULES.teams)
 
   useEffect(() => {
     if (!open) return
@@ -69,7 +75,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                   <Icon name="X" size={18} />
                 </button>
               </div>
-              <button
+              {canAccountMapping && <button
                 onClick={() => {
                   onClose()
                   navigate('/map')
@@ -83,8 +89,8 @@ export function MobileNavDrawer({ open, onClose }: Props) {
               >
                 <Icon name="Map" size={17} />
                 Account Mapping
-              </button>
-              <button
+              </button>}
+              {canCommercial && <button
                 onClick={() => {
                   onClose()
                   navigate('/commercial-calculator')
@@ -98,8 +104,8 @@ export function MobileNavDrawer({ open, onClose }: Props) {
               >
                 <Icon name="Calculator" size={17} />
                 Commercial Calculator
-              </button>
-              {isBidTrackerEnabled() && (
+              </button>}
+              {isBidTrackerEnabled() && canOpportunity && (
                 <button
                   onClick={() => {
                     onClose()
@@ -116,7 +122,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                   Opportunity
                 </button>
               )}
-              <button
+              {canTeams && <button
                 onClick={() => {
                   onClose()
                   navigate('/teams')
@@ -130,7 +136,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
               >
                 <Icon name="Users" size={17} />
                 Teams
-              </button>
+              </button>}
             </motion.div>
           </>
         )}

@@ -1,4 +1,6 @@
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import type { PolicyModuleKey } from '@goms/domain'
+import { usePermissions } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { Dashboard } from './pages/Dashboard'
 import { CreateBoq } from './pages/CreateBoq'
@@ -149,19 +151,32 @@ function SidebarTabPage({ groups, defaultKey }: { groups: SidebarNavGroup[]; def
   )
 }
 
+/** Which modules open each top-level section (any one at Read or above). */
+const SECTION_MODULES: Record<string, PolicyModuleKey[]> = {
+  dashboard: ['com.boqs'], 'create-boq': ['com.boqs'], 'boq-management': ['com.boqs'],
+  catalog: ['com.skus', 'com.masters'], settings: ['com.skus', 'com.masters', 'com.approvalMatrix', 'admin.audit'],
+}
+
 function CommercialCalculatorWorkspaceBody() {
   const { section, boqId } = useParams()
   const navigate = useNavigate()
+  const perms = usePermissions()
+  const canOpen = (modules: readonly PolicyModuleKey[]) => !perms.enforced || modules.some((m) => perms.level(m) !== 'N')
+  const sections = SECTIONS.filter((s) => canOpen(SECTION_MODULES[s.key] ?? []))
+  // The Approval Matrix and the Audit Log are their own modules inside Settings.
+  const settingsNav = SETTINGS_NAV
+    .map((g) => ({ ...g, items: g.items.filter((i) => (i.key === 'approvalMatrix' ? canOpen(['com.approvalMatrix']) : i.key === 'audit' ? canOpen(['admin.audit']) : true)) }))
+    .filter((g) => g.items.length > 0)
   // No tab is "active" while viewing a specific BOQ — the current route
   // genuinely isn't Dashboard/Create BOQ/BOQ Management/Governance, it's the
   // shared proposal route those all lead into (IA redesign §6).
-  const activeKey = boqId ? null : (SECTIONS.find((s) => s.key === section) ?? SECTIONS[0]).key
+  const activeKey = boqId ? null : (sections.find((s) => s.key === section) ?? sections[0] ?? SECTIONS[0]).key
   const goTo = (key: string) => navigate(`/commercial-calculator/${key}`)
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 items-center gap-1 overflow-x-auto border-b border-line px-3 py-2">
-        {SECTIONS.map((s) => (
+        {sections.map((s) => (
           <button
             key={s.key}
             onClick={() => goTo(s.key)}
@@ -185,7 +200,7 @@ function CommercialCalculatorWorkspaceBody() {
             {activeKey === 'create-boq' && <CreateBoq onCancel={() => goTo('boq-management')} onCreated={(id) => goTo('boq/' + id)} />}
             {activeKey === 'boq-management' && <BoqManagement />}
             {activeKey === 'catalog' && <SidebarTabPage groups={CATALOG_NAV} defaultKey="hierarchy" />}
-            {activeKey === 'settings' && <SidebarTabPage groups={SETTINGS_NAV} defaultKey="approvalMatrix" />}
+            {activeKey === 'settings' && <SidebarTabPage groups={settingsNav} defaultKey={settingsNav[0]?.items[0]?.key ?? 'approvalMatrix'} />}
           </>
         )}
       </div>

@@ -43,6 +43,9 @@ Thumbs.db
 
 # Vite
 .vite/
+.vite-*.log
+.dms-build-check/
+.dms-build-check.log
 
 # Coverage
 coverage/

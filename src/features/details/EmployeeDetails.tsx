@@ -1,3 +1,4 @@
+import { Can } from '@/lib/permissions'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
@@ -209,9 +210,13 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           ) : (
             <AddReporteeMenu onChoose={setReporteeMode} />
           )}
-          <Button size="sm" onClick={() => ws.editEmployee(emp)}><Icon name="Pencil" size={14} /> Edit</Button>
+          <Can module="am.contacts" action="update">
+            <Button size="sm" onClick={() => ws.editEmployee(emp)}><Icon name="Pencil" size={14} /> Edit</Button>
+          </Can>
           {!vacant && (
-            <Button size="sm" onClick={() => setActive('event')}><Icon name="Calendar" size={14} /> Add meeting</Button>
+            <Can module="am.meetings" action="create">
+              <Button size="sm" onClick={() => setActive('event')}><Icon name="Calendar" size={14} /> Add meeting</Button>
+            </Can>
           )}
 
           {/* Less-frequent / destructive actions tucked away so they can't be hit by accident. */}
@@ -235,28 +240,38 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
               <>
                 {!vacant && (
                   <>
-                    <MenuItem icon={<Icon name="Briefcase" size={15} />} onClick={() => { close(); setActive('charge') }}>
-                      Add charge
-                    </MenuItem>
-                    <MenuItem icon={<Icon name="ArrowLeftRight" size={15} />} onClick={() => { close(); setActive('transfer') }}>
-                      Transfer
-                    </MenuItem>
+                    <Can module="am.contacts" action="update">
+                      <MenuItem icon={<Icon name="Briefcase" size={15} />} onClick={() => { close(); setActive('charge') }}>
+                        Add charge
+                      </MenuItem>
+                    </Can>
+                    <Can module="am.contacts" action="update">
+                      <Can module="am.departments" action="update">
+                        <MenuItem icon={<Icon name="ArrowLeftRight" size={15} />} onClick={() => { close(); setActive('transfer') }}>
+                          Transfer
+                        </MenuItem>
+                      </Can>
+                    </Can>
                     <MenuItem icon={<Icon name="IdCard" size={15} />} onClick={() => { close(); setCardOpen(true) }}>
                       Visiting card
                     </MenuItem>
-                    <MenuItem icon={<Icon name="Copy" size={15} />} onClick={() => { close(); setDuplicateDialogOpen(true) }}>
-                      Mark as duplicate of…
-                    </MenuItem>
+                    <Can module="am.contacts" action="update">
+                      <MenuItem icon={<Icon name="Copy" size={15} />} onClick={() => { close(); setDuplicateDialogOpen(true) }}>
+                        Mark as duplicate of…
+                      </MenuItem>
+                    </Can>
                     <MenuDivider />
                   </>
                 )}
-                <MenuItem
-                  icon={<Icon name="Trash2" size={15} />}
-                  danger
-                  onClick={() => { close(); setDeleteOpen(true) }}
-                >
-                  Remove
-                </MenuItem>
+                <Can module="am.contacts" action="delete">
+                  <MenuItem
+                    icon={<Icon name="Trash2" size={15} />}
+                    danger
+                    onClick={() => { close(); setDeleteOpen(true) }}
+                  >
+                    Remove
+                  </MenuItem>
+                </Can>
               </>
             )}
           </Menu>

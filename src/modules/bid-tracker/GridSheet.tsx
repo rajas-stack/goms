@@ -1,3 +1,4 @@
+import { useAllowed } from '@/lib/permissions'
 import { useEffect, useRef, useState } from 'react'
 import { pruneFilterNodes, type FilterNode } from '@goms/domain'
 import { useBidSavedViewMutations, useBidSavedViews } from '@/lib/api'
@@ -18,6 +19,8 @@ const SAVE_DEBOUNCE_MS = 600
 export function GridSheet({ sheet }: { sheet: SheetId }) {
   const { data: views = [] } = useBidSavedViews(sheet)
   const { update, remove } = useBidSavedViewMutations()
+  // Editing or deleting a GLOBAL view needs the right to manage columns; personal views are the user's own (gap A3).
+  const canManageGlobalViews = useAllowed('bid.columns', 'update')
   const [activeViewId, setActiveViewId] = useState(DEFAULT_VIEW_ID)
   // The grid's working copy. Switching views replaces it from the view; editing
   // it changes only this copy — and, for a USER view, is persisted back (spec
@@ -43,7 +46,7 @@ export function GridSheet({ sheet }: { sheet: SheetId }) {
   const pending = useRef<{ id: string; patch: { filterRules: FilterNode[]; visibleColumns: string[] } } | null>(null)
   const flushPending = () => {
     clearTimeout(persistTimer.current)
-    if (pending.current) update.mutate(pending.current)
+    if (pending.current && !(views.find((v) => v.id === pending.current!.id)?.scope === 'global' && !canManageGlobalViews)) update.mutate(pending.current)
     pending.current = null
   }
   const flushRef = useRef(flushPending)
@@ -69,6 +72,7 @@ export function GridSheet({ sheet }: { sheet: SheetId }) {
   const onColumnsChange = (next: string[]) => { setVisibleColumns(next); persist(rules, next) }
 
   const onDelete = (id: string) => {
+    if (views.find((v) => v.id === id)?.scope === 'global' && !canManageGlobalViews) return
     if (!window.confirm('Delete this saved view?')) return
     if (pending.current?.id === id) { clearTimeout(persistTimer.current); pending.current = null } // nothing to save into a deleted view
     remove.mutate(id, { onSuccess: () => selectView(DEFAULT_VIEW_ID) })

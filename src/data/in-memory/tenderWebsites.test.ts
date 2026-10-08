@@ -31,6 +31,17 @@ describe('tender websites (local store)', () => {
     expect(await repository.listTenderWebsites()).toHaveLength(1)
   })
 
+  it('persists the edit lock and prevents changes until editing is unlocked', async () => {
+    const credentials = { version: 1 as const, salt: 'AAAAAAAAAAAAAAAAAAAAAA==', iv: 'AAAAAAAAAAAAAAAA', ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }
+    const site = await repository.createTenderWebsite({ name: 'Portal', url: 'https://portal.example', credentials })
+    await repository.setTenderWebsiteEditingLock(site.id, true)
+    await expect(repository.updateTenderWebsite(site.id, { name: 'Changed', url: 'https://changed.example' })).rejects.toThrow('Unlock editing')
+    expect((await repository.listTenderWebsites())[0]).toMatchObject({ name: 'Portal', editingLocked: true, credentials })
+    await repository.setTenderWebsiteEditingLock(site.id, false)
+    const updated = await repository.updateTenderWebsite(site.id, { name: 'Changed', url: site.url })
+    expect(updated).toMatchObject({ name: 'Changed', editingLocked: false, credentials })
+  })
+
   it('validates DSC eligibility and preserves a credential lock when changing only the link', async () => {
     const people = await repository.listOrgPeople()
     const senior = people.find(person => person.level === 0)!

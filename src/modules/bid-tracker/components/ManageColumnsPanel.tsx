@@ -1,3 +1,4 @@
+import { Gate, useAllowed } from '@/lib/permissions'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -28,6 +29,7 @@ export function ManageColumnsPanel({ all, visible, columnOrder, onVisibleChange,
 }) {
   const { data: fields = [] } = useBidCustomFields(true)
   const { update, reorder, archive, unarchive, remove } = useBidCustomFieldMutations()
+  const allowed = useAllowed('bid.columns', 'update')
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
   const [editingOptions, setEditingOptions] = useState<{ id: string; options: string[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -82,6 +84,7 @@ export function ManageColumnsPanel({ all, visible, columnOrder, onVisibleChange,
   )
 
   return (
+    <Gate allowed={allowed}>
     <div className="flex flex-col divide-y divide-line" data-testid="manage-columns-panel">
       <ColumnsPanel all={all} visible={visible} columnOrder={columnOrder} onChange={onVisibleChange} focusId={focusId} onDeleteCustom={doDelete} />
 
@@ -154,5 +157,6 @@ export function ManageColumnsPanel({ all, visible, columnOrder, onVisibleChange,
       </div>
       )}
     </div>
+    </Gate>
   )
 }

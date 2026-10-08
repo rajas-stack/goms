@@ -9,6 +9,7 @@ export interface TenderWebsite {
   /** Encrypted together; the unlock passphrase is never stored. */
   credentials?: TenderCredentialLock | null
   dscEmployeeId?: string | null
+  editingLocked?: boolean
 }
 
 export interface TenderCredentialLock {

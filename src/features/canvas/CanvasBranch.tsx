@@ -1,3 +1,4 @@
+import { usePermissions } from '@/lib/permissions'
 import { useCallback, useEffect, useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCanvas, type DragPayload } from './canvasContext'
@@ -41,6 +42,9 @@ export function CanvasBranch({ item, depth, parentKey, controlled }: {
   const toast = useToast()
   const { move, reorder } = useNodeMutations()
   const { update: updateEmployee, setManager } = useEmployeeMutations()
+  const perms = usePermissions()
+  // Drag-and-drop re-parents nodes and re-posts / re-points contacts; the server decides per row.
+  const canDrag = perms.mayWrite('am.contacts') || perms.mayWrite('am.departments') || perms.mayWrite('am.geography')
   const key = itemKey(item)
   const expanded = controlled ? controlled.expanded : canvas.isExpanded(key, depth)
 
@@ -173,7 +177,7 @@ export function CanvasBranch({ item, depth, parentKey, controlled }: {
     const p = dragPayload
     canvas.setOverKey(null)
     canvas.setDragPayload(null)
-    if (!dropValid(p)) return
+    if (!canDrag || !dropValid(p)) return
     try {
       if (p!.kind === 'node' && isNode && node) {
         if (p!.node.parentId === node.parentId) {
@@ -205,7 +209,7 @@ export function CanvasBranch({ item, depth, parentKey, controlled }: {
       <div
         ref={setRef}
         data-card-key={key}
-        draggable
+        draggable={canDrag}
         onDragStart={onDragStart}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}

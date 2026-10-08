@@ -1,3 +1,4 @@
+import { useAllowed } from '@/lib/permissions'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useCurrentPostings, useDepartments, useEmployeeMutations, useEmployeesUnder, useSalesPersons } from '@/lib/api'
 import { convertWorkAmount, formatBudgetRange, WORK_VALUE_UNITS } from '@/features/nodes/department-meta'
@@ -19,6 +20,7 @@ import { formatPercent, isNegativeMargin } from '../format'
 import { useBoqWorkspaceShortcuts } from '../use-boq-workspace-shortcuts'
 import { useStickyScrollOffset } from '../use-sticky-scroll-offset'
 import { BOQ_WORKSPACE_SECTIONS, BoqWorkspaceHeader } from '../components/BoqWorkspaceHeader'
+import { canComputeMargin } from '../restricted'
 import { SkuLinePicker } from '../components/SkuLinePicker'
 import { SkuSearchBar } from '../components/SkuSearchBar'
 import { SellingPriceSection } from '../components/SellingPriceSection'
@@ -62,6 +64,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const { data: boqs = [] } = useBoqs()
   const { create, updateStatus } = useBoqMutations()
   const { create: createEmployee } = useEmployeeMutations()
+  const allowed = useAllowed('com.boqs', 'create')
   const toast = useToast()
 
   const [opportunityName, setOpportunityName] = useState('')
@@ -320,6 +323,18 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
   const stickyBarRef = useRef<HTMLDivElement>(null)
   useStickyScrollOffset(scrollContainerRef, stickyBarRef)
 
+  if (!allowed) {
+    return (
+      <div className="flex h-full items-center justify-center p-8 text-center">
+        <div>
+          <h1 className="text-lg font-semibold text-ink-900">You can't create BOQs</h1>
+          <p className="mt-1 text-sm text-muted">Your role can view BOQs but not create them.</p>
+          <button type="button" className="mt-3 text-sm text-teal-600 underline" onClick={onCancel}>Back</button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div ref={scrollContainerRef} className="flex h-full flex-col overflow-y-auto">
       <div className="shrink-0 border-b border-line bg-white px-4 py-3">
@@ -337,7 +352,7 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
         statusLabel="Draft"
         customerName={customerName}
         lineCount={lines.length}
-        marginPct={marginPreview}
+        marginPct={canComputeMargin(skus) ? marginPreview : null}
         grandTotal={grandTotal}
         currencyCode={effectiveCurrencyCode}
         onPreview={() => {
@@ -666,8 +681,8 @@ export function CreateBoq({ onCancel, onCreated }: { onCancel: () => void; onCre
                 </table>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-4 text-sm">
-                <span className={isNegativeMargin(marginPreview) ? 'font-medium text-rose-700' : 'text-muted'}>
-                  Margin {formatPercent(marginPreview)}{isNegativeMargin(marginPreview) ? ' — Below Cost' : ''}
+                <span className={canComputeMargin(skus) && isNegativeMargin(marginPreview) ? 'font-medium text-rose-700' : 'text-muted'}>
+                  {canComputeMargin(skus) ? `Margin ${formatPercent(marginPreview)}${isNegativeMargin(marginPreview) ? ' — Below Cost' : ''}` : 'Margin Restricted'}
                 </span>
                 <span className="font-semibold text-ink-900">
                   Grand Total: {effectiveCurrencyCode} {grandTotal.toLocaleString()}

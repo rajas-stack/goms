@@ -20,5 +20,6 @@ export function useTenderWebsiteMutations() {
     create: useMutation({ mutationFn: (input: TenderWebsiteInput) => repository.createTenderWebsite(input), onSuccess }),
     update: useMutation({ mutationFn: ({ id, ...input }: TenderWebsiteInput & { id: string }) => repository.updateTenderWebsite(id, input), onSuccess }),
     remove: useMutation({ mutationFn: (id: string) => repository.deleteTenderWebsite(id), onSuccess }),
+    editLock: useMutation({ mutationFn: ({ id, locked }: { id: string; locked: boolean }) => repository.setTenderWebsiteEditingLock(id, locked), onSuccess }),
   }
 }

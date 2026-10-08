@@ -1,3 +1,4 @@
+import { usePermissions } from '@/lib/permissions'
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
@@ -74,6 +75,14 @@ export function GlobalFab() {
   const location = useLocation()
   const navigate = useNavigate()
   const { openImport } = useShell()
+  const perms = usePermissions()
+  // Each entry creates something in one module; show only what this role may create.
+  const visibleMenu = MENU.filter((item) => {
+    if (item.kind === 'import') return perms.can('am.departments', 'create') || perms.can('am.contacts', 'create')
+    if (item.kind === 'activity') return perms.can('am.meetings', 'create')
+    if (item.kind === 'person') return perms.can('am.contacts', 'create')
+    return perms.can('am.departments', 'create')
+  })
   const [menuOpen, setMenuOpen] = useState(false)
   const [flow, setFlow] = useState<Flow>({ step: 'closed' })
   const [activityDialogOpen, setActivityDialogOpen] = useState(false)
@@ -175,7 +184,7 @@ export function GlobalFab() {
               role="menu"
               aria-label="Create"
             >
-              {MENU.map((item) => (
+              {visibleMenu.map((item) => (
                 <button
                   key={item.id}
                   type="button"

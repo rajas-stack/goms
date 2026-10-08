@@ -14,6 +14,7 @@ function toMember(row: any) {
     designation: row.designation ?? '',
     status: row.status,
     managerId: row.manager_id ?? null,
+    orgPersonId: row.org_person_id ?? null,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
   }
 }

@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissions'
 import { useEffect, useRef, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -61,6 +62,7 @@ const EMPTY = {
 export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, reporteeMode, onClose, onSaved }: Props) {
   const toast = useToast()
   const { create, update, addTimelineEvent } = useEmployeeMutations()
+  const allowed = useAllowed('am.contacts', employee ? 'update' : 'create')
   const { create: createFollowUp } = useFollowUpMutations()
   const { data: salesPersons = [] } = useSalesPersons()
   const { assign } = useOwnershipMutations()
@@ -363,7 +365,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
       footer={
         <>
           <Button onClick={onClose} disabled={isSaving}>Cancel</Button>
-          <Button variant="primary" onClick={submit} disabled={!canSubmit || isSaving}>
+          <Button variant="primary" onClick={submit} disabled={(!canSubmit || isSaving) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
             {isSaving
               ? 'Saving…'
               : employee ? 'Save changes' : reporteeMode === 'manager' ? 'Add manager' : reporteeMode === 'junior' ? 'Add junior' : form.vacant ? 'Add position' : 'Add employee'}

@@ -26,9 +26,10 @@ export const authPromptLink: TRPCLink<AppRouter> = () => {
           observer.next(value)
         },
         error(err) {
-          const code = (err as { data?: { code?: string } } | null)?.data?.code
-          if (code === 'UNAUTHORIZED' || code === 'FORBIDDEN') {
-            notifyAuthRequired(code === 'FORBIDDEN' ? 'forbidden' : 'unauthorized')
+          const data = (err as { data?: { code?: string; rbacDenied?: boolean } } | null)?.data
+          // An RBAC denial means "signed in, but not allowed" — the sign-in dialog would be wrong and misleading.
+          if (!data?.rbacDenied && (data?.code === 'UNAUTHORIZED' || data?.code === 'FORBIDDEN')) {
+            notifyAuthRequired(data.code === 'FORBIDDEN' ? 'forbidden' : 'unauthorized')
           }
           observer.error(err)
         },

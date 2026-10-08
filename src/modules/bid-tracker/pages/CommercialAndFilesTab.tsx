@@ -1,3 +1,4 @@
+import { Gate, usePermissions } from '@/lib/permissions'
 import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
@@ -64,6 +65,8 @@ export function CommercialAndFilesTab({ bidId, opportunity }: {
 }) {
   const { data: documents = [], isLoading } = useDocuments('bid', bidId)
   const { requestUploadUrl, confirmUpload, remove, download } = useDocumentMutations('bid', bidId)
+  // Pre-sales / Legal upload only to rows they are assigned to (the server decides per row); Bid manages all of them.
+  const allowed = usePermissions().mayWrite('bid.documents')
   const [citationsFor, setCitationsFor] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
@@ -105,6 +108,7 @@ export function CommercialAndFilesTab({ bidId, opportunity }: {
   }
 
   return (
+    <Gate allowed={allowed}>
     <div className="space-y-6 p-4" data-testid="commercial-tab">
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
@@ -158,5 +162,6 @@ export function CommercialAndFilesTab({ bidId, opportunity }: {
         </ul>
       </div>
     </div>
+    </Gate>
   )
 }

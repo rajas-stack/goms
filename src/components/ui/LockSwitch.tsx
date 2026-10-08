@@ -8,22 +8,24 @@ import { cn } from '@/lib/utils'
  *  reads as a "slide" without needing pointer-drag handling. Shared by the
  *  Sales Team lock and the Bid Tracker Master Grid lock so they look and
  *  behave identically. */
-export function LockSwitch({ unlocked, onToggle, lockedLabel, unlockedLabel, className }: {
+export function LockSwitch({ unlocked, onToggle, lockedLabel, unlockedLabel, className, disabled = false }: {
   unlocked: boolean
   onToggle: () => void
   /** Accessible names for each state (what tapping would do). */
   lockedLabel: string
   unlockedLabel: string
   className?: string
+  disabled?: boolean
 }) {
   return (
     <button
       type="button"
       onClick={onToggle}
+      disabled={disabled}
       aria-pressed={unlocked}
       aria-label={unlocked ? unlockedLabel : lockedLabel}
       className={cn(
-        'relative flex h-7 w-[104px] shrink-0 items-center rounded-full border px-1 text-[11px] font-medium transition-colors',
+        'relative flex h-7 w-[104px] shrink-0 items-center rounded-full border px-1 text-[11px] font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none',
         unlocked ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-line bg-panel text-muted',
         className,
       )}

@@ -1,3 +1,4 @@
+import { NO_PERMISSION_TITLE, usePermissions } from '@/lib/permissions'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { DEFAULT_OWNED_SHEET, OPPORTUNITY_TYPES, OWNED_SHEETS, OWNED_SHEET_LABELS, type DepartmentChoice, type OwnedSheet } from '@goms/domain'
@@ -93,6 +94,9 @@ function CreateBidFlow({ onClose, presetId, sheet, newDepartmentId, onRequestCre
   const { data: bids = [] } = useBidsForGrid()
   const { data: departments = [] } = useDepartments()
   const { create, createWithNewOpportunity } = useBidMutations()
+  const perms = usePermissions()
+  // A bid is created onto one sheet (Bid Tracker unless told otherwise); the server decides which.
+  const allowed = perms.can('opp.bidTracker', 'create') || perms.can('opp.pipeline', 'create') || perms.can('opp.campaign', 'create')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(presetId ?? null)
   const [error, setError] = useState<string | null>(null)
@@ -281,7 +285,7 @@ function CreateBidFlow({ onClose, presetId, sheet, newDepartmentId, onRequestCre
         {error && <p role="alert" className="text-[13px] text-crimson">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={busy || (!hasDepartment && !choice) || (isNew && (!newName.trim() || invalidDue))} onClick={() => void submit()}>
+          <Button variant="primary" disabled={busy || (!hasDepartment && !choice) || (isNew && (!newName.trim() || invalidDue)) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE} onClick={() => void submit()}>
             {busy ? 'Creating…' : isNew ? 'Create opportunity and bid' : 'Create bid'}
           </Button>
         </div>

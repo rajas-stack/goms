@@ -4,7 +4,7 @@
 -- or unlock passphrases are stored by the API, audit log, or backups.
 ALTER TABLE tender_websites
   ADD COLUMN credentials JSONB,
-  ADD COLUMN dsc_employee_id TEXT REFERENCES org_people(id) ON DELETE SET NULL;
+  ADD COLUMN dsc_employee_id UUID REFERENCES org_people(id) ON DELETE SET NULL;
 
 -- Down Migration
 

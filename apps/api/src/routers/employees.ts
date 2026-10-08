@@ -165,16 +165,17 @@ const timelineRouter = router({
       attendees: z.array(z.union([z.string(), z.object({ salesPersonId: z.string(), name: z.string() })])).optional(),
       agenda: z.string().optional(), outcome: z.string().optional(), nextSteps: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const result = await pool.query(
-        `INSERT INTO timeline_events (employee_id, type, title, custom_label, date, time, note, source, attendees, agenda, outcome, next_steps)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,'manual',$8,$9,$10,$11) RETURNING *`,
+        `INSERT INTO timeline_events (employee_id, type, title, custom_label, date, time, note, source, attendees, agenda, outcome, next_steps, created_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'manual',$8,$9,$10,$11,$12) RETURNING *`,
         [
           input.employeeId, input.type, input.title,
           input.type === 'custom' ? (input.customLabel?.trim() || null) : null,
           input.date, input.time || null, input.note ?? '',
           input.attendees ? JSON.stringify(input.attendees) : null,
           input.agenda ?? null, input.outcome ?? null, input.nextSteps ?? null,
+          ctx.user?.email?.trim().toLowerCase() ?? null,
         ],
       )
       return toTimelineEvent(result.rows[0])

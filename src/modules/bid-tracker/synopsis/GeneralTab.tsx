@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, Loader2, Pencil, RotateCcw, Save, X } from 'lucide-react'
-import type { BidSynopsis } from '@goms/domain'
+import type { BidSynopsis, PolicyModuleKey } from '@goms/domain'
+import { useAllowed } from '@/lib/permissions'
 import { Button } from '@/components/ui/Button'
 import { PersonName } from '@/components/ui/PersonName'
 import { cn } from '@/lib/utils'
@@ -16,11 +17,12 @@ function hasValues(values: Readonly<Record<string, string>>): boolean {
   return GENERAL_FIELDS.some(field => (values[field.key] ?? '').trim() !== '')
 }
 
-export function GeneralTab({ bidId }: { bidId: string }) {
+export function GeneralTab({ bidId, module = 'opp.bidTracker' }: { bidId: string; module?: PolicyModuleKey }) {
+  const canEdit = useAllowed(module, 'update')
   const query = useSynopsis(bidId, 'general')
   if (query.isLoading) return <div role="status" className="p-6 text-sm text-muted">Loading General...</div>
   if (query.isError) return <div role="alert" className="space-y-2 p-6 text-sm text-crimson"><p>{query.error.message}</p><Button size="sm" onClick={() => query.refetch()}>Retry</Button></div>
-  return <GeneralForm key={bidId} bidId={bidId} saved={query.data ?? null} onReload={() => query.refetch()} />
+  return <GeneralForm key={bidId} bidId={bidId} saved={query.data ?? null} canEdit={canEdit} onReload={() => query.refetch()} />
 }
 
 /** Who last saved, shown with their avatar (Sales Team photo when the email matches). */
@@ -30,13 +32,14 @@ function UpdatedBy({ email }: { email: string }) {
   return <PersonName size="2xs" person={{ name: person?.label ?? email, photoUrl: person?.photoUrl ?? null }} />
 }
 
-function GeneralForm({ bidId, saved, onReload }: {
-  bidId: string; saved: BidSynopsis | null; onReload: () => Promise<{ data?: BidSynopsis | null; error?: unknown }>
+function GeneralForm({ bidId, saved, onReload, canEdit }: {
+  bidId: string; saved: BidSynopsis | null; canEdit: boolean; onReload: () => Promise<{ data?: BidSynopsis | null; error?: unknown }>
 }) {
   const [base, setBase] = useState(() => ({ values: documentToGeneral(saved?.document), revision: saved?.revision ?? 0 }))
   const [values, setValues] = useState<Record<string, string>>(base.values)
   // Saved information opens locked; a new / empty General opens ready to fill in.
-  const [editing, setEditing] = useState(() => !hasValues(base.values))
+  const [editingRequested, setEditing] = useState(() => !hasValues(base.values))
+  const editing = canEdit && editingRequested
   const [invalid, setInvalid] = useState<ReadonlySet<string>>(NO_INVALID)
   const [error, setError] = useState<string | null>(null)
   // Bumped whenever values are replaced wholesale, so controls drop any half-typed text.
@@ -113,9 +116,9 @@ function GeneralForm({ bidId, saved, onReload }: {
               {hasValues(base.values) && <Button size="sm" disabled={save.isPending} onClick={cancel}><X size={14} /> Cancel</Button>}
               <Button size="sm" variant="primary" disabled={save.isPending || !dirty || invalid.size > 0} onClick={() => void submit()}><Save size={14} /> Save</Button>
             </>
-          ) : (
+          ) : canEdit ? (
             <Button size="sm" variant="primary" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</Button>
-          )}
+          ) : null}
         </div>
       </div>
       {error && <div role="alert" className="border-y border-red-200 bg-red-50 px-4 py-2 text-[13px] text-crimson">{error}</div>}

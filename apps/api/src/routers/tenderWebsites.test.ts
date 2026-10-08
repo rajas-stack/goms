@@ -64,8 +64,25 @@ describe('tender websites router', () => {
   })
 
   it('rejects DSC assignees outside the active L0-L2 directory', async () => {
-    await expect(caller().create({ name: 'Portal', url: 'https://portal.example', dscEmployeeId: 'junior' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
-    expect(db.query).toHaveBeenCalledWith("SELECT id FROM org_people WHERE id=$1 AND status='active' AND level IN (0,1,2)", ['junior'])
+    const junior = '00000000-0000-4000-8000-000000000002'
+    await expect(caller().create({ name: 'Portal', url: 'https://portal.example', dscEmployeeId: junior })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+    expect(db.query).toHaveBeenCalledWith("SELECT id FROM org_people WHERE id=$1 AND status='active' AND level IN (0,1,2)", [junior])
     expect(db.query.mock.calls.some(call => String(call[0]).startsWith('INSERT INTO tender_websites'))).toBe(false)
+  })
+
+  it('atomically rejects updates to an edit-locked website', async () => {
+    db.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ editing_locked: true }] })
+    await expect(caller().update({ id, name: 'Changed', url: 'https://changed.example' })).rejects.toMatchObject({ code: 'CONFLICT', message: 'Unlock editing before changing this website.' })
+    expect(db.query.mock.calls[0][0]).toContain('AND NOT editing_locked')
+    expect(db.query.mock.calls.some(call => String(call[0]).includes('INSERT INTO commercial_audit_logs'))).toBe(false)
+  })
+
+  it('persists the edit lock separately and preserves the encrypted credentials', async () => {
+    const credentials = { version: 1 as const, salt: 'AAAAAAAAAAAAAAAAAAAAAA==', iv: 'AAAAAAAAAAAAAAAA', ciphertext: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' }
+    db.query.mockResolvedValueOnce({ rows: [{ ...row('Portal', 'https://portal.example'), editing_locked: true, credentials }] })
+    expect(await caller().setEditingLock({ id, locked: true })).toMatchObject({ editingLocked: true, credentials })
+    expect(db.query).toHaveBeenCalledWith('UPDATE tender_websites SET editing_locked=$1, updated_at=now() WHERE id=$2 RETURNING *', [true, id])
+    db.query.mockResolvedValueOnce({ rows: [] })
+    await expect(caller().setEditingLock({ id, locked: false })).rejects.toMatchObject({ code: 'NOT_FOUND' })
   })
 })

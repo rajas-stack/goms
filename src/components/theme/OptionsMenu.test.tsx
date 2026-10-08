@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import { resolveTheme, THEME_STORAGE_KEY } from '@/lib/theme'
 import { OptionsMenu } from './OptionsMenu'
 
@@ -19,7 +20,7 @@ describe('OptionsMenu', () => {
   })
 
   function openMenu() {
-    render(<OptionsMenu />)
+    render(<MemoryRouter><OptionsMenu /></MemoryRouter>)
     fireEvent.click(screen.getByRole('button', { name: 'Options' }))
   }
 
@@ -42,7 +43,7 @@ describe('OptionsMenu', () => {
   })
 
   it('toggles day/night with Ctrl+Shift+L from anywhere', () => {
-    render(<OptionsMenu />)
+    render(<MemoryRouter><OptionsMenu /></MemoryRouter>)
     fireEvent.keyDown(window, { key: 'L', ctrlKey: true, shiftKey: true })
     expect(document.documentElement.classList.contains('dark')).toBe(true)
     fireEvent.keyDown(window, { key: 'L', ctrlKey: true, shiftKey: true })
@@ -53,6 +54,9 @@ describe('OptionsMenu', () => {
     openMenu()
     fireEvent.click(screen.getByRole('menuitem', { name: /settings/i }))
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
-    expect(screen.getByRole('radiogroup', { name: 'Theme' })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /DMS Settings/ })).toHaveAttribute('href', '/settings/dms')
+    expect(screen.getByRole('link', { name: /Tender websites/ })).toHaveAttribute('href', '/settings/tender-websites')
+    expect(screen.queryByRole('radiogroup', { name: 'Theme' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Keyboard shortcuts')).not.toBeInTheDocument()
   })
 })

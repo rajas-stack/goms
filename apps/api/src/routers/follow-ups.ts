@@ -28,11 +28,11 @@ export const followUpsRouter = router({
       entityType: z.string(), entityId: z.string().uuid(), dueDate: z.string(),
       note: z.string().optional(), assigneeId: z.string().uuid().nullable().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const result = await pool.query(
-        `INSERT INTO follow_ups (entity_type, entity_id, assignee_id, due_date, status, note)
-         VALUES ($1,$2,$3,$4,'open',$5) RETURNING *`,
-        [input.entityType, input.entityId, input.assigneeId ?? null, input.dueDate, input.note ?? ''],
+        `INSERT INTO follow_ups (entity_type, entity_id, assignee_id, due_date, status, note, created_by)
+         VALUES ($1,$2,$3,$4,'open',$5,$6) RETURNING *`,
+        [input.entityType, input.entityId, input.assigneeId ?? null, input.dueDate, input.note ?? '', ctx.user?.email?.trim().toLowerCase() ?? null],
       )
       return toFollowUp(result.rows[0])
     }),

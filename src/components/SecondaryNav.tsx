@@ -1,6 +1,8 @@
 import { NavLink } from 'react-router-dom'
 import { Icon } from './ui/Icon'
 import { cn } from '@/lib/utils'
+import { useCanReadAny } from '@/lib/permissions'
+import { NAV_MODULES } from '@/lib/routeModules'
 
 function NavTileContent({ icon, label }: { icon: string; label: string }) {
   return (
@@ -42,6 +44,10 @@ function NavTile({ to, end, icon, label }: { to: string; end?: boolean; icon: st
  *  you got there. Renders as a fixed bottom bar below `lg:` and a horizontal
  *  bar directly under TopBar at `lg:` and up. */
 export function SecondaryNav() {
+  const canMap = useCanReadAny(NAV_MODULES.map)
+  const canDirectory = useCanReadAny(NAV_MODULES.directory)
+  const canInsights = useCanReadAny(NAV_MODULES.insights)
+  const canMeetings = useCanReadAny(NAV_MODULES.meetings)
   return (
     <nav
       className={cn(
@@ -51,10 +57,10 @@ export function SecondaryNav() {
         'lg:static lg:z-auto lg:h-auto lg:justify-start lg:gap-1 lg:border-b lg:border-t-0 lg:bg-paper/70 lg:px-3 lg:py-1.5',
       )}
     >
-      <NavTile to="/map" icon="Map" label="Map" />
-      <NavTile to="/directory" icon="Network" label="Directory" />
-      <NavTile to="/analytics" icon="BarChart3" label="Insights" />
-      <NavTile to="/meetings" icon="CalendarClock" label="Meetings" />
+      {canMap && <NavTile to="/map" icon="Map" label="Map" />}
+      {canDirectory && <NavTile to="/directory" icon="Network" label="Directory" />}
+      {canInsights && <NavTile to="/analytics" icon="BarChart3" label="Insights" />}
+      {canMeetings && <NavTile to="/meetings" icon="CalendarClock" label="Meetings" />}
     </nav>
   )
 }

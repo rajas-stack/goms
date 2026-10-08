@@ -6,21 +6,24 @@
 // through. Confirmed complete against the full interface as of the
 // 2026-08-31 local-vs-GCP functional parity audit
 // (docs/superpowers/analysis/2026-08-31-goms-local-vs-gcp-functional-parity-audit.md).
+import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/routers/access'
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import type { BidSynopsis, BidSynopsisSection, SaveBidSynopsisInput } from '@goms/domain'
 import type { TenderWebsite, TenderWebsiteInput } from '@goms/domain'
 import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
+import type { MyAccess } from '../../../apps/api/src/routers/auth'
 import { authPromptLink } from './authPromptLink'
 import type { AppRouter } from '../../../apps/api/src/index'
 import type {
   Repository, CreateCustomerInput, CreateNodeInput, CreateEmployeeInput, AddTimelineInput,
   ImportChildRow, ImportEmployeeRow, MergeEmployeesInput, TransferInput,
-  CreateSalesPersonInput, CreateDeliveryTeamMemberInput, UpdateDeliveryTeamMemberPatch, TransferSalesPersonInput, StateSummary, CreateOrgPersonInput, UpdateOrgPersonPatch,
+  CreateSalesPersonInput, CreateDeliveryTeamMemberInput, UpdateDeliveryTeamMemberPatch, CreateOrgPersonInput, UpdateOrgPersonPatch, TransferSalesPersonInput, StateSummary,
   CreateOpportunityInput, AssignOwnerInput, TransferBookOfBusinessInput, CreateFollowUpInput,
-  RelationshipAnalytics,
+  RelationshipAnalytics, SetRoleOverrideInput,
 } from '../repository'
 import type { OwnerResolution } from '@/data/ownership'
+import type { OrgPerson } from '@/data/org-structure'
 import type {
   Customer, HierNode, Status, Employee, Charge, TimelineEvent, TimelineEventType, Transfer, MergeAuditRecord,
   SalesPerson, SalesPosting, DeliveryTeamKey, DeliveryTeamMember, Opportunity, OpportunityStageChange, OwnershipAssignment, FollowUp, SearchResult,
@@ -45,9 +48,16 @@ export class RemoteRepository implements Partial<Repository> {
   updateTenderWebsite = (id: string, input: TenderWebsiteInput): Promise<TenderWebsite> =>
     this.client.tenderWebsites.update.mutate({ id, ...input })
   deleteTenderWebsite = async (id: string): Promise<void> => { await this.client.tenderWebsites.delete.mutate({ id }) }
+  setTenderWebsiteEditingLock = (id: string, locked: boolean): Promise<TenderWebsite> => this.client.tenderWebsites.setEditingLock.mutate({ id, locked })
   private client = createTRPCClient<AppRouter>({
     links: [authPromptLink, httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`, headers: getAuthHeaders })],
   })
+
+  getMyAccess = (): Promise<MyAccess> => this.client.auth.me.query()
+  getAccessReadiness = (): Promise<ReadinessRow[]> => this.client.access.readiness.query()
+  listRoleOverrides = (): Promise<RoleOverrideRow[]> => this.client.access.listOverrides.query()
+  setRoleOverride = async (input: SetRoleOverrideInput): Promise<void> => { await this.client.access.setOverride.mutate(input as never) }
+  removeRoleOverride = (id: string): Promise<void> => this.client.access.removeOverride.mutate({ id })
 
   listCustomers = (): Promise<Customer[]> => this.client.customers.list.query()
   getCustomer = (id: string): Promise<Customer | null> => this.client.customers.get.query({ id })
@@ -138,10 +148,12 @@ export class RemoteRepository implements Partial<Repository> {
   setDeliveryTeamMemberStatus = (id: string, status: DeliveryTeamMember['status']): Promise<void> =>
     this.client.deliveryTeams.setStatus.mutate({ id, status })
   deleteDeliveryTeamMember = (id: string): Promise<void> => this.client.deliveryTeams.delete.mutate({ id })
-  listOrgPeople = () => this.client.orgPeople.list.query()
-  createOrgPerson = (input: CreateOrgPersonInput) => this.client.orgPeople.create.mutate(input)
-  updateOrgPerson = (id: string, patch: UpdateOrgPersonPatch) => this.client.orgPeople.update.mutate({ id, patch })
-  deleteOrgPerson = async (id: string): Promise<void> => { await this.client.orgPeople.delete.mutate({ id }) }
+  // Org Structure (the company chart). The server also re-mirrors the Pre-sales / Bid / Legal rosters from it.
+  listOrgPeople = (): Promise<OrgPerson[]> => this.client.orgPeople.list.query() as Promise<OrgPerson[]>
+  createOrgPerson = (input: CreateOrgPersonInput): Promise<OrgPerson> => this.client.orgPeople.create.mutate(input) as Promise<OrgPerson>
+  updateOrgPerson = (id: string, patch: UpdateOrgPersonPatch): Promise<OrgPerson> =>
+    this.client.orgPeople.update.mutate({ id, patch }) as Promise<OrgPerson>
+  deleteOrgPerson = (id: string): Promise<void> => this.client.orgPeople.delete.mutate({ id })
   transferSalesPerson = (input: TransferSalesPersonInput): Promise<SalesPosting> => this.client.sales.transfer.mutate(input)
   updatePostingDates = (postingId: string, edit: { startDate?: string; lastDayHeld?: string | null }): Promise<SalesPosting> =>
     this.client.sales.updatePostingDates.mutate({ postingId, ...edit })

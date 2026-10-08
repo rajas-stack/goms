@@ -449,6 +449,8 @@ export interface BidGridRow extends Bid {
   preSalesPersonId: string | null
   legalPersonId: string | null
   bidTeamMemberId: string | null
+  /** Lower-cased email of whoever created the opportunity (RBAC "own" for a Sales user who created it). */
+  createdBy: string | null
   ownerEmail: string | null
   solutionLeadEmail: string | null
   documentCount: number

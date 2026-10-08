@@ -26,7 +26,7 @@ export { PricingValidationError, DISCOUNT_FLOAT_EPSILON }
 /** The SKU's own tier price for a level — a starting hint only, never
  *  auto-filled into the Selling Price input (spec §3: stays empty until the
  *  user types a value). */
-export function skuPriceForLevel(sku: CommercialSku, level: PricingLevelKey): number {
+export function skuPriceForLevel(sku: CommercialSku, level: PricingLevelKey): number | null {
   switch (level) {
     case 'internal': return sku.internalPrice
     case 'floor': return sku.floorPrice

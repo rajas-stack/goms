@@ -13,6 +13,7 @@ import { ImportDialog } from '@/features/import/ImportDialog'
 import { ExportDialog } from '@/features/import/ExportDialog'
 import { ToastProvider } from '@/components/ui/Toast'
 import { SalesEditLockProvider } from '@/features/sales/salesEditLock'
+import { PermissionsProvider } from '@/lib/permissions'
 import { cn, isTypingTarget } from '@/lib/utils'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import {
@@ -170,6 +171,7 @@ export function AppLayout() {
   }, [navigate])
 
   return (
+    <PermissionsProvider>
     <SalesEditLockProvider>
       <ToastProvider>
         <Ctx.Provider value={{
@@ -218,5 +220,6 @@ export function AppLayout() {
         </Ctx.Provider>
       </ToastProvider>
     </SalesEditLockProvider>
+    </PermissionsProvider>
   )
 }
