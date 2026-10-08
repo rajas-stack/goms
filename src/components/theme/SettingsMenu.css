@@ -1,0 +1,73 @@
+.settings-back {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 20px;
+  padding: 5px 11px;
+  border: 1px solid rgb(var(--c-line));
+  border-radius: 10px;
+  background: rgb(var(--c-white));
+  color: rgb(var(--c-muted));
+  font-size: 13px;
+}
+
+.settings-icon {
+  --settings-accent: var(--c-indigo);
+  position: relative;
+  display: flex;
+  width: 54px;
+  height: 54px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(var(--settings-accent) / .12);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgb(var(--c-white)), rgb(var(--c-panel)));
+  box-shadow: 4px 4px 10px rgb(var(--c-shadow) / .12), -3px -3px 8px rgb(var(--c-white) / .9), inset 0 1px 0 rgb(var(--c-white) / .85);
+  color: rgb(var(--settings-accent));
+}
+
+.settings-icon--tender {
+  --settings-accent: var(--c-amber);
+}
+
+.settings-icon--verification {
+  --settings-accent: var(--c-teal);
+}
+
+.settings-icon__primary {
+  transform: translate(-3px, -3px);
+  fill: rgb(var(--settings-accent) / .09);
+  filter: drop-shadow(0 1px 0 rgb(var(--c-white) / .8));
+}
+
+.settings-icon__badge {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: flex;
+  width: 21px;
+  height: 21px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(var(--settings-accent) / .12);
+  border-radius: 7px;
+  background: rgb(var(--c-white));
+  box-shadow: 1px 2px 4px rgb(var(--c-shadow) / .12);
+}
+
+.dark .settings-icon {
+  box-shadow: 4px 4px 10px rgb(var(--c-shadow) / .45), -3px -3px 8px rgb(var(--c-edge) / .13), inset 0 1px 0 rgb(var(--c-edge) / .3);
+}
+
+.dark .settings-icon__primary {
+  filter: drop-shadow(0 1px 1px rgb(var(--c-shadow) / .3));
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .settings-back:hover {
+    background: rgb(var(--c-panel));
+    color: rgb(var(--c-ink-900));
+  }
+}

@@ -997,10 +997,8 @@ export function MasterGrid(props: MasterGridProps) {
                             <span className="sr-only">Filtered</span>
                           </span>
                         )}
-                        {h.column.getCanSort() && (
-                          sorted
-                            ? <span className="shrink-0 text-goms-navy"><Icon name={sorted === 'asc' ? 'ArrowUp' : 'ArrowDown'} size={13} /></span>
-                            : <span className="shrink-0 text-muted opacity-0 group-hover/th:opacity-60"><Icon name="ChevronsUpDown" size={12} /></span>
+                        {h.column.getCanSort() && sorted && (
+                          <span className="shrink-0 text-goms-navy"><Icon name={sorted === 'asc' ? 'ArrowUp' : 'ArrowDown'} size={13} /></span>
                         )}
                         <ColumnHeaderMenu
                           header={meta.header} sorted={sorted}
