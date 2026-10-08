@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
 import { Input, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
+import { LockSwitch } from '@/components/ui/LockSwitch'
 import { useTenderDscEmployees } from './api'
 import { lockCredentials, unlockCredentials } from './credentialLock'
 
@@ -108,7 +109,8 @@ export function TenderWebsiteForm({ existing, editing, busy, submitLabel, onSubm
             <div className="flex gap-1">
               <Input id={`${prefix}-user`} aria-label="User ID" autoComplete="off" value={locked ? '••••••••' : userId}
                 maxLength={200} readOnly={locked} disabled={disabled} placeholder="Portal user ID" onChange={event => setUserId(event.target.value)} />
-              {locked && <Button variant="secondary" size="icon" className="h-10 w-10 shrink-0" aria-label="Unlock User ID" disabled={disabled} onClick={openUnlock}><Icon name="Lock" size={14} /></Button>}
+              {editing?.credentials && <LockSwitch size="sm" className="self-center" unlocked={!locked} onToggle={locked ? openUnlock : relock}
+                lockedLabel="Unlock User ID" unlockedLabel="Lock User ID" disabled={disabled} />}
             </div>
           </div>
           <div>
@@ -116,8 +118,12 @@ export function TenderWebsiteForm({ existing, editing, busy, submitLabel, onSubm
             <div className="flex gap-1">
               <Input id={`${prefix}-password`} aria-label="Password" autoComplete="new-password" type={showPassword && !locked ? 'text' : 'password'}
                 value={locked ? '••••••••' : password} maxLength={2000} readOnly={locked} disabled={disabled} placeholder="Portal password" onChange={event => setPassword(event.target.value)} />
-              <Button variant="secondary" size="icon" className="h-10 w-10 shrink-0" disabled={disabled} aria-label={locked ? 'Unlock Password' : showPassword ? 'Hide Password' : 'Show Password'}
-                onClick={locked ? openUnlock : () => setShowPassword(!showPassword)}><Icon name={locked ? 'Lock' : showPassword ? 'EyeOff' : 'Eye'} size={14} /></Button>
+              {editing?.credentials && <LockSwitch size="sm" className="self-center" unlocked={!locked} onToggle={locked ? openUnlock : relock}
+                lockedLabel="Unlock Password" unlockedLabel="Lock Password" disabled={disabled} />}
+              {!locked && <Button variant="secondary" size="icon" className="h-10 w-10 shrink-0" disabled={disabled}
+                aria-label={showPassword ? 'Hide Password' : 'Show Password'} onClick={() => setShowPassword(!showPassword)}>
+                <Icon name={showPassword ? 'EyeOff' : 'Eye'} size={14} />
+              </Button>}
             </div>
           </div>
           <div>
@@ -155,7 +161,8 @@ export function TenderWebsiteForm({ existing, editing, busy, submitLabel, onSubm
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted">{locked ? 'Credentials locked. Unlock to view or change.' : 'Credentials are encrypted and locked when saved.'}</p>
           <div className="flex items-center gap-2">
-            {editing?.credentials && !locked && <Button size="sm" variant="ghost" disabled={disabled} onClick={relock}><Icon name="Lock" size={13} /> Lock credentials</Button>}
+            {editing?.credentials && !locked && <LockSwitch unlocked onToggle={relock} lockedLabel="Unlock credentials" unlockedLabel="Lock credentials"
+              disabled={disabled} text="Lock credentials" className="lock-switch--wide" />}
             <Button type="submit" size="sm" variant="primary" disabled={disabled}>
               <Icon name={editing ? 'Check' : 'Plus'} size={14} /> {working ? 'Saving...' : submitLabel}
             </Button>
@@ -174,7 +181,8 @@ export function TenderWebsiteForm({ existing, editing, busy, submitLabel, onSubm
           {lockError && <p role="alert" className="text-[12px] text-crimson">{lockError}</p>}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={closeUnlock} disabled={working}>Cancel</Button>
-            <Button onClick={() => void confirmUnlock()} disabled={working || !unlockPassphrase}>{working ? 'Please wait...' : 'Unlock'}</Button>
+            <LockSwitch unlocked={false} onToggle={() => void confirmUnlock()} disabled={working || !unlockPassphrase}
+              lockedLabel="Unlock" unlockedLabel="Lock" text={working ? 'Please wait...' : 'Unlock'} />
           </div>
         </div>
       </Dialog>

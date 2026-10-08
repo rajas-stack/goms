@@ -979,17 +979,10 @@ export function MasterGrid(props: MasterGridProps) {
                           {unlocked && isColumnOpen(meta) && <span title="Editable column" className="shrink-0 text-goms-green"><Icon name="Pencil" size={10} /></span>}
                         </button>
                         {canLockColumn(meta) ? (
-                          <button
-                            type="button" onClick={() => toggleColumnLock(meta)} aria-pressed={!isColumnOpen(meta)}
-                            aria-label={isColumnOpen(meta) ? `Lock ${meta.header} column` : `Unlock ${meta.header} column`}
-                            title={isColumnOpen(meta) ? `Lock ${meta.header} (stop edits in this column)` : `Unlock ${meta.header} for editing`}
-                            className={cn(
-                              'flex h-5 w-5 shrink-0 items-center justify-center rounded transition-colors hover:bg-ink-900/[0.07] focus-visible:focus-ring',
-                              isColumnOpen(meta) ? 'text-muted/60 opacity-0 group-hover/th:opacity-100 focus-visible:opacity-100' : 'text-amber-600',
-                            )}
-                          >
-                            <Icon name={isColumnOpen(meta) ? 'Unlock' : 'Lock'} size={11} />
-                          </button>
+                          <LockSwitch
+                            size="sm" unlocked={isColumnOpen(meta)} onToggle={() => toggleColumnLock(meta)}
+                            lockedLabel={`Unlock ${meta.header} column`} unlockedLabel={`Lock ${meta.header} column`}
+                          />
                         ) : meta.id !== 'manage' && (
                           <span title={`Always locked — ${meta.readOnlyReason ?? 'no write path'}`} aria-label="Always locked" role="img" className="inline-flex shrink-0 text-muted/50"><Icon name="Lock" size={11} /></span>
                         )}
@@ -1163,7 +1156,8 @@ export function MasterGrid(props: MasterGridProps) {
         footer={(
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setLockPromptOpen(false)}>Keep editing</Button>
-            <Button variant="primary" onClick={discardAndLock}>Discard edit and lock</Button>
+            <LockSwitch unlocked onToggle={discardAndLock} lockedLabel="Unlock editing"
+              unlockedLabel="Discard edit and lock" text="Discard edit and lock" className="lock-switch--confirmation" />
           </div>
         )}
       >

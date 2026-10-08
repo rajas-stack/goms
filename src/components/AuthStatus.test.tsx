@@ -29,15 +29,18 @@ describe('AuthStatus', () => {
     signOut.mockReset().mockResolvedValue(undefined)
   })
 
-  it('shows a "Sign in" affordance when signed out', () => {
+  it('shows Sign in under the blank user profile when signed out', () => {
     renderStatus()
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Profile options' })).toHaveTextContent('User')
+    fireEvent.click(screen.getByRole('button', { name: 'Profile options' }))
+    expect(screen.getByRole('menuitem', { name: /sign in/i })).toBeInTheDocument()
   })
 
   it('triggers the shared sign-in prompt when "Sign in" is clicked, rather than its own popup flow', () => {
     const spy = vi.spyOn(authPrompt, 'notifyAuthRequired')
     renderStatus()
-    screen.getByRole('button', { name: /sign in/i }).click()
+    fireEvent.click(screen.getByRole('button', { name: 'Profile options' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /sign in/i }))
     expect(spy).toHaveBeenCalledWith('unauthorized')
   })
 
@@ -88,6 +91,7 @@ describe('AuthStatus', () => {
     act(() => authStateCallback()(null))
 
     expect(screen.queryByText('rajas@amnex.com')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Profile options' }))
+    expect(screen.getByRole('menuitem', { name: /sign in/i })).toBeInTheDocument()
   })
 })

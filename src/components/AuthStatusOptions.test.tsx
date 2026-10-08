@@ -30,11 +30,14 @@ describe('Profile options navigation', () => {
     expect(screen.getByRole('link', { name: /DMS Settings/ })).toHaveAttribute('href', '/settings/dms')
     expect(screen.getByRole('link', { name: /Tender websites/ })).toHaveAttribute('href', '/settings/tender-websites')
   })
-  it('keeps the gear and Sign in for signed-out users', () => {
+  it('offers Settings and Sign in through the blank user pill when signed out', async () => {
     firebase.onAuthStateChanged.mockImplementation((_auth, callback) => { callback(null); return () => {} })
     render(<MemoryRouter><AuthStatus /></MemoryRouter>)
-    expect(screen.getByRole('button', { name: 'Options' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Profile options' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Profile options' })).toHaveTextContent('User')
+    await userEvent.click(screen.getByRole('button', { name: 'Profile options' }))
+    expect(screen.getByRole('menuitem', { name: 'Sign in' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('menuitem', { name: /Settings/ }))
+    expect(screen.getByRole('link', { name: /DMS Settings/ })).toHaveAttribute('href', '/settings/dms')
+    expect(screen.getByRole('link', { name: /Tender websites/ })).toHaveAttribute('href', '/settings/tender-websites')
   })
 })

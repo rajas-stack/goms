@@ -11,9 +11,9 @@ vi.mock('@/features/dms/DmsSetup', () => ({ DmsSetup: () => <div>DMS configurati
 afterEach(cleanup)
 
 describe('DMS settings navigation', () => {
-  it('follows gear > Settings > DMS Settings to a dedicated page', async () => {
+  it('follows the blank user profile > Settings > DMS Settings to a dedicated page', async () => {
     render(<MemoryRouter initialEntries={['/']}><OptionsMenu /><Routes><Route path="/" element={<p>Workspace</p>} /><Route path="/settings" element={<SettingsPage />} /><Route path="/settings/dms" element={<DmsSettingsPage />} /><Route path="/settings/dms/new" element={<DmsConnectionPage />} /></Routes></MemoryRouter>)
-    await userEvent.click(screen.getByRole('button', { name: 'Options' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Profile options' }))
     await userEvent.click(screen.getByRole('menuitem', { name: /Settings/ }))
     const dialog = screen.getByRole('dialog', { name: 'Settings' })
     expect(within(dialog).queryByText('Appearance')).not.toBeInTheDocument()

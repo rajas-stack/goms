@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
 import { auth } from '@/lib/firebaseAuth'
 import { notifyAuthRequired } from '@/lib/authPrompt'
-import { Icon } from '@/components/ui/Icon'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { OptionsMenu } from '@/components/theme/OptionsMenu'
@@ -26,18 +25,7 @@ export function AuthStatus() {
   const currentAuth = auth
 
   if (!user) {
-    return (
-      <>
-      <OptionsMenu />
-      <button
-        onClick={() => notifyAuthRequired('unauthorized')}
-        className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-muted hover:bg-panel hover:text-ink lg:h-8"
-      >
-        <Icon name="LogIn" size={14} />
-        <span className="hidden sm:inline">Sign in</span>
-      </button>
-      </>
-    )
+    return <OptionsMenu onSignIn={() => notifyAuthRequired('unauthorized')} />
   }
 
   return (

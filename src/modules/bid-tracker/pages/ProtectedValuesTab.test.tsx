@@ -24,7 +24,7 @@ describe('ProtectedValuesTab', () => {
     const bid = await makeBid()
     renderTab(bid.id)
     await screen.findByText('Tender ID')
-    expect(screen.getAllByTestId('protected-row').map((r) => r.textContent?.replace(/Freeze Value$/, ''))).toEqual([
+    expect(screen.getAllByTestId('protected-row').map((r) => r.querySelector(':scope > span')?.textContent?.trim())).toEqual([
       'Tender ID', 'Estimated Value', 'EMD / Tender Fee', 'Submission Deadline', 'Tender Link',
     ])
   })

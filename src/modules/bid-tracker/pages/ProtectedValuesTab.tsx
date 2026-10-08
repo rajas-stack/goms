@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
+import { LockSwitch } from '@/components/ui/LockSwitch'
 import { useProtectedValueMutations, useProtectedValues } from '@/lib/api'
 
 /** The facts that can actually be protected: exactly the keys the API's shared
@@ -56,23 +57,21 @@ export function ProtectedValuesTab({ bidId }: { bidId: string }) {
                   className="h-8 w-64 rounded-lg border border-line bg-white px-2 text-[13px] text-ink focus-visible:focus-ring"
                   value={reason} onChange={(e) => setReason(e.target.value)}
                 />
-                <Button
-                  variant="primary" size="sm" disabled={!reason.trim() || unfreeze.isPending}
-                  onClick={async () => {
+                <LockSwitch
+                  unlocked={false} lockedLabel="Confirm Unfreeze" unlockedLabel="Freeze value"
+                  text="Confirm Unfreeze" className="lock-switch--wide" disabled={!reason.trim() || unfreeze.isPending}
+                  onToggle={async () => {
                     if (await run(() => unfreeze.mutateAsync({ fieldKey: key, reason: reason.trim() }))) { setUnfreezing(null); setReason('') }
                   }}
-                >
-                  Confirm Unfreeze
-                </Button>
+                />
                 <Button variant="ghost" size="sm" onClick={() => { setUnfreezing(null); setReason('') }}>Cancel</Button>
               </div>
             ) : (
-              <Button
-                variant="secondary" size="sm" aria-label={`${isFrozen ? 'Unfreeze' : 'Freeze'} ${label}`}
-                onClick={() => { setError(null); if (isFrozen) setUnfreezing(key); else void run(() => freeze.mutateAsync(key)) }}
-              >
-                {isFrozen ? 'Unfreeze' : 'Freeze Value'}
-              </Button>
+              <LockSwitch
+                unlocked={!isFrozen} lockedLabel={`Unfreeze ${label}`} unlockedLabel={`Freeze ${label}`}
+                disabled={freeze.isPending || unfreeze.isPending}
+                onToggle={() => { setError(null); if (isFrozen) setUnfreezing(key); else void run(() => freeze.mutateAsync(key)) }}
+              />
             )}
           </div>
         )
