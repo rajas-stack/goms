@@ -10,7 +10,7 @@
   flex-shrink: 0;
   align-items: center;
   overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 80%);
+  border: 1px solid rgb(255 255 255 / 55%);
   border-radius: 999px;
   background: linear-gradient(150deg, #fff, #f1f7fc 45%, #dae5ef);
   box-shadow: 0 2px 7px var(--lock-glow), inset 0 1px 1px #fff, inset 0 -1px 2px rgb(28 51 77 / 12%);
@@ -29,6 +29,12 @@
   --lock-width: 44px;
   --lock-height: 24px;
   --lock-thumb: 16px;
+}
+
+.lock-switch--toolbar {
+  --lock-width: 56px;
+  --lock-height: 28px;
+  --lock-thumb: 20px;
 }
 
 .lock-switch--wide {
@@ -50,8 +56,8 @@
 
 .lock-switch__track {
   position: absolute;
-  inset: 2px;
-  border: 1px solid rgb(255 255 255 / 44%);
+  inset: .5px;
+  border: .5px solid rgb(255 255 255 / 30%);
   border-radius: inherit;
   background: linear-gradient(180deg, #f52745 0%, #ca1230 48%, #eb1738 82%, #ff697e 100%);
   box-shadow: inset 0 1px 3px rgb(111 2 32 / 35%), inset 0 -1px 2px rgb(255 255 255 / 48%);

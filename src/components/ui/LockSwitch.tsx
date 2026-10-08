@@ -12,7 +12,7 @@ interface LockSwitchProps {
   className?: string
   disabled?: boolean
   /** Compact controls retain their action in the tooltip and accessible name. */
-  size?: 'md' | 'sm'
+  size?: 'md' | 'sm' | 'toolbar'
   /** Explicit action copy for passphrase and confirmation buttons. */
   text?: string
 }
@@ -24,6 +24,7 @@ export function LockSwitch({
 }: LockSwitchProps) {
   const [keyboardAction, setKeyboardAction] = useState(false)
   const label = unlocked ? unlockedLabel : lockedLabel
+  const iconOnly = size !== 'md'
 
   return (
     <button
@@ -34,16 +35,21 @@ export function LockSwitch({
       disabled={disabled}
       aria-pressed={unlocked}
       aria-label={label}
-      title={size === 'sm' ? label : undefined}
+      title={iconOnly ? label : undefined}
       data-unlocked={unlocked}
       data-instant={keyboardAction}
-      className={cn('lock-switch focus-visible:focus-ring', size === 'sm' && 'lock-switch--compact', className)}
+      className={cn(
+        'lock-switch focus-visible:focus-ring',
+        size === 'sm' && 'lock-switch--compact',
+        size === 'toolbar' && 'lock-switch--toolbar',
+        className,
+      )}
     >
       <span aria-hidden="true" className="lock-switch__track" />
       <span aria-hidden="true" className="lock-switch__shine" />
       <span aria-hidden="true" className="lock-switch__label">
-        <Icon name={unlocked ? 'Unlock' : 'Lock'} size={size === 'sm' ? 10 : 13} />
-        {size !== 'sm' && <span>{text ?? (unlocked ? 'Unlocked' : 'Locked')}</span>}
+        <Icon name={unlocked ? 'Unlock' : 'Lock'} size={size === 'sm' ? 10 : size === 'toolbar' ? 12 : 13} />
+        {!iconOnly && <span>{text ?? (unlocked ? 'Unlocked' : 'Locked')}</span>}
       </span>
       <span aria-hidden="true" className="lock-switch__thumb" />
     </button>

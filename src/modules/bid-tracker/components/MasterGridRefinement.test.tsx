@@ -94,7 +94,7 @@ describe('Master Grid refinement', () => {
       renderGrid()
       await screen.findByText('Alpha')
       expect(lockSwitch()).toHaveAttribute('aria-pressed', 'false')
-      expect(lockSwitch()).toHaveTextContent('Locked')
+      expect(lockSwitch()).toHaveAttribute('title', lockSwitch().getAttribute('aria-label'))
       expect(screen.queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument()
       expect(document.querySelector('[data-editable-cell]')).toBeNull()
       expect(screen.queryByTitle('Editable column')).not.toBeInTheDocument()
@@ -118,7 +118,7 @@ describe('Master Grid refinement', () => {
       await screen.findByText('Alpha')
       await unlock()
       expect(lockSwitch()).toHaveAttribute('aria-pressed', 'true')
-      expect(lockSwitch()).toHaveTextContent('Unlocked')
+      expect(lockSwitch()).toHaveAttribute('title', lockSwitch().getAttribute('aria-label'))
       const editable = [
         'Opportunity / Mission', 'Opportunity Type', 'Tender Link', 'Department / Client', 'City', 'Sector',
         'Geo-sales', 'BU-sales', 'Pre-sales', 'Legal', 'Bid', 'Bid Owner', 'Sales Lead / Solution Lead',
@@ -207,7 +207,7 @@ describe('Master Grid refinement', () => {
       await userEvent.type(screen.getByRole('textbox', { name: 'Note' }), 'half typed')
       await userEvent.click(lockSwitch()) // the click blurs the editor, which saves
       await waitFor(async () => expect((await repository.listBidCustomValues(bid.id)).note).toBe('half typed'))
-      expect(lockSwitch()).toHaveTextContent('Locked')
+      expect(lockSwitch()).toHaveAttribute('aria-pressed', 'false')
       expect(screen.queryByRole('button', { name: 'Edit Note' })).not.toBeInTheDocument()
       expect(screen.getByText('half typed')).toBeInTheDocument()
     })
@@ -222,16 +222,16 @@ describe('Master Grid refinement', () => {
       await userEvent.click(lockSwitch())
       const dialog = await screen.findByRole('dialog')
       expect(dialog).toHaveTextContent('unsaved edit')
-      expect(lockSwitch()).toHaveTextContent('Unlocked') // still unlocked behind the prompt
+      expect(lockSwitch()).toHaveAttribute('aria-pressed', 'true') // still unlocked behind the prompt
 
       await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
       expect(screen.getByRole('textbox', { name: 'Contact' })).toHaveValue('not-an-email')
-      expect(lockSwitch()).toHaveTextContent('Unlocked')
+      expect(lockSwitch()).toHaveAttribute('aria-pressed', 'true')
 
       await userEvent.click(lockSwitch())
       await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Discard edit and lock' }))
-      await waitFor(() => expect(lockSwitch()).toHaveTextContent('Locked'))
+      await waitFor(() => expect(lockSwitch()).toHaveAttribute('aria-pressed', 'false'))
       expect(screen.queryByRole('textbox', { name: 'Contact' })).not.toBeInTheDocument()
       expect((await repository.listBidCustomValues(bid.id)).contact).toBeUndefined()
     })
@@ -245,7 +245,7 @@ describe('Master Grid refinement', () => {
       await userEvent.type(screen.getByRole('textbox', { name: 'Note' }), 'draft{Escape}')
       await userEvent.click(lockSwitch())
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-      expect(lockSwitch()).toHaveTextContent('Locked')
+      expect(lockSwitch()).toHaveAttribute('aria-pressed', 'false')
     })
 
     it('a save that fails after the grid was locked is reported in the toolbar', async () => {

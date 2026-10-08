@@ -861,7 +861,7 @@ export function MasterGrid(props: MasterGridProps) {
         )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <LockSwitch
-            unlocked={unlocked} onToggle={requestToggleLock}
+            size="toolbar" unlocked={unlocked} onToggle={requestToggleLock}
             lockedLabel="Master grid editing locked — tap to unlock"
             unlockedLabel="Master grid editing unlocked — tap to lock"
           />
