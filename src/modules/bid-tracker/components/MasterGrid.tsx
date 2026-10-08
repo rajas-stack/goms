@@ -252,16 +252,19 @@ export function MasterGrid(props: MasterGridProps) {
     return meta
   }
   const canLockColumn = (meta: GridColumnMeta) => !!(meta.editable || (meta.unlockable && !perms.enforced))
-  const isColumnOpen = (meta: GridColumnMeta) => !!effectiveMeta(meta).editable
-  const toggleColumnLock = (meta: GridColumnMeta) => setColumnLocks((cur) => {
-    const open = !!effectiveMeta(meta).editable
-    const without = (ids: string[]) => ids.filter((id) => id !== meta.id)
-    const next: ColumnLocks = open
-      ? { locked: meta.editable ? [...without(cur.locked), meta.id] : without(cur.locked), unlocked: without(cur.unlocked) }
-      : { locked: without(cur.locked), unlocked: meta.editable ? without(cur.unlocked) : [...without(cur.unlocked), meta.id] }
-    saveColumnLocks(props.sheet ?? 'bidTracker', next)
-    return next
-  })
+  const isColumnOpen = (meta: GridColumnMeta) => unlocked && !!effectiveMeta(meta).editable
+  const toggleColumnLock = (meta: GridColumnMeta) => {
+    if (!unlocked) return
+    setColumnLocks((cur) => {
+      const open = !!effectiveMeta(meta).editable
+      const without = (ids: string[]) => ids.filter((id) => id !== meta.id)
+      const next: ColumnLocks = open
+        ? { locked: meta.editable ? [...without(cur.locked), meta.id] : without(cur.locked), unlocked: without(cur.unlocked) }
+        : { locked: without(cur.locked), unlocked: meta.editable ? without(cur.unlocked) : [...without(cur.unlocked), meta.id] }
+      saveColumnLocks(props.sheet ?? 'bidTracker', next)
+      return next
+    })
+  }
 
   // --- data -------------------------------------------------------------------
   const appliedRules = useMemo(() => pruneFilterNodes(rules, isRuleComplete), [rules])
@@ -981,6 +984,7 @@ export function MasterGrid(props: MasterGridProps) {
                         {canLockColumn(meta) ? (
                           <LockSwitch
                             size="sm" unlocked={isColumnOpen(meta)} onToggle={() => toggleColumnLock(meta)}
+                            disabled={!unlocked}
                             lockedLabel={`Unlock ${meta.header} column`} unlockedLabel={`Lock ${meta.header} column`}
                           />
                         ) : meta.id !== 'manage' && (

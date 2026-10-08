@@ -98,6 +98,11 @@ describe('Master Grid refinement', () => {
       expect(screen.queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument()
       expect(document.querySelector('[data-editable-cell]')).toBeNull()
       expect(screen.queryByTitle('Editable column')).not.toBeInTheDocument()
+      for (const column of screen.getAllByRole('button', { name: /^Unlock .+ column$/ })) {
+        expect(column).toHaveAttribute('aria-pressed', 'false')
+        expect(column).toBeDisabled()
+      }
+      expect(screen.queryByRole('button', { name: /^Lock .+ column$/ })).not.toBeInTheDocument()
     })
 
     it('no cell edits while locked; clicking a row does not open the bid, only its Opportunity ID does', async () => {
@@ -147,10 +152,24 @@ describe('Master Grid refinement', () => {
       expect(screen.queryByRole('button', { name: 'Edit City' })).not.toBeInTheDocument()
       // Calculated / system columns have no write path, so they offer no switch.
       expect(screen.queryByRole('button', { name: /lock Days Remaining column/i })).not.toBeInTheDocument()
+      const savedChoices = localStorage.getItem('goms:bidGrid:columnLocks:bidTracker')
+      await userEvent.click(lockSwitch())
+      for (const column of screen.getAllByRole('button', { name: /^Unlock .+ column$/ })) {
+        expect(column).toHaveAttribute('aria-pressed', 'false')
+        expect(column).toBeDisabled()
+      }
+      expect(screen.queryByRole('button', { name: /^Lock .+ column$/ })).not.toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Unlock Tender ID column' }))
+      expect(localStorage.getItem('goms:bidGrid:columnLocks:bidTracker')).toBe(savedChoices)
+      await unlock()
+      expect(screen.getByRole('button', { name: 'Edit Tender ID' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Edit City' })).not.toBeInTheDocument()
       // The choice survives a remount (remembered per sheet).
       view.unmount()
       renderGrid()
       await screen.findByText('Alpha')
+      expect(screen.getByRole('button', { name: 'Unlock Tender ID column' })).toBeDisabled()
+      expect(screen.queryByRole('button', { name: /^Lock .+ column$/ })).not.toBeInTheDocument()
       await unlock()
       expect(screen.getByRole('button', { name: 'Edit Tender ID' })).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Edit City' })).not.toBeInTheDocument()
