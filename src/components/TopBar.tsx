@@ -4,7 +4,8 @@ import { Icon } from './ui/Icon'
 import { Button } from './ui/Button'
 import { Tooltip } from './ui/Tooltip'
 import { AuthStatus } from './AuthStatus'
-import { OptionsMenu } from './theme/OptionsMenu'
+import { useConnections } from '@/features/dms/useConnections'
+import { moduleForPath } from '@/features/dms/connections'
 import { cn } from '@/lib/utils'
 import logo from '@/assets/amnex-logo.svg'
 
@@ -16,14 +17,19 @@ interface Props {
 export function TopBar({ onOpenDrawer }: Props) {
   const { openSearch, openImport, openExport } = useShell()
   const location = useLocation()
+  const connections = useConnections()
+  const dmsModule = moduleForPath(location.pathname)
+  const hasDms = dmsModule && connections.some((item) => !item.isMaster && item.modules.includes(dmsModule))
   const isHome = location.pathname === '/'
   const isCommercialCalculator = location.pathname.startsWith('/commercial-calculator')
   const isBidTracker = location.pathname.startsWith('/bid-tracker')
   const isTeams = location.pathname.startsWith('/teams')
+  const isSettings = location.pathname.startsWith('/settings')
+  const isDocuments = location.pathname.startsWith('/documents')
   // Search/Import/Export act on Account Mapping's hierarchy data, so no
   // standalone module shows them.
-  const hidesAccountMappingTools = isCommercialCalculator || isBidTracker || isTeams
-  const moduleLabel = isCommercialCalculator ? 'Commercial Calculator' : isBidTracker ? 'Opportunity' : isTeams ? 'Teams' : 'Accounts Mapping'
+  const hidesAccountMappingTools = isCommercialCalculator || isBidTracker || isTeams || isSettings || isDocuments
+  const moduleLabel = isDocuments ? 'Documents' : isSettings ? 'Settings' : isCommercialCalculator ? 'Commercial Calculator' : isBidTracker ? 'Opportunity' : isTeams ? 'Teams' : 'Accounts Mapping'
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-paper/90 px-3 sm:gap-3 sm:px-5">
       <button
@@ -79,8 +85,8 @@ export function TopBar({ onOpenDrawer }: Props) {
       )}
 
       <div className={cn('flex shrink-0 items-center gap-2', hidesAccountMappingTools && 'ml-auto')}>
-        <OptionsMenu />
-        <AuthStatus />
+        {hasDms && <Link to={`/documents/${dmsModule}`} aria-label="Documents" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-white px-2.5 text-xs font-medium text-ink hover:bg-panel"><Icon name="FileText" size={15} /><span className="hidden sm:inline">Documents</span></Link>}
+        <AuthStatus includeOptions />
       </div>
     </header>
   )

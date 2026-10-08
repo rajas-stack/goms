@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/Button'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { Icon } from '@/components/ui/Icon'
 import { PersonName } from '@/components/ui/PersonName'
 import {
@@ -113,7 +114,7 @@ function Entry({ group, bidLabel, bidExists, photoOf }: {
       </div>
       {group.bidId && (
         <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-          {bid && <span className="max-w-[14rem] truncate text-[12px] font-semibold text-goms-navy" title={bid.name}>{bid.code}</span>}
+          {bid?.code && <span className="max-w-[14rem] truncate font-mono text-[12px] font-semibold text-goms-navy" title={bid.name}>{bid.code}</span>}
           {bid && <span className="hidden max-w-[14rem] truncate text-[12px] text-muted sm:block">{bid.name}</span>}
           {deleted
             ? <span className="text-[12px] italic text-muted">(this bid was deleted)</span>
@@ -142,7 +143,7 @@ export function ActivityHistoryPage() {
   const corrigendumKey = [...corrigendumBid].join('|')
 
   const bidById = useMemo(() => new Map(bids.map((b) => [b.id, b])), [bids])
-  const bidLabel = (id: string) => { const b = bidById.get(id); return b ? { code: b.bidCode, name: b.opportunityName } : null }
+  const bidLabel = (id: string) => { const b = bidById.get(id); return b ? { code: b.opportunityCode, name: b.opportunityName } : null }
 
   // The actor is an email (audit log) or a name (ownership history); resolve a
   // face from the sales roster by email first, then by name — initials otherwise.
@@ -173,7 +174,7 @@ export function ActivityHistoryPage() {
   // The pick-lists only offer what the feed actually contains.
   const bidOptions = useMemo(() => {
     const ids = [...new Set(items.map((i) => i.bidId).filter((x): x is string => !!x))]
-    return ids.map((id) => ({ id, label: bidLabel(id) ? `${bidLabel(id)!.code} · ${bidLabel(id)!.name}` : 'Deleted bid' }))
+    return ids.map((id) => ({ id, label: bidLabel(id) ? [bidLabel(id)!.name, bidLabel(id)!.code].filter(Boolean).join(' · ') : 'Deleted bid' }))
       .sort((a, b) => a.label.localeCompare(b.label))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, bidById])
@@ -218,11 +219,11 @@ export function ActivityHistoryPage() {
         </select>
         <label className="flex items-center gap-1.5 text-[12px] text-muted">
           From
-          <input type="date" aria-label="From date" className={control} value={filters.from} max={filters.to || undefined} onChange={(e) => set({ from: e.target.value })} />
+          <FriendlyDateInput aria-label="From date" placeholder="Any date" floatingFeedback wrapperClassName="w-[10rem]" className={control} value={filters.from} max={filters.to || undefined} onChange={(v) => set({ from: v })} />
         </label>
         <label className="flex items-center gap-1.5 text-[12px] text-muted">
           To
-          <input type="date" aria-label="To date" className={control} value={filters.to} min={filters.from || undefined} onChange={(e) => set({ to: e.target.value })} />
+          <FriendlyDateInput aria-label="To date" placeholder="Any date" floatingFeedback wrapperClassName="w-[10rem]" className={control} value={filters.to} min={filters.from || undefined} onChange={(v) => set({ to: v })} />
         </label>
         {filtered && <Button variant="ghost" size="sm" onClick={() => set(NO_ACTIVITY_FILTERS)}>Clear filters</Button>}
         <span className="ml-auto text-[12px] text-muted" aria-live="polite">

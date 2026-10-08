@@ -7,12 +7,13 @@ import { Tooltip } from '@/components/ui/Tooltip'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { PersonName } from '@/components/ui/PersonName'
+import { OptionsMenu } from '@/components/theme/OptionsMenu'
 
 /** Persistent sign-in indicator, visible on every screen (TopBar) — not just
  *  reactively when a mutation gets rejected (AuthPromptDialog). Signing in
  *  reuses that same shared dialog via notifyAuthRequired rather than calling
  *  signInWithPopup itself, so there's one sign-in flow/error path, not two. */
-export function AuthStatus() {
+export function AuthStatus({ includeOptions = false }: { includeOptions?: boolean } = {}) {
   const [user, setUser] = useState<User | null>(null)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
 
@@ -24,11 +25,13 @@ export function AuthStatus() {
   // Not configured for this build (e.g. goms-prod today, or local dev with
   // no .env.local) — nothing meaningful to show. Captured into a local so TS
   // narrows it to `Auth` inside the sign-out closure below too.
-  if (!auth) return null
+  if (!auth) return includeOptions ? <OptionsMenu /> : null
   const currentAuth = auth
 
   if (!user) {
     return (
+      <>
+      {includeOptions && <OptionsMenu />}
       <button
         onClick={() => notifyAuthRequired('unauthorized')}
         className="flex h-11 shrink-0 items-center gap-1.5 rounded-lg px-2 text-[13px] font-medium text-muted hover:bg-panel hover:text-ink lg:h-8"
@@ -36,12 +39,13 @@ export function AuthStatus() {
         <Icon name="LogIn" size={14} />
         <span className="hidden sm:inline">Sign in</span>
       </button>
+      </>
     )
   }
 
   return (
     <>
-      <Tooltip label={user.email ?? 'Signed in'} side="bottom" className="shrink-0">
+      {includeOptions ? <OptionsMenu profile={{ name: user.displayName || user.email || 'Signed in', photoUrl: user.photoURL }} onSignOut={() => setConfirmSignOut(true)} /> : <Tooltip label={user.email ?? 'Signed in'} side="bottom" className="shrink-0">
         <div className="flex h-11 items-center gap-1 rounded-full border border-line bg-panel py-1 pl-1 pr-1 text-[12px] font-medium text-ink-700 lg:h-8">
           <PersonName
             person={{ name: user.displayName || user.email || 'Signed in', photoUrl: user.photoURL }}
@@ -55,7 +59,7 @@ export function AuthStatus() {
             <Icon name="LogOut" size={13} />
           </button>
         </div>
-      </Tooltip>
+      </Tooltip>}
 
       <Dialog
         open={confirmSignOut}

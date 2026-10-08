@@ -209,3 +209,8 @@ export interface NewBidOpportunity {
 
 export const DEPARTMENT_REQUIRED_MESSAGE =
   'This opportunity has no department. Choose an existing department or create one to create the bid.'
+
+/** Protected values ("freeze a fact") are switched off for now: nothing is
+ *  frozen, edits and corrigenda are never blocked, and old freeze records do
+ *  not block deleting a bid. Records are kept so this can be turned back on. */
+export const PROTECTED_VALUES_ENFORCED = false

@@ -12,7 +12,7 @@ import { mergeTeamRosters } from './pre-sales-team'
 import { mergeOrgSeed, syncAllTeamsFromOrg, type OrgPerson } from './org-structure'
 import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
 import type { CommercialCalculatorData } from '@/modules/commercial-calculator/types'
-import type { BidSynopsis } from '@goms/domain'
+import type { BidSynopsis, TenderWebsite } from '@goms/domain'
 
 interface AdminState {
   st_code: number
@@ -113,6 +113,8 @@ export interface GormsData {
   /** Added in v14 (Bid Tracker custom columns, spec §8.1). Start empty. */
   bidCustomFields: BidCustomField[]
   bidCustomFieldValues: BidCustomFieldValue[]
+  /** Added in v24: tender portals saved in Settings (General tab dropdown). */
+  tenderWebsites: TenderWebsite[]
 }
 
 export function buildSeed(): GormsData {
@@ -331,6 +333,6 @@ export function buildSeed(): GormsData {
     deliveryTeamMembers: syncAllTeamsFromOrg(mergeOrgSeed([]), mergeTeamRosters([])),
     bids: [], bidSynopsis: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
     protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [],
-    bidCustomFields: [], bidCustomFieldValues: [],
+    bidCustomFields: [], bidCustomFieldValues: [], tenderWebsites: [],
   }
 }

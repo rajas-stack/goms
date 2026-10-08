@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { PhoneInput, isValidPhone } from '@/components/ui/PhoneInput'
 import { EmailInput } from '@/components/ui/EmailInput'
 import { Icon } from '@/components/ui/Icon'
@@ -572,7 +573,7 @@ export function EmployeeFormDialog({ open, orgNode, employee, presetManagerId, r
                 <span className="text-sm text-ink-800">High-priority</span>
               </label>
             </Field>
-            <Field label="Last interaction"><Input type="date" value={form.lastInteractionAt} onChange={set('lastInteractionAt')} /></Field>
+            <Field label="Last interaction"><FriendlyDateInput value={form.lastInteractionAt} onChange={(v) => set('lastInteractionAt')({ target: { value: v } })} /></Field>
             <div className="sm:col-span-2">
               <Field label="Personal notes"><Textarea value={form.notes} onChange={set('notes')} /></Field>
             </div>

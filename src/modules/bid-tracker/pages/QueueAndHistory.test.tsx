@@ -37,7 +37,7 @@ describe('ActionQueuePage', () => {
     wrap(<ActionQueuePage />)
     const row = await screen.findByTestId('action-row')
     expect(within(row).getByText('AI Document Processing System')).toBeInTheDocument()
-    expect(within(row).getByText(bid.bidCode)).toBeInTheDocument()
+    expect(within(row).queryByText(bid.bidCode)).not.toBeInTheDocument()
     expect(within(row).getByText('Solutioning')).toBeInTheDocument()
     expect(within(row).getByText(/Verify Security Clearance Level 3/)).toBeInTheDocument()
     expect(within(row).getByText('Asha Rao')).toBeInTheDocument()
@@ -88,7 +88,8 @@ describe('ActivityHistoryPage', () => {
     const stage = rows.find((r) => /Stage changed/.test(r.textContent ?? ''))!
     expect(stage).toHaveTextContent('Solutioning')
     expect(stage).toHaveTextContent('Qualification')
-    expect(stage).toHaveTextContent(bid.bidCode)
+    expect(stage).toHaveTextContent('AI Document Processing System')
+    expect(stage).not.toHaveTextContent(bid.bidCode)
     expect(stage.textContent).not.toMatch(/stageKey/)
     expect(screen.getAllByRole('link', { name: 'Open bid' }).length).toBeGreaterThan(0)
   })
@@ -158,8 +159,8 @@ describe('ActivityHistoryPage', () => {
     await screen.findAllByTestId('activity-entry')
     const total = screen.getAllByTestId('activity-entry').length
 
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Bid' }), screen.getByRole('option', { name: new RegExp(two.bidCode) }))
-    expect(screen.getAllByTestId('activity-entry').every((e) => e.textContent?.includes(two.bidCode))).toBe(true)
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Bid' }), screen.getByRole('option', { name: /Beta Mission/ }))
+    expect(screen.getAllByTestId('activity-entry').every((e) => e.textContent?.includes('Beta Mission'))).toBe(true)
     await userEvent.click(screen.getByRole('button', { name: 'Clear filters' }))
     expect(screen.getAllByTestId('activity-entry')).toHaveLength(total)
 

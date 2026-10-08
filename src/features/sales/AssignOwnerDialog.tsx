@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { Combobox } from '@/components/ui/Combobox'
 import { useToast } from '@/components/ui/Toast'
 import { useOwnershipMutations, useSalesPersons } from '@/lib/api'
@@ -102,11 +103,11 @@ export function AssignOwnerDialog({ open, entityType, entityId, entityLabel, onC
 
         <div className="grid grid-cols-2 gap-3">
           <Field label="Effective from" required>
-            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            <FriendlyDateInput value={startDate} onChange={setStartDate} />
           </Field>
           {role === 'delegate' && (
             <Field label="Until" hint="A delegation must expire." required>
-              <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              <FriendlyDateInput value={endDate} onChange={setEndDate} />
             </Field>
           )}
         </div>

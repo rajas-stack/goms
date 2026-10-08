@@ -250,7 +250,11 @@ export function useBidCorrigendaMutations(bidId: string) {
     mutationFn: (input: Parameters<typeof repository.reviewCorrigendumChange>[0]) => repository.reviewCorrigendumChange(input),
     onSuccess: invalidate,
   })
-  return { create, reviewChange }
+  const updateRegister = useMutation({
+    mutationFn: (input: Parameters<typeof repository.updateBidCorrigendumRegister>[0]) => repository.updateBidCorrigendumRegister(input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.bidCorrigenda(bidId) }),
+  })
+  return { create, reviewChange, updateRegister }
 }
 
 export const useProtectedValues = (entityType: string, entityId: string | null) =>

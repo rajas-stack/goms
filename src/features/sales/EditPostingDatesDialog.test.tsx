@@ -38,14 +38,14 @@ afterEach(() => { vi.restoreAllMocks() })
 describe('EditPostingDatesDialog', () => {
   it('prefills the current posting: Effective to is blank (Present)', () => {
     renderDialog(OPEN)
-    expect(from()).toHaveValue('1970-01-01')
+    expect(from()).toHaveValue('01 Jan 1970') // stored 1970-01-01, shown readably by the shared date field
     expect(to()).toHaveValue('')
   })
 
   it('shows the LAST DAY HELD for a closed posting, not the exclusive stored end', () => {
     renderDialog(CLOSED)
-    expect(from()).toHaveValue('2025-07-01')
-    expect(to()).toHaveValue('2026-03-31')
+    expect(from()).toHaveValue('01 Jul 2025')
+    expect(to()).toHaveValue('31 Mar 2026')
   })
 
   it('changing only Effective from sends only startDate', async () => {

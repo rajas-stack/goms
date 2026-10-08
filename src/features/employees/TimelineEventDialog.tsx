@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { MultiSelectDropdown } from '@/components/ui/MultiSelectDropdown'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
@@ -244,7 +245,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             </Field>
           )}
           <Field label="Date">
-            <Input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
+            <FriendlyDateInput value={form.date} onChange={(v) => setForm((f) => ({ ...f, date: v }))} />
           </Field>
           <Field label="Time">
             <Input type="time" value={form.time} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} />

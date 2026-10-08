@@ -3,6 +3,7 @@
 // silently overwritten" is enforced identically everywhere rather than
 // reimplemented per call site with room to drift.
 import { TRPCError } from '@trpc/server'
+import { PROTECTED_VALUES_ENFORCED } from '@goms/domain'
 
 export async function assertFieldsNotProtected(
   client: { query: (sql: string, params?: unknown[]) => Promise<any> },

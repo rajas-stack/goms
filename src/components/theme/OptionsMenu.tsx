@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Icon } from '@/components/ui/Icon'
+import { PersonName } from '@/components/ui/PersonName'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import { useMenuKeyboardNav } from '@/components/ui/popover/useMenuKeyboardNav'
 import { originOf, useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { DayNightSwitch } from './DayNightSwitch'
 import { ThemeSegmented } from './ThemeSegmented'
-import { Kbd, SettingsDialog, type SettingsSection } from './SettingsDialog'
+import { Kbd, SettingsDialog } from './SettingsDialog'
 import { THEME_TOGGLE_KEYS, isThemeToggleShortcut } from './shortcuts'
 
 /** Matches menuitem, menuitemradio and menuitemcheckbox. */
@@ -16,9 +17,9 @@ const NAV_ITEMS = '[role^="menuitem"]'
 /** TopBar's "Options" dropdown: day/night switch, Light/Dark/System picker,
  *  and entry points into Settings. Also owns the global theme shortcut, since
  *  the TopBar (and so this menu) is mounted on every screen. */
-export function OptionsMenu() {
+export function OptionsMenu({ profile, onSignOut }: { profile?: { name: string; photoUrl?: string | null }; onSignOut?: () => void } = {}) {
   const [open, setOpen] = useState(false)
-  const [settings, setSettings] = useState<{ open: boolean; section: SettingsSection }>({ open: false, section: 'appearance' })
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const anchorRef = useRef<HTMLDivElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
   const { resolved, toggle } = useTheme()
@@ -36,9 +37,9 @@ export function OptionsMenu() {
     return () => window.removeEventListener('keydown', onKey)
   }, [toggle])
 
-  const openSettings = (section: SettingsSection) => {
+  const openSettings = () => {
     setOpen(false)
-    setSettings({ open: true, section })
+    setSettingsOpen(true)
   }
 
   return (
@@ -47,19 +48,20 @@ export function OptionsMenu() {
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          aria-label="Options"
+          aria-label={profile ? 'Profile options' : 'Options'}
           aria-haspopup="menu"
           aria-expanded={open}
           className={cn(
             'group flex h-11 items-center gap-1 rounded-lg border px-2.5 text-muted outline-none transition-all duration-150 focus-visible:focus-ring lg:h-8 lg:px-2',
+            profile && 'rounded-full border-line bg-panel text-ink-700',
             open
               ? 'border-ink-600/40 bg-panel text-ink-900'
-              : 'border-transparent hover:border-line hover:bg-panel hover:text-ink-900',
+              : profile ? 'border-line bg-panel hover:border-ink-600/40 hover:bg-white' : 'border-transparent hover:border-line hover:bg-panel hover:text-ink-900',
           )}
         >
-          <motion.span className="flex" animate={{ rotate: open ? 90 : 0 }} transition={{ type: 'spring', stiffness: 300, damping: 20 }}>
+          {profile ? <PersonName person={profile} className="max-w-[11rem]" nameClassName="hidden sm:block" /> : <motion.span className="flex" animate={{ rotate: open ? 90 : 0 }} transition={{ type: 'spring', stiffness: 300, damping: 20 }}>
             <Icon name="Settings" size={17} />
-          </motion.span>
+          </motion.span>}
           <Icon name="ChevronDown" size={13} className={cn('hidden transition-transform duration-200 sm:block', open && 'rotate-180')} />
         </button>
 
@@ -128,17 +130,16 @@ export function OptionsMenu() {
 
               <div className="mx-1 my-2 h-px bg-line" />
 
-              <OptionsItem icon="Settings" label="Settings" hint="Appearance & preferences" onClick={() => openSettings('appearance')} />
-              <OptionsItem icon="Keyboard" label="Keyboard shortcuts" onClick={() => openSettings('shortcuts')} className="hidden lg:flex" />
+              <OptionsItem icon="Settings" label="Settings" hint="Workspace configuration" onClick={openSettings} />
+              {onSignOut && <><div className="mx-1 my-2 h-px bg-line" /><OptionsItem icon="LogOut" label="Sign out" onClick={() => { setOpen(false); onSignOut() }} /></>}
             </motion.div>
           )}
         </PopoverPanel>
       </div>
 
       <SettingsDialog
-        open={settings.open}
-        section={settings.section}
-        onClose={() => setSettings((s) => ({ ...s, open: false }))}
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
       />
     </>
   )

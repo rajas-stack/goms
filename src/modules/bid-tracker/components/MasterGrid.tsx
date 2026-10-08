@@ -757,7 +757,7 @@ export function MasterGrid(props: MasterGridProps) {
         { label: 'Delete bid…', icon: 'Trash2', danger: true, onSelect: () => deleteBid(row) },
       ],
     ]
-    setMenu({ x: e.clientX, y: e.clientY, title: `${row.bidCode} · ${meta.header}`, groups })
+    setMenu({ x: e.clientX, y: e.clientY, title: `${row.opportunityName} · ${meta.header}`, groups })
   }
   const openHeaderMenu = (e: React.MouseEvent, column: { getIsSorted: () => false | 'asc' | 'desc'; getCanSort: () => boolean; toggleSorting: (desc?: boolean, multi?: boolean) => void; clearSorting: () => void }, meta: GridColumnMeta) => {
     e.preventDefault()

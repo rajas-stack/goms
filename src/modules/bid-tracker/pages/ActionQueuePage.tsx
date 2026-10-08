@@ -28,7 +28,7 @@ export function ActionQueuePage() {
       <table className="w-full min-w-max border-separate border-spacing-0 text-sm">
         <thead className="sticky top-0 bg-paper">
           <tr>
-            {['Opportunity / Mission', 'Bid ID', 'Stage', 'Next Action', 'Action Owner', 'Action Due', 'Attention'].map((h) => (
+            {['Opportunity / Mission', 'Stage', 'Next Action', 'Action Owner', 'Action Due', 'Attention'].map((h) => (
               <th key={h} className="whitespace-nowrap border-b border-line px-3 py-2 text-left text-[13px] font-medium text-ink">{h}</th>
             ))}
           </tr>
@@ -37,7 +37,6 @@ export function ActionQueuePage() {
           {entries.map((e) => (
             <tr key={e.followUpId} data-testid="action-row" className="cursor-pointer hover:bg-ink-900/[0.03]" onClick={() => navigate(`/bid-tracker/bid/${e.bidId}`)}>
               <td className="border-b border-line px-3 py-2">{e.opportunityName}</td>
-              <td className="border-b border-line px-3 py-2">{e.bidCode}</td>
               <td className="border-b border-line px-3 py-2">{stageLabel(e.stageKey)}</td>
               <td className="border-b border-line px-3 py-2">{e.note || '—'}</td>
               <td className="border-b border-line px-3 py-2">{ownerCell(e.assigneeId)}</td>

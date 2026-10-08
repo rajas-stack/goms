@@ -54,6 +54,8 @@ export function AppLayout() {
     && !location.pathname.startsWith('/commercial-calculator')
     && !location.pathname.startsWith('/bid-tracker')
     && !location.pathname.startsWith('/teams')
+    && !location.pathname.startsWith('/settings')
+    && !location.pathname.startsWith('/documents')
   // `MobileDetailsSheet` only renders as an overlay below `lg` (it's
   // `lg:hidden`) — at `lg` and up the same selection drives the always-visible
   // desktop `<aside>`, which isn't an overlay to close on back, so the

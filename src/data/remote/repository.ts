@@ -8,6 +8,7 @@
 // (docs/superpowers/analysis/2026-08-31-goms-local-vs-gcp-functional-parity-audit.md).
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import type { BidSynopsis, BidSynopsisSection, SaveBidSynopsisInput } from '@goms/domain'
+import type { TenderWebsite, TenderWebsiteInput } from '@goms/domain'
 import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
 import { authPromptLink } from './authPromptLink'
@@ -15,7 +16,7 @@ import type { AppRouter } from '../../../apps/api/src/index'
 import type {
   Repository, CreateCustomerInput, CreateNodeInput, CreateEmployeeInput, AddTimelineInput,
   ImportChildRow, ImportEmployeeRow, MergeEmployeesInput, TransferInput,
-  CreateSalesPersonInput, CreateDeliveryTeamMemberInput, UpdateDeliveryTeamMemberPatch, TransferSalesPersonInput, StateSummary,
+  CreateSalesPersonInput, CreateDeliveryTeamMemberInput, UpdateDeliveryTeamMemberPatch, TransferSalesPersonInput, StateSummary, CreateOrgPersonInput, UpdateOrgPersonPatch,
   CreateOpportunityInput, AssignOwnerInput, TransferBookOfBusinessInput, CreateFollowUpInput,
   RelationshipAnalytics,
 } from '../repository'
@@ -31,12 +32,19 @@ import type {
   MasterEntityKey, MasterRowMap, CreateMasterInput, ProductEditionFeature,
   CommercialBoq, CommercialBoqLineItem, CommercialAuditLog, CreateBoqInput, UpdateBoqInput, CreateBoqLineItemInput, BoqStatus,
 } from '@/modules/commercial-calculator/types'
+import type { CreateCorrigendumInput, UpdateCorrigendumRegisterInput } from '@/modules/bid-tracker/corrigenda/model'
 
 export class RemoteRepository implements Partial<Repository> {
   getBidSynopsis = (bidId: string, section: BidSynopsisSection): Promise<BidSynopsis | null> =>
     this.client.bidSynopsis.get.query({ bidId, section }) as Promise<BidSynopsis | null>
   saveBidSynopsis = (input: SaveBidSynopsisInput): Promise<BidSynopsis> =>
     this.client.bidSynopsis.save.mutate(input) as Promise<BidSynopsis>
+  listTenderWebsites = (): Promise<TenderWebsite[]> => this.client.tenderWebsites.list.query()
+  listTenderDscEmployees = () => this.client.tenderWebsites.dscEmployees.query()
+  createTenderWebsite = (input: TenderWebsiteInput): Promise<TenderWebsite> => this.client.tenderWebsites.create.mutate(input)
+  updateTenderWebsite = (id: string, input: TenderWebsiteInput): Promise<TenderWebsite> =>
+    this.client.tenderWebsites.update.mutate({ id, ...input })
+  deleteTenderWebsite = async (id: string): Promise<void> => { await this.client.tenderWebsites.delete.mutate({ id }) }
   private client = createTRPCClient<AppRouter>({
     links: [authPromptLink, httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`, headers: getAuthHeaders })],
   })
@@ -130,12 +138,10 @@ export class RemoteRepository implements Partial<Repository> {
   setDeliveryTeamMemberStatus = (id: string, status: DeliveryTeamMember['status']): Promise<void> =>
     this.client.deliveryTeams.setStatus.mutate({ id, status })
   deleteDeliveryTeamMember = (id: string): Promise<void> => this.client.deliveryTeams.delete.mutate({ id })
-  // Org Structure is local-data only so far; connected mode has no API for it yet.
-  private orgNotConnected = (): never => { throw new Error('Org Structure is not available in connected mode yet.') }
-  listOrgPeople = async (): Promise<never[]> => []
-  createOrgPerson = async (): Promise<never> => this.orgNotConnected()
-  updateOrgPerson = async (): Promise<never> => this.orgNotConnected()
-  deleteOrgPerson = async (): Promise<never> => this.orgNotConnected()
+  listOrgPeople = () => this.client.orgPeople.list.query()
+  createOrgPerson = (input: CreateOrgPersonInput) => this.client.orgPeople.create.mutate(input)
+  updateOrgPerson = (id: string, patch: UpdateOrgPersonPatch) => this.client.orgPeople.update.mutate({ id, patch })
+  deleteOrgPerson = async (id: string): Promise<void> => { await this.client.orgPeople.delete.mutate({ id }) }
   transferSalesPerson = (input: TransferSalesPersonInput): Promise<SalesPosting> => this.client.sales.transfer.mutate(input)
   updatePostingDates = (postingId: string, edit: { startDate?: string; lastDayHeld?: string | null }): Promise<SalesPosting> =>
     this.client.sales.updatePostingDates.mutate({ postingId, ...edit })
@@ -280,10 +286,10 @@ export class RemoteRepository implements Partial<Repository> {
 
   listBidCorrigenda = (bidId: string): Promise<BidCorrigendum[]> =>
     this.client.bidCorrigenda.listForBid.query({ bidId }) as unknown as Promise<BidCorrigendum[]>
-  createBidCorrigendum = (input: {
-    bidId: string; corrigendumNumber: number; sourceDocumentId?: string
-    changes: { fieldKey: string; currentValue: string; proposedValue: string }[]
-  }): Promise<BidCorrigendum> => this.client.bidCorrigenda.create.mutate(input) as unknown as Promise<BidCorrigendum>
+  createBidCorrigendum = (input: CreateCorrigendumInput): Promise<BidCorrigendum> =>
+    this.client.bidCorrigenda.create.mutate(input) as unknown as Promise<BidCorrigendum>
+  updateBidCorrigendumRegister = (input: UpdateCorrigendumRegisterInput): Promise<BidCorrigendum> =>
+    this.client.bidCorrigenda.updateRegister.mutate(input) as unknown as Promise<BidCorrigendum>
   reviewCorrigendumChange = (
     input: { changeId: string; decision: 'accepted' | 'rejected'; reason?: string },
   ): Promise<BidCorrigendumChange> =>

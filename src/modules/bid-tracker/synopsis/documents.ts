@@ -1,9 +1,10 @@
 import type { BidSynopsisSection, SynopsisNode } from '@goms/domain'
 import type { WorkSheet } from 'xlsx'
 import { utils } from 'xlsx'
+import { generalToDocument } from './generalFields'
 
 export const SECTION_LABELS: Record<BidSynopsisSection, string> = {
-  scope: 'Scope of Work', pq: 'PQ', tq: 'TQ', manpower: 'Manpower', milestone: 'Milestone', payment: 'Payment Terms', boq: 'BoQ', queries: 'Queries',
+  general: 'General', scope: 'Scope of Work', pq: 'PQ', tq: 'TQ', manpower: 'Manpower', milestone: 'Milestone', payment: 'Payment Terms', boq: 'BoQ', queries: 'Queries',
 }
 
 export function paragraph(text = ''): SynopsisNode {
@@ -20,6 +21,7 @@ export function createTable(columns: string[], rows = 3, header = true): Synopsi
 }
 
 export function starterDocument(section: BidSynopsisSection): SynopsisNode {
+  if (section === 'general') return generalToDocument({})
   return section === 'scope'
     ? { type: 'doc', content: [paragraph()] }
     : { type: 'doc', content: [createTable(['Column 1', 'Column 2', 'Column 3', 'Column 4']), paragraph()] }

@@ -12,6 +12,7 @@ import { Combobox, type ComboboxOption } from '@/components/ui/Combobox'
 import { PersonName } from '@/components/ui/PersonName'
 import { MobileFilterBar } from '@/components/MobileFilterBar'
 import { Input } from '@/components/ui/Field'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { TimelineEventDialog } from '@/features/employees/TimelineEventDialog'
 import { ALL_EVENT_TYPES, TIMELINE_META, timelineEventLabel } from '@/lib/timeline-meta'
 import {
@@ -221,7 +222,7 @@ export function Meetings() {
                 aria-label="Filter by region"
                 className="min-w-[12rem] flex-1"
               />
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date" className="h-9 w-full text-[13px] sm:w-[9rem]" />
+              <FriendlyDateInput value={date} onChange={setDate} aria-label="Date" placeholder="Any date" floatingFeedback wrapperClassName="w-full sm:w-[10rem]" className="h-9 text-[13px]" />
               <div className="flex items-center gap-1.5">
                 <Input type="time" value={timeFrom} onChange={(e) => setTimeFrom(e.target.value)} aria-label="Time from" className="h-9 w-full text-[13px] sm:w-[7rem]" />
                 <span className="text-[12px] text-muted">to</span>

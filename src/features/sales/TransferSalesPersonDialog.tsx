@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { Combobox } from '@/components/ui/Combobox'
 import { useToast } from '@/components/ui/Toast'
 import { useSalesPersonMutations, useSalesPersons, useSalesPostings } from '@/lib/api'
@@ -103,7 +104,7 @@ export function TransferSalesPersonDialog({ open, person, onClose }: {
           <Input value={office} onChange={(e) => setOffice(e.target.value)} />
         </Field>
         <Field label="Effective date" required>
-          <Input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} />
+          <FriendlyDateInput value={effectiveDate} onChange={setEffectiveDate} />
         </Field>
         <Field label="Reason">
           <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} placeholder="e.g. Promoted to Regional Manager" />

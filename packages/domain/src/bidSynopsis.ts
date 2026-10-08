@@ -1,4 +1,6 @@
-export const BID_SYNOPSIS_SECTIONS = ['scope', 'pq', 'tq', 'manpower', 'milestone', 'payment', 'boq', 'queries'] as const
+import { validateSynopsisGrid } from './synopsisGrid.js'
+
+export const BID_SYNOPSIS_SECTIONS = ['general', 'scope', 'pq', 'tq', 'manpower', 'milestone', 'payment', 'boq', 'queries'] as const
 export type BidSynopsisSection = (typeof BID_SYNOPSIS_SECTIONS)[number]
 
 export interface SynopsisNode {
@@ -25,7 +27,7 @@ export interface SaveBidSynopsisInput {
   expectedRevision: number
 }
 
-const NODE_TYPES = new Set(['doc', 'paragraph', 'text', 'hardBreak', 'heading', 'bulletList', 'orderedList', 'listItem', 'blockquote', 'horizontalRule', 'table', 'tableRow', 'tableCell', 'tableHeader', 'codeBlock'])
+const NODE_TYPES = new Set(['doc', 'paragraph', 'text', 'hardBreak', 'heading', 'bulletList', 'orderedList', 'listItem', 'blockquote', 'horizontalRule', 'table', 'tableRow', 'tableCell', 'tableHeader', 'codeBlock', 'grid'])
 const MARK_TYPES = new Set(['bold', 'italic', 'underline', 'strike', 'textStyle', 'highlight', 'link', 'code'])
 
 export function validateSynopsisDocument(value: unknown): asserts value is SynopsisNode {
@@ -37,6 +39,11 @@ export function validateSynopsisDocument(value: unknown): asserts value is Synop
     const node = value as SynopsisNode
     if (!NODE_TYPES.has(node.type) || (node.text !== undefined && typeof node.text !== 'string')) throw new Error('Invalid section content.')
     if (node.type === 'text' && !node.text) throw new Error('Text cannot be empty.')
+    if (node.type === 'grid') {
+      if (depth !== 1 || node.content !== undefined) throw new Error('Invalid grid placement.')
+      validateSynopsisGrid(node.attrs?.grid)
+      return
+    }
     if (node.attrs !== undefined && (!node.attrs || typeof node.attrs !== 'object' || Array.isArray(node.attrs))) throw new Error('Invalid formatting.')
     for (const key of ['colspan', 'rowspan']) {
       const span = node.attrs?.[key]

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Field'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { AddableSelect } from '@/components/ui/AddableSelect'
 import { MultiSelectDropdown } from '@/components/ui/MultiSelectDropdown'
 import { DraftNotice } from '@/components/ui/DraftNotice'
@@ -133,10 +134,10 @@ export function WorkFormDialog({ open, work, departmentId = null, draftKey, mana
             </Select>
           </Field>
           <Field label="Publish date">
-            <Input type="date" value={form.publishDate} onChange={(e) => set('publishDate', e.target.value)} />
+            <FriendlyDateInput value={form.publishDate} onChange={(v) => set('publishDate', v)} />
           </Field>
           <Field label="Submission date">
-            <Input type="date" value={form.submissionDate} disabled={managedInBidTracker} onChange={(e) => set('submissionDate', e.target.value)} />
+            <FriendlyDateInput value={form.submissionDate} disabled={managedInBidTracker} onChange={(v) => set('submissionDate', v)} />
           </Field>
           <Field label="Component">
             <MultiSelectDropdown value={form.component} onChange={(v) => set('component', v)} groups={WORK_COMPONENT_GROUPS} storageKey="work-component" searchable searchPlaceholder="Search components…" />

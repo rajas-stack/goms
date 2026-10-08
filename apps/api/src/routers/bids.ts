@@ -6,8 +6,7 @@ import { isUniqueViolation } from '../db-errors.js'
 import { assertFieldsNotProtected } from '../lib/protectedValues.js'
 import {
   DEPARTMENT_REQUIRED_MESSAGE, formatBidCode, DEFAULT_BID_STAGE_KEY, DEFAULT_OWNED_SHEET, OWNED_SHEETS, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP,
-  computeAttentionFlag, applyFilterRules, buildOwnerMap, type CustomFieldType, type CustomValue, type OwnedSheet,
-} from '@goms/domain'
+  computeAttentionFlag, applyFilterRules, buildOwnerMap, type CustomFieldType, type CustomValue, type OwnedSheet, PROTECTED_VALUES_ENFORCED } from '@goms/domain'
 import { applyStageChange, insertOpportunity } from './opportunities.js'
 import { loadOwnershipContext } from './ownership.js'
 import { writeAuditLog } from '../lib/auditLog.js'
@@ -425,7 +424,7 @@ export const bidsRouter = router({
       const docs = await client.query(`SELECT 1 FROM documents WHERE entity_type='bid' AND entity_id=$1 LIMIT 1`, [input.id])
       const followUps = await client.query(`SELECT 1 FROM follow_ups WHERE entity_type='bid' AND entity_id=$1 LIMIT 1`, [input.id])
       if (corrigenda.rows.length) throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete — this bid has corrigendum history. Archive it instead.' })
-      if (protectedRows.rows.length) throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete — this bid has protected-value history. Archive it instead.' })
+      if (PROTECTED_VALUES_ENFORCED && protectedRows.rows.length) throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete — this bid has protected-value history. Archive it instead.' })
       if (docs.rows.length) throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete — this bid has uploaded documents. Archive it instead.' })
       if (followUps.rows.length) throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete — this bid has follow-ups. Archive it instead.' })
 

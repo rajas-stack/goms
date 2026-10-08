@@ -229,6 +229,29 @@
   .focus-ring {
     @apply outline-none ring-2 ring-indigo/70 ring-offset-1 ring-offset-paper;
   }
+  /* Soft "neumorphic" surfaces (Opportunity Timeline): a light highlight on the
+     top-left and a soft shade bottom-right. --neu-* switch for dark mode. */
+  .neu-raised {
+    background: linear-gradient(145deg, rgb(var(--c-white)), rgb(var(--c-panel)));
+    box-shadow: -4px -4px 10px var(--neu-hi), 5px 5px 14px var(--neu-lo);
+  }
+  .neu-raised-sm {
+    background: linear-gradient(145deg, rgb(var(--c-white)), rgb(var(--c-panel)));
+    box-shadow: -2px -2px 6px var(--neu-hi), 3px 3px 8px var(--neu-lo);
+  }
+  .neu-inset {
+    background: rgb(var(--c-panel) / 0.6);
+    box-shadow: inset 2px 2px 6px var(--neu-lo), inset -2px -2px 6px var(--neu-hi);
+  }
+}
+
+:root, .light {
+  --neu-hi: rgb(255 255 255 / 0.95);
+  --neu-lo: rgb(15 41 66 / 0.11);
+}
+.dark {
+  --neu-hi: rgb(255 255 255 / 0.035);
+  --neu-lo: rgb(0 0 0 / 0.5);
 }
 
 /* Survey-chart grid backdrop */

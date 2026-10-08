@@ -28,6 +28,14 @@ export default defineConfig({
   // up watches across all of it is what actually made every cold `npm run
   // dev` start hang for minutes before the first page could render.
   server: {
-    watch: { ignored: ['**/android/**', '**/ios/**', '**/.worktrees/**', '**/.claude/**', '**/dist/**', '**/test-results/**', '**/playwright-report/**'] },
+    watch: {
+      ignored: [
+        '**/android/**', '**/ios/**', '**/.worktrees/**', '**/.claude/**', '**/test-results/**', '**/playwright-report/**',
+        // Build output is ignored — except @goms/domain's, which the app imports
+        // from packages/domain/dist; ignoring it made Vite serve a stale module
+        // after `npm run build` in packages/domain (missing-export crashes).
+        (path: string) => /[\\/]dist[\\/]/.test(path) && !/[\\/]packages[\\/]domain[\\/]dist[\\/]/.test(path),
+      ],
+    },
   },
 })

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
 import { useEmployeeMutations } from '@/lib/api'
@@ -81,11 +82,11 @@ export function ChargeDialog({ open, employeeId, onClose }: {
             />
           </Field>
           <Field label="Start date">
-            <Input type="date" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
+            <FriendlyDateInput value={form.startDate} onChange={(v) => setForm((f) => ({ ...f, startDate: v }))} />
           </Field>
           {isActing && (
             <Field label="End date">
-              <Input type="date" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
+              <FriendlyDateInput value={form.endDate} onChange={(v) => setForm((f) => ({ ...f, endDate: v }))} />
             </Field>
           )}
         </div>
