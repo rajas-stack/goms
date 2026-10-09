@@ -13,6 +13,8 @@ export const adminPolicy: Record<string, PolicyEntry> = {
   'health.check': { requirements: [], kind: 'public' },
   /** The caller's own identity: authenticates itself (see routers/auth.ts). */
   'auth.me': { requirements: [], kind: 'self' },
+  'googleIntegrations.get': { requirements: [], kind: 'self' },
+  'googleIntegrations.save': { requirements: [], kind: 'self' },
   'access.listOverrides': { requirements: [read('admin.access')] },
   'access.readiness': { requirements: [read('admin.access')] },
   'access.setOverride': { requirements: [write('admin.access')] },

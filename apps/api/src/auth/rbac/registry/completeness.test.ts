@@ -26,7 +26,7 @@ describe('PROCEDURE_POLICY completeness', () => {
     expect(exempt).toEqual([
       'outside:adminImport.commitGeographyLoad', 'outside:adminImport.history', 'outside:adminImport.listDomains',
       'outside:adminImport.previewGeographyLoad', 'outside:adminImport.session.commit', 'outside:adminImport.session.history',
-      'outside:adminImport.session.validate', 'public:health.check', 'self:auth.me',
+      'outside:adminImport.session.validate', 'public:health.check', 'self:auth.me', 'self:googleIntegrations.get', 'self:googleIntegrations.save',
     ])
   })
   it('gives every non-exempt entry at least one requirement', () => {
