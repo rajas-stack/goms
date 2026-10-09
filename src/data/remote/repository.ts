@@ -1,3 +1,4 @@
+import type { CredentialPassphrase, CredentialPassphraseInput, CredentialPassphraseUpdate } from '@goms/domain'
 // tRPC-backed Repository implementation — only wired in when
 // VITE_API_BASE_URL is set (see ../repository.ts). Implements every method of
 // Repository (declared as Partial<Repository> only so a future new method
@@ -42,6 +43,10 @@ export class RemoteRepository implements Partial<Repository> {
     this.client.bidSynopsis.get.query({ bidId, section }) as Promise<BidSynopsis | null>
   saveBidSynopsis = (input: SaveBidSynopsisInput): Promise<BidSynopsis> =>
     this.client.bidSynopsis.save.mutate(input) as Promise<BidSynopsis>
+  listCredentialPassphrases = (): Promise<CredentialPassphrase[]> => this.client.credentialPassphrases.list.query()
+  createCredentialPassphrase = (input: CredentialPassphraseInput): Promise<CredentialPassphrase> => this.client.credentialPassphrases.create.mutate(input)
+  updateCredentialPassphrase = (input: CredentialPassphraseUpdate): Promise<CredentialPassphrase> => this.client.credentialPassphrases.update.mutate(input)
+  deleteCredentialPassphrase = async (id: string): Promise<void> => { await this.client.credentialPassphrases.remove.mutate({ id }) }
   listTenderWebsites = (kind: TenderWebsiteKind = 'tender'): Promise<TenderWebsite[]> => this.client.tenderWebsites.list.query({ kind })
   listTenderDscEmployees = () => this.client.tenderWebsites.dscEmployees.query()
   createTenderWebsite = (input: TenderWebsiteInput): Promise<TenderWebsite> => this.client.tenderWebsites.create.mutate(input)

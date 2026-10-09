@@ -37,7 +37,7 @@ beforeEach(async () => {
 afterEach(cleanupRbacFixtures)
 
 describe('registry coverage for this area', () => {
-  it('registers exactly the 65 opportunity / bid procedures', () => {
+  it('registers exactly the 76 opportunity / bid procedures', () => {
     expect(Object.keys(opportunityPolicy).sort()).toEqual([
       'bidCorrigenda.create', 'bidCorrigenda.listForBid', 'bidCorrigenda.reviewChange',
       'bidCustomFields.archive', 'bidCustomFields.create', 'bidCustomFields.delete', 'bidCustomFields.list', 'bidCustomFields.reorder',
@@ -55,6 +55,8 @@ describe('registry coverage for this area', () => {
       'ownership.assign', 'ownership.end', 'ownership.listAssignments', 'ownership.listFor', 'ownership.listOwnedBy',
       'ownership.resolveOwner', 'ownership.resolveOwners', 'ownership.transferBookOfBusiness',
       'protectedValues.freeze', 'protectedValues.listFor', 'protectedValues.unfreeze',
+      'tenderWebsites.list', 'tenderWebsites.dscEmployees', 'tenderWebsites.create', 'tenderWebsites.update', 'tenderWebsites.delete', 'tenderWebsites.setEditingLock',
+      'credentialPassphrases.list', 'credentialPassphrases.create', 'credentialPassphrases.update', 'credentialPassphrases.remove',
     ].sort())
   })
 })

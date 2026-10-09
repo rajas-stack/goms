@@ -17,6 +17,12 @@ function v1Snapshot() {
 }
 
 describe('migrateSnapshot', () => {
+  it('adds the shared passphrase collection without losing saved website locks', () => {
+    const websites = [{ id: 'portal', credentials: { ciphertext: 'existing encrypted credentials' } }]
+    const migrated = migrateSnapshot({ ...v1Snapshot(), tenderWebsites: websites }, 24)
+    expect(migrated?.credentialPassphrases).toEqual([])
+    expect(migrated?.tenderWebsites).toBe(websites)
+  })
   it('returns the data unchanged when already at the current version', () => {
     const current = migrateSnapshot(v1Snapshot(), SCHEMA_VERSION)
     expect(current).not.toBeNull()

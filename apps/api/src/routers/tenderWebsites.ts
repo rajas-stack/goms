@@ -1,3 +1,4 @@
+import { credentialEnvelope, credentialTransaction, validateManagedCredential } from '../lib/credentialPassphrases.js'
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { normalizeTenderWebsiteInput, TENDER_WEBSITE_KINDS, TENDER_WEBSITE_NAME_MAX, TENDER_WEBSITE_URL_MAX, type TenderWebsite, type TenderWebsiteInput } from '@goms/domain'
@@ -10,7 +11,7 @@ const kindShape = z.enum(TENDER_WEBSITE_KINDS)
 
 const websiteShape = z.object({
   name: z.string().max(TENDER_WEBSITE_NAME_MAX * 2), url: z.string().max(TENDER_WEBSITE_URL_MAX),
-  credentials: z.object({ version: z.literal(1), salt: z.string().max(24), iv: z.string().max(16), ciphertext: z.string().max(32768) }).strict().nullable().optional(),
+  credentials: credentialEnvelope.nullable().optional(),
   dscEmployeeId: z.string().uuid().nullable().optional(),
 })
 
@@ -61,10 +62,14 @@ export const tenderWebsitesRouter = router({
     const site = clean(input)
     await validateDsc(site.dscEmployeeId)
     try {
-      const result = await pool.query(
+      const write = (db: Pick<typeof pool, 'query'>) => db.query(
         'INSERT INTO tender_websites (name, url, created_by, credentials, dsc_employee_id, kind) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
         [site.name, site.url, ctx.user?.email ?? null, site.credentials ?? null, site.dscEmployeeId ?? null, site.kind ?? 'tender'],
       )
+      const result = site.credentials?.passphraseId ? await credentialTransaction(async client => {
+        await validateManagedCredential(client, site.credentials)
+        return write(client)
+      }) : await write(pool)
       await audit(result.rows[0].id, 'create', `${site.name} ${site.url}`, ctx.user?.email)
       return toWebsite(result.rows[0])
     } catch (error) {
@@ -80,12 +85,16 @@ export const tenderWebsitesRouter = router({
       if (site.dscEmployeeId !== existing.rows[0]?.dsc_employee_id) await validateDsc(site.dscEmployeeId)
     }
     try {
-      const result = await pool.query(
+      const write = (db: Pick<typeof pool, 'query'>) => db.query(
         `UPDATE tender_websites SET name=$1, url=$2, updated_at=now(),
          credentials=CASE WHEN $4 THEN $5::jsonb ELSE credentials END,
          dsc_employee_id=CASE WHEN $6 THEN $7::uuid ELSE dsc_employee_id END WHERE id=$3 AND NOT editing_locked RETURNING *`,
         [site.name, site.url, input.id, site.credentials !== undefined, site.credentials ?? null, site.dscEmployeeId !== undefined, site.dscEmployeeId ?? null],
       )
+      const result = site.credentials?.passphraseId ? await credentialTransaction(async client => {
+        await validateManagedCredential(client, site.credentials)
+        return write(client)
+      }) : await write(pool)
       if (!result.rows[0]) {
         const current = await pool.query('SELECT editing_locked FROM tender_websites WHERE id=$1', [input.id])
         if (current.rows[0]?.editing_locked) throw new TRPCError({ code: 'CONFLICT', message: 'Unlock editing before changing this website.' })
