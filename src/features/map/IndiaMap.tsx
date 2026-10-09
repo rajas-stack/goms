@@ -661,8 +661,8 @@ export function IndiaMap() {
 
       {hover && active && (
         <div
-          className="pointer-events-none fixed z-30 w-56 -translate-x-1/2 -translate-y-full rounded-xl border border-line bg-paper p-3 shadow-pop"
-          style={{ left: hover.x, top: hover.y - 14 }}
+          className="pointer-events-none fixed z-30 w-56 -translate-x-1/2 rounded-xl border border-line bg-paper p-3 shadow-pop"
+          style={{ left: Math.max(120, Math.min(window.innerWidth - 120, hover.x)), top: hover.y + 20 }}
         >
           <div className="flex items-center justify-between">
             <span className="font-display text-sm font-semibold text-ink-900">{active.name}</span>

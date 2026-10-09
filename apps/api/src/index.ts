@@ -24,6 +24,7 @@ import { orgPeopleRouter } from './routers/orgPeople.js'
 import { authRouter } from './routers/auth.js'
 import { accessRouter } from './routers/access.js'
 import { tenderWebsitesRouter } from './routers/tenderWebsites.js'
+import { credentialPassphrasesRouter } from './routers/credentialPassphrases.js'
 
 export const appRouter = router({
   health: healthRouter, customers: customersRouter, hierarchy: hierarchyRouter,
@@ -38,5 +39,6 @@ export const appRouter = router({
   orgPeople: orgPeopleRouter,
   auth: authRouter, access: accessRouter,
   tenderWebsites: tenderWebsitesRouter,
+  credentialPassphrases: credentialPassphrasesRouter,
 })
 export type AppRouter = typeof appRouter

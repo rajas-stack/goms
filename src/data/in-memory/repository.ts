@@ -1,3 +1,4 @@
+import { MAX_CREDENTIAL_PASSPHRASES, normalizeCredentialPassphrase, type CredentialPassphrase, type CredentialPassphraseInput, type CredentialPassphraseUpdate } from '@goms/domain'
 import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/routers/access'
 import type {
   ActionQueueEntry, AttendeeRef, Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue,
@@ -563,6 +564,10 @@ export interface Repository {
 
   /** Tender portals managed in Settings, offered in a bid's General tab. */
   /** Websites on one Settings page; defaults to the tender portals. */
+  listCredentialPassphrases(): Promise<CredentialPassphrase[]>
+  createCredentialPassphrase(input: CredentialPassphraseInput): Promise<CredentialPassphrase>
+  updateCredentialPassphrase(input: CredentialPassphraseUpdate): Promise<CredentialPassphrase>
+  deleteCredentialPassphrase(id: string): Promise<void>
   listTenderWebsites(kind?: TenderWebsiteKind): Promise<TenderWebsite[]>
   listTenderDscEmployees(): Promise<TenderDscEmployee[]>
   createTenderWebsite(input: TenderWebsiteInput): Promise<TenderWebsite>
@@ -698,6 +703,7 @@ class InMemoryRepository implements Repository {
       bidCustomFields: data.bidCustomFields ?? [],
       bidCustomFieldValues: data.bidCustomFieldValues ?? [],
       // Websites saved before Settings had a verification page are tender portals.
+      credentialPassphrases: data.credentialPassphrases ?? [],
       tenderWebsites: (data.tenderWebsites ?? []).map(site => ({ ...site, kind: tenderWebsiteKind(site) })),
     }
     // `mergeAudit` postdates some locally persisted snapshots (the static
@@ -1928,6 +1934,48 @@ class InMemoryRepository implements Repository {
     return structuredClone(updated)
   }
 
+  async listCredentialPassphrases(): Promise<CredentialPassphrase[]> { return structuredClone(this.data.credentialPassphrases ?? []) }
+  async createCredentialPassphrase(input: CredentialPassphraseInput): Promise<CredentialPassphrase> {
+    const clean = normalizeCredentialPassphrase(input)
+    const records = this.data.credentialPassphrases ?? []
+    if (records.length >= MAX_CREDENTIAL_PASSPHRASES) throw new Error('A maximum of 5 passphrases is allowed.')
+    if (records.some(item => item.name.toLowerCase() === clean.name.toLowerCase())) throw new Error('That passphrase name already exists.')
+    const record = { ...clean, id: uid('phrase'), updatedAt: new Date().toISOString() }
+    this.data.credentialPassphrases = [...records, record]
+    return structuredClone(record)
+  }
+  async updateCredentialPassphrase(input: CredentialPassphraseUpdate): Promise<CredentialPassphrase> {
+    const clean = normalizeCredentialPassphrase(input)
+    const records = this.data.credentialPassphrases ?? []
+    const existing = records.find(item => item.id === input.id)
+    if (!existing || existing.updatedAt !== input.expectedUpdatedAt) throw new Error('The passphrase changed. Reload before saving.')
+    if (records.some(item => item.id !== input.id && item.name.toLowerCase() === clean.name.toLowerCase())) throw new Error('That passphrase name already exists.')
+    const sites = this.data.tenderWebsites.filter(site => site.credentials?.passphraseId === input.id)
+    if (existing.proof.ciphertext !== clean.proof.ciphertext) {
+      if (sites.length !== input.replacements.length || new Set(input.replacements.map(item => item.id)).size !== sites.length) throw new Error('Connected websites changed. Reload before saving.')
+      for (const site of sites) {
+        const replacement = input.replacements.find(item => item.id === site.id)
+        if (!replacement || replacement.previousCiphertext !== site.credentials!.ciphertext || replacement.credentials.passphraseId !== input.id || replacement.credentials.passphraseRevision !== clean.proof.ciphertext) throw new Error('Connected credentials changed. Reload before saving.')
+        normalizeTenderWebsiteInput({ name: site.name, url: site.url, credentials: replacement.credentials })
+      }
+    } else if (input.replacements.length) throw new Error('Invalid credential replacement.')
+    const updated = { ...existing, ...clean, updatedAt: new Date().toISOString() }
+    this.data.tenderWebsites = this.data.tenderWebsites.map(site => {
+      const replacement = input.replacements.find(item => item.id === site.id)
+      return replacement ? { ...site, credentials: structuredClone(replacement.credentials), updatedAt: updated.updatedAt } : site
+    })
+    this.data.credentialPassphrases = records.map(item => item.id === input.id ? updated : item)
+    return structuredClone(updated)
+  }
+  async deleteCredentialPassphrase(id: string): Promise<void> {
+    if (this.data.tenderWebsites.some(site => site.credentials?.passphraseId === id)) throw new Error('This passphrase protects saved credentials and cannot be removed.')
+    this.data.credentialPassphrases = (this.data.credentialPassphrases ?? []).filter(item => item.id !== id)
+  }
+  private validateManagedCredential(lock: TenderWebsiteInput['credentials']) {
+    if (!lock?.passphraseId) return
+    const record = this.data.credentialPassphrases?.find(item => item.id === lock.passphraseId)
+    if (!record || record.proof.ciphertext !== lock.passphraseRevision) throw new Error('The passphrase changed. Reload and enter its current value.')
+  }
   async listTenderWebsites(kind: TenderWebsiteKind = 'tender'): Promise<TenderWebsite[]> {
     return this.data.tenderWebsites.filter(site => tenderWebsiteKind(site) === kind).sort((a, b) => a.name.localeCompare(b.name)).map(site => ({ ...site }))
   }
@@ -1945,6 +1993,7 @@ class InMemoryRepository implements Repository {
 
   async createTenderWebsite(input: TenderWebsiteInput): Promise<TenderWebsite> {
     const clean = normalizeTenderWebsiteInput(input)
+    this.validateManagedCredential(clean.credentials)
     const kind = clean.kind ?? 'tender'
     assertUniqueTenderWebsiteName(this.data.tenderWebsites, clean.name, undefined, kind)
     await this.validateTenderDsc(clean.dscEmployeeId)
@@ -1959,6 +2008,7 @@ class InMemoryRepository implements Repository {
     if (!existing) throw new Error('That website no longer exists.')
     if (existing.editingLocked) throw new Error('Unlock editing before changing this website.')
     const clean = normalizeTenderWebsiteInput(input)
+    this.validateManagedCredential(clean.credentials)
     const kind = tenderWebsiteKind(existing) // a website never moves between Settings pages
     assertUniqueTenderWebsiteName(this.data.tenderWebsites, clean.name, id, kind)
     if (clean.dscEmployeeId !== existing.dscEmployeeId) await this.validateTenderDsc(clean.dscEmployeeId)
@@ -3115,6 +3165,7 @@ class InMemoryRepository implements Repository {
  *  snapshot after each of these resolves, so a new mutating method MUST be
  *  listed here or its effects won't survive a reload. */
 const MUTATOR_KEYS = [
+  'createCredentialPassphrase', 'updateCredentialPassphrase', 'deleteCredentialPassphrase',
   'saveBidSynopsis',
   'createTenderWebsite', 'updateTenderWebsite', 'deleteTenderWebsite', 'setTenderWebsiteEditingLock',
   'createDeliveryTeamMember', 'updateDeliveryTeamMember', 'setDeliveryTeamMemberStatus', 'deleteDeliveryTeamMember',
@@ -3146,7 +3197,7 @@ const MUTATOR_KEYS = [
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
  *  "classified as a read" apart from "nobody classified it". */
 const READER_KEYS = [
-  'getBidSynopsis', 'listTenderWebsites', 'listTenderDscEmployees',
+  'listCredentialPassphrases', 'getBidSynopsis', 'listTenderWebsites', 'listTenderDscEmployees',
   'listDeliveryTeamMembers', 'listOrgPeople',
   'listStates', 'getState', 'getNode', 'listChildren', 'listOrgRoots', 'listDepartments', 'listPostingNodes',
   'breadcrumb', 'childCount', 'geoRoot', 'childCounts',

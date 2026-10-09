@@ -1,4 +1,4 @@
-export type SettingsIconKind = 'storage' | 'tender' | 'verification'
+export type SettingsIconKind = 'storage' | 'tender' | 'verification' | 'credentials'
 
 /** A consistent navy, partially filled symbol for each settings area. */
 export function SettingsIcon({ kind }: { kind: SettingsIconKind }) {
@@ -6,6 +6,11 @@ export function SettingsIcon({ kind }: { kind: SettingsIconKind }) {
     <span aria-hidden="true" className="settings-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6}
         strokeLinecap="round" strokeLinejoin="round" focusable="false" className="settings-icon__symbol">
+        {kind === 'credentials' && <>
+          <rect x="5" y="10" width="14" height="11" rx="2" fill="currentColor" />
+          <path d="M8 10V7a4 4 0 0 1 8 0v3" />
+          <path d="M12 14v3" stroke="#fff" strokeWidth={2} />
+        </>}
         {kind === 'storage' && <>
           <path d="M3 11V6.5A1.5 1.5 0 0 1 4.5 5H9l3 3h7.5A1.5 1.5 0 0 1 21 9.5V11"
             fill="currentColor" fillOpacity={.1} />

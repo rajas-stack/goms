@@ -12,6 +12,7 @@ const StateWorkspace = lazy(() => import('./routes/StateWorkspace').then((m) => 
 const Directory = lazy(() => import('./routes/Directory').then((m) => ({ default: m.Directory })))
 const Insights = lazy(() => import('./routes/Insights').then((m) => ({ default: m.Insights })))
 const Meetings = lazy(() => import('./routes/Meetings').then((m) => ({ default: m.Meetings })))
+const CredentialsSettingsPage = lazy(() => import('./routes/CredentialsSettingsPage').then(m => ({ default: m.CredentialsSettingsPage })))
 const SettingsPage = lazy(() => import('./routes/SettingsPage').then((m) => ({ default: m.SettingsPage })))
 const DmsSettingsPage = lazy(() => import('./routes/DmsSettingsPage').then((m) => ({ default: m.DmsSettingsPage })))
 const DmsConnectionPage = lazy(() => import('./routes/DmsConnectionPage').then((m) => ({ default: m.DmsConnectionPage })))
@@ -106,6 +107,7 @@ export const router = createBrowserRouter([
       { path: '/commercial-calculator/:section', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
       { path: '/commercial-calculator/boq/:boqId', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
       { path: '/admin/access', element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><AccessManagement /></RequireAccess> },
+      { path: '/settings/credentials', element: <CredentialsSettingsPage /> },
       { path: '/settings', element: <SettingsPage /> },
       { path: '/settings/dms', element: <DmsSettingsPage /> },
       { path: '/settings/dms/new', element: <DmsConnectionPage /> },

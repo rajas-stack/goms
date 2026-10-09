@@ -7,6 +7,7 @@ import { Icon } from '@/components/ui/Icon'
 import { LockSwitch } from '@/components/ui/LockSwitch'
 import { useTenderDscEmployees } from './api'
 import { lockCredentials, unlockCredentials } from './credentialLock'
+import { useCredentialPassphrases, verifyPassphrase } from './passphrases'
 
 interface Props {
   existing: readonly TenderWebsite[]
@@ -34,20 +35,20 @@ export function TenderWebsiteForm({ existing, editing, busy, submitLabel, onSubm
   const [showPassword, setShowPassword] = useState(false)
   const [unlocking, setUnlocking] = useState(false)
   const [unlockPassphrase, setUnlockPassphrase] = useState('')
-  const [changingPassphrase, setChangingPassphrase] = useState(false)
+  const { data: passphrases = [], isLoading: phrasesLoading, isError: phrasesError } = useCredentialPassphrases()
+  const [passphraseId, setPassphraseId] = useState(editing?.credentials?.passphraseId ?? '')
   const [newPassphrase, setNewPassphrase] = useState('')
-  const [confirmation, setConfirmation] = useState('')
   const [working, setWorking] = useState(false)
   const [lockError, setLockError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const disabled = busy || working || !!editing?.editingLocked
-  const passphraseFields = !locked && (!editing?.credentials || changingPassphrase)
+  const passphraseFields = !locked && !editing?.credentials
 
   const closeUnlock = () => { if (!working) { setUnlocking(false); setUnlockPassphrase(''); setLockError(null) } }
   const openUnlock = () => { setLockError(null); setUnlocking(true) }
   const relock = () => {
     setLocked(true); setUserId(''); setPassword(''); setKey(''); setShowPassword(false)
-    setChangingPassphrase(false); setNewPassphrase(''); setConfirmation('')
+    setNewPassphrase('')
   }
 
   const save = async () => {
@@ -60,18 +61,23 @@ export function TenderWebsiteForm({ existing, editing, busy, submitLabel, onSubm
       if (dscEmployeeId && dscEmployeeId !== editing?.dscEmployeeId && !employees.some(person => person.id === dscEmployeeId)) {
         throw new Error('Select an active employee at L0, L1, or L2 for DSC.')
       }
-      const needsLock = !!(userId || password || newPassphrase || editing?.credentials)
+      const needsLock = !!(userId || password || editing?.credentials)
       let encryptionKey = key
-      if (passphraseFields && (needsLock || changingPassphrase)) {
-        if (newPassphrase.length < 8) throw new Error('Use at least 8 characters for the credential passphrase.')
-        if (newPassphrase !== confirmation) throw new Error('The passphrases do not match.')
+      const managed = passphrases.find(item => item.id === passphraseId)
+      if (!locked && editing?.credentials?.passphraseId && (!managed || managed.proof.ciphertext !== editing.credentials.passphraseRevision)) {
+        throw new Error('The passphrase changed or is unavailable. Reload before editing credentials.')
+      }
+      if (passphraseFields && needsLock) {
+        if (!managed) throw new Error('Select a saved passphrase from Settings > Credentials.')
+        await verifyPassphrase(managed, newPassphrase)
         encryptionKey = newPassphrase
       }
       clean.credentials = locked ? editing?.credentials ?? null
         : needsLock ? await lockCredentials({ userId, password }, encryptionKey) : null
+      if (!locked && clean.credentials && managed) clean.credentials = { ...clean.credentials, passphraseId: managed.id, passphraseRevision: managed.proof.ciphertext }
       await onSubmit(clean)
       setKey(''); setUserId(''); setPassword(''); setShowPassword(false)
-      setNewPassphrase(''); setConfirmation(''); setChangingPassphrase(false)
+      setNewPassphrase('')
       if (!editing) { setName(''); setUrl(''); setDscEmployeeId(''); setLocked(false) }
       else setLocked(!!clean.credentials)
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not save the website.') }
@@ -144,23 +150,18 @@ export function TenderWebsiteForm({ existing, editing, busy, submitLabel, onSubm
             {isError && <p role="alert" className="mt-1 text-xs text-crimson">Could not load employees. <button type="button" className="underline" onClick={() => void refetch()}>Retry</button></p>}
           </div>
         </div>
-        <div className="rounded-xl border border-line bg-panel/40 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="inline-flex items-center gap-1.5 text-[13px] font-medium"><Icon name="Lock" size={13} /> Passphrase</span>
-            {editing?.credentials && !changingPassphrase && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => { setChangingPassphrase(true); if (locked) openUnlock() }}>Change passphrase</Button>}
-            {changingPassphrase && <Button size="sm" variant="ghost" disabled={disabled} onClick={() => { setChangingPassphrase(false); setNewPassphrase(''); setConfirmation('') }}>Cancel passphrase change</Button>}
-          </div>
-          {passphraseFields ? <div className="mt-2 grid gap-3 sm:grid-cols-2">
-            <label className="block text-[13px] font-medium">{editing?.credentials ? 'New passphrase' : 'Create passphrase'}
-              <Input aria-label={editing?.credentials ? 'New passphrase' : 'Create passphrase'} type="password" autoComplete="new-password"
-                value={newPassphrase} disabled={disabled} onChange={event => setNewPassphrase(event.target.value)} placeholder="At least 8 characters" />
-            </label>
-            <label className="block text-[13px] font-medium">Confirm passphrase
-              <Input aria-label="Confirm passphrase" type="password" autoComplete="new-password" value={confirmation} disabled={disabled} onChange={event => setConfirmation(event.target.value)} />
-            </label>
-          </div> : <p className="mt-1 text-xs text-muted">{locked ? 'Enter the current passphrase to view credentials or change the passphrase.' : 'Current passphrase is set. Change it here and save the website.'}</p>}
-          {passphraseFields && <p className="mt-2 text-xs text-muted">Save the website to apply this passphrase. Required to view its User ID and Password.</p>}
-        </div>
+        {passphraseFields && <div className="grid gap-3 rounded-xl border border-line bg-panel/40 p-3 sm:grid-cols-2">
+          <label className="block text-[13px] font-medium">Saved passphrase
+            <Select aria-label="Saved passphrase" value={passphraseId} disabled={disabled || phrasesLoading || phrasesError} onChange={event => setPassphraseId(event.target.value)}>
+              <option value="">Select passphrase</option>{passphrases.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </Select>
+          </label>
+          <label className="block text-[13px] font-medium">Credential passphrase
+            <Input aria-label="Credential passphrase" type="password" autoComplete="current-password" value={newPassphrase} disabled={disabled} onChange={event => setNewPassphrase(event.target.value)} />
+          </label>
+          {!passphrases.length && <p className="text-xs text-muted">Manage passphrases in Settings &gt; Credentials.</p>}
+          {phrasesError && <p role="alert" className="text-xs text-crimson">Could not load saved passphrases.</p>}
+        </div>}
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted">{locked ? 'Credentials locked. Unlock to view or change.' : 'Credentials are encrypted and locked when saved.'}</p>
           <div className="flex items-center gap-2">
