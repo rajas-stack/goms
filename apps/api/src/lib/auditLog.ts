@@ -6,7 +6,14 @@
 // auditLogs.list` procedure keeps its exact existing route/input/output
 // shape by calling `listAuditLogs` from here — zero behavior change for its
 // existing consumer, AuditLog.tsx in commercial-calculator.
+import { TRPCError } from '@trpc/server'
+import { RbacDenial } from '../auth/rbac/denial.js'
 import { pool } from '../db.js'
+
+/** Role-override history (who got or lost which role, why, set by whom) lives in this table too, but its ONE reader is
+ *  `access.overrideHistory` (System Admin / IT / CXO gating of `admin.access`, its own SQL). It must never come out of the
+ *  generic feed below, which any signed-in user can call when RBAC is off or shadowed. */
+export const ROLE_OVERRIDE_ENTITY = 'role_override'
 
 export interface AuditLogEntry {
   entityType: string
@@ -36,11 +43,14 @@ export function toAuditLog(row: any) {
 }
 
 export async function listAuditLogs(filter?: { entityType?: string; entityId?: string }) {
-  const conditions: string[] = []
-  const params: any[] = []
+  if (filter?.entityType === ROLE_OVERRIDE_ENTITY) {
+    const message = 'Role override history is only available from Role & Access.'
+    throw new TRPCError({ code: 'FORBIDDEN', message, cause: new RbacDenial(message, { module: 'admin.audit', action: 'read' }) })
+  }
+  const params: any[] = [ROLE_OVERRIDE_ENTITY]
+  const conditions: string[] = ['entity_type <> $1']
   if (filter?.entityType) { params.push(filter.entityType); conditions.push(`entity_type=$${params.length}`) }
   if (filter?.entityId) { params.push(filter.entityId); conditions.push(`entity_id=$${params.length}`) }
-  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
-  const result = await pool.query(`SELECT * FROM commercial_audit_logs ${where} ORDER BY changed_at DESC`, params)
+  const result = await pool.query(`SELECT * FROM commercial_audit_logs WHERE ${conditions.join(' AND ')} ORDER BY changed_at DESC`, params)
   return result.rows.map(toAuditLog)
 }

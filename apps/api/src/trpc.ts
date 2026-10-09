@@ -4,6 +4,7 @@ import { verifyIdentity, isAllowListed, isAmnexAccount, type AuthenticatedUser }
 import { rbacMode } from './auth/rbac/mode.js'
 import { evaluateCall } from './auth/rbac/guard.js'
 import { RbacDenial } from './auth/rbac/denial.js'
+import { requireSystemAdmin } from './auth/rbac/systemAdminOnly.js'
 
 export interface Context {
   authHeader?: string
@@ -149,6 +150,14 @@ export const accessProcedure = protectedProcedure.use(async ({ ctx, path, getRaw
   // `shadow` only logs for every other procedure, but an override written during shadow becomes a live role the moment
   // RBAC is enforced — so here the decision is applied in shadow too (spec §3.3).
   if (mode === 'shadow') await evaluateCall({ mode: 'enforce', path, rawInput: await getRawInput(), ctx })
+  return next()
+})
+
+/** `accessProcedure` (its gating is kept, in every RBAC mode) plus an explicit System Admin check: the procedure is listed in
+ *  SYSTEM_ADMIN_ONLY, so a functional role that holds the matrix permission (IT on `admin.access`) is still refused. System Admin
+ *  membership is env-only (ADMIN_ALLOWED_EMAILS); like `adminProcedure`, a no-op when auth is not enforced. */
+export const systemAdminProcedure = accessProcedure.use(({ ctx, path, next }) => {
+  requireSystemAdmin(ctx, 'Only a System Admin can do this.', path)
   return next()
 })
 

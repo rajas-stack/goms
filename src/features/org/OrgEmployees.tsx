@@ -6,7 +6,9 @@ import { Field, Input, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { PersonName } from '@/components/ui/PersonName'
 import { useOrgPeople, useOrgPersonMutations } from '@/lib/api'
+import { normalizeEmail } from '@/lib/inputNormalization'
 import { cn } from '@/lib/utils'
+import { EMAIL_BINDING_HELP, EMAIL_FORMAT_MESSAGE, clearEmailConfirmText, useCanEditEmailBinding } from '@/modules/admin-access/useIsSystemAdmin'
 import {
   ORG_DEPARTMENTS, ORG_LEVELS, eligibleManagers, levelLabel, managerProblem, reportsBrokenByLevel, type OrgPerson,
 } from '@/data/org-structure'
@@ -19,15 +21,22 @@ const toOption = (p: OrgPerson): ComboboxOption => ({
  *  designation and departments are set. Reports-to only offers people at a higher
  *  level; a level change that would leave someone reporting to a peer or junior
  *  is refused with the names to move first. Every change flows to the org chart
- *  and to the Pre-sales / Bid / Legal teams derived from it. */
+ *  and to the Pre-sales / Bid / Legal teams derived from it.
+ *
+ *  A person's email is what derives their role, so changing it is System Admin only: the server refuses it from anyone else in
+ *  every RBAC mode. Here the field is editable for a System Admin (and while the browser cannot tell who is one) and plain text
+ *  for everyone else; that is a convenience, not the boundary. The email goes into a change only when it actually changed. */
 export function OrgEmployees() {
   const { data: people = [], isLoading } = useOrgPeople()
   const { create, update, remove } = useOrgPersonMutations()
   const canEdit = useAllowed('team.org', 'update') // the org chart is Company Org Structure: CXO and System Admin write
+  const emailEditable = useCanEditEmailBinding()
   const [query, setQuery] = useState('')
   const [department, setDepartment] = useState('all')
   const [error, setError] = useState<string | null>(null)
-  const [draft, setDraft] = useState({ name: '', designation: '', level: '4', department: 'Pre-Sales', managerId: '' })
+  const [emailResets, setEmailResets] = useState<Record<string, number>>({}) // per row id, bumped when that row's email change is refused so its field shows the stored value again; other rows' unsaved input is untouched
+  const resetEmailField = (id: string) => setEmailResets((r) => ({ ...r, [id]: (r[id] ?? 0) + 1 }))
+  const [draft, setDraft] = useState({ name: '', designation: '', level: '4', department: 'Pre-Sales', managerId: '', email: '' })
 
   const departments = useMemo(
     () => [...new Set([...ORG_DEPARTMENTS, ...people.flatMap((p) => p.departments)])].sort(),
@@ -42,10 +51,26 @@ export function OrgEmployees() {
       .sort((a, b) => a.level - b.level || a.name.localeCompare(b.name))
   }, [people, department, query, managerName])
 
-  const run = async (action: () => Promise<unknown>, fallback: string) => {
+  /** Runs a change and shows the server's message if it is refused. Resolves true when the change went through. */
+  const run = async (action: () => Promise<unknown>, fallback: string): Promise<boolean> => {
     setError(null)
-    if (!canEdit) { setError(NO_PERMISSION_TITLE); return }
-    try { await action() } catch (cause) { setError(cause instanceof Error ? cause.message : fallback) }
+    if (!canEdit) { setError(NO_PERMISSION_TITLE); return false }
+    try { await action(); return true } catch (cause) { setError(cause instanceof Error ? cause.message : fallback); return false }
+  }
+
+  const changeEmail = async (person: OrgPerson, raw: string) => {
+    const next = normalizeEmail(raw, true)
+    // Unchanged (the server compares trimmed and case-insensitively): nothing to send, and nothing for it to refuse.
+    if (next.toLowerCase() === (person.email ?? '').trim().toLowerCase()) return
+    // A light check before anything is sent (the server stays the boundary): a typed email needs an @.
+    if (next && !next.includes('@')) {
+      setError(EMAIL_FORMAT_MESSAGE)
+      resetEmailField(person.id)
+      return
+    }
+    // Clearing unbinds the person from the role their email derives, so it is confirmed first.
+    if (!next && !window.confirm(clearEmailConfirmText(person.name))) { resetEmailField(person.id); return }
+    if (!(await run(() => update.mutateAsync({ id: person.id, patch: { email: next } }), 'Could not save the email.'))) resetEmailField(person.id)
   }
 
   const changeLevel = (person: OrgPerson, level: number) => {
@@ -76,18 +101,26 @@ export function OrgEmployees() {
   const addPerson = () => {
     if (!draft.name.trim()) return
     void run(async () => {
+      const email = emailEditable ? normalizeEmail(draft.email, true) : ''
       await create.mutateAsync({
         name: draft.name.trim(), designation: draft.designation.trim(), level: draftLevel,
         departments: draft.department ? [draft.department] : [], managerId: draft.managerId || null,
+        ...(email ? { email } : {}), // only when one was typed: adding a person without an email needs no System Admin
       })
-      setDraft((d) => ({ ...d, name: '', designation: '' }))
+      setDraft((d) => ({ ...d, name: '', designation: '', email: '' }))
     }, 'Could not add this person.')
   }
 
   return (
     <section aria-label="Employees" className="flex h-full min-h-0 flex-col gap-3 p-3">
-      <div className="grid grid-cols-1 gap-2 rounded-xl border border-line bg-white p-2.5 sm:grid-cols-[1.2fr_1fr_5.5rem_1fr_1.3fr_auto] sm:items-end">
+      <div className={cn(
+        'grid grid-cols-1 gap-2 rounded-xl border border-line bg-white p-2.5 sm:items-end',
+        emailEditable ? 'sm:grid-cols-[1.2fr_1.2fr_1fr_5.5rem_1fr_1.3fr_auto]' : 'sm:grid-cols-[1.2fr_1fr_5.5rem_1fr_1.3fr_auto]',
+      )}>
         <Field label="Full name" required><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Employee name" /></Field>
+        {emailEditable && (
+          <Field label="Email"><Input type="email" aria-label="New employee email" value={draft.email} onChange={(e) => setDraft({ ...draft, email: e.target.value })} placeholder="name@amnex.com" /></Field>
+        )}
         <Field label="Designation"><Input value={draft.designation} onChange={(e) => setDraft({ ...draft, designation: e.target.value })} placeholder="e.g. Manager" /></Field>
         <Field label="Level">
           <Select value={draft.level} onChange={(e) => setDraft({ ...draft, level: e.target.value, managerId: '' })}>
@@ -129,6 +162,7 @@ export function OrgEmployees() {
         </div>
         <span className="ml-auto text-[12px] text-muted">{rows.length} of {people.length} people</span>
       </div>
+      <p className="text-[11px] text-muted"><span className="font-medium text-ink-700">Email.</span> <span>{EMAIL_BINDING_HELP}</span></p>
       {error && (
         <p role="alert" className="flex items-center gap-2 rounded-lg bg-crimson-100 px-3 py-1.5 text-[12px] text-crimson">
           {error}
@@ -138,10 +172,11 @@ export function OrgEmployees() {
 
       <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-line bg-white">
         {isLoading ? <p className="p-4 text-sm text-muted">Loading employees…</p> : (
-          <table className="w-full min-w-[960px] border-separate border-spacing-0 text-[13px]">
+          <table className="w-full min-w-[1180px] border-separate border-spacing-0 text-[13px]">
             <thead className="sticky top-0 z-10 bg-grid-head text-left text-[11px] font-semibold uppercase tracking-wide text-ink-600">
               <tr>
                 <th className="border-b border-line px-3 py-2">Employee</th>
+                <th className="w-56 border-b border-line px-3 py-2" title={EMAIL_BINDING_HELP}>Email</th>
                 <th className="w-24 border-b border-line px-3 py-2">Level</th>
                 <th className="border-b border-line px-3 py-2">Designation</th>
                 <th className="w-64 border-b border-line px-3 py-2">Reports to</th>
@@ -153,6 +188,16 @@ export function OrgEmployees() {
               {rows.map((p) => (
                 <tr key={p.id} className={cn('hover:bg-grid-hover', p.status === 'inactive' && 'opacity-60')}>
                   <td className="border-b border-line/70 px-3 py-1.5"><PersonName person={p} size="sm" nameClassName="font-medium text-ink-900" /></td>
+                  <td className="border-b border-line/70 px-3 py-1.5">
+                    {emailEditable ? (
+                      <Input
+                        key={`${p.id}:${p.email}:${emailResets[p.id] ?? 0}`} type="email"
+                        aria-label={`${p.name} email`} defaultValue={p.email} placeholder="—" className="h-8"
+                        onBlur={(e) => void changeEmail(p, e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                      />
+                    ) : <span className="text-muted">{p.email || '—'}</span>}
+                  </td>
                   <td className="border-b border-line/70 px-3 py-1.5">
                     <Select aria-label={`${p.name} level`} value={String(p.level)} onChange={(e) => changeLevel(p, Number(e.target.value))} className="h-8">
                       {ORG_LEVELS.map((l) => <option key={l} value={l}>{levelLabel(l)}</option>)}
