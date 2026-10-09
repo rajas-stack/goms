@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { TenderWebsite } from '@goms/domain'
+import type { TenderWebsite, TenderWebsiteKind } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { Dialog } from '@/components/ui/Dialog'
@@ -9,12 +9,15 @@ import { Can } from '@/lib/permissions'
 import { useTenderDscEmployees, useTenderWebsiteMutations, useTenderWebsites } from './api'
 import { TenderWebsiteForm } from './TenderWebsiteForm'
 import { TenderWebsiteLink } from './TenderWebsiteLink'
+import { WEBSITE_KIND_COPY } from './websiteKinds'
 
-/** Settings body: the tender portals a bid's General tab offers as a dropdown. */
-export function TenderWebsitesSection() {
-  const { data: sites = [], isLoading, isError, error, refetch } = useTenderWebsites()
+/** Settings body for one website page: the tender portals a bid's General tab
+ *  offers as a dropdown, or the document verification portals. */
+export function TenderWebsitesSection({ kind = 'tender' }: { kind?: TenderWebsiteKind }) {
+  const copy = WEBSITE_KIND_COPY[kind]
+  const { data: sites = [], isLoading, isError, error, refetch } = useTenderWebsites(kind)
   const { data: dscEmployees = [] } = useTenderDscEmployees()
-  const { create, update, remove, editLock } = useTenderWebsiteMutations()
+  const { create, update, remove, editLock } = useTenderWebsiteMutations(kind)
   const [creating, setCreating] = useState(false)
   const [viewingId, setViewingId] = useState<string | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -52,14 +55,14 @@ export function TenderWebsitesSection() {
       <div className="flex justify-end"><Can module="bid.columns" action="create"><Button size="sm" variant="primary" onClick={() => { setEditingId(null); setCreating(true) }}><Icon name="Plus" size={14} /> Create new</Button></Can></div>
       {sites.length === 0 ? (
         <p className="rounded-xl border border-dashed border-line px-4 py-3 text-[13px] text-muted">
-          No websites yet. Add the portals you download tender documents from, such as E-Proc or GeM.
+          {copy.emptyText}
         </p>
       ) : (
-        <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-white" aria-label="Saved tender websites">
+        <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-white" aria-label={copy.listLabel}>
           {sites.map(site => (
             <li key={site.id} className="px-4 py-2.5">
               {editingId === site.id && !site.editingLocked ? (
-                <TenderWebsiteForm existing={sites} editing={site} busy={update.isPending} submitLabel="Save"
+                <TenderWebsiteForm existing={sites} editing={site} busy={update.isPending} submitLabel="Save" namePlaceholder={copy.namePlaceholder}
                   onSubmit={async input => { await update.mutateAsync({ id: site.id, ...input }); setEditingId(null) }}
                   onCancel={() => setEditingId(null)} />
               ) : (
@@ -72,7 +75,7 @@ export function TenderWebsitesSection() {
                       {site.dscEmployeeId && <span>DSC: {dscEmployees.find(person => person.id === site.dscEmployeeId)?.name ?? 'Assigned employee (unavailable)'}</span>}
                     </div>
                   </div>
-                  <Can module="bid.columns" action="update"><LockSwitch unlocked={!site.editingLocked} onToggle={() => void toggleEditing(site)}
+                  <Can module="bid.columns" action="update"><LockSwitch size="sm" unlocked={!site.editingLocked} onToggle={() => void toggleEditing(site)}
                     lockedLabel={`Unlock editing for ${site.name}`} unlockedLabel={`Lock editing for ${site.name}`} disabled={editLock.isPending} /></Can>
                   {site.credentials && <Button size="icon" variant="ghost" aria-label={`View credentials for ${site.name}`} onClick={() => setViewingId(site.id)}><Icon name="Eye" size={14} /></Button>}
                   {confirmingId === site.id ? (
@@ -99,8 +102,8 @@ export function TenderWebsitesSection() {
       )}
       {deleteError && <p role="alert" className="text-[12px] text-crimson">{deleteError}</p>}
       {lockError && <p role="alert" className="text-[12px] text-crimson">{lockError}</p>}
-      {creating && <Dialog open size="lg" title="Create tender website" onClose={() => { if (!create.isPending) setCreating(false) }}>
-        <TenderWebsiteForm existing={sites} busy={create.isPending} submitLabel="Create" onSubmit={async input => { await create.mutateAsync(input); setCreating(false) }} onCancel={() => setCreating(false)} />
+      {creating && <Dialog open size="lg" title={copy.createTitle} onClose={() => { if (!create.isPending) setCreating(false) }}>
+        <TenderWebsiteForm existing={sites} busy={create.isPending} submitLabel="Create" formLabel={copy.formLabel} namePlaceholder={copy.namePlaceholder} onSubmit={async input => { await create.mutateAsync(input); setCreating(false) }} onCancel={() => setCreating(false)} />
       </Dialog>}
       {viewing?.credentials && <TenderCredentialsDialog key={`${viewing.id}:${viewing.credentials.ciphertext}`} site={viewing} onClose={() => setViewingId(null)} />}
     </div>

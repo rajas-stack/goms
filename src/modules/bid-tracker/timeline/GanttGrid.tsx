@@ -34,19 +34,19 @@ interface LayerProps {
 
 /** Left column: the three row names, as raised pills. */
 export function GanttLabels() {
-  const pill = 'neu-raised-sm flex items-center gap-2.5 rounded-xl px-3 text-[13px] font-semibold text-ink-900'
+  const pill = 'neu-raised-sm flex items-center gap-2 rounded-lg px-2.5 text-[12px] font-semibold text-ink-900'
   return (
-    <div className="w-[132px] shrink-0 space-y-0 pr-3" aria-hidden>
+    <div className="w-[112px] shrink-0 space-y-0 pr-2.5" aria-hidden>
       <div style={{ height: GANTT.headerH }} />
-      <div className="flex items-center" style={{ height: GANTT.rowH }}><span className={cn(pill, 'h-10 w-full')}><Dot className="bg-blue" />Planned</span></div>
-      <div className="flex items-center" style={{ height: GANTT.rowH }}><span className={cn(pill, 'h-10 w-full')}><Dot className="bg-emerald" />Actual</span></div>
-      <div className="flex items-center" style={{ height: GANTT.milestoneH }}><span className={cn(pill, 'h-10 w-full')}><Diamond className="border-2 border-ink-900 bg-transparent" />Milestones</span></div>
+      <div className="flex items-center" style={{ height: GANTT.rowH }}><span className={cn(pill, 'h-8 w-full')}><Dot className="bg-blue" />Planned</span></div>
+      <div className="flex items-center" style={{ height: GANTT.rowH }}><span className={cn(pill, 'h-8 w-full')}><Dot className="bg-emerald" />Actual</span></div>
+      <div className="flex items-center" style={{ height: GANTT.milestoneH }}><span className={cn(pill, 'h-8 w-full')}><Diamond className="border-2 border-ink-900 bg-transparent" />Milestones</span></div>
     </div>
   )
 }
 
 export function Dot({ className }: { className?: string }) {
-  return <span aria-hidden className={cn('inline-block h-3.5 w-3.5 shrink-0 rounded-full shadow-[inset_0_-2px_3px_rgb(0_0_0/0.18)]', className)} />
+  return <span aria-hidden className={cn('inline-block h-3 w-3 shrink-0 rounded-full shadow-[inset_0_-2px_3px_rgb(0_0_0/0.18)]', className)} />
 }
 
 export function Diamond({ className, size = 12 }: { className?: string; size?: number }) {
@@ -67,7 +67,7 @@ function MonthRow({ originDay, endDay, pxPerDay }: Pick<LayerProps, 'originDay' 
   return (
     <>
       {months.map((mo, i) => (
-        <span key={mo.label} className={cn('absolute top-0 flex items-center overflow-hidden whitespace-nowrap pl-3 text-[13px] font-semibold text-ink-900', i > 0 && 'border-l border-edge')}
+        <span key={mo.label} className={cn('absolute top-0 flex items-center overflow-hidden whitespace-nowrap pl-2.5 text-[12px] font-semibold text-ink-900', i > 0 && 'border-l border-edge')}
           style={{ left: dayToX(mo.start, originDay, pxPerDay), width: (mo.end - mo.start) * pxPerDay, height: GANTT.monthH }}>
           {(mo.end - mo.start) * pxPerDay > 70 ? mo.label : MONTHS_LONG[Number(new Date(mo.start * 86_400_000).getUTCMonth())].slice(0, 3)}
         </span>
@@ -87,7 +87,7 @@ function DayRow({ pxPerDay, originDay, viewStartDay, viewSpanDays }: Pick<LayerP
         return (
           <span key={t.day}>
             <span className="absolute border-l border-line/70" style={{ left: x, top: GANTT.monthH, height: GANTT.totalH - GANTT.monthH }} aria-hidden />
-            <span className={cn('absolute flex items-center whitespace-nowrap text-[12px] tabular-nums text-ink-600', daily ? 'justify-center' : 'pl-1.5')}
+            <span className={cn('absolute flex items-center whitespace-nowrap text-[11px] tabular-nums text-ink-600', daily ? 'justify-center' : 'pl-1.5')}
               style={{ left: x, width, top: GANTT.monthH, height: GANTT.dayH }}>
               {daily ? t.label.slice(0, 2) : t.label}
             </span>
@@ -105,18 +105,18 @@ function Bar({ left, width, top, className, label, title, ends, onClick, selecte
   if (width < DOT_ONLY_PX) {
     return (
       <button type="button" onClick={onClick} aria-label={title} title={title}
-        className={cn('absolute h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white shadow focus-visible:focus-ring', ends)}
-        style={{ left: left + width / 2, top: top + GANTT.rowH / 2 - 8 }} />
+        className={cn('absolute h-3.5 w-3.5 -translate-x-1/2 rounded-full border-2 border-white shadow focus-visible:focus-ring', ends)}
+        style={{ left: left + width / 2, top: top + GANTT.rowH / 2 - 7 }} />
     )
   }
   return (
     <button type="button" onClick={onClick} aria-label={title} title={title}
-      className={cn('absolute flex h-8 items-center justify-center rounded-full text-[13px] font-semibold transition-[box-shadow,transform] duration-150 hover:-translate-y-px focus-visible:focus-ring',
+      className={cn('absolute flex h-6 items-center justify-center rounded-full text-[11px] font-semibold transition-[box-shadow,transform] duration-150 hover:-translate-y-px focus-visible:focus-ring',
         'shadow-[0_2px_6px_rgb(var(--c-shadow)/0.18),inset_0_1px_0_rgb(255_255_255/0.35)]', className, selected && 'ring-2 ring-blue ring-offset-2 ring-offset-white')}
-      style={{ left, width, top: top + (GANTT.rowH - 32) / 2 }}>
-      <span className={cn('absolute -left-1.5 h-3.5 w-3.5 rounded-full border-2 border-white shadow', ends)} aria-hidden />
-      {width >= LABEL_MIN_PX && <span className="truncate px-3">{label}</span>}
-      <span className={cn('absolute -right-1.5 h-3.5 w-3.5 rounded-full border-2 border-white shadow', ends)} aria-hidden />
+      style={{ left, width, top: top + (GANTT.rowH - 24) / 2 }}>
+      <span className={cn('absolute -left-1 h-3 w-3 rounded-full border-2 border-white shadow', ends)} aria-hidden />
+      {width >= LABEL_MIN_PX && <span className="truncate px-2.5">{label}</span>}
+      <span className={cn('absolute -right-1 h-3 w-3 rounded-full border-2 border-white shadow', ends)} aria-hidden />
     </button>
   )
 }
@@ -204,17 +204,17 @@ export const GanttLayer = memo(function GanttLayer(p: LayerProps) {
         return (
           <span key={`up:${m.id}`} aria-hidden>
             <Dashed from={l} to={r} top={actualTop} className="border-edge" />
-            <span className="absolute h-3 w-3 -translate-x-1/2 rounded-full bg-edge" style={{ left: r, top: actualTop + GANTT.rowH / 2 - 6 }} />
+            <span className="absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full bg-edge" style={{ left: r, top: actualTop + GANTT.rowH / 2 - 5 }} />
           </span>
         )
       })}
 
       {/* Milestones row */}
       {chips.map((d) => (
-        <span key={`d:${d.id}`} className="absolute" style={{ left: d.x, top: actualTop + GANTT.rowH / 2 + 10 }}>
+        <span key={`d:${d.id}`} className="absolute" style={{ left: d.x, top: actualTop + GANTT.rowH / 2 + 4 }}>
           <span aria-hidden className="absolute h-[26px] -translate-x-1/2 border-l-2 border-dashed border-emerald/60" style={{ top: 0 }} />
-          <Diamond className="absolute top-[26px] -translate-x-1/2 border-2 border-white bg-emerald shadow" size={14} />
-          {d.chip && <span className="neu-raised-sm absolute top-[46px] -translate-x-1/2 whitespace-nowrap rounded-lg px-2 py-0.5 text-[12px] font-semibold text-ink-900">{formatShortDate(d.date)}</span>}
+          <Diamond className="absolute top-[22px] -translate-x-1/2 border-2 border-white bg-emerald shadow" size={11} />
+          {d.chip && <span className="neu-raised-sm absolute top-[38px] -translate-x-1/2 whitespace-nowrap rounded-md px-1.5 py-px text-[10px] font-semibold text-ink-900">{formatShortDate(d.date)}</span>}
         </span>
       ))}
       <EventMarkers clusters={p.clusters} originDay={p.originDay} pxPerDay={p.pxPerDay} top={msTop + 6} onSelect={p.onSelect} />
@@ -222,8 +222,8 @@ export const GanttLayer = memo(function GanttLayer(p: LayerProps) {
       {/* Deadline */}
       <span aria-hidden className="absolute border-l-2 border-dashed border-crimson/70" style={{ left: endX, top: GANTT.monthH, height: GANTT.totalH - GANTT.monthH }} />
       <span className="absolute" style={{ left: endX, top: msTop + 22 }} data-testid="deadline-marker">
-        <Diamond className="absolute -translate-x-1/2 border-2 border-white bg-edge shadow" size={18} />
-        <span className="neu-raised-sm absolute -top-1.5 right-4 whitespace-nowrap rounded-lg px-2 py-1 text-right text-[12px] font-semibold leading-tight text-ink-900">
+        <Diamond className="absolute -translate-x-1/2 border-2 border-white bg-edge shadow" size={13} />
+        <span className="neu-raised-sm absolute -top-1.5 right-3 whitespace-nowrap rounded-md px-1.5 py-0.5 text-right text-[10px] font-semibold leading-tight text-ink-900">
           {formatShortDate(p.endDate)}<br /><span className="font-medium text-muted">{p.endEstimated ? 'Est. end' : 'Deadline'}</span>
         </span>
       </span>
@@ -232,9 +232,9 @@ export const GanttLayer = memo(function GanttLayer(p: LayerProps) {
       {p.showToday && (
         <span data-testid="today-marker" className="pointer-events-none absolute" style={{ left: todayX, top: GANTT.monthH }}>
           <span aria-hidden className="absolute border-l-2 border-dashed border-blue" style={{ height: GANTT.totalH - GANTT.monthH }} />
-          <span className="absolute" style={{ top: msTop - GANTT.monthH + 22 }}>
-            <Diamond className="absolute -translate-x-1/2 border-2 border-white bg-blue shadow-[0_0_0_3px_rgb(var(--c-blue)/0.25)]" size={18} />
-            <span className="neu-raised-sm absolute -top-1.5 left-4 whitespace-nowrap rounded-lg px-2 py-1 text-[12px] font-semibold leading-tight text-blue">
+          <span className="absolute" style={{ top: msTop - GANTT.monthH + 16 }}>
+            <Diamond className="absolute -translate-x-1/2 border-2 border-white bg-blue shadow-[0_0_0_3px_rgb(var(--c-blue)/0.25)]" size={13} />
+            <span className="neu-raised-sm absolute -top-1.5 left-3 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[10px] font-semibold leading-tight text-blue">
               Today<br />{formatShortDate(p.today)}
             </span>
           </span>

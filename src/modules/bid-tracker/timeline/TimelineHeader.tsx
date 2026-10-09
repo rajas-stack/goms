@@ -6,7 +6,7 @@ import { ZOOM_PRESETS, type ZoomLevel, type ZoomPreset } from './timelineMath'
 const ZOOM_LABEL: Record<ZoomPreset, string> = {
   All: 'Whole lifecycle', '3M': '3 months', '1M': '1 month', '1W': '1 week',
 }
-const raisedButton = 'neu-raised inline-flex h-11 items-center gap-2.5 rounded-xl px-4 text-[14px] font-semibold text-ink-900 transition-transform duration-100 hover:-translate-y-px active:translate-y-px focus-visible:focus-ring'
+const raisedButton = 'neu-raised inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[12px] font-semibold text-ink-900 transition-transform duration-100 hover:-translate-y-px active:translate-y-px focus-visible:focus-ring'
 
 interface HeaderProps {
   /** Visible range, already formatted by the caller from the viewport. */
@@ -22,24 +22,24 @@ interface HeaderProps {
 
 export function TimelineHeader({ rangeStart, rangeEnd, endEstimated, outcome, zoom, onZoom, onToday, onStep }: HeaderProps) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4">
-      <div className="flex min-w-0 items-center gap-4">
-        <span className="neu-raised flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-goms-navy"><Icon name="Clock" size={28} /></span>
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="neu-raised flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-goms-navy"><Icon name="Clock" size={18} /></span>
         <div className="min-w-0">
-          <h3 className="text-[22px] font-bold leading-tight text-ink-900">Opportunity Timeline</h3>
-          <p className="flex flex-wrap items-center gap-2 text-[14px] text-muted">
+          <h3 className="text-[15px] font-bold leading-tight text-ink-900">Opportunity Timeline</h3>
+          <p className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
             Track planned vs actual progress across key stages
-            {endEstimated && <span className="rounded-full bg-amber-100 px-2 text-[11px] font-semibold text-amber-800">Deadline not set · end estimated</span>}
-            {outcome && <span className="rounded-full bg-panel px-2 text-[11px] font-semibold text-ink-600">Closed · {outcome}</span>}
+            {endEstimated && <span className="rounded-full bg-amber-100 px-2 text-[10px] font-semibold text-amber-800">Deadline not set · end estimated</span>}
+            {outcome && <span className="rounded-full bg-panel px-2 text-[10px] font-semibold text-ink-600">Closed · {outcome}</span>}
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2">
         <Menu align="end" trigger={({ open, toggle }) => (
           <button type="button" className={raisedButton} onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Visible range ${rangeStart} to ${rangeEnd}. Change range`}>
-            <Icon name="CalendarDays" size={20} className="text-goms-navy" />
+            <Icon name="CalendarDays" size={14} className="text-goms-navy" />
             <span className="tabular-nums">{rangeStart} – {rangeEnd}</span>
-            <Icon name="ChevronDown" size={16} className={cn('text-muted transition-transform', open && 'rotate-180')} />
+            <Icon name="ChevronDown" size={13} className={cn('text-muted transition-transform', open && 'rotate-180')} />
           </button>
         )}>
           {(close) => (
@@ -57,7 +57,7 @@ export function TimelineHeader({ rangeStart, rangeEnd, endEstimated, outcome, zo
           )}
         </Menu>
         <button type="button" className={raisedButton} onClick={() => onZoom('All')} aria-pressed={zoom === 'All'}>
-          <Icon name="Maximize" size={18} className="text-goms-navy" />Full View
+          <Icon name="Maximize" size={14} className="text-goms-navy" />Full View
         </button>
       </div>
     </div>

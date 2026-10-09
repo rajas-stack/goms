@@ -1,7 +1,19 @@
-/** A tender portal (e.g. "E-Proc") saved in Settings, offered in a bid's
- *  General tab as the place to download bidding documents and corrigenda. */
+/** Which Settings page a saved website belongs to: tender portals (offered in
+ *  a bid's General tab) or document verification portals (GST, MCA, Udyam,
+ *  ISO certificate checks). Records saved before kinds existed are tenders. */
+export const TENDER_WEBSITE_KINDS = ['tender', 'verification'] as const
+export type TenderWebsiteKind = typeof TENDER_WEBSITE_KINDS[number]
+
+/** The kind of a stored website, defaulting legacy records to 'tender'. */
+export function tenderWebsiteKind(site: { kind?: string | null }): TenderWebsiteKind {
+  return site.kind === 'verification' ? 'verification' : 'tender'
+}
+
+/** A portal saved in Settings: a tender portal (e.g. "E-Proc") offered in a
+ *  bid's General tab, or a document verification portal. */
 export interface TenderWebsite {
   id: string
+  kind?: TenderWebsiteKind
   name: string
   url: string
   createdAt: string
@@ -22,6 +34,8 @@ export interface TenderCredentialLock {
 export interface TenderDscEmployee { id: string; name: string; level: number }
 
 export interface TenderWebsiteInput {
+  /** Set on create only; a website never moves between pages. */
+  kind?: TenderWebsiteKind
   name: string
   url: string
   credentials?: TenderCredentialLock | null
@@ -50,6 +64,10 @@ export function normalizeTenderWebsiteInput(input: TenderWebsiteInput): TenderWe
   if (url.length > TENDER_WEBSITE_URL_MAX) throw new Error('That link is too long.')
   if (!isHttpUrl(url)) throw new Error('Enter a full link starting with http:// or https://.')
   const result: TenderWebsiteInput = { name, url }
+  if (input.kind !== undefined) {
+    if (!(TENDER_WEBSITE_KINDS as readonly string[]).includes(input.kind)) throw new Error('Unknown website type.')
+    result.kind = input.kind
+  }
   if (input.credentials !== undefined) {
     const lock = input.credentials
     if (lock && (lock.version !== 1 || !/^[A-Za-z0-9+/]{22}==$/.test(lock.salt)
@@ -63,8 +81,12 @@ export function normalizeTenderWebsiteInput(input: TenderWebsiteInput): TenderWe
   return result
 }
 
-/** Names are unique, ignoring case, so the General dropdown is unambiguous. */
-export function assertUniqueTenderWebsiteName(existing: readonly Pick<TenderWebsite, 'id' | 'name'>[], name: string, ownId?: string): void {
-  const clash = existing.some(site => site.id !== ownId && site.name.trim().toLowerCase() === name.trim().toLowerCase())
+/** Names are unique, ignoring case, so the General dropdown is unambiguous.
+ *  With `kind`, only websites on that same Settings page are compared. */
+export function assertUniqueTenderWebsiteName(
+  existing: readonly Pick<TenderWebsite, 'id' | 'name' | 'kind'>[], name: string, ownId?: string, kind?: TenderWebsiteKind,
+): void {
+  const key = name.trim().toLowerCase()
+  const clash = existing.some(site => site.id !== ownId && (!kind || tenderWebsiteKind(site) === kind) && site.name.trim().toLowerCase() === key)
   if (clash) throw new Error(`A website named "${name}" already exists.`)
 }

@@ -21,7 +21,7 @@ describe('OptionsMenu', () => {
 
   function openMenu() {
     render(<MemoryRouter><OptionsMenu /></MemoryRouter>)
-    fireEvent.click(screen.getByRole('button', { name: 'Options' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Profile options' }))
   }
 
   it('switches the whole document to night mode and persists the choice', () => {

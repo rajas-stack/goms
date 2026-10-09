@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Icon } from '@/components/ui/Icon'
-import { PersonName } from '@/components/ui/PersonName'
+import { Avatar } from '@/components/ui/Avatar'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import { useMenuKeyboardNav } from '@/components/ui/popover/useMenuKeyboardNav'
 import { originOf, useTheme } from '@/lib/theme'
@@ -17,7 +17,11 @@ const NAV_ITEMS = '[role^="menuitem"]'
 /** TopBar's "Options" dropdown: day/night switch, Light/Dark/System picker,
  *  and entry points into Settings. Also owns the global theme shortcut, since
  *  the TopBar (and so this menu) is mounted on every screen. */
-export function OptionsMenu({ profile, onSignOut }: { profile?: { name: string; photoUrl?: string | null }; onSignOut?: () => void } = {}) {
+export function OptionsMenu({ profile, onSignIn, onSignOut }: {
+  profile?: { name: string; photoUrl?: string | null }
+  onSignIn?: () => void
+  onSignOut?: () => void
+} = {}) {
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -48,21 +52,23 @@ export function OptionsMenu({ profile, onSignOut }: { profile?: { name: string; 
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          aria-label={profile ? 'Profile options' : 'Options'}
+          aria-label="Profile options"
           aria-haspopup="menu"
           aria-expanded={open}
           className={cn(
-            'group flex h-11 items-center gap-1 rounded-lg border px-2.5 text-muted outline-none transition-all duration-150 focus-visible:focus-ring lg:h-8 lg:px-2',
-            profile && 'rounded-full border-line bg-panel text-ink-700',
+            'group flex h-10 w-10 items-center gap-2 rounded-full border border-line bg-panel p-1 text-[13px] font-medium text-ink-700 outline-none transition-colors duration-150 focus-visible:focus-ring sm:w-[198px] sm:pr-2.5',
             open
               ? 'border-ink-600/40 bg-panel text-ink-900'
-              : profile ? 'border-line bg-panel hover:border-ink-600/40 hover:bg-white' : 'border-transparent hover:border-line hover:bg-panel hover:text-ink-900',
+              : 'hover:border-ink-600/40 hover:bg-white',
           )}
         >
-          {profile ? <PersonName person={profile} className="max-w-[11rem]" nameClassName="hidden sm:block" /> : <motion.span className="flex" animate={{ rotate: open ? 90 : 0 }} transition={{ type: 'spring', stiffness: 300, damping: 20 }}>
-            <Icon name="Settings" size={17} />
-          </motion.span>}
-          <Icon name="ChevronDown" size={13} className={cn('hidden transition-transform duration-200 sm:block', open && 'rotate-180')} />
+          {profile ? <Avatar person={profile} size="sm" className="h-7 w-7" /> : (
+            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink-100 text-muted">
+              <Icon name="User" size={16} />
+            </span>
+          )}
+          <span className="hidden min-w-0 flex-1 truncate text-left sm:block">{profile?.name || 'User'}</span>
+          <Icon name="ChevronDown" size={13} className={cn('hidden shrink-0 transition-transform duration-200 sm:block', open && 'rotate-180')} />
         </button>
 
         <PopoverPanel open={open} anchorRef={anchorRef} onClose={() => setOpen(false)} align="end" maxPanelHeight={480} gap={8}>
@@ -131,6 +137,7 @@ export function OptionsMenu({ profile, onSignOut }: { profile?: { name: string; 
               <div className="mx-1 my-2 h-px bg-line" />
 
               <OptionsItem icon="Settings" label="Settings" hint="Workspace configuration" onClick={openSettings} />
+              {onSignIn && <><div className="mx-1 my-2 h-px bg-line" /><OptionsItem icon="LogIn" label="Sign in" onClick={() => { setOpen(false); onSignIn() }} /></>}
               {onSignOut && <><div className="mx-1 my-2 h-px bg-line" /><OptionsItem icon="LogOut" label="Sign out" onClick={() => { setOpen(false); onSignOut() }} /></>}
             </motion.div>
           )}

@@ -6,7 +6,6 @@ import { Tooltip } from './ui/Tooltip'
 import { AuthStatus } from './AuthStatus'
 import { useConnections } from '@/features/dms/useConnections'
 import { moduleForPath } from '@/features/dms/connections'
-import { cn } from '@/lib/utils'
 import logo from '@/assets/amnex-logo.svg'
 
 interface Props {
@@ -26,9 +25,8 @@ export function TopBar({ onOpenDrawer }: Props) {
   const isTeams = location.pathname.startsWith('/teams')
   const isSettings = location.pathname.startsWith('/settings')
   const isDocuments = location.pathname.startsWith('/documents')
-  // Search/Import/Export act on Account Mapping's hierarchy data, so no
-  // standalone module shows them.
-  const hidesAccountMappingTools = isCommercialCalculator || isBidTracker || isTeams || isSettings || isDocuments
+  // Import and Export work with Account Mapping's hierarchy data.
+  const hidesImportExport = isCommercialCalculator || isBidTracker || isTeams || isSettings || isDocuments
   const moduleLabel = isDocuments ? 'Documents' : isSettings ? 'Settings' : isCommercialCalculator ? 'Commercial Calculator' : isBidTracker ? 'Opportunity' : isTeams ? 'Teams' : 'Accounts Mapping'
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-paper/90 px-3 sm:gap-3 sm:px-5">
@@ -50,24 +48,22 @@ export function TopBar({ onOpenDrawer }: Props) {
           </span>
         </div>
       )}
-      {/* Search/Import/Export operate on Account Mapping's hierarchy data
-          (src/features/import) — hidden in Commercial Calculator and Bid
-          Tracker, same as SecondaryNav/GlobalFab (AppLayout.tsx's `navExpanded`). */}
-      {!hidesAccountMappingTools && (
+      {/* Global search is available on every route through the shared shell. */}
+      <button
+        onClick={openSearch}
+        aria-label="Search everything"
+        className="group ml-auto flex h-11 w-full min-w-0 max-w-[12rem] items-center gap-2 rounded-lg border border-line bg-white px-3 text-sm text-muted transition-colors hover:border-ink-600 lg:h-9"
+      >
+        <Icon name="Search" size={15} className="shrink-0" />
+        <span className="truncate">Search…</span>
+        {/* Keyboard hint is desktop-only — there's no ⌘/Ctrl key on a phone,
+            and the badge was crowding the mobile top bar. */}
+        <kbd className="ml-auto hidden items-center gap-0.5 rounded border border-line bg-panel px-1.5 py-0.5 font-mono text-[10px] text-muted lg:flex">
+          ⌘K
+        </kbd>
+      </button>
+      {!hidesImportExport && (
         <>
-          <button
-            onClick={openSearch}
-            className="group ml-auto flex h-11 w-full min-w-0 max-w-[12rem] items-center gap-2 rounded-lg border border-line bg-white px-3 text-sm text-muted transition-colors hover:border-ink-600 lg:h-9"
-          >
-            <Icon name="Search" size={15} className="shrink-0" />
-            <span className="truncate">Search…</span>
-            {/* Keyboard hint is desktop-only — there's no ⌘/Ctrl key on a phone,
-                and the badge was crowding the mobile top bar. */}
-            <kbd className="ml-auto hidden items-center gap-0.5 rounded border border-line bg-panel px-1.5 py-0.5 font-mono text-[10px] text-muted lg:flex">
-              ⌘K
-            </kbd>
-          </button>
-
           <Tooltip label="Import records from a file" side="bottom" className="shrink-0">
             <Button variant="primary" size="sm" onClick={openImport} aria-label="Import records" className="h-11 lg:h-8">
               <Icon name="Upload" size={15} />
@@ -84,9 +80,9 @@ export function TopBar({ onOpenDrawer }: Props) {
         </>
       )}
 
-      <div className={cn('flex shrink-0 items-center gap-2', hidesAccountMappingTools && 'ml-auto')}>
+      <div className="flex shrink-0 items-center gap-2">
         {hasDms && <Link to={`/documents/${dmsModule}`} aria-label="Documents" className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line bg-white px-2.5 text-xs font-medium text-ink hover:bg-panel"><Icon name="FileText" size={15} /><span className="hidden sm:inline">Documents</span></Link>}
-        <AuthStatus includeOptions />
+        <AuthStatus />
       </div>
     </header>
   )

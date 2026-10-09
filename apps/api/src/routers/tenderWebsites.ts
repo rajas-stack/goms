@@ -1,10 +1,12 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { normalizeTenderWebsiteInput, TENDER_WEBSITE_NAME_MAX, TENDER_WEBSITE_URL_MAX, type TenderWebsite, type TenderWebsiteInput } from '@goms/domain'
+import { normalizeTenderWebsiteInput, TENDER_WEBSITE_KINDS, TENDER_WEBSITE_NAME_MAX, TENDER_WEBSITE_URL_MAX, type TenderWebsite, type TenderWebsiteInput } from '@goms/domain'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
 import { writeAuditLog } from '../lib/auditLog.js'
+
+const kindShape = z.enum(TENDER_WEBSITE_KINDS)
 
 const websiteShape = z.object({
   name: z.string().max(TENDER_WEBSITE_NAME_MAX * 2), url: z.string().max(TENDER_WEBSITE_URL_MAX),
@@ -12,8 +14,11 @@ const websiteShape = z.object({
   dscEmployeeId: z.string().uuid().nullable().optional(),
 })
 
+/** Create picks the Settings page; update never moves a website between pages. */
+const createShape = websiteShape.extend({ kind: kindShape.optional() })
+
 function toWebsite(row: any): TenderWebsite {
-  return { id: row.id, name: row.name, url: row.url, createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString(),
+  return { id: row.id, ...(row.kind !== undefined ? { kind: row.kind } : {}), name: row.name, url: row.url, createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString(),
     ...(row.credentials !== undefined ? { credentials: row.credentials } : {}),
     ...(row.dsc_employee_id !== undefined ? { dscEmployeeId: row.dsc_employee_id } : {}),
     ...(row.editing_locked !== undefined ? { editingLocked: row.editing_locked } : {}),
@@ -47,18 +52,18 @@ export const tenderWebsitesRouter = router({
     const result = await pool.query("SELECT id, name, level FROM org_people WHERE status='active' AND level IN (0,1,2) ORDER BY level, lower(name)")
     return result.rows.map((row: any) => ({ id: String(row.id), name: String(row.name), level: Number(row.level) }))
   }),
-  list: protectedReadProcedure.query(async () => {
-    const result = await pool.query('SELECT * FROM tender_websites ORDER BY lower(name)')
+  list: protectedReadProcedure.input(z.object({ kind: kindShape }).optional()).query(async ({ input }) => {
+    const result = await pool.query('SELECT * FROM tender_websites WHERE kind=$1 ORDER BY lower(name)', [input?.kind ?? 'tender'])
     return result.rows.map(toWebsite)
   }),
 
-  create: protectedProcedure.input(websiteShape).mutation(async ({ input, ctx }) => {
+  create: protectedProcedure.input(createShape).mutation(async ({ input, ctx }) => {
     const site = clean(input)
     await validateDsc(site.dscEmployeeId)
     try {
       const result = await pool.query(
-        'INSERT INTO tender_websites (name, url, created_by, credentials, dsc_employee_id) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-        [site.name, site.url, ctx.user?.email ?? null, site.credentials ?? null, site.dscEmployeeId ?? null],
+        'INSERT INTO tender_websites (name, url, created_by, credentials, dsc_employee_id, kind) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *',
+        [site.name, site.url, ctx.user?.email ?? null, site.credentials ?? null, site.dscEmployeeId ?? null, site.kind ?? 'tender'],
       )
       await audit(result.rows[0].id, 'create', `${site.name} ${site.url}`, ctx.user?.email)
       return toWebsite(result.rows[0])

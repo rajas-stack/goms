@@ -26,7 +26,23 @@ describe('tender websites router', () => {
     const saved = await caller().create({ name: '  E-Proc ', url: ' https://eproc.example.gov.in ' })
     expect(saved).toMatchObject({ name: 'E-Proc', url: 'https://eproc.example.gov.in' })
     const insert = db.query.mock.calls.find(call => String(call[0]).startsWith('INSERT INTO tender_websites'))!
-    expect(insert[1]).toEqual(['E-Proc', 'https://eproc.example.gov.in', 'editor@amnex.com', null, null])
+    expect(insert[1]).toEqual(['E-Proc', 'https://eproc.example.gov.in', 'editor@amnex.com', null, null, 'tender'])
+  })
+
+  it('lists only the requested kind, defaulting to tender portals', async () => {
+    await caller().list()
+    expect(db.query).toHaveBeenLastCalledWith('SELECT * FROM tender_websites WHERE kind=$1 ORDER BY lower(name)', ['tender'])
+    db.query.mockResolvedValueOnce({ rows: [{ ...row('GST', 'https://services.gst.gov.in'), kind: 'verification' }] })
+    expect(await caller().list({ kind: 'verification' })).toEqual([expect.objectContaining({ kind: 'verification', name: 'GST' })])
+    expect(db.query).toHaveBeenLastCalledWith('SELECT * FROM tender_websites WHERE kind=$1 ORDER BY lower(name)', ['verification'])
+    await expect(caller().list({ kind: 'other' as never })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+
+  it('creates a document verification site with its kind', async () => {
+    await caller().create({ kind: 'verification', name: 'MCA', url: 'https://www.mca.gov.in' })
+    const insert = db.query.mock.calls.find(call => String(call[0]).startsWith('INSERT INTO tender_websites'))!
+    expect(insert[1]).toEqual(['MCA', 'https://www.mca.gov.in', 'editor@amnex.com', null, null, 'verification'])
+    await expect(caller().create({ kind: 'bogus' as never, name: 'X', url: 'https://x.example' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
   })
 
   it('rejects non-http links and blank names before touching the database', async () => {

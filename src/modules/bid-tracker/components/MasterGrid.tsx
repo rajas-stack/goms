@@ -252,16 +252,19 @@ export function MasterGrid(props: MasterGridProps) {
     return meta
   }
   const canLockColumn = (meta: GridColumnMeta) => !!(meta.editable || (meta.unlockable && !perms.enforced))
-  const isColumnOpen = (meta: GridColumnMeta) => !!effectiveMeta(meta).editable
-  const toggleColumnLock = (meta: GridColumnMeta) => setColumnLocks((cur) => {
-    const open = !!effectiveMeta(meta).editable
-    const without = (ids: string[]) => ids.filter((id) => id !== meta.id)
-    const next: ColumnLocks = open
-      ? { locked: meta.editable ? [...without(cur.locked), meta.id] : without(cur.locked), unlocked: without(cur.unlocked) }
-      : { locked: without(cur.locked), unlocked: meta.editable ? without(cur.unlocked) : [...without(cur.unlocked), meta.id] }
-    saveColumnLocks(props.sheet ?? 'bidTracker', next)
-    return next
-  })
+  const isColumnOpen = (meta: GridColumnMeta) => unlocked && !!effectiveMeta(meta).editable
+  const toggleColumnLock = (meta: GridColumnMeta) => {
+    if (!unlocked) return
+    setColumnLocks((cur) => {
+      const open = !!effectiveMeta(meta).editable
+      const without = (ids: string[]) => ids.filter((id) => id !== meta.id)
+      const next: ColumnLocks = open
+        ? { locked: meta.editable ? [...without(cur.locked), meta.id] : without(cur.locked), unlocked: without(cur.unlocked) }
+        : { locked: without(cur.locked), unlocked: meta.editable ? without(cur.unlocked) : [...without(cur.unlocked), meta.id] }
+      saveColumnLocks(props.sheet ?? 'bidTracker', next)
+      return next
+    })
+  }
 
   // --- data -------------------------------------------------------------------
   const appliedRules = useMemo(() => pruneFilterNodes(rules, isRuleComplete), [rules])
@@ -861,7 +864,7 @@ export function MasterGrid(props: MasterGridProps) {
         )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <LockSwitch
-            unlocked={unlocked} onToggle={requestToggleLock}
+            size="toolbar" unlocked={unlocked} onToggle={requestToggleLock}
             lockedLabel="Master grid editing locked — tap to unlock"
             unlockedLabel="Master grid editing unlocked — tap to lock"
           />
@@ -979,17 +982,11 @@ export function MasterGrid(props: MasterGridProps) {
                           {unlocked && isColumnOpen(meta) && <span title="Editable column" className="shrink-0 text-goms-green"><Icon name="Pencil" size={10} /></span>}
                         </button>
                         {canLockColumn(meta) ? (
-                          <button
-                            type="button" onClick={() => toggleColumnLock(meta)} aria-pressed={!isColumnOpen(meta)}
-                            aria-label={isColumnOpen(meta) ? `Lock ${meta.header} column` : `Unlock ${meta.header} column`}
-                            title={isColumnOpen(meta) ? `Lock ${meta.header} (stop edits in this column)` : `Unlock ${meta.header} for editing`}
-                            className={cn(
-                              'flex h-5 w-5 shrink-0 items-center justify-center rounded transition-colors hover:bg-ink-900/[0.07] focus-visible:focus-ring',
-                              isColumnOpen(meta) ? 'text-muted/60 opacity-0 group-hover/th:opacity-100 focus-visible:opacity-100' : 'text-amber-600',
-                            )}
-                          >
-                            <Icon name={isColumnOpen(meta) ? 'Unlock' : 'Lock'} size={11} />
-                          </button>
+                          <LockSwitch
+                            size="sm" unlocked={isColumnOpen(meta)} onToggle={() => toggleColumnLock(meta)}
+                            disabled={!unlocked}
+                            lockedLabel={`Unlock ${meta.header} column`} unlockedLabel={`Lock ${meta.header} column`}
+                          />
                         ) : meta.id !== 'manage' && (
                           <span title={`Always locked — ${meta.readOnlyReason ?? 'no write path'}`} aria-label="Always locked" role="img" className="inline-flex shrink-0 text-muted/50"><Icon name="Lock" size={11} /></span>
                         )}
@@ -1000,10 +997,8 @@ export function MasterGrid(props: MasterGridProps) {
                             <span className="sr-only">Filtered</span>
                           </span>
                         )}
-                        {h.column.getCanSort() && (
-                          sorted
-                            ? <span className="shrink-0 text-goms-navy"><Icon name={sorted === 'asc' ? 'ArrowUp' : 'ArrowDown'} size={13} /></span>
-                            : <span className="shrink-0 text-muted opacity-0 group-hover/th:opacity-60"><Icon name="ChevronsUpDown" size={12} /></span>
+                        {h.column.getCanSort() && sorted && (
+                          <span className="shrink-0 text-goms-navy"><Icon name={sorted === 'asc' ? 'ArrowUp' : 'ArrowDown'} size={13} /></span>
                         )}
                         <ColumnHeaderMenu
                           header={meta.header} sorted={sorted}
@@ -1163,7 +1158,8 @@ export function MasterGrid(props: MasterGridProps) {
         footer={(
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setLockPromptOpen(false)}>Keep editing</Button>
-            <Button variant="primary" onClick={discardAndLock}>Discard edit and lock</Button>
+            <LockSwitch unlocked onToggle={discardAndLock} lockedLabel="Unlock editing"
+              unlockedLabel="Discard edit and lock" text="Discard edit and lock" className="lock-switch--confirmation" />
           </div>
         )}
       >
