@@ -1,3 +1,5 @@
+import { getGoogleSession, invalidateGoogleSession } from '@/features/integrations/session'
+
 export const FOLDER_MIME = 'application/vnd.google-apps.folder'
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
 const API = 'https://www.googleapis.com/drive/v3'
@@ -24,6 +26,7 @@ interface GoogleIdentity {
   accounts: { oauth2: {
     initTokenClient: (config: {
       client_id: string; scope: string; callback: (response: TokenResponse) => void
+      login_hint?: string; hd?: string; include_granted_scopes?: boolean
       error_callback: (error: { type: string }) => void
     }) => { requestAccessToken: (config: { prompt: string }) => void }
   } }
@@ -31,6 +34,7 @@ interface GoogleIdentity {
 
 let identityPromise: Promise<GoogleIdentity> | undefined
 const sessions = new Map<string, DriveSession>()
+const disconnectedSharedTokens = new Map<string, string>()
 function notifySession() { if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') window.dispatchEvent(new Event('goms:dms-session-changed')) }
 const identity = () => (window as Window & { google?: GoogleIdentity }).google
 
@@ -63,12 +67,18 @@ export function loadGoogleIdentity(): Promise<GoogleIdentity> {
 }
 
 export function getDriveSession(connectionId = 'default'): DriveSession | null {
-  const session = sessions.get(connectionId)
-  if (session && session.expiresAt <= Date.now()) { sessions.delete(connectionId); return null }
-  return session ?? null
+  let session = sessions.get(connectionId)
+  if (session && session.expiresAt <= Date.now()) { sessions.delete(connectionId); session = undefined }
+  if (session) return session
+  const shared = getGoogleSession([DRIVE_SCOPE])
+  return shared && disconnectedSharedTokens.get(connectionId) !== shared.accessToken ? { accessToken: shared.accessToken, email: shared.email, expiresAt: shared.expiresAt } : null
 }
 
-export function disconnectDrive(connectionId = 'default'): void { sessions.delete(connectionId); notifySession() }
+export function disconnectDrive(connectionId = 'default'): void {
+  const shared = getGoogleSession([DRIVE_SCOPE])
+  if (shared) disconnectedSharedTokens.set(connectionId, shared.accessToken)
+  sessions.delete(connectionId); notifySession()
+}
 
 /** Called synchronously from a click, after loading GIS, to preserve popup permission. */
 export function connectDrive(clientId: string, connectionId = 'default'): Promise<DriveSession> {
@@ -105,9 +115,10 @@ export function connectDrive(clientId: string, connectionId = 'default'): Promis
   })
 }
 
-async function checkResponse(response: Response, connectionId: string): Promise<Response> {
+async function checkResponse(response: Response, connectionId: string, token: string): Promise<Response> {
   if (response.ok) return response
   if (response.status === 401) {
+    invalidateGoogleSession(token)
     disconnectDrive(connectionId)
     throw new Error('Your Google Drive session has expired. Reconnect to continue.')
   }
@@ -120,7 +131,7 @@ async function authenticatedFetch(url: string, init: RequestInit = {}, connectio
   if (!current) throw new Error('Connect Google Drive to continue.')
   const headers = new Headers(init.headers)
   headers.set('Authorization', `Bearer ${current.accessToken}`)
-  return checkResponse(await fetch(url, { ...init, headers }), connectionId)
+  return checkResponse(await fetch(url, { ...init, headers }), connectionId, current.accessToken)
 }
 
 async function driveRequest<T>(path: string, init?: RequestInit, connectionId = 'default'): Promise<T> {
