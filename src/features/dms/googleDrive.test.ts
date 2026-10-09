@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { connectDrive, disconnectDrive, getDriveSession, getFolder, listFiles, trashFile, uploadFile } from './googleDrive'
+import { getGoogleSession, saveGoogleSession, setGoogleAccount } from '@/features/integrations/session'
 
 const scope = 'https://www.googleapis.com/auth/drive'
 const fetchMock = vi.fn()
@@ -13,6 +14,7 @@ async function connected() {
 
 describe('Google Drive integration', () => {
   beforeEach(() => {
+    setGoogleAccount(null)
     disconnectDrive()
     vi.clearAllMocks()
     vi.stubGlobal('fetch', fetchMock)
@@ -26,6 +28,22 @@ describe('Google Drive integration', () => {
     expect(initTokenClient.mock.calls[0][0].client_id).toBe(clientId)
     expect(getDriveSession()?.email).toBe('admin@example.com')
     expect(new Headers(fetchMock.mock.calls[0][1].headers).get('Authorization')).toBe('Bearer memory-only-token')
+  })
+
+  it('shares the verified integration grant, respects DMS disconnect and clears rejected tokens', async () => {
+    setGoogleAccount({ uid: 'shared-user', email: 'user@amnex.com', googleId: 'google-user' })
+    const grant = { uid: 'shared-user', email: 'user@amnex.com', accessToken: 'shared-first', scopes: [scope], expiresAt: Date.now() + 3600000, clientId }
+    saveGoogleSession(grant)
+    expect(getDriveSession('shared-dms')?.email).toBe('user@amnex.com')
+    disconnectDrive('shared-dms')
+    expect(getDriveSession('shared-dms')).toBeNull()
+    expect(getGoogleSession([scope])).not.toBeNull()
+    saveGoogleSession({ ...grant, accessToken: 'shared-new' })
+    expect(getDriveSession('shared-dms')?.accessToken).toBe('shared-new')
+    fetchMock.mockResolvedValueOnce(Response.json({ error: { message: 'Expired' } }, { status: 401 }))
+    await expect(listFiles('folder', 'shared-dms')).rejects.toThrow('expired')
+    expect(getGoogleSession([scope])).toBeNull()
+    setGoogleAccount(null)
   })
 
   it('handles cancelled popups and missing Drive permissions without creating a session', async () => {

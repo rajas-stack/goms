@@ -13,4 +13,6 @@ export * from './synopsisGrid.js'
 export * from './corrigenda.js'
 export * from './tenderWebsites.js'
 export * from './credentialPassphrases.js'
+export * from './googleIntegrations.js'
 export * from './rbac/index.js'
+

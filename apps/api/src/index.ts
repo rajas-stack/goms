@@ -25,6 +25,7 @@ import { authRouter } from './routers/auth.js'
 import { accessRouter } from './routers/access.js'
 import { tenderWebsitesRouter } from './routers/tenderWebsites.js'
 import { credentialPassphrasesRouter } from './routers/credentialPassphrases.js'
+import { googleIntegrationsRouter } from './routers/googleIntegrations.js'
 
 export const appRouter = router({
   health: healthRouter, customers: customersRouter, hierarchy: hierarchyRouter,
@@ -40,5 +41,6 @@ export const appRouter = router({
   auth: authRouter, access: accessRouter,
   tenderWebsites: tenderWebsitesRouter,
   credentialPassphrases: credentialPassphrasesRouter,
+  googleIntegrations: googleIntegrationsRouter,
 })
 export type AppRouter = typeof appRouter
