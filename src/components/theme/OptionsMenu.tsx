@@ -4,6 +4,8 @@ import { Icon } from '@/components/ui/Icon'
 import { Avatar } from '@/components/ui/Avatar'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import { useMenuKeyboardNav } from '@/components/ui/popover/useMenuKeyboardNav'
+import { ROLE_LABELS, type Role } from '@goms/domain'
+import { usePermissions } from '@/lib/permissions'
 import { originOf, useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { DayNightSwitch } from './DayNightSwitch'
@@ -28,6 +30,9 @@ export function OptionsMenu({ profile, onSignIn, onSignOut }: {
   const panelRef = useRef<HTMLDivElement>(null)
   const { resolved, toggle } = useTheme()
   const isNight = resolved === 'dark'
+  const perms = usePermissions()
+  // Only with real, server-reported roles to choose between (RBAC enforced, 2+ roles).
+  const showRoles = perms.enforced && perms.allRoles.length > 1
 
   useMenuKeyboardNav(open, panelRef, NAV_ITEMS)
 
@@ -134,6 +139,22 @@ export function OptionsMenu({ profile, onSignIn, onSignOut }: {
                 <ThemeSegmented variant="menu" />
               </div>
 
+              {showRoles && (
+                <>
+                  <div className="mx-1 my-2 h-px bg-line" />
+                  <div role="group" aria-label="Role" className="px-0.5">
+                    <span className="eyebrow px-2">Role</span>
+                    <RoleOption label="All my roles" checked={perms.activeRole === null} onSelect={() => perms.setActiveRole(null)} />
+                    {perms.allRoles.map((r: Role) => (
+                      <RoleOption key={r} label={ROLE_LABELS[r]} checked={perms.activeRole === r} onSelect={() => perms.setActiveRole(r)} />
+                    ))}
+                    <p className="px-2.5 pb-1 pt-1.5 text-[11.5px] leading-snug text-muted">
+                      Narrows what this app shows you. Your actual access is decided by the server.
+                    </p>
+                  </div>
+                </>
+              )}
+
               <div className="mx-1 my-2 h-px bg-line" />
 
               <OptionsItem icon="Settings" label="Settings" hint="Workspace configuration" onClick={openSettings} />
@@ -149,6 +170,24 @@ export function OptionsMenu({ profile, onSignIn, onSignOut }: {
         onClose={() => setSettingsOpen(false)}
       />
     </>
+  )
+}
+
+function RoleOption({ label, checked, onSelect }: { label: string; checked: boolean; onSelect: () => void }) {
+  return (
+    <button
+      type="button"
+      role="menuitemradio"
+      aria-checked={checked}
+      onClick={onSelect}
+      className={cn(
+        'flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] outline-none transition-colors hover:bg-ink-900/[0.05] focus-visible:bg-ink-900/[0.05] lg:min-h-0',
+        checked ? 'font-semibold text-ink-900' : 'text-ink-700',
+      )}
+    >
+      <span className="flex h-4 w-4 shrink-0 items-center justify-center text-ink-900">{checked && <Icon name="Check" size={14} />}</span>
+      {label}
+    </button>
   )
 }
 

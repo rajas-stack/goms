@@ -7,7 +7,7 @@ import { STANDARD_COLUMNS } from './gridColumns'
 const perms = (roles: Role[], salesPersonId: string | null = null, ids = { presales: [] as string[], legal: [] as string[], bid: [] as string[] }): Permissions => {
   const user: UserFacts = { email: 'me@amnex.com', roles, salesPersonId, teamMemberIds: ids }
   return {
-    enforced: true, roles, level: (m) => accessFor(user, m).level, can: () => true, canReadAtom: () => true, mayWrite: () => true,
+    enforced: true, roles, allRoles: roles, activeRole: null, setActiveRole: () => {}, level: (m) => accessFor(user, m).level, can: () => true, canReadAtom: () => true, mayWrite: () => true,
     canEdit: (m, atom, row) => allows(accessFor(user, m, row), atom),
   }
 }
