@@ -43,7 +43,7 @@ describe('Google account-bound authorization', () => {
     expect(fetchMock.mock.calls.some(call => String(call[0]).includes('docs.googleapis.com'))).toBe(false)
   })
   it('clearly identifies web-only and cloud setup requirements', async () => {
-    expect(await testGoogleConnection('sites', account, DEFAULT_GOOGLE_INTEGRATIONS)).toMatchObject({ status: 'account' })
+    expect(await testGoogleConnection('maps', account, DEFAULT_GOOGLE_INTEGRATIONS)).toMatchObject({ status: 'account' })
     expect(fetchMock).not.toHaveBeenCalled()
     await expect(testGoogleConnection('notebooklm', account, DEFAULT_GOOGLE_INTEGRATIONS)).rejects.toThrow('NotebookLM Enterprise')
     await expect(testGoogleConnection('translate', account, DEFAULT_GOOGLE_INTEGRATIONS)).rejects.toThrow('Cloud Translation')

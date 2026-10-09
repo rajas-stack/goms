@@ -5,10 +5,12 @@ import { assertGoogleAccount, getGoogleAccount, getGoogleSession, hasGoogleScope
 import { googleServiceEnabled, googleSettings } from './settings'
 
 const IDENTITY_SCOPES = ['openid', 'email']
-export async function googleApiRequest<T>(url: string, token: string, project?: string): Promise<T> {
+export async function googleApiRequest<T>(url: string, token: string, project?: string, request: { method?: 'GET' | 'POST'; body?: unknown } = {}): Promise<T> {
   const destination = new URL(url)
   if (destination.protocol !== 'https:' || !destination.hostname.endsWith('.googleapis.com') || destination.username || destination.password) throw new Error('Google tokens may only be sent to approved Google API endpoints.')
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, ...(project ? { 'x-goog-user-project': project } : {}) }, signal: AbortSignal.timeout(15_000) })
+  const multipart = request.body instanceof FormData
+  const blob = request.body instanceof Blob
+  const response = await fetch(url, { method: request.method ?? 'GET', headers: { Authorization: `Bearer ${token}`, ...(project ? { 'x-goog-user-project': project } : {}), ...(request.body !== undefined && !multipart ? { 'Content-Type': blob ? (request.body as Blob).type : 'application/json' } : {}) }, body: request.body === undefined ? undefined : multipart || blob ? request.body as FormData | Blob : JSON.stringify(request.body), redirect: 'error', signal: AbortSignal.timeout(30_000) })
   if (!response.ok) {
     const body = await response.json().catch(() => null)
     if (response.status === 401) { invalidateGoogleSession(token); throw new Error('Google authorization expired. Reconnect and retry.') }
@@ -47,11 +49,11 @@ export async function authorizeGoogle(account: GoogleAccount, scopes: readonly s
     client.requestAccessToken({ prompt: '' })
   })
 }
-export function googleFeatureToken(service: GoogleService, pageId: string): Promise<string> {
+export function googleFeatureToken(service: GoogleService, pageId: string, additionalScopes: readonly string[] = []): Promise<string> {
   if (!googleServiceEnabled(service, pageId)) return Promise.reject(new Error('This service is disabled on this page in Settings > Integrations.'))
   const account = getGoogleAccount()
   if (!account) return Promise.reject(new Error('Sign in with your verified Amnex Google account.'))
-  return authorizeGoogle(account, productFor(service).scopes, googleSettings(account).clientId)
+  return authorizeGoogle(account, [...productFor(service).scopes, ...additionalScopes], googleSettings(account).clientId)
 }
 export interface ConnectionTest { status: 'verified' | 'authorized' | 'account'; message: string }
 const NOTEBOOK_LOCATIONS: readonly string[] = ['global', 'us', 'eu']
@@ -70,6 +72,7 @@ export async function testGoogleConnection(service: GoogleService, account: Goog
     calendar: 'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1', chat: 'https://chat.googleapis.com/v1/spaces?pageSize=1',
     meet: 'https://meet.googleapis.com/v2/conferenceRecords?pageSize=1', keep: 'https://keep.googleapis.com/v1/notes?pageSize=1',
     tasks: 'https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=1',
+    sites: "https://www.googleapis.com/drive/v3/files?q=mimeType%3D'application%2Fvnd.google-apps.site'%20and%20trashed%3Dfalse&pageSize=1&fields=files(id)",
     translate: 'https://translation.googleapis.com/language/translate/v2/languages?target=en',
     notebooklm: `https://${settings.notebookLocation}-discoveryengine.googleapis.com/v1alpha/projects/${encodeURIComponent(settings.cloudProject)}/locations/${settings.notebookLocation}/notebooks:listRecentlyViewed?pageSize=1`,
   }
@@ -87,5 +90,5 @@ export async function testGoogleConnection(service: GoogleService, account: Goog
   }
   await googleApiRequest(endpoints[service]!, token, product.mode === 'cloud' ? settings.cloudProject : undefined)
   assertGoogleAccount(account)
-  return { status: 'verified', message: `${product.name} API verified for ${account.email}.` }
+  return { status: 'verified', message: service === 'sites' ? `Sites file access verified through Drive for ${account.email}.` : `${product.name} API verified for ${account.email}.` }
 }

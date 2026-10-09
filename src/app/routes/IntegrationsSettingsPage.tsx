@@ -12,6 +12,7 @@ import { authorizeGoogle, testGoogleConnection, type ConnectionTest } from '@/fe
 import { googleSettings, googleSettingsStatus, loadGoogleSettings, updateGoogleSettings } from '@/features/integrations/settings'
 import { useGoogleAccount, disconnectGoogleIntegrations, type GoogleAccount } from '@/features/integrations/session'
 import { IntegrationPagesPicker } from '@/features/integrations/IntegrationPagesPicker'
+import { GoogleWorkspacePanel } from '@/features/integrations/GoogleWorkspacePanel'
 
 export function IntegrationsSettingsPage() {
   const account = useGoogleAccount()
@@ -25,6 +26,7 @@ function IntegrationsContent({ account }: { account: GoogleAccount | null }) {
   const [errors, setErrors] = useState<Partial<Record<GoogleService, string>>>({})
   const [error, setError] = useState('')
   const [ready, setReady] = useState(false)
+  const [workspace, setWorkspace] = useState<GoogleService | null>(null)
   const [clientId, setClientId] = useState(settings.clientId)
   const [docsId, setDocsId] = useState(settings.docsId)
   const [sheetsId, setSheetsId] = useState(settings.sheetsId)
@@ -60,7 +62,7 @@ function IntegrationsContent({ account }: { account: GoogleAccount | null }) {
       <div className="min-w-0"><p className="flex items-center gap-2 text-sm font-semibold"><Icon name="ShieldCheck" size={17} />{account?.email ?? 'Amnex account required'}</p><p className="mt-1 text-xs text-muted">{account ? 'One account across Google services.' : 'Sign in with your verified @amnex.com Google account.'}</p></div>
       {account ? <div className="flex gap-2"><Button size="sm" disabled={!!busy || !ready} onClick={() => {
         setBusy('connect'); setError(''); void authorizeGoogle(account, [], settings.clientId).then(() => setError('')).catch(cause => setError(cause.message)).finally(() => setBusy(null))
-      }}><Icon name="Link2" size={14} />{busy === 'connect' ? 'Connecting…' : 'Connect Google'}</Button><Button size="sm" variant="ghost" disabled={!!busy} onClick={() => { disconnectGoogleIntegrations(); setChecks({}); setErrors({}) }}>Disconnect APIs</Button></div> : <Button size="sm" onClick={() => notifyAuthRequired('unauthorized')}>Sign in</Button>}
+      }}><Icon name="Link2" size={14} />{busy === 'connect' ? 'Connecting…' : 'Connect Google'}</Button><Button size="sm" variant="ghost" disabled={!!busy} onClick={() => { disconnectGoogleIntegrations(); setWorkspace(null); setChecks({}); setErrors({}) }}>Disconnect APIs</Button></div> : <Button size="sm" onClick={() => notifyAuthRequired('unauthorized')}>Sign in</Button>}
     </div>
     {status?.state === 'loading' && <p role="status" className="mb-3 text-sm text-muted">Loading your settings…</p>}
     {status?.state === 'error' && <p role="alert" className="mb-3 text-sm text-crimson">{status.error} <button className="underline" onClick={() => account && void loadGoogleSettings(account).catch(() => undefined)}>Retry</button></p>}
@@ -75,9 +77,10 @@ function IntegrationsContent({ account }: { account: GoogleAccount | null }) {
     {error && <p role="alert" className="mb-4 text-sm text-crimson">{error}</p>}
     <div className="grid items-start gap-3 md:grid-cols-2">{GOOGLE_PRODUCTS.map(product => <section key={product.id} aria-label={`${product.name} integration`} className="rounded-xl border border-line bg-white p-4">
       <div className="flex items-center gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-panel text-ink-700"><Icon name={product.icon} size={21} /></span><div className="min-w-0 flex-1"><h2 className="text-sm font-semibold text-ink-900">{product.name}</h2><p className="mt-0.5 text-xs text-muted">{checks[product.id]?.status === 'verified' ? 'API verified' : checks[product.id]?.status === 'authorized' ? 'Authorized · test resource needed' : account ? product.mode === 'web' ? 'Account linked · web access' : 'Account linked · API consent required' : 'Sign in required'}</p></div></div>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><IntegrationPagesPicker service={product.id} disabled={!writable || !!busy} /><div className="flex items-center gap-2"><Button size="sm" disabled={!account || !!busy || (product.mode !== 'web' && !ready)} aria-label={`Test ${product.name} connection`} onClick={() => void test(product.id)}><Icon name={busy === product.id ? 'Loader' : 'CircleCheck'} size={14} className={busy === product.id ? 'animate-spin' : undefined} />{busy === product.id ? 'Testing…' : 'Test'}</Button>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2"><IntegrationPagesPicker service={product.id} disabled={!writable || !!busy} /><div className="flex flex-wrap items-center gap-2"><Button size="sm" disabled={!account || !!busy} aria-expanded={workspace === product.id} onClick={() => setWorkspace(current => current === product.id ? null : product.id)}>Use {product.name}</Button><Button size="sm" disabled={!account || !!busy || (product.mode !== 'web' && !ready)} aria-label={`Test ${product.name} connection`} onClick={() => void test(product.id)}><Icon name={busy === product.id ? 'Loader' : 'CircleCheck'} size={14} className={busy === product.id ? 'animate-spin' : undefined} />{busy === product.id ? 'Testing…' : 'Test'}</Button>
         <a href={googleProductUrl(product.id, account?.email)} target="_blank" rel="noopener noreferrer" aria-label={`Open ${product.name}`} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-line text-muted hover:text-ink focus-visible:focus-ring"><Icon name="ExternalLink" size={14} /></a></div></div>
       {checks[product.id] && <p role="status" className="mt-3 text-xs text-muted">{checks[product.id]?.message}</p>}{errors[product.id] && <p role="alert" className="mt-3 text-xs text-crimson">{errors[product.id]}</p>}
+      {workspace === product.id && <GoogleWorkspacePanel service={product.id} onClose={() => setWorkspace(null)} />}
     </section>)}</div>
   </div></div>
 }

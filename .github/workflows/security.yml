@@ -22,8 +22,8 @@ jobs:
       - run: npm run build --workspace @goms/api
       - run: npx vitest run src/security/security.test.ts src/security/audit.test.ts src/auth/identity.test.ts src/auth/rbac/registry/completeness.test.ts src/routers/tenderWebsites.test.ts src/routers/googleIntegrations.test.ts
         working-directory: apps/api
-      - run: npx vitest run src/features/dms/googleDrive.test.ts src/features/integrations/googleClient.test.ts src/features/tender-websites/credentialLock.test.ts src/lib/csv.test.ts
-      - run: npx vitest run --config vitest.component.config.ts src/features/integrations/GoogleAccountBinder.test.tsx src/lib/permissions.security.test.tsx src/lib/permissions.test.tsx
+      - run: npx vitest run src/features/dms/googleDrive.test.ts src/features/integrations/googleClient.test.ts src/features/integrations/workspaceClient.test.ts src/features/tender-websites/credentialLock.test.ts src/lib/csv.test.ts
+      - run: npx vitest run --config vitest.component.config.ts src/features/integrations/IntegrationsSettingsPage.test.tsx src/features/integrations/GoogleAccountBinder.test.tsx src/lib/permissions.security.test.tsx src/lib/permissions.test.tsx
   codeql:
     runs-on: ubuntu-latest
     timeout-minutes: 30

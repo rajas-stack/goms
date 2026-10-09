@@ -6,15 +6,18 @@ import { IntegrationsSettingsPage } from '@/app/routes/IntegrationsSettingsPage'
 import { GOOGLE_PRODUCTS } from './catalog'
 import { registerGoogleFeature } from './registry'
 import { getGoogleAccount, setGoogleAccount } from './session'
-import { googleServiceEnabled, googleSettings, loadGoogleSettings } from './settings'
+import { googleServiceEnabled, googleSettings, loadGoogleSettings, saveGoogleSettings } from './settings'
 import { testGoogleConnection } from './googleClient'
+import { runWorkspaceAction } from './workspaceClient'
 vi.mock('@/features/dms/googleDrive', () => ({ loadGoogleIdentity: vi.fn(async () => ({})) }))
 vi.mock('./googleClient', () => ({ authorizeGoogle: vi.fn(async () => 'memory-only'), testGoogleConnection: vi.fn(async () => ({ status: 'verified', message: 'API verified.' })) }))
+vi.mock('./workspaceClient', async importOriginal => ({ ...await importOriginal<typeof import('./workspaceClient')>(), runWorkspaceAction: vi.fn(async () => ({ items: [{ id: 'message-a', title: 'Tender reminder', detail: 'From user@amnex.com' }] })) }))
 let counter = 0
 beforeEach(async () => {
   vi.clearAllMocks()
   const account = { uid: `integration-user-${++counter}`, email: 'a@amnex.com', googleId: 'google-a' }
   setGoogleAccount(account); await loadGoogleSettings(account)
+  await saveGoogleSettings(account, { ...googleSettings(account), clientId: '123.apps.googleusercontent.com' })
 })
 afterEach(() => { cleanup(); setGoogleAccount(null) })
 describe('Google Integrations settings', () => {
@@ -24,6 +27,7 @@ describe('Google Integrations settings', () => {
       expect(screen.getByRole('heading', { name: product.name })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: `Test ${product.name} connection` })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: `Choose pages for ${product.name}` })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: `Use ${product.name}` })).toBeInTheDocument()
       expect(screen.getByRole('link', { name: `Open ${product.name}` })).toHaveAttribute('href', expect.stringContaining('authuser=a%40amnex.com'))
     }
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
@@ -57,5 +61,38 @@ describe('Google Integrations settings', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Test Sites connection' }))
     expect(testGoogleConnection).toHaveBeenCalledWith('sites', getGoogleAccount(), googleSettings(getGoogleAccount()))
     expect(await within(screen.getByRole('region', { name: 'Sites integration' })).findByText('API verified.')).toBeInTheDocument()
+  })
+  it('loads real service results in the app and respects disabled pages', async () => {
+    render(<MemoryRouter><IntegrationsSettingsPage /></MemoryRouter>)
+    await userEvent.click(screen.getByRole('button', { name: 'Use Gmail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Load recent items' }))
+    expect(runWorkspaceAction).toHaveBeenCalledWith('gmail', 'load', expect.any(Object), undefined, 'integrations')
+    expect(await screen.findByText('Tender reminder')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Choose pages for Gmail' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Integrations' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Load recent items' })).toBeDisabled())
+  })
+  it('opens a send-email form and clears private results on account changes', async () => {
+    render(<MemoryRouter><IntegrationsSettingsPage /></MemoryRouter>)
+    await userEvent.click(screen.getByRole('button', { name: 'Use Gmail' }))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Gmail action' }), 'create')
+    await userEvent.type(screen.getByLabelText('To'), 'user@amnex.com')
+    await userEvent.type(screen.getByLabelText('Subject'), 'Bid update')
+    await userEvent.type(screen.getByLabelText('Message'), 'New deadline')
+    await userEvent.click(screen.getByRole('button', { name: 'Send email' }))
+    expect(runWorkspaceAction).toHaveBeenCalledWith('gmail', 'create', expect.objectContaining({ to: 'user@amnex.com', title: 'Bid update', text: 'New deadline' }), undefined, 'integrations')
+    expect(await screen.findByText('Tender reminder')).toBeInTheDocument()
+    setGoogleAccount(null)
+    await waitFor(() => expect(screen.queryByText('Tender reminder')).not.toBeInTheDocument())
+  })
+  it('embeds the selected map address without redirecting or sending an OAuth token', async () => {
+    render(<MemoryRouter><IntegrationsSettingsPage /></MemoryRouter>)
+    await userEvent.click(screen.getByRole('button', { name: 'Use Maps' }))
+    await userEvent.type(screen.getByLabelText('Maps Embed API key'), 'restricted-browser-key')
+    await userEvent.type(screen.getByLabelText('Address'), 'New Delhi, India')
+    await userEvent.click(screen.getByRole('button', { name: 'Show map' }))
+    const frame = screen.getByTitle('Google Maps address preview')
+    expect(frame).toHaveAttribute('src', 'https://www.google.com/maps/embed/v1/place?key=restricted-browser-key&q=New+Delhi%2C+India')
+    expect(runWorkspaceAction).not.toHaveBeenCalled()
   })
 })
