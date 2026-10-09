@@ -4,17 +4,21 @@ import { verifyFirebaseToken, isAllowListed, isAmnexAccount, type AuthenticatedU
 import { rbacMode } from './auth/rbac/mode.js'
 import { evaluateCall } from './auth/rbac/guard.js'
 import { RbacDenial } from './auth/rbac/denial.js'
+import { productionSecurity } from './security/config.js'
+import { userOperationBudget } from './security/operationLimit.js'
+import { beginSecurityAudit, finishSecurityAudit } from './security/audit.js'
 
 export interface Context {
   authHeader?: string
   user?: AuthenticatedUser
+  verifiedIdentity?: Promise<AuthenticatedUser>
 }
 
 /** Exported for testing. An RBAC denial is flagged (`data.rbacDenied`) so the client can show a normal "no
  *  permission" message instead of the "sign in with your @amnex.com account" dialog every FORBIDDEN used to trigger. */
 export function formatError({ shape, error }: { shape: any; error: TRPCError }) {
   if (error.code === 'INTERNAL_SERVER_ERROR') {
-    return { ...shape, message: 'Internal server error' }
+    return { ...shape, message: 'Internal server error', data: { ...shape.data, stack: undefined } }
   }
   if (error.cause instanceof RbacDenial) {
     return { ...shape, data: { ...shape.data, rbacDenied: true } }
@@ -24,7 +28,22 @@ export function formatError({ shape, error }: { shape: any; error: TRPCError }) 
 
 export const t = initTRPC.context<Context>().create({ errorFormatter: formatError })
 export const router = t.router
-export const publicProcedure = t.procedure
+export const publicProcedure = t.procedure.use(async ({ ctx, path, type, next }) => {
+  if (!productionSecurity() || path === 'health.check') return next()
+  // tRPC shares this request context across its batch: verify revocation once per HTTP request.
+  const user = await (ctx.verifiedIdentity ??= verifyFirebaseToken(ctx.authHeader))
+  if (!isAmnexAccount(user.email)) throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
+  if (type === 'mutation' && /^(credentialPassphrases\.|access\.)/.test(path) && (!user.authTime || Date.now() / 1000 - user.authTime > 900)) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in again before changing credentials or permissions.' })
+  if (!userOperationBudget.consume(user.uid)) throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'Too many operations. Retry in a few minutes.' })
+  if (type === 'mutation') assertNotReadOnly()
+  const sensitive = type === 'mutation' || path === 'tenderWebsites.list' || path === 'credentialPassphrases.list'
+  const auditId = sensitive ? await beginSecurityAudit(user.uid, user.email, path) : null
+  try {
+    const result = await next({ ctx: { ...ctx, user } })
+    if (auditId) await finishSecurityAudit(auditId, result.ok)
+    return result
+  } catch (cause) { if (auditId) await finishSecurityAudit(auditId, false); throw cause }
+})
 
 /** Incident kill switch (decision doc §5) — checked unconditionally, ahead
  *  of every other gate, regardless of whether AUTH_ENFORCEMENT_ENABLED
@@ -37,7 +56,7 @@ function assertNotReadOnly() {
 }
 
 function authEnforced(): boolean {
-  return process.env.AUTH_ENFORCEMENT_ENABLED === 'true'
+  return productionSecurity() || process.env.AUTH_ENFORCEMENT_ENABLED === 'true'
 }
 
 /** RBAC (docs/superpowers/specs/2026-10-06-rbac-design.md). `off` (the default, and always when auth is not
@@ -73,7 +92,7 @@ export const protectedProcedure = publicProcedure
     if (!authEnforced()) {
       return next({ ctx })
     }
-    const user = await verifyFirebaseToken(ctx.authHeader)
+    const user = ctx.user ?? await verifyFirebaseToken(ctx.authHeader)
     if (!isAmnexAccount(user.email)) {
       throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
     }
@@ -82,7 +101,7 @@ export const protectedProcedure = publicProcedure
   .use(rbacGate)
 
 function readAuthEnforced(): boolean {
-  return process.env.READ_AUTH_ENFORCEMENT_ENABLED === 'true'
+  return productionSecurity() || process.env.READ_AUTH_ENFORCEMENT_ENABLED === 'true'
 }
 
 /** Staged read-protection boundary (2026-09-15 public-read security audit,
@@ -105,7 +124,7 @@ export const protectedReadProcedure = publicProcedure
     if (!readAuthEnforced()) {
       return next({ ctx })
     }
-    const user = await verifyFirebaseToken(ctx.authHeader)
+    const user = ctx.user ?? await verifyFirebaseToken(ctx.authHeader)
     if (!isAmnexAccount(user.email)) {
       throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
     }

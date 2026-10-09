@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_GOOGLE_INTEGRATIONS } from '@goms/domain'
-import { authorizeGoogle, testGoogleConnection } from './googleClient'
+import { authorizeGoogle, googleApiRequest, testGoogleConnection } from './googleClient'
 import { getGoogleSession, setGoogleAccount } from './session'
 const account = { uid: 'user-a', email: 'a@amnex.com', googleId: 'google-a' }
 const clientId = '123.apps.googleusercontent.com'
@@ -47,5 +47,9 @@ describe('Google account-bound authorization', () => {
     expect(fetchMock).not.toHaveBeenCalled()
     await expect(testGoogleConnection('notebooklm', account, DEFAULT_GOOGLE_INTEGRATIONS)).rejects.toThrow('NotebookLM Enterprise')
     await expect(testGoogleConnection('translate', account, DEFAULT_GOOGLE_INTEGRATIONS)).rejects.toThrow('Cloud Translation')
+  })
+  it('rejects token exfiltration to non-Google and insecure endpoints before making a request', async () => {
+    for (const url of ['https://googleapis.com.evil.example/read', 'http://www.googleapis.com/read', 'https://user:pass@www.googleapis.com/read']) await expect(googleApiRequest(url, 'secret')).rejects.toThrow('approved Google API')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

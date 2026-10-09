@@ -1,4 +1,4 @@
-import { getGoogleSession, invalidateGoogleSession } from '@/features/integrations/session'
+import { getGoogleSession, invalidateGoogleSession, getGoogleAccount, assertGoogleAccount } from '@/features/integrations/session'
 
 export const FOLDER_MIME = 'application/vnd.google-apps.folder'
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
@@ -34,6 +34,7 @@ interface GoogleIdentity {
 
 let identityPromise: Promise<GoogleIdentity> | undefined
 const sessions = new Map<string, DriveSession>()
+const pendingConnections = new Set<string>()
 const disconnectedSharedTokens = new Map<string, string>()
 function notifySession() { if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') window.dispatchEvent(new Event('goms:dms-session-changed')) }
 const identity = () => (window as Window & { google?: GoogleIdentity }).google
@@ -67,6 +68,7 @@ export function loadGoogleIdentity(): Promise<GoogleIdentity> {
 }
 
 export function getDriveSession(connectionId = 'default'): DriveSession | null {
+  if (pendingConnections.has(connectionId)) return null
   let session = sessions.get(connectionId)
   if (session && session.expiresAt <= Date.now()) { sessions.delete(connectionId); session = undefined }
   if (session) return session
@@ -77,20 +79,26 @@ export function getDriveSession(connectionId = 'default'): DriveSession | null {
 export function disconnectDrive(connectionId = 'default'): void {
   const shared = getGoogleSession([DRIVE_SCOPE])
   if (shared) disconnectedSharedTokens.set(connectionId, shared.accessToken)
-  sessions.delete(connectionId); notifySession()
+  sessions.delete(connectionId); pendingConnections.delete(connectionId); notifySession()
 }
+export function disconnectAllDrive(): void { sessions.clear(); pendingConnections.clear(); disconnectedSharedTokens.clear(); notifySession() }
 
 /** Called synchronously from a click, after loading GIS, to preserve popup permission. */
 export function connectDrive(clientId: string, connectionId = 'default'): Promise<DriveSession> {
+  const account = getGoogleAccount()
   const google = identity()
   if (!google) return Promise.reject(new Error('Google sign-in is still loading. Try again.'))
   if (!clientId) return Promise.reject(new Error('Save a Google OAuth client ID before connecting.'))
   return new Promise((resolve, reject) => {
     const client = google.accounts.oauth2.initTokenClient({
       client_id: clientId,
-      scope: DRIVE_SCOPE,
+      scope: account ? `openid email ${DRIVE_SCOPE}` : DRIVE_SCOPE,
+      ...(account ? { login_hint: account.email, hd: 'amnex.com', include_granted_scopes: true } : {}),
       error_callback: (error) => reject(new Error(error.type === 'popup_closed' ? 'Google sign-in was cancelled.' : 'Allow the Google sign-in popup and try again.')),
       callback: (response) => {
+        if (account) {
+          try { assertGoogleAccount(account) } catch (cause) { reject(cause); return }
+        }
         if (response.error || !response.access_token) {
           reject(new Error(response.error_description ?? 'Google Drive access was not granted.'))
           return
@@ -100,18 +108,30 @@ export function connectDrive(clientId: string, connectionId = 'default'): Promis
           return
         }
         const session = { accessToken: response.access_token, expiresAt: Date.now() + (response.expires_in ?? 3600) * 1000, email: '' }
+        pendingConnections.add(connectionId)
         sessions.set(connectionId, session)
-        driveRequest<{ user: { emailAddress: string } }>('/about?fields=user(emailAddress)', undefined, connectionId)
-          .then((result) => {
+        fetch(`${API}/about?fields=user(emailAddress)`, { headers: new Headers({ Authorization: `Bearer ${session.accessToken}` }) })
+          .then(response => checkResponse(response, connectionId, session.accessToken))
+          .then(response => response.json() as Promise<{ user: { emailAddress: string } }>)
+          .then(async (result) => {
+            if (account) {
+              assertGoogleAccount(account)
+              if (result.user.emailAddress.toLowerCase() !== account.email) throw new Error('Use the Amnex Google account signed in to GOMS.')
+              const identityResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: new Headers({ Authorization: `Bearer ${session.accessToken}` }) })
+              const identity = await (await checkResponse(identityResponse, connectionId, session.accessToken)).json()
+              assertGoogleAccount(account)
+              if (!identity.email_verified || identity.hd !== 'amnex.com' || identity.sub !== account.googleId || identity.email?.toLowerCase() !== account.email) throw new Error('Use the Amnex Google account signed in to GOMS.')
+            }
             if (sessions.get(connectionId) !== session) throw new Error('The connection was closed. Try again.')
             session.email = result.user.emailAddress
+            pendingConnections.delete(connectionId)
             notifySession()
             resolve({ ...session })
           })
           .catch((error) => { disconnectDrive(connectionId); reject(error) })
       },
     })
-    client.requestAccessToken({ prompt: 'select_account' })
+    client.requestAccessToken({ prompt: account ? '' : 'select_account' })
   })
 }
 

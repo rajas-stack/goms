@@ -1,9 +1,11 @@
 import { TRPCError } from '@trpc/server'
 import { getFirebaseAuth } from './firebaseAdmin.js'
+import { productionSecurity } from '../security/config.js'
 
 export interface AuthenticatedUser {
   uid: string
   email: string
+  authTime?: number
 }
 
 /** Decodes and validates a Firebase ID token from an incoming Authorization
@@ -17,18 +19,21 @@ export async function verifyFirebaseToken(authHeader: string | undefined): Promi
     throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in to continue.' })
   }
 
-  let decoded: { uid: string; email?: string; email_verified?: boolean }
+  let decoded: { uid: string; email?: string; email_verified?: boolean; auth_time?: number; firebase?: { sign_in_provider?: string } }
   try {
-    decoded = await getFirebaseAuth().verifyIdToken(idToken)
+    decoded = await getFirebaseAuth().verifyIdToken(idToken, productionSecurity())
   } catch {
+    console.warn(JSON.stringify({ event: 'security.authentication_failed' }))
     throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Your session has expired. Please sign in again.' })
   }
 
   if (!decoded.email || !decoded.email_verified) {
     throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in with a verified Google account.' })
   }
+  if (productionSecurity() && decoded.firebase?.sign_in_provider !== 'google.com') throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in with your Google account.' })
+  if (productionSecurity() && (!decoded.auth_time || Date.now() / 1000 - decoded.auth_time > 43200 || decoded.auth_time > Date.now() / 1000 + 300)) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in again to renew your session.' })
 
-  return { uid: decoded.uid, email: decoded.email }
+  return { uid: decoded.uid, email: decoded.email, ...(productionSecurity() ? { authTime: decoded.auth_time } : {}) }
 }
 
 export function parseAllowList(raw: string | undefined): string[] {

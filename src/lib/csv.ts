@@ -4,7 +4,10 @@ import { downloadFile } from './file-export'
  *  or newline), doubling any embedded quotes — the escaping half of the
  *  `splitCsvLine` reader in the import dialog. */
 function csvCell(value: string): string {
-  return /[",\r\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
+  // Spreadsheet programs can execute formulas even inside quoted CSV fields.
+  const dangerous = /^[\s\uFEFF]*[=+@-]/.test(value) && !/^\s*-\d+(?:\.\d+)?\s*$/.test(value)
+  const safe = dangerous || /^[\t\r\n]/.test(value) ? `'${value}` : value
+  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
 export function toCsv(rows: string[][]): string {

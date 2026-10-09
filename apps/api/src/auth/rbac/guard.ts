@@ -47,5 +47,6 @@ export async function evaluateCall(args: {
     logShadow({ path, email: user.email, module: denial.module, action: denial.action, atom: denial.atom, message: denial.message })
     return { entry, user }
   }
+  console.warn(JSON.stringify({ event: 'security.permission_denied', path, email: user.email, module: denial.module, action: denial.action }))
   throw new TRPCError({ code: 'FORBIDDEN', message: denial.message, cause: new RbacDenial(denial.message, denial) })
 }

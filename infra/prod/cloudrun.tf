@@ -38,6 +38,13 @@ resource "google_project_iam_member" "runtime_cloudsql" {
   member  = "serviceAccount:${google_service_account.goms_api_runtime.email}"
 }
 
+# Required for Firebase checkRevoked: read disabled-user and revocation status.
+resource "google_project_iam_member" "runtime_firebase_auth_reader" {
+  project = var.project_id
+  role    = "roles/firebaseauth.viewer"
+  member  = "serviceAccount:${google_service_account.goms_api_runtime.email}"
+}
+
 resource "google_secret_manager_secret_iam_member" "runtime_secret_access" {
   secret_id = google_secret_manager_secret.goms_db_url.id
   role      = "roles/secretmanager.secretAccessor"
@@ -108,7 +115,7 @@ resource "google_cloud_run_v2_service" "goms_api" {
     }
 
     containers {
-      image = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:0e64dfe455e1aceeb1cd2a3cb845049e0c0e5b52"
+      image = var.api_image
       # This service is only ever reached through Firebase Hosting's
       # `/api/**` rewrite (firebase.json), which arrives from a Google
       # front-end address and carries CDN addresses in X-Forwarded-For. Without
@@ -206,13 +213,19 @@ resource "google_cloud_run_v2_service" "goms_api" {
         name  = "READ_AUTH_ENFORCEMENT_ENABLED"
         value = "true"
       }
-      # RBAC (docs/superpowers/specs/2026-10-06-rbac-design.md). "off" is an exact no-op; "shadow" logs would-be
-      # denials ({"event":"rbac.would_deny"}) without blocking; "enforce" applies them. Only meaningful while
-      # AUTH_ENFORCEMENT_ENABLED is "true". Flip per environment, dev first; the prod flip needs its own approval.
-      # ADMIN_ALLOWED_EMAILS (the two System Admin accounts) must be set for the environment before this leaves "off".
+      # Security hardening: production refuses permissive authentication/RBAC flags.
+      # Provision System Admin access and the Firebase runtime permissions before deploying.
       env {
         name  = "RBAC_MODE"
-        value = "off"
+        value = "enforce"
+      }
+      env {
+        name  = "ADMIN_ALLOWED_EMAILS"
+        value = join(",", var.admin_allowed_emails)
+      }
+      env {
+        name  = "CORS_ALLOWED_ORIGINS"
+        value = "https://goms-prod.web.app,https://goms-prod.firebaseapp.com"
       }
       env {
         name  = "ATTACHMENTS_BUCKET"
@@ -247,7 +260,7 @@ resource "google_cloud_run_v2_job" "goms_migrate" {
         # live via `gcloud run jobs describe`) so a migration run always
         # reflects the exact same code as the service it's migrating the
         # schema for.
-        image   = "asia-south1-docker.pkg.dev/${var.project_id}/goms/goms-api:7c5ade7797a82b7a9610b1f7e7152d24dc4e423c"
+        image   = var.api_image
         command = ["node"]
         args    = ["node_modules/node-pg-migrate/bin/node-pg-migrate.js", "up"]
         env {

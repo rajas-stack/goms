@@ -45,7 +45,7 @@ function duplicateName(name: string): TRPCError {
 
 async function audit(entityId: string, action: string, value: string, changedBy?: string | null) {
   await writeAuditLog(pool, { entityType: 'tenderWebsite', entityId, field: 'website', oldValue: '', newValue: value, reason: '', action, changedBy })
-    .catch(() => undefined) // best-effort, never blocks the change itself
+    .catch(() => { console.error(JSON.stringify({ event: 'security.portal_audit_failed', entityId, action })) })
 }
 
 export const tenderWebsitesRouter = router({
@@ -109,7 +109,12 @@ export const tenderWebsitesRouter = router({
   }),
 
   delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
-    await pool.query('DELETE FROM tender_websites WHERE id=$1', [input.id])
+    const result = await pool.query('DELETE FROM tender_websites WHERE id=$1 AND NOT editing_locked RETURNING id', [input.id])
+    if (!result.rows[0]) {
+      const current = await pool.query('SELECT editing_locked FROM tender_websites WHERE id=$1', [input.id])
+      if (current.rows[0]?.editing_locked) throw new TRPCError({ code: 'CONFLICT', message: 'Unlock editing before deleting this website.' })
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'That website no longer exists.' })
+    }
     await audit(input.id, 'delete', '', ctx.user?.email)
   }),
 

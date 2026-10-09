@@ -5,6 +5,8 @@ import type { TRPCError } from '@trpc/server'
 import { fastifyTRPCPlugin, type CreateFastifyContextOptions } from '@trpc/server/adapters/fastify'
 import { appRouter } from './index.js'
 import { resolveClientIp, resolveProxyTrust } from './client-ip.js'
+import { assertSecurityConfiguration, productionSecurity } from './security/config.js'
+import { OperationBudget } from './security/operationLimit.js'
 
 export interface BuildAppOptions {
   // Override for tests only — production always gets the defaults below.
@@ -14,9 +16,9 @@ export interface BuildAppOptions {
   trustProxy?: string
 }
 
-// Explicit allow-list only — never `origin: true`/`*`, since every procedure
-// here is a `publicProcedure` with no auth check of its own (see the
-// 2026-08-26 cutover readiness report §3.1/§4). `http://localhost:5173` is
+// Explicit allow-list only — never `origin: true`/`*`. Authentication and
+// authorization remain mandatory independently of browser CORS checks.
+// `http://localhost:5173` is
 // Vite's default dev-server origin, covering local opt-in remote-mode testing
 // (VITE_API_BASE_URL set via an untracked .env.local — never the default).
 // CORS_ALLOWED_ORIGINS adds real deployed frontend origins (comma-separated)
@@ -24,6 +26,7 @@ export interface BuildAppOptions {
 const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173']
 
 export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInstance> {
+  assertSecurityConfiguration()
   // Fastify's find-my-way router defaults maxParamLength to 100 characters.
   // tRPC's fastify adapter matches the batched procedure-name list (e.g.
   // "hierarchy.listStates,hierarchy.listOrgRoots,...") as a single route param,
@@ -51,8 +54,15 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   const proxyTrust = resolveProxyTrust(opts.trustProxy ?? process.env.TRUST_PROXY)
 
   const app = Fastify({
+    logger: {
+      redact: ['req.headers.authorization', 'req.headers.cookie', 'res.headers.set-cookie'], level: 'info',
+      serializers: { req: request => ({ method: request.method, path: request.url?.split('?')[0] }) },
+    },
     routerOptions: { maxParamLength: 2000 },
     bodyLimit: 8 * 1024 * 1024,
+    requestTimeout: 60000,
+    connectionTimeout: 10000,
+    keepAliveTimeout: 5000,
     trustProxy: proxyTrust.trustProxy,
   })
 
@@ -60,7 +70,27 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     .split(',')
     .map((origin) => origin.trim())
     .filter(Boolean)
-  const allowedOrigins = [...new Set([...DEFAULT_ALLOWED_ORIGINS, ...configuredOrigins])]
+  const allowedOrigins = [...new Set([...(productionSecurity() ? [] : DEFAULT_ALLOWED_ORIGINS), ...configuredOrigins])]
+
+  const operations = new OperationBudget()
+  app.addHook('onRequest', async (request, reply) => {
+    reply.header('X-Content-Type-Options', 'nosniff').header('X-Frame-Options', 'DENY')
+      .header('Referrer-Policy', 'no-referrer').header('Cache-Control', 'private, no-store')
+      .header('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; base-uri 'none'")
+      .header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    if (productionSecurity()) reply.header('Strict-Transport-Security', 'max-age=31536000')
+    const origin = request.headers.origin
+    if (productionSecurity() && origin && !allowedOrigins.includes(origin)) return reply.code(403).send({ error: 'Origin not allowed' })
+    if (request.method === 'OPTIONS') return
+    const pathname = request.url.split('?')[0]
+    if (!pathname.startsWith('/api/trpc/')) return
+    let procedures: string[]
+    try { procedures = decodeURIComponent(pathname.slice('/api/trpc/'.length)).split(',') }
+    catch { return reply.code(400).send({ error: 'Invalid procedure path' }) }
+    if (procedures.length > 25) return reply.code(413).send({ error: 'A batch may contain at most 25 operations.' })
+    const ip = resolveClientIp(request.headers, request.ip, proxyTrust)
+    if (!operations.consume(ip, procedures.length)) return reply.header('Retry-After', '300').code(429).send({ error: 'Too many operations' })
+  })
 
   await app.register(cors, { origin: allowedOrigins })
 
@@ -94,12 +124,10 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     trpcOptions: {
       router: appRouter,
       createContext: ({ req }: CreateFastifyContextOptions) => ({ authHeader: req.headers.authorization }),
-      // Sanitized for the client by trpc.ts's errorFormatter — logged here
-      // in full (including the raw pg error) so an on-call engineer can
-      // still diagnose the real cause from server logs.
+      // Do not put raw database errors or request secrets into logs.
       onError({ path, error }: { path?: string; error: TRPCError }) {
         if (error.code === 'INTERNAL_SERVER_ERROR') {
-          app.log.error({ path, err: error.cause ?? error }, 'unhandled tRPC error')
+          app.log.error({ path, code: error.code }, 'unhandled tRPC error')
         }
       },
     },

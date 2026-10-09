@@ -14,7 +14,7 @@ async function keyFor(passphrase: string, salt: Uint8Array<ArrayBuffer>) {
 }
 
 export async function lockCredentials(credentials: TenderCredentials, passphrase: string): Promise<TenderCredentialLock> {
-  if (passphrase.length < 8) throw new Error('Use at least 8 characters for the credential passphrase.')
+  if (passphrase.length < 12 || passphrase.length > 1024) throw new Error('Use 12 to 1024 characters for the credential passphrase.')
   if (credentials.userId.length > 200 || credentials.password.length > 2000) throw new Error('The User ID or password is too long.')
   const salt = crypto.getRandomValues(new Uint8Array(16))
   const iv = crypto.getRandomValues(new Uint8Array(12))

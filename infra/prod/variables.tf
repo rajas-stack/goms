@@ -21,3 +21,19 @@ variable "api_hostname" {
   description = "Hostname the uptime check probes (no scheme, no path) — goms-api's *.run.app host once the prod Cloud Run service exists, or the prod Firebase Hosting domain once plan §6 ships. No default — neither exists yet."
   type        = string
 }
+variable "admin_allowed_emails" {
+  description = "Verified Amnex Google identities authorized to administer GOMS. Required before enforcing RBAC."
+  type        = list(string)
+  validation {
+    condition     = length(var.admin_allowed_emails) > 0 && alltrue([for email in var.admin_allowed_emails : endswith(lower(email), "@amnex.com")])
+    error_message = "Provide at least one administrator with an @amnex.com Google identity."
+  }
+}
+variable "api_image" {
+  description = "Validated security release image, pinned by immutable Artifact Registry digest."
+  type        = string
+  validation {
+    condition     = can(regex("^asia-south1-docker[.]pkg[.]dev/[^/]+/goms/goms-api@sha256:[a-f0-9]{64}$", var.api_image))
+    error_message = "Provide the tested goms-api image with an immutable sha256 digest."
+  }
+}

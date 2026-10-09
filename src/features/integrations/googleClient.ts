@@ -6,6 +6,8 @@ import { googleServiceEnabled, googleSettings } from './settings'
 
 const IDENTITY_SCOPES = ['openid', 'email']
 export async function googleApiRequest<T>(url: string, token: string, project?: string): Promise<T> {
+  const destination = new URL(url)
+  if (destination.protocol !== 'https:' || !destination.hostname.endsWith('.googleapis.com') || destination.username || destination.password) throw new Error('Google tokens may only be sent to approved Google API endpoints.')
   const response = await fetch(url, { headers: { Authorization: `Bearer ${token}`, ...(project ? { 'x-goog-user-project': project } : {}) }, signal: AbortSignal.timeout(15_000) })
   if (!response.ok) {
     const body = await response.json().catch(() => null)

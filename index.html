@@ -6,19 +6,7 @@
     <meta name="theme-color" content="#FAFAF7" />
     <!-- Paint the saved day/night theme before first paint so a reload never
          flashes light. Mirrors src/lib/theme.ts (key + resolution rules). -->
-    <script>
-      (function () {
-        var pref = 'system'
-        try {
-          var s = localStorage.getItem('goms.theme')
-          if (s === 'light' || s === 'dark' || s === 'system') pref = s
-        } catch (e) {}
-        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
-        if (dark) document.documentElement.classList.add('dark')
-        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
-        document.querySelector('meta[name="theme-color"]').setAttribute('content', dark ? '#000000' : '#FAFAF7')
-      })()
-    </script>
+    <script src="/theme-init.js"></script>
     <title>GORMS — Account Mapping</title>
     <!-- Inline SVG data URI rather than a static file — guarantees this
          exact icon renders for this project and never collides with a

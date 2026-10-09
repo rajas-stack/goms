@@ -9,4 +9,6 @@ gitlab_project_path  = "<GITLAB_PROJECT>"      # same value as infra/dev — see
 # .example file; do not apply with an empty list for real, since that pages
 # nobody. Fill in real channel resource IDs once the recipient is decided.
 notification_channel_ids = []
+admin_allowed_emails = ["<ADMIN_EMAIL>@amnex.com"] # replace with an actual verified administrator
+api_image = "asia-south1-docker.pkg.dev/<GCP_PROJECT_ID_PROD>/goms/goms-api@sha256:<VALIDATED_IMAGE_DIGEST>"
 api_hostname              = "<GOMS_API_RUN_APP_HOST_OR_HOSTING_DOMAIN>" # no scheme/path — doesn't exist until the prod Cloud Run service (or Firebase Hosting domain) is stood up

@@ -1,9 +1,9 @@
-FROM node:20-slim AS build
+FROM node:22-slim AS build
 WORKDIR /app
 COPY . .
-RUN npm ci && npm --workspace apps/api run build
+RUN npm ci && npm --workspace apps/api run build && npm prune --omit=dev --ignore-scripts
 
-FROM node:20-slim
+FROM node:22-slim
 WORKDIR /app
 COPY --from=build /app/apps/api/dist ./dist
 COPY --from=build /app/apps/api/migrations ./migrations
@@ -14,4 +14,5 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages/domain/package.json ./packages/domain/package.json
 COPY --from=build /app/packages/domain/dist ./packages/domain/dist
 ENV NODE_ENV=production
+USER node
 CMD ["node", "dist/server.js"]
