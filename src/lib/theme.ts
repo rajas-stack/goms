@@ -13,7 +13,7 @@ const FADE_CLASS = 'theme-fade'
 const FADE_MS = 320
 const REVEAL_MS = 520
 /** Browser-chrome color (mobile address bar, Capacitor status bar) per theme. */
-const CHROME_COLOR: Record<ResolvedTheme, string> = { light: '#FAFAF7', dark: '#0A101C' }
+const CHROME_COLOR: Record<ResolvedTheme, string> = { light: '#FAFAF7', dark: '#000000' }
 
 const PREFERENCES: readonly ThemePreference[] = ['light', 'dark', 'system']
 
