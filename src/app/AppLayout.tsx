@@ -220,7 +220,8 @@ export function AppLayout() {
             : <ImportDialog open={importOpen} onClose={() => setImportOpen(false)} />}
           <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
           <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
-          {navExpanded && <GlobalFab />}
+          {/* The "+ Add Activity" FAB has no meaning on the access admin screens, and it overlaps their bottom rows. */}
+          {navExpanded && !location.pathname.startsWith('/admin/access') && <GlobalFab />}
         </Ctx.Provider>
       </ToastProvider>
     </SalesEditLockProvider>

@@ -39,7 +39,7 @@ export function AccessMatrix() {
   return (
     <div className="am-root h-full overflow-auto">
       <style>{STYLE}</style>
-      <div style={css('padding:28px 32px 110px;max-width:1080px;margin:0 auto')}>
+      <div style={css('padding:28px 32px 110px')}>
         <div style={css('display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:16px')}>
           <div style={css('flex:1;min-width:260px')}>
             <h1 style={css('margin:0;font-size:20px;font-weight:600')}>Role &amp; Access Management</h1>
