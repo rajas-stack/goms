@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, act, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { AuthPromptDialog } from './AuthPromptDialog'
-import { notifyAuthRequired } from '@/lib/authPrompt'
+import { notifyAuthRequired, setPendingAuthReason } from '@/lib/authPrompt'
+import { ShellUpdateRequiredError } from '@/lib/auth/errors'
+import { bootstrapNativeAuth } from '@/lib/auth/bootstrap'
 
 const { onAuthStateChanged, signInWithPopup } = vi.hoisted(() => ({
   onAuthStateChanged: vi.fn(),
@@ -10,6 +12,11 @@ const { onAuthStateChanged, signInWithPopup } = vi.hoisted(() => ({
 }))
 vi.mock('firebase/auth', () => ({ onAuthStateChanged, signInWithPopup, GoogleAuthProvider: class {} }))
 vi.mock('@/lib/firebaseAuth', () => ({ auth: {}, googleProvider: {} }))
+// The Android deep-link listener is faked so the test can deliver links; bootstrapNativeAuth and authPrompt are the real ones.
+const { deepLink } = vi.hoisted(() => ({ deepLink: { handler: null as null | ((r: { code?: string; error?: string }) => Promise<void>) } }))
+vi.mock('@/lib/auth/native', () => ({
+  listenForAuthDeepLinks: async (_scheme: string, h: (r: { code?: string; error?: string }) => Promise<void>) => { deepLink.handler = h },
+}))
 
 /** onAuthStateChanged is subscribed once on mount (`useEffect(..., [])`) and
  *  its callback is captured here so tests can simulate Firebase pushing a
@@ -113,6 +120,109 @@ describe('AuthPromptDialog', () => {
     expect(await screen.findByText(/sign-in failed/i)).toBeInTheDocument()
     // Still open — a failed sign-in must not silently dismiss the prompt.
     expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('an old Android shell (ShellUpdateRequiredError) is told to update the app, not shown the generic failure', async () => {
+    signInWithPopup.mockRejectedValue(new ShellUpdateRequiredError())
+    renderDialog()
+    act(() => notifyAuthRequired('unauthorized'))
+
+    await act(async () => {
+      screen.getByRole('button', { name: /sign in with google/i }).click()
+      await Promise.resolve()
+    })
+
+    expect(await screen.findByText("This version of the GOMS app can't sign you in. Update the app and try again.")).toBeInTheDocument()
+    expect(screen.queryByText(/sign-in failed/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('any other rejection still shows the generic text, and a later notification clears the previous error', async () => {
+    signInWithPopup.mockRejectedValue(new Error('network'))
+    renderDialog()
+    act(() => notifyAuthRequired('unauthorized'))
+
+    await act(async () => {
+      screen.getByRole('button', { name: /sign in with google/i }).click()
+      await Promise.resolve()
+    })
+
+    expect(await screen.findByText('Sign-in failed. Try again.')).toBeInTheDocument()
+    expect(screen.queryByText(/update the app/i)).not.toBeInTheDocument()
+    act(() => notifyAuthRequired('unauthorized'))
+    expect(screen.queryByText(/sign-in failed/i)).not.toBeInTheDocument()
+  })
+
+  describe('a reason raised before the dialog mounted (failed sign-in redirect)', () => {
+    it("shows the 'forbidden' prompt on mount, with no signed-in user and no blank email", async () => {
+      setPendingAuthReason('forbidden')
+      renderDialog()
+      expect(await screen.findByRole('dialog')).toBeInTheDocument()
+      expect(await screen.findByText(/isn't authorized/i)).toBeInTheDocument()
+      expect(screen.getByText(/@amnex\.com Google account/i)).toBeInTheDocument()
+      expect(screen.getByText(/sign in with a different one/i)).toBeInTheDocument()
+      // The signed-in sentence ("<email> is signed in, but ...") must NOT be rendered without a user...
+      expect(screen.queryByText(/is signed in/i)).not.toBeInTheDocument()
+    })
+
+    it("sibling: with a signed-in user the 'is signed in' sentence IS rendered (proves the negative above can match)", async () => {
+      onAuthStateChanged.mockImplementation((_auth, cb) => { cb({ email: 'someone@gmail.com' }); return () => {} })
+      setPendingAuthReason('forbidden')
+      renderDialog()
+      expect(await screen.findByText(/someone@gmail\.com is signed in/i)).toBeInTheDocument()
+      expect(screen.queryByText(/sign in with a different one/i)).not.toBeInTheDocument()
+    })
+
+    it("shows the 'sign in required' prompt for a pending 'unauthorized' reason", async () => {
+      setPendingAuthReason('unauthorized')
+      renderDialog()
+      expect(await screen.findByText(/sign in required/i)).toBeInTheDocument()
+      expect(screen.queryByText(/isn't authorized/i)).not.toBeInTheDocument()
+    })
+
+    it('shows a pending reason only once: a later mount starts closed', async () => {
+      setPendingAuthReason('forbidden')
+      const { unmount } = render(<QueryClientProvider client={new QueryClient()}><AuthPromptDialog /></QueryClientProvider>)
+      expect(await screen.findByRole('dialog')).toBeInTheDocument()
+      unmount()
+      renderDialog()
+      await Promise.resolve()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('Android deep-link failures reach an already-mounted dialog (R19, warm path)', () => {
+    async function mountThenBoot(redeem: () => Promise<void> = async () => {}) {
+      renderDialog() // the dialog subscribes ONCE, at mount - before any link arrives
+      await bootstrapNativeAuth({ redeem, init: async () => {}, trackHandoff: () => {}, isSignedIn: () => false }, 'com.gorms.app')
+    }
+
+    it('?error=domain shows the "isn\'t authorized" copy', async () => {
+      await mountThenBoot()
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      await act(async () => { await deepLink.handler!({ error: 'domain' }) })
+      expect(await screen.findByText(/isn't authorized/i)).toBeInTheDocument()
+      expect(screen.queryByText(/sign in required/i)).not.toBeInTheDocument()
+    })
+
+    it('sibling: ?error=state shows "sign in required" and NOT the "isn\'t authorized" copy (proves the negative above can match)', async () => {
+      await mountThenBoot()
+      await act(async () => { await deepLink.handler!({ error: 'state' }) })
+      expect(await screen.findByText(/sign in required/i)).toBeInTheDocument()
+      expect(screen.queryByText(/isn't authorized/i)).not.toBeInTheDocument()
+    })
+
+    it('a failed redeem shows "sign in required"', async () => {
+      await mountThenBoot(async () => { throw new Error('expired') })
+      await act(async () => { await deepLink.handler!({ code: 'Q'.repeat(43) }) })
+      expect(await screen.findByText(/sign in required/i)).toBeInTheDocument()
+    })
+
+    it('sibling: a successful redeem leaves the dialog closed', async () => {
+      await mountThenBoot()
+      await act(async () => { await deepLink.handler!({ code: 'Q'.repeat(43) }) })
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
   })
 
   describe('post-sign-in read recovery', () => {

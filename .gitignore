@@ -22,6 +22,7 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+!apps/api/.env.oauth.example
 
 # Firebase Hosting project alias — names a real GCP project id once goms-prod
 # exists; only .firebaserc.example (a placeholder) is committed.

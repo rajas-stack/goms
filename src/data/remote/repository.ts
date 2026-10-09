@@ -13,6 +13,7 @@ import type { BidSynopsis, BidSynopsisSection, SaveBidSynopsisInput } from '@gom
 import type { TenderWebsite, TenderWebsiteInput, TenderWebsiteKind } from '@goms/domain'
 import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
+import { authApi } from '@/lib/auth'
 import type { MyAccess } from '../../../apps/api/src/routers/auth'
 import { authPromptLink } from './authPromptLink'
 import type { AppRouter } from '../../../apps/api/src/index'
@@ -55,7 +56,7 @@ export class RemoteRepository implements Partial<Repository> {
   deleteTenderWebsite = async (id: string): Promise<void> => { await this.client.tenderWebsites.delete.mutate({ id }) }
   setTenderWebsiteEditingLock = (id: string, locked: boolean): Promise<TenderWebsite> => this.client.tenderWebsites.setEditingLock.mutate({ id, locked })
   private client = createTRPCClient<AppRouter>({
-    links: [authPromptLink, httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`, headers: getAuthHeaders })],
+    links: [authPromptLink, httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`, headers: getAuthHeaders, fetch: authApi.fetch })],
   })
 
   getMyAccess = (): Promise<MyAccess> => this.client.auth.me.query()

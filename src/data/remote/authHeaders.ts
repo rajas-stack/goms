@@ -1,4 +1,4 @@
-import { auth } from '@/lib/firebaseAuth'
+import { authApi } from '@/lib/auth'
 
 /** Attaches the current Firebase ID token, if any, to every request made by
  *  the main app's tRPC client (repository.ts) — the single choke point
@@ -8,11 +8,4 @@ import { auth } from '@/lib/firebaseAuth'
  *  Authorization header, and the request proceeds unauthenticated — fine
  *  for a read, and the server's 401/403 on a mutation is what
  *  src/data/remote/authPromptLink.ts (Task 9) reacts to. */
-export async function getAuthHeaders(): Promise<Record<string, string>> {
-  try {
-    const token = await auth?.currentUser?.getIdToken()
-    return token ? { Authorization: `Bearer ${token}` } : {}
-  } catch {
-    return {}
-  }
-}
+export const getAuthHeaders = (): Promise<Record<string, string>> => authApi.getAuthorizationHeaders()

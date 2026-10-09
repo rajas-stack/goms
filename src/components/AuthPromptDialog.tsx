@@ -1,24 +1,18 @@
 import { useEffect, useState } from 'react'
-import { onAuthStateChanged, signInWithPopup, type User } from 'firebase/auth'
 import { useQueryClient } from '@tanstack/react-query'
-import { auth, googleProvider } from '@/lib/firebaseAuth'
+import { authApi, useAuthUser } from '@/lib/auth'
+import { ShellUpdateRequiredError } from '@/lib/auth/errors'
 import { subscribeAuthRequired, type AuthPromptReason } from '@/lib/authPrompt'
 import { Button } from '@/components/ui/Button'
 
 export function AuthPromptDialog() {
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState<AuthPromptReason>('unauthorized')
-  const [user, setUser] = useState<User | null>(null)
-  const [signInError, setSignInError] = useState(false)
+  const { user } = useAuthUser()
+  const [signInError, setSignInError] = useState<unknown>(null)
   const queryClient = useQueryClient()
 
-  // `auth` is null when Firebase isn't configured for this build (see
-  // firebaseAuth.ts) — nothing to subscribe to in that case.
-  useEffect(() => {
-    if (!auth) return
-    return onAuthStateChanged(auth, setUser)
-  }, [])
-  useEffect(() => subscribeAuthRequired((r) => { setReason(r); setOpen(true); setSignInError(false) }), [])
+  useEffect(() => subscribeAuthRequired((r) => { setReason(r); setOpen(true); setSignInError(null) }), [])
 
   // Recovers reads that failed while signed out (or signed in with the
   // wrong account) once a real identity shows up via the SAME
@@ -48,9 +42,10 @@ export function AuthPromptDialog() {
   if (!open) return null
 
   function handleSignIn() {
-    if (!auth) return
-    setSignInError(false)
-    signInWithPopup(auth, googleProvider).catch(() => setSignInError(true))
+    if (!authApi.configured) return
+    setSignInError(null)
+    // `?? new Error()` keeps a rejection with no reason (undefined/null) counted as a failure.
+    authApi.signIn().catch((e: unknown) => setSignInError(e ?? new Error('sign-in failed')))
   }
 
   return (
@@ -60,7 +55,9 @@ export function AuthPromptDialog() {
           <>
             <p className="text-sm font-medium text-ink">Your account isn't authorized</p>
             <p className="text-sm text-muted">
-              {user?.email} is signed in, but GOMS requires a verified @amnex.com Google account for this action.
+              {user?.email
+                ? `${user.email} is signed in, but GOMS requires a verified @amnex.com Google account for this action.`
+                : "That Google account isn't an @amnex.com account. GOMS needs a verified @amnex.com Google account for this action — sign in with a different one."}
             </p>
           </>
         ) : (
@@ -71,15 +68,19 @@ export function AuthPromptDialog() {
             </p>
           </>
         )}
-        {!auth && (
+        {!authApi.configured && (
           <p className="text-xs text-muted">Sign-in is not configured for this deployment.</p>
         )}
-        {signInError && (
-          <p className="text-xs text-red-600">Sign-in failed. Try again.</p>
+        {signInError !== null && (
+          <p className="text-xs text-red-600">
+            {signInError instanceof ShellUpdateRequiredError
+              ? "This version of the GOMS app can't sign you in. Update the app and try again."
+              : 'Sign-in failed. Try again.'}
+          </p>
         )}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="primary" disabled={!auth} onClick={handleSignIn}>Sign in with Google</Button>
+          <Button variant="primary" disabled={!authApi.configured} onClick={handleSignIn}>Sign in with Google</Button>
         </div>
       </div>
     </div>

@@ -1,37 +1,39 @@
-import { useEffect, useState } from 'react'
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth'
-import { auth } from '@/lib/firebaseAuth'
-import { notifyAuthRequired } from '@/lib/authPrompt'
+import { useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { authApi, useAuthUser } from '@/lib/auth'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { OptionsMenu } from '@/components/theme/OptionsMenu'
 
-/** Persistent sign-in indicator, visible on every screen (TopBar) — not just
- *  reactively when a mutation gets rejected (AuthPromptDialog). Signing in
- *  reuses that same shared dialog via notifyAuthRequired rather than calling
- *  signInWithPopup itself, so there's one sign-in flow/error path, not two. */
+/** Persistent sign-in indicator, visible on every screen (TopBar). Signing in
+ *  sends the user to the full-page /login screen (returning here afterwards),
+ *  and signing out returns them there so no internal page stays on screen;
+ *  AuthPromptDialog remains the inline prompt for a session that expires
+ *  mid-edit, so that flow doesn't lose the user's place. */
 export function AuthStatus() {
-  const [user, setUser] = useState<User | null>(null)
+  const { user } = useAuthUser()
   const [confirmSignOut, setConfirmSignOut] = useState(false)
+  const navigate = useNavigate()
+  const location = useLocation()
 
-  useEffect(() => {
-    if (!auth) return
-    return onAuthStateChanged(auth, setUser)
-  }, [])
-
-  // Settings remain accessible when Firebase Auth is not configured.
-  // Capture Auth locally so the sign-out callback keeps the narrowed type.
-  if (!auth) return <OptionsMenu />
-  const currentAuth = auth
+  // Settings remain accessible when sign-in is not configured for this build.
+  if (!authApi.configured) return <OptionsMenu />
 
   if (!user) {
-    return <OptionsMenu onSignIn={() => notifyAuthRequired('unauthorized')} />
+    return (
+      <OptionsMenu
+        onSignIn={() => {
+          const here = location.pathname + location.search + location.hash
+          navigate(`/login?next=${encodeURIComponent(here)}`)
+        }}
+      />
+    )
   }
 
   return (
     <>
       <OptionsMenu
-        profile={{ name: user.displayName || user.email || 'Signed in', photoUrl: user.photoURL }}
+        profile={{ name: user.displayName || user.email || 'Signed in', photoUrl: user.photoUrl }}
         onSignOut={() => setConfirmSignOut(true)}
       />
 
@@ -47,7 +49,11 @@ export function AuthStatus() {
               variant="danger"
               onClick={() => {
                 setConfirmSignOut(false)
-                void signOut(currentAuth)
+                // Navigate only once sign-out has completed: arriving at /login
+                // while still signed in would bounce straight back to home.
+                // A failed sign-out leaves the user signed in and on the page —
+                // the profile menu still shows them, so nothing more to report.
+                authApi.signOut().then(() => navigate('/login', { replace: true }), () => {})
               }}
             >
               Sign out

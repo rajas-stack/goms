@@ -3,6 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // `adminImportRoutes` (router.tsx) is read from `import.meta.env.VITE_ADMIN_IMPORT_ENABLED`
 // at module-load time, so switching modes needs a fresh module graph — see
 // the same pattern in TopBar.test.tsx.
+describe('login route', () => {
+  it('registers /login as its own top-level route, outside AppLayout', async () => {
+    const { router } = await import('./router')
+    expect(router.routes.find((r) => r.path === '/login')).toBeDefined()
+    expect(router.routes[0].children?.map((c) => c.path)).not.toContain('/login')
+  }, 30_000)
+})
+
 describe('access routes', () => {
   it('serves the Access Matrix and sends /admin/access to it (the older list page is not routed)', async () => {
     const { router } = await import('./router')

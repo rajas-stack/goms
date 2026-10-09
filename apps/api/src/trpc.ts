@@ -1,6 +1,6 @@
 import { initTRPC, TRPCError } from '@trpc/server'
 import { verifyAdminImportToken } from './auth/verifyAdminImportToken.js'
-import { verifyFirebaseToken, isAllowListed, isAmnexAccount, type AuthenticatedUser } from './auth/identity.js'
+import { verifyIdentity, isAllowListed, isAmnexAccount, type AuthenticatedUser } from './auth/identity.js'
 import { rbacMode } from './auth/rbac/mode.js'
 import { evaluateCall } from './auth/rbac/guard.js'
 import { RbacDenial } from './auth/rbac/denial.js'
@@ -73,7 +73,7 @@ export const protectedProcedure = publicProcedure
     if (!authEnforced()) {
       return next({ ctx })
     }
-    const user = await verifyFirebaseToken(ctx.authHeader)
+    const user = await verifyIdentity(ctx.authHeader)
     if (!isAmnexAccount(user.email)) {
       throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
     }
@@ -88,7 +88,7 @@ function readAuthEnforced(): boolean {
 /** Staged read-protection boundary (2026-09-15 public-read security audit,
  *  finding: every query in every business router was `publicProcedure`).
  *  Reuses the exact same authorization check as protectedProcedure —
- *  verifyFirebaseToken + isAmnexAccount, no new rule — but behind its own
+ *  verifyIdentity + isAmnexAccount, no new rule — but behind its own
  *  independent flag rather than AUTH_ENFORCEMENT_ENABLED. That flag is
  *  already "true" in goms-prod today (for mutations), so a read wired
  *  through protectedProcedure itself would start enforcing the moment this
@@ -105,7 +105,7 @@ export const protectedReadProcedure = publicProcedure
     if (!readAuthEnforced()) {
       return next({ ctx })
     }
-    const user = await verifyFirebaseToken(ctx.authHeader)
+    const user = await verifyIdentity(ctx.authHeader)
     if (!isAmnexAccount(user.email)) {
       throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
     }

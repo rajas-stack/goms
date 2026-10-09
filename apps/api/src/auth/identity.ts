@@ -1,5 +1,7 @@
 import { TRPCError } from '@trpc/server'
 import { getFirebaseAuth } from './firebaseAdmin.js'
+import { AccessTokenError, isGomsToken, verifyAccessToken } from './oauth/accessToken.js'
+import { OAuthConfigError, authProvider, firebaseAccepted, gomsAccepted } from './oauth/config.js'
 
 export interface AuthenticatedUser {
   uid: string
@@ -29,6 +31,33 @@ export async function verifyFirebaseToken(authHeader: string | undefined): Promi
   }
 
   return { uid: decoded.uid, email: decoded.email }
+}
+
+/** The ONE place identity is established (RBAC spec §3.4 / OAuth spec §4.1). Returns the same `{uid, email}` whichever kind of
+ *  token carried it, so authorisation downstream (the @amnex.com gate, RBAC roles, allow-lists, Admin Data Import) cannot tell.
+ *    firebase: Firebase only (today's behaviour).   both: GOMS token or Firebase token.   oauth: GOMS only.
+ *  A GOMS-looking token is verified as GOMS and never falls through to Firebase. */
+export async function verifyIdentity(authHeader: string | undefined): Promise<AuthenticatedUser> {
+  if (authProvider() === 'firebase') return verifyFirebaseToken(authHeader)
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : undefined
+  if (!token) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in to continue.' })
+  if (gomsAccepted() && isGomsToken(token)) {
+    try {
+      const c = await verifyAccessToken(token)
+      return { uid: c.uid, email: c.email }
+    } catch (e) {
+      if (e instanceof AccessTokenError) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Your session has expired. Please sign in again.' })
+      if (e instanceof OAuthConfigError) {
+        // Misconfiguration (e.g. AUTH_SESSION_SECRET missing/short), not a bad token: tell the operator, with no values, and keep the
+        // user-facing answer identical to any other rejected session.
+        console.error(JSON.stringify({ event: 'auth.config_error' }))
+        throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Your session has expired. Please sign in again.' })
+      }
+      throw e
+    }
+  }
+  if (firebaseAccepted()) return verifyFirebaseToken(authHeader)
+  throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Your session has expired. Please sign in again.' })
 }
 
 export function parseAllowList(raw: string | undefined): string[] {

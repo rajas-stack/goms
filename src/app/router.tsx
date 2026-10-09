@@ -1,9 +1,10 @@
-import { lazy } from 'react'
+import { lazy, Suspense } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppLayout } from './AppLayout'
 import { GlobalErrorScreen } from './routes/GlobalErrorScreen'
 import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
 import { RequireAccess } from '@/components/NoAccess'
+import { RouteFallback } from '@/components/RouteFallback'
 import { NAV_MODULES } from '@/lib/routeModules'
 
 const Home = lazy(() => import('./routes/Home').then((m) => ({ default: m.Home })))
@@ -49,6 +50,7 @@ const AdminImportAuthGate = lazy(() =>
 const AccessMatrix = lazy(() =>
   import('@/modules/admin-access/access-matrix/AccessMatrix').then((m) => ({ default: m.AccessMatrix })),
 )
+const Login = lazy(() => import('./routes/Login').then((m) => ({ default: m.Login })))
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
 // Admin Data Import is gated behind its own env flag — unset/false by
@@ -121,5 +123,12 @@ export const router = createBrowserRouter([
       ...adminImportRoutes,
       { path: '*', element: <NotFound /> },
     ],
+  },
+  // Full-page sign-in, deliberately outside AppLayout (no TopBar/nav/FAB). Kept
+  // AFTER the layout route: router.test.tsx reads `routes[0].children`.
+  {
+    path: '/login',
+    element: <Suspense fallback={<RouteFallback />}><Login /></Suspense>,
+    errorElement: <GlobalErrorScreen />,
   },
 ])
