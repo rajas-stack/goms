@@ -11,7 +11,7 @@ const { onAuthStateChanged, signInWithPopup, signOut } = vi.hoisted(() => ({
   signOut: vi.fn(),
 }))
 
-vi.mock('firebase/auth', () => ({ onAuthStateChanged, signInWithPopup, signOut, GoogleAuthProvider: class {} }))
+vi.mock('firebase/auth', () => ({ onAuthStateChanged, signInWithPopup, signOut, GoogleAuthProvider: class { setCustomParameters() {} } }))
 vi.mock('@/lib/firebaseAuth', () => ({ auth: {}, googleProvider: {} }))
 
 // Wrapped in an outer MemoryRouter deliberately, matching how AdminImportModal

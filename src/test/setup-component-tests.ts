@@ -22,7 +22,7 @@ vi.mock('firebase/auth', () => ({
   onAuthStateChanged: () => () => {},
   signOut: () => Promise.resolve(),
   signInWithPopup: () => Promise.resolve({ user: null }),
-  GoogleAuthProvider: class {},
+  GoogleAuthProvider: class { setCustomParameters() {} },
 }))
 
 // jsdom has no scrollIntoView implementation at all — every sticky

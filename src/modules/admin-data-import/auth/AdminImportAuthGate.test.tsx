@@ -9,7 +9,7 @@ const { onAuthStateChanged, signInWithPopup, signOut } = vi.hoisted(() => ({
 }))
 const { useAdminImportDomains } = vi.hoisted(() => ({ useAdminImportDomains: vi.fn() }))
 
-vi.mock('firebase/auth', () => ({ onAuthStateChanged, signInWithPopup, signOut, GoogleAuthProvider: class {} }))
+vi.mock('firebase/auth', () => ({ onAuthStateChanged, signInWithPopup, signOut, GoogleAuthProvider: class { setCustomParameters() {} } }))
 vi.mock('@/lib/firebaseAuth', () => ({ auth: {}, googleProvider: {} }))
 vi.mock('../api', () => ({ useAdminImportDomains }))
 

@@ -10,7 +10,7 @@ const { onAuthStateChanged, signInWithPopup } = vi.hoisted(() => ({
   onAuthStateChanged: vi.fn(),
   signInWithPopup: vi.fn(),
 }))
-vi.mock('firebase/auth', () => ({ onAuthStateChanged, signInWithPopup, GoogleAuthProvider: class {} }))
+vi.mock('firebase/auth', () => ({ onAuthStateChanged, signInWithPopup, GoogleAuthProvider: class { setCustomParameters() {} } }))
 vi.mock('@/lib/firebaseAuth', () => ({ auth: {}, googleProvider: {} }))
 // The Android deep-link listener is faked so the test can deliver links; bootstrapNativeAuth and authPrompt are the real ones.
 const { deepLink } = vi.hoisted(() => ({ deepLink: { handler: null as null | ((r: { code?: string; error?: string }) => Promise<void>) } }))

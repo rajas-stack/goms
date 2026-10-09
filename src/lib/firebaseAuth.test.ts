@@ -47,6 +47,8 @@ describe('firebaseAuth (real SDK, unconfigured env)', () => {
     // touched by `new GoogleAuthProvider()`) — confirm it's still exported
     // even though `auth` is null.
     expect(mod.googleProvider).toBeDefined()
+    // Google must always show its account chooser, otherwise the one signed-in browser account is picked silently.
+    expect(mod.googleProvider.getCustomParameters()).toEqual({ prompt: 'select_account' })
   })
 })
 
