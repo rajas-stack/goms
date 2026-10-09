@@ -8,13 +8,13 @@ import { originOf, useTheme } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { DayNightSwitch } from './DayNightSwitch'
 import { ThemeSegmented } from './ThemeSegmented'
-import { Kbd, SettingsDialog } from './SettingsDialog'
-import { THEME_TOGGLE_KEYS, isThemeToggleShortcut } from './shortcuts'
+import { SettingsDialog } from './SettingsDialog'
+import { isThemeToggleShortcut } from './shortcuts'
 
 /** Matches menuitem, menuitemradio and menuitemcheckbox. */
 const NAV_ITEMS = '[role^="menuitem"]'
 
-/** TopBar's "Options" dropdown: day/night switch, Light/Dark/System picker,
+/** TopBar's "Options" dropdown: day/night switch, Light/Dark/Eye comfort picker,
  *  and entry points into Settings. Also owns the global theme shortcut, since
  *  the TopBar (and so this menu) is mounted on every screen. */
 export function OptionsMenu({ profile, onSignIn, onSignOut }: {
@@ -117,13 +117,6 @@ export function OptionsMenu({ profile, onSignIn, onSignOut }: {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[13.5px] font-semibold text-ink-900">{isNight ? 'Night mode' : 'Day mode'}</span>
-                  {/* Shortcut hint is desktop-only — no keyboard on a phone. */}
-                  <span className="mt-0.5 hidden items-center gap-1 lg:flex">
-                    {THEME_TOGGLE_KEYS.map((k) => <Kbd key={k}>{k}</Kbd>)}
-                  </span>
-                  <span className="mt-0.5 block text-[11.5px] text-muted lg:hidden">
-                    {isNight ? 'Easy on the eyes after dark' : 'Bright and crisp'}
-                  </span>
                 </span>
                 <span data-switch>
                   <DayNightSwitch isNight={isNight} />
@@ -136,7 +129,7 @@ export function OptionsMenu({ profile, onSignIn, onSignOut }: {
 
               <div className="mx-1 my-2 h-px bg-line" />
 
-              <OptionsItem icon="Settings" label="Settings" hint="Workspace configuration" onClick={openSettings} />
+              <OptionsItem icon="Settings" label="Settings" onClick={openSettings} />
               {onSignIn && <><div className="mx-1 my-2 h-px bg-line" /><OptionsItem icon="LogIn" label="Sign in" onClick={() => { setOpen(false); onSignIn() }} /></>}
               {onSignOut && <><div className="mx-1 my-2 h-px bg-line" /><OptionsItem icon="LogOut" label="Sign out" onClick={() => { setOpen(false); onSignOut() }} /></>}
             </motion.div>
@@ -155,12 +148,11 @@ export function OptionsMenu({ profile, onSignIn, onSignOut }: {
 interface OptionsItemProps {
   icon: string
   label: string
-  hint?: string
   onClick: () => void
   className?: string
 }
 
-function OptionsItem({ icon, label, hint, onClick, className }: OptionsItemProps) {
+function OptionsItem({ icon, label, onClick, className }: OptionsItemProps) {
   return (
     <button
       type="button"
@@ -176,7 +168,6 @@ function OptionsItem({ icon, label, hint, onClick, className }: OptionsItemProps
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[13px] font-medium text-ink">{label}</span>
-        {hint && <span className="block text-[11.5px] text-muted">{hint}</span>}
       </span>
       <Icon name="ChevronRight" size={14} className="text-muted opacity-0 transition-all duration-150 group-hover/item:translate-x-0.5 group-hover/item:opacity-100 group-focus-visible/item:opacity-100" />
     </button>

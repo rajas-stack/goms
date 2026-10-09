@@ -17,6 +17,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 const websitePage = ({ route, title, hint }: WebsiteKindCopy, kind: SettingsIconKind) => ({ to: route, kind, title, hint })
 
 const SETTINGS_PAGES = [
+  { to: '/settings/credentials', kind: 'credentials' as const, title: 'Credentials', hint: 'Manage shared passphrases.' },
   { to: '/settings/dms', kind: 'storage' as const, title: 'DMS Settings', hint: 'Connect Drive and organize documents.' },
   websitePage(WEBSITE_KIND_COPY.tender, 'tender'),
   websitePage(WEBSITE_KIND_COPY.verification, 'verification'),

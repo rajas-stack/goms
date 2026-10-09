@@ -27,7 +27,7 @@ async function openCreate() {
 }
 
 describe('TenderWebsitesSection', () => {
-  beforeEach(async () => { vi.clearAllMocks(); await resetLocalData() })
+  beforeEach(async () => { vi.clearAllMocks(); await resetLocalData(); await repository.createCredentialPassphrase({ name: 'Portal key', proof: locked }) })
 
   it('adds a website and shows it as a named link opening in a new tab', async () => {
     renderSection()
@@ -159,13 +159,13 @@ describe('TenderWebsitesSection', () => {
     await waitFor(() => expect(screen.getByLabelText('DSC employee')).not.toBeDisabled())
     const employee = (await repository.listTenderDscEmployees())[0]
     await userEvent.selectOptions(screen.getByLabelText('DSC employee'), employee.id)
-    await userEvent.type(screen.getByLabelText('Create passphrase'), 'portal-lock')
-    await userEvent.type(screen.getByLabelText('Confirm passphrase'), 'portal-lock')
+    await userEvent.selectOptions(screen.getByLabelText('Saved passphrase'), (await repository.listCredentialPassphrases())[0].id)
+    await userEvent.type(screen.getByLabelText('Credential passphrase'), 'portal-lock')
     await userEvent.click(screen.getByRole('button', { name: 'Create' }))
     await screen.findByRole('link', { name: /Secure portal/ })
     expect(lockCredentials).toHaveBeenCalledWith({ userId: 'portal-user', password: 'portal-secret' }, 'portal-lock')
     const [site] = await repository.listTenderWebsites()
-    expect(site).toMatchObject({ credentials: locked, dscEmployeeId: employee.id })
+    expect(site).toMatchObject({ credentials: { ...locked }, dscEmployeeId: employee.id })
     expect(JSON.stringify(site)).not.toContain('portal-secret')
     await waitFor(() => expect(screen.queryByLabelText('Confirm passphrase')).not.toBeInTheDocument())
 
@@ -187,19 +187,21 @@ describe('TenderWebsitesSection', () => {
     expect(within(form).getByLabelText('User ID')).toHaveAttribute('readonly')
     await userEvent.click(within(form).getByRole('button', { name: /Save/ }))
     await screen.findByRole('button', { name: 'Edit Secure portal' })
-    expect((await repository.listTenderWebsites())[0].credentials).toEqual(locked)
+    expect((await repository.listTenderWebsites())[0].credentials).toMatchObject(locked)
   })
 
-  it('cancels creation without saving and rejects unmatched passphrases', async () => {
+  it('cancels creation without saving and rejects an incorrect saved passphrase', async () => {
     renderSection()
     await openCreate()
     await userEvent.type(screen.getByLabelText('Website name'), 'Portal')
     await userEvent.type(screen.getByLabelText('Website link'), 'https://portal.example')
     await userEvent.type(screen.getByLabelText('Password'), 'portal-secret')
-    await userEvent.type(screen.getByLabelText('Create passphrase'), 'portal-lock')
-    await userEvent.type(screen.getByLabelText('Confirm passphrase'), 'different-lock')
+    await userEvent.selectOptions(screen.getByLabelText('Saved passphrase'), (await repository.listCredentialPassphrases())[0].id)
+    await userEvent.type(screen.getByLabelText('Credential passphrase'), 'portal-lock')
+    await userEvent.clear(screen.getByLabelText('Credential passphrase'))
+    await userEvent.type(screen.getByLabelText('Credential passphrase'), 'different-lock')
     await userEvent.click(screen.getByRole('button', { name: 'Create' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent('The passphrases do not match.')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Check the passphrase.')
     expect(lockCredentials).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByLabelText('Website name')).not.toBeInTheDocument()
@@ -237,24 +239,18 @@ describe('TenderWebsitesSection', () => {
     expect(within(reopened).queryByLabelText('Password')).not.toBeInTheDocument()
   })
 
-  it('requires the current passphrase before saving a replacement passphrase', async () => {
+  it('manages passphrase creation and changes exclusively in Credentials settings', async () => {
     await repository.createTenderWebsite({ name: 'Portal', url: 'https://portal.example', credentials: locked })
     renderSection()
     await userEvent.click(await screen.findByRole('button', { name: 'Edit Portal' }))
     const form = screen.getByRole('form', { name: 'Edit Portal' })
-    await userEvent.click(within(form).getByRole('button', { name: 'Change passphrase' }))
+    expect(within(form).queryByRole('button', { name: 'Change passphrase' })).not.toBeInTheDocument()
+    expect(within(form).queryByLabelText('Create passphrase')).not.toBeInTheDocument()
     expect(within(form).queryByLabelText('New passphrase')).not.toBeInTheDocument()
+    await userEvent.click(within(form).getByRole('button', { name: 'Unlock Password' }))
     const unlockDialog = screen.getByRole('dialog', { name: 'Unlock credentials' })
     await userEvent.type(within(unlockDialog).getByLabelText('Credential passphrase'), 'portal-lock')
     await userEvent.click(within(unlockDialog).getByRole('button', { name: 'Unlock' }))
-    await userEvent.type(await within(form).findByLabelText('New passphrase'), 'replacement-lock')
-    await userEvent.type(within(form).getByLabelText('Confirm passphrase'), 'replacement-lock')
-    const rotated = { ...locked, ciphertext: 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' }
-    vi.mocked(lockCredentials).mockResolvedValueOnce(rotated)
-    await userEvent.click(within(form).getByRole('button', { name: 'Save' }))
-    await waitFor(() => expect(screen.queryByRole('form', { name: 'Edit Portal' })).not.toBeInTheDocument())
-    expect(lockCredentials).toHaveBeenCalledWith({ userId: 'portal-user', password: 'portal-secret' }, 'replacement-lock')
-    expect((await repository.listTenderWebsites())[0].credentials).toEqual(rotated)
-    expect(JSON.stringify((await repository.listTenderWebsites())[0])).not.toContain('replacement-lock')
+    expect(await within(form).findByLabelText('Password')).toHaveValue('portal-secret')
   })
 })

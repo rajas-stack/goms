@@ -177,6 +177,10 @@ export const opportunityPolicy: Record<string, PolicyEntry> = {
   'bidSynopsis.save': { requirements: [bidRow('update', (r) => r?.bidId)] },
 
   // Shared tender-portal setup follows the existing bid configuration permissions.
+  ...same(['credentialPassphrases.list'], readRows),
+  'credentialPassphrases.create': { requirements: [create('bid.columns')] },
+  ...same(['credentialPassphrases.update'], write('bid.columns')),
+  'credentialPassphrases.remove': { requirements: [remove('bid.columns')] },
   ...same(['tenderWebsites.list', 'tenderWebsites.dscEmployees'], readRows),
   'tenderWebsites.create': { requirements: [create('bid.columns')] },
   ...same(['tenderWebsites.update', 'tenderWebsites.setEditingLock'], write('bid.columns')),

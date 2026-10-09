@@ -1,3 +1,4 @@
+import type { CredentialPassphrase } from '@goms/domain'
 import type {
   Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue, BidDocument, BidMilestone, BidSavedView,
   Customer, DeliveryTeamMember, DocumentCitation, Employee, ExternalId, FollowUp, HierNode, MergeAuditRecord, Opportunity, OpportunityStageChange,
@@ -113,6 +114,8 @@ export interface GormsData {
   /** Added in v14 (Bid Tracker custom columns, spec §8.1). Start empty. */
   bidCustomFields: BidCustomField[]
   bidCustomFieldValues: BidCustomFieldValue[]
+  /** Added in v25: encrypted verification envelopes for shared passphrases. */
+  credentialPassphrases?: CredentialPassphrase[]
   /** Added in v24: tender portals saved in Settings (General tab dropdown). */
   tenderWebsites: TenderWebsite[]
 }
@@ -333,6 +336,6 @@ export function buildSeed(): GormsData {
     deliveryTeamMembers: syncAllTeamsFromOrg(mergeOrgSeed([]), mergeTeamRosters([])),
     bids: [], bidSynopsis: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
     protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [],
-    bidCustomFields: [], bidCustomFieldValues: [], tenderWebsites: [],
+    bidCustomFields: [], bidCustomFieldValues: [], tenderWebsites: [], credentialPassphrases: [],
   }
 }

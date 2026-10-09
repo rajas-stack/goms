@@ -25,6 +25,8 @@ export interface TenderWebsite {
 }
 
 export interface TenderCredentialLock {
+  passphraseId?: string
+  passphraseRevision?: string
   version: 1
   salt: string
   iv: string
@@ -75,7 +77,9 @@ export function normalizeTenderWebsiteInput(input: TenderWebsiteInput): TenderWe
       || lock.ciphertext.length < 24 || !/^[A-Za-z0-9+/]+={0,2}$/.test(lock.ciphertext))) {
       throw new Error('Invalid credential lock. Unlock and save the credentials again.')
     }
-    result.credentials = lock ? { version: 1, salt: lock.salt, iv: lock.iv, ciphertext: lock.ciphertext } : null
+    if (lock?.passphraseId && (!lock.passphraseRevision || lock.passphraseId.length > 100 || lock.passphraseRevision.length > 32768)) throw new Error('Invalid managed passphrase reference.')
+    result.credentials = lock ? { version: 1, salt: lock.salt, iv: lock.iv, ciphertext: lock.ciphertext,
+      ...(lock.passphraseId ? { passphraseId: lock.passphraseId, passphraseRevision: lock.passphraseRevision } : {}) } : null
   }
   if (input.dscEmployeeId !== undefined) result.dscEmployeeId = input.dscEmployeeId?.trim() || null
   return result
