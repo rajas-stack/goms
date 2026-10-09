@@ -85,3 +85,9 @@ scripts/admin-import-fixtures/out/
 test-results/
 playwright-report/
 
+# Local-only scratch: design exports, pasted screenshots, spreadsheets, thumbnails.
+# (Env files are already covered by `.env.*` above.)
+/uploads/
+/.thumbnail
+/Copy of Book*.xlsx
+/Access Control Center*.dc.html
