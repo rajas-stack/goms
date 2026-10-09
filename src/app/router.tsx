@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppLayout } from './AppLayout'
+import { RequireSignIn } from './RequireSignIn'
 import { GlobalErrorScreen } from './routes/GlobalErrorScreen'
 import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
 import { RequireAccess } from '@/components/NoAccess'
@@ -92,7 +93,7 @@ const bidTrackerRoutes = isBidTrackerEnabled()
 
 export const router = createBrowserRouter([
   {
-    element: <AppLayout />,
+    element: <RequireSignIn><AppLayout /></RequireSignIn>,
     errorElement: <GlobalErrorScreen />,
     children: [
       { path: '/', element: <Home /> },
