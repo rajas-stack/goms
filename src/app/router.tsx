@@ -1,5 +1,5 @@
 import { lazy } from 'react'
-import { createBrowserRouter } from 'react-router-dom'
+import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppLayout } from './AppLayout'
 import { GlobalErrorScreen } from './routes/GlobalErrorScreen'
 import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
@@ -44,9 +44,6 @@ const GeographyLoadPanel = lazy(() =>
 )
 const AdminImportAuthGate = lazy(() =>
   import('@/modules/admin-data-import/auth/AdminImportAuthGate').then((m) => ({ default: m.AdminImportAuthGate })),
-)
-const AccessManagement = lazy(() =>
-  import('@/modules/admin-access/AccessManagement').then((m) => ({ default: m.AccessManagement })),
 )
 const AccessMatrix = lazy(() =>
   import('@/modules/admin-access/access-matrix/AccessMatrix').then((m) => ({ default: m.AccessMatrix })),
@@ -108,7 +105,8 @@ export const router = createBrowserRouter([
       { path: '/commercial-calculator', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
       { path: '/commercial-calculator/:section', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
       { path: '/commercial-calculator/boq/:boqId', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
-      { path: '/admin/access', element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><AccessManagement /></RequireAccess> },
+      // The Access Matrix is the access screen; the older per-person list page is no longer routed. /admin/access (rail, bookmarks) lands on it.
+      { path: '/admin/access', element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><Navigate to="/admin/access/matrix" replace /></RequireAccess> },
       { path: '/settings', element: <SettingsPage /> },
       { path: '/settings/dms', element: <DmsSettingsPage /> },
       { path: '/settings/dms/new', element: <DmsConnectionPage /> },

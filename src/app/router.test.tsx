@@ -3,6 +3,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // `adminImportRoutes` (router.tsx) is read from `import.meta.env.VITE_ADMIN_IMPORT_ENABLED`
 // at module-load time, so switching modes needs a fresh module graph — see
 // the same pattern in TopBar.test.tsx.
+describe('access routes', () => {
+  it('serves the Access Matrix and sends /admin/access to it (the older list page is not routed)', async () => {
+    const { router } = await import('./router')
+    const paths = router.routes[0].children?.map((c) => c.path) ?? []
+    expect(paths).toContain('/admin/access/matrix')
+    const legacy = router.routes[0].children?.find((c) => c.path === '/admin/access')
+    // The route exists only to forward to the matrix: it must not render the old page.
+    expect(JSON.stringify((legacy as { element?: unknown } | undefined)?.element, (_k, v) => (typeof v === 'function' ? v.name : v))).toContain('/admin/access/matrix')
+  }, 30_000)
+})
+
 describe('admin data import routes', () => {
   beforeEach(() => {
     vi.resetModules()
