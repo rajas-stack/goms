@@ -48,6 +48,9 @@ const AdminImportAuthGate = lazy(() =>
 const AccessManagement = lazy(() =>
   import('@/modules/admin-access/AccessManagement').then((m) => ({ default: m.AccessManagement })),
 )
+const AccessMatrix = lazy(() =>
+  import('@/modules/admin-access/access-matrix/AccessMatrix').then((m) => ({ default: m.AccessMatrix })),
+)
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
 // Admin Data Import is gated behind its own env flag — unset/false by
@@ -113,6 +116,7 @@ export const router = createBrowserRouter([
       { path: '/documents/:module', element: <DmsDocumentsPage /> },
       { path: '/settings/tender-websites', element: <TenderWebsitesSettingsPage /> },
       { path: '/settings/document-verifications', element: <DocumentVerificationsSettingsPage /> },
+      { path: '/admin/access/matrix', element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><AccessMatrix /></RequireAccess> },
       ...bidTrackerRoutes,
       ...adminImportRoutes,
       { path: '*', element: <NotFound /> },

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link, useInRouterContext } from 'react-router-dom'
 import { FUNCTIONAL_ROLES, ROLE_LABELS, type Role } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Can } from '@/lib/permissions'
@@ -11,6 +12,7 @@ const roles = (list: Role[]) => (list.length ? list.map((r) => ROLE_LABELS[r]).j
  *  and the per-person overrides. System Admin accounts come from the protected admin allow-list, so they are shown as
  *  protected rows — they cannot be granted, changed or removed here. */
 export function AccessManagement() {
+  const inRouter = useInRouterContext()
   const { data: rows = [], isLoading } = useAccessReadiness()
   const { set, remove } = useRoleOverrideMutations()
   const [attentionOnly, setAttentionOnly] = useState(false)
@@ -38,6 +40,7 @@ export function AccessManagement() {
       <header>
         <h1 className="text-lg font-semibold text-ink-900">Role &amp; Access Management</h1>
         <p className="text-sm text-muted">Roles come from the org chart and the Sales roster; overrides add or remove one for a person. System Admins are managed outside this screen.</p>
+        {inRouter && <Link to="/admin/access/matrix" className="mt-1 inline-block text-sm text-ink-800 underline">Open the Access Matrix (field-level Denied / Read / Edit by team and level)</Link>}
       </header>
 
       <Can module="admin.access" action="create">
