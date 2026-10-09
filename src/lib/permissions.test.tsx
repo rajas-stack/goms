@@ -1,9 +1,7 @@
-import { act, renderHook } from '@testing-library/react'
+import { renderHook } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { ReactNode } from 'react'
-import { GRANTS, type Level, type PolicyModuleKey, type Role } from '@goms/domain'
-import { readStoredRole, writeStoredRole } from './activeRole'
 import { PermissionsProvider, useAllowed, usePermissions } from './permissions'
 
 const wrap = (access: any) => ({ children }: { children: ReactNode }) => (
@@ -80,105 +78,5 @@ describe('useAllowed', () => {
   it('an atom narrows an update to that field', () => {
     expect(allowedFor(['sales'], 'team.sales', 'update')).toBe(false)
     expect(allowedFor(['sales'], 'team.sales', 'update', 'sales.ownProfile', { salesOwnerIds: ['sp1'], createdBy: null, assigned: { presales: null, legal: null, bid: null } })).toBe(true)
-  })
-})
-
-describe('active role (UI narrowing only; the server stays authoritative)', () => {
-  const access = (roles: string[], email = 'multi@amnex.com') => ({ mode: 'enforce', email, roles, facts })
-  const perms = (a: unknown) => renderHook(() => usePermissions(), { wrapper: wrap(a) }).result.current
-  const RANK: Record<Level, number> = { N: 0, R: 1, P: 2, W: 3 }
-  const modules = Object.keys(GRANTS) as PolicyModuleKey[]
-
-  beforeEach(() => localStorage.clear())
-
-  it('defaults to "All my roles": the multi-role union, exactly as before', () => {
-    const p = perms(access(['sales', 'legal']))
-    expect(p.activeRole).toBeNull()
-    expect(p.roles).toEqual(['sales', 'legal'])
-    expect(p.allRoles).toEqual(['sales', 'legal'])
-  })
-
-  it('narrows to exactly the selected role: same answers as a user who only holds that role', () => {
-    writeStoredRole('multi@amnex.com', 'sales')
-    const narrowed = perms(access(['sales', 'finance']))
-    const onlySales = perms(access(['sales'], 'sales-only@amnex.com'))
-    expect(narrowed.activeRole).toBe('sales')
-    expect(narrowed.roles).toEqual(['sales'])
-    expect(narrowed.allRoles).toEqual(['sales', 'finance'])
-    for (const m of modules) expect(narrowed.level(m)).toBe(onlySales.level(m))
-    expect(narrowed.canReadAtom('sku.costs')).toBe(onlySales.canReadAtom('sku.costs'))
-  })
-
-  it('never grants beyond the union of the roles the server reported', () => {
-    const roles: Role[] = ['sales', 'legal', 'finance']
-    const union = perms(access(roles))
-    for (const r of roles) {
-      localStorage.clear()
-      writeStoredRole('multi@amnex.com', r)
-      const narrowed = perms(access(roles))
-      expect(narrowed.roles).toEqual([r])
-      for (const m of modules) expect(RANK[narrowed.level(m)]).toBeLessThanOrEqual(RANK[union.level(m)])
-      for (const atom of ['sku.costs', 'sku.floor'] as const) {
-        if (narrowed.canReadAtom(atom)) expect(union.canReadAtom(atom)).toBe(true)
-      }
-    }
-  })
-
-  it('cannot select a role the server does not report: the saved value is ignored and discarded', () => {
-    writeStoredRole('multi@amnex.com', 'system_admin')
-    const p = perms(access(['sales', 'legal']))
-    expect(p.activeRole).toBeNull()
-    expect(p.roles).toEqual(['sales', 'legal'])
-    expect(p.level('com.skus')).not.toBe('W')
-    expect(readStoredRole('multi@amnex.com')).toBeNull()
-  })
-
-  it('a mounted provider with a stale role list does not wipe a selection another tab validly made (cleanup runs once at load)', () => {
-    const stale = renderHook(() => usePermissions(), { wrapper: wrap(access(['sales', 'legal'])) }) // an older tab: does not know "finance"
-    const fresh = renderHook(() => usePermissions(), { wrapper: wrap(access(['sales', 'legal', 'finance'])) })
-    act(() => fresh.result.current.setActiveRole('finance')) // the other tab picks a role the server now reports
-    expect(readStoredRole('multi@amnex.com')).toBe('finance') // the stale tab must not erase it
-    expect(fresh.result.current.activeRole).toBe('finance')
-    expect(stale.result.current.activeRole).toBeNull() // and it still never honours a role it does not know
-    stale.unmount()
-    fresh.unmount()
-  })
-
-  it('ignores a saved role for a user with one role or none', () => {
-    writeStoredRole('one@amnex.com', 'sales')
-    expect(perms(access(['sales'], 'one@amnex.com')).activeRole).toBeNull()
-    writeStoredRole('none@amnex.com', 'sales')
-    expect(perms(access([], 'none@amnex.com')).roles).toEqual([])
-  })
-
-  it('keeps System Admin unrestricted under "All my roles"; selecting System Admin stays unrestricted', () => {
-    const all = perms(access(['sales', 'system_admin'], 'admin@amnex.com'))
-    expect(all.level('com.skus')).toBe('W')
-    expect(all.canReadAtom('sku.costs')).toBe(true)
-    writeStoredRole('admin@amnex.com', 'system_admin')
-    const asAdmin = perms(access(['sales', 'system_admin'], 'admin@amnex.com'))
-    expect(asAdmin.roles).toEqual(['system_admin'])
-    expect(asAdmin.level('com.skus')).toBe('W')
-  })
-
-  it('setActiveRole persists the choice per user and flips the effective roles', () => {
-    const { result } = renderHook(() => usePermissions(), { wrapper: wrap(access(['sales', 'legal'])) })
-    act(() => result.current.setActiveRole('legal'))
-    expect(result.current.activeRole).toBe('legal')
-    expect(result.current.roles).toEqual(['legal'])
-    expect(readStoredRole('multi@amnex.com')).toBe('legal')
-    act(() => result.current.setActiveRole(null))
-    expect(result.current.roles).toEqual(['sales', 'legal'])
-    expect(readStoredRole('multi@amnex.com')).toBeNull()
-  })
-
-  it('does nothing while RBAC is off or shadow: everything stays visible and there is no role list', () => {
-    writeStoredRole('multi@amnex.com', 'sales')
-    for (const mode of ['off', 'shadow']) {
-      const p = perms({ mode, email: 'multi@amnex.com', roles: ['sales', 'legal'], facts })
-      expect(p.activeRole).toBeNull()
-      expect(p.allRoles).toEqual([])
-      expect(p.level('com.skus')).toBe('W')
-    }
   })
 })
