@@ -26,4 +26,9 @@ describe('per-user Google integration settings', () => {
     await expect(caller().save({ accountUid: 'user-a', settings: { ...settings, accessToken: 'do-not-store' } as any })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
     await expect(caller().save({ accountUid: 'user-a', settings: { ...settings, disabledPages: { gmail: ['../bad'] } } })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
   })
+  it('persists master activation and Maps browser configuration, rejecting unknown services', async () => {
+    const settings = { ...DEFAULT_GOOGLE_INTEGRATIONS, disabledServices: ['gmail' as const], mapsEmbedKey: 'restricted-browser-key' }
+    expect(await caller().save({ accountUid: 'user-a', settings })).toEqual(settings)
+    await expect(caller().save({ accountUid: 'user-a', settings: { ...settings, disabledServices: ['unknown' as any] } })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
 })

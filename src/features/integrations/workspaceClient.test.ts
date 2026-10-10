@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_GOOGLE_INTEGRATIONS } from '@goms/domain'
-import { googleFeatureToken } from './googleClient'
+import { authorizeGoogle, googleFeatureToken } from './googleClient'
 import { runWorkspaceAction } from './workspaceClient'
 import { setGoogleAccount } from './session'
 import { saveGoogleSettings } from './settings'
-vi.mock('./googleClient', async importOriginal => ({ ...await importOriginal<typeof import('./googleClient')>(), googleFeatureToken: vi.fn(async () => 'in-memory-token') }))
+vi.mock('./googleClient', async importOriginal => ({ ...await importOriginal<typeof import('./googleClient')>(), authorizeGoogle: vi.fn(async () => 'in-memory-token'), googleFeatureToken: vi.fn(async () => 'in-memory-token') }))
 const fetchMock = vi.fn()
 const account = { uid: 'workspace-tests', email: 'a@amnex.com', googleId: 'google-a' }
 beforeEach(async () => {
@@ -95,5 +95,13 @@ describe('Google Workspace API actions', () => {
     vi.mocked(googleFeatureToken).mockImplementationOnce(async () => { await saveGoogleSettings(account, { ...DEFAULT_GOOGLE_INTEGRATIONS, disabledPages: { drive: ['integrations'] } }); return 'token' })
     await expect(runWorkspaceAction('drive', 'create', { title: 'Folder' })).rejects.toThrow('disabled on this page')
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+  it('permits read-only diagnostics of an inactive service but never writes through test mode', async () => {
+    await saveGoogleSettings(account, { ...DEFAULT_GOOGLE_INTEGRATIONS, disabledServices: ['drive'], clientId: '123.apps.googleusercontent.com' })
+    await runWorkspaceAction('drive', 'load', {}, undefined, 'integrations', true)
+    expect(authorizeGoogle).toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledOnce()
+    await expect(runWorkspaceAction('drive', 'create', { title: 'Folder' }, undefined, 'integrations', true)).rejects.toThrow('cannot change Google data')
+    expect(fetchMock).toHaveBeenCalledOnce()
   })
 })

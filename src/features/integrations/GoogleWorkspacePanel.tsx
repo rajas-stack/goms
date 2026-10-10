@@ -4,29 +4,29 @@ import { Button } from '@/components/ui/Button'
 import { Input, Textarea, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { productFor } from './catalog'
-import { googleServiceEnabled } from './settings'
+import { googleServiceEnabled, googleSettings } from './settings'
 import { useGoogleAccount } from './session'
 import { WORKSPACE_ACTIONS, runWorkspaceAction, type WorkspaceAction, type WorkspaceResult } from './workspaceClient'
 
 /** The same panel can be embedded in a feature page using its registered page ID. */
-export function GoogleWorkspacePanel({ service, pageId = 'integrations', onClose }: { service: GoogleService; pageId?: string; onClose?: () => void }) {
+export function GoogleWorkspacePanel({ service, pageId = 'integrations', onClose, connectionTest = false }: { service: GoogleService; pageId?: string; onClose?: () => void; connectionTest?: boolean }) {
   const account = useGoogleAccount()
-  return <WorkspaceContent key={`${service}:${account?.uid}:${account?.googleId}`} service={service} pageId={pageId} onClose={onClose} />
+  return <WorkspaceContent key={`${service}:${account?.uid}:${account?.googleId}`} service={service} pageId={pageId} onClose={onClose} connectionTest={connectionTest} />
 }
-function WorkspaceContent({ service, pageId, onClose }: { service: GoogleService; pageId: string; onClose?: () => void }) {
+function WorkspaceContent({ service, pageId, onClose, connectionTest }: { service: GoogleService; pageId: string; onClose?: () => void; connectionTest: boolean }) {
   const account = useGoogleAccount()
-  const definitions = WORKSPACE_ACTIONS[service] ?? []
+  const definitions = (WORKSPACE_ACTIONS[service] ?? []).filter(item => !connectionTest || ['load', 'read', 'messages', 'translate'].includes(item.id))
   const [action, setAction] = useState<WorkspaceAction>(definitions[0]?.id ?? 'load')
   const [fields, setFields] = useState<Record<string, string>>({ target: 'hi', range: 'A1:F20' })
   const [file, setFile] = useState<File>()
   const [result, setResult] = useState<WorkspaceResult>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [mapKey, setMapKey] = useState('')
+  const [mapKey, setMapKey] = useState(googleSettings(account).mapsEmbedKey ?? '')
   const [mapUrl, setMapUrl] = useState('')
   const generation = useRef(0)
   const definition = definitions.find(item => item.id === action)
-  const enabled = !!account && googleServiceEnabled(service, pageId)
+  const enabled = !!account && (connectionTest || googleServiceEnabled(service, pageId))
   useEffect(() => { if (!enabled) { generation.current++; setResult(undefined); setMapUrl('') } }, [enabled])
   useEffect(() => {
     const hidden = () => { if (document.visibilityState === 'hidden') { generation.current++; setResult(undefined); setFields({ target: 'hi', range: 'A1:F20' }); setFile(undefined); setMapUrl(''); setMapKey('') } }
@@ -45,7 +45,7 @@ function WorkspaceContent({ service, pageId, onClose }: { service: GoogleService
     }
     setBusy(true)
     const current = ++generation.current
-    try { const value = await runWorkspaceAction(service, action, fields, file, pageId); if (current === generation.current) { setResult(value); if (value.resourceId && ['docs', 'sheets', 'notebooklm'].includes(service)) setFields(previous => ({ ...previous, resource: value.resourceId! })); if (action === 'create' && ['gmail', 'chat'].includes(service)) setFields(previous => ({ ...previous, text: '' })) } }
+    try { const value = await runWorkspaceAction(service, action, fields, file, pageId, connectionTest); if (current === generation.current) { setResult(value); if (value.resourceId && ['docs', 'sheets', 'notebooklm'].includes(service)) setFields(previous => ({ ...previous, resource: value.resourceId! })); if (action === 'create' && ['gmail', 'chat'].includes(service)) setFields(previous => ({ ...previous, text: '' })) } }
     catch (cause) { if (current === generation.current) setError(cause instanceof Error ? cause.message : 'Google request failed.') }
     finally { setBusy(false) }
   }

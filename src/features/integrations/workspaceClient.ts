@@ -1,5 +1,6 @@
 import type { GoogleService } from '@goms/domain'
-import { googleApiRequest, googleFeatureToken } from './googleClient'
+import { authorizeGoogle, googleApiRequest, googleFeatureToken } from './googleClient'
+import { productFor } from './catalog'
 import { assertGoogleAccount, getGoogleAccount } from './session'
 import { googleServiceEnabled, googleSettings } from './settings'
 
@@ -29,7 +30,8 @@ export const WORKSPACE_ACTIONS: Partial<Record<GoogleService, ActionDefinition[]
 }
 
 /** Fixed API operations, never an arbitrary destination; all results are account-bound. */
-export async function runWorkspaceAction(service: GoogleService, action: WorkspaceAction, fields: Record<string, string> = {}, file?: File, pageId = 'integrations'): Promise<WorkspaceResult> {
+export async function runWorkspaceAction(service: GoogleService, action: WorkspaceAction, fields: Record<string, string> = {}, file?: File, pageId = 'integrations', connectionTest = false): Promise<WorkspaceResult> {
+  if (connectionTest && !['load', 'read', 'messages', 'translate'].includes(action)) throw new Error('Connection tests cannot change Google data.')
   const definition = WORKSPACE_ACTIONS[service]?.find(item => item.id === action)
   if (!definition) throw new Error('This action is unavailable for this service.')
   for (const field of definition.fields) if (field.required && !fields[field.key]?.trim()) throw new Error(`${field.label} is required.`)
@@ -43,14 +45,14 @@ export async function runWorkspaceAction(service: GoogleService, action: Workspa
   if (service === 'calendar' && action === 'create' && (!Number.isFinite(Date.parse(fields.start)) || !Number.isFinite(Date.parse(fields.end)) || Date.parse(fields.end) <= Date.parse(fields.start))) throw new Error('The event must end after it starts.')
   if (service === 'chat' && action !== 'load' && !/^spaces\/[A-Za-z0-9_-]+$/.test(fields.resource)) throw new Error('Choose a valid Chat space.')
   if (action === 'upload' && (!file || file.size > 25 * 1024 * 1024)) throw new Error('Choose a file up to 25 MB.')
-  const token = await googleFeatureToken(service, pageId, definition.scopes)
+  const token = connectionTest ? await authorizeGoogle(account, [...productFor(service).scopes, ...(definition.scopes ?? [])], settings.clientId) : await googleFeatureToken(service, pageId, definition.scopes)
   assertGoogleAccount(account)
   const request = async <T>(url: string, payload?: unknown): Promise<T> => {
     assertGoogleAccount(account)
-    if (!googleServiceEnabled(service, pageId)) throw new Error('This service was disabled on this page. Enable it before retrying.')
+    if (!connectionTest && !googleServiceEnabled(service, pageId)) throw new Error('This service was disabled on this page. Enable it before retrying.')
     const value = await googleApiRequest<T>(url, token, ['translate', 'notebooklm'].includes(service) ? settings.cloudProject : undefined, payload === undefined ? {} : { method: 'POST', body: payload })
     assertGoogleAccount(account)
-    if (!googleServiceEnabled(service, pageId)) throw new Error('This service was disabled on this page.')
+    if (!connectionTest && !googleServiceEnabled(service, pageId)) throw new Error('This service was disabled on this page.')
     return value
   }
   const id = encodeURIComponent(fields.resource ?? '')

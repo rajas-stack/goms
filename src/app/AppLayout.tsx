@@ -1,4 +1,5 @@
 import { GoogleAccountBinder } from '@/features/integrations/GoogleAccountBinder'
+import { GoogleIntegrationDock } from '@/features/integrations/GoogleIntegrationDock'
 import { EyeComfortOverlay } from '@/components/theme/EyeComfort'
 import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
@@ -178,6 +179,7 @@ export function AppLayout() {
       <ToastProvider>
         <EyeComfortOverlay />
         <GoogleAccountBinder />
+        <GoogleIntegrationDock />
         <Ctx.Provider value={{
           openSearch: () => setSearchOpen(true),
           // Root-caused 2026-09-03: ImportDialog (below) is a separate, older,

@@ -26,7 +26,11 @@ Tests perform read-only requests; they do not create or modify mail, events, doc
 
 ## Use services inside GOMS
 
-Each card has a **Use** button with an in-app workspace:
+The settings page is the deployment controller. Each service has a saved **Active/Inactive** switch, a page-assignment dropdown and **Test & preview**. There are no external service-launch links on this page. Activation is separate from Google authorization: an active service still needs valid API access. Deactivating a service disables it on all assigned pages while preserving those choices for reactivation. Configuration is scoped to the signed-in Firebase UID and syncs through the API in remote mode; it is not an organization-wide Workspace policy.
+
+**Test & preview** makes a Google connection check and opens a read-only in-app API preview. Inactive services can still be diagnosed, but test mode cannot send mail, upload files, create resources or otherwise write Google data. Translation and Maps previews use their appropriate Cloud/Embed interfaces. API errors remain visible rather than being reported as connected.
+
+Enabled modules show **Google tools** inside the running application. Selecting a service opens its actual API widget in a modal over the current module; no external redirect is needed for these operations:
 
 | Service | API operations |
 | --- | --- |
@@ -46,9 +50,9 @@ Each card has a **Use** button with an in-app workspace:
 
 Read and write actions request their required OAuth scopes incrementally. Existing read grants do not imply write consent. Operations call Google's HTTPS APIs, surface Google's errors, and never turn a redirect or a sign-in into a successful operation. Google data, tokens and form content stay in memory; responses are discarded on account changes and private views clear when the tab is hidden. Writes are initiated explicitly by the user and are not automatically retried. These direct Google operations are governed by Google access/Workspace policies; the application's database mutation audit does not observe them.
 
-`Integrations` registers itself in every service's pages selector. Reuse `<GoogleWorkspacePanel service="calendar" pageId="accounts" />` on an actual feature page alongside its sidecar; actions enforce that page's activation. The console currently returns bounded first pages (10 mail messages, up to 20 other items), not a full synchronization job. It does not provide background sync, mailbox body search, a full Google editor, or NotebookLM chat.
+The shared widget dock registers six module pages (Accounts mapping, Meetings, Sales, Teams, Commercial calculator and Opportunity/Bid tracker) for every service, including module subroutes and their DMS document routes. Future sidecars remain automatically discovered. The settings controller is not itself a deployment target. Reuse `<GoogleWorkspacePanel service="calendar" pageId="accounts" />` on another actual feature page alongside its sidecar; actions enforce both master activation and page assignment. Widgets currently return bounded first pages (10 mail messages, up to 20 other items), not a full synchronization job. They do not provide background sync, mailbox body search, a full native Google editor, or NotebookLM chat.
 
-For Maps, enable Maps Embed API and enter a browser key restricted to that API and your exact site referrers. No Google OAuth grant is sent to the iframe. The key is public browser configuration and is not persisted by the panel. For NotebookLM, configure the project number/location and Enterprise license/IAM access. For Keep, approve the eligible enterprise account/API access with your Workspace administrator.
+For Maps, enable Maps Embed API and save a browser key in Connection setup restricted to that API and your exact site referrers. It is reused by deployed map widgets. No Google OAuth grant is sent to the iframe. The key is public browser configuration, not a private credential. For NotebookLM, configure the project number/location and Enterprise license/IAM access. For Keep, approve the eligible enterprise account/API access with your Workspace administrator. Google Sites editing and video calls inside the native Meet UI are not implemented by these widgets; Sites file listing and Meet space creation use the available APIs.
 
 Enable the required Google APIs, configure the OAuth client's authorized JavaScript origins, and apply `1791763800000_google-integrations.sql` before deploying the API. Google may require consent/admin approval for requested scopes. Firebase sign-in alone does not grant Google API access.
 
