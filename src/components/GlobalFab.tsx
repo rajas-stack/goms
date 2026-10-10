@@ -27,7 +27,7 @@ type FabItem =
   | { id: string; label: string; icon: string; kind: 'person' }
   | { id: string; label: string; icon: string; kind: 'orgChild'; childKey: string }
 
-// 8 items, flat and unordered (no context-aware reordering; that's
+// 3 items, flat and unordered (no context-aware reordering; that's
 // explicitly out of scope here). "Create Location" (geo domain) was removed
 // per explicit request — no `GeoTargetPicker`/`pick-geo` flow step remains.
 // "Create Meeting" and "Log Interaction" were merged into one "Add Activity"
@@ -36,12 +36,7 @@ type FabItem =
 // dialog's own Type selector now offers the full list (Meeting included)
 // and the user picks, rather than the menu pre-deciding for them.
 const MENU: FabItem[] = [
-  { id: 'import', label: 'Import Records', icon: 'Upload', kind: 'import' },
   { id: 'activity', label: 'Add Activity', icon: 'CalendarClock', kind: 'activity' },
-  { id: 'unit', label: 'Create Unit', icon: 'Boxes', kind: 'orgChild', childKey: 'unit' },
-  { id: 'office', label: 'Create Office', icon: 'DoorOpen', kind: 'orgChild', childKey: 'office' },
-  { id: 'division', label: 'Create Division', icon: 'Layers', kind: 'orgChild', childKey: 'division' },
-  { id: 'branch', label: 'Create Branch', icon: 'GitBranch', kind: 'orgChild', childKey: 'branch' },
   { id: 'person', label: 'Create Person', icon: 'UserPlus', kind: 'person' },
   { id: 'department', label: 'Create Department', icon: 'Building2', kind: 'department' },
 ]
