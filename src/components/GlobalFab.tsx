@@ -36,7 +36,7 @@ type FabItem =
 // dialog's own Type selector now offers the full list (Meeting included)
 // and the user picks, rather than the menu pre-deciding for them.
 const MENU: FabItem[] = [
-  { id: 'activity', label: 'Add Activity', icon: 'CalendarClock', kind: 'activity' },
+  { id: 'activity', label: 'Add Meeting', icon: 'CalendarClock', kind: 'activity' },
   { id: 'person', label: 'Create Person', icon: 'UserPlus', kind: 'person' },
   { id: 'department', label: 'Create Department', icon: 'Building2', kind: 'department' },
 ]

@@ -38,12 +38,8 @@ const ROW_GAP = 8
 // a "meeting" or this page and the department view would silently diverge.
 export const LOGGED_TYPES: TimelineEventType[] = ['meeting', 'inPerson', 'call', 'email', 'whatsapp', 'followup', 'note', 'document', 'custom']
 
-/** Read-through, cross-employee view over `TimelineEvent` rows — the same
- *  data that's already shown embedded in each Employee's profile timeline,
- *  just aggregated here. Browsing and filtering never mutate anything;
- *  "Create Meeting" opens the same `TimelineEventDialog` the global "Add
- *  Activity" FAB uses, and editing or deleting an entry still happens from
- *  the person's own profile. */
+/** Cross-person meeting list backed by timeline records. Creation shares
+ *  the global meeting form; each saved row opens its meeting details page. */
 export function Meetings() {
   const navigate = useNavigate()
   const { data: employees = [] } = useAllEmployees()
@@ -125,13 +121,8 @@ export function Meetings() {
     return true
   }), [allRows, facetsById, filters, date, timeFrom, timeTo])
 
-  // `highlight` here is consumed by EmployeeDetails (a different reader than
-  // this page's own `useHighlightOnArrival` below) to scroll to and briefly
-  // highlight this specific timeline entry within the employee's profile —
-  // without it, "showing meeting details" just looked like "landed on the
-  // employee's generic profile" since nothing pointed at the actual meeting.
-  function openPerson(employeeId: string, entryId: string) {
-    navigate(`/directory?sel=${employeeId}&kind=employee&highlight=${entryId}`)
+  function openMeeting(entryId: string) {
+    navigate(`/meetings/${encodeURIComponent(entryId)}`)
   }
 
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -161,7 +152,7 @@ export function Meetings() {
             <p className="text-[12px] text-muted">Every logged meeting and interaction, across every employee</p>
           </div>
           <Button variant="primary" onClick={() => setCreateOpen(true)} className="shrink-0">
-            <Icon name="Plus" size={15} /> Create Meeting
+            <Icon name="Plus" size={15} /> Add New Meeting
           </Button>
         </div>
 
@@ -260,7 +251,7 @@ export function Meetings() {
                     employee={employeeById.get(e.employeeId)!}
                     department={deptById[e.employeeId]?.name}
                     highlighted={e.id === highlightedId}
-                    onClick={() => openPerson(e.employeeId, e.id)}
+                    onClick={() => openMeeting(e.id)}
                   />
                 </div>
               )

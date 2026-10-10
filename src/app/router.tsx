@@ -12,6 +12,7 @@ const StateWorkspace = lazy(() => import('./routes/StateWorkspace').then((m) => 
 const Directory = lazy(() => import('./routes/Directory').then((m) => ({ default: m.Directory })))
 const Insights = lazy(() => import('./routes/Insights').then((m) => ({ default: m.Insights })))
 const Meetings = lazy(() => import('./routes/Meetings').then((m) => ({ default: m.Meetings })))
+const MeetingDetails = lazy(() => import('./routes/MeetingDetails').then(m => ({ default: m.MeetingDetails })))
 const CredentialsSettingsPage = lazy(() => import('./routes/CredentialsSettingsPage').then(m => ({ default: m.CredentialsSettingsPage })))
 const IntegrationsSettingsPage = lazy(() => import('./routes/IntegrationsSettingsPage').then(m => ({ default: m.IntegrationsSettingsPage })))
 const SettingsPage = lazy(() => import('./routes/SettingsPage').then((m) => ({ default: m.SettingsPage })))
@@ -99,6 +100,7 @@ export const router = createBrowserRouter([
       { path: '/directory', element: <RequireAccess anyOf={NAV_MODULES.directory}><Directory /></RequireAccess> },
       { path: '/analytics', element: <RequireAccess anyOf={NAV_MODULES.insights}><Insights /></RequireAccess> },
       { path: '/meetings', element: <RequireAccess anyOf={NAV_MODULES.meetings}><Meetings /></RequireAccess> },
+      { path: '/meetings/:meetingId', element: <RequireAccess anyOf={NAV_MODULES.meetings}><MeetingDetails /></RequireAccess> },
       { path: '/sales', element: <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess> },
       { path: '/sales/:section', element: <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess> },
       { path: '/teams', element: <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess> },

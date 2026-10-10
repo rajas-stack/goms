@@ -2,7 +2,8 @@ import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissio
 import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
-import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { Field, Input, Select } from '@/components/ui/Field'
+import { RepeatableMeetingField } from './RepeatableMeetingField'
 import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { MultiSelectDropdown } from '@/components/ui/MultiSelectDropdown'
 import { DraftNotice } from '@/components/ui/DraftNotice'
@@ -12,7 +13,8 @@ import { isoToday } from '@/data/repository'
 import { useFormDraft } from '@/lib/useFormDraft'
 import { MANUAL_EVENT_TYPES, TIMELINE_META } from '@/lib/timeline-meta'
 import { EmployeePicker } from './EmployeePicker'
-import type { AttendeeRef, TimelineEvent, TimelineEventType } from '@/lib/types'
+import { MeetingPersonDialog } from './MeetingPersonDialog'
+import type { AttendeeRef, Employee, TimelineEvent, TimelineEventType } from '@/lib/types'
 
 /**
  * `employeeId: null` opens the dialog with an employee-search/pick step
@@ -54,12 +56,15 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   const toast = useToast()
   const { addTimelineEvent, updateTimelineEvent } = useEmployeeMutations()
   const allowed = useAllowed('am.meetings', existingEvent ? 'update' : 'create')
+  const canCreatePerson = useAllowed('am.contacts', 'create')
   const { data: allEmployees = [] } = useAllEmployees()
   const { data: salesPersons = [] } = useSalesPersons()
   const [pickedEmployeeId, setPickedEmployeeId] = useState<string | null>(null)
+  const [creatingPerson, setCreatingPerson] = useState(false)
+  const [createdPerson, setCreatedPerson] = useState<Employee | null>(null)
   const activeEmployeeId = employeeId ?? pickedEmployeeId
   const showPicker = !activeEmployeeId
-  const pickedEmployee = pickedEmployeeId ? allEmployees.find((e) => e.id === pickedEmployeeId) : undefined
+  const pickedEmployee = pickedEmployeeId ? allEmployees.find((e) => e.id === pickedEmployeeId) ?? (createdPerson?.id === pickedEmployeeId ? createdPerson : undefined) : undefined
   const typeOptionsBase = typeFilter && typeFilter.length > 0 ? typeFilter : MANUAL_EVENT_TYPES
   // An existing entry's own type might fall outside the caller's typeFilter
   // (e.g. a 'meeting'-type entry created via the global FAB, edited from a
@@ -89,6 +94,8 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
     if (open) {
       setForm(existingEvent ? formFromEvent(existingEvent) : (draft.take(EMPTY_FORM) ?? EMPTY_FORM))
       setPickedEmployeeId(null)
+      setCreatingPerson(false)
+      setCreatedPerson(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, existingEvent])
@@ -167,18 +174,20 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
         customLabel: form.type === 'custom' ? form.customLabel.trim() : undefined,
         agenda: form.agenda.trim() || undefined, outcome: form.outcome.trim() || undefined, nextSteps: form.nextSteps.trim() || undefined,
       })
-      toast('Added to timeline')
+      toast('Meeting added')
       draft.clear()
     }
     onClose()
   }
 
   if (showPicker) {
+    if (open && creatingPerson) return <MeetingPersonDialog onBack={() => setCreatingPerson(false)} onCreated={person => { setCreatedPerson(person); setPickedEmployeeId(person.id); setCreatingPerson(false) }} />
     return (
       <Dialog
         open={open}
         onClose={onClose}
-        title="Log to timeline"
+        title="Add New Meeting"
+        size="lg"
         description="Choose who this is for"
         footer={<Button onClick={onClose}>Cancel</Button>}
       >
@@ -190,6 +199,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             placeholder="Search a person…"
           />
         </Field>
+        {canCreatePerson && <Button className="mt-4" onClick={() => setCreatingPerson(true)}>Create new person</Button>}
       </Dialog>
     )
   }
@@ -199,18 +209,19 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
     <Dialog
       open={open}
       onClose={onClose}
-      title={existingEvent ? 'Edit timeline entry' : 'Log to timeline'}
+      title={existingEvent ? 'Edit Meeting' : 'Add New Meeting'}
+      size="xl"
       description={!employeeId && pickedEmployee ? `For ${pickedEmployee.name}` : undefined}
       footer={
         <>
           <Button onClick={onClose} disabled={pending}>Cancel</Button>
           <Button variant="primary" onClick={submit} disabled={(!form.title.trim() || pending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
-            {existingEvent ? (pending ? 'Saving…' : 'Save changes') : (pending ? 'Adding…' : 'Add entry')}
+            {existingEvent ? (pending ? 'Saving…' : 'Save changes') : (pending ? 'Adding…' : 'Add Meeting')}
           </Button>
         </>
       }
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         {draft.restored && <DraftNotice onDiscard={draft.discard} />}
         {!employeeId && pickedEmployee && (
           <button
@@ -221,7 +232,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             Change person
           </button>
         )}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field
             label="Meeting type"
             hint={existingEvent ? "Can't be changed after creation" : undefined}
@@ -253,6 +264,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             <Input type="time" value={form.time} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} />
           </Field>
         </div>
+        <div className="grid gap-3 lg:grid-cols-2">
         <Field label="Title" required>
           <Input
             value={form.title}
@@ -280,18 +292,13 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             </p>
           )}
         </Field>
-        <Field label="Note" hint="Optional details.">
-          <Textarea value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
-        </Field>
-        <Field label="Agenda" hint="Optional. What this meeting was for.">
-          <Textarea value={form.agenda} onChange={(e) => setForm((f) => ({ ...f, agenda: e.target.value }))} />
-        </Field>
-        <Field label="Outcome" hint="Optional. What came out of it.">
-          <Textarea value={form.outcome} onChange={(e) => setForm((f) => ({ ...f, outcome: e.target.value }))} />
-        </Field>
-        <Field label="Next steps" hint="Optional. What happens next.">
-          <Textarea value={form.nextSteps} onChange={(e) => setForm((f) => ({ ...f, nextSteps: e.target.value }))} />
-        </Field>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <RepeatableMeetingField label="Note" value={form.note} disabled={pending} onChange={note => setForm(f => ({ ...f, note }))} />
+          <RepeatableMeetingField label="Agenda" value={form.agenda} disabled={pending} onChange={agenda => setForm(f => ({ ...f, agenda }))} />
+          <RepeatableMeetingField label="Outcome" value={form.outcome} disabled={pending} onChange={outcome => setForm(f => ({ ...f, outcome }))} />
+          <RepeatableMeetingField label="Next steps" value={form.nextSteps} disabled={pending} onChange={nextSteps => setForm(f => ({ ...f, nextSteps }))} />
+        </div>
       </div>
     </Dialog>
   )

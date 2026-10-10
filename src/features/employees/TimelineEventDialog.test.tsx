@@ -6,11 +6,44 @@ import { ALL_EVENT_TYPES, MEETING_LOG_TYPES } from '@/lib/timeline-meta'
 import { TimelineEventDialog } from './TimelineEventDialog'
 
 // Item 13: Agenda/Outcome/Next Steps are new optional fields on the
-// "Log to timeline" form, alongside the existing Note field. This suite
+// "Add New Meeting" form, alongside the existing Note field. This suite
 // covers only the submit() payload wiring for the three new fields —
 // everything else about the dialog (person picker, attendee list) is
 // exercised implicitly by always passing a real employeeId.
 const addTimelineMutateAsync = vi.fn().mockResolvedValue({})
+
+it('adds and removes rows while saving every remaining meeting section', async () => {
+  const user = userEvent.setup()
+  render(<TimelineEventDialog open employeeId="emp-1" onClose={vi.fn()} />)
+  await user.type(screen.getByLabelText(/^title$/i), 'Planning')
+  for (const label of ['Note', 'Agenda', 'Outcome', 'Next steps']) {
+    await user.type(screen.getByLabelText(label, { exact: true }), `${label} first`)
+    await user.click(screen.getByRole('button', { name: `Add ${label.toLowerCase()} row` }))
+    await user.type(screen.getByLabelText(`${label} row 2`), `${label} second`)
+    await user.click(screen.getByRole('button', { name: `Add ${label.toLowerCase()} row` }))
+    await user.type(screen.getByLabelText(`${label} row 3`), 'Remove this')
+    await user.click(screen.getByRole('button', { name: `Remove ${label.toLowerCase()} row 3` }))
+  }
+  await user.click(screen.getByRole('button', { name: 'Add Meeting' }))
+  expect(addTimelineMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ note: 'Note first\nNote second', agenda: 'Agenda first\nAgenda second', outcome: 'Outcome first\nOutcome second', nextSteps: 'Next steps first\nNext steps second' }))
+})
+
+it('creates a new contact and continues into the meeting without leaving the flow', async () => {
+  const create = vi.fn().mockResolvedValue({ id: 'new-person', name: 'New Person' })
+  vi.spyOn(api, 'useDepartments').mockReturnValue({ data: [{ id: 'department-1', name: 'Health', stateCode: 24 }] } as never)
+  vi.spyOn(api, 'useEmployeeMutations').mockReturnValue({ create: { mutateAsync: create, isPending: false }, addTimelineEvent: { mutateAsync: addTimelineMutateAsync, isPending: false } } as never)
+  const user = userEvent.setup()
+  render(<TimelineEventDialog open employeeId={null} onClose={vi.fn()} />)
+  await user.click(screen.getByRole('button', { name: 'Create new person' }))
+  await user.type(screen.getByLabelText(/^name/i), 'New Person')
+  await user.selectOptions(screen.getByLabelText(/^department/i), 'department-1')
+  await user.click(screen.getByRole('button', { name: 'Save and continue' }))
+  expect(create).toHaveBeenCalledWith(expect.objectContaining({ name: 'New Person', orgNodeId: 'department-1' }))
+  expect(await screen.findByText('For New Person')).toBeInTheDocument()
+  await user.type(screen.getByLabelText(/^title$/i), 'Introduction')
+  await user.click(screen.getByRole('button', { name: 'Add Meeting' }))
+  expect(addTimelineMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ employeeId: 'new-person', title: 'Introduction' }))
+})
 
 function stubApiHooks() {
   vi.spyOn(api, 'useEmployeeMutations').mockReturnValue({
@@ -38,7 +71,7 @@ describe('TimelineEventDialog — Agenda/Outcome/Next Steps (Task 8.2)', () => {
     await user.type(screen.getByLabelText(/^agenda/i), 'Discuss Q1 budget')
     await user.type(screen.getByLabelText(/^outcome/i), 'Approved with revisions')
     await user.type(screen.getByLabelText(/^next steps/i), 'Send revised sheet by Friday')
-    await user.click(screen.getByRole('button', { name: 'Add entry' }))
+    await user.click(screen.getByRole('button', { name: 'Add Meeting' }))
 
     expect(addTimelineMutateAsync).toHaveBeenCalledTimes(1)
     const payload = addTimelineMutateAsync.mock.calls[0][0]
@@ -52,7 +85,7 @@ describe('TimelineEventDialog — Agenda/Outcome/Next Steps (Task 8.2)', () => {
     render(<TimelineEventDialog open employeeId="emp-1" onClose={vi.fn()} />)
 
     await user.type(screen.getByLabelText(/^title$/i), 'Quick call')
-    await user.click(screen.getByRole('button', { name: 'Add entry' }))
+    await user.click(screen.getByRole('button', { name: 'Add Meeting' }))
 
     expect(addTimelineMutateAsync).toHaveBeenCalledTimes(1)
     const payload = addTimelineMutateAsync.mock.calls[0][0]
@@ -130,7 +163,7 @@ describe('TimelineEventDialog — attendee picker (Task 8.3)', () => {
     await user.click(screen.getByRole('checkbox', { name: 'Asha Rao' }))
     await user.click(screen.getByRole('checkbox', { name: 'Vikram Shah' }))
     await user.type(screen.getByLabelText(/^title$/i), 'Quarterly review')
-    await user.click(screen.getByRole('button', { name: 'Add entry' }))
+    await user.click(screen.getByRole('button', { name: 'Add Meeting' }))
 
     expect(addTimelineMutateAsync).toHaveBeenCalledTimes(1)
     const payload = addTimelineMutateAsync.mock.calls[0][0]
@@ -246,17 +279,17 @@ describe('TimelineEventDialog — edit mode (Task 8.4)', () => {
   })
 })
 
-// GlobalFab's "Add Activity" and EmployeeDetails' "+ Add meeting" merged
+// GlobalFab's "Add Meeting" and EmployeeDetails' "+ Add meeting" merged
 // down to typeFilter differences on this one dialog (no more separate
 // "Create Meeting"/"Log Interaction" flows) — this covers that each list
 // still offers the right options and default, at the prop level rather than
 // through either specific caller's own UI.
-describe('TimelineEventDialog — unified type list (Add Activity consolidation)', () => {
+describe('TimelineEventDialog — unified type list (Add Meeting consolidation)', () => {
   beforeEach(() => {
     stubApiHooks()
   })
 
-  it('offers every type including Meeting, defaulting to Meeting, when given ALL_EVENT_TYPES (the FAB\'s "Add Activity")', () => {
+  it('offers every type including Meeting, defaulting to Meeting, when given ALL_EVENT_TYPES (the FAB\'s "Add Meeting")', () => {
     render(<TimelineEventDialog open employeeId="emp-1" typeFilter={ALL_EVENT_TYPES} onClose={vi.fn()} />)
 
     const select = screen.getByLabelText(/^meeting type/i)
@@ -287,7 +320,7 @@ describe('TimelineEventDialog — unified type list (Add Activity consolidation)
     render(<TimelineEventDialog open employeeId="emp-1" typeFilter={ALL_EVENT_TYPES} onClose={vi.fn()} />)
 
     await user.type(screen.getByLabelText(/^title$/i), 'QA Sync')
-    await user.click(screen.getByRole('button', { name: 'Add entry' }))
+    await user.click(screen.getByRole('button', { name: 'Add Meeting' }))
 
     expect(addTimelineMutateAsync).toHaveBeenCalledTimes(1)
     expect(addTimelineMutateAsync.mock.calls[0][0].type).toBe('meeting')
