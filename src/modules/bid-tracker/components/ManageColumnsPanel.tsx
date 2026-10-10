@@ -7,16 +7,14 @@ import { useBidCustomFields, useBidCustomFieldMutations } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { BidCustomField } from '@/lib/types'
 import { hasOptions } from '@goms/domain'
-import { CUSTOM_TYPE_LABEL, type GridColumnMeta } from '../gridColumns'
+import { CUSTOM_TYPE_LABEL, setColumnVisibility, type GridColumnMeta } from '../gridColumns'
 import { ColumnsPanel } from './ColumnsPanel'
 import { OptionsEditor } from './OptionsEditor'
 
 const box = 'h-8 min-w-0 flex-1 rounded-lg border border-line bg-white px-2 text-[13px] text-ink focus-visible:focus-ring'
 
-/** The Columns popover: visibility + order for every column (ColumnsPanel), and
- *  below it the management of the user-defined columns — rename, edit options,
- *  default order, archive, restore, and delete (only for a column that has never
- *  held a value; everything else is archive-only, spec §8.1). */
+/** Remove columns from the current view and restore them with values intact.
+ * Custom definitions also support renaming, options, default order and archiving. */
 export function ManageColumnsPanel({ all, visible, columnOrder, onVisibleChange, focusId, inScope }: {
   all: GridColumnMeta[]
   visible: GridColumnMeta[]
@@ -28,7 +26,7 @@ export function ManageColumnsPanel({ all, visible, columnOrder, onVisibleChange,
   inScope?: (field: BidCustomField) => boolean
 }) {
   const { data: fields = [] } = useBidCustomFields(true)
-  const { update, reorder, archive, unarchive, remove } = useBidCustomFieldMutations()
+  const { update, reorder, archive, unarchive } = useBidCustomFieldMutations()
   const allowed = useAllowed('bid.columns', 'update')
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
   const [editingOptions, setEditingOptions] = useState<{ id: string; options: string[] } | null>(null)
@@ -72,24 +70,20 @@ export function ManageColumnsPanel({ all, visible, columnOrder, onVisibleChange,
     void run(() => archive.mutateAsync(f.id))
   }
   const doDelete = (f: BidCustomField) => {
-    const message = f.hasHeldValue
-      ? `Delete "${f.name}" permanently? Every value in it is deleted too and cannot be recovered. (Archive keeps the values.)`
-      : `Delete "${f.name}"? It has never held a value, so nothing is lost.`
-    if (!window.confirm(message)) return
-    void run(() => remove.mutateAsync({ id: f.id, withValues: f.hasHeldValue }))
+    onVisibleChange(setColumnVisibility(all, columnOrder, `custom:${f.key}`, false))
   }
 
   const deleteButton = (f: BidCustomField) => (
-    <Button variant="ghost" size="icon" aria-label={`Delete ${f.name}`} title="Delete column" onClick={() => doDelete(f)}><Icon name="Trash2" size={14} /></Button>
+    <Button variant="ghost" size="icon" aria-label={`Delete ${f.name}`} title="Remove from this view (restore under Hidden)" disabled={visible.length === 1 && visible[0]?.id === `custom:${f.key}`} onClick={() => doDelete(f)}><Icon name="Trash2" size={14} /></Button>
   )
 
   return (
     <Gate allowed={allowed}>
     <div className="flex flex-col divide-y divide-line" data-testid="manage-columns-panel">
-      <ColumnsPanel all={all} visible={visible} columnOrder={columnOrder} onChange={onVisibleChange} focusId={focusId} onDeleteCustom={doDelete} />
+      <ColumnsPanel all={all} visible={visible} columnOrder={columnOrder} onChange={onVisibleChange} focusId={focusId} />
 
       {/* Nothing to manage yet → no section at all (no empty heading or hint);
-          creating the first custom column is the toolbar's Add column button. */}
+          creating the first custom column is the Add column button above this panel. */}
       {(active.length > 0 || archived.length > 0 || error) && (
       <div className="flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2 p-3">
         {active.length > 0 && (
@@ -122,7 +116,7 @@ export function ManageColumnsPanel({ all, visible, columnOrder, onVisibleChange,
                   <Button variant="ghost" size="icon" aria-label={`Move ${f.name} earlier by default`} title="Earlier in the default column order (new views)" disabled={i === 0} onClick={() => void move(i, -1)}><Icon name="ArrowUp" size={14} /></Button>
                   <Button variant="ghost" size="icon" aria-label={`Move ${f.name} later by default`} title="Later in the default column order (new views)" disabled={i === active.length - 1} onClick={() => void move(i, 1)}><Icon name="ArrowDown" size={14} /></Button>
                   <Button variant="ghost" size="icon" aria-label={`Archive ${f.name}`} onClick={() => doArchive(f)}><Icon name="Archive" size={14} /></Button>
-                  {deleteButton(f)}
+                  {visible.some(column => column.id === `custom:${f.key}`) ? deleteButton(f) : <Button variant="ghost" size="sm" aria-label={`Show ${f.name} in this view`} onClick={() => onVisibleChange(setColumnVisibility(all, columnOrder, `custom:${f.key}`, true))}><Icon name="Eye" size={14} />Restore</Button>}
                 </div>
               )}
               {editingOptions?.id === f.id && (
@@ -148,7 +142,6 @@ export function ManageColumnsPanel({ all, visible, columnOrder, onVisibleChange,
                   <Button variant="ghost" size="sm" aria-label={`Restore ${f.name}`} onClick={() => void run(() => unarchive.mutateAsync(f.id))}>
                     <Icon name="ArchiveRestore" size={14} /> Restore
                   </Button>
-                  {deleteButton(f)}
                 </li>
               ))}
             </ul>

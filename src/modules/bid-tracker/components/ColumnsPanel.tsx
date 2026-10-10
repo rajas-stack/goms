@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { cn } from '@/lib/utils'
-import type { BidCustomField } from '@/lib/types'
 import {
   CUSTOM_GROUP, GRID_GROUPS, columnIdFromOrderToken, isHiddenColumnOrderToken,
   orderedColumnIds, setColumnVisibility, showAllColumnIds, type GridColumnMeta,
@@ -14,7 +13,7 @@ const groupLabel = (id: string) => (id === CUSTOM_GROUP.id ? CUSTOM_GROUP.label 
  *  (the same array saved views persist): position = display order, absence =
  *  hidden. This panel is the ONE place to move / hide / show a column — the
  *  header menu only links here ("Manage column…"). */
-export function ColumnsPanel({ all, visible, columnOrder, onChange, focusId, onDeleteCustom }: {
+export function ColumnsPanel({ all, visible, columnOrder, onChange, focusId }: {
   all: GridColumnMeta[]
   /** Visible columns, in display order. */
   visible: GridColumnMeta[]
@@ -23,9 +22,6 @@ export function ColumnsPanel({ all, visible, columnOrder, onChange, focusId, onD
   onChange: (orderedVisibleIds: string[]) => void
   /** The column whose header opened this panel: scrolled to and highlighted. */
   focusId?: string | null
-  /** Delete a custom column for good (the caller confirms). Default columns are built in, so
-   *  their Delete removes them from the grid instead — restorable under Hidden. */
-  onDeleteCustom?: (field: BidCustomField) => void
 }) {
   const focusRef = useRef<HTMLLIElement>(null)
   useEffect(() => { focusRef.current?.scrollIntoView?.({ block: 'nearest' }) }, [focusId])
@@ -108,9 +104,9 @@ export function ColumnsPanel({ all, visible, columnOrder, onChange, focusId, onD
               </Button>
               <Button
                 variant="ghost" size="icon" aria-label={`Delete ${c.header}`}
-                disabled={!c.custom && visible.length === 1}
-                title={c.custom ? 'Delete this column and its values' : 'Remove from the grid (restore it anytime under Hidden)'}
-                onClick={() => (c.custom ? onDeleteCustom?.(c.custom) : hide(c.id))}
+                disabled={visible.length === 1}
+                title="Remove from this view (restore anytime under Hidden)"
+                onClick={() => hide(c.id)}
               >
                 <Icon name="Trash2" size={14} />
               </Button>
@@ -127,8 +123,8 @@ export function ColumnsPanel({ all, visible, columnOrder, onChange, focusId, onD
                 <span className="min-w-0 flex-1 truncate text-[13px] text-muted">
                   {c.header} <span className="text-[11px]">· {groupLabel(c.group)}</span>
                 </span>
-                <Button variant="ghost" size="icon" aria-label={`Show ${c.header}`} onClick={() => show(c.id)}>
-                  <Icon name="Eye" size={14} />
+                <Button variant="ghost" size="sm" aria-label={`Show ${c.header}`} title={`Restore ${c.header}`} onClick={() => show(c.id)}>
+                  <Icon name="Eye" size={14} />Restore
                 </Button>
               </li>
             ))}
