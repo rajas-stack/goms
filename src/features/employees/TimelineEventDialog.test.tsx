@@ -12,6 +12,44 @@ import { TimelineEventDialog } from './TimelineEventDialog'
 // exercised implicitly by always passing a real employeeId.
 const addTimelineMutateAsync = vi.fn().mockResolvedValue({})
 
+it('restores the selected person and filled rows after Escape and a new browser session', async () => {
+  vi.spyOn(api, 'useAllEmployees').mockReturnValue({ data: [{ id: 'resume-person', name: 'Resume Person', designation: 'Officer', vacant: false }] } as never)
+  const user = userEvent.setup()
+  const close = vi.fn()
+  const first = render(<TimelineEventDialog open employeeId={null} onClose={close} />)
+  await user.click(screen.getByPlaceholderText('Search a person…'))
+  await user.click(screen.getByRole('button', { name: /Resume Person/ }))
+  await user.type(screen.getByLabelText(/^title$/i), 'Unfinished meeting')
+  await user.type(screen.getByLabelText('Agenda', { exact: true }), 'First agenda')
+  await user.click(screen.getByRole('button', { name: 'Add agenda row' }))
+  await user.type(screen.getByLabelText('Agenda row 2'), 'Second agenda')
+  await user.keyboard('{Escape}')
+  expect(close).toHaveBeenCalled()
+  first.unmount()
+  sessionStorage.clear()
+  render(<TimelineEventDialog open employeeId={null} onClose={vi.fn()} />)
+  expect(await screen.findByText('Restored your unsaved changes.')).toBeInTheDocument()
+  expect(screen.getByText('For Resume Person')).toBeInTheDocument()
+  expect(screen.getByLabelText(/^title$/i)).toHaveValue('Unfinished meeting')
+  expect(screen.getByLabelText('Agenda row 2')).toHaveValue('Second agenda')
+  await user.click(screen.getByRole('button', { name: 'Add Meeting' }))
+  expect(addTimelineMutateAsync).toHaveBeenCalledWith(expect.objectContaining({ employeeId: 'resume-person', agenda: 'First agenda\nSecond agenda' }))
+  expect(localStorage.getItem('gorms:meeting-draft:local:new:global')).toBeNull()
+})
+
+it('lets a restored draft be discarded and saves subsequent new typing', async () => {
+  const user = userEvent.setup()
+  const first = render(<TimelineEventDialog open employeeId="emp-1" onClose={vi.fn()} />)
+  await user.type(screen.getByLabelText(/^title$/i), 'Old draft')
+  first.unmount()
+  render(<TimelineEventDialog open employeeId="emp-1" onClose={vi.fn()} />)
+  await user.click(await screen.findByRole('button', { name: 'Discard' }))
+  expect(screen.getByLabelText(/^title$/i)).toHaveValue('')
+  expect(localStorage.getItem('gorms:meeting-draft:local:new:emp-1')).toBeNull()
+  await user.type(screen.getByLabelText(/^title$/i), 'Replacement draft')
+  expect(JSON.parse(localStorage.getItem('gorms:meeting-draft:local:new:emp-1')!).value.form.title).toBe('Replacement draft')
+})
+
 it('adds and removes rows while saving every remaining meeting section', async () => {
   const user = userEvent.setup()
   render(<TimelineEventDialog open employeeId="emp-1" onClose={vi.fn()} />)
@@ -56,6 +94,7 @@ function stubApiHooks() {
 beforeEach(() => {
   stubApiHooks()
   sessionStorage.clear()
+  localStorage.clear()
 })
 
 afterEach(() => {
