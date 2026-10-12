@@ -52,6 +52,9 @@ tsconfig.tsbuildinfo
 !packages/
 !packages/domain/
 !packages/domain/**
+!docker/
+!docker/api-entrypoint.mjs
+!docker/api-healthcheck.mjs
 **/node_modules
 **/dist
 **/.env
