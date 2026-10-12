@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import { signOut } from 'firebase/auth'
-import { auth } from '@/lib/firebaseAuth'
+import { authApi } from '@/lib/auth'
 import { Dialog } from '@/components/ui/Dialog'
 import { ImportDialog } from '@/features/import/ImportDialog'
 import { AdminImportAuthGate, type AdminImportAuthPhase } from './auth/AdminImportAuthGate'
@@ -48,7 +47,7 @@ export function AdminImportModal({ open, onClose }: { open: boolean; onClose: ()
         open={open}
         onClose={handleClose}
         signedInAs={email ?? undefined}
-        onSignOut={() => { if (auth) void signOut(auth); handleClose() }}
+        onSignOut={() => { void authApi.signOut(); handleClose() }}
       />
     )
   }

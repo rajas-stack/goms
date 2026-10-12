@@ -1,5 +1,5 @@
 import type { RbacMode, Role, UserFacts } from '@goms/domain'
-import { isAmnexAccount, verifyFirebaseToken } from '../auth/identity.js'
+import { isAmnexAccount, verifyIdentity } from '../auth/identity.js'
 import { rbacMode } from '../auth/rbac/mode.js'
 import { loadUserFacts } from '../auth/rbac/userFacts.js'
 import { pool } from '../db.js'
@@ -22,7 +22,7 @@ export const authRouter = router({
     let verified = ctx.user
     if (!verified) {
       try {
-        verified = await verifyFirebaseToken(ctx.authHeader)
+        verified = await verifyIdentity(ctx.authHeader)
       } catch (e) {
         // `shadow` changes nothing for the browser: a signed-out visitor is not prompted to sign in. At `enforce` they are.
         if (mode === 'shadow') return { mode: 'off', email: null, roles: [], facts: null }

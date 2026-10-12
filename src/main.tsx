@@ -1,3 +1,5 @@
+// MUST stay the first import: strips a one-time `?auth_code=` before ./app/router creates the browser router (OAuth provider only).
+import './lib/auth/earlyHandoff'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
@@ -5,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { router } from './app/router'
 import { bootstrapRepository } from './data/repository'
 import { AuthPromptDialog } from './components/AuthPromptDialog'
+import { authApi } from './lib/auth'
 import { installStaleChunkRecovery } from './lib/staleChunkRecovery'
 import './index.css'
 
@@ -24,6 +27,12 @@ function render() {
     </StrictMode>,
   )
 }
+
+// Auth bootstrap (a no-op for the Firebase provider). A one-time `?auth_code=` was
+// already stripped (and stashed for this call) by ./lib/auth/earlyHandoff, before
+// the router existed; not awaited, because token reads wait for the in-flight
+// redeem themselves.
+void authApi.bootstrap()
 
 // Restore the locally persisted store BEFORE the first render: every read hits
 // the in-memory data directly, so hydrating afterwards would race the first

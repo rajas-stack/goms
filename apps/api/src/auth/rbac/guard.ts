@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server'
 import { ownEntry, type RbacMode, type UserFacts } from '@goms/domain'
-import { isAmnexAccount, verifyFirebaseToken } from '../identity.js'
+import { isAmnexAccount, verifyIdentity } from '../identity.js'
 import { decide } from './decide.js'
 import { RbacDenial } from './denial.js'
 import { PROCEDURE_POLICY } from './registry/index.js'
@@ -28,7 +28,7 @@ export async function evaluateCall(args: {
   if (!email) {
     // Public reads and reads with READ_AUTH off arrive here unauthenticated: resolve the caller ourselves.
     try {
-      const verified = await verifyFirebaseToken(ctx.authHeader)
+      const verified = await verifyIdentity(ctx.authHeader)
       if (!isAmnexAccount(verified.email)) {
         throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
       }

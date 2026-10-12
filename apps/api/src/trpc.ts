@@ -1,12 +1,13 @@
 import { initTRPC, TRPCError } from '@trpc/server'
 import { verifyAdminImportToken } from './auth/verifyAdminImportToken.js'
-import { verifyFirebaseToken, isAllowListed, isAmnexAccount, type AuthenticatedUser } from './auth/identity.js'
+import { verifyIdentity, isAllowListed, isAmnexAccount, type AuthenticatedUser } from './auth/identity.js'
 import { rbacMode } from './auth/rbac/mode.js'
 import { evaluateCall } from './auth/rbac/guard.js'
 import { RbacDenial } from './auth/rbac/denial.js'
 import { productionSecurity } from './security/config.js'
 import { userOperationBudget } from './security/operationLimit.js'
 import { beginSecurityAudit, finishSecurityAudit } from './security/audit.js'
+import { requireSystemAdmin } from './auth/rbac/systemAdminOnly.js'
 
 export interface Context {
   authHeader?: string
@@ -31,7 +32,7 @@ export const router = t.router
 export const publicProcedure = t.procedure.use(async ({ ctx, path, type, next }) => {
   if (!productionSecurity() || path === 'health.check') return next()
   // tRPC shares this request context across its batch: verify revocation once per HTTP request.
-  const user = await (ctx.verifiedIdentity ??= verifyFirebaseToken(ctx.authHeader))
+  const user = await (ctx.verifiedIdentity ??= verifyIdentity(ctx.authHeader))
   if (!isAmnexAccount(user.email)) throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
   if (type === 'mutation' && /^(credentialPassphrases\.|access\.)/.test(path) && (!user.authTime || Date.now() / 1000 - user.authTime > 900)) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in again before changing credentials or permissions.' })
   if (!userOperationBudget.consume(user.uid)) throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'Too many operations. Retry in a few minutes.' })
@@ -92,7 +93,7 @@ export const protectedProcedure = publicProcedure
     if (!authEnforced()) {
       return next({ ctx })
     }
-    const user = ctx.user ?? await verifyFirebaseToken(ctx.authHeader)
+    const user = ctx.user ?? await verifyIdentity(ctx.authHeader)
     if (!isAmnexAccount(user.email)) {
       throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
     }
@@ -107,7 +108,7 @@ function readAuthEnforced(): boolean {
 /** Staged read-protection boundary (2026-09-15 public-read security audit,
  *  finding: every query in every business router was `publicProcedure`).
  *  Reuses the exact same authorization check as protectedProcedure —
- *  verifyFirebaseToken + isAmnexAccount, no new rule — but behind its own
+ *  verifyIdentity + isAmnexAccount, no new rule — but behind its own
  *  independent flag rather than AUTH_ENFORCEMENT_ENABLED. That flag is
  *  already "true" in goms-prod today (for mutations), so a read wired
  *  through protectedProcedure itself would start enforcing the moment this
@@ -124,7 +125,7 @@ export const protectedReadProcedure = publicProcedure
     if (!readAuthEnforced()) {
       return next({ ctx })
     }
-    const user = ctx.user ?? await verifyFirebaseToken(ctx.authHeader)
+    const user = ctx.user ?? await verifyIdentity(ctx.authHeader)
     if (!isAmnexAccount(user.email)) {
       throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
     }
@@ -168,6 +169,14 @@ export const accessProcedure = protectedProcedure.use(async ({ ctx, path, getRaw
   // `shadow` only logs for every other procedure, but an override written during shadow becomes a live role the moment
   // RBAC is enforced — so here the decision is applied in shadow too (spec §3.3).
   if (mode === 'shadow') await evaluateCall({ mode: 'enforce', path, rawInput: await getRawInput(), ctx })
+  return next()
+})
+
+/** `accessProcedure` (its gating is kept, in every RBAC mode) plus an explicit System Admin check: the procedure is listed in
+ *  SYSTEM_ADMIN_ONLY, so a functional role that holds the matrix permission (IT on `admin.access`) is still refused. System Admin
+ *  membership is env-only (ADMIN_ALLOWED_EMAILS); like `adminProcedure`, a no-op when auth is not enforced. */
+export const systemAdminProcedure = accessProcedure.use(({ ctx, path, next }) => {
+  requireSystemAdmin(ctx, 'Only a System Admin can do this.', path)
   return next()
 })
 

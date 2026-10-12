@@ -13,7 +13,9 @@ import type { BidSynopsis, BidSynopsisSection, SaveBidSynopsisInput } from '@gom
 import type { TenderWebsite, TenderWebsiteInput, TenderWebsiteKind } from '@goms/domain'
 import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
+import { authApi } from '@/lib/auth'
 import type { MyAccess } from '../../../apps/api/src/routers/auth'
+import type { EffectivePermissions, OverrideHistoryFilter, OverrideHistoryRow, PermissionMatrix, UnmatchedOverride } from '../accessTypes'
 import { authPromptLink } from './authPromptLink'
 import type { AppRouter } from '../../../apps/api/src/index'
 import type {
@@ -55,7 +57,7 @@ export class RemoteRepository implements Partial<Repository> {
   deleteTenderWebsite = async (id: string): Promise<void> => { await this.client.tenderWebsites.delete.mutate({ id }) }
   setTenderWebsiteEditingLock = (id: string, locked: boolean): Promise<TenderWebsite> => this.client.tenderWebsites.setEditingLock.mutate({ id, locked })
   private client = createTRPCClient<AppRouter>({
-    links: [authPromptLink, httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`, headers: getAuthHeaders })],
+    links: [authPromptLink, httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`, headers: getAuthHeaders, fetch: authApi.fetch })],
   })
 
   getMyAccess = (): Promise<MyAccess> => this.client.auth.me.query()
@@ -63,6 +65,10 @@ export class RemoteRepository implements Partial<Repository> {
   listRoleOverrides = (): Promise<RoleOverrideRow[]> => this.client.access.listOverrides.query()
   setRoleOverride = async (input: SetRoleOverrideInput): Promise<void> => { await this.client.access.setOverride.mutate(input as never) }
   removeRoleOverride = (id: string): Promise<void> => this.client.access.removeOverride.mutate({ id })
+  listUnmatchedOverrides = (): Promise<UnmatchedOverride[]> => this.client.access.unmatchedOverrides.query()
+  listOverrideHistory = (filter?: OverrideHistoryFilter): Promise<OverrideHistoryRow[]> => this.client.access.overrideHistory.query(filter)
+  getPermissionMatrix = (): Promise<PermissionMatrix> => this.client.access.permissionMatrix.query()
+  getEffectivePermissions = (email: string): Promise<EffectivePermissions> => this.client.access.effectivePermissions.query({ email })
 
   listCustomers = (): Promise<Customer[]> => this.client.customers.list.query()
   getCustomer = (id: string): Promise<Customer | null> => this.client.customers.get.query({ id })

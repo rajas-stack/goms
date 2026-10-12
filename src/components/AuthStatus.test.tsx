@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, act, within, waitFor, fireEvent } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { AuthStatus } from './AuthStatus'
-import * as authPrompt from '@/lib/authPrompt'
 
 const { onAuthStateChanged, signOut } = vi.hoisted(() => ({
   onAuthStateChanged: vi.fn(),
@@ -14,8 +13,18 @@ function authStateCallback(): (user: { email: string } | null) => void {
   return onAuthStateChanged.mock.calls[0][1]
 }
 
-function renderStatus() {
-  return render(<MemoryRouter><AuthStatus /></MemoryRouter>)
+function Where() {
+  const l = useLocation()
+  return <div data-testid="where">{l.pathname + l.search + l.hash}</div>
+}
+
+function renderStatus(at = '/') {
+  return render(
+    <MemoryRouter initialEntries={[at]}>
+      <AuthStatus />
+      <Where />
+    </MemoryRouter>,
+  )
 }
 
 function requestSignOut() {
@@ -36,12 +45,13 @@ describe('AuthStatus', () => {
     expect(screen.getByRole('menuitem', { name: /sign in/i })).toBeInTheDocument()
   })
 
-  it('triggers the shared sign-in prompt when "Sign in" is clicked, rather than its own popup flow', () => {
-    const spy = vi.spyOn(authPrompt, 'notifyAuthRequired')
-    renderStatus()
+  it('sends the user to /login, returning to the current page, when "Sign in" is clicked', () => {
+    renderStatus('/sales/roster?tab=a#x')
     fireEvent.click(screen.getByRole('button', { name: 'Profile options' }))
     fireEvent.click(screen.getByRole('menuitem', { name: /sign in/i }))
-    expect(spy).toHaveBeenCalledWith('unauthorized')
+    expect(screen.getByTestId('where')).toHaveTextContent(
+      `/login?next=${encodeURIComponent('/sales/roster?tab=a#x')}`,
+    )
   })
 
   it('shows the signed-in account\'s email once Firebase reports a user', () => {
@@ -71,6 +81,28 @@ describe('AuthStatus', () => {
       within(dialog).getByRole('button', { name: /^sign out$/i }).click()
     })
     expect(signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('redirects to /login once sign-out completes, leaving the internal page', async () => {
+    onAuthStateChanged.mockImplementation((_auth, cb) => { cb({ email: 'rajas@amnex.com' }); return () => {} })
+    renderStatus('/sales/roster')
+    expect(screen.getByTestId('where')).toHaveTextContent('/sales/roster')
+    requestSignOut()
+    await act(async () => {
+      within(screen.getByRole('dialog')).getByRole('button', { name: /^sign out$/i }).click()
+    })
+    await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent(/^\/login$/))
+  })
+
+  it('stays put if sign-out fails', async () => {
+    signOut.mockRejectedValue(new Error('network'))
+    onAuthStateChanged.mockImplementation((_auth, cb) => { cb({ email: 'rajas@amnex.com' }); return () => {} })
+    renderStatus('/sales/roster')
+    requestSignOut()
+    await act(async () => {
+      within(screen.getByRole('dialog')).getByRole('button', { name: /^sign out$/i }).click()
+    })
+    expect(screen.getByTestId('where')).toHaveTextContent('/sales/roster')
   })
 
   it('does not sign out if the confirmation is cancelled', async () => {

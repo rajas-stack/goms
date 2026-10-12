@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server'
 import type { PoolClient } from 'pg'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { EMAIL_BINDING_MESSAGE, ORG_SYNC_EMAIL_MESSAGE, emailChanges, lacksSystemAdmin, requireSystemAdmin, type CallerContext } from '../auth/rbac/systemAdminOnly.js'
 
 // Org Structure: the company chart. Pre-Sales / Bid / Legal rosters are mirrored from it by the
 // sync_delivery_teams_from_org() SQL function, which every mutation runs in the same transaction.
@@ -51,14 +52,31 @@ function managerProblem(person: { id: string; level: number }, managerId: string
   return null
 }
 
-/** Runs `fn` in a transaction with org edits serialised, then re-mirrors the three team rosters. */
-async function inOrgTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+const memberEmails = async (client: PoolClient): Promise<Map<string, string>> =>
+  new Map((await client.query('SELECT id, email FROM delivery_team_members')).rows.map((r) => [r.id as string, r.email as string]))
+
+/** Runs `fn` in a transaction with org edits serialised, then re-mirrors the three team rosters.
+ *
+ *  The mirror (sync_delivery_teams_from_org) links an unlinked, hand-added member to an org person by NAME and then copies the person's
+ *  email onto it, so a rename / department edit could re-point a member's email without any email field being sent. A caller who is not
+ *  a System Admin may not change team-member emails (SYSTEM_ADMIN_ONLY): their transaction is rolled back (FORBIDDEN) when the mirror
+ *  changed the email of a member that existed before it ran. Members it only inserts (a new person's own row) and links that keep the
+ *  member's email are the ordinary mirroring and stay allowed. Not applied to a System Admin, nor when auth is not enforced. */
+async function inOrgTransaction<T>(ctx: CallerContext, fn: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
     await client.query('LOCK TABLE org_people IN SHARE ROW EXCLUSIVE MODE')
     const result = await fn(client)
+    const guarded = lacksSystemAdmin(ctx)
+    const before = guarded ? await memberEmails(client) : null
     await client.query('SELECT sync_delivery_teams_from_org()')
+    if (before) {
+      const after = await memberEmails(client)
+      for (const [id, email] of before) {
+        if (after.has(id) && after.get(id) !== email) requireSystemAdmin(ctx, ORG_SYNC_EMAIL_MESSAGE, 'orgPeople.update#email')
+      }
+    }
     await client.query('COMMIT')
     return result
   } catch (error) {
@@ -90,7 +108,9 @@ export const orgPeopleRouter = router({
     departments: departments.optional(),
     managerId: z.string().uuid().nullable().optional(),
     email: z.string().trim().max(254).optional(),
-  })).mutation(({ input }) => inOrgTransaction(async (client) => {
+  })).mutation(({ input, ctx }) => inOrgTransaction(ctx, async (client) => {
+    // The email is what derives this person's role (SYSTEM_ADMIN_ONLY, every RBAC mode): adding one needs a System Admin.
+    if (emailChanges(input.email, '')) requireSystemAdmin(ctx, EMAIL_BINDING_MESSAGE, 'orgPeople.create#email')
     if (await nameTaken(client, input.name, null)) throw new TRPCError({ code: 'CONFLICT', message: 'Someone with this name is already in the org.' })
     const people = await loadPeople(client)
     const problem = managerProblem({ id: '', level: input.level }, input.managerId ?? null, people)
@@ -114,14 +134,18 @@ export const orgPeopleRouter = router({
       managerId: z.string().uuid().nullable().optional(),
       status: z.enum(['active', 'inactive']).optional(),
     }),
-  })).mutation(({ input }) => inOrgTransaction(async (client) => {
+  })).mutation(({ input, ctx }) => inOrgTransaction(ctx, async (client) => {
     const current = (await client.query('SELECT * FROM org_people WHERE id=$1 FOR UPDATE', [input.id])).rows[0]
     if (!current) throw new TRPCError({ code: 'NOT_FOUND', message: 'This person is no longer in the org.' })
     const p = input.patch
+    // Changing the stored email (trimmed, case-insensitive) needs a System Admin; re-saving the same one does not, and then the
+    // STORED value is kept as it is: case or Unicode look-alikes of it (the Kelvin sign lowercases to "k") are not a way to rewrite it.
+    const emailChanged = emailChanges(p.email, current.email)
+    if (emailChanged) requireSystemAdmin(ctx, EMAIL_BINDING_MESSAGE, 'orgPeople.update#email')
     const next = {
       name: p.name ?? current.name,
       designation: p.designation ?? current.designation,
-      email: p.email ?? current.email,
+      email: emailChanged ? p.email! : current.email,
       level: p.level ?? current.level,
       departments: p.departments !== undefined ? [...new Set(p.departments)] : current.departments,
       managerId: p.managerId !== undefined ? p.managerId : current.manager_id,
@@ -141,7 +165,7 @@ export const orgPeopleRouter = router({
     return toPerson(result.rows[0])
   })),
 
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) => inOrgTransaction(async (client) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input, ctx }) => inOrgTransaction(ctx, async (client) => {
     const person = (await client.query('SELECT id, manager_id FROM org_people WHERE id=$1 FOR UPDATE', [input.id])).rows[0]
     if (!person) return
     // their reports move up to their manager; their roster entries go inactive rather than disappearing

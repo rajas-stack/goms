@@ -5,6 +5,7 @@ import { useShell } from '@/app/AppLayout'
 import { Icon } from './ui/Icon'
 import { cn } from '@/lib/utils'
 import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
+import { useShowAccessNav } from '@/lib/accessNav'
 import { useCanReadAny } from '@/lib/permissions'
 import { NAV_MODULES } from '@/lib/routeModules'
 
@@ -26,6 +27,9 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const commercialActive = location.pathname.startsWith('/commercial-calculator')
   const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
   const teamsActive = location.pathname.startsWith('/teams')
+  const accessActive = location.pathname.startsWith('/admin/access')
+  // Same rule as the desktop rail (useShowAccessNav). Link visibility is NOT authorization: the route guard and the server decide.
+  const canAccess = useShowAccessNav()
   const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping)
   const canCommercial = useCanReadAny(NAV_MODULES.commercial)
   const canOpportunity = useCanReadAny(NAV_MODULES.opportunity)
@@ -122,6 +126,21 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                   Opportunity
                 </button>
               )}
+              {canAccess && <button
+                onClick={() => {
+                  onClose()
+                  navigate('/admin/access')
+                }}
+                className={cn(
+                  'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
+                  accessActive
+                    ? 'bg-white text-ink-900 shadow-sm'
+                    : 'text-ink hover:bg-ink-900/[0.05]',
+                )}
+              >
+                <Icon name="Lock" size={17} />
+                Role &amp; Access
+              </button>}
               {canTeams && <button
                 onClick={() => {
                   onClose()

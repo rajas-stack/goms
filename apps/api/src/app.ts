@@ -7,6 +7,8 @@ import { appRouter } from './index.js'
 import { resolveClientIp, resolveProxyTrust } from './client-ip.js'
 import { assertSecurityConfiguration, productionSecurity } from './security/config.js'
 import { OperationBudget } from './security/operationLimit.js'
+import { googleGateway, type GoogleGateway } from './auth/oauth/googleClient.js'
+import { registerOAuthRoutes } from './auth/oauth/routes.js'
 
 export interface BuildAppOptions {
   // Override for tests only — production always gets the defaults below.
@@ -14,6 +16,8 @@ export interface BuildAppOptions {
   // Override for tests only — same accepted values as the TRUST_PROXY
   // environment variable (see client-ip.ts's resolveProxyTrust).
   trustProxy?: string
+  // Override for tests only — the real Google gateway is used in every deployed process.
+  oauth?: { google?: GoogleGateway }
 }
 
 // Explicit allow-list only — never `origin: true`/`*`. Authentication and
@@ -118,6 +122,10 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     timeWindow: opts.rateLimit?.timeWindow ?? '5 minutes',
     keyGenerator: (request) => resolveClientIp(request.headers, request.ip, proxyTrust),
   })
+
+  // Google OAuth login (docs/superpowers/specs/2026-10-06-google-oauth-login-design.md). Routes are registered only when
+  // AUTH_PROVIDER is `both` or `oauth` (read at boot); in the default `firebase` mode this registers nothing.
+  registerOAuthRoutes(app, { google: opts.oauth?.google ?? googleGateway })
 
   app.register(fastifyTRPCPlugin, {
     prefix: '/api/trpc',

@@ -39,3 +39,6 @@ export const auth: Auth | null = isFirebaseConfigured(firebaseConfig)
 // OAuth scopes/params) — so it's safe to create unconditionally even when
 // Firebase itself isn't configured.
 export const googleProvider = new GoogleAuthProvider()
+// Always show Google's account chooser. Without it Google silently reuses the one signed-in browser account, so a different
+// one can never be picked. The API still only accepts verified @amnex.com accounts.
+googleProvider.setCustomParameters({ prompt: 'select_account' })

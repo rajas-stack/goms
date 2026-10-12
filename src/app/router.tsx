@@ -1,9 +1,11 @@
-import { lazy } from 'react'
-import { createBrowserRouter } from 'react-router-dom'
+import { lazy, Suspense } from 'react'
+import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { AppLayout } from './AppLayout'
+import { RequireSignIn } from './RequireSignIn'
 import { GlobalErrorScreen } from './routes/GlobalErrorScreen'
 import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
 import { RequireAccess } from '@/components/NoAccess'
+import { RouteFallback } from '@/components/RouteFallback'
 import { NAV_MODULES } from '@/lib/routeModules'
 
 const Home = lazy(() => import('./routes/Home').then((m) => ({ default: m.Home })))
@@ -48,9 +50,10 @@ const GeographyLoadPanel = lazy(() =>
 const AdminImportAuthGate = lazy(() =>
   import('@/modules/admin-data-import/auth/AdminImportAuthGate').then((m) => ({ default: m.AdminImportAuthGate })),
 )
-const AccessManagement = lazy(() =>
-  import('@/modules/admin-access/AccessManagement').then((m) => ({ default: m.AccessManagement })),
+const AccessMatrix = lazy(() =>
+  import('@/modules/admin-access/access-matrix/AccessMatrix').then((m) => ({ default: m.AccessMatrix })),
 )
+const Login = lazy(() => import('./routes/Login').then((m) => ({ default: m.Login })))
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
 // Admin Data Import is gated behind its own env flag — unset/false by
@@ -91,7 +94,7 @@ const bidTrackerRoutes = isBidTrackerEnabled()
 
 export const router = createBrowserRouter([
   {
-    element: <AppLayout />,
+    element: <RequireSignIn><AppLayout /></RequireSignIn>,
     errorElement: <GlobalErrorScreen />,
     children: [
       { path: '/', element: <Home /> },
@@ -109,7 +112,8 @@ export const router = createBrowserRouter([
       { path: '/commercial-calculator', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
       { path: '/commercial-calculator/:section', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
       { path: '/commercial-calculator/boq/:boqId', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
-      { path: '/admin/access', element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><AccessManagement /></RequireAccess> },
+      // The Access Matrix is the access screen; the older per-person list page is no longer routed. /admin/access (rail, bookmarks) lands on it.
+      { path: '/admin/access', element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><Navigate to="/admin/access/matrix" replace /></RequireAccess> },
       { path: '/settings/credentials', element: <CredentialsSettingsPage /> },
       { path: '/settings/integrations', element: <IntegrationsSettingsPage /> },
       { path: '/settings', element: <SettingsPage /> },
@@ -119,9 +123,17 @@ export const router = createBrowserRouter([
       { path: '/documents/:module', element: <DmsDocumentsPage /> },
       { path: '/settings/tender-websites', element: <TenderWebsitesSettingsPage /> },
       { path: '/settings/document-verifications', element: <DocumentVerificationsSettingsPage /> },
+      { path: '/admin/access/matrix', element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><AccessMatrix /></RequireAccess> },
       ...bidTrackerRoutes,
       ...adminImportRoutes,
       { path: '*', element: <NotFound /> },
     ],
+  },
+  // Full-page sign-in, deliberately outside AppLayout (no TopBar/nav/FAB). Kept
+  // AFTER the layout route: router.test.tsx reads `routes[0].children`.
+  {
+    path: '/login',
+    element: <Suspense fallback={<RouteFallback />}><Login /></Suspense>,
+    errorElement: <GlobalErrorScreen />,
   },
 ])

@@ -76,21 +76,22 @@ describe('access.* in shadow: the generic gate only logs, but this API must stil
     await expect(as('sales').access.listOverrides()).rejects.toMatchObject({ code: 'FORBIDDEN' })
     await expect(as('sales').access.readiness()).rejects.toMatchObject({ code: 'FORBIDDEN' })
   })
-  it('still lets IT and a System Admin manage overrides', async () => {
+  it('still lets IT read overrides and a System Admin manage them (managing is System Admin only)', async () => {
     await setRole('it', 'it'); makeSystemAdmin('root')
     await expect(as('it').access.listOverrides()).resolves.toEqual(expect.any(Array))
     await expect(as('root').access.setOverride({ email: rbacEmail('z'), role: 'delivery', effect: 'grant', reason: 'r' })).resolves.toBeDefined()
   })
 })
 
-describe('access.* once RBAC is on: IT manages it, other roles cannot', () => {
+describe('access.* once RBAC is on: IT and CXO read it, only a System Admin changes it, other roles cannot', () => {
   beforeEach(() => { process.env.AUTH_ENFORCEMENT_ENABLED = 'true'; process.env.RBAC_MODE = 'enforce' })
-  it('IT and System Admin can; Sales cannot, and CXO may only read', async () => {
+  it('IT and System Admin can read, only System Admin can write; Sales cannot, and CXO may only read', async () => {
     await setRole('it', 'it'); await setRole('cxo', 'cxo'); await addSalesPerson('sales'); makeSystemAdmin('root')
     await expect(as('it').access.listOverrides()).resolves.toEqual(expect.any(Array)) // setRole above wrote override rows, so not empty
     await expect(as('root').access.listOverrides()).resolves.toEqual(expect.any(Array))
     await expect(as('root').access.setOverride({ email: rbacEmail('z'), role: 'delivery', effect: 'grant', reason: 'r' })).resolves.toBeDefined()
-    await expect(as('it').access.setOverride({ email: rbacEmail('x'), role: 'finance', effect: 'grant', reason: 'r' })).resolves.toBeDefined()
+    // IT used to be able to write overrides (the matrix still lets it); the System Admin-only rule now refuses it
+    await expect(as('it').access.setOverride({ email: rbacEmail('x'), role: 'finance', effect: 'grant', reason: 'r' })).rejects.toMatchObject({ code: 'FORBIDDEN' })
     const refused = await as('sales').access.listOverrides().catch((e) => e)
     expect(refused.cause).toBeInstanceOf(RbacDenial)
     await expect(as('cxo').access.listOverrides()).resolves.toBeDefined()
