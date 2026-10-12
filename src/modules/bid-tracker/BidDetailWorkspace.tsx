@@ -18,6 +18,7 @@ import { GridTab } from './synopsis/grid/GridTab'
 import { SynopsisTab } from './synopsis/SynopsisTab'
 import { RfpTimelineTab } from './synopsis/rfpTimeline/RfpTimelineTab'
 import { BidTimelineSection } from './timeline/BidTimelineSection'
+import { BidAttachmentsSection } from './attachments/BidAttachmentsSection'
 
 const TABS = [
   { value: 'overview', label: 'Overview' },
@@ -152,6 +153,7 @@ export function BidDetailWorkspace() {
         {tab === 'rfpTimeline' && <div role="tabpanel" id="synopsis-panel-rfpTimeline" aria-labelledby="synopsis-tab-rfpTimeline">
           <RfpTimelineTab bidId={bid.id} onOpenGeneral={() => setParams(current => { const next = new URLSearchParams(current); next.set('tab', 'general'); return next })} />
         </div>}
+        <BidAttachmentsSection bidId={bid.id} />
       </div>
       <ConfirmDeleteDialog
         open={confirmDelete}

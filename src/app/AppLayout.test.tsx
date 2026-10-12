@@ -95,6 +95,15 @@ describe('TopBar Import button', () => {
     expect(screen.getByRole('button', { name: 'Search everything' })).toBeInTheDocument()
   })
 
+  it('leaves Ctrl+F to the browser (find in page) and opens global search on Ctrl+Shift+F', () => {
+    renderAppLayoutAt('/bid-tracker')
+    const plainFind = fireEvent.keyDown(window, { key: 'f', ctrlKey: true })
+    expect(plainFind).toBe(true) // not prevented, so the browser's own find bar opens
+    expect(screen.queryByPlaceholderText(/Search or ask/)).not.toBeInTheDocument()
+    fireEvent.keyDown(window, { key: 'F', ctrlKey: true, shiftKey: true })
+    expect(screen.getByPlaceholderText(/Search or ask/)).toBeInTheDocument()
+  })
+
   it('finds and opens an Opportunity record from Settings without restricting search to that page', async () => {
     const search = vi.spyOn(repository, 'search').mockResolvedValue([{
       kind: 'other', category: 'work', id: 'global-opportunity', title: 'Cross-module tender',

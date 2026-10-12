@@ -56,7 +56,7 @@ describe('Master Grid refinement', () => {
   })
 
   describe('toolbar', () => {
-    it('reads Search / Filters / Add column → Lock → Columns → Create Bid, with Columns only once', async () => {
+    it('reads Search / Filters → Lock → Columns (with Add column inside) → Create Bid, with Columns only once', async () => {
       await makeBid('Alpha')
       renderGrid()
       await screen.findByText('Alpha')
@@ -64,8 +64,8 @@ describe('Master Grid refinement', () => {
       const labels = Array.from(toolbar.querySelectorAll('button')).map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim())
       const at = (re: RegExp) => labels.findIndex((l) => re.test(l ?? ''))
       expect(at(/^Filters/)).toBeGreaterThanOrEqual(0)
-      expect(at(/Add column/)).toBeGreaterThan(at(/^Filters/))
-      expect(at(/Master grid editing/)).toBeGreaterThan(at(/Add column/))
+      expect(at(/Add column/)).toBe(-1) // moved into the Manage columns dropdown
+      expect(at(/Master grid editing/)).toBeGreaterThan(at(/^Filters/))
       expect(at(/^Manage columns/)).toBeGreaterThan(at(/Master grid editing/))
       expect(at(/Create Bid/)).toBeGreaterThan(at(/^Manage columns/))
       expect(labels.filter((l) => /^Manage columns/.test(l ?? ''))).toHaveLength(1)
@@ -500,7 +500,8 @@ describe('Master Grid refinement', () => {
       await makeBid('Alpha')
       renderGrid()
       await screen.findByText('Alpha')
-      await userEvent.click(screen.getByRole('button', { name: /Add column/ }))
+      await userEvent.click(screen.getByRole('button', { name: /^Manage columns/ }))
+      await userEvent.click(await screen.findByRole('button', { name: /Add column/ }))
       const dialog = await screen.findByRole('dialog')
       const select = within(dialog).getByRole('combobox')
       const options = within(select).getAllByRole('option').map((o) => o.textContent)

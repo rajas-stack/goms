@@ -12,6 +12,11 @@ import type { MyAccess } from '../../../apps/api/src/routers/auth'
 import type { EffectivePermissions, OverrideHistoryFilter, OverrideHistoryRow, PermissionMatrix, UnmatchedOverride } from '../accessTypes'
 import { uid } from '@/lib/utils'
 import { PROTECTED_VALUES_ENFORCED, validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type SaveBidSynopsisInput } from '@goms/domain'
+import { downloadName, MIME_FOR_FILE_TYPE, type MakerDocument, type MakerDocumentKind } from '@goms/domain'
+import {
+  base64ToBytes, createLocal, duplicateLocal, LOCAL_OWNER, MakerEditorUnavailable, renameLocal, replaceLocal, requireLocal, toPublic, uploadLocal,
+  type LocalMakerDocument, type MakerDownload, type MakerEditorSession, type MakerOwner,
+} from './makerDocuments'
 import { assertUniqueTenderWebsiteName, normalizeTenderWebsiteInput, tenderWebsiteKind, type TenderWebsite, type TenderWebsiteInput, type TenderWebsiteKind, type TenderDscEmployee } from '@goms/domain'
 import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType } from '@/lib/node-types'
@@ -51,8 +56,9 @@ import type {
 } from '@/modules/commercial-calculator/types'
 import {
   changeDetails, normalizeChange, normalizeRegister, patchRegister,
-  type CreateCorrigendumInput, type UpdateCorrigendumRegisterInput,
+  type AddCorrigendumChangesInput, type CreateCorrigendumInput, type UpdateCorrigendumRegisterInput,
 } from '@/modules/bid-tracker/corrigenda/model'
+import { normalizeDocumentFiling, type DocumentBatch, type DocumentCategory } from '@goms/domain'
 
 export interface StateSummary {
   code: number
@@ -571,6 +577,17 @@ export interface Repository {
   getBidSynopsis(bidId: string, section: BidSynopsisSection): Promise<BidSynopsis | null>
   saveBidSynopsis(input: SaveBidSynopsisInput): Promise<BidSynopsis>
 
+  /** Document maker (personal Office files). `owner` is used only by the local store; the API takes the signed-in user. */
+  listMakerDocuments(): Promise<MakerDocument[]>
+  createMakerDocument(input: { kind: MakerDocumentKind; title: string; owner?: MakerOwner }): Promise<MakerDocument>
+  uploadMakerDocument(input: { name: string; data: string; owner?: MakerOwner }): Promise<MakerDocument>
+  replaceMakerDocument(id: string, name: string, data: string): Promise<MakerDocument>
+  renameMakerDocument(id: string, title: string): Promise<MakerDocument>
+  duplicateMakerDocument(id: string): Promise<MakerDocument>
+  deleteMakerDocument(id: string): Promise<void>
+  getMakerEditorSession(id: string, theme: 'light' | 'dark'): Promise<MakerEditorSession>
+  getMakerDownload(id: string): Promise<MakerDownload>
+
   /** Tender portals managed in Settings, offered in a bid's General tab. */
   /** Websites on one Settings page; defaults to the tender portals. */
   listCredentialPassphrases(): Promise<CredentialPassphrase[]>
@@ -598,6 +615,8 @@ export interface Repository {
   /** Edits the register fields only — changes are append-only and never rewritten. */
   updateBidCorrigendumRegister(input: UpdateCorrigendumRegisterInput): Promise<BidCorrigendum>
   reviewCorrigendumChange(input: { changeId: string; decision: 'accepted' | 'rejected'; reason?: string }): Promise<BidCorrigendumChange>
+  /** Appends clause changes to an existing corrigendum — earlier rows are never rewritten. */
+  addCorrigendumChanges(input: AddCorrigendumChangesInput): Promise<BidCorrigendum>
 
   listProtectedValues(entityType: string, entityId: string): Promise<ProtectedValue[]>
   freezeValue(entityType: string, entityId: string, fieldKey: string): Promise<void>
@@ -605,8 +624,11 @@ export interface Repository {
 
   requestDocumentUploadUrl(input: {
     entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+    batch?: DocumentBatch; category?: DocumentCategory
   }): Promise<{ uploadId: string; uploadUrl: string }>
   confirmDocumentUpload(uploadId: string): Promise<BidDocument>
+  /** Re-files a document into another attachment batch/category. */
+  updateDocumentFiling(input: { id: string; batch: DocumentBatch; category: DocumentCategory }): Promise<BidDocument>
   listDocuments(entityType: string, entityId: string): Promise<BidDocument[]>
   deleteDocument(id: string): Promise<void>
   getDocumentDownloadUrl(id: string): Promise<string>
@@ -651,7 +673,19 @@ let inMemoryBidSeq = 1
 /** Upload slots handed out by `requestDocumentUploadUrl`, awaiting confirm. */
 const pendingBidUploads = new Map<string, {
   entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+  batch?: DocumentBatch; category?: DocumentCategory
 }>()
+
+/** Same allow-list and limit the API enforces (apps/api/src/lib/gcs.ts). */
+const LOCAL_DOCUMENT_TYPES = [
+  'application/pdf', 'image/jpeg', 'image/png',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]
+const LOCAL_DOCUMENT_MAX_BYTES = 50 * 1024 * 1024
+
+/** A stored document with its filing defaulted (rows saved before batches existed). */
+const withFiling = (doc: BidDocument): BidDocument => ({ ...doc, ...normalizeDocumentFiling(doc.batch, doc.category) })
 
 /** A bid's sheet must be one it can live in (never 'master', never a typo). */
 function assertOwnedSheet(sheet: unknown): asserts sheet is OwnedSheet {
@@ -707,6 +741,7 @@ class InMemoryRepository implements Repository {
       ownershipAssignments: data.ownershipAssignments ?? [],
       bids: data.bids ?? [],
       bidSynopsis: data.bidSynopsis ?? [],
+      makerDocuments: data.makerDocuments ?? [],
       bidMilestones: data.bidMilestones ?? [],
       bidCorrigenda: data.bidCorrigenda ?? [],
       bidCorrigendumChanges: data.bidCorrigendumChanges ?? [],
@@ -1948,6 +1983,41 @@ class InMemoryRepository implements Repository {
     return structuredClone(updated)
   }
 
+  // --- Document maker (logic in ./makerDocuments; every change replaces the array) -----------------
+  private get makerDocs(): LocalMakerDocument[] { return this.data.makerDocuments ?? [] }
+  private putMakerDoc(doc: LocalMakerDocument): MakerDocument {
+    this.data.makerDocuments = [doc, ...this.makerDocs.filter((item) => item.id !== doc.id)]
+    return toPublic(doc)
+  }
+  async listMakerDocuments(): Promise<MakerDocument[]> {
+    return [...this.makerDocs].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(toPublic)
+  }
+  async createMakerDocument(input: { kind: MakerDocumentKind; title: string; owner?: MakerOwner }): Promise<MakerDocument> {
+    return this.putMakerDoc(createLocal(input.kind, input.title, input.owner ?? LOCAL_OWNER))
+  }
+  async uploadMakerDocument(input: { name: string; data: string; owner?: MakerOwner }): Promise<MakerDocument> {
+    return this.putMakerDoc(uploadLocal(input.name, input.data, input.owner ?? LOCAL_OWNER))
+  }
+  async replaceMakerDocument(id: string, name: string, data: string): Promise<MakerDocument> {
+    return this.putMakerDoc(replaceLocal(requireLocal(this.makerDocs, id), name, data))
+  }
+  async renameMakerDocument(id: string, title: string): Promise<MakerDocument> {
+    return this.putMakerDoc(renameLocal(requireLocal(this.makerDocs, id), title))
+  }
+  async duplicateMakerDocument(id: string): Promise<MakerDocument> {
+    return this.putMakerDoc(duplicateLocal(requireLocal(this.makerDocs, id)))
+  }
+  async deleteMakerDocument(id: string): Promise<void> {
+    requireLocal(this.makerDocs, id)
+    this.data.makerDocuments = this.makerDocs.filter((item) => item.id !== id)
+  }
+  async getMakerEditorSession(): Promise<MakerEditorSession> { throw new MakerEditorUnavailable() }
+  async getMakerDownload(id: string): Promise<MakerDownload> {
+    const doc = requireLocal(this.makerDocs, id)
+    const blob = new Blob([base64ToBytes(doc.contentBase64) as BlobPart], { type: MIME_FOR_FILE_TYPE[doc.fileType] })
+    return { url: URL.createObjectURL(blob), name: downloadName(doc) }
+  }
+
   async listCredentialPassphrases(): Promise<CredentialPassphrase[]> { return structuredClone(this.data.credentialPassphrases ?? []) }
   async createCredentialPassphrase(input: CredentialPassphraseInput): Promise<CredentialPassphrase> {
     const clean = normalizeCredentialPassphrase(input)
@@ -2144,6 +2214,31 @@ class InMemoryRepository implements Repository {
     return this.joinCorrigendum(corrigendum)
   }
 
+  async addCorrigendumChanges(input: AddCorrigendumChangesInput) {
+    const corrigendum = this.data.bidCorrigenda.find((c) => c.id === input.corrigendumId)
+    if (!corrigendum) throw new Error(`No such corrigendum: ${input.corrigendumId}`)
+    const bid = this.requireBid(corrigendum.bidId)
+    if (!input.changes.length) throw new Error('Add at least one change.')
+    if (input.changes.length > 200) throw new Error('A corrigendum can record up to 200 changes at once.')
+    const existingKeys = new Set(this.data.bidCorrigendumChanges.filter((ch) => ch.corrigendumId === corrigendum.id).map((ch) => ch.fieldKey))
+    const keys = input.changes.map((ch) => ch.fieldKey.trim())
+    if (keys.some((k) => !k)) throw new Error('Every change needs a clause or field key.')
+    if (new Set(keys).size !== keys.length || keys.some((k) => existingKeys.has(k))) throw new Error('Each clause can change only once per corrigendum.')
+    // Appended changes are tender clauses only — milestone fields are recorded with a new corrigendum.
+    if (input.changes.some((ch) => ch.kind !== 'clause')) throw new Error('Only clause changes can be added to an existing corrigendum.')
+    const changes = input.changes.map((ch) => ({
+      id: uid('cch'), corrigendumId: corrigendum.id, fieldKey: ch.fieldKey.trim(),
+      currentValue: ch.currentValue, proposedValue: ch.proposedValue,
+      decision: 'pending' as const, decidedAt: null, decidedBy: null, ...changeDetails({ ...ch, fieldKey: ch.fieldKey.trim() }),
+    }))
+    const reopened = { ...corrigendum, status: 'pending_review' as const, reviewedAt: null, reviewedBy: null }
+    this.data.bidCorrigenda = this.data.bidCorrigenda.map((c) => (c.id === corrigendum.id ? reopened : c))
+    this.data.bidCorrigendumChanges = [...this.data.bidCorrigendumChanges, ...changes]
+    bid.dataConfidence = 'needs_review'
+    bid.updatedAt = new Date().toISOString()
+    return this.joinCorrigendum(reopened)
+  }
+
   async updateBidCorrigendumRegister(input: UpdateCorrigendumRegisterInput) {
     const existing = this.data.bidCorrigenda.find((c) => c.id === input.corrigendumId)
     if (!existing) throw new Error(`No such corrigendum: ${input.corrigendumId}`)
@@ -2230,9 +2325,16 @@ class InMemoryRepository implements Repository {
 
   async requestDocumentUploadUrl(input: {
     entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+    batch?: DocumentBatch; category?: DocumentCategory
   }) {
     // Local dev has no object storage: the "upload URL" is a placeholder and
     // the file bytes are never stored — only the metadata row.
+    if (!LOCAL_DOCUMENT_TYPES.includes(input.contentType)) throw new Error(`Unsupported file type: ${input.contentType}`)
+    if (!Number.isFinite(input.sizeBytes) || input.sizeBytes <= 0 || input.sizeBytes > LOCAL_DOCUMENT_MAX_BYTES) throw new Error('File exceeds the 50 MB limit.')
+    if ((input.batch !== undefined || input.category !== undefined)
+      && (normalizeDocumentFiling(input.batch, input.category).category !== input.category)) {
+      throw new Error('Choose a category that belongs to the selected batch.')
+    }
     const uploadId = uid('upl')
     pendingBidUploads.set(uploadId, input)
     return { uploadId, uploadUrl: `local://bid-upload/${uploadId}` }
@@ -2247,15 +2349,27 @@ class InMemoryRepository implements Repository {
       storagePath: `local://${pending.entityType}/${pending.entityId}/${pending.filename}`,
       version: pending.version ?? '1', contentType: pending.contentType, sizeBytes: pending.sizeBytes,
       uploadedBy: null, uploadedAt: new Date().toISOString(),
+      ...normalizeDocumentFiling(pending.batch, pending.category),
     }
-    this.data.bidDocuments.push(doc)
-    return doc
+    this.data.bidDocuments = [...this.data.bidDocuments, doc]
+    return { ...doc }
   }
 
   async listDocuments(entityType: string, entityId: string) {
     return this.data.bidDocuments
       .filter((d) => d.entityType === entityType && d.entityId === entityId)
       .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))
+      .map(withFiling)
+  }
+
+  async updateDocumentFiling(input: { id: string; batch: DocumentBatch; category: DocumentCategory }) {
+    const doc = this.data.bidDocuments.find((d) => d.id === input.id)
+    if (!doc) throw new Error(`No such document: ${input.id}`)
+    const filing = normalizeDocumentFiling(input.batch, input.category)
+    if (filing.batch !== input.batch || filing.category !== input.category) throw new Error('Choose a category that belongs to the selected batch.')
+    const updated = { ...doc, ...filing }
+    this.data.bidDocuments = this.data.bidDocuments.map((d) => (d.id === doc.id ? updated : d))
+    return { ...updated }
   }
 
   async deleteDocument(id: string) {
@@ -3181,6 +3295,7 @@ class InMemoryRepository implements Repository {
 const MUTATOR_KEYS = [
   'createCredentialPassphrase', 'updateCredentialPassphrase', 'deleteCredentialPassphrase',
   'saveBidSynopsis',
+  'createMakerDocument', 'uploadMakerDocument', 'replaceMakerDocument', 'renameMakerDocument', 'duplicateMakerDocument', 'deleteMakerDocument',
   'createTenderWebsite', 'updateTenderWebsite', 'deleteTenderWebsite', 'setTenderWebsiteEditingLock',
   'createDeliveryTeamMember', 'updateDeliveryTeamMember', 'setDeliveryTeamMemberStatus', 'deleteDeliveryTeamMember',
   'createOrgPerson', 'updateOrgPerson', 'deleteOrgPerson',
@@ -3199,8 +3314,8 @@ const MUTATOR_KEYS = [
   'createCustomer', 'updateCustomer', 'deleteCustomer',
   'createBid', 'createBidForNewOpportunity', 'updateBid', 'archiveBid', 'markBidVerified', 'unarchiveBid', 'deleteBid',
   'createBidMilestone', 'updateBidMilestone', 'deleteBidMilestone',
-  'createBidCorrigendum', 'updateBidCorrigendumRegister', 'reviewCorrigendumChange', 'freezeValue', 'unfreezeValue',
-  'requestDocumentUploadUrl', 'confirmDocumentUpload', 'deleteDocument', 'createDocumentCitation', 'deleteDocumentCitation',
+  'createBidCorrigendum', 'updateBidCorrigendumRegister', 'reviewCorrigendumChange', 'addCorrigendumChanges', 'freezeValue', 'unfreezeValue',
+  'requestDocumentUploadUrl', 'confirmDocumentUpload', 'updateDocumentFiling', 'deleteDocument', 'createDocumentCitation', 'deleteDocumentCitation',
   'createBidSavedView', 'updateBidSavedView', 'deleteBidSavedView',
   'createBidCustomField', 'updateBidCustomField', 'reorderBidCustomFields', 'archiveBidCustomField',
   'unarchiveBidCustomField', 'deleteBidCustomField', 'setBidCustomValue',
@@ -3212,6 +3327,7 @@ const MUTATOR_KEYS = [
  *  "classified as a read" apart from "nobody classified it". */
 const READER_KEYS = [
   'listCredentialPassphrases', 'getBidSynopsis', 'listTenderWebsites', 'listTenderDscEmployees',
+  'listMakerDocuments', 'getMakerEditorSession', 'getMakerDownload',
   'listDeliveryTeamMembers', 'listOrgPeople',
   'listStates', 'getState', 'getNode', 'listChildren', 'listOrgRoots', 'listDepartments', 'listPostingNodes',
   'breadcrumb', 'childCount', 'geoRoot', 'childCounts',

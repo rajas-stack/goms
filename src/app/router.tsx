@@ -53,6 +53,12 @@ const AdminImportAuthGate = lazy(() =>
 const AccessMatrix = lazy(() =>
   import('@/modules/admin-access/access-matrix/AccessMatrix').then((m) => ({ default: m.AccessMatrix })),
 )
+const DocumentMakerHome = lazy(() =>
+  import('@/modules/document-maker/DocumentMakerHome').then((m) => ({ default: m.DocumentMakerHome })),
+)
+const DocumentMakerEditor = lazy(() =>
+  import('@/modules/document-maker/DocumentMakerEditor').then((m) => ({ default: m.DocumentMakerEditor })),
+)
 const Login = lazy(() => import('./routes/Login').then((m) => ({ default: m.Login })))
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
@@ -121,6 +127,9 @@ export const router = createBrowserRouter([
       { path: '/settings/dms/new', element: <DmsConnectionPage /> },
       { path: '/settings/dms/:connectionId', element: <DmsConnectionPage /> },
       { path: '/documents/:module', element: <DmsDocumentsPage /> },
+      // Personal Office files: every signed-in user; the API scopes each file to its owner.
+      { path: '/document-maker', element: <DocumentMakerHome /> },
+      { path: '/document-maker/:id', element: <DocumentMakerEditor /> },
       { path: '/settings/tender-websites', element: <TenderWebsitesSettingsPage /> },
       { path: '/settings/document-verifications', element: <DocumentVerificationsSettingsPage /> },
       { path: '/admin/access/matrix', element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><AccessMatrix /></RequireAccess> },

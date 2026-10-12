@@ -215,6 +215,22 @@ describe('MasterGrid', () => {
       expect(screen.queryByText('oops')).not.toBeInTheDocument()
     })
 
+    it('reads a date cell typed in any format (21092026, 21.09.2026) and stores yyyy-mm-dd', async () => {
+      const bid = await makeBid('Alpha')
+      const due = await repository.createBidCustomField({ name: 'Review', dataType: 'date' })
+      renderGrid()
+      await unlock()
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit Review' }))
+      await userEvent.type(screen.getByRole('textbox', { name: 'Review' }), '21092026{Enter}')
+      await waitFor(async () => expect((await repository.listBidCustomValues(bid.id))[due.key]).toBe('2026-09-21'))
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit Review' }))
+      const box = screen.getByRole('textbox', { name: 'Review' })
+      expect(box).toHaveValue('21 Sep 2026')
+      await userEvent.clear(box)
+      await userEvent.type(box, '31.02.2026{Enter}')
+      expect(await screen.findByRole('alert')).toHaveTextContent('Could not read that date')
+    })
+
     it('edits City (a plain opportunity attribute) inline', async () => {
       const bid = await makeBid('Alpha')
       renderGrid()
@@ -516,12 +532,15 @@ describe('MasterGrid', () => {
       expect(screen.getByRole('button', { name: 'Hide Bid ID' })).toBeDisabled()
     })
 
-    it('has a single Add column control: the toolbar button, not a second one inside the Columns panel', async () => {
+    it('has a single Add column control, inside the Manage columns dropdown (not on the toolbar)', async () => {
       await makeBid('Alpha')
       renderGrid()
       await screen.findByText('Alpha')
+      expect(screen.queryByRole('button', { name: /Add column/ })).not.toBeInTheDocument()
       await openPopover('Manage columns')
       expect(screen.getAllByRole('button', { name: /Add column/ })).toHaveLength(1)
+      await userEvent.click(screen.getByRole('button', { name: /Add column/ }))
+      expect(await screen.findByRole('dialog', { name: 'Add column' })).toBeInTheDocument()
     })
 
     it('reports ordered visible ids when controlled', async () => {

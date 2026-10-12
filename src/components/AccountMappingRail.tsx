@@ -22,6 +22,7 @@ export function AccountMappingRail() {
   const commercialActive = location.pathname.startsWith('/commercial-calculator')
   const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
   const teamsActive = location.pathname.startsWith('/teams')
+  const documentMakerActive = location.pathname.startsWith('/document-maker')
   const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping)
   const canCommercial = useCanReadAny(NAV_MODULES.commercial)
   const canOpportunity = useCanReadAny(NAV_MODULES.opportunity)
@@ -69,6 +70,19 @@ export function AccountMappingRail() {
           <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Opportunity</span>
         </button>
       )}
+      {/* Personal files: open to every signed-in user (the API scopes each file to its owner). */}
+      <button
+        onClick={() => navigate('/document-maker')}
+        title="Document maker"
+        aria-current={documentMakerActive ? 'page' : undefined}
+        className={cn(
+          'flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors lg:w-14',
+          documentMakerActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600/70 hover:bg-white hover:text-ink-900',
+        )}
+      >
+        <Icon name="FilePenLine" size={18} />
+        <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Document maker</span>
+      </button>
       {canAccess && <button
         onClick={() => navigate('/admin/access')}
         title="Role & Access"

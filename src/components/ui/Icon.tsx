@@ -10,10 +10,12 @@ import {
   RotateCcw, Loader2, GitMerge, Calculator, Lock, Unlock, Printer, Settings, TriangleAlert, Database,
   LogIn, LogOut, ChevronsUpDown, ArrowRight, Brackets, Pin, PinOff, ShieldCheck, History, Sun, Moon, Monitor, Palette,
   Lightbulb, ClipboardCheck, MessageSquareText, CalendarDays, EllipsisVertical, CircleCheck, Diamond,
+  FilePenLine, Presentation, FileUp, ArrowDownUp, LayoutGrid, Rows3, ServerOff,
   type LucideIcon,
 } from 'lucide-react'
 
 const REGISTRY: Record<string, LucideIcon> = {
+  FilePenLine, Presentation, FileUp, ArrowDownUp, LayoutGrid, Rows3, ServerOff,
   Lightbulb, ClipboardCheck, MessageSquareText, CalendarDays, EllipsisVertical, CircleCheck, Diamond,
   Folder, Video, Languages, PanelsTopLeft, BookOpen, KeyRound, Globe, Landmark, MapPin, Map, Home, Building2, GitBranch, Layers, DoorOpen, Boxes,
   Search, Plus, Pencil, Trash2, Archive, ArchiveRestore, Copy, ChevronRight, ChevronLeft, ChevronDown, ChevronUp,

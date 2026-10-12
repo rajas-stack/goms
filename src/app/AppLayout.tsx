@@ -60,6 +60,7 @@ export function AppLayout() {
     && !location.pathname.startsWith('/teams')
     && !location.pathname.startsWith('/settings')
     && !location.pathname.startsWith('/documents')
+    && !location.pathname.startsWith('/document-maker')
   // `MobileDetailsSheet` only renders as an overlay below `lg` (it's
   // `lg:hidden`) — at `lg` and up the same selection drives the always-visible
   // desktop `<aside>`, which isn't an overlay to close on back, so the
@@ -69,8 +70,11 @@ export function AppLayout() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key.toLowerCase() === 'k' || e.key.toLowerCase() === 'f')) {
-        // Ctrl/Cmd+K and Ctrl/Cmd+F both open search (F overrides browser find).
+      const key = e.key.toLowerCase()
+      const mod = e.metaKey || e.ctrlKey
+      // Ctrl/Cmd+K or Ctrl/Cmd+Shift+F open global search. Plain Ctrl/Cmd+F is
+      // left to the browser so it searches the current page.
+      if (mod && ((key === 'k' && !e.shiftKey) || (key === 'f' && e.shiftKey))) {
         e.preventDefault()
         setSearchOpen(true)
         return

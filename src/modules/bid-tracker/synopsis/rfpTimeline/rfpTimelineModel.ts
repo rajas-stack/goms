@@ -132,8 +132,12 @@ export function relativeLabel(entry: RfpDate, now: Date): string {
   return days > 0 ? `in ${plural(days, 'day')}` : `${plural(-days, 'day')} ago`
 }
 
+// Fixed names, not toLocaleDateString: browsers disagree on "Sep" vs "Sept",
+// and the General tab shows "21 Sep 2026".
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
 export function formatRfpDate(entry: Pick<RfpDate, 'date' | 'hasTime'>): string {
-  const day = entry.date.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+  const day = `${String(entry.date.getDate()).padStart(2, '0')} ${MONTHS[entry.date.getMonth()]} ${entry.date.getFullYear()}`
   if (!entry.hasTime) return day
   return `${day}, ${entry.date.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })}`
 }

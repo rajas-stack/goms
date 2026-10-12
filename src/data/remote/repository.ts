@@ -38,7 +38,10 @@ import type {
   MasterEntityKey, MasterRowMap, CreateMasterInput, ProductEditionFeature,
   CommercialBoq, CommercialBoqLineItem, CommercialAuditLog, CreateBoqInput, UpdateBoqInput, CreateBoqLineItemInput, BoqStatus,
 } from '@/modules/commercial-calculator/types'
-import type { CreateCorrigendumInput, UpdateCorrigendumRegisterInput } from '@/modules/bid-tracker/corrigenda/model'
+import type { AddCorrigendumChangesInput, CreateCorrigendumInput, UpdateCorrigendumRegisterInput } from '@/modules/bid-tracker/corrigenda/model'
+import type { DocumentBatch, DocumentCategory } from '@goms/domain'
+import type { MakerDocument, MakerDocumentKind } from '@goms/domain'
+import type { MakerDownload, MakerEditorSession } from '../in-memory/makerDocuments'
 
 export class RemoteRepository implements Partial<Repository> {
   getBidSynopsis = (bidId: string, section: BidSynopsisSection): Promise<BidSynopsis | null> =>
@@ -59,6 +62,23 @@ export class RemoteRepository implements Partial<Repository> {
   private client = createTRPCClient<AppRouter>({
     links: [authPromptLink, httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`, headers: getAuthHeaders, fetch: authApi.fetch })],
   })
+
+  // Document maker — the API takes the owner from the verified sign-in, never from the client.
+  listMakerDocuments = (): Promise<MakerDocument[]> => this.client.makerDocuments.list.query()
+  createMakerDocument = (input: { kind: MakerDocumentKind; title: string }): Promise<MakerDocument> =>
+    this.client.makerDocuments.create.mutate({ kind: input.kind, title: input.title })
+  uploadMakerDocument = (input: { name: string; data: string }): Promise<MakerDocument> =>
+    this.client.makerDocuments.upload.mutate({ name: input.name, data: input.data })
+  replaceMakerDocument = (id: string, name: string, data: string): Promise<MakerDocument> => this.client.makerDocuments.replace.mutate({ id, name, data })
+  renameMakerDocument = (id: string, title: string): Promise<MakerDocument> => this.client.makerDocuments.rename.mutate({ id, title })
+  duplicateMakerDocument = (id: string): Promise<MakerDocument> => this.client.makerDocuments.duplicate.mutate({ id })
+  deleteMakerDocument = async (id: string): Promise<void> => { await this.client.makerDocuments.delete.mutate({ id }) }
+  getMakerEditorSession = (id: string, theme: 'light' | 'dark'): Promise<MakerEditorSession> =>
+    this.client.makerDocuments.editorConfig.query({ id, theme }) as Promise<MakerEditorSession>
+  getMakerDownload = async (id: string): Promise<MakerDownload> => {
+    const { path } = await this.client.makerDocuments.downloadUrl.query({ id })
+    return { url: `${import.meta.env.VITE_API_BASE_URL}${path}`, name: '' }
+  }
 
   getMyAccess = (): Promise<MyAccess> => this.client.auth.me.query()
   getAccessReadiness = (): Promise<ReadinessRow[]> => this.client.access.readiness.query()
@@ -317,6 +337,10 @@ export class RemoteRepository implements Partial<Repository> {
     input: { changeId: string; decision: 'accepted' | 'rejected'; reason?: string },
   ): Promise<BidCorrigendumChange> =>
     this.client.bidCorrigenda.reviewChange.mutate(input) as unknown as Promise<BidCorrigendumChange>
+  addCorrigendumChanges = (input: AddCorrigendumChangesInput): Promise<BidCorrigendum> =>
+    this.client.bidCorrigenda.addChanges.mutate({
+      ...input, changes: input.changes.map((c) => ({ ...c, kind: 'clause' as const })),
+    }) as unknown as Promise<BidCorrigendum>
 
   listProtectedValues = (entityType: string, entityId: string): Promise<ProtectedValue[]> =>
     this.client.protectedValues.listFor.query({ entityType, entityId }) as unknown as Promise<ProtectedValue[]>
@@ -327,12 +351,15 @@ export class RemoteRepository implements Partial<Repository> {
 
   requestDocumentUploadUrl = (input: {
     entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+    batch?: DocumentBatch; category?: DocumentCategory
   }): Promise<{ uploadId: string; uploadUrl: string }> =>
     this.client.documents.requestUploadUrl.mutate(input) as unknown as Promise<{ uploadId: string; uploadUrl: string }>
   confirmDocumentUpload = (uploadId: string): Promise<BidDocument> =>
     this.client.documents.confirmUpload.mutate({ uploadId }) as unknown as Promise<BidDocument>
   listDocuments = (entityType: string, entityId: string): Promise<BidDocument[]> =>
     this.client.documents.listFor.query({ entityType, entityId }) as unknown as Promise<BidDocument[]>
+  updateDocumentFiling = (input: { id: string; batch: DocumentBatch; category: DocumentCategory }): Promise<BidDocument> =>
+    this.client.documents.updateFiling.mutate(input) as unknown as Promise<BidDocument>
   deleteDocument = (id: string): Promise<void> => this.client.documents.delete.mutate({ id }) as unknown as Promise<void>
   getDocumentDownloadUrl = async (id: string): Promise<string> => (await this.client.documents.getDownloadUrl.query({ id })).url
   deleteDocumentCitation = (id: string): Promise<void> =>

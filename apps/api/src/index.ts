@@ -26,6 +26,7 @@ import { accessRouter } from './routers/access.js'
 import { tenderWebsitesRouter } from './routers/tenderWebsites.js'
 import { credentialPassphrasesRouter } from './routers/credentialPassphrases.js'
 import { googleIntegrationsRouter } from './routers/googleIntegrations.js'
+import { makerDocumentsRouter } from './routers/makerDocuments.js'
 
 export const appRouter = router({
   health: healthRouter, customers: customersRouter, hierarchy: hierarchyRouter,
@@ -42,5 +43,6 @@ export const appRouter = router({
   tenderWebsites: tenderWebsitesRouter,
   credentialPassphrases: credentialPassphrasesRouter,
   googleIntegrations: googleIntegrationsRouter,
+  makerDocuments: makerDocumentsRouter,
 })
 export type AppRouter = typeof appRouter

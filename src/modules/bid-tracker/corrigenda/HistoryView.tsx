@@ -73,7 +73,7 @@ export function HistoryView({ chain, clauses, onOpenSource }: { chain: string[];
               <h4 className="font-display text-[14px] font-semibold text-ink-900">{h.title}</h4>
               <span className={cn(eyebrow, 'text-muted')}>{CORRIGENDUM_MODULE_LABELS[h.module]}</span>
             </div>
-            <ol className="relative before:absolute before:bottom-2 before:left-[6px] before:top-2 before:w-px before:bg-line">
+            <ol className="relative before:absolute before:bottom-2 before:left-[6px] before:top-2 before:w-px before:bg-edge">
               <Node tone="origin">
                 <div className={cn(eyebrow, 'text-muted')}>Original tender</div>
                 <p className="mt-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-ink-700" data-testid="history-original">

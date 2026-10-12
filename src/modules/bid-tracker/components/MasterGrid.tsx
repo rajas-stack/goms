@@ -837,7 +837,6 @@ export function MasterGrid(props: MasterGridProps) {
         <ToolbarPopover label="Filters" icon="SlidersHorizontal" badge={flattenRules(appliedRules).length}>
           <FilterBuilder columns={filterable} rules={rules} onChange={setRules} lookups={lookups} />
         </ToolbarPopover>
-        <Button variant="secondary" size="sm" className="h-7 px-2.5" onClick={() => setAddColumnOpen(true)}><Icon name="Plus" size={14} /> Add column</Button>
         {selectedIds.length > 0 && (
           <div className="flex items-center gap-2 rounded-lg bg-goms-sky/[0.16] px-2 py-0.5 text-[13px] text-goms-navy" data-testid="bulk-toolbar">
             <span className="font-medium">{selectedIds.length} selected</span>
@@ -880,6 +879,12 @@ export function MasterGrid(props: MasterGridProps) {
             label="Manage columns" icon="List" open={columnsOpen} align="end"
             onOpenChange={(open) => { setColumnsOpen(open); if (!open) setManageColumnId(null) }}
           >
+            <Button
+              variant="secondary" size="sm" className="mb-2 h-7 w-full justify-center px-2.5"
+              onClick={() => { setColumnsOpen(false); setManageColumnId(null); setAddColumnOpen(true) }}
+            >
+              <Icon name="Plus" size={14} /> Add column
+            </Button>
             <ManageColumnsPanel all={allColumns} visible={visible} columnOrder={visibleIds} onVisibleChange={setVisibleIds} focusId={manageColumnId} inScope={(f) => columnInScope(f.sheet, sheetId, props.columnScope)} />
           </ToolbarPopover>
           <Button variant="primary" size="sm" className="h-7 px-2.5" onClick={() => setCreateBidOpen(true)}>

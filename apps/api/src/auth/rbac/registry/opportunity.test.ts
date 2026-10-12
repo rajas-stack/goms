@@ -37,9 +37,9 @@ beforeEach(async () => {
 afterEach(cleanupRbacFixtures)
 
 describe('registry coverage for this area', () => {
-  it('registers exactly the 76 opportunity / bid procedures', () => {
+  it('registers exactly the 78 opportunity / bid procedures', () => {
     expect(Object.keys(opportunityPolicy).sort()).toEqual([
-      'bidCorrigenda.create', 'bidCorrigenda.listForBid', 'bidCorrigenda.reviewChange',
+      'bidCorrigenda.addChanges', 'bidCorrigenda.create', 'bidCorrigenda.listForBid', 'bidCorrigenda.reviewChange',
       'bidCustomFields.archive', 'bidCustomFields.create', 'bidCustomFields.delete', 'bidCustomFields.list', 'bidCustomFields.reorder',
       'bidCustomFields.setValue', 'bidCustomFields.unarchive', 'bidCustomFields.update', 'bidCustomFields.valuesForBid',
       'bidMilestones.create', 'bidMilestones.delete', 'bidMilestones.listAll', 'bidMilestones.listForBid', 'bidMilestones.update',
@@ -48,7 +48,7 @@ describe('registry coverage for this area', () => {
       'bids.actionQueue.list', 'bids.archive', 'bids.create', 'bids.delete', 'bids.get', 'bids.getForOpportunity', 'bids.listForGrid',
       'bids.markVerified', 'bids.unarchive', 'bids.update',
       'documents.citations.create', 'documents.citations.delete', 'documents.citations.list', 'documents.confirmUpload', 'documents.delete',
-      'documents.getDownloadUrl', 'documents.listFor', 'documents.requestUploadUrl',
+      'documents.getDownloadUrl', 'documents.listFor', 'documents.requestUploadUrl', 'documents.updateFiling',
       'followUps.create', 'followUps.delete', 'followUps.listForEntity', 'followUps.listOpen', 'followUps.setStatus',
       'opportunities.create', 'opportunities.delete', 'opportunities.get', 'opportunities.list', 'opportunities.listByDepartment',
       'opportunities.listStageChanges', 'opportunities.update',

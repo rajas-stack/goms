@@ -14,6 +14,7 @@ import { mergeOrgSeed, syncAllTeamsFromOrg, type OrgPerson } from './org-structu
 import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
 import type { CommercialCalculatorData } from '@/modules/commercial-calculator/types'
 import type { BidSynopsis, TenderWebsite } from '@goms/domain'
+import type { LocalMakerDocument } from './in-memory/makerDocuments'
 
 interface AdminState {
   st_code: number
@@ -69,6 +70,8 @@ for (const sd of subdistricts) {
 
 export interface GormsData {
   bidSynopsis: BidSynopsis[]
+  /** Document maker files (with their bytes as base64). Optional: snapshots before it existed simply lack it. */
+  makerDocuments?: LocalMakerDocument[]
   nodes: HierNode[]
   employees: Employee[]
   externalIds: ExternalId[]
@@ -337,5 +340,6 @@ export function buildSeed(): GormsData {
     bids: [], bidSynopsis: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
     protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [],
     bidCustomFields: [], bidCustomFieldValues: [], tenderWebsites: [], credentialPassphrases: [],
+    makerDocuments: [],
   }
 }

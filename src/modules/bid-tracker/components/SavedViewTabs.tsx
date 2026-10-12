@@ -36,16 +36,17 @@ export function SavedViewTabs({ sheet, activeViewId, onChange, onCreateNew, onDe
           >
             <button
               type="button" aria-pressed={active} onClick={() => onChange(v.id)}
-              className={cn('flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md pl-2.5 focus-visible:focus-ring', v.isSystem || !active || !onDelete ? 'pr-2.5' : 'pr-1')}
+              className={cn('flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md pl-2.5 focus-visible:focus-ring', v.isSystem || !onDelete ? 'pr-2.5' : 'pr-1')}
             >
               {v.name}
               {!v.isSystem && v.scope === 'global' && <span className="text-[10px] opacity-70">Global</span>}
               {modified && <span title="Changed since this view was loaded" className="h-1.5 w-1.5 rounded-full bg-amber" />}
             </button>
-            {!v.isSystem && active && onDelete && (
+            {!v.isSystem && onDelete && (
               <button
-                type="button" aria-label={`Delete view ${v.name}`} onClick={() => onDelete(v.id)}
-                className="mr-1 flex h-5 w-5 items-center justify-center rounded hover:bg-white/20"
+                type="button" aria-label={`Delete view ${v.name}`} title={`Delete view ${v.name}`} onClick={() => onDelete(v.id)}
+                className={cn('mr-1 flex h-5 w-5 items-center justify-center rounded focus-visible:focus-ring',
+                  active ? 'hover:bg-white/20' : 'text-muted hover:bg-crimson-100 hover:text-crimson')}
               >
                 <Icon name="X" size={12} />
               </button>

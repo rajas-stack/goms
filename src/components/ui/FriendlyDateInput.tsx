@@ -147,7 +147,8 @@ export function FriendlyDateInput({
           value={text}
           aria-invalid={errorText ? true : undefined}
           aria-describedby={describedByIds}
-          className={cn(showPicker && 'pr-9', className)}
+          // pr-9 last so a caller's px-* never slides text under the calendar button.
+          className={cn(className, showPicker && 'pr-9')}
           onChange={(event) => handleText(event.target.value)}
         />
         {showPicker && (

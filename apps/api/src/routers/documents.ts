@@ -6,12 +6,18 @@ import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
 import { ALLOWED_DOCUMENT_CONTENT_TYPES, MAX_DOCUMENT_SIZE_BYTES, getSignedUploadUrl, getSignedDownloadUrl, getObjectMetadata, moveObject, deleteObject } from '../lib/gcs.js'
 import { pendingUploads } from '../lib/pendingUploads.js'
+import { DOCUMENT_BATCHES, DOCUMENT_CATEGORIES, categoryFitsBatch, normalizeDocumentFiling } from '@goms/domain'
+
+/** Batch + category must be given together and the category must belong to the batch. */
+const filingSchema = z.object({ batch: z.enum(DOCUMENT_BATCHES), category: z.enum(DOCUMENT_CATEGORIES) })
+  .refine((f) => categoryFitsBatch(f.batch, f.category), { message: 'Choose a category that belongs to the selected batch.' })
 
 export function toDocument(row: any) {
   return {
     id: row.id, entityType: row.entity_type, entityId: row.entity_id, filename: row.filename,
     storagePath: row.storage_path, version: row.version, contentType: row.content_type,
     sizeBytes: Number(row.size_bytes), uploadedBy: row.uploaded_by, uploadedAt: row.uploaded_at,
+    ...normalizeDocumentFiling(row.batch, row.category),
   }
 }
 
@@ -54,6 +60,9 @@ export const documentsRouter = router({
     .input(z.object({
       entityType: z.string(), entityId: z.string().uuid(), filename: z.string().min(1),
       contentType: z.string(), sizeBytes: z.number().int().positive(), version: z.string().optional(),
+      batch: z.enum(DOCUMENT_BATCHES).optional(), category: z.enum(DOCUMENT_CATEGORIES).optional(),
+    }).refine((i) => (i.batch === undefined && i.category === undefined) || (!!i.batch && !!i.category && categoryFitsBatch(i.batch, i.category)), {
+      message: 'Choose a category that belongs to the selected batch.',
     }))
     .mutation(async ({ input }) => {
       if (!(ALLOWED_DOCUMENT_CONTENT_TYPES as readonly string[]).includes(input.contentType)) {
@@ -68,7 +77,8 @@ export const documentsRouter = router({
       const version = input.version ?? 'v1.0'
       const pendingPath = `bid-tracker/_pending/${uploadId}/${safeFilename}`
       const canonicalPath = `bid-tracker/${input.entityType}/${input.entityId}/${documentId}/${safeFilename}`
-      pendingUploads.set(uploadId, { entityType: input.entityType, entityId: input.entityId, filename: safeFilename, version, pendingPath, canonicalPath })
+      const filing = normalizeDocumentFiling(input.batch, input.category)
+      pendingUploads.set(uploadId, { entityType: input.entityType, entityId: input.entityId, filename: safeFilename, version, pendingPath, canonicalPath, ...filing })
       const uploadUrl = await getSignedUploadUrl(pendingPath, input.contentType)
       return { uploadId, uploadUrl }
     }),
@@ -96,9 +106,10 @@ export const documentsRouter = router({
       let row: any
       try {
         row = (await pool.query(
-          `INSERT INTO documents (entity_type, entity_id, filename, storage_path, version, content_type, size_bytes, uploaded_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-          [pending.entityType, pending.entityId, pending.filename, pending.canonicalPath, pending.version, metadata.contentType, metadata.size, ctx.user?.email ?? null],
+          `INSERT INTO documents (entity_type, entity_id, filename, storage_path, version, content_type, size_bytes, uploaded_by, batch, category)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+          [pending.entityType, pending.entityId, pending.filename, pending.canonicalPath, pending.version, metadata.contentType, metadata.size, ctx.user?.email ?? null,
+            pending.batch, pending.category],
         )).rows[0]
       } catch (e) {
         if (isUniqueViolation(e)) {
@@ -123,6 +134,14 @@ export const documentsRouter = router({
     if (!doc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Document not found.' })
     return { url: await getSignedDownloadUrl(doc.storage_path) }
   }),
+  /** Moves a document to another attachment batch/category. */
+  updateFiling: protectedProcedure
+    .input(z.object({ id: z.string().uuid() }).and(filingSchema))
+    .mutation(async ({ input }) => {
+      const row = (await pool.query('UPDATE documents SET batch=$2, category=$3 WHERE id=$1 RETURNING *', [input.id, input.batch, input.category])).rows[0]
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Document not found.' })
+      return toDocument(row)
+    }),
   delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
     const doc = (await pool.query('SELECT * FROM documents WHERE id=$1', [input.id])).rows[0]
     if (!doc) return

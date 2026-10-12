@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/Checkbox'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import { Icon } from '@/components/ui/Icon'
 import { cn } from '@/lib/utils'
+import { formatFriendlyPreview, formatFriendlyValue, parseFriendlyValue } from '@/lib/friendlyDate'
 import { Avatar } from '@/components/ui/Avatar'
 import { NO_LOOKUPS, isEmptyCell, optionsOf, type ColumnOption, type EntityLookups, type GridColumnMeta } from '../gridColumns'
 
@@ -22,6 +23,7 @@ const input = 'absolute inset-0 z-20 h-[35px] w-full rounded-none border-2 bg-wh
 function draftOf(type: string, value: unknown): string {
   if (isEmptyCell(value)) return ''
   if (type === 'multiselect') return JSON.stringify(parseMultiValue(value))
+  if (type === 'date') return String(value).slice(0, 10)
   return String(value)
 }
 
@@ -91,17 +93,22 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
   const start = (seed?: string) => {
     cancelled.current = false
     done.current = false
-    setDraft(seed ?? current)
+    setDraft(seed ?? (type === 'date' ? formatFriendlyValue(current, 'date') : current))
     setError(null)
     setEditing(true)
   }
   // Spreadsheet habit: typing on a selected cell replaces its value (free-text editors only).
-  const typesFreely = !(col.pick || ['select', 'boolean', 'state', 'person', 'department', 'multiselect', 'date'].includes(type))
+  const typesFreely = !(col.pick || ['select', 'boolean', 'state', 'person', 'department', 'multiselect'].includes(type))
 
   const commit = (raw: string) => {
     if (cancelled.current || done.current) return
     let next: CellDraft
     try {
+      if (type === 'date' && raw.trim() !== '') {
+        const iso = parseFriendlyValue(raw, 'date')
+        if (!iso) throw new Error('Could not read that date. Try 21.09.2026 or 21 Sep 2026.')
+        raw = iso
+      }
       if (col.custom) next = coerceCustomValue(col.custom.dataType, raw, col.custom.options)
       else if (raw.trim() === '') {
         if (col.required) throw new Error(`${col.header} is required.`)
@@ -207,13 +214,14 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
     editor = (
       <input
         aria-label={col.header} className={cn(input, borderClass)} value={draft}
-        type={numeric ? 'number' : type === 'date' ? 'date' : 'text'} step={numeric ? 'any' : undefined}
+        type={numeric ? 'number' : 'text'} step={numeric ? 'any' : undefined}
         inputMode={type === 'email' ? 'email' : type === 'phone' ? 'tel' : type === 'url' ? 'url' : undefined}
-        placeholder={type === 'url' ? 'https://…' : type === 'email' ? 'name@example.com' : type === 'phone' ? '+91 …' : undefined}
+        placeholder={type === 'date' ? 'e.g. 21.09.2026' : type === 'url' ? 'https://…' : type === 'email' ? 'name@example.com' : type === 'phone' ? '+91 …' : undefined}
         ref={(el) => { inputRef.current = el }}
         onChange={(e) => { setDraft(e.target.value); if (error) setError(null) }}
         onKeyDown={onKeyDown}
         onBlur={() => commit(draft)}
+        title={type === 'date' ? (error ?? (formatFriendlyPreview(draft, 'date') || undefined)) : undefined}
       />
     )
   }

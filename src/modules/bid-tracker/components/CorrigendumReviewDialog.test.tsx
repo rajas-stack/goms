@@ -45,15 +45,19 @@ describe('CorrigendumReviewDialog', () => {
     expect((await repository.getBid(bid.id))!.tenderLink).toBeNull() // rejected: existing value kept
   })
 
-  it('never overrides a frozen field: the rejection is shown and nothing after it is applied', async () => {
+  // Protected values are switched off (PROTECTED_VALUES_ENFORCED=false): an old
+  // freeze record must never block a corrigendum from being accepted.
+  it('applies an accepted change even when an old freeze record exists (protection disabled)', async () => {
     const { bid, cor } = await makeBidWithCorrigendum()
     await repository.freezeValue('bid', bid.id, 'submissionDeadline')
     wrap(<CorrigendumReviewDialog bidId={bid.id} corrigendumId={cor.id} onClose={() => {}} />)
     await userEvent.click((await screen.findAllByRole('checkbox', { name: /accept change/i }))[0])
     await userEvent.click(screen.getByRole('button', { name: /save 1 change/i }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(/frozen|protected/)
-    expect((await repository.listBidMilestones(bid.id))[0].dueAt).toBe('2099-01-15T00:00:00.000Z')
-    expect((await repository.listBidCorrigenda(bid.id))[0].changes.every((c) => c.decision === 'pending')).toBe(true)
+    await waitFor(async () => {
+      expect((await repository.listBidCorrigenda(bid.id))[0].changes.map((c) => c.decision)).toEqual(['accepted', 'rejected'])
+    })
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect((await repository.listBidMilestones(bid.id))[0].dueAt).toBe('2099-02-01T00:00:00.000Z')
   })
 })
 

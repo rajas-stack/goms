@@ -28,6 +28,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
   const teamsActive = location.pathname.startsWith('/teams')
   const accessActive = location.pathname.startsWith('/admin/access')
+  const documentMakerActive = location.pathname.startsWith('/document-maker')
   // Same rule as the desktop rail (useShowAccessNav). Link visibility is NOT authorization: the route guard and the server decide.
   const canAccess = useShowAccessNav()
   const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping)
@@ -126,6 +127,21 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                   Opportunity
                 </button>
               )}
+              <button
+                onClick={() => {
+                  onClose()
+                  navigate('/document-maker')
+                }}
+                className={cn(
+                  'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
+                  documentMakerActive
+                    ? 'bg-white text-ink-900 shadow-sm'
+                    : 'text-ink hover:bg-ink-900/[0.05]',
+                )}
+              >
+                <Icon name="FilePenLine" size={17} />
+                Document maker
+              </button>
               {canAccess && <button
                 onClick={() => {
                   onClose()

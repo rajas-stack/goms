@@ -13,6 +13,7 @@ import { SECTION_LABELS } from '../documents'
 import { gridDocument, gridToWorksheet, readGridSection, worksheetToGrid } from './gridIO'
 import { updateColumn } from './gridModel'
 import { SynopsisGridView } from './SynopsisGridView'
+import { CorrigendaToggle, OrphanChanges, useGridCorrigenda } from './corrigendum/GridCorrigenda'
 
 const HISTORY_LIMIT = 100
 const DRAFT_DELAY_MS = 500
@@ -57,6 +58,7 @@ function GridSectionEditor({ bidId, section, saved, canEdit, onReload }: {
   const [importSheet, setImportSheet] = useState('')
   const upload = useRef<HTMLInputElement>(null)
   const save = useSaveSynopsis()
+  const corrigenda = useGridCorrigenda(bidId, section, grid, setError)
 
   const currentJson = JSON.stringify(gridDocument(grid, notes))
   const dirty = currentJson !== savedJson.current || converted
@@ -159,6 +161,7 @@ function GridSectionEditor({ bidId, section, saved, canEdit, onReload }: {
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          <CorrigendaToggle state={corrigenda} />
           <Button size="sm" aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!canEdit || !history.past.length} onClick={undo}><Icon name="RotateCcw" size={14} /></Button>
           <Button size="sm" aria-label="Redo" title="Redo (Ctrl+Y)" disabled={!canEdit || !history.future.length} onClick={redo}><Icon name="RotateCcw" size={14} className="-scale-x-100" /></Button>
           <Menu trigger={({ toggle }) => (
@@ -193,9 +196,11 @@ function GridSectionEditor({ bidId, section, saved, canEdit, onReload }: {
         </div>
       )}
       {error && <div role="alert" className="border-y border-red-200 bg-red-50 px-4 py-2 text-[13px] text-crimson">{error}</div>}
-      <SynopsisGridView grid={grid} readOnly={!canEdit} onChange={change} label={`${label} grid`} onUndo={undo} onRedo={redo} onError={setError} />
+      <SynopsisGridView grid={grid} readOnly={!canEdit} onChange={change} label={`${label} grid`} onUndo={undo} onRedo={redo} onError={setError} corrigenda={corrigenda.overlay} />
+      {corrigenda.visible && <OrphanChanges comparison={corrigenda.comparison} />}
+      {corrigenda.dialogs}
       <p className="px-4 py-1.5 text-[11px] text-muted">
-        Double-click or type to edit · Drag row numbers or headers to reorder · Right-click for row/column actions · Ctrl+C / Ctrl+V work with Sheets and Excel
+        Double-click or type to edit · Drag row numbers or headers to reorder · Right-click for row/column actions (incl. Record corrigendum change) · Ctrl+C / Ctrl+V work with Sheets and Excel
       </p>
       <label className="block px-4 pb-4 pt-2">
         <span className="mb-1.5 block text-[13px] font-medium text-ink-800">Notes</span>

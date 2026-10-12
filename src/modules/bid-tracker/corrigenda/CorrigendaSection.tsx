@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { useBidCorrigenda, useBidCorrigendaMutations, useDeliveryTeamMembers, useDocuments } from '@/lib/api'
+import { NO_PERMISSION_TITLE, useAllowed } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { CorrigendumComparison } from './CorrigendumComparison'
 import { EditRegisterDialog } from './EditRegisterDialog'
@@ -21,17 +22,25 @@ const SAMPLE_ENABLED = import.meta.env.DEV && !import.meta.env.VITE_API_BASE_URL
 
 /** Corrigenda for one bid: the register, a per-corrigendum comparison, the
  *  Current Tender Position and the full version history. */
+const linkedParam = (name: string): string | null => {
+  try { return new URLSearchParams(window.location.search).get(name) } catch { return null }
+}
+
 export function CorrigendaSection({ bidId }: { bidId: string }) {
   const { data: corrigenda = [], isLoading } = useBidCorrigenda(bidId)
   const { data: members = [] } = useDeliveryTeamMembers()
   const { data: documents = [] } = useDocuments('bid', bidId)
   const { create, reviewChange } = useBidCorrigendaMutations(bidId)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  // A grid cell's "Open in Corrigenda" links here with ?corrigendum=…&change=….
+  const [selectedId, setSelectedId] = useState<string | null>(() => linkedParam('corrigendum'))
   const [view, setView] = useState<View>('corrigendum')
-  const [highlight, setHighlight] = useState<string | null>(null)
+  const [highlight, setHighlight] = useState<string | null>(() => linkedParam('change'))
   const [recording, setRecording] = useState(false)
   const [editing, setEditing] = useState(false)
   const [sampleError, setSampleError] = useState<string | null>(null)
+  const canCreate = useAllowed('bid.corrigenda', 'create')
+  const canReview = useAllowed('bid.corrigenda', 'update', 'corrigendum.review')
+  const canEditRegister = useAllowed('bid.corrigenda', 'update')
 
   const clauses = useMemo(() => buildTenderPosition(corrigenda), [corrigenda])
   const selected = corrigenda.find((c) => c.id === selectedId) ?? corrigenda[corrigenda.length - 1] ?? null
@@ -63,11 +72,11 @@ export function CorrigendaSection({ bidId }: { bidId: string }) {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {SAMPLE_ENABLED && corrigenda.length === 0 && (
-            <Button size="sm" variant="ghost" disabled={create.isPending} onClick={loadSample} title="Dev only — local data">
+            <Button size="sm" variant="ghost" disabled={create.isPending || !canCreate} onClick={loadSample} title="Dev only — local data">
               <Icon name="Database" size={13} /> Load sample corrigenda
             </Button>
           )}
-          <Button size="sm" variant="primary" onClick={() => setRecording(true)}><Icon name="Plus" size={13} /> Record corrigendum</Button>
+          <Button size="sm" variant="primary" disabled={!canCreate} title={canCreate ? undefined : NO_PERMISSION_TITLE} onClick={() => setRecording(true)}><Icon name="Plus" size={13} /> Record corrigendum</Button>
         </div>
       </div>
       {sampleError && <p role="alert" className="mb-2 text-[13px] text-crimson">{sampleError}</p>}
@@ -99,8 +108,8 @@ export function CorrigendaSection({ bidId }: { bidId: string }) {
               owner={ownerName(selected.reviewOwnerId) ? { name: ownerName(selected.reviewOwnerId)! } : null}
               document={documents.find((d) => d.id === selected.sourceDocumentId) ?? null}
               highlightedChangeId={highlight}
-              onEditRegister={() => setEditing(true)}
-              onDecide={(changeId, decision) => reviewChange.mutateAsync({ changeId, decision })}
+              onEditRegister={canEditRegister ? () => setEditing(true) : undefined}
+              onDecide={canReview ? (changeId, decision) => reviewChange.mutateAsync({ changeId, decision }) : undefined}
             />
           )}
           {view === 'current' && <TenderPositionView clauses={clauses} onOpenSource={openSource} />}
