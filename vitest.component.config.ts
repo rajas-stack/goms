@@ -27,9 +27,6 @@ export default defineConfig({
     // Heavy grid tests (virtualized table + userEvent) exceed the 5s default when the whole
     // suite runs in parallel; they pass alone in ~1-2s, so this only absorbs load, not hangs.
     testTimeout: 20000,
-    poolOptions: {
-      forks: { execArgv: WORKER_EXEC_ARGV },
-      threads: { execArgv: WORKER_EXEC_ARGV },
-    },
+    execArgv: WORKER_EXEC_ARGV,
   },
 })

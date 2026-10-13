@@ -110,7 +110,7 @@ describe('duplicate roster emails are ambiguous, never silently resolved', () =>
 
 describe('duplicate org-chart and team-member emails are ambiguous too (fail closed)', () => {
   const ambiguityLogs = (warn: ReturnType<typeof vi.spyOn>, source: string) =>
-    warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('rbac.ambiguous_identity') && l.includes(source))
+    warn.mock.calls.map((c: unknown[]) => String(c[0])).filter((l: string) => l.includes('rbac.ambiguous_identity') && l.includes(source))
 
   it('two active org people sharing an email (any case / spacing) derive NO role for that login, and it is logged', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})

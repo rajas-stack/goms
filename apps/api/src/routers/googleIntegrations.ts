@@ -13,6 +13,8 @@ async function account(ctx: Context) {
 const settingsShape = z.object({
   clientId: z.string().max(300).regex(/^$|^[\w.-]+\.apps\.googleusercontent\.com$/),
   disabledPages: z.record(z.enum(GOOGLE_SERVICES), z.array(z.string().regex(/^[a-z][a-z0-9-]{0,79}$/)).max(200)),
+  disabledServices: z.array(z.enum(GOOGLE_SERVICES)).max(GOOGLE_SERVICES.length).optional(),
+  mapsEmbedKey: z.string().max(200).regex(/^[\w-]*$/).optional(),
   docsId: z.string().max(200).regex(/^[\w-]*$/), sheetsId: z.string().max(200).regex(/^[\w-]*$/),
   cloudProject: z.string().max(100).regex(/^$|^[a-z0-9][a-z0-9-]*$/), notebookLocation: z.enum(['global', 'us', 'eu']),
 }).strict()

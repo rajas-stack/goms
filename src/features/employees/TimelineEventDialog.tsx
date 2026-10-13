@@ -2,17 +2,20 @@ import { NO_PERMISSION_TITLE, useAllowed, usePermissions } from '@/lib/permissio
 import { useEffect, useMemo, useState } from 'react'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
-import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { Field, Input, Select } from '@/components/ui/Field'
+import { RepeatableMeetingField } from './RepeatableMeetingField'
 import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { MultiSelectDropdown } from '@/components/ui/MultiSelectDropdown'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useToast } from '@/components/ui/Toast'
 import { useAllEmployees, useEmployeeMutations, useSalesPersons } from '@/lib/api'
 import { isoToday } from '@/data/repository'
-import { useFormDraft } from '@/lib/useFormDraft'
+import { useMeetingDraft } from './useMeetingDraft'
+import { auth } from '@/lib/firebaseAuth'
 import { MANUAL_EVENT_TYPES, TIMELINE_META } from '@/lib/timeline-meta'
 import { EmployeePicker } from './EmployeePicker'
-import type { AttendeeRef, TimelineEvent, TimelineEventType } from '@/lib/types'
+import { MeetingPersonDialog } from './MeetingPersonDialog'
+import type { AttendeeRef, Employee, TimelineEvent, TimelineEventType } from '@/lib/types'
 
 /**
  * `employeeId: null` opens the dialog with an employee-search/pick step
@@ -54,12 +57,15 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   const toast = useToast()
   const { addTimelineEvent, updateTimelineEvent } = useEmployeeMutations()
   const allowed = useAllowed('am.meetings', existingEvent ? 'update' : 'create')
+  const canCreatePerson = useAllowed('am.contacts', 'create')
   const { data: allEmployees = [] } = useAllEmployees()
   const { data: salesPersons = [] } = useSalesPersons()
   const [pickedEmployeeId, setPickedEmployeeId] = useState<string | null>(null)
+  const [creatingPerson, setCreatingPerson] = useState(false)
+  const [createdPerson, setCreatedPerson] = useState<Employee | null>(null)
   const activeEmployeeId = employeeId ?? pickedEmployeeId
   const showPicker = !activeEmployeeId
-  const pickedEmployee = pickedEmployeeId ? allEmployees.find((e) => e.id === pickedEmployeeId) : undefined
+  const pickedEmployee = pickedEmployeeId ? allEmployees.find((e) => e.id === pickedEmployeeId) ?? (createdPerson?.id === pickedEmployeeId ? createdPerson : undefined) : undefined
   const typeOptionsBase = typeFilter && typeFilter.length > 0 ? typeFilter : MANUAL_EVENT_TYPES
   // An existing entry's own type might fall outside the caller's typeFilter
   // (e.g. a 'meeting'-type entry created via the global FAB, edited from a
@@ -75,23 +81,38 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   }
   const [form, setForm] = useState(EMPTY_FORM)
 
-  // Keyed on the target person, not on this render's `defaultType` — a draft
-  // must survive the dialog closing and reopening for the same person even
-  // though `defaultType` (derived from `initialType`) could differ between
-  // entry points (the FAB's "Add Activity" vs. a profile's "+ Add meeting").
-  // Disabled entirely while editing an existing event: that form is seeded
-  // from the record itself, not from an in-progress add — persisting it here
-  // would risk polluting the same person's next "+ Add meeting" draft.
-  const draftKey = !existingEvent && activeEmployeeId ? `timeline:${activeEmployeeId}` : null
-  const draft = useFormDraft(draftKey, form, open, () => setForm(EMPTY_FORM))
+  // Scope drafts to the signed-in account and entry point. Global creation
+  // includes the selected person; editing has a separate key per meeting.
+  const draftOwner = auth?.currentUser?.uid ?? 'local'
+  const draftKey = draftOwner ? `${draftOwner}:${existingEvent ? `edit:${existingEvent.id}` : `new:${employeeId ?? 'global'}`}` : null
+  const draft = useMeetingDraft(draftKey, { personId: activeEmployeeId, form }, open)
+  function discardDraft() {
+    draft.clear()
+    setForm(existingEvent ? formFromEvent(existingEvent) : EMPTY_FORM)
+    if (!employeeId) setPickedEmployeeId(null)
+    // Establish the fresh baseline so subsequent typing starts a new draft.
+    draft.take({ personId: employeeId, form: existingEvent ? formFromEvent(existingEvent) : EMPTY_FORM })
+  }
+  function closeWithDraft() { draft.flush(); onClose() }
 
   useEffect(() => {
     if (open) {
-      setForm(existingEvent ? formFromEvent(existingEvent) : (draft.take(EMPTY_FORM) ?? EMPTY_FORM))
-      setPickedEmployeeId(null)
+      const seeded = existingEvent ? formFromEvent(existingEvent) : EMPTY_FORM
+      const saved = draft.take({ personId: employeeId, form: seeded })
+      let legacy = null
+      if (!saved && employeeId && !existingEvent) {
+        try {
+          const raw = sessionStorage.getItem(`gorms:draft:timeline:${employeeId}`)
+          if (raw) { const old = JSON.parse(raw); if (Date.now() - old.savedAt < 12 * 60 * 60 * 1000) legacy = old.form; sessionStorage.removeItem(`gorms:draft:timeline:${employeeId}`) }
+        } catch { /* Older tab drafts are optional. */ }
+      }
+      setForm(saved?.form ?? legacy ?? seeded)
+      setPickedEmployeeId(employeeId ? null : saved?.personId ?? null)
+      setCreatingPerson(false)
+      setCreatedPerson(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, existingEvent])
+  }, [open, existingEvent, draftKey])
 
   // MultiSelectDropdown operates over a plain string[] of names. Legacy
   // plain-string attendees (e.g. restored from a draft saved before this
@@ -167,20 +188,23 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
         customLabel: form.type === 'custom' ? form.customLabel.trim() : undefined,
         agenda: form.agenda.trim() || undefined, outcome: form.outcome.trim() || undefined, nextSteps: form.nextSteps.trim() || undefined,
       })
-      toast('Added to timeline')
-      draft.clear()
+      toast('Meeting added')
     }
+    draft.clear()
+    try { if (activeEmployeeId) sessionStorage.removeItem(`gorms:draft:timeline:${activeEmployeeId}`) } catch { /* Saved meeting already exists. */ }
     onClose()
   }
 
   if (showPicker) {
+    if (open && creatingPerson) return <MeetingPersonDialog onBack={() => setCreatingPerson(false)} onCreated={person => { setCreatedPerson(person); setPickedEmployeeId(person.id); setCreatingPerson(false) }} />
     return (
       <Dialog
         open={open}
-        onClose={onClose}
-        title="Log to timeline"
+        onClose={closeWithDraft}
+        title="Add New Meeting"
+        size="lg"
         description="Choose who this is for"
-        footer={<Button onClick={onClose}>Cancel</Button>}
+        footer={<Button onClick={closeWithDraft}>Cancel</Button>}
       >
         <Field label="Person" hint="Search by name or designation">
           <EmployeePicker
@@ -190,6 +214,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             placeholder="Search a person…"
           />
         </Field>
+        {canCreatePerson && <Button className="mt-4" onClick={() => setCreatingPerson(true)}>Create new person</Button>}
       </Dialog>
     )
   }
@@ -198,20 +223,22 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
   return (
     <Dialog
       open={open}
-      onClose={onClose}
-      title={existingEvent ? 'Edit timeline entry' : 'Log to timeline'}
+      onClose={closeWithDraft}
+      title={existingEvent ? 'Edit Meeting' : 'Add New Meeting'}
+      size="xl"
       description={!employeeId && pickedEmployee ? `For ${pickedEmployee.name}` : undefined}
       footer={
         <>
-          <Button onClick={onClose} disabled={pending}>Cancel</Button>
+          <Button onClick={closeWithDraft} disabled={pending}>Cancel</Button>
           <Button variant="primary" onClick={submit} disabled={(!form.title.trim() || pending) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE}>
-            {existingEvent ? (pending ? 'Saving…' : 'Save changes') : (pending ? 'Adding…' : 'Add entry')}
+            {existingEvent ? (pending ? 'Saving…' : 'Save changes') : (pending ? 'Adding…' : 'Add Meeting')}
           </Button>
         </>
       }
     >
-      <div className="space-y-4">
-        {draft.restored && <DraftNotice onDiscard={draft.discard} />}
+      <div className="space-y-3">
+        {draft.restored && <DraftNotice onDiscard={discardDraft} />}
+        <p role="status" className="text-xs text-muted">{!draftKey ? 'Sign in to save a draft on this device.' : draft.error ? 'Draft could not be saved on this device. Keep this form open.' : 'Draft saved on this device as you type. You can close and continue later.'}</p>
         {!employeeId && pickedEmployee && (
           <button
             type="button"
@@ -221,7 +248,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             Change person
           </button>
         )}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field
             label="Meeting type"
             hint={existingEvent ? "Can't be changed after creation" : undefined}
@@ -253,6 +280,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             <Input type="time" value={form.time} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} />
           </Field>
         </div>
+        <div className="grid gap-3 lg:grid-cols-2">
         <Field label="Title" required>
           <Input
             value={form.title}
@@ -280,18 +308,13 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             </p>
           )}
         </Field>
-        <Field label="Note" hint="Optional details.">
-          <Textarea value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
-        </Field>
-        <Field label="Agenda" hint="Optional. What this meeting was for.">
-          <Textarea value={form.agenda} onChange={(e) => setForm((f) => ({ ...f, agenda: e.target.value }))} />
-        </Field>
-        <Field label="Outcome" hint="Optional. What came out of it.">
-          <Textarea value={form.outcome} onChange={(e) => setForm((f) => ({ ...f, outcome: e.target.value }))} />
-        </Field>
-        <Field label="Next steps" hint="Optional. What happens next.">
-          <Textarea value={form.nextSteps} onChange={(e) => setForm((f) => ({ ...f, nextSteps: e.target.value }))} />
-        </Field>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <RepeatableMeetingField label="Note" value={form.note} disabled={pending} onChange={note => setForm(f => ({ ...f, note }))} />
+          <RepeatableMeetingField label="Agenda" value={form.agenda} disabled={pending} onChange={agenda => setForm(f => ({ ...f, agenda }))} />
+          <RepeatableMeetingField label="Outcome" value={form.outcome} disabled={pending} onChange={outcome => setForm(f => ({ ...f, outcome }))} />
+          <RepeatableMeetingField label="Next steps" value={form.nextSteps} disabled={pending} onChange={nextSteps => setForm(f => ({ ...f, nextSteps }))} />
+        </div>
       </div>
     </Dialog>
   )

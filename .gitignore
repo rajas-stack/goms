@@ -89,5 +89,7 @@ playwright-report/
 # (Env files are already covered by `.env.*` above.)
 /uploads/
 /.thumbnail
+/.docker/
+!.env.docker.example
 /Copy of Book*.xlsx
 /Access Control Center*.dc.html

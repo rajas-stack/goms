@@ -6,7 +6,7 @@ import type { MyAccess } from '../../apps/api/src/routers/auth'
 import { useMyAccess } from './api'
 
 export interface Permissions {
-  /** False when RBAC is off (or not yet known): everything is shown, the server is still the authority. */
+  /** False only in offline mode or when the server explicitly disables RBAC. */
   enforced: boolean
   roles: UserFacts['roles']
   level(module: PolicyModuleKey): Level
@@ -25,13 +25,17 @@ export interface Permissions {
 const OPEN: Permissions = {
   enforced: false, roles: [], level: () => 'W', can: () => true, canEdit: () => true, canReadAtom: () => true, mayWrite: () => true,
 }
+const CLOSED: Permissions = {
+  enforced: true, roles: [], level: () => 'N', can: () => false, canEdit: () => false, canReadAtom: () => false, mayWrite: () => false,
+}
 const Ctx = createContext<Permissions>(OPEN)
 
 function build(access: MyAccess | undefined): Permissions {
-  if (!access) return OPEN
+  if (!access) return import.meta.env.VITE_API_BASE_URL ? CLOSED : OPEN
   const reported = { mode: access.mode, systemAdmin: access.mode !== 'off' && access.roles.includes('system_admin') }
   // `shadow` only logs on the server, so the UI behaves exactly as it does with RBAC off until `enforce`.
-  if (access.mode !== 'enforce' || !access.facts) return { ...OPEN, ...reported }
+  if (access.mode !== 'enforce') return { ...OPEN, ...reported }
+  if (!access.facts) return { ...CLOSED, ...reported }
   const user: UserFacts = { email: access.email ?? '', roles: access.roles, ...access.facts }
   return {
     ...reported,

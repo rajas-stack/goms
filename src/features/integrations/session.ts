@@ -25,6 +25,7 @@ export function saveGoogleSession(session: GoogleSession) {
 }
 export function hasGoogleScope(granted: readonly string[], required: string) {
   if (granted.includes(required)) return true
+  if (required.endsWith('.readonly') && granted.includes(required.slice(0, -'.readonly'.length))) return true
   if (required.startsWith('https://www.googleapis.com/auth/drive.') && granted.includes('https://www.googleapis.com/auth/drive')) return true
   return false
 }

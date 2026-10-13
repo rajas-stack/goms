@@ -6,15 +6,18 @@ import { IntegrationsSettingsPage } from '@/app/routes/IntegrationsSettingsPage'
 import { GOOGLE_PRODUCTS } from './catalog'
 import { registerGoogleFeature } from './registry'
 import { getGoogleAccount, setGoogleAccount } from './session'
-import { googleServiceEnabled, googleSettings, loadGoogleSettings } from './settings'
+import { googleServiceEnabled, googleSettings, loadGoogleSettings, saveGoogleSettings } from './settings'
 import { testGoogleConnection } from './googleClient'
+import { runWorkspaceAction } from './workspaceClient'
 vi.mock('@/features/dms/googleDrive', () => ({ loadGoogleIdentity: vi.fn(async () => ({})) }))
 vi.mock('./googleClient', () => ({ authorizeGoogle: vi.fn(async () => 'memory-only'), testGoogleConnection: vi.fn(async () => ({ status: 'verified', message: 'API verified.' })) }))
+vi.mock('./workspaceClient', async importOriginal => ({ ...await importOriginal<typeof import('./workspaceClient')>(), runWorkspaceAction: vi.fn(async () => ({ items: [{ id: 'message-a', title: 'Tender reminder', detail: 'From user@amnex.com' }] })) }))
 let counter = 0
 beforeEach(async () => {
   vi.clearAllMocks()
   const account = { uid: `integration-user-${++counter}`, email: 'a@amnex.com', googleId: 'google-a' }
   setGoogleAccount(account); await loadGoogleSettings(account)
+  await saveGoogleSettings(account, { ...googleSettings(account), clientId: '123.apps.googleusercontent.com' })
 })
 afterEach(() => { cleanup(); setGoogleAccount(null) })
 describe('Google Integrations settings', () => {
@@ -24,7 +27,8 @@ describe('Google Integrations settings', () => {
       expect(screen.getByRole('heading', { name: product.name })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: `Test ${product.name} connection` })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: `Choose pages for ${product.name}` })).toBeInTheDocument()
-      expect(screen.getByRole('link', { name: `Open ${product.name}` })).toHaveAttribute('href', expect.stringContaining('authuser=a%40amnex.com'))
+      expect(screen.getByRole('switch', { name: `${product.name} activation` })).toBeInTheDocument()
+      expect(screen.queryByRole('link', { name: `Open ${product.name}` })).not.toBeInTheDocument()
     }
     expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings')
   })
@@ -57,5 +61,44 @@ describe('Google Integrations settings', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Test Sites connection' }))
     expect(testGoogleConnection).toHaveBeenCalledWith('sites', getGoogleAccount(), googleSettings(getGoogleAccount()))
     expect(await within(screen.getByRole('region', { name: 'Sites integration' })).findByText('API verified.')).toBeInTheDocument()
+  })
+  it('loads read-only test results in the app while a service is inactive', async () => {
+    render(<MemoryRouter><IntegrationsSettingsPage /></MemoryRouter>)
+    await userEvent.click(screen.getByRole('switch', { name: 'Gmail activation' }))
+    await waitFor(() => expect(googleServiceEnabled('gmail', 'accounts')).toBe(false))
+    await userEvent.click(screen.getByRole('button', { name: 'Test Gmail connection' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Load recent items' }))
+    expect(runWorkspaceAction).toHaveBeenCalledWith('gmail', 'load', expect.any(Object), undefined, 'integrations', true)
+    expect(await screen.findByText('Tender reminder')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Send email' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Gmail action' })).not.toBeInTheDocument()
+  })
+  it('preserves page choices across master deactivation and clears private previews on sign-out', async () => {
+    render(<MemoryRouter><IntegrationsSettingsPage /></MemoryRouter>)
+    await userEvent.click(screen.getByRole('button', { name: 'Choose pages for Gmail' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Sales' }))
+    await waitFor(() => expect(googleServiceEnabled('gmail', 'sales')).toBe(false))
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(screen.getByRole('switch', { name: 'Gmail activation' }))
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Gmail activation' })).not.toBeChecked())
+    await userEvent.click(screen.getByRole('switch', { name: 'Gmail activation' }))
+    await waitFor(() => expect(screen.getByRole('switch', { name: 'Gmail activation' })).toBeChecked())
+    expect(googleServiceEnabled('gmail', 'sales')).toBe(false)
+    expect(googleServiceEnabled('gmail', 'accounts')).toBe(true)
+    await userEvent.click(screen.getByRole('button', { name: 'Test Gmail connection' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Load recent items' }))
+    expect(await screen.findByText('Tender reminder')).toBeInTheDocument()
+    setGoogleAccount(null)
+    await waitFor(() => expect(screen.queryByText('Tender reminder')).not.toBeInTheDocument())
+  })
+  it('embeds the selected map address without redirecting or sending an OAuth token', async () => {
+    render(<MemoryRouter><IntegrationsSettingsPage /></MemoryRouter>)
+    await userEvent.click(screen.getByRole('button', { name: 'Test Maps connection' }))
+    await userEvent.type(screen.getByLabelText('Maps Embed API key'), 'restricted-browser-key')
+    await userEvent.type(screen.getByLabelText('Address'), 'New Delhi, India')
+    await userEvent.click(screen.getByRole('button', { name: 'Show map' }))
+    const frame = screen.getByTitle('Google Maps address preview')
+    expect(frame).toHaveAttribute('src', 'https://www.google.com/maps/embed/v1/place?key=restricted-browser-key&q=New+Delhi%2C+India')
+    expect(runWorkspaceAction).not.toHaveBeenCalled()
   })
 })

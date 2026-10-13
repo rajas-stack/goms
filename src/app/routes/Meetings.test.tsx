@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import * as api from '@/lib/api'
 import { Meetings } from './Meetings'
+import { MeetingDetails } from './MeetingDetails'
 import type { Employee, HierNode, SalesPerson, SalesPosting, TimelineEvent } from '@/lib/types'
 
 // jsdom's 0-height scroll container makes the real virtualizer render no rows;
@@ -92,11 +93,21 @@ function setup() {
 beforeEach(() => { stub(); sessionStorage.clear() })
 afterEach(() => { vi.restoreAllMocks() })
 
+it('opens the saved meeting details instead of the contact card', async () => {
+  stub([evt({ id: 'm1', title: 'Kickoff Alpha', note: 'First note\nSecond note', agenda: 'Review budget', outcome: 'Approved', nextSteps: 'Share proposal', attendees: [att('vishal', 'Vishal Sharma')] })])
+  const user = userEvent.setup()
+  render(<MemoryRouter initialEntries={['/meetings']}><Routes><Route path="/meetings" element={<Meetings />} /><Route path="/meetings/:meetingId" element={<MeetingDetails />} /></Routes></MemoryRouter>)
+  await user.click(screen.getByText('Kickoff Alpha'))
+  expect(screen.getByRole('heading', { name: 'Kickoff Alpha' })).toBeInTheDocument()
+  for (const text of ['First note', 'Second note', 'Review budget', 'Approved', 'Share proposal', 'Vishal Sharma', 'Anita Desai']) expect(screen.getByText(text)).toBeInTheDocument()
+  expect(screen.getByRole('link', { name: 'Meetings' })).toHaveAttribute('href', '/meetings')
+})
+
 describe('Meetings — Create Meeting', () => {
   it('shows a primary + Create Meeting action that opens the existing timeline-event dialog', async () => {
     const { user } = setup()
-    await user.click(screen.getByRole('button', { name: /create meeting/i }))
-    const dialog = await screen.findByRole('dialog', { name: 'Log to timeline' })
+    await user.click(screen.getByRole('button', { name: /add new meeting/i }))
+    const dialog = await screen.findByRole('dialog', { name: 'Add New Meeting' })
     // The reused dialog starts on its employee-picker step (no pre-selected person).
     expect(within(dialog).getByText('Choose who this is for')).toBeInTheDocument()
     expect(within(dialog).getByPlaceholderText('Search a person…')).toBeInTheDocument()

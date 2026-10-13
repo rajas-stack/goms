@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { onAuthStateChanged } from 'firebase/auth'
+import { auth } from '@/lib/firebaseAuth'
 import type { TenderWebsite } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
@@ -14,11 +16,24 @@ export function TenderCredentialsDialog({ site, onClose }: { site: TenderWebsite
   const [showPassword, setShowPassword] = useState(false)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState('')
+  const generation = useRef(0)
+  const [attempts, setAttempts] = useState(0)
+  const [retryAt, setRetryAt] = useState(0)
+  useEffect(() => {
+    const clear = () => { generation.current++; setPassphrase(''); setCredentials(null); setShowPassword(false) }
+    const hidden = () => { if (document.visibilityState === 'hidden') clear() }
+    document.addEventListener('visibilitychange', hidden)
+    const stop = auth ? onAuthStateChanged(auth, clear) : undefined
+    const timer = window.setInterval(clear, 120000)
+    return () => { generation.current++; document.removeEventListener('visibilitychange', hidden); stop?.(); window.clearInterval(timer) }
+  }, [])
   const unlock = async () => {
     if (!site.credentials || working) return
+    if (Date.now() < retryAt) { setError('Too many attempts. Wait 30 seconds before retrying.'); return }
+    const request = generation.current
     setWorking(true); setError('')
-    try { setCredentials(await unlockCredentials(site.credentials, passphrase)); setPassphrase('') }
-    catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not unlock credentials.') }
+    try { const value = await unlockCredentials(site.credentials, passphrase); if (request !== generation.current) return; setCredentials(value); setPassphrase(''); setAttempts(0) }
+    catch (cause) { if (request !== generation.current) return; const next = attempts + 1; setAttempts(next); if (next >= 5) { setRetryAt(Date.now() + 30000); setAttempts(0) }; setError(cause instanceof Error ? cause.message : 'Could not unlock credentials.') }
     finally { setWorking(false) }
   }
   return <Dialog open onClose={onClose} title={`Credentials: ${site.name}`} description="The credential passphrase is required even when website editing is unlocked.">
