@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { PermissionsProvider } from '@/lib/permissions'
 import { ACCESS_NAV_CASES } from '@/test/accessNavCases'
 import { AccountMappingRail } from './AccountMappingRail'
+import { NodeAccessProvider } from '@/lib/rbacTree/access'
+import type { RbacMyAccess } from '@goms/domain'
 
 // Whether the viewer is signed in comes from Firebase; the tests decide it directly.
 const { signedIn } = vi.hoisted(() => ({ signedIn: { value: false } }))
@@ -41,27 +42,27 @@ describe('AccountMappingRail — Bid Tracker entry', () => {
 
 const Where = () => <p data-testid="where">{useLocation().pathname}</p>
 
-describe('AccountMappingRail — Role & Access entry (link visibility only: the route guard and the server decide access)', () => {
-  const renderWith = (access: Parameters<typeof PermissionsProvider>[0]['access'], path = '/map') => render(
+describe('AccountMappingRail — Role & Access moved to Settings', () => {
+  const renderWith = (access: Parameters<typeof PermissionsProvider>[0]['access'], tree?: RbacMyAccess) => render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <PermissionsProvider access={access}>
-        <MemoryRouter initialEntries={[path]}><AccountMappingRail /><Where /></MemoryRouter>
+        <NodeAccessProvider access={tree}>
+          <MemoryRouter initialEntries={['/map']}><AccountMappingRail /><Where /></MemoryRouter>
+        </NodeAccessProvider>
       </PermissionsProvider>
     </QueryClientProvider>,
   )
 
-  it.each(ACCESS_NAV_CASES)('$name: entry visible = $visible', ({ access, signedIn: isSignedIn, visible }) => {
+  it.each(ACCESS_NAV_CASES)('$name: no Role & Access entry in the rail', ({ access, signedIn: isSignedIn }) => {
     signedIn.value = isSignedIn
     renderWith(access)
-    if (visible) expect(screen.getByTitle('Role & Access')).toBeInTheDocument()
-    else expect(screen.queryByTitle('Role & Access')).not.toBeInTheDocument()
+    expect(screen.queryByTitle('Role & Access')).not.toBeInTheDocument()
   })
 
-  it('opens the Role & Access screen and marks the entry active there', async () => {
-    signedIn.value = true
-    renderWith({ mode: 'enforce', email: 'root@amnex.com', roles: ['system_admin'], facts: { salesPersonId: null, teamMemberIds: { presales: [], legal: [], bid: [] } } })
-    await userEvent.click(screen.getByTitle('Role & Access'))
-    expect(screen.getByTestId('where')).toHaveTextContent('/admin/access')
-    expect(screen.getByTitle('Role & Access').className).toContain('shadow-sm')
+  it('hides a module the permission tree denies, keeps the others', () => {
+    const tree: RbacMyAccess = { configured: true, allowed: { commercial: 0, accountMapping: 63 } }
+    renderWith({ mode: 'off', email: null, roles: [], facts: null }, tree)
+    expect(screen.queryByTitle('Commercial Calculator')).not.toBeInTheDocument()
+    expect(screen.getByTitle('Account Mapping')).toBeInTheDocument()
   })
 })

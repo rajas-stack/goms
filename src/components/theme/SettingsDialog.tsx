@@ -6,6 +6,10 @@ import { Link } from 'react-router-dom'
 import { WEBSITE_KIND_COPY, type WebsiteKindCopy } from '@/features/tender-websites/websiteKinds'
 import { SettingsIcon, type SettingsIconKind } from './SettingsIcon'
 import './SettingsMenu.css'
+import { definePermissionNodes } from '@/lib/rbacTree/registry'
+import { useNodeFilter } from '@/lib/rbacTree/access'
+import { useShowAccessNav } from '@/lib/accessNav'
+import '@/lib/rbacTree/appModules'
 
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   return (
@@ -18,13 +22,15 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
 const websitePage = ({ route, title, hint }: WebsiteKindCopy, kind: SettingsIconKind) => ({ to: route, kind, title, hint })
 
-const SETTINGS_GROUPS = [
+/** Settings groups and pages, also the permission-tree nodes `settings.<group>.<page kind>`. */
+const SETTINGS_GROUPS = definePermissionNodes('settings', [
   {
     id: 'system', title: 'System settings', icon: 'SlidersHorizontal',
     pages: [
       { to: '/settings/integrations', kind: 'integrations' as const, title: 'Integrations', hint: 'Connect Google services.' },
       { to: '/settings/dms', kind: 'storage' as const, title: 'DMS Settings', hint: 'Connect Drive and organize documents.' },
       { to: '/settings/credentials', kind: 'credentials' as const, title: 'Credentials', hint: 'Manage shared passphrases.' },
+      { to: '/settings/access', kind: 'access' as const, title: 'Roles & Access', hint: 'Who can see and do what in GOMS.' },
     ],
   },
   {
@@ -35,7 +41,12 @@ const SETTINGS_GROUPS = [
     id: 'pre-sales', title: 'Pre-sales', icon: 'TrendingUp',
     pages: [{ to: '/settings/competitors', kind: 'competitors' as const, title: 'Competitors', hint: 'Rival companies and what they offer.' }],
   },
-]
+  {
+    id: 'masters', title: 'Masters', icon: 'Database',
+    pages: [{ to: '/settings/masters/employees', kind: 'employees' as const, title: 'Employee Master', hint: 'Amnex departments employees belong to.' }],
+  },
+], { kind: 'section', key: (g) => g.id, label: (g) => g.title })
+for (const group of SETTINGS_GROUPS) definePermissionNodes(`settings.${group.id}`, group.pages, { kind: 'page', key: (p) => p.kind, label: (p) => p.title })
 
 const SETTINGS_BUTTON_CLASS = 'settings-menu-item group inline-flex h-11 max-w-full items-center justify-center gap-2 rounded-lg border border-line bg-white px-3 text-sm font-medium text-ink-900 shadow-sm transition-colors hover:border-ink-600/30 hover:bg-panel focus-visible:focus-ring lg:h-10'
 
@@ -44,7 +55,13 @@ export function SettingsMenu({ onNavigate }: { onNavigate?: () => void }) {
   const [direction, setDirection] = useState(1)
   const contentRef = useRef<HTMLDivElement>(null)
   const reducedMotion = useReducedMotion()
-  const selectedGroup = SETTINGS_GROUPS.find(group => group.id === groupId)
+  // Roles & Access follows the same visibility rule the old rail entry had; every page also follows the permission tree.
+  const showAccess = useShowAccessNav()
+  const allowed = useNodeFilter()
+  const groups = SETTINGS_GROUPS.filter(group => allowed(`settings.${group.id}`)).map(group => ({
+    ...group, pages: group.pages.filter(page => (page.kind !== 'access' || showAccess) && allowed(`settings.${group.id}.${page.kind}`)),
+  }))
+  const selectedGroup = groups.find(group => group.id === groupId)
 
   return (
     <div>
@@ -83,7 +100,7 @@ export function SettingsMenu({ onNavigate }: { onNavigate?: () => void }) {
                 <span className="min-w-0"><span className="block">{page.title}</span><span className="sr-only">{page.hint}</span></span>
                 <Icon name="ChevronRight" size={14} className="shrink-0 text-muted transition-transform group-hover:translate-x-0.5" />
               </Link>
-            )) : SETTINGS_GROUPS.map(group => (
+            )) : groups.map(group => (
               <button key={group.id} type="button" onClick={() => { setDirection(1); setGroupId(group.id) }} className={SETTINGS_BUTTON_CLASS}>
                 <Icon name={group.icon} size={16} className="shrink-0" />
                 <span className="min-w-0">{group.title}</span>

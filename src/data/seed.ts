@@ -14,7 +14,9 @@ import { mergeOrgSeed, syncAllTeamsFromOrg, type OrgPerson } from './org-structu
 import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
 import type { CommercialCalculatorData } from '@/modules/commercial-calculator/types'
 import type { BidSynopsis, Competitor, TenderWebsite } from '@goms/domain'
+import type { StoredDepartment } from './in-memory/amnexDepartments'
 import type { LocalMakerDocument } from './in-memory/makerDocuments'
+import type { RbacLocalState } from './in-memory/rbacTree'
 
 interface AdminState {
   st_code: number
@@ -123,6 +125,10 @@ export interface GormsData {
   tenderWebsites: TenderWebsite[]
   /** Rival companies saved in Settings > Competitors. Optional: older snapshots simply lack it. */
   competitors?: Competitor[]
+  /** Settings > Masters > Amnex Departments. Optional: older snapshots lack it (seeded from the org on load). */
+  amnexDepartments?: StoredDepartment[]
+  /** Settings > Roles & Access: the UI permission tree (nodes, grants, roles, templates). Optional: older snapshots lack it. */
+  rbacTree?: RbacLocalState
 }
 
 export function buildSeed(): GormsData {

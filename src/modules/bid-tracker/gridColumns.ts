@@ -8,6 +8,8 @@ import {
   type CustomFieldType, type FilterNode, type GeneralField, type TypedFilterRule,
 } from '@goms/domain'
 import type { BidCustomField, BidGridRow, DeliveryTeamKey, DeliveryTeamMember } from '@/lib/types'
+import type { OrgPerson } from '@/data/org-structure'
+import { opportunityTeamMembers } from '@/features/teams/opportunityTeamMembers'
 
 export type GridGroupId = 'identity' | 'client' | 'ownership' | 'decision' | 'dates' | 'documents' | 'system' | 'general' | 'custom'
 
@@ -298,6 +300,7 @@ export const NO_LOOKUPS: EntityLookups = {
 export function buildLookups(input: {
   persons: { id: string; name: string; officialEmail?: string; photoUrl?: string | null }[]
   deliveryTeamMembers?: DeliveryTeamMember[]
+  orgPeople?: OrgPerson[]
   departments: { id: string; name: string; stateCode: number | null }[]
   states: { code: number; name: string }[]
 }): EntityLookups {
@@ -306,9 +309,10 @@ export function buildLookups(input: {
   const nameCount = new Map<string, number>()
   for (const d of input.departments) nameCount.set(d.name, (nameCount.get(d.name) ?? 0) + 1)
   const members = (team: DeliveryTeamKey, activeOnly: boolean): ColumnOption[] =>
-    input.deliveryTeamMembers
-      ?.filter((member) => member.team === team && (!activeOnly || member.status === 'active'))
-      .map((member) => ({ value: member.id, label: member.name, email: member.email || undefined, isPerson: true })) ?? []
+    (activeOnly
+      ? opportunityTeamMembers(team, input.deliveryTeamMembers ?? [], input.orgPeople)
+      : (input.deliveryTeamMembers ?? []).filter(member => member.team === team))
+      .map(member => ({ value: member.id, label: member.name, email: member.email || undefined, isPerson: true }))
   return {
     persons: input.persons
       .map((p) => ({ value: p.id, label: p.name, email: p.officialEmail, photoUrl: p.photoUrl ?? null, isPerson: true }))

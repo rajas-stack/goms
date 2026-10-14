@@ -6,7 +6,9 @@ import type { BidSavedView } from '@/lib/types'
 import { isRuleComplete } from './gridColumns'
 import { CreateSavedViewDialog } from './components/CreateSavedViewDialog'
 import { MasterGrid } from './components/MasterGrid'
-import { SavedViewTabs } from './components/SavedViewTabs'
+import { SavedViewTabs, viewsNodeFor } from './components/SavedViewTabs'
+import { savedViewNodeId } from '@goms/domain'
+import { useNodeFilter } from '@/lib/rbacTree/access'
 import { Icon } from '@/components/ui/Icon'
 import { MASTER_SCOPES, type MasterScope, type SheetId } from './sheets'
 import { readSystemColumns, saveSystemColumns } from './systemColumnPreferences'
@@ -72,6 +74,12 @@ export function GridSheet({ sheet }: { sheet: SheetId }) {
 
   const onRulesChange = (next: FilterNode[]) => { setRules(next); persist(next, visibleColumns) }
   const onColumnsChange = (next: string[]) => { setVisibleColumns(next); persist(rules, next) }
+
+  // When the permission tree hides the current view, open the first view it allows.
+  const allowedNode = useNodeFilter()
+  const firstAllowed = views.find((v) => allowedNode(savedViewNodeId(viewsNodeFor(sheet), v.id)))?.id
+  const activeHidden = views.length > 0 && !allowedNode(savedViewNodeId(viewsNodeFor(sheet), activeViewId))
+  useEffect(() => { if (activeHidden && firstAllowed) selectView(firstAllowed) }, [activeHidden, firstAllowed]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const onDelete = (id: string) => {
     if (views.find((v) => v.id === id)?.scope === 'global' && !canManageGlobalViews) return

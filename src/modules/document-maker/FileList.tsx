@@ -10,7 +10,10 @@ import { useOwnerPerson } from './useOwner'
 export type FileAction = 'rename' | 'duplicate' | 'download' | 'delete'
 
 /** The user's files: a table on wide screens, stacked rows on a phone (same markup, grid columns collapse). */
-export function FileList({ files, onAction }: { files: MakerDocument[]; onAction: (action: FileAction, doc: MakerDocument) => void }) {
+/** `can` hides menu actions the permission tree does not allow (default: all allowed). */
+export function FileList({ files, onAction, can = () => true }: {
+  files: MakerDocument[]; onAction: (action: FileAction, doc: MakerDocument) => void; can?: (action: FileAction) => boolean
+}) {
   const ownerOf = useOwnerPerson()
   return (
     <div role="table" aria-label="Your files" className="overflow-hidden rounded-2xl border border-line bg-white">
@@ -68,11 +71,11 @@ export function FileList({ files, onAction }: { files: MakerDocument[]; onAction
                 )}>
                   {(close) => (
                     <>
-                      <MenuItem icon={<Icon name="Pencil" size={15} />} onClick={() => { close(); onAction('rename', doc) }}>Rename</MenuItem>
-                      <MenuItem icon={<Icon name="Copy" size={15} />} onClick={() => { close(); onAction('duplicate', doc) }}>Duplicate</MenuItem>
-                      <MenuItem icon={<Icon name="Download" size={15} />} onClick={() => { close(); onAction('download', doc) }}>Download .{doc.fileType}</MenuItem>
-                      <MenuDivider />
-                      <MenuItem danger icon={<Icon name="Trash2" size={15} />} onClick={() => { close(); onAction('delete', doc) }}>Delete</MenuItem>
+                      {can('rename') && <MenuItem icon={<Icon name="Pencil" size={15} />} onClick={() => { close(); onAction('rename', doc) }}>Rename</MenuItem>}
+                      {can('duplicate') && <MenuItem icon={<Icon name="Copy" size={15} />} onClick={() => { close(); onAction('duplicate', doc) }}>Duplicate</MenuItem>}
+                      {can('download') && <MenuItem icon={<Icon name="Download" size={15} />} onClick={() => { close(); onAction('download', doc) }}>Download .{doc.fileType}</MenuItem>}
+                      {can('delete') && <MenuDivider />}
+                      {can('delete') && <MenuItem danger icon={<Icon name="Trash2" size={15} />} onClick={() => { close(); onAction('delete', doc) }}>Delete</MenuItem>}
                     </>
                   )}
                 </Menu>

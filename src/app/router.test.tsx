@@ -12,13 +12,15 @@ describe('login route', () => {
 })
 
 describe('access routes', () => {
-  it('serves the Access Matrix and sends /admin/access to it (the older list page is not routed)', async () => {
+  it('serves Roles & Access at /settings/access and forwards the old /admin/access screens there', async () => {
     const { router } = await import('./router')
-    const paths = router.routes[0].children?.map((c) => c.path) ?? []
-    expect(paths).toContain('/admin/access/matrix')
-    const legacy = router.routes[0].children?.find((c) => c.path === '/admin/access')
-    // The route exists only to forward to the matrix: it must not render the old page.
-    expect(JSON.stringify((legacy as { element?: unknown } | undefined)?.element, (_k, v) => (typeof v === 'function' ? v.name : v))).toContain('/admin/access/matrix')
+    const children = router.routes[0].children ?? []
+    expect(children.map((c) => c.path)).toContain('/settings/access')
+    expect(children.map((c) => c.path)).not.toContain('/admin/access/matrix')
+    for (const path of ['/admin/access', '/admin/access/*']) {
+      const legacy = children.find((c) => c.path === path)
+      expect(JSON.stringify((legacy as { element?: unknown } | undefined)?.element, (_k, v) => (typeof v === 'function' ? v.name : v))).toContain('/settings/access')
+    }
   }, 30_000)
 })
 

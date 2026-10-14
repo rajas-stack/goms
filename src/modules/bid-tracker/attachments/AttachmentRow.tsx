@@ -13,13 +13,15 @@ interface Props {
   item: AttachmentItem
   uploader: string
   canRefile: boolean
+  /** The permission tree allows downloading (default true). */
+  canDownload?: boolean
   onOpen: (id: string) => void
   onDelete: (id: string, filename: string) => void
   onRefile: (id: string, batch: DocumentBatch, category: DocumentCategory) => void
 }
 
 /** One attachment: name (opens it), C-codes, filing, uploader, date, size, actions. */
-export function AttachmentRow({ item, uploader, canRefile, onOpen, onDelete, onRefile }: Props) {
+export function AttachmentRow({ item, uploader, canRefile, canDownload = true, onOpen, onDelete, onRefile }: Props) {
   const d = item.document
   const isCorrigendumSource = item.corrigendumCodes.length > 0
   return (
@@ -53,10 +55,10 @@ export function AttachmentRow({ item, uploader, canRefile, onOpen, onDelete, onR
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
-        <Button variant="ghost" size="icon" aria-label={`Download ${d.filename}`} title="Open / download" onClick={() => onOpen(d.id)}>
+        {canDownload && <Button variant="ghost" size="icon" aria-label={`Download ${d.filename}`} title="Open / download" onClick={() => onOpen(d.id)}>
           <Icon name="Download" size={14} />
-        </Button>
-        <Can module="bid.documents" action="delete">
+        </Button>}
+        <Can module="bid.documents" action="delete" node="opportunity.bid.attachments">
           <Button variant="ghost" size="icon" aria-label={`Delete ${d.filename}`} title="Delete" onClick={() => onDelete(d.id, d.filename)}>
             <Icon name="Trash2" size={14} />
           </Button>

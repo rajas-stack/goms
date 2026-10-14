@@ -19,8 +19,12 @@ import { SynopsisTab } from './synopsis/SynopsisTab'
 import { RfpTimelineTab } from './synopsis/rfpTimeline/RfpTimelineTab'
 import { BidTimelineSection } from './timeline/BidTimelineSection'
 import { BidAttachmentsSection } from './attachments/BidAttachmentsSection'
+import { definePermissionNodes } from '@/lib/rbacTree/registry'
+import { useNodeFilter } from '@/lib/rbacTree/access'
 
-const TABS = [
+/** Permission-tree node of the Individual Opportunity page (declared with the route, src/app/routeNodes.ts). */
+const BID_NODE = 'opportunity.bid'
+const TABS = definePermissionNodes(BID_NODE, [
   { value: 'overview', label: 'Overview' },
   { value: 'general', label: 'General' },
   { value: 'scope', label: 'Scope of Work' },
@@ -33,7 +37,7 @@ const TABS = [
   { value: 'queries', label: 'Queries' },
   { value: 'competition', label: 'Competition' },
   { value: 'rfpTimeline', label: 'RFP Timeline' },
-] as const
+] as const)
 type Tab = (typeof TABS)[number]['value']
 const isSynopsisSection = (value: Tab): value is BidSynopsisSection => (BID_SYNOPSIS_SECTIONS as readonly string[]).includes(value)
 
@@ -45,7 +49,9 @@ export function BidDetailWorkspace() {
   const { bidId } = useParams()
   const [params, setParams] = useSearchParams()
   const requested = params.get('tab') === 'milestones' ? 'milestone' : params.get('tab')
-  const tab: Tab = TABS.some(item => item.value === requested) ? requested as Tab : 'overview'
+  const allowedNode = useNodeFilter()
+  const tabs = TABS.filter(item => allowedNode(`${BID_NODE}.${item.value}`))
+  const tab: Tab = tabs.some(item => item.value === requested) ? requested as Tab : tabs[0]?.value ?? 'overview'
   const [visited, setVisited] = useState<BidSynopsisSection[]>([])
   useEffect(() => {
     if (isSynopsisSection(tab)) setVisited(current => current.includes(tab) ? current : [...current, tab])
@@ -97,7 +103,7 @@ export function BidDetailWorkspace() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <Can module={sheetModule(bid.sheet)} action="update" atom="bid.archive">
+            <Can module={sheetModule(bid.sheet)} action="update" atom="bid.archive" node={BID_NODE}>
             <Button
               size="sm" disabled={archive.isPending || unarchive.isPending}
               onClick={async () => {
@@ -110,7 +116,7 @@ export function BidDetailWorkspace() {
               <Icon name={bid.status === 'archived' ? 'ArchiveRestore' : 'Archive'} size={13} /> {bid.status === 'archived' ? 'Restore' : 'Archive'}
             </Button>
             </Can>
-            <Can module={sheetModule(bid.sheet)} action="delete">
+            <Can module={sheetModule(bid.sheet)} action="delete" node={BID_NODE}>
             <Button size="sm" variant="danger" onClick={() => { setActionError(null); setConfirmDelete(true) }}>
               <Icon name="Trash2" size={13} /> Delete bid
             </Button>
@@ -120,13 +126,13 @@ export function BidDetailWorkspace() {
         </div>
       </div>
       <div role="tablist" aria-label="Bid synopsis sections" className="flex shrink-0 overflow-x-auto border-b border-line bg-white px-2 scrollbar-thin">
-        {TABS.map(item => <button key={item.value} role="tab" id={`synopsis-tab-${item.value}`} aria-selected={tab === item.value}
+        {tabs.map(item => <button key={item.value} role="tab" id={`synopsis-tab-${item.value}`} aria-selected={tab === item.value}
           aria-controls={`synopsis-panel-${item.value}`} onClick={() => setParams(current => { const next = new URLSearchParams(current); next.set('tab', item.value); return next })}
           onKeyDown={event => {
-            const index = TABS.findIndex(value => value.value === item.value)
-            const target = event.key === 'ArrowRight' ? (index + 1) % TABS.length : event.key === 'ArrowLeft' ? (index - 1 + TABS.length) % TABS.length : event.key === 'Home' ? 0 : event.key === 'End' ? TABS.length - 1 : -1
+            const index = tabs.findIndex(value => value.value === item.value)
+            const target = event.key === 'ArrowRight' ? (index + 1) % tabs.length : event.key === 'ArrowLeft' ? (index - 1 + tabs.length) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : -1
             if (target < 0) return
-            event.preventDefault(); setParams({ tab: TABS[target].value }); document.getElementById(`synopsis-tab-${TABS[target].value}`)?.focus()
+            event.preventDefault(); setParams({ tab: tabs[target].value }); document.getElementById(`synopsis-tab-${tabs[target].value}`)?.focus()
           }} tabIndex={tab === item.value ? 0 : -1}
           className={`shrink-0 whitespace-nowrap border-b-2 px-3 py-3 text-[13px] font-medium focus-visible:focus-ring ${tab === item.value ? 'border-blue text-ink-900' : 'border-transparent text-muted hover:bg-panel hover:text-ink'}`}>
           {item.label}

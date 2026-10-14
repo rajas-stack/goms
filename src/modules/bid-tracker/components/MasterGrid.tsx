@@ -35,9 +35,10 @@ import {
 } from '../gridColumns'
 import { fromRoot, toRoot } from '../filterTree'
 import {
-  OWNED_SHEETS, OWNED_SHEET_LABELS, columnInScope, columnOwner, createLabelFor, rowInSheet,
+  OWNED_SHEETS, OWNED_SHEET_LABELS, SHEET_NODE, columnInScope, columnOwner, createLabelFor, rowInSheet,
   type MasterScope, type OwnedSheet, type SheetId,
 } from '../sheets'
+import { useNodeAccess } from '@/lib/rbacTree/access'
 import { useEntityLookups } from '../useEntityLookups'
 import { useBidColumnMutation } from '../useBidColumnMutation'
 import { canEditCell as roleAllowsCell } from '../gridPermissions'
@@ -227,6 +228,10 @@ export function MasterGrid(props: MasterGridProps) {
   const appliedRules = useMemo(() => pruneFilterNodes(rules, isRuleComplete), [rules])
   const { data: fetched, isLoading } = useBidsForGrid(appliedRules)
   const sheetId = (props.sheet ?? 'bidTracker') as SheetId
+  // The permission tree narrows what the server policy allows on this sheet's grid (both must allow).
+  const treeCreate = useNodeAccess(SHEET_NODE[sheetId], 'create')
+  const treeEdit = useNodeAccess(SHEET_NODE[sheetId], 'edit')
+  const treeDelete = useNodeAccess(SHEET_NODE[sheetId], 'delete')
   const { data: allCustomFields = [] } = useBidCustomFields()
   // A sheet shows only the custom columns it owns; Master shows every sheet's (or the one picked in its switcher).
   const customFields = useMemo(
@@ -602,7 +607,7 @@ export function MasterGrid(props: MasterGridProps) {
       : null
   // Editable only while unlocked; locked, every cell is read/navigate-only. With RBAC enforced the role must also
   // allow this field on this row (the server stays the authority).
-  const canEditCell = (row: BidGridRow, meta: GridColumnMeta) => unlocked && isColumnOpen(meta) && roleAllowsCell(perms, row, meta.id, me)
+  const canEditCell = (row: BidGridRow, meta: GridColumnMeta) => treeEdit && unlocked && isColumnOpen(meta) && roleAllowsCell(perms, row, meta.id, me)
   // --- right-click menus ----------------------------------------------------------
   const openCellMenu = (e: React.MouseEvent, row: BidGridRow, meta: GridColumnMeta) => {
     e.preventDefault()
@@ -635,7 +640,7 @@ export function MasterGrid(props: MasterGridProps) {
       [
         { label: favourites.has(row.id) ? 'Remove from favourites' : 'Add to favourites', icon: 'Star', onSelect: () => toggleFavourite(row.id) },
         { label: archived ? 'Unarchive' : 'Archive', icon: archived ? 'ArchiveRestore' : 'Archive', onSelect: () => (archived ? unarchive : archive).mutate(row.id) },
-        { label: 'Delete bid…', icon: 'Trash2', danger: true, onSelect: () => deleteBid(row) },
+        ...(treeDelete ? [{ label: 'Delete bid…', icon: 'Trash2', danger: true, onSelect: () => deleteBid(row) }] : []),
       ],
     ]
     setMenu({ x: e.clientX, y: e.clientY, title: `${row.opportunityName} · ${meta.header}`, groups })
@@ -714,7 +719,7 @@ export function MasterGrid(props: MasterGridProps) {
             {showArchived
               ? <Button variant="secondary" size="sm" className="h-6 px-2" onClick={unarchiveSelected}>Unarchive Selected</Button>
               : <Button variant="secondary" size="sm" className="h-6 px-2" onClick={archiveSelected}>Archive Selected</Button>}
-            <Button variant="secondary" size="sm" className="h-6 px-2 text-crimson" disabled={removeBid.isPending} onClick={deleteSelected}><Icon name="Trash2" size={13} /> Delete Selected</Button>
+            {treeDelete && <Button variant="secondary" size="sm" className="h-6 px-2 text-crimson" disabled={removeBid.isPending} onClick={deleteSelected}><Icon name="Trash2" size={13} /> Delete Selected</Button>}
             <Button variant="secondary" size="sm" className="h-6 px-2" onClick={() => setReassignOpen(true)}>Reassign Owner</Button>
             <select
               aria-label="Move selected to" value=""
@@ -759,9 +764,9 @@ export function MasterGrid(props: MasterGridProps) {
             </Button>
             <ManageColumnsPanel all={allColumns} visible={visible} columnOrder={visibleIds} onVisibleChange={setVisibleIds} focusId={manageColumnId} inScope={(f) => columnInScope(f.sheet, sheetId, props.columnScope)} />
           </ToolbarPopover>
-          <Button variant="primary" size="sm" className="h-7 px-2.5" onClick={() => setCreateBidOpen(true)}>
+          {treeCreate && <Button variant="primary" size="sm" className="h-7 px-2.5" onClick={() => setCreateBidOpen(true)}>
             <Icon name="Plus" size={14} /> {createLabel}
-          </Button>
+          </Button>}
         </div>
       </div>
 
@@ -1022,7 +1027,7 @@ export function MasterGrid(props: MasterGridProps) {
             {(hasFilters || search) && (
               <Button variant="ghost" size="sm" onClick={() => { setRules([]); setSearch('') }}>Clear search and filters</Button>
             )}
-            {totalCount === 0 && !hasFilters && !showArchived && (
+            {totalCount === 0 && !hasFilters && !showArchived && treeCreate && (
               <Button variant="primary" size="sm" onClick={() => setCreateBidOpen(true)}><Icon name="Plus" size={14} /> {createLabel}</Button>
             )}
           </div>

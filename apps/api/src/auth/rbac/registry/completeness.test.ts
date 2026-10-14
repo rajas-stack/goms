@@ -29,7 +29,7 @@ describe('PROCEDURE_POLICY completeness', () => {
       'outside:adminImport.session.validate', 'public:health.check', 'self:auth.me', 'self:googleIntegrations.get', 'self:googleIntegrations.save',
       'self:makerDocuments.create', 'self:makerDocuments.delete', 'self:makerDocuments.downloadUrl', 'self:makerDocuments.duplicate',
       'self:makerDocuments.editorConfig', 'self:makerDocuments.list', 'self:makerDocuments.rename', 'self:makerDocuments.replace',
-      'self:makerDocuments.upload',
+      'self:makerDocuments.upload', 'self:rbacTree.myAccess',
     ])
   })
   it('gives every non-exempt entry at least one requirement', () => {

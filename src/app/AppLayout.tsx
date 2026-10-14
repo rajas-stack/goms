@@ -17,6 +17,7 @@ import { ExportDialog } from '@/features/import/ExportDialog'
 import { ToastProvider } from '@/components/ui/Toast'
 import { SalesEditLockProvider } from '@/features/sales/salesEditLock'
 import { PermissionsProvider } from '@/lib/permissions'
+import { NodeAccessProvider } from '@/lib/rbacTree/access'
 import { cn, isTypingTarget } from '@/lib/utils'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import {
@@ -179,6 +180,7 @@ export function AppLayout() {
 
   return (
     <PermissionsProvider>
+    <NodeAccessProvider>
     <SalesEditLockProvider>
       <ToastProvider>
         <EyeComfortOverlay />
@@ -227,10 +229,11 @@ export function AppLayout() {
           <ExportDialog open={exportOpen} onClose={() => setExportOpen(false)} />
           <MobileNavDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} />
           {/* The "+ Add Activity" FAB has no meaning on the access admin screens, and it overlaps their bottom rows. */}
-          {navExpanded && !location.pathname.startsWith('/admin/access') && <GlobalFab />}
+          {navExpanded && !location.pathname.startsWith('/settings/access') && <GlobalFab />}
         </Ctx.Provider>
       </ToastProvider>
     </SalesEditLockProvider>
+    </NodeAccessProvider>
     </PermissionsProvider>
   )
 }

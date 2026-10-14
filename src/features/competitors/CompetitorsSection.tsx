@@ -81,7 +81,7 @@ export function CompetitorsSection() {
             <Input type="search" aria-label="Search competitors" placeholder="Search company name…" className="pl-9"
               value={query} onChange={event => setQuery(event.target.value)} />
           </div>
-          <Can module="bid.columns" action="create">
+          <Can module="bid.columns" action="create" node="settings.pre-sales.competitors">
             <Button variant="primary" onClick={() => setEditor({ mode: 'create' })}><Icon name="Plus" size={15} /> Add Competitor</Button>
           </Can>
         </div>

@@ -34,7 +34,7 @@ export const publicProcedure = t.procedure.use(async ({ ctx, path, type, next })
   // tRPC shares this request context across its batch: verify revocation once per HTTP request.
   const user = await (ctx.verifiedIdentity ??= verifyIdentity(ctx.authHeader))
   if (!isAmnexAccount(user.email)) throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
-  if (type === 'mutation' && /^(credentialPassphrases\.|access\.)/.test(path) && (!user.authTime || Date.now() / 1000 - user.authTime > 900)) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in again before changing credentials or permissions.' })
+  if (type === 'mutation' && /^(credentialPassphrases\.|access\.|rbacTree\.)/.test(path) && (!user.authTime || Date.now() / 1000 - user.authTime > 900)) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in again before changing credentials or permissions.' })
   if (!userOperationBudget.consume(user.uid)) throw new TRPCError({ code: 'TOO_MANY_REQUESTS', message: 'Too many operations. Retry in a few minutes.' })
   if (type === 'mutation') assertNotReadOnly()
   const sensitive = type === 'mutation' || path === 'tenderWebsites.list' || path === 'credentialPassphrases.list'

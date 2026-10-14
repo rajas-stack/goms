@@ -7,6 +7,9 @@ import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
 import { RequireAccess } from '@/components/NoAccess'
 import { RouteFallback } from '@/components/RouteFallback'
 import { NAV_MODULES } from '@/lib/routeModules'
+import { RequireNode } from '@/lib/rbacTree/RequireNode'
+import { ROUTE_NODES, rbacHandle } from './routeNodes'
+import type { ReactNode } from 'react'
 
 const Home = lazy(() => import('./routes/Home').then((m) => ({ default: m.Home })))
 const Landing = lazy(() => import('./routes/Landing').then((m) => ({ default: m.Landing })))
@@ -29,6 +32,9 @@ const DocumentVerificationsSettingsPage = lazy(() =>
 )
 const CompetitorsSettingsPage = lazy(() =>
   import('./routes/CompetitorsSettingsPage').then((m) => ({ default: m.CompetitorsSettingsPage })),
+)
+const EmployeeMasterSettingsPage = lazy(() =>
+  import('./routes/EmployeeMasterSettingsPage').then((m) => ({ default: m.EmployeeMasterSettingsPage })),
 )
 const SalesWorkspace = lazy(() => import('./routes/SalesWorkspace').then((m) => ({ default: m.SalesWorkspace })))
 const TeamsWorkspace = lazy(() => import('./routes/TeamsWorkspace').then((m) => ({ default: m.TeamsWorkspace })))
@@ -53,9 +59,7 @@ const GeographyLoadPanel = lazy(() =>
 const AdminImportAuthGate = lazy(() =>
   import('@/modules/admin-data-import/auth/AdminImportAuthGate').then((m) => ({ default: m.AdminImportAuthGate })),
 )
-const AccessMatrix = lazy(() =>
-  import('@/modules/admin-access/access-matrix/AccessMatrix').then((m) => ({ default: m.AccessMatrix })),
-)
+const RolesAccessPage = lazy(() => import('@/modules/rbac-tree/RolesAccessPage').then((m) => ({ default: m.RolesAccessPage })))
 const DocumentMakerHome = lazy(() =>
   import('@/modules/document-maker/DocumentMakerHome').then((m) => ({ default: m.DocumentMakerHome })),
 )
@@ -65,6 +69,10 @@ const DocumentMakerEditor = lazy(() =>
 const Login = lazy(() => import('./routes/Login').then((m) => ({ default: m.Login })))
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
+/** A route with its permission-tree node (docs/superpowers/specs/2026-10-14-dynamic-rbac-design.md): `handle.rbac` names
+ *  the node (collected into the manifest; manifest.test.tsx fails for a route without one) and RequireNode enforces it. */
+const routed = (path: string, node: string, element: ReactNode) => ({ path, handle: rbacHandle(node), element: <RequireNode node={node}>{element}</RequireNode> })
+
 // Admin Data Import is gated behind its own env flag — unset/false by
 // default everywhere, including goms-prod — since it has no real
 // authentication yet (see AdminImportBanner). Building the route list
@@ -73,13 +81,13 @@ const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: 
 const adminImportRoutes =
   import.meta.env.VITE_ADMIN_IMPORT_ENABLED === 'true'
     ? [
-        { path: '/admin/data-import', element: <AdminImportAuthGate><AdminImportDashboard /></AdminImportAuthGate> },
+        routed('/admin/data-import', ROUTE_NODES.dataImport, <AdminImportAuthGate><AdminImportDashboard /></AdminImportAuthGate>),
         // Geography is a one-click load with no uploaded file at all, so it
         // keeps its own dedicated panel — it never goes through the session
         // wizard (design spec §4 treats it as an always-'ready' root with no
         // uploaded rows).
-        { path: '/admin/data-import/geography', element: <AdminImportAuthGate><GeographyLoadPanel /></AdminImportAuthGate> },
-        { path: '/admin/data-import/session', element: <AdminImportAuthGate><SessionImportWizard /></AdminImportAuthGate> },
+        routed('/admin/data-import/geography', ROUTE_NODES.dataImport, <AdminImportAuthGate><GeographyLoadPanel /></AdminImportAuthGate>),
+        routed('/admin/data-import/session', ROUTE_NODES.dataImport, <AdminImportAuthGate><SessionImportWizard /></AdminImportAuthGate>),
       ]
     : []
 
@@ -90,14 +98,14 @@ const Opp = ({ children }: { children: React.ReactNode }) => <RequireAccess anyO
 // the admin-import routes above: absent from the router entirely when off.
 const bidTrackerRoutes = isBidTrackerEnabled()
   ? [
-      { path: '/bid-tracker', element: <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp> },
-      { path: '/bid-tracker/bid/:bidId', element: <Opp><BidDetailWorkspace /></Opp> },
-      { path: '/bid-tracker/pipeline', element: <Opp><OpportunityWorkspace tab="pipeline" /></Opp> },
-      { path: '/bid-tracker/pipeline/:tab', element: <Opp><OpportunityWorkspace tab="pipeline" /></Opp> },
-      { path: '/bid-tracker/campaign', element: <Opp><OpportunityWorkspace tab="campaign" /></Opp> },
-      { path: '/bid-tracker/master', element: <Opp><OpportunityWorkspace tab="master" /></Opp> },
-      { path: '/bid-tracker/dashboard', element: <Opp><OpportunityWorkspace tab="dashboard" /></Opp> },
-      { path: '/bid-tracker/:section', element: <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp> },
+      routed('/bid-tracker', ROUTE_NODES.bidTracker, <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp>),
+      routed('/bid-tracker/bid/:bidId', ROUTE_NODES.bid, <Opp><BidDetailWorkspace /></Opp>),
+      routed('/bid-tracker/pipeline', ROUTE_NODES.pipeline, <Opp><OpportunityWorkspace tab="pipeline" /></Opp>),
+      routed('/bid-tracker/pipeline/:tab', ROUTE_NODES.pipeline, <Opp><OpportunityWorkspace tab="pipeline" /></Opp>),
+      routed('/bid-tracker/campaign', ROUTE_NODES.campaign, <Opp><OpportunityWorkspace tab="campaign" /></Opp>),
+      routed('/bid-tracker/master', ROUTE_NODES.master, <Opp><OpportunityWorkspace tab="master" /></Opp>),
+      routed('/bid-tracker/dashboard', ROUTE_NODES.dashboard, <Opp><OpportunityWorkspace tab="dashboard" /></Opp>),
+      routed('/bid-tracker/:section', ROUTE_NODES.bidTracker, <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp>),
     ]
   : []
 
@@ -106,37 +114,39 @@ export const router = createBrowserRouter([
     element: <RequireSignIn><AppLayout /></RequireSignIn>,
     errorElement: <GlobalErrorScreen />,
     children: [
-      { path: '/', element: <Home /> },
-      { path: '/map', element: <RequireAccess anyOf={NAV_MODULES.map}><Landing /></RequireAccess> },
-      { path: '/state/:code', element: <RequireAccess anyOf={NAV_MODULES.map}><StateWorkspace /></RequireAccess> },
-      { path: '/directory', element: <RequireAccess anyOf={NAV_MODULES.directory}><Directory /></RequireAccess> },
-      { path: '/analytics', element: <RequireAccess anyOf={NAV_MODULES.insights}><Insights /></RequireAccess> },
-      { path: '/meetings', element: <RequireAccess anyOf={NAV_MODULES.meetings}><Meetings /></RequireAccess> },
-      { path: '/meetings/:meetingId', element: <RequireAccess anyOf={NAV_MODULES.meetings}><MeetingDetails /></RequireAccess> },
-      { path: '/sales', element: <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess> },
-      { path: '/sales/:section', element: <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess> },
-      { path: '/teams', element: <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess> },
-      { path: '/teams/:team', element: <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess> },
-      { path: '/teams/:team/:section', element: <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess> },
-      { path: '/commercial-calculator', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
-      { path: '/commercial-calculator/:section', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
-      { path: '/commercial-calculator/boq/:boqId', element: <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess> },
-      // The Access Matrix is the access screen; the older per-person list page is no longer routed. /admin/access (rail, bookmarks) lands on it.
-      { path: '/admin/access', element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><Navigate to="/admin/access/matrix" replace /></RequireAccess> },
-      { path: '/settings/credentials', element: <CredentialsSettingsPage /> },
-      { path: '/settings/integrations', element: <IntegrationsSettingsPage /> },
-      { path: '/settings', element: <SettingsPage /> },
-      { path: '/settings/dms', element: <DmsSettingsPage /> },
-      { path: '/settings/dms/new', element: <DmsConnectionPage /> },
-      { path: '/settings/dms/:connectionId', element: <DmsConnectionPage /> },
-      { path: '/documents/:module', element: <DmsDocumentsPage /> },
+      routed('/', ROUTE_NODES.home, <Home />),
+      routed('/map', ROUTE_NODES.map, <RequireAccess anyOf={NAV_MODULES.map}><Landing /></RequireAccess>),
+      routed('/state/:code', ROUTE_NODES.state, <RequireAccess anyOf={NAV_MODULES.map}><StateWorkspace /></RequireAccess>),
+      routed('/directory', ROUTE_NODES.directory, <RequireAccess anyOf={NAV_MODULES.directory}><Directory /></RequireAccess>),
+      routed('/analytics', ROUTE_NODES.insights, <RequireAccess anyOf={NAV_MODULES.insights}><Insights /></RequireAccess>),
+      routed('/meetings', ROUTE_NODES.meetings, <RequireAccess anyOf={NAV_MODULES.meetings}><Meetings /></RequireAccess>),
+      routed('/meetings/:meetingId', ROUTE_NODES.meeting, <RequireAccess anyOf={NAV_MODULES.meetings}><MeetingDetails /></RequireAccess>),
+      routed('/sales', ROUTE_NODES.sales, <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess>),
+      routed('/sales/:section', ROUTE_NODES.sales, <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess>),
+      routed('/teams', ROUTE_NODES.teams, <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess>),
+      routed('/teams/:team', ROUTE_NODES.teams, <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess>),
+      routed('/teams/:team/:section', ROUTE_NODES.teams, <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess>),
+      routed('/commercial-calculator', ROUTE_NODES.commercial, <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess>),
+      routed('/commercial-calculator/:section', ROUTE_NODES.commercial, <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess>),
+      routed('/commercial-calculator/boq/:boqId', ROUTE_NODES.boq, <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess>),
+      // Roles & Access lives in Settings → System settings; the old /admin/access screens (bookmarks) forward there.
+      { path: '/admin/access', element: <Navigate to="/settings/access" replace /> },
+      { path: '/admin/access/*', element: <Navigate to="/settings/access" replace /> },
+      { path: '/settings/access', handle: rbacHandle(ROUTE_NODES.access), element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><RequireNode node={ROUTE_NODES.access}><RolesAccessPage /></RequireNode></RequireAccess> },
+      routed('/settings/credentials', ROUTE_NODES.credentials, <CredentialsSettingsPage />),
+      routed('/settings/integrations', ROUTE_NODES.integrations, <IntegrationsSettingsPage />),
+      routed('/settings', ROUTE_NODES.settings, <SettingsPage />),
+      routed('/settings/dms', ROUTE_NODES.dms, <DmsSettingsPage />),
+      routed('/settings/dms/new', ROUTE_NODES.dms, <DmsConnectionPage />),
+      routed('/settings/dms/:connectionId', ROUTE_NODES.dms, <DmsConnectionPage />),
+      routed('/documents/:module', ROUTE_NODES.documents, <DmsDocumentsPage />),
       // Personal Office files: every signed-in user; the API scopes each file to its owner.
-      { path: '/document-maker', element: <DocumentMakerHome /> },
-      { path: '/document-maker/:id', element: <DocumentMakerEditor /> },
-      { path: '/settings/tender-websites', element: <TenderWebsitesSettingsPage /> },
-      { path: '/settings/document-verifications', element: <DocumentVerificationsSettingsPage /> },
-      { path: '/settings/competitors', element: <CompetitorsSettingsPage /> },
-      { path: '/admin/access/matrix', element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><AccessMatrix /></RequireAccess> },
+      routed('/document-maker', ROUTE_NODES.documentMaker, <DocumentMakerHome />),
+      routed('/document-maker/:id', ROUTE_NODES.documentEditor, <DocumentMakerEditor />),
+      routed('/settings/tender-websites', ROUTE_NODES.tenderWebsites, <TenderWebsitesSettingsPage />),
+      routed('/settings/document-verifications', ROUTE_NODES.verifications, <DocumentVerificationsSettingsPage />),
+      routed('/settings/competitors', ROUTE_NODES.competitors, <CompetitorsSettingsPage />),
+      routed('/settings/masters/employees', ROUTE_NODES.employeeMaster, <EmployeeMasterSettingsPage />),
       ...bidTrackerRoutes,
       ...adminImportRoutes,
       { path: '*', element: <NotFound /> },

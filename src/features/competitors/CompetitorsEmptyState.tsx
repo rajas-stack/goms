@@ -38,7 +38,7 @@ export function CompetitorsEmptyState() {
         Add the companies you meet in bids, such as SAS, with their positioning and capabilities, so the team can compare at a glance.
       </p>
       {IS_LOCAL_MODE && (
-        <Can module="bid.columns" action="create">
+        <Can module="bid.columns" action="create" node="settings.pre-sales.competitors">
           <Button className="mt-4" size="sm" disabled={loading} onClick={() => void loadSamples()}>
             <Icon name="Sparkles" size={14} /> {loading ? 'Loading…' : 'Load sample competitors'}
           </Button>

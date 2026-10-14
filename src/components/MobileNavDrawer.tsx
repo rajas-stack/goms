@@ -5,8 +5,8 @@ import { useShell } from '@/app/AppLayout'
 import { Icon } from './ui/Icon'
 import { cn } from '@/lib/utils'
 import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
-import { useShowAccessNav } from '@/lib/accessNav'
 import { useCanReadAny } from '@/lib/permissions'
+import { useNodeFilter } from '@/lib/rbacTree/access'
 import { NAV_MODULES } from '@/lib/routeModules'
 
 interface Props {
@@ -27,14 +27,14 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const commercialActive = location.pathname.startsWith('/commercial-calculator')
   const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
   const teamsActive = location.pathname.startsWith('/teams')
-  const accessActive = location.pathname.startsWith('/admin/access')
   const documentMakerActive = location.pathname.startsWith('/document-maker')
-  // Same rule as the desktop rail (useShowAccessNav). Link visibility is NOT authorization: the route guard and the server decide.
-  const canAccess = useShowAccessNav()
-  const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping)
-  const canCommercial = useCanReadAny(NAV_MODULES.commercial)
-  const canOpportunity = useCanReadAny(NAV_MODULES.opportunity)
-  const canTeams = useCanReadAny(NAV_MODULES.teams)
+  // Same rule as the desktop rail: the server policy (A) AND the permission tree. Roles & Access lives in Settings.
+  const tree = useNodeFilter()
+  const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping) && tree('accountMapping')
+  const canCommercial = useCanReadAny(NAV_MODULES.commercial) && tree('commercial')
+  const canOpportunity = useCanReadAny(NAV_MODULES.opportunity) && tree('opportunity')
+  const canTeams = useCanReadAny(NAV_MODULES.teams) && tree('teams')
+  const canDocumentMaker = tree('documentMaker')
 
   useEffect(() => {
     if (!open) return
@@ -127,7 +127,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                   Opportunity
                 </button>
               )}
-              <button
+              {canDocumentMaker && <button
                 onClick={() => {
                   onClose()
                   navigate('/document-maker')
@@ -141,21 +141,6 @@ export function MobileNavDrawer({ open, onClose }: Props) {
               >
                 <Icon name="FilePenLine" size={17} />
                 Document maker
-              </button>
-              {canAccess && <button
-                onClick={() => {
-                  onClose()
-                  navigate('/admin/access')
-                }}
-                className={cn(
-                  'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
-                  accessActive
-                    ? 'bg-white text-ink-900 shadow-sm'
-                    : 'text-ink hover:bg-ink-900/[0.05]',
-                )}
-              >
-                <Icon name="Lock" size={17} />
-                Role &amp; Access
               </button>}
               {canTeams && <button
                 onClick={() => {

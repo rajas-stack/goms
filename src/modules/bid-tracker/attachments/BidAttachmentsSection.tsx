@@ -3,10 +3,15 @@ import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Icon } from '@/components/ui/Icon'
 import { useBidCorrigenda, useDeliveryTeamMembers, useDocumentMutations, useDocuments } from '@/lib/api'
 import { useAllowed } from '@/lib/permissions'
+import { defineSection } from '@/lib/rbacTree/registry'
+import { useNodeAccess } from '@/lib/rbacTree/access'
 import { cn } from '@/lib/utils'
 import { AttachmentRow } from './AttachmentRow'
 import { AttachmentUploadForm } from './AttachmentUploadForm'
 import { groupAttachments, type AttachmentBatchGroup } from './attachmentModel'
+
+/** Permission-tree node of the attachments panel shown below every bid tab. */
+export const BID_ATTACHMENTS_NODE = defineSection('opportunity.bid', 'attachments', 'Attachments')
 
 const OPEN_KEY = 'goms:bid-attachments-open'
 const readOpen = (): boolean => { try { return localStorage.getItem(OPEN_KEY) !== '0' } catch { return true } }
@@ -23,8 +28,12 @@ export function BidAttachmentsSection({ bidId }: { bidId: string }) {
   const { data: corrigenda = [] } = useBidCorrigenda(bidId)
   const { data: members = [] } = useDeliveryTeamMembers()
   const { remove, download, updateFiling } = useDocumentMutations('bid', bidId)
-  const canUpload = useAllowed('bid.documents', 'create')
-  const canRefile = useAllowed('bid.documents', 'update', 'doc.upload')
+  const canView = useNodeAccess(BID_ATTACHMENTS_NODE)
+  const treeCreate = useNodeAccess(BID_ATTACHMENTS_NODE, 'create')
+  const treeEdit = useNodeAccess(BID_ATTACHMENTS_NODE, 'edit')
+  const canUpload = useAllowed('bid.documents', 'create') && treeCreate
+  const canRefile = useAllowed('bid.documents', 'update', 'doc.upload') && treeEdit
+  const canDownload = useNodeAccess(BID_ATTACHMENTS_NODE, 'download')
   const [open, setOpen] = useState(readOpen)
   const [error, setError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<{ id: string; filename: string } | null>(null)
@@ -43,6 +52,7 @@ export function BidAttachmentsSection({ bidId }: { bidId: string }) {
     window.open(url, '_blank', 'noopener')
   }, 'Could not open the document.')
 
+  if (!canView) return null
   return (
     <section aria-labelledby="bid-attachments-heading" data-testid="bid-attachments" className="border-t-4 border-line bg-panel/50 px-4 py-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -75,7 +85,7 @@ export function BidAttachmentsSection({ bidId }: { bidId: string }) {
                       ? <p className="px-3 py-1.5 text-[12px] italic text-muted">None yet</p>
                       : <ul className="divide-y divide-line">
                           {g.items.map((item) => (
-                            <AttachmentRow key={item.document.id} item={item} uploader={uploaderName(item.document.uploadedBy)} canRefile={canRefile}
+                            <AttachmentRow key={item.document.id} item={item} uploader={uploaderName(item.document.uploadedBy)} canRefile={canRefile} canDownload={canDownload}
                               onOpen={(id) => void openDocument(id)} onDelete={(id, filename) => setDeleting({ id, filename })}
                               onRefile={(id, batch, category) => void run(() => updateFiling.mutateAsync({ id, batch, category }), 'Could not move the document.')} />
                           ))}

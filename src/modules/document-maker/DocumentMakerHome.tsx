@@ -11,6 +11,11 @@ import {
   useMakerDocuments, useRenameMakerDocument, useUploadMakerDocument,
 } from './api'
 import { FileList, type FileAction } from './FileList'
+import { useNodeFilter } from '@/lib/rbacTree/access'
+import type { RbacAction } from '@goms/domain'
+
+const DOCUMENT_MAKER_NODE = 'documentMaker'
+const TREE_ACTION: Record<FileAction, RbacAction> = { rename: 'edit', duplicate: 'create', download: 'download', delete: 'delete' }
 import { MAKER_KIND_ORDER } from './kinds'
 import { NewFileTiles } from './NewFileTiles'
 import { RenameDialog } from './RenameDialog'
@@ -37,6 +42,8 @@ export function DocumentMakerHome() {
   const rename = useRenameMakerDocument()
   const duplicate = useDuplicateMakerDocument()
   const remove = useDeleteMakerDocument()
+  const tree = useNodeFilter()
+  const canFile = (action: FileAction) => tree(DOCUMENT_MAKER_NODE, TREE_ACTION[action])
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<Sort>('edited-desc')
   const [filter, setFilter] = useState<Filter>('all')
@@ -88,7 +95,7 @@ export function DocumentMakerHome() {
           <span className="rounded-full bg-panel px-3 py-1 text-[12px] font-medium tabular-nums text-muted">{total} {total === 1 ? 'file' : 'files'}</span>
         </header>
 
-        <NewFileTiles onCreate={(kind) => void startNew(kind)} onUpload={() => picker.current?.click()} busy={create.isPending || upload.isPending} />
+        {tree(DOCUMENT_MAKER_NODE, 'create') && <NewFileTiles onCreate={(kind) => void startNew(kind)} onUpload={() => picker.current?.click()} busy={create.isPending || upload.isPending} />}
         <input
           ref={picker} type="file" className="hidden" aria-label="Office file to upload"
           accept=".docx,.xlsx,.pptx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.openxmlformats-officedocument.presentationml.presentation"
@@ -144,7 +151,7 @@ export function DocumentMakerHome() {
           {files.isSuccess && total > 0 && visible.length === 0 && (
             <p className="rounded-2xl border border-line bg-white p-8 text-center text-sm text-muted">No files match “{query}”.</p>
           )}
-          {visible.length > 0 && <FileList files={visible} onAction={(action, doc) => void onAction(action, doc)} />}
+          {visible.length > 0 && <FileList files={visible} can={canFile} onAction={(action, doc) => void onAction(action, doc)} />}
         </section>
       </div>
 

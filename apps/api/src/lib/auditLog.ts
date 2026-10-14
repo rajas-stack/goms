@@ -14,6 +14,8 @@ import { pool } from '../db.js'
  *  `access.overrideHistory` (System Admin / IT / CXO gating of `admin.access`, its own SQL). It must never come out of the
  *  generic feed below, which any signed-in user can call when RBAC is off or shadowed. */
 export const ROLE_OVERRIDE_ENTITY = 'role_override'
+/** Permission-tree changes (routers/rbacTree.ts): like role overrides, never part of the generic feed. */
+export const RBAC_TREE_AUDIT_ENTITY = 'rbac_tree'
 
 export interface AuditLogEntry {
   entityType: string
@@ -43,12 +45,12 @@ export function toAuditLog(row: any) {
 }
 
 export async function listAuditLogs(filter?: { entityType?: string; entityId?: string }) {
-  if (filter?.entityType === ROLE_OVERRIDE_ENTITY) {
+  if (filter?.entityType === ROLE_OVERRIDE_ENTITY || filter?.entityType === RBAC_TREE_AUDIT_ENTITY) {
     const message = 'Role override history is only available from Role & Access.'
     throw new TRPCError({ code: 'FORBIDDEN', message, cause: new RbacDenial(message, { module: 'admin.audit', action: 'read' }) })
   }
-  const params: any[] = [ROLE_OVERRIDE_ENTITY]
-  const conditions: string[] = ['entity_type <> $1']
+  const params: any[] = [[ROLE_OVERRIDE_ENTITY, RBAC_TREE_AUDIT_ENTITY]]
+  const conditions: string[] = ['entity_type <> ALL($1::text[])']
   if (filter?.entityType) { params.push(filter.entityType); conditions.push(`entity_type=$${params.length}`) }
   if (filter?.entityId) { params.push(filter.entityId); conditions.push(`entity_id=$${params.length}`) }
   const result = await pool.query(`SELECT * FROM commercial_audit_logs WHERE ${conditions.join(' AND ')} ORDER BY changed_at DESC`, params)

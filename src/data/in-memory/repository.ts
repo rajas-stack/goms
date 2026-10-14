@@ -19,7 +19,16 @@ import {
 } from './makerDocuments'
 import { assertUniqueTenderWebsiteName, normalizeTenderWebsiteInput, tenderWebsiteKind, type TenderWebsite, type TenderWebsiteInput, type TenderWebsiteKind, type TenderDscEmployee } from '@goms/domain'
 import type { Competitor, CompetitorInput } from '@goms/domain'
+import type { AmnexDepartment } from '@goms/domain'
+import {
+  createDepartmentLocal, deleteDepartmentLocal, listDepartmentsLocal, renameDepartmentLocal, reorderDepartmentsLocal, seedDepartments,
+} from './amnexDepartments'
 import { cloneCompetitor, createCompetitorLocal, deleteCompetitorLocal, listCompetitorsLocal, updateCompetitorLocal } from './competitors'
+import type {
+  ApplyTemplateInput, RbacCustomRole, RbacGrantChange, RbacMyAccess, RbacNode, RbacRoleInput, RbacSubjectConfig, RbacSubjectRef, RbacSubjects,
+  RbacSyncResult, RbacTemplateInput, RbacLinkableRef,
+} from '@goms/domain'
+import * as rbacLocal from './rbacTree'
 import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType } from '@/lib/node-types'
 import {
@@ -607,6 +616,30 @@ export interface Repository {
   createCompetitor(input: CompetitorInput): Promise<Competitor>
   updateCompetitor(id: string, input: CompetitorInput): Promise<Competitor>
   deleteCompetitor(id: string): Promise<void>
+  /** Settings > Masters > Amnex Departments, in display order, each with its employee count. */
+  listAmnexDepartments(): Promise<AmnexDepartment[]>
+  createAmnexDepartment(name: string): Promise<AmnexDepartment>
+  /** Custom departments only; also renames it on every employee who has it. */
+  renameAmnexDepartment(id: string, name: string): Promise<AmnexDepartment>
+  reorderAmnexDepartments(ids: string[]): Promise<AmnexDepartment[]>
+  /** Custom departments only; also removes it from every employee who has it. */
+  deleteAmnexDepartment(id: string): Promise<{ removedFromEmployees: number }>
+  /** Settings > Roles & Access (UI permission tree). `localEmail` is used only by the local store (no server). */
+  getRbacMyAccess(localEmail: string | null): Promise<RbacMyAccess>
+  listRbacNodes(): Promise<RbacNode[]>
+  syncRbacNodes(): Promise<RbacSyncResult>
+  getRbacSubjects(): Promise<RbacSubjects>
+  getRbacConfig(subject: RbacSubjectRef): Promise<RbacSubjectConfig>
+  setRbacConfig(subject: RbacSubjectRef, changes: RbacGrantChange[]): Promise<void>
+  createRbacRole(input: RbacRoleInput): Promise<RbacCustomRole>
+  updateRbacRole(id: string, input: RbacRoleInput): Promise<void>
+  deleteRbacRole(id: string): Promise<void>
+  createRbacTemplate(input: RbacTemplateInput): Promise<{ id: string }>
+  updateRbacTemplate(id: string, input: { name: string; description?: string }): Promise<void>
+  duplicateRbacTemplate(id: string): Promise<{ id: string }>
+  deleteRbacTemplate(id: string): Promise<void>
+  applyRbacTemplate(input: ApplyTemplateInput): Promise<void>
+  unlinkRbacTemplate(subject: RbacLinkableRef): Promise<void>
 
   listBidMilestones(bidId: string): Promise<BidMilestone[]>
   listAllBidMilestones(): Promise<BidMilestoneWithBid[]>
@@ -762,6 +795,8 @@ class InMemoryRepository implements Repository {
       credentialPassphrases: data.credentialPassphrases ?? [],
       tenderWebsites: (data.tenderWebsites ?? []).map(site => ({ ...site, kind: tenderWebsiteKind(site) })),
       competitors: data.competitors ?? [],
+      amnexDepartments: data.amnexDepartments ?? seedDepartments(data.orgPeople ?? []),
+      rbacTree: data.rbacTree ?? rbacLocal.emptyRbacState(),
     }
     // `mergeAudit` postdates some locally persisted snapshots (the static
     // type says it's always there, but a snapshot saved before this field
@@ -1586,6 +1621,44 @@ class InMemoryRepository implements Repository {
     }
   }
 
+  // --- Amnex Departments master (logic in ./amnexDepartments; every change replaces the arrays) ---
+
+  private departmentState() {
+    if (!this.data.amnexDepartments) this.data.amnexDepartments = seedDepartments(this.data.orgPeople)
+    return { departments: this.data.amnexDepartments, people: this.data.orgPeople }
+  }
+
+  async listAmnexDepartments(): Promise<AmnexDepartment[]> {
+    return listDepartmentsLocal(this.departmentState())
+  }
+
+  async createAmnexDepartment(name: string): Promise<AmnexDepartment> {
+    const { departments, created } = createDepartmentLocal(this.departmentState().departments, name)
+    this.data.amnexDepartments = departments
+    return { ...created, employeeCount: 0 }
+  }
+
+  async renameAmnexDepartment(id: string, name: string): Promise<AmnexDepartment> {
+    const next = renameDepartmentLocal(this.departmentState(), id, name)
+    this.data.amnexDepartments = next.departments
+    this.data.orgPeople = next.people
+    const renamed = listDepartmentsLocal(this.departmentState()).find((d) => d.id === id)
+    if (!renamed) throw new Error('That department no longer exists.')
+    return renamed
+  }
+
+  async reorderAmnexDepartments(ids: string[]): Promise<AmnexDepartment[]> {
+    this.data.amnexDepartments = reorderDepartmentsLocal(this.departmentState().departments, ids)
+    return listDepartmentsLocal(this.departmentState())
+  }
+
+  async deleteAmnexDepartment(id: string): Promise<{ removedFromEmployees: number }> {
+    const next = deleteDepartmentLocal(this.departmentState(), id)
+    this.data.amnexDepartments = next.departments
+    this.data.orgPeople = next.people
+    return { removedFromEmployees: next.removedFromEmployees }
+  }
+
   // --- Org Structure: the source of truth the delivery-team rosters derive from ---
 
   async listOrgPeople(): Promise<OrgPerson[]> {
@@ -2135,6 +2208,25 @@ class InMemoryRepository implements Repository {
     this.data.tenderWebsites = this.data.tenderWebsites.map(site => site.id === id ? updated : site)
     return { ...updated }
   }
+
+  // --- Roles & Access permission tree (logic in ./rbacTree; every change replaces the state) ------------
+  private get rbac(): rbacLocal.RbacLocalState { return this.data.rbacTree ?? rbacLocal.emptyRbacState() }
+  private set rbac(state: rbacLocal.RbacLocalState) { this.data.rbacTree = state }
+  async getRbacMyAccess(localEmail: string | null): Promise<RbacMyAccess> { return rbacLocal.localMyAccess(this.rbac, this.data.bidSavedViews, localEmail) }
+  async listRbacNodes(): Promise<RbacNode[]> { return rbacLocal.listLocalNodes(this.rbac, this.data.bidSavedViews) }
+  async syncRbacNodes(): Promise<RbacSyncResult> { const { state, result } = rbacLocal.syncLocalNodes(this.rbac); this.rbac = state; return result }
+  async getRbacSubjects(): Promise<RbacSubjects> { return rbacLocal.localSubjects(this.rbac) }
+  async getRbacConfig(subject: RbacSubjectRef): Promise<RbacSubjectConfig> { return rbacLocal.getLocalConfig(this.rbac, subject) }
+  async setRbacConfig(subject: RbacSubjectRef, changes: RbacGrantChange[]): Promise<void> { this.rbac = rbacLocal.setLocalConfig(this.rbac, subject, changes) }
+  async createRbacRole(input: RbacRoleInput): Promise<RbacCustomRole> { const { state, role } = rbacLocal.createLocalRole(this.rbac, input); this.rbac = state; return role }
+  async updateRbacRole(id: string, input: RbacRoleInput): Promise<void> { this.rbac = rbacLocal.updateLocalRole(this.rbac, id, input) }
+  async deleteRbacRole(id: string): Promise<void> { this.rbac = rbacLocal.deleteLocalRole(this.rbac, id) }
+  async createRbacTemplate(input: RbacTemplateInput): Promise<{ id: string }> { const { state, id } = rbacLocal.createLocalTemplate(this.rbac, input); this.rbac = state; return { id } }
+  async updateRbacTemplate(id: string, input: { name: string; description?: string }): Promise<void> { this.rbac = rbacLocal.updateLocalTemplate(this.rbac, id, input) }
+  async duplicateRbacTemplate(id: string): Promise<{ id: string }> { const { state, id: copy } = rbacLocal.duplicateLocalTemplate(this.rbac, id); this.rbac = state; return { id: copy } }
+  async deleteRbacTemplate(id: string): Promise<void> { this.rbac = rbacLocal.deleteLocalTemplate(this.rbac, id) }
+  async applyRbacTemplate(input: ApplyTemplateInput): Promise<void> { this.rbac = rbacLocal.applyLocalTemplate(this.rbac, input) }
+  async unlinkRbacTemplate(subject: RbacLinkableRef): Promise<void> { this.rbac = rbacLocal.unlinkLocalTemplate(this.rbac, subject) }
 
   // --- Competitors (logic in ./competitors; every change replaces the array) ----------------------
   async listCompetitors(): Promise<Competitor[]> {
@@ -3342,6 +3434,9 @@ const MUTATOR_KEYS = [
   'createMakerDocument', 'uploadMakerDocument', 'replaceMakerDocument', 'renameMakerDocument', 'duplicateMakerDocument', 'deleteMakerDocument',
   'createTenderWebsite', 'updateTenderWebsite', 'deleteTenderWebsite', 'setTenderWebsiteEditingLock',
   'createCompetitor', 'updateCompetitor', 'deleteCompetitor',
+  'createAmnexDepartment', 'renameAmnexDepartment', 'reorderAmnexDepartments', 'deleteAmnexDepartment',
+  'syncRbacNodes', 'setRbacConfig', 'createRbacRole', 'updateRbacRole', 'deleteRbacRole', 'createRbacTemplate', 'updateRbacTemplate',
+  'duplicateRbacTemplate', 'deleteRbacTemplate', 'applyRbacTemplate', 'unlinkRbacTemplate',
   'createDeliveryTeamMember', 'updateDeliveryTeamMember', 'setDeliveryTeamMemberStatus', 'deleteDeliveryTeamMember',
   'createOrgPerson', 'updateOrgPerson', 'deleteOrgPerson',
   'createNode', 'updateNode', 'setNodeStatus', 'deleteNode', 'moveNode', 'duplicateNode',
@@ -3371,7 +3466,8 @@ const MUTATOR_KEYS = [
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
  *  "classified as a read" apart from "nobody classified it". */
 const READER_KEYS = [
-  'listCredentialPassphrases', 'getBidSynopsis', 'listTenderWebsites', 'listTenderDscEmployees', 'listCompetitors',
+  'listCredentialPassphrases', 'getBidSynopsis', 'listTenderWebsites', 'listTenderDscEmployees', 'listCompetitors', 'listAmnexDepartments',
+  'getRbacMyAccess', 'listRbacNodes', 'getRbacSubjects', 'getRbacConfig',
   'listMakerDocuments', 'getMakerEditorSession', 'getMakerDownload',
   'listDeliveryTeamMembers', 'listOrgPeople',
   'listStates', 'getState', 'getNode', 'listChildren', 'listOrgRoots', 'listDepartments', 'listPostingNodes',

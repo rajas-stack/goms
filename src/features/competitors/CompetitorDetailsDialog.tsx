@@ -38,11 +38,11 @@ export function CompetitorDetailsDialog({ competitor, onClose, onEdit, onDelete 
   return (
     <Dialog open size="lg" title={c.name} onClose={onClose}
       footer={<>
-        <Can module="bid.columns" action="delete">
+        <Can module="bid.columns" action="delete" node="settings.pre-sales.competitors">
           <Button variant="ghost" className="mr-auto text-crimson hover:text-crimson" onClick={() => onDelete(c)}><Icon name="Trash2" size={14} /> Delete</Button>
         </Can>
         <Button onClick={onClose}>Close</Button>
-        <Can module="bid.columns" action="update">
+        <Can module="bid.columns" action="update" node="settings.pre-sales.competitors">
           <Button variant="primary" onClick={() => onEdit(c)}><Icon name="Pencil" size={14} /> Edit</Button>
         </Can>
       </>}>

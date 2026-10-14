@@ -11,7 +11,11 @@ import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/router
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import type { BidSynopsis, BidSynopsisSection, SaveBidSynopsisInput } from '@goms/domain'
 import type { TenderWebsite, TenderWebsiteInput, TenderWebsiteKind } from '@goms/domain'
-import type { Competitor, CompetitorInput } from '@goms/domain'
+import type { AmnexDepartment, Competitor, CompetitorInput } from '@goms/domain'
+import type {
+  ApplyTemplateInput, RbacCustomRole, RbacGrantChange, RbacMyAccess, RbacNode, RbacRoleInput, RbacSubjectConfig, RbacSubjectRef, RbacSubjects,
+  RbacSyncResult, RbacTemplateInput, RbacLinkableRef,
+} from '@goms/domain'
 import type { DepartmentChoice, NewBidOpportunity, OwnedSheet } from '@goms/domain'
 import { getAuthHeaders } from './authHeaders'
 import { authApi } from '@/lib/auth'
@@ -65,6 +69,22 @@ export class RemoteRepository implements Partial<Repository> {
   updateCompetitor = (id: string, input: CompetitorInput): Promise<Competitor> =>
     this.client.competitors.update.mutate({ id, ...input })
   deleteCompetitor = async (id: string): Promise<void> => { await this.client.competitors.delete.mutate({ id }) }
+  // Roles & Access permission tree. The server resolves the caller from the verified sign-in (never from `localEmail`).
+  getRbacMyAccess = (): Promise<RbacMyAccess> => this.client.rbacTree.myAccess.query()
+  listRbacNodes = (): Promise<RbacNode[]> => this.client.rbacTree.nodes.query()
+  syncRbacNodes = (): Promise<RbacSyncResult> => this.client.rbacTree.sync.mutate()
+  getRbacSubjects = (): Promise<RbacSubjects> => this.client.rbacTree.subjects.query()
+  getRbacConfig = (subject: RbacSubjectRef): Promise<RbacSubjectConfig> => this.client.rbacTree.getConfig.query(subject)
+  setRbacConfig = async (subject: RbacSubjectRef, changes: RbacGrantChange[]): Promise<void> => { await this.client.rbacTree.setConfig.mutate({ subject, changes }) }
+  createRbacRole = (input: RbacRoleInput): Promise<RbacCustomRole> => this.client.rbacTree.createRole.mutate(input)
+  updateRbacRole = async (id: string, input: RbacRoleInput): Promise<void> => { await this.client.rbacTree.updateRole.mutate({ id, ...input }) }
+  deleteRbacRole = async (id: string): Promise<void> => { await this.client.rbacTree.deleteRole.mutate({ id }) }
+  createRbacTemplate = (input: RbacTemplateInput): Promise<{ id: string }> => this.client.rbacTree.createTemplate.mutate(input)
+  updateRbacTemplate = async (id: string, input: { name: string; description?: string }): Promise<void> => { await this.client.rbacTree.updateTemplate.mutate({ id, ...input }) }
+  duplicateRbacTemplate = (id: string): Promise<{ id: string }> => this.client.rbacTree.duplicateTemplate.mutate({ id })
+  deleteRbacTemplate = async (id: string): Promise<void> => { await this.client.rbacTree.deleteTemplate.mutate({ id }) }
+  applyRbacTemplate = async (input: ApplyTemplateInput): Promise<void> => { await this.client.rbacTree.applyTemplate.mutate(input) }
+  unlinkRbacTemplate = async (subject: RbacLinkableRef): Promise<void> => { await this.client.rbacTree.unlinkTemplate.mutate(subject) }
   private client = createTRPCClient<AppRouter>({
     links: [authPromptLink, httpBatchLink({ url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`, headers: getAuthHeaders, fetch: authApi.fetch })],
   })
@@ -191,6 +211,12 @@ export class RemoteRepository implements Partial<Repository> {
   updateOrgPerson = (id: string, patch: UpdateOrgPersonPatch): Promise<OrgPerson> =>
     this.client.orgPeople.update.mutate({ id, patch }) as Promise<OrgPerson>
   deleteOrgPerson = (id: string): Promise<void> => this.client.orgPeople.delete.mutate({ id })
+  // Amnex Departments master (Settings > Masters > Employee Master)
+  listAmnexDepartments = (): Promise<AmnexDepartment[]> => this.client.amnexDepartments.list.query()
+  createAmnexDepartment = (name: string): Promise<AmnexDepartment> => this.client.amnexDepartments.create.mutate({ name })
+  renameAmnexDepartment = (id: string, name: string): Promise<AmnexDepartment> => this.client.amnexDepartments.rename.mutate({ id, name })
+  reorderAmnexDepartments = (ids: string[]): Promise<AmnexDepartment[]> => this.client.amnexDepartments.reorder.mutate({ ids })
+  deleteAmnexDepartment = (id: string): Promise<{ removedFromEmployees: number }> => this.client.amnexDepartments.delete.mutate({ id })
   transferSalesPerson = (input: TransferSalesPersonInput): Promise<SalesPosting> => this.client.sales.transfer.mutate(input)
   updatePostingDates = (postingId: string, edit: { startDate?: string; lastDayHeld?: string | null }): Promise<SalesPosting> =>
     this.client.sales.updatePostingDates.mutate({ postingId, ...edit })
