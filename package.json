@@ -17,7 +17,11 @@
     "test:component": "vitest run --config vitest.component.config.ts",
     "seed:import": "tsx scripts/seed-import.ts",
     "build-import-fixtures": "tsx scripts/admin-import-fixtures/build-fixtures.ts",
-    "rbac:manifest": "node scripts/rbac-manifest.mjs"
+    "rbac:manifest": "node scripts/rbac-manifest.mjs",
+    "sync:local": "node scripts/local-sync.mjs",
+    "sync:status": "node scripts/local-sync.mjs --status",
+    "sync:pause": "node scripts/local-sync.mjs --pause",
+    "sync:resume": "node scripts/local-sync.mjs --resume"
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "^8.0.1",
