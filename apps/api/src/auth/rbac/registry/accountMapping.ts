@@ -113,6 +113,11 @@ export const accountMappingPolicy: Record<string, PolicyEntry> = {
   ...same(['orgPeople.create', 'deliveryTeams.create'], create('team.org')),
   ...same(['orgPeople.update', 'deliveryTeams.update', 'deliveryTeams.setStatus'], write('team.org')),
   ...same(['orgPeople.delete', 'deliveryTeams.delete'], remove('team.org')),
+  // Amnex Departments master (Settings > Masters > Employee Master): read like the org chart (every role), written like employees
+  'amnexDepartments.list': { requirements: [read('team.org')] },
+  'amnexDepartments.create': { requirements: [create('team.org')] },
+  ...same(['amnexDepartments.rename', 'amnexDepartments.reorder'], write('team.org')),
+  'amnexDepartments.delete': { requirements: [remove('team.org')] },
 
   // ---- search: visible per category; relationship analytics is Operational analytics (gap A5)
   ...Object.fromEntries(['search.search', 'search.relatedRecords'].map((p) => [p, {

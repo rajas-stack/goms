@@ -10,6 +10,13 @@ export type CommitMove = 'down' | 'right' | 'left' | 'none'
 const NUMBER_FORMAT = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 4 })
 const CURRENCY_FORMAT = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 })
 
+/** "₹15,00,000.00" / "1,250" / "30%" — how the grid shows a numeric value. */
+export function formatNumeric(type: GridColumn['type'], value: number): string {
+  if (type === 'currency') return CURRENCY_FORMAT.format(value)
+  return type === 'percent' ? `${NUMBER_FORMAT.format(value)}%` : NUMBER_FORMAT.format(value)
+}
+export const isNumericType = (type: GridColumn['type']): boolean => type === 'number' || type === 'currency' || type === 'percent'
+
 export function OptionPill({ option }: { option: GridSelectOption }) {
   return <Badge tone={option.color} className="max-w-full truncate">{option.value || ' '}</Badge>
 }
@@ -25,9 +32,7 @@ export function CellDisplay({ column, value }: { column: GridColumn; value: Grid
   }
   if (value === null || value === undefined || value === '') return null
   switch (column.type) {
-    case 'number': return <span className="block text-right tabular-nums">{NUMBER_FORMAT.format(value as number)}</span>
-    case 'currency': return <span className="block text-right tabular-nums">{CURRENCY_FORMAT.format(value as number)}</span>
-    case 'percent': return <span className="block text-right tabular-nums">{NUMBER_FORMAT.format(value as number)}%</span>
+    case 'number': case 'currency': case 'percent': return <span className="block text-right tabular-nums">{formatNumeric(column.type, value as number)}</span>
     case 'date': return <span className="tabular-nums">{new Date(`${value}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
     case 'url':
       // Defence in depth: validateSynopsisGrid already allows only these schemes.

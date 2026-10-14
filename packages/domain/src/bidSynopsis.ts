@@ -1,6 +1,6 @@
 import { validateSynopsisGrid } from './synopsisGrid.js'
 
-export const BID_SYNOPSIS_SECTIONS = ['general', 'scope', 'pq', 'tq', 'manpower', 'milestone', 'payment', 'boq', 'queries'] as const
+export const BID_SYNOPSIS_SECTIONS = ['general', 'scope', 'pq', 'tq', 'manpower', 'milestone', 'payment', 'boq', 'queries', 'competition'] as const
 export type BidSynopsisSection = (typeof BID_SYNOPSIS_SECTIONS)[number]
 
 export interface SynopsisNode {

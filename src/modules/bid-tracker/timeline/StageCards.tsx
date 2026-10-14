@@ -13,10 +13,13 @@ const ICON_TILE: Record<MilestoneStatus, string> = {
   BLOCKED: 'bg-gradient-to-b from-amber-50 to-amber-100 text-amber-700',
 }
 
-/** ✓ when done, a progress ring while running, an empty ring when upcoming. */
+/** Check when done, a progress ring while running, an empty ring when upcoming. */
 function StatusMark({ m, today }: { m: Milestone; today: IsoDate }) {
   if (m.status === 'COMPLETED') {
     return <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald text-white shadow-[0_2px_6px_rgb(var(--c-emerald)/0.45)]"><Icon name="Check" size={13} /></span>
+  }
+  if (m.planned === false) {
+    return <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 border-line bg-white" aria-hidden />
   }
   const span = Math.max(diffDays(m.plannedStart, m.plannedEnd), 1)
   const running = m.status === 'IN_PROGRESS' || m.status === 'DELAYED'
@@ -39,7 +42,10 @@ export const StageCards = memo(function StageCards({ milestones, today, selected
     <div className="flex items-stretch gap-1 overflow-x-auto px-1 pb-2 pt-1 scrollbar-thin" data-testid="stage-cards">
       {milestones.map((m, i) => {
         const active = m.status === 'IN_PROGRESS' || m.status === 'DELAYED'
-        const days = diffDays(m.plannedStart, m.plannedEnd)
+        const planned = m.planned !== false
+        const days = planned ? diffDays(m.plannedStart, m.plannedEnd) : 0
+        const planLabel = planned ? `${formatShortDate(m.plannedStart)} - ${formatShortDate(m.plannedEnd)}` : 'Planned not set'
+        const durationLabel = planned ? pluralDays(days) : `${m.owner ?? 'Sales'} activity`
         const selected = selectedId === m.id
         return (
           <Fragment key={m.id}>
@@ -48,7 +54,9 @@ export const StageCards = memo(function StageCards({ milestones, today, selected
               type="button"
               data-phase-card={m.id}
               aria-pressed={selected}
-              aria-label={`${m.name}: ${STATUS_META[m.status].label}, planned ${formatShortDate(m.plannedStart)} to ${formatShortDate(m.plannedEnd)}, ${pluralDays(days)}`}
+              aria-label={planned
+                ? `${m.name}: ${STATUS_META[m.status].label}, planned ${formatShortDate(m.plannedStart)} to ${formatShortDate(m.plannedEnd)}, ${pluralDays(days)}`
+                : `${m.name}: ${STATUS_META[m.status].label}, planned not set`}
               onClick={() => onSelect(m.id)}
               className={cn(
                 'neu-raised flex min-w-[170px] flex-1 items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-[box-shadow,transform] duration-150 hover:-translate-y-0.5 focus-visible:focus-ring',
@@ -63,8 +71,8 @@ export const StageCards = memo(function StageCards({ milestones, today, selected
               </span>
               <span className="min-w-0 flex-1">
                 <span className={cn('line-clamp-2 block text-[12px] font-semibold leading-tight', active ? (m.status === 'DELAYED' ? 'text-crimson' : 'text-blue-700') : 'text-ink-900')}>{m.name}</span>
-                <span className="block text-[11px] text-ink-600">{formatShortDate(m.plannedStart)} – {formatShortDate(m.plannedEnd)}</span>
-                <span className="block text-[11px] text-muted">{pluralDays(days)}{!!m.issueCount && <span className="ml-1.5 text-crimson">· {m.issueCount} open issue{m.issueCount === 1 ? '' : 's'}</span>}</span>
+                <span className="block text-[11px] text-ink-600">{planLabel}</span>
+                <span className="block text-[11px] text-muted">{durationLabel}{!!m.issueCount && <span className="ml-1.5 text-crimson">- {m.issueCount} open issue{m.issueCount === 1 ? '' : 's'}</span>}</span>
               </span>
               <StatusMark m={m} today={today} />
             </button>

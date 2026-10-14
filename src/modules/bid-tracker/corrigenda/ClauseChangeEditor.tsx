@@ -6,6 +6,7 @@ import {
 } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
+import { Icon } from '@/components/ui/Icon'
 import { WhatChanged } from './DiffText'
 import { diffText } from './textDiff'
 import { currentSourceLabel, type ClauseHistory } from './tenderPosition'
@@ -20,6 +21,10 @@ export interface ClauseDraft {
   sourceRef: string
   original: string
   modified: string
+  /** Preset clause key, e.g. a synopsis grid cell (`grid:pq:<row>:<column>`). */
+  fieldKey?: string
+  /** Where a preset key points, shown instead of the clause picker. */
+  linkLabel?: string
 }
 export const emptyClauseDraft = (): ClauseDraft => ({
   existingKey: '', title: '', module: 'pq', classification: 'modified', impact: 'medium', sourceRef: '', original: '', modified: '',
@@ -47,16 +52,24 @@ export function ClauseChangeEditor({ index, draft, clauses, usedKeys, onChange, 
     <fieldset data-testid="clause-change" className="space-y-3 rounded-xl border border-line bg-panel/40 p-3.5">
       <legend className="px-1 text-[12px] font-semibold uppercase tracking-wider text-muted">Change {index + 1}</legend>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Field label="Clause">
-          <Select aria-label={`Clause ${index + 1}`} value={draft.existingKey} onChange={(e) => pickClause(e.target.value)}>
-            <option value="">New clause…</option>
-            {clauses.map((c) => (
-              <option key={c.key} value={c.key} disabled={usedKeys.has(c.key) && c.key !== draft.existingKey}>
-                {c.title} ({currentSourceLabel(c)})
-              </option>
-            ))}
-          </Select>
-        </Field>
+        {draft.fieldKey ? (
+          <Field label="Linked grid cell">
+            <p data-testid="linked-cell" className="flex min-h-9 items-center gap-1.5 rounded-lg border border-line bg-panel px-2.5 text-[13px] text-ink-700">
+              <Icon name="Link2" size={13} className="shrink-0 text-muted" /><span className="truncate">{draft.linkLabel ?? draft.fieldKey}</span>
+            </p>
+          </Field>
+        ) : (
+          <Field label="Clause">
+            <Select aria-label={`Clause ${index + 1}`} value={draft.existingKey} onChange={(e) => pickClause(e.target.value)}>
+              <option value="">New clause…</option>
+              {clauses.map((c) => (
+                <option key={c.key} value={c.key} disabled={usedKeys.has(c.key) && c.key !== draft.existingKey}>
+                  {c.title} ({currentSourceLabel(c)})
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label="Clause title" required>
           <Input aria-label={`Clause title ${index + 1}`} value={draft.title} maxLength={300} disabled={!!existing}
             placeholder="e.g. PQ 2.1 — Average Annual Turnover" onChange={(e) => set('title', e.target.value)} />

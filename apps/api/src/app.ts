@@ -9,6 +9,7 @@ import { assertSecurityConfiguration, productionSecurity } from './security/conf
 import { OperationBudget } from './security/operationLimit.js'
 import { googleGateway, type GoogleGateway } from './auth/oauth/googleClient.js'
 import { registerOAuthRoutes } from './auth/oauth/routes.js'
+import { registerDocumentMakerRoutes } from './routes/documentMakerRoutes.js'
 
 export interface BuildAppOptions {
   // Override for tests only — production always gets the defaults below.
@@ -126,6 +127,9 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   // Google OAuth login (docs/superpowers/specs/2026-10-06-google-oauth-login-design.md). Routes are registered only when
   // AUTH_PROVIDER is `both` or `oauth` (read at boot); in the default `firebase` mode this registers nothing.
   registerOAuthRoutes(app, { google: opts.oauth?.google ?? googleGateway })
+
+  // Document maker: file + save-callback routes for the ONLYOFFICE Document Server (JWT-authorised, not tRPC).
+  registerDocumentMakerRoutes(app)
 
   app.register(fastifyTRPCPlugin, {
     prefix: '/api/trpc',

@@ -1,0 +1,53 @@
+# Local development backing services for the Document maker: Postgres for the GOMS API and the ONLYOFFICE Document
+# Server. The API (npm run dev in apps/api) and the web app (npm run dev) run on the host.
+#   cp docker/onlyoffice/.env.example docker/onlyoffice/.env   # then fill in real values (.env is git-ignored)
+#   docker compose -f docker/onlyoffice/docker-compose.yml --env-file docker/onlyoffice/.env up -d
+# See docs/ONLYOFFICE_SETUP.md. For the full containerised stack use compose.yaml + compose.onlyoffice.yaml instead.
+name: goms-dev
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-goms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in docker/onlyoffice/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-goms}
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - goms_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  onlyoffice:
+    image: onlyoffice/documentserver:9.0.0
+    environment:
+      JWT_ENABLED: 'true'
+      JWT_SECRET: ${ONLYOFFICE_JWT_SECRET:?Set ONLYOFFICE_JWT_SECRET in docker/onlyoffice/.env}
+      # The GOMS API runs on the host (host.docker.internal), which is a private address.
+      ALLOW_PRIVATE_IP_ADDRESS: 'true'
+    ports:
+      - '127.0.0.1:8082:80'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    volumes:
+      - onlyoffice_data:/var/www/onlyoffice/Data
+      - onlyoffice_library:/var/lib/onlyoffice
+      - onlyoffice_logs:/var/log/onlyoffice
+    healthcheck:
+      test: [CMD-SHELL, 'curl -fsS http://localhost/healthcheck | grep -q true']
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  goms_pgdata:
+  onlyoffice_data:
+  onlyoffice_library:
+  onlyoffice_logs:

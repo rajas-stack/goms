@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { SowCorrigendumPanel } from './SowCorrigendumPanel'
 import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react'
 import {
   AlignCenter, AlignLeft, AlignRight, Bold, Italic, Underline, Strikethrough,
@@ -132,7 +133,10 @@ export function SynopsisTab({ bidId, section, module }: { bidId: string; section
   const query = useSynopsis(bidId, section)
   if (query.isLoading) return <div role="status" className="p-6 text-sm text-muted">Loading {SECTION_LABELS[section]}...</div>
   if (query.isError) return <div role="alert" className="space-y-2 p-6 text-sm text-crimson"><p>{query.error.message}</p><Button size="sm" onClick={() => query.refetch()}>Retry</Button></div>
-  return <SynopsisDocumentEditor key={`${bidId}:${section}`} bidId={bidId} section={section} saved={query.data ?? null} module={module} onReload={() => query.refetch()} />
+  return <>
+    <SynopsisDocumentEditor key={`${bidId}:${section}`} bidId={bidId} section={section} saved={query.data ?? null} module={module} onReload={() => query.refetch()} />
+    {section === 'scope' && <SowCorrigendumPanel bidId={bidId} />}
+  </>
 }
 
 function SynopsisDocumentEditor({ bidId, section, saved, module, onReload }: {

@@ -78,6 +78,36 @@ describe('OpportunityTimeline', () => {
     expect(screen.queryByTestId('today-marker')).not.toBeInTheDocument()
   })
 
+  it('switches between Sales Reactive, Pre-sales and Complete timeline views', async () => {
+    const workflow: Timeline = {
+      ...timeline,
+      milestones: [
+        { id: 'sales:rfpReceived', name: 'RFP Received', sequence: 1, plannedStart: '2026-01-01', plannedEnd: '2026-01-01', planned: false, track: 'sales', owner: 'Sales', status: 'COMPLETED', icon: 'Briefcase' },
+        { id: 'sales:rfpForwarded', name: 'RFP Forwarded to Pre-Sales', sequence: 2, plannedStart: '2026-01-01', plannedEnd: '2026-01-01', planned: false, track: 'sales', owner: 'Sales', status: 'COMPLETED', icon: 'Send' },
+        ...timeline.milestones.map((m) => ({ ...m, sequence: m.sequence + 2, planned: true, track: 'presales' as const })),
+      ],
+    }
+    renderTimeline(workflow)
+    expect(screen.getByRole('button', { name: /^RFP Received: Completed, planned not set/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Solutioning:/ })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /^Timeline view Complete/ }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Pre-sales' }))
+    expect(screen.queryByRole('button', { name: /^RFP Received:/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Solutioning:/ })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /^Timeline view Pre-sales/ }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Sales Reactive' }))
+    expect(screen.getByRole('button', { name: /^RFP Received: Completed, planned not set/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Solutioning:/ })).not.toBeInTheDocument()
+    expect(screen.getByText('No fixed planned timeline for this view')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /^Timeline view Sales Reactive/ }))
+    await userEvent.click(screen.getByRole('menuitem', { name: 'Complete' }))
+    expect(screen.getByRole('button', { name: /^RFP Received: Completed, planned not set/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Solutioning:/ })).toBeInTheDocument()
+  })
+
   it('places bars time-proportionally, not equally', () => {
     renderTimeline()
     const solToQual = plannedLeft('Qualification') - plannedLeft('Solutioning')

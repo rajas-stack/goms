@@ -8,22 +8,25 @@ interface ToastAction {
   onClick: () => void
 }
 
+export type ToastTone = 'success' | 'error'
+
 interface Toast {
   id: number
   message: string
   action?: ToastAction
+  tone: ToastTone
 }
 
-const ToastCtx = createContext<(message: string, action?: ToastAction) => void>(() => {})
+const ToastCtx = createContext<(message: string, action?: ToastAction, tone?: ToastTone) => void>(() => {})
 export const useToast = () => useContext(ToastCtx)
 
 let nextId = 0
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
-  const push = useCallback((message: string, action?: ToastAction) => {
+  const push = useCallback((message: string, action?: ToastAction, tone: ToastTone = 'success') => {
     const id = ++nextId
-    setToasts((t) => [...t, { id, message, action }])
+    setToasts((t) => [...t, { id, message, action, tone }])
     // A toast offering a manual retry stays up longer than the standard
     // 2600ms — the user needs enough time to notice and act on it, not just
     // read it before it disappears.
@@ -70,13 +73,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         <AnimatePresence>
           {toasts.map((t) => (
             <motion.div
-              key={t.id}
+              key={t.id} role={t.tone === 'error' ? 'alert' : 'status'}
               initial={{ opacity: 0, y: 16, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               className="pointer-events-auto flex items-center gap-2 rounded-full bg-ink-900 px-4 py-2 text-[13px] font-medium text-paper shadow-pop"
             >
-              <Icon name="Check" size={14} className="text-indigo-100" />
+              {t.tone === 'error'
+                ? <Icon name="CircleAlert" size={14} className="text-crimson" />
+                : <Icon name="Check" size={14} className="text-indigo-100" />}
               {t.message}
               {t.action && (
                 <button

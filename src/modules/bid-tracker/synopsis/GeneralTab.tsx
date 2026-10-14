@@ -1,157 +1,150 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Check, Loader2, Pencil, RotateCcw, Save, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Check, Loader2, Pencil, Plus, RotateCcw } from 'lucide-react'
+import type { BidCustomField, BidGridRow } from '@/lib/types'
 import type { BidSynopsis, PolicyModuleKey } from '@goms/domain'
-import { useAllowed } from '@/lib/permissions'
 import { Button } from '@/components/ui/Button'
 import { PersonName } from '@/components/ui/PersonName'
+import { useBidCustomFields, useBidsForGrid, useMyAccess } from '@/lib/api'
+import { useAllowed, usePermissions } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
+import { EditableCell, type CellDraft, type PendingEdits } from '../components/EditableCell'
+import { AddCustomColumnDialog } from '../components/AddCustomColumnDialog'
+import { CUSTOM_GROUP, GRID_GROUPS, cellValue, editValue, formatValueText, personOf, resolveColumns, type GridColumnMeta } from '../gridColumns'
+import { canEditCell } from '../gridPermissions'
+import { columnInScope, columnOwner } from '../sheets'
+import { useBidColumnMutation } from '../useBidColumnMutation'
 import { useEntityLookups } from '../useEntityLookups'
-import { useSaveSynopsis, useSynopsis } from './api'
+import { useSynopsis } from './api'
 import { GeneralFieldControl } from './GeneralFieldControl'
 import { GeneralFieldValue } from './GeneralFieldValue'
-import { documentToGeneral, GENERAL_FIELDS, GENERAL_GROUPS, generalToDocument } from './generalFields'
-
-const NO_INVALID: ReadonlySet<string> = new Set()
-
-function hasValues(values: Readonly<Record<string, string>>): boolean {
-  return GENERAL_FIELDS.some(field => (values[field.key] ?? '').trim() !== '')
-}
 
 export function GeneralTab({ bidId, module = 'opp.bidTracker' }: { bidId: string; module?: PolicyModuleKey }) {
   const canEdit = useAllowed(module, 'update')
-  const query = useSynopsis(bidId, 'general')
-  if (query.isLoading) return <div role="status" className="p-6 text-sm text-muted">Loading General...</div>
-  if (query.isError) return <div role="alert" className="space-y-2 p-6 text-sm text-crimson"><p>{query.error.message}</p><Button size="sm" onClick={() => query.refetch()}>Retry</Button></div>
-  return <GeneralForm key={bidId} bidId={bidId} saved={query.data ?? null} canEdit={canEdit} onReload={() => query.refetch()} />
+  const synopsis = useSynopsis(bidId, 'general')
+  const rows = useBidsForGrid()
+  const fields = useBidCustomFields()
+  if (synopsis.isLoading || rows.isLoading || fields.isLoading) return <div role="status" className="p-6 text-sm text-muted">Loading General...</div>
+  const error = synopsis.error ?? rows.error ?? fields.error
+  if (error) return <div role="alert" className="space-y-2 p-6 text-sm text-crimson"><p>{error.message}</p><Button size="sm" onClick={() => { void synopsis.refetch(); void rows.refetch(); void fields.refetch() }}>Retry</Button></div>
+  const row = rows.data?.find(candidate => candidate.id === bidId)
+  if (!row) return <p role="alert" className="p-6 text-sm text-crimson">Bid not found.</p>
+  return <GeneralForm key={bidId} row={row} fields={fields.data ?? []} saved={synopsis.data ?? null} canEdit={canEdit} onReload={() => { void synopsis.refetch(); void rows.refetch(); void fields.refetch() }} />
 }
 
-/** Who last saved, shown with their avatar (Sales Team photo when the email matches). */
-function UpdatedBy({ email }: { email: string }) {
-  const { persons } = useEntityLookups()
-  const person = persons.find(candidate => candidate.email?.toLowerCase() === email.toLowerCase())
-  return <PersonName size="2xs" person={{ name: person?.label ?? email, photoUrl: person?.photoUrl ?? null }} />
-}
-
-function GeneralForm({ bidId, saved, onReload, canEdit }: {
-  bidId: string; saved: BidSynopsis | null; canEdit: boolean; onReload: () => Promise<{ data?: BidSynopsis | null; error?: unknown }>
+function GeneralForm({ row, fields, saved, canEdit, onReload }: {
+  row: BidGridRow; fields: BidCustomField[]; saved: BidSynopsis | null; canEdit: boolean; onReload: () => void
 }) {
-  const [base, setBase] = useState(() => ({ values: documentToGeneral(saved?.document), revision: saved?.revision ?? 0 }))
-  const [values, setValues] = useState<Record<string, string>>(base.values)
-  // Saved information opens locked; a new / empty General opens ready to fill in.
-  const [editingRequested, setEditing] = useState(() => !hasValues(base.values))
+  const [editingRequested, setEditing] = useState(() => !saved)
+  const [addFieldOpen, setAddFieldOpen] = useState(false)
+  const [doneRequested, setDoneRequested] = useState(false)
+  const canAddField = useAllowed('bid.columns', 'create')
+  const [errors, setErrors] = useState<Record<string, string>>({})
+  const pending: PendingEdits = useRef(new Map())
+  const lookups = useEntityLookups()
+  const permissions = usePermissions()
+  const { data: access } = useMyAccess()
+  const me = { email: access?.email ?? '', salesPersonId: access?.facts?.salesPersonId ?? null }
+  const mutation = useBidColumnMutation(lookups)
   const editing = canEdit && editingRequested
-  const [invalid, setInvalid] = useState<ReadonlySet<string>>(NO_INVALID)
-  const [error, setError] = useState<string | null>(null)
-  // Bumped whenever values are replaced wholesale, so controls drop any half-typed text.
-  const [resetKey, setResetKey] = useState(0)
-  const save = useSaveSynopsis()
-  const dirty = useMemo(
-    () => GENERAL_FIELDS.some(field => (values[field.key] ?? '').trim() !== (base.values[field.key] ?? '').trim()),
-    [values, base],
-  )
-
   useEffect(() => {
-    if (!dirty) return
-    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    if (doneRequested && !mutation.isPending && pending.current.size === 0 && Object.keys(errors).length === 0) { setEditing(false); setDoneRequested(false) }
+  }, [doneRequested, mutation.isPending, row, errors])
+  useEffect(() => {
+    const warn = (event: BeforeUnloadEvent) => { if (pending.current.size || mutation.isPending) { event.preventDefault(); event.returnValue = '' } }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty])
+  }, [mutation.isPending])
+  const columns = useMemo(() => resolveColumns(fields.filter(field => columnInScope(field.sheet, row.sheet))).filter(column => column.type !== null), [fields, row.sheet])
+  const groups = [...GRID_GROUPS, CUSTOM_GROUP].map(group => ({ ...group, columns: columns.filter(column => column.group === group.id) })).filter(group => group.columns.length)
 
-  const applySaved = (next: Record<string, string>, revision: number) => {
-    setBase({ values: next, revision })
-    setValues(next)
-    setInvalid(NO_INVALID)
-    setResetKey(key => key + 1)
-    setEditing(!hasValues(next))
+  const commit = async (col: GridColumnMeta, value: CellDraft) => {
+    setErrors(current => { const { [col.id]: _removed, ...rest } = current; return rest })
+    try { await mutation.mutateAsync({ row, col, value }) }
+    catch (error) { setErrors(current => ({ ...current, [col.id]: error instanceof Error ? error.message : 'Could not save.' })) }
   }
 
-  const submit = async () => {
-    if (save.isPending || !editing) return
-    if (invalid.size) { setError('Fix the highlighted dates before saving.'); return }
-    setError(null)
-    try {
-      const record = await save.mutateAsync({ bidId, section: 'general', document: generalToDocument(values), expectedRevision: base.revision })
-      applySaved(documentToGeneral(record.document), record.revision)
-    } catch (e) { setError(e instanceof Error ? e.message : 'Could not save General.') }
+  const done = () => {
+    setDoneRequested(true)
   }
-
-  const cancel = () => {
-    setValues(base.values)
-    setInvalid(NO_INVALID)
-    setError(null)
-    setResetKey(key => key + 1)
-    setEditing(!hasValues(base.values))
-  }
-
-  const reload = async () => {
-    if (dirty && !window.confirm('Discard your unsaved changes and reload General?')) return
-    setError(null)
-    const result = await onReload()
-    if (result.error) { setError('Could not reload the saved values. Your changes have been kept.'); return }
-    applySaved(documentToGeneral(result.data?.document), result.data?.revision ?? 0)
-  }
-
-  const setValidity = (key: string, isInvalid: boolean) => setInvalid(current => {
-    if (current.has(key) === isInvalid) return current
-    const next = new Set(current)
-    if (isInvalid) next.add(key); else next.delete(key)
-    return next
-  })
 
   return (
-    <section aria-label="General" className="min-w-0">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4">
+    <section aria-label="General" className="min-w-0" data-testid="bid-general-form">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-4">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-base font-semibold text-ink-900">General Information</h2>
-          <span role="status" className={cn('inline-flex items-center gap-1.5 text-[12px]', dirty ? 'text-amber' : 'text-muted')}>
-            {save.isPending ? <><Loader2 size={12} className="animate-spin" /> Saving...</>
-              : dirty ? <><span className="h-1.5 w-1.5 rounded-full bg-amber" /> Unsaved changes</>
-                : saved || base.revision ? <><Check size={12} className="text-emerald" /> Saved</> : 'Not saved yet'}
+          <span role="status" className="inline-flex items-center gap-1.5 text-xs text-muted">
+            {mutation.isPending ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : Object.keys(errors).length ? 'Save failed' : <><Check size={14} className="text-emerald" /> Saved</>}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
-          <Button size="sm" disabled={save.isPending} onClick={() => void reload()} aria-label="Reload saved values"><RotateCcw size={14} /></Button>
-          {editing ? (
-            <>
-              {hasValues(base.values) && <Button size="sm" disabled={save.isPending} onClick={cancel}><X size={14} /> Cancel</Button>}
-              <Button size="sm" variant="primary" disabled={save.isPending || !dirty || invalid.size > 0} onClick={() => void submit()}><Save size={14} /> Save</Button>
-            </>
-          ) : canEdit ? (
-            <Button size="sm" variant="primary" onClick={() => setEditing(true)}><Pencil size={14} /> Edit</Button>
-          ) : null}
+          {canAddField && <Button size="sm" onClick={() => setAddFieldOpen(true)}><Plus size={14} /> Add field</Button>}
+          <Button size="sm" disabled={mutation.isPending} onClick={onReload} aria-label="Reload saved values" title="Reload saved values"><RotateCcw size={14} /></Button>
+          {canEdit && <Button size="sm" variant="primary" disabled={mutation.isPending && !editing} onClick={() => editing ? done() : setEditing(true)}>
+            {editing ? <><Check size={14} /> Done</> : <><Pencil size={14} /> Edit</>}
+          </Button>}
         </div>
       </div>
-      {error && <div role="alert" className="border-y border-red-200 bg-red-50 px-4 py-2 text-[13px] text-crimson">{error}</div>}
-      <form key={resetKey} className="space-y-6 px-4 pb-6" aria-readonly={!editing} onSubmit={event => { event.preventDefault(); void submit() }}>
-        {GENERAL_GROUPS.map(group => (
-          <fieldset key={group.title} disabled={save.isPending} className="rounded-lg border border-line bg-white disabled:opacity-70">
-            <legend className="ml-3 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">{group.title}</legend>
+      <div className="px-4 pb-6">
+        {groups.map(group => (
+          <section key={group.id} aria-label={group.label} className="border-b border-line py-4">
+            <h3 className="mb-2 text-sm font-semibold text-ink-900">{group.label}</h3>
             <dl className="divide-y divide-line">
-              {group.fields.map(field => (
-                <div key={field.key} className={cn('grid gap-1.5 px-3 md:grid-cols-[minmax(180px,280px)_1fr] md:gap-4', editing ? 'py-2.5' : 'py-2')}>
-                  <dt>
-                    {editing
-                      ? <label htmlFor={`general-${field.key}`} className="text-[13px] font-medium text-ink-800">{field.label}</label>
-                      : <span className="text-[13px] font-medium text-ink-600">{field.label}</span>}
-                  </dt>
-                  <dd className={cn('min-w-0', !editing && 'text-[13px] text-ink-900')} data-field={field.key}>
-                    {editing ? (
-                      <GeneralFieldControl field={field} value={values[field.key] ?? ''}
-                        onChange={value => setValues(current => ({ ...current, [field.key]: value }))}
-                        onValidityChange={isInvalid => setValidity(field.key, isInvalid)} />
-                    ) : <GeneralFieldValue field={field} value={values[field.key] ?? ''} />}
-                  </dd>
-                </div>
-              ))}
+              {group.columns.map(col => {
+                const value = cellValue(row, col)
+                const person = personOf(col, value, lookups)
+                const editable = editing && !!col.editable && canEditCell(permissions, row, col.id, me)
+                const display = col.generalField ? <GeneralFieldValue field={col.generalField} value={String(value ?? '')} />
+                  : person ? <PersonName person={person} size="xs" nameClassName="whitespace-pre-wrap overflow-visible [overflow-wrap:anywhere]" /> : formatValueText(col, value, lookups) || <span className="text-muted">-</span>
+                return (
+                  <div key={col.id} className="grid gap-2 py-2 md:grid-cols-[minmax(180px,280px)_1fr] md:gap-4" data-column-id={col.id}>
+                    <dt className="text-sm font-medium text-ink-700">{col.header}</dt>
+                    <dd className="relative min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] text-sm text-ink-900" data-field={col.generalField?.key ?? col.id} title={!col.editable ? col.readOnlyReason : undefined}>
+                      {editable ? col.generalField ? <GeneralControl key={col.id} col={col} value={String(value ?? '')} onCommit={next => commit(col, next)} pending={pending} />
+                        : <EditableCell col={col} value={editValue(row, col)} display={display} lookups={lookups} pending={pending} cellKey={row.id + ':' + col.id} onCommit={next => void commit(col, next)} externalError={errors[col.id]} />
+                        : display}
+                      {errors[col.id] && <p role="alert" className="mt-1 text-xs text-crimson">{errors[col.id]}</p>}
+                    </dd>
+                  </div>
+                )
+              })}
             </dl>
-          </fieldset>
+          </section>
         ))}
-      </form>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-4 py-2 text-[11px] text-muted">
-        <span>Revision {base.revision}</span>
-        {saved?.updatedAt && <span>Saved {new Date(saved.updatedAt).toLocaleString('en-IN')}</span>}
-        {saved?.updatedBy && <UpdatedBy email={saved.updatedBy} />}
       </div>
+      <div className="flex flex-wrap gap-4 border-t border-line px-4 py-2 text-xs text-muted">
+        {saved && <span>Revision {saved.revision}</span>}
+        <span>Updated {new Date(row.updatedAt).toLocaleString('en-IN')}</span>
+      </div>
+      <AddCustomColumnDialog open={addFieldOpen} onClose={() => setAddFieldOpen(false)} sheet={columnOwner(row.sheet)} />
     </section>
+  )
+}
+
+function GeneralControl({ col, value, onCommit, pending }: {
+  col: GridColumnMeta; value: string; onCommit: (value: string) => Promise<void>; pending: PendingEdits
+}) {
+  const [draft, setDraft] = useState(value)
+  const draftRef = useRef(value)
+  const invalid = useRef(false)
+  const lastSubmitted = useRef<string | null>(null)
+  useEffect(() => { draftRef.current = value; setDraft(value) }, [value])
+  useEffect(() => {
+    if (draft === value) return
+    pending.current.set(col.id, { discard: () => { draftRef.current = value; setDraft(value) } })
+    return () => { pending.current.delete(col.id) }
+  }, [draft, value, pending, col.id])
+  const save = (next = draftRef.current) => {
+    if (invalid.current || next === value || lastSubmitted.current === next) return
+    lastSubmitted.current = next
+    void onCommit(next).finally(() => { if (lastSubmitted.current === next) lastSubmitted.current = null })
+  }
+  const field = { ...col.generalField!, label: col.header }
+  return (
+    <div onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) save() }}
+      onKeyDown={event => { if (event.key === 'Enter' && field.kind !== 'textarea' && field.kind !== 'address') { event.preventDefault(); save() } }}>
+      <GeneralFieldControl field={field} value={draft}
+        onChange={next => { draftRef.current = next; setDraft(next); if (field.kind === 'select' || field.kind === 'department' || field.kind === 'websites') save(next) }}
+        onValidityChange={next => { invalid.current = next }} />
+    </div>
   )
 }

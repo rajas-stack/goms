@@ -1,6 +1,7 @@
 import { OPERATORS_BY_TYPE, isFilterGroup, type FilterGroup, type FilterNode, type FilterOperator, type TypedFilterRule } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Combobox } from '@/components/ui/Combobox'
+import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { Icon } from '@/components/ui/Icon'
 import { MultiSelectDropdown } from '@/components/ui/MultiSelectDropdown'
 import { cn } from '@/lib/utils'
@@ -251,7 +252,24 @@ function RuleValue({ rule, col, lookups, onChange }: {
   }
 
   const numeric = type === 'number' || type === 'currency'
-  const inputType = numeric ? 'number' : type === 'date' ? 'date' : 'text'
+  if (type === 'date') {
+    // Same free-format date capture as every other date field ("21092026", "21.09.2026").
+    const dateBox = (label: string, value: string, set: (v: string) => void) => (
+      <FriendlyDateInput aria-label={label} value={value} onChange={set} floatingFeedback className={`${control} w-36`} placeholder="Date" />
+    )
+    return (
+      <>
+        {dateBox(rule.operator === 'between' ? 'From' : 'Value', rule.value, (v) => onChange({ ...rule, value: v }))}
+        {rule.operator === 'between' && (
+          <>
+            <span className="text-[13px] text-muted">and</span>
+            {dateBox('To', rule.value2 ?? '', (v) => onChange({ ...rule, value2: v }))}
+          </>
+        )}
+      </>
+    )
+  }
+  const inputType = numeric ? 'number' : 'text'
   return (
     <>
       <input

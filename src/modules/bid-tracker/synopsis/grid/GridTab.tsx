@@ -12,7 +12,9 @@ import { useSaveSynopsis, useSynopsis } from '../api'
 import { SECTION_LABELS } from '../documents'
 import { gridDocument, gridToWorksheet, readGridSection, worksheetToGrid } from './gridIO'
 import { updateColumn } from './gridModel'
+import { starterGrid } from './competitionGrid'
 import { SynopsisGridView } from './SynopsisGridView'
+import { CorrigendaToggle, OrphanChanges, useGridCorrigenda } from './corrigendum/GridCorrigenda'
 
 const HISTORY_LIMIT = 100
 const DRAFT_DELAY_MS = 500
@@ -28,6 +30,10 @@ function readDraft(key: string): Draft | null {
   } catch { return null }
 }
 
+/** A saved section as stored; an unsaved one opens with its section's starter columns. */
+const loadSection = (section: BidSynopsisSection, saved: BidSynopsis | null) =>
+  saved ? readGridSection(saved.document) : { grid: starterGrid(section), notes: '', converted: false }
+
 export function GridTab({ bidId, section, module = 'opp.bidTracker' }: { bidId: string; section: BidSynopsisSection; module?: PolicyModuleKey }) {
   const query = useSynopsis(bidId, section)
   const canEdit = useAllowed(module, 'update')
@@ -42,7 +48,7 @@ function GridSectionEditor({ bidId, section, saved, canEdit, onReload }: {
   const label = SECTION_LABELS[section]
   const draftKey = `goms:synopsis-grid:${import.meta.env.VITE_API_BASE_URL || 'local'}:${bidId}:${section}`
   const [initial] = useState(() => {
-    const loaded = readGridSection(saved?.document)
+    const loaded = loadSection(section, saved)
     const draft = canEdit ? readDraft(draftKey) : null
     return { loaded, draft }
   })
@@ -57,6 +63,7 @@ function GridSectionEditor({ bidId, section, saved, canEdit, onReload }: {
   const [importSheet, setImportSheet] = useState('')
   const upload = useRef<HTMLInputElement>(null)
   const save = useSaveSynopsis()
+  const corrigenda = useGridCorrigenda(bidId, section, grid, setError)
 
   const currentJson = JSON.stringify(gridDocument(grid, notes))
   const dirty = currentJson !== savedJson.current || converted
@@ -120,7 +127,7 @@ function GridSectionEditor({ bidId, section, saved, canEdit, onReload }: {
     setError(null)
     const result = await onReload()
     if (result.error) { setError('Could not reload the saved section. Your changes have been kept.'); return }
-    const loaded = readGridSection(result.data?.document)
+    const loaded = loadSection(section, result.data ?? null)
     revision.current = result.data?.revision ?? 0
     savedJson.current = JSON.stringify(gridDocument(loaded.grid, loaded.notes))
     commitGrid(loaded.grid); setNotes(loaded.notes); setConverted(loaded.converted); setHistory({ past: [], future: [] })
@@ -159,6 +166,7 @@ function GridSectionEditor({ bidId, section, saved, canEdit, onReload }: {
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          <CorrigendaToggle state={corrigenda} />
           <Button size="sm" aria-label="Undo" title="Undo (Ctrl+Z)" disabled={!canEdit || !history.past.length} onClick={undo}><Icon name="RotateCcw" size={14} /></Button>
           <Button size="sm" aria-label="Redo" title="Redo (Ctrl+Y)" disabled={!canEdit || !history.future.length} onClick={redo}><Icon name="RotateCcw" size={14} className="-scale-x-100" /></Button>
           <Menu trigger={({ toggle }) => (
@@ -193,9 +201,11 @@ function GridSectionEditor({ bidId, section, saved, canEdit, onReload }: {
         </div>
       )}
       {error && <div role="alert" className="border-y border-red-200 bg-red-50 px-4 py-2 text-[13px] text-crimson">{error}</div>}
-      <SynopsisGridView grid={grid} readOnly={!canEdit} onChange={change} label={`${label} grid`} onUndo={undo} onRedo={redo} onError={setError} />
+      <SynopsisGridView grid={grid} readOnly={!canEdit} onChange={change} label={`${label} grid`} onUndo={undo} onRedo={redo} onError={setError} corrigenda={corrigenda.overlay} />
+      {corrigenda.visible && <OrphanChanges comparison={corrigenda.comparison} />}
+      {corrigenda.dialogs}
       <p className="px-4 py-1.5 text-[11px] text-muted">
-        Double-click or type to edit · Drag row numbers or headers to reorder · Right-click for row/column actions · Ctrl+C / Ctrl+V work with Sheets and Excel
+        Double-click or type to edit · Drag row numbers or headers to reorder · Right-click for row/column actions (incl. Record corrigendum change) · Ctrl+C / Ctrl+V work with Sheets and Excel
       </p>
       <label className="block px-4 pb-4 pt-2">
         <span className="mb-1.5 block text-[13px] font-medium text-ink-800">Notes</span>

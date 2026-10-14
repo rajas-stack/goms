@@ -22,7 +22,8 @@ export function useBidTimeline(bidId: string | null): BidTimelineResult {
   const { data: followUps = [] } = useFollowUps('bid', bidId)
   const { data: milestones = [] } = useBidMilestones(bidId)
   const { data: people = [] } = useSalesPersons()
-  const submissionDate = gridRows.find((r) => r.id === bidId)?.submissionDate ?? null
+  const gridRow = gridRows.find((r) => r.id === bidId)
+  const submissionDate = gridRow?.submissionDate ?? null
   const today = isoToday()
 
   const timeline = useMemo(() => {
@@ -30,8 +31,8 @@ export function useBidTimeline(bidId: string | null): BidTimelineResult {
     const stageChanges: StageChange[] = logs
       .filter((l) => l.entityType === 'bid' && l.entityId === bid.id && l.field === 'stageKey')
       .map((l) => ({ changedAt: l.changedAt, oldValue: l.oldValue, newValue: l.newValue }))
-    return buildBidTimeline({ bid, submissionDate, stageChanges, corrigenda, followUps, milestones, people, today })
-  }, [bid, logs, submissionDate, corrigenda, followUps, milestones, people, today])
+    return buildBidTimeline({ bid, submissionDate, opportunityType: gridRow?.opportunityType ?? null, stageChanges, corrigenda, followUps, milestones, people, today })
+  }, [bid, logs, submissionDate, gridRow?.opportunityType, corrigenda, followUps, milestones, people, today])
 
   return { timeline, isLoading: bidLoading || logsLoading, isClosed: !!timeline?.outcome }
 }

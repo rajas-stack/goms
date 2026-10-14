@@ -1,7 +1,8 @@
 import { Combobox } from '@/components/ui/Combobox'
 import { Field } from '@/components/ui/Field'
-import { useDeliveryTeamMembers, useSalesPersons } from '@/lib/api'
+import { useDeliveryTeamMembers, useOrgPeople, useSalesPersons } from '@/lib/api'
 import type { Opportunity } from '@/lib/types'
+import { opportunityTeamMembers } from './opportunityTeamMembers'
 
 /** Delivery-team members have no photo field — their Avatar falls back to initials. */
 function toOption(person: { id: string; name: string; photoUrl?: string | null }) {
@@ -25,11 +26,12 @@ export function OpportunityTeamAssignments({ value, onChange }: {
 }) {
   const { data: salesPeople = [] } = useSalesPersons()
   const { data: deliveryMembers = [] } = useDeliveryTeamMembers()
+  const { data: orgPeople = [] } = useOrgPeople()
   const options = {
     sales: salesPeople.filter((person) => person.status === 'active').map(toOption),
-    preSales: deliveryMembers.filter((person) => person.team === 'preSales' && person.status === 'active').map(toOption),
-    legal: deliveryMembers.filter((person) => person.team === 'legal' && person.status === 'active').map(toOption),
-    bid: deliveryMembers.filter((person) => person.team === 'bid' && person.status === 'active').map(toOption),
+    preSales: opportunityTeamMembers('preSales', deliveryMembers, orgPeople).map(toOption),
+    legal: opportunityTeamMembers('legal', deliveryMembers, orgPeople).map(toOption),
+    bid: opportunityTeamMembers('bid', deliveryMembers, orgPeople).map(toOption),
   }
 
   return (

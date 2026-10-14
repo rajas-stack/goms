@@ -257,7 +257,11 @@ export function useBidCorrigendaMutations(bidId: string) {
     mutationFn: (input: Parameters<typeof repository.updateBidCorrigendumRegister>[0]) => repository.updateBidCorrigendumRegister(input),
     onSuccess: () => qc.invalidateQueries({ queryKey: qk.bidCorrigenda(bidId) }),
   })
-  return { create, reviewChange, updateRegister }
+  const addChanges = useMutation({
+    mutationFn: (input: Parameters<typeof repository.addCorrigendumChanges>[0]) => repository.addCorrigendumChanges(input),
+    onSuccess: invalidate,
+  })
+  return { create, reviewChange, updateRegister, addChanges }
 }
 
 export const useProtectedValues = (entityType: string, entityId: string | null) =>
@@ -296,7 +300,11 @@ export function useDocumentMutations(entityType: string, entityId: string) {
   })
   /** Mints a fresh signed URL on each call (a cached one would expire). */
   const download = useMutation({ mutationFn: (id: string) => repository.getDocumentDownloadUrl(id) })
-  return { requestUploadUrl, confirmUpload, remove, download }
+  const updateFiling = useMutation({
+    mutationFn: (input: Parameters<typeof repository.updateDocumentFiling>[0]) => repository.updateDocumentFiling(input),
+    onSuccess: invalidate,
+  })
+  return { requestUploadUrl, confirmUpload, remove, download, updateFiling }
 }
 
 export const useDocumentCitations = (documentId: string | null) =>

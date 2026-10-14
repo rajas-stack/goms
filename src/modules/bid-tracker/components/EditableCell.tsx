@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/Checkbox'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import { Icon } from '@/components/ui/Icon'
 import { cn } from '@/lib/utils'
+import { formatFriendlyPreview, formatFriendlyValue, parseFriendlyValue } from '@/lib/friendlyDate'
 import { Avatar } from '@/components/ui/Avatar'
 import { NO_LOOKUPS, isEmptyCell, optionsOf, type ColumnOption, type EntityLookups, type GridColumnMeta } from '../gridColumns'
 
@@ -14,14 +15,13 @@ export type CellDraft = string | number | boolean | null
  *  reads this when asked to lock: a pending edit must be saved or discarded first. */
 export type PendingEdits = MutableRefObject<Map<string, { discard: () => void }>>
 
-// The editor sits exactly on top of the cell, like a spreadsheet's in-cell editor:
-// it covers the cell border with a 2px accent outline and never changes row height.
-const input = 'absolute inset-0 z-20 h-[35px] w-full rounded-none border-2 bg-white px-2 text-[12.5px] text-ink shadow-[0_2px_8px_rgba(11,43,73,0.22)] outline-none'
+const input = 'absolute inset-0 z-20 h-full min-h-[35px] w-full rounded-none border-2 bg-white px-2 text-[12.5px] text-ink shadow-[0_2px_8px_rgba(11,43,73,0.22)] outline-none'
 
 /** Raw text for a type's editor, from the stored value. */
-function draftOf(type: string, value: unknown): string {
+function draftOf(type: string, value: unknown, dateTime = false): string {
   if (isEmptyCell(value)) return ''
   if (type === 'multiselect') return JSON.stringify(parseMultiValue(value))
+  if (type === 'date') return String(value).slice(0, dateTime ? 16 : 10)
   return String(value)
 }
 
@@ -47,7 +47,8 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement | HTMLSelectElement | null>(null)
+  const inputRef = useRef<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null>(null)
+  const [editorHeight, setEditorHeight] = useState(35)
   const cancelled = useRef(false)
   const displayRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<HTMLDivElement>(null)
@@ -59,7 +60,8 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
   const done = useRef(false)
 
   const type = col.type ?? 'text'
-  const current = draftOf(type, value)
+  const dateFormat = col.generalField?.kind === 'datetime' ? 'datetime-local' : 'date'
+  const current = draftOf(type, value, dateFormat === 'datetime-local')
   const options = optionsOf(col, lookups)
   // A stored select value that is no longer one of the field's options stays
   // visible (and selectable as-is) but is tagged, so a removed option never
@@ -72,6 +74,13 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
     else if (editing) editorRef.current?.focus()
     else if (refocus.current) { refocus.current = false; displayRef.current?.focus() }
   }, [editing, type])
+
+  useEffect(() => {
+    const element = inputRef.current
+    if (!editing || !(element instanceof HTMLTextAreaElement)) return
+    element.style.height = 'auto'
+    element.style.height = Math.max(editorHeight, element.scrollHeight) + 'px'
+  }, [editing, draft, editorHeight])
 
   const cancel = () => {
     cancelled.current = true
@@ -91,17 +100,23 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
   const start = (seed?: string) => {
     cancelled.current = false
     done.current = false
-    setDraft(seed ?? current)
+    setDraft(seed ?? (type === 'date' ? formatFriendlyValue(current, dateFormat) : current))
+    setEditorHeight(Math.max(35, displayRef.current?.getBoundingClientRect().height ?? 35))
     setError(null)
     setEditing(true)
   }
   // Spreadsheet habit: typing on a selected cell replaces its value (free-text editors only).
-  const typesFreely = !(col.pick || ['select', 'boolean', 'state', 'person', 'department', 'multiselect', 'date'].includes(type))
+  const typesFreely = !(col.pick || ['select', 'boolean', 'state', 'person', 'department', 'multiselect'].includes(type))
 
   const commit = (raw: string) => {
     if (cancelled.current || done.current) return
     let next: CellDraft
     try {
+      if (type === 'date' && raw.trim() !== '') {
+        const iso = parseFriendlyValue(raw, dateFormat)
+        if (!iso) throw new Error('Could not read that date. Try 21.09.2026 or 21 Sep 2026.')
+        raw = iso
+      }
       if (col.custom) next = coerceCustomValue(col.custom.dataType, raw, col.custom.options)
       else if (raw.trim() === '') {
         if (col.required) throw new Error(`${col.header} is required.`)
@@ -121,7 +136,7 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { e.preventDefault(); commit(draft) }
+    if (e.key === 'Enter' && !(e.shiftKey && e.target instanceof HTMLTextAreaElement)) { e.preventDefault(); commit(draft) }
     else if (e.key === 'Escape') { e.preventDefault(); cancel() }
   }
 
@@ -135,7 +150,7 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
         className={cn(
           // Each editable cell reads as its own box while unlocked; the active
           // (focused) cell gets the spreadsheet's 2px selection rectangle.
-          'flex h-[35px] w-full min-w-0 cursor-cell items-center gap-1 px-3 outline-none',
+          'flex min-h-[35px] w-full min-w-0 cursor-cell items-center gap-1 px-3 py-1.5 whitespace-pre-wrap [overflow-wrap:anywhere] outline-none',
           'shadow-[inset_0_0_0_1px_rgba(76,167,221,0.35)] hover:shadow-[inset_0_0_0_1px_rgba(76,167,221,0.95)]',
           'focus:shadow-[inset_0_0_0_2px_rgb(var(--c-goms-navy))] focus:bg-grid-hover',
           externalError && 'text-crimson shadow-[inset_0_0_0_1px_rgb(var(--c-crimson))]',
@@ -147,7 +162,7 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
           else if ((e.key === 'Delete' || e.key === 'Backspace') && !col.required && typesFreely) { e.preventDefault(); e.stopPropagation(); start(''); }
         }}
       >
-        <span className="min-w-0 flex-1 truncate">{display}</span>
+        <span className="min-w-0 flex-1">{display}</span>
         {externalError && <span className="shrink-0 text-[11px]">{externalError}</span>}
       </div>
     )
@@ -166,10 +181,10 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
     editor = (
       <div
         ref={editorRef} tabIndex={-1} role="group" aria-label={col.header}
-        className={cn(input, borderClass, 'flex items-center truncate')}
+        className={cn(input, borderClass, 'flex items-center whitespace-pre-wrap [overflow-wrap:anywhere]')}
         onKeyDown={onKeyDown}
       >
-        <span className="truncate">{[...chosen].join(', ') || <span className="text-muted">Choose…</span>}</span>
+        <span className="min-w-0">{[...chosen].join(', ') || <span className="text-muted">Choose…</span>}</span>
         <PopoverPanel open anchorRef={editorRef} onClose={() => commit(draft)} maxPanelHeight={260}>
           {({ maxHeight }) => (
             <motion.div
@@ -202,24 +217,34 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
         onPick={(v) => { setDraft(v); commit(v) }} onCancel={cancel}
       />
     )
+  } else if (['text', 'url', 'email', 'phone'].includes(type)) {
+    editor = (
+      <textarea
+        aria-label={col.header} className={cn(input, borderClass, 'relative block resize-none overflow-hidden py-1.5 whitespace-pre-wrap [overflow-wrap:anywhere]')}
+        rows={1} value={draft} ref={el => { inputRef.current = el }}
+        onChange={e => { setDraft(e.target.value); if (error) setError(null) }}
+        onKeyDown={onKeyDown} onBlur={() => commit(draft)}
+      />
+    )
   } else {
     const numeric = type === 'number' || type === 'currency'
     editor = (
       <input
         aria-label={col.header} className={cn(input, borderClass)} value={draft}
-        type={numeric ? 'number' : type === 'date' ? 'date' : 'text'} step={numeric ? 'any' : undefined}
+        type={numeric ? 'number' : 'text'} step={numeric ? 'any' : undefined}
         inputMode={type === 'email' ? 'email' : type === 'phone' ? 'tel' : type === 'url' ? 'url' : undefined}
-        placeholder={type === 'url' ? 'https://…' : type === 'email' ? 'name@example.com' : type === 'phone' ? '+91 …' : undefined}
+        placeholder={type === 'date' ? 'e.g. 21.09.2026' : type === 'url' ? 'https://…' : type === 'email' ? 'name@example.com' : type === 'phone' ? '+91 …' : undefined}
         ref={(el) => { inputRef.current = el }}
         onChange={(e) => { setDraft(e.target.value); if (error) setError(null) }}
         onKeyDown={onKeyDown}
         onBlur={() => commit(draft)}
+        title={type === 'date' ? (error ?? (formatFriendlyPreview(draft, dateFormat) || undefined)) : undefined}
       />
     )
   }
 
   return (
-    <div className="relative h-[35px] w-full" onClick={(e) => e.stopPropagation()}>
+    <div className="relative w-full" style={{ minHeight: editorHeight }} onClick={(e) => e.stopPropagation()}>
       {editor}
       {error && (
         <p role="alert" className="absolute left-0 top-full z-30 mt-0.5 whitespace-nowrap rounded bg-crimson px-1.5 py-0.5 text-[11px] text-white shadow-pop">{error}</p>
@@ -259,9 +284,9 @@ function CellPicker({ label, options, value, borderClass, allowClear, removed, o
     else if (e.key === 'Escape') { e.preventDefault(); onCancel() }
   }
   return (
-    <div ref={anchorRef} className={cn(input, borderClass, 'flex items-center gap-1.5 truncate')}>
+    <div ref={anchorRef} className={cn(input, borderClass, 'flex items-center gap-1.5 whitespace-pre-wrap [overflow-wrap:anywhere]')}>
       {shownOption?.isPerson && <Avatar person={{ name: shownOption.label, photoUrl: shownOption.photoUrl }} size="xs" />}
-      <span className="min-w-0 flex-1 truncate">{shown || <span className="text-muted">Choose…</span>}</span>
+      <span className="min-w-0 flex-1">{shown || <span className="text-muted">Choose…</span>}</span>
       <Icon name="ChevronDown" size={13} className="shrink-0 text-muted" />
       <PopoverPanel open anchorRef={anchorRef} onClose={onCancel} maxPanelHeight={300}>
         {({ maxHeight }) => (
@@ -289,7 +314,7 @@ function CellPicker({ label, options, value, borderClass, allowClear, removed, o
                     )}
                   >
                     {o.isPerson && <Avatar person={{ name: o.label, photoUrl: o.photoUrl }} size="xs" />}
-                    <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                    <span className="min-w-0 flex-1 whitespace-normal [overflow-wrap:anywhere]">{o.label}</span>
                     {o.value === value && o.value !== '' && <Icon name="Check" size={13} className="shrink-0 text-goms-navy" />}
                   </button>
                 </li>

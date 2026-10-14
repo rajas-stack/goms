@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
+import { Fragment, useMemo, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import { GRID_LIMITS, type GridCellValue, type GridColumn, type SynopsisGrid } from '@goms/domain'
 import { Icon } from '@/components/ui/Icon'
 import { cn } from '@/lib/utils'
 import { GridContextMenu, type MenuEntry } from '../../components/GridContextMenu'
 import { CellDisplay, CellEditor, type CommitMove } from './GridCell'
+import { AfterDataCell, AfterHeaderCell, afterColumnWidth, NewRowMarker, type GridCorrigendumOverlay } from './corrigendum/AfterColumnCells'
 import { FieldEditor, type FieldDraft } from './FieldEditor'
 import { columnMenu, insertColumnAt, rowMenu } from './gridMenus'
 import {
@@ -27,12 +28,14 @@ export interface SynopsisGridViewProps {
   onUndo?: () => void
   onRedo?: () => void
   onError: (message: string) => void
+  /** Derived, read-only "after corrigendum" columns (never part of `grid`). */
+  corrigenda?: GridCorrigendumOverlay
 }
 
 /** Baserow-style editable grid: typed columns, drag to reorder rows/columns,
  *  resize, freeze, range selection, keyboard editing and Sheets-compatible
  *  copy/paste (tab-separated). */
-export function SynopsisGridView({ grid, onChange, readOnly = false, label, onUndo, onRedo, onError }: SynopsisGridViewProps) {
+export function SynopsisGridView({ grid, onChange, readOnly = false, label, onUndo, onRedo, onError, corrigenda }: SynopsisGridViewProps) {
   const columns = useMemo(() => grid.columns.filter(c => !c.hidden), [grid.columns])
   const [anchorRaw, setAnchor] = useState<Pos>({ r: 0, c: 0 })
   const [focusRaw, setFocus] = useState<Pos>({ r: 0, c: 0 })
@@ -53,8 +56,12 @@ export function SynopsisGridView({ grid, onChange, readOnly = false, label, onUn
   const range: Range = { r1: Math.min(anchor.r, focus.r), r2: Math.max(anchor.r, focus.r), c1: Math.min(anchor.c, focus.c), c2: Math.max(anchor.c, focus.c) }
   const inRange = (r: number, c: number, rg: Range = range) => r >= rg.r1 && r <= rg.r2 && c >= rg.c1 && c <= rg.c2
   const widthOf = (column: GridColumn) => (resize?.id === column.id ? resize.width : column.width ?? DEFAULT_WIDTH)
+  const afterOf = (column: GridColumn) => corrigenda?.comparison.columns[column.id]
+  const afterWidthOf = (column: GridColumn) => (afterOf(column) ? afterColumnWidth(widthOf(column)) : 0)
   const frozen = Math.min(grid.frozenColumns ?? 0, columns.length)
-  const leftOffsets = columns.reduce<number[]>((acc, column, i) => [...acc, i === 0 ? GUTTER : acc[i - 1] + widthOf(columns[i - 1])], [])
+  const leftOffsets = columns.reduce<number[]>((acc, column, i) => [...acc, i === 0 ? GUTTER : acc[i - 1] + widthOf(columns[i - 1]) + afterWidthOf(columns[i - 1])], [])
+  // A derived column next to a frozen one stays in view with it.
+  const afterSticky = (c: number, header: boolean) => (c < frozen ? { position: 'sticky' as const, left: leftOffsets[c] + widthOf(columns[c]), zIndex: header ? 4 : 2 } : {})
 
   // Latest grid, so two changes in one event (create option, then set the
   // cell to it) build on each other instead of the stale render's grid.
@@ -179,20 +186,25 @@ export function SynopsisGridView({ grid, onChange, readOnly = false, label, onUn
 
   const openRowMenu = (event: ReactMouseEvent, r: number, c?: number) => {
     event.preventDefault()
-    if (readOnly) return
+    const column = c !== undefined ? columns[c] : undefined
+    const record = column && corrigenda?.onRecord
+      ? [{ label: 'Record corrigendum change…', icon: 'GitBranch', onSelect: () => corrigenda.onRecord!(rows[r].id, column.id) }] : []
+    if (readOnly) {
+      if (record.length) setMenu({ x: event.clientX, y: event.clientY, title: `Row ${r + 1}`, groups: [record] })
+      return
+    }
     // Act on what was right-clicked: the selection if the click is inside it,
     // otherwise that cell (or the whole row, from the row number).
     const target: Range = inRange(r, c ?? range.c1) ? range
       : c === undefined ? { r1: r, r2: r, c1: 0, c2: columns.length - 1 } : { r1: r, r2: r, c1: c, c2: c }
     if (target !== range) { setAnchor({ r: target.r1, c: target.c1 }); setFocus({ r: target.r2, c: target.c2 }) }
     const ids = rows.slice(target.r1, target.r2 + 1).map(row => row.id)
-    const column = c !== undefined ? columns[c] : undefined
     setMenu({
       x: event.clientX, y: event.clientY, title: `Row ${r + 1}`,
-      groups: rowMenu(ctx, ids, {
+      groups: [...rowMenu(ctx, ids, {
         onClear: () => clearRange(target), onCopy: () => { void navigator.clipboard?.writeText(rangeText(target)) },
         columnId: column?.id, onInsertColumn: column ? side => setFieldDialog({ mode: 'insert', anchorId: column.id, side }) : undefined,
-      }),
+      }), record],
     })
   }
   const openColumnMenu = (event: ReactMouseEvent, c: number) => {
@@ -246,17 +258,18 @@ export function SynopsisGridView({ grid, onChange, readOnly = false, label, onUn
     drag?.kind === kind && drag.over === index && drag.from !== index ? (drag.from < index ? 'after' : 'before') : null
 
   const hiddenCount = grid.columns.length - columns.length
+  const afterCount = columns.filter(afterOf).length
   const stickyLeft = (c: number) => (c < frozen ? { position: 'sticky' as const, left: leftOffsets[c], zIndex: 2 } : undefined)
 
   return (
     <div className="min-w-0">
-      <div ref={root} role="grid" aria-label={label} aria-rowcount={rows.length + 1} aria-colcount={columns.length} aria-readonly={readOnly}
+      <div ref={root} role="grid" aria-label={label} aria-rowcount={rows.length + 1} aria-colcount={columns.length + afterCount} aria-readonly={readOnly}
         tabIndex={0} onKeyDown={onKeyDown} onCopy={onCopy} onCut={onCut} onPaste={onPaste}
         className="relative max-h-[70vh] overflow-auto border-y border-line bg-white outline-none focus-visible:ring-2 focus-visible:ring-goms-sky">
-        <table className="border-separate border-spacing-0 text-[13px]" style={{ tableLayout: 'fixed', width: GUTTER + columns.reduce((sum, c) => sum + widthOf(c), 0) + (readOnly ? 0 : 44) }}>
+        <table className="border-separate border-spacing-0 text-[13px]" style={{ tableLayout: 'fixed', width: GUTTER + columns.reduce((sum, c) => sum + widthOf(c) + afterWidthOf(c), 0) + (readOnly ? 0 : 44) }}>
           <colgroup>
             <col style={{ width: GUTTER }} />
-            {columns.map(column => <col key={column.id} style={{ width: widthOf(column) }} />)}
+            {columns.map(column => <Fragment key={column.id}><col style={{ width: widthOf(column) }} />{afterOf(column) && <col style={{ width: afterWidthOf(column) }} />}</Fragment>)}
             {!readOnly && <col style={{ width: 44 }} />}
           </colgroup>
           <thead>
@@ -267,8 +280,8 @@ export function SynopsisGridView({ grid, onChange, readOnly = false, label, onUn
                       className="inline-flex items-center gap-0.5 text-goms-navy hover:underline"><Icon name="Eye" size={12} />{hiddenCount}</button>
                   : null}
               </th>
-              {columns.map((column, c) => (
-                <th key={column.id} role="columnheader" scope="col" draggable={!readOnly}
+              {columns.map((column, c) => (<Fragment key={column.id}>
+                <th role="columnheader" scope="col" draggable={!readOnly}
                   onDragStart={event => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('text/plain', column.name); setDrag({ kind: 'column', from: c, over: c }) }}
                   onDragOver={event => { if (drag?.kind === 'column') { event.preventDefault(); if (drag.over !== c) setDrag({ ...drag, over: c }) } }}
                   onDrop={event => { event.preventDefault(); endDrag() }} onDragEnd={() => setDrag(null)}
@@ -292,7 +305,8 @@ export function SynopsisGridView({ grid, onChange, readOnly = false, label, onUn
                   {!readOnly && <span aria-hidden onMouseDown={event => startResize(event, column)} onDragStart={event => event.preventDefault()}
                     className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize hover:bg-goms-sky" />}
                 </th>
-              ))}
+                {afterOf(column) && <AfterHeaderCell column={afterOf(column)!} style={{ height: ROW_HEIGHT, ...afterSticky(c, true) }} />}
+              </Fragment>))}
               {!readOnly && (
                 <th className="sticky top-0 z-[3] border-b border-line bg-grid-head">
                   <button type="button" aria-label="Add column" title="Add column"
@@ -324,13 +338,15 @@ export function SynopsisGridView({ grid, onChange, readOnly = false, label, onUn
                         className="cursor-grab text-muted opacity-0 group-hover/row:opacity-100"><Icon name="GripVertical" size={13} /></span>
                     )}
                     <span>{r + 1}</span>
+                    {corrigenda?.comparison.newRows[row.id] && <NewRowMarker code={corrigenda.comparison.newRows[row.id]} />}
                   </div>
                 </td>
                 {columns.map((column, c) => {
                   const active = focus.r === r && focus.c === c
                   const isEditing = !!editing && editing.rowId === row.id && editing.columnId === column.id && !readOnly
-                  return (
-                    <td key={column.id} role="gridcell" data-pos={`${r}:${c}`} aria-selected={inRange(r, c)}
+                  const after = afterOf(column)
+                  return (<Fragment key={column.id}>
+                    <td role="gridcell" data-pos={`${r}:${c}`} aria-selected={inRange(r, c)}
                       onMouseDown={event => {
                         if (event.button !== 0 || isEditing) return
                         select({ r, c }, event.shiftKey); selecting.current = true
@@ -352,7 +368,9 @@ export function SynopsisGridView({ grid, onChange, readOnly = false, label, onUn
                             onCommit={commit} onCancel={() => { setEditing(null); root.current?.focus() }} onCreateOption={createOption} /></div>
                         : <div className="flex h-full items-center overflow-hidden"><CellDisplay column={column} value={row.cells[column.id]} /></div>}
                     </td>
-                  )
+                    {after && <AfterDataCell cell={after.cells[row.id]} type={column.type} label={`Row ${r + 1}, ${column.name}`} style={{ height: ROW_HEIGHT, ...afterSticky(c, false) }}
+                      onOpen={corrigenda!.onOpen} onRecord={corrigenda?.onRecord ? () => corrigenda.onRecord!(row.id, column.id) : undefined} />}
+                  </Fragment>)
                 })}
                 {!readOnly && <td className="border-b border-line" />}
               </tr>

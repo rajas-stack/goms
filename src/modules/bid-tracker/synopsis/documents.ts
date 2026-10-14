@@ -4,7 +4,7 @@ import { utils } from 'xlsx'
 import { generalToDocument } from './generalFields'
 
 export const SECTION_LABELS: Record<BidSynopsisSection, string> = {
-  general: 'General', scope: 'Scope of Work', pq: 'PQ', tq: 'TQ', manpower: 'Manpower', milestone: 'Milestone', payment: 'Payment Terms', boq: 'BoQ', queries: 'Queries',
+  general: 'General', scope: 'Scope of Work', pq: 'PQ', tq: 'TQ', manpower: 'Manpower', milestone: 'Milestone', payment: 'Payment Terms', boq: 'BoQ', queries: 'Queries', competition: 'Competition',
 }
 
 export function paragraph(text = ''): SynopsisNode {

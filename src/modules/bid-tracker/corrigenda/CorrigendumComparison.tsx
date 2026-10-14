@@ -32,8 +32,9 @@ export function CorrigendumComparison({ corrigendum, owner, document, highlighte
   owner: { name: string } | null
   document: BidDocument | null
   highlightedChangeId: string | null
-  onEditRegister: () => void
-  onDecide: (changeId: string, decision: 'accepted' | 'rejected') => Promise<unknown>
+  /** Omitted when the role may not edit the register / review changes. */
+  onEditRegister?: () => void
+  onDecide?: (changeId: string, decision: 'accepted' | 'rejected') => Promise<unknown>
 }) {
   const [deciding, setDeciding] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -41,14 +42,15 @@ export function CorrigendumComparison({ corrigendum, owner, document, highlighte
   const c = corrigendum
 
   async function decide(changeId: string, decision: 'accepted' | 'rejected') {
+    if (!onDecide) return
     setError(null); setDeciding(changeId)
     try { await onDecide(changeId, decision) } catch (e) { setError(e instanceof Error ? e.message : 'Could not record the decision.') } finally { setDeciding(null) }
   }
 
   return (
     <section aria-labelledby={`corrigendum-${c.id}-heading`} className="space-y-4">
-      <header className="relative overflow-hidden rounded-2xl bg-ink-900 px-5 py-4 text-paper shadow-[0_10px_30px_-18px_rgb(var(--c-ink-900)/0.9)] sm:px-6 sm:py-5">
-        <div aria-hidden className="pointer-events-none absolute -right-6 -top-10 select-none font-display text-[120px] font-bold leading-none text-paper/[0.06]">
+      <header className="relative overflow-hidden rounded-2xl bg-ink-900 px-5 py-4 text-paper shadow-[0_10px_30px_-18px_rgb(var(--c-ink-900)/0.9)] dark:border dark:border-line dark:bg-white dark:text-ink-900 dark:shadow-[inset_0_1px_0_rgb(255_255_255/0.06)] sm:px-6 sm:py-5">
+        <div aria-hidden className="pointer-events-none absolute -right-6 -top-10 select-none font-display text-[120px] font-bold leading-none text-paper/[0.06] dark:text-ink-900/[0.05]">
           {corrigendumCode(c.corrigendumNumber)}
         </div>
         <div className="relative flex flex-wrap items-start justify-between gap-3">
@@ -56,18 +58,18 @@ export function CorrigendumComparison({ corrigendum, owner, document, highlighte
             <h3 id={`corrigendum-${c.id}-heading`} data-testid="corrigendum-heading" className="font-display text-2xl font-bold tracking-[0.08em] sm:text-[28px]">
               {corrigendumHeading(c.corrigendumNumber)}
             </h3>
-            <p data-testid="corrigendum-subheading" className="mt-1 flex flex-wrap items-center gap-x-2 text-[13px] text-paper/75">
+            <p data-testid="corrigendum-subheading" className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[13px] text-paper/75 dark:text-muted">
               <span>Published: {formatRegisterDate(c.publishedDate)}</span>
-              <span aria-hidden>|</span>
+              <span aria-hidden className="hidden sm:inline">|</span>
               <span>{numberOfChanges} {numberOfChanges === 1 ? 'Change' : 'Changes'}</span>
-              <span aria-hidden>|</span>
-              <span className="font-semibold text-paper">{CORRIGENDUM_IMPACT_LABELS[c.impactLevel]} Impact</span>
+              <span aria-hidden className="hidden sm:inline">|</span>
+              <span className="font-semibold text-paper dark:text-ink-900">{CORRIGENDUM_IMPACT_LABELS[c.impactLevel]} Impact</span>
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={REVIEW_STATUS_TONE[c.reviewStatus]}>{CORRIGENDUM_REVIEW_STATUS_LABELS[c.reviewStatus]}</Badge>
             <Badge tone={openActions ? 'amber' : 'emerald'}>{openActions} open {openActions === 1 ? 'action' : 'actions'}</Badge>
-            <Button size="sm" variant="secondary" onClick={onEditRegister}><Icon name="Pencil" size={13} /> Edit register</Button>
+            {onEditRegister && <Button size="sm" variant="secondary" onClick={onEditRegister}><Icon name="Pencil" size={13} /> Edit register</Button>}
           </div>
         </div>
       </header>
@@ -95,7 +97,7 @@ export function CorrigendumComparison({ corrigendum, owner, document, highlighte
         {c.changes.map((ch, i) => (
           <ChangeCard
             key={ch.id} change={ch} index={i} highlighted={highlightedChangeId === ch.id}
-            deciding={deciding === ch.id} onDecide={(d) => decide(ch.id, d)}
+            deciding={deciding === ch.id} onDecide={onDecide ? (d) => decide(ch.id, d) : undefined}
           />
         ))}
       </div>

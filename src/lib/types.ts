@@ -5,6 +5,7 @@
 import type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue, FilterNode, OwnedSheet } from '@goms/domain'
 import type {
   CorrigendumAffectedModule, CorrigendumChangeClassification, CorrigendumChangeKind, CorrigendumImpactLevel, CorrigendumReviewStatus,
+  DocumentBatch, DocumentCategory,
 } from '@goms/domain'
 export type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue }
 
@@ -466,6 +467,9 @@ export interface BidGridRow extends Bid {
   attentionFlag: 'dueSoon' | 'overdue' | 'corrigendumPending' | 'onTrack'
   /** Active custom columns only, keyed by field `key`; absent = no value. */
   customValues: Record<string, CustomValue>
+  generalValues?: Record<string, string>
+  referenceNo?: string | null
+  assignmentName?: string | null
 }
 export interface BidMilestone {
   id: string; bidId: string; milestoneType: string; key: string; label: string
@@ -520,6 +524,8 @@ export interface ProtectedValue {
 export interface BidDocument {
   id: string; entityType: string; entityId: string; filename: string; storagePath: string
   version: string; contentType: string; sizeBytes: number; uploadedBy: string | null; uploadedAt: string
+  /** Attachment filing (Batch 1 tender / Batch 2 post-publication). Older documents read as Batch 1 / Other. */
+  batch: DocumentBatch; category: DocumentCategory
 }
 export interface DocumentCitation {
   id: string; documentId: string; pageLabel: string; quoteText: string; fieldRef: string | null; createdAt: string

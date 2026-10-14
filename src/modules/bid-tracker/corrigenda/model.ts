@@ -15,6 +15,8 @@ export interface CreateCorrigendumInput {
   changes: CorrigendumChangeInput[]
 }
 export interface UpdateCorrigendumRegisterInput { corrigendumId: string; patch: Partial<CorrigendumRegister> }
+/** More clause changes for an already-recorded corrigendum (append-only). */
+export interface AddCorrigendumChangesInput { corrigendumId: string; changes: CorrigendumChangeInput[] }
 
 export const DEFAULT_REGISTER: CorrigendumRegister = {
   publishedDate: null, receivedDate: null, effectiveDate: null, affectedSections: [], impactLevel: 'medium',
@@ -78,6 +80,17 @@ export function normalizeChange(change: Partial<BidCorrigendumChange> & Pick<Bid
     decision: change.decision ?? 'pending', decidedAt: change.decidedAt ?? null, decidedBy: change.decidedBy ?? null,
     ...changeDetails(change),
   }
+}
+
+/** Corrigenda a change to `key` may be appended to: not one that already
+ *  changes it, and not one older than its latest recorded version (a clause's
+ *  history must stay in corrigendum order). Oldest first. */
+export function corrigendaAcceptingKey(corrigenda: readonly BidCorrigendum[], key: string): BidCorrigendum[] {
+  const touching = corrigenda.filter((c) => c.changes.some((ch) => ch.fieldKey === key))
+  const floor = Math.max(0, ...touching.map((c) => c.corrigendumNumber))
+  return [...corrigenda]
+    .filter((c) => c.corrigendumNumber > floor)
+    .sort((a, b) => a.corrigendumNumber - b.corrigendumNumber)
 }
 
 export interface CorrigendumStats { numberOfChanges: number; openActions: number }

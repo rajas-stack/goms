@@ -1,13 +1,13 @@
 import { useRef, useState } from 'react'
-import { corrigendumHeading, slugifyFieldKey } from '@goms/domain'
+import { corrigendumCode, corrigendumHeading, slugifyFieldKey } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
 import { useBidCorrigendaMutations, useDocumentMutations, useDocuments } from '@/lib/api'
-import type { CorrigendumRegister } from '@/lib/types'
+import type { BidCorrigendum, CorrigendumRegister } from '@/lib/types'
 import { ClauseChangeEditor, emptyClauseDraft, type ClauseDraft } from './ClauseChangeEditor'
-import { DEFAULT_REGISTER, type CorrigendumChangeInput } from './model'
+import { corrigendaAcceptingKey, DEFAULT_REGISTER, type CorrigendumChangeInput } from './model'
 import { RegisterFields } from './RegisterFields'
 import type { ClauseHistory } from './tenderPosition'
 
@@ -24,7 +24,7 @@ function newClauseKey(d: ClauseDraft, taken: Set<string>): string {
 function toChangeInputs(drafts: ClauseDraft[], clauses: ClauseHistory[]): CorrigendumChangeInput[] {
   const taken = new Set(clauses.map((c) => c.key))
   return drafts.map((d) => {
-    const key = d.existingKey || newClauseKey(d, taken)
+    const key = d.existingKey || d.fieldKey || newClauseKey(d, taken)
     taken.add(key)
     return {
       fieldKey: key, currentValue: d.original.trim(), proposedValue: d.modified.trim(), kind: 'clause',
@@ -33,18 +33,35 @@ function toChangeInputs(drafts: ClauseDraft[], clauses: ClauseHistory[]): Corrig
   })
 }
 
+const NEW_TARGET = 'new'
+
+/** Existing corrigenda every draft's (known) key may still be appended to. */
+function appendTargets(corrigenda: readonly BidCorrigendum[], drafts: ClauseDraft[]): BidCorrigendum[] {
+  const keys = drafts.map((d) => d.existingKey || d.fieldKey).filter((k): k is string => !!k)
+  return keys.reduce((ok, key) => {
+    const allowed = new Set(corrigendaAcceptingKey(corrigenda, key).map((c) => c.id))
+    return ok.filter((c) => allowed.has(c.id))
+  }, corrigendaAcceptingKey(corrigenda, ''))
+}
+
 /** Records a new corrigendum: register entry + clause-level changes. The
- *  number is automatic (next C-number); nothing already recorded is edited. */
-export function RecordCorrigendumDialog({ bidId, nextNumber, clauses, onClose, onCreated }: {
+ *  number is automatic (next C-number); nothing already recorded is edited.
+ *  With `corrigenda`, the changes can instead be appended to an existing one
+ *  (e.g. "Record corrigendum change…" from a grid cell, `initialDraft`). */
+export function RecordCorrigendumDialog({ bidId, nextNumber, clauses, onClose, onCreated, initialDraft, corrigenda = [] }: {
   bidId: string; nextNumber: number; clauses: ClauseHistory[]; onClose: () => void; onCreated: (id: string) => void
+  initialDraft?: ClauseDraft; corrigenda?: BidCorrigendum[]
 }) {
-  const { create } = useBidCorrigendaMutations(bidId)
+  const { create, addChanges } = useBidCorrigendaMutations(bidId)
   const { data: documents = [] } = useDocuments('bid', bidId)
   const { requestUploadUrl, confirmUpload } = useDocumentMutations('bid', bidId)
   const fileRef = useRef<HTMLInputElement>(null)
   const [register, setRegister] = useState<CorrigendumRegister>(DEFAULT_REGISTER)
   const [documentId, setDocumentId] = useState('')
-  const [drafts, setDrafts] = useState<ClauseDraft[]>([emptyClauseDraft()])
+  const [drafts, setDrafts] = useState<ClauseDraft[]>([initialDraft ?? emptyClauseDraft()])
+  const targets = appendTargets(corrigenda, drafts)
+  const [targetChoice, setTarget] = useState<string>(() => (initialDraft ? appendTargets(corrigenda, [initialDraft]).slice(-1)[0]?.id : undefined) ?? NEW_TARGET)
+  const appendTo = targets.find((c) => c.id === targetChoice) ?? null
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const tracked = clauses.filter((c) => c.kind === 'clause')
@@ -75,6 +92,14 @@ export function RecordCorrigendumDialog({ bidId, nextNumber, clauses, onClose, o
 
   async function submit() {
     setError(null)
+    if (appendTo) {
+      try {
+        const updated = await addChanges.mutateAsync({ corrigendumId: appendTo.id, changes: toChangeInputs(drafts, clauses) })
+        onCreated(updated.id)
+        onClose()
+      } catch (e) { setError(e instanceof Error ? e.message : 'Could not add the change.') }
+      return
+    }
     try {
       const created = await create.mutateAsync({
         bidId, corrigendumNumber: nextNumber, sourceDocumentId: documentId || undefined,
@@ -90,16 +115,26 @@ export function RecordCorrigendumDialog({ bidId, nextNumber, clauses, onClose, o
 
   return (
     <Dialog
-      open onClose={onClose} size="xl" title={`Record ${corrigendumHeading(nextNumber)}`}
+      open onClose={onClose} size="xl" title={appendTo ? `Add changes to ${corrigendumHeading(appendTo.corrigendumNumber)}` : `Record ${corrigendumHeading(nextNumber)}`}
       description="Register the corrigendum and each clause it changes. Earlier versions are kept — nothing is overwritten."
       footer={<>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button variant="primary" disabled={!valid || create.isPending || uploading} onClick={submit}>Record corrigendum</Button>
+        <Button variant="primary" disabled={!valid || create.isPending || addChanges.isPending || uploading} onClick={submit}>
+          {appendTo ? `Add to ${corrigendumCode(appendTo.corrigendumNumber)}` : 'Record corrigendum'}
+        </Button>
       </>}
     >
       <div className="space-y-5">
-        <RegisterFields value={register} onChange={setRegister} />
-        <Field label="Corrigendum document">
+        {corrigenda.length > 0 && (
+          <Field label="Corrigendum" hint="Add the change to a corrigendum already recorded, or record a new one.">
+            <Select aria-label="Corrigendum" value={appendTo ? appendTo.id : NEW_TARGET} onChange={(e) => setTarget(e.target.value)}>
+              {targets.map((c) => <option key={c.id} value={c.id}>{corrigendumHeading(c.corrigendumNumber)} ({corrigendumCode(c.corrigendumNumber)})</option>)}
+              <option value={NEW_TARGET}>New — {corrigendumHeading(nextNumber)} ({corrigendumCode(nextNumber)})</option>
+            </Select>
+          </Field>
+        )}
+        {!appendTo && <RegisterFields value={register} onChange={setRegister} />}
+        {!appendTo && <Field label="Corrigendum document">
           <div className="flex flex-wrap items-center gap-2">
             <Select aria-label="Corrigendum document" className="min-w-0 flex-1" value={documentId} onChange={(e) => setDocumentId(e.target.value)}>
               <option value="">— None —</option>
@@ -111,7 +146,7 @@ export function RecordCorrigendumDialog({ bidId, nextNumber, clauses, onClose, o
             <input ref={fileRef} type="file" className="hidden" aria-label="Upload corrigendum document" accept={ALLOWED_TYPES.join(',')}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload(f) }} />
           </div>
-        </Field>
+        </Field>}
         <div className="space-y-3">
           {drafts.map((d, i) => (
             <ClauseChangeEditor

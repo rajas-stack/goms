@@ -1,6 +1,9 @@
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import type { PolicyModuleKey } from '@goms/domain'
 import { usePermissions } from '@/lib/permissions'
+import { definePermissionNodes } from '@/lib/rbacTree/registry'
+import { useNodeFilter } from '@/lib/rbacTree/access'
+import '@/lib/rbacTree/appModules'
 import { cn } from '@/lib/utils'
 import { Dashboard } from './pages/Dashboard'
 import { CreateBoq } from './pages/CreateBoq'
@@ -27,13 +30,13 @@ import type { MasterEntityKey } from './types'
  *  were unless a future round asks otherwise. Commercial BOM has no tab of
  *  its own: it's a per-SKU concern, edited from inside a SKU's detail page
  *  (SkuCatalog.tsx). */
-const SECTIONS = [
+const SECTIONS = definePermissionNodes('commercial', [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'create-boq', label: 'Create BOQ' },
   { key: 'boq-management', label: 'BOQ Management' },
   { key: 'catalog', label: 'Catalog' },
   { key: 'settings', label: 'Settings' },
-] as const
+] as const)
 
 /** Flat reference lookups — no rule attached, unlike Catalog's items or
  *  Approval Matrix. Pre-Sales lives here too: a short list of names with
@@ -162,7 +165,8 @@ function CommercialCalculatorWorkspaceBody() {
   const navigate = useNavigate()
   const perms = usePermissions()
   const canOpen = (modules: readonly PolicyModuleKey[]) => !perms.enforced || modules.some((m) => perms.level(m) !== 'N')
-  const sections = SECTIONS.filter((s) => canOpen(SECTION_MODULES[s.key] ?? []))
+  const treeAllows = useNodeFilter()
+  const sections = SECTIONS.filter((s) => canOpen(SECTION_MODULES[s.key] ?? []) && treeAllows(`commercial.${s.key}`))
   // The Approval Matrix and the Audit Log are their own modules inside Settings.
   const settingsNav = SETTINGS_NAV
     .map((g) => ({ ...g, items: g.items.filter((i) => (i.key === 'approvalMatrix' ? canOpen(['com.approvalMatrix']) : i.key === 'audit' ? canOpen(['admin.audit']) : true)) }))

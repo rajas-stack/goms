@@ -6,7 +6,7 @@ import { isUniqueViolation } from '../db-errors.js'
 import { assertFieldsNotProtected } from '../lib/protectedValues.js'
 import {
   DEPARTMENT_REQUIRED_MESSAGE, formatBidCode, DEFAULT_BID_STAGE_KEY, DEFAULT_OWNED_SHEET, OWNED_SHEETS, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP,
-  computeAttentionFlag, applyFilterRules, buildOwnerMap, type CustomFieldType, type CustomValue, type OwnedSheet, PROTECTED_VALUES_ENFORCED } from '@goms/domain'
+  computeAttentionFlag, applyFilterRules, buildOwnerMap, documentToGeneral, type CustomFieldType, type CustomValue, type OwnedSheet, PROTECTED_VALUES_ENFORCED } from '@goms/domain'
 import { applyStageChange, insertOpportunity } from './opportunities.js'
 import { loadOwnershipContext } from '../lib/ownershipContext.js'
 import { writeAuditLog } from '../lib/auditLog.js'
@@ -100,7 +100,7 @@ export const bidsRouter = router({
     .query(async ({ input, ctx }) => {
       const [gridResult, corrigendaPendingResult, { assignments, ctx: ownershipCtx }, customFieldsResult, customValuesResult] = await Promise.all([
         pool.query(`
-             SELECT b.*, o.opportunity_code, o.opportunity_type, o.department_id, o.state_code, o.city, o.opportunity_name, o.gem_tender_id, o.submission_date,
+             SELECT b.*, o.opportunity_code, o.opportunity_type, o.department_id, o.state_code, o.city, o.opportunity_name, o.gem_tender_id, o.reference_no, o.assignment_name, o.submission_date,
                o.geo_sales_person_id, o.bu_sales_person_id, o.pre_sales_person_id, o.legal_person_id, o.bid_team_member_id, o.created_by,
                  o.value_amount, o.value_unit, o.emd_amount, o.emd_unit, o.vertical,
                  dept.name AS department_name,
@@ -110,10 +110,12 @@ export const bidsRouter = router({
                  next_action.note AS next_action_note, next_action.due_date AS next_action_due_date,
                  next_action.assignee_id AS next_action_assignee_id,
                  last_audit.changed_by AS updated_by,
-                 solution_lead.sales_person_id AS solution_lead_sales_person_id
+                 solution_lead.sales_person_id AS solution_lead_sales_person_id,
+                 general.document AS general_document
           FROM bids b
           JOIN opportunities o ON o.id = b.opportunity_id
           LEFT JOIN hierarchy_nodes dept ON dept.id = o.department_id
+          LEFT JOIN bid_synopsis_sections general ON general.bid_id = b.id AND general.section = 'general'
           LEFT JOIN LATERAL (
             SELECT count(*)::int AS document_count FROM documents d WHERE d.entity_type='bid' AND d.entity_id=b.id
           ) doc_counts ON true
@@ -192,6 +194,7 @@ export const bidsRouter = router({
       const emailById = new Map(emailsResult.rows.map((r: any) => [r.id, r.official_email]))
 
       const rows = gridResult.rows.map((r: any) => {
+        const generalValues = documentToGeneral(r.general_document)
         const dueAt = r.submission_date && !Number.isNaN(new Date(r.submission_date).getTime()) ? r.submission_date : null
         const owner = ownerMap.get(r.id)
         const nextMilestoneDueAt: string | null = r.next_milestone_due_at ? new Date(r.next_milestone_due_at).toISOString() : null
@@ -199,7 +202,8 @@ export const bidsRouter = router({
           ...toBid(r), opportunityCode: r.opportunity_code ?? '', opportunityType: r.opportunity_type ?? '',
           departmentId: r.department_id, departmentName: r.department_name ?? null,
           stateCode: r.state_code, city: r.city ?? null, opportunityName: r.opportunity_name,
-          gemTenderId: r.gem_tender_id, submissionDate: r.submission_date, valueAmount: r.value_amount,
+          gemTenderId: r.gem_tender_id || generalValues.tenderId || '', submissionDate: r.submission_date, valueAmount: r.value_amount,
+          referenceNo: r.reference_no || generalValues.referenceNo || '', assignmentName: r.assignment_name || generalValues.assignmentName || '',
           valueUnit: r.value_unit, emdAmount: r.emd_amount, emdUnit: r.emd_unit, vertical: r.vertical,
           geoSalesPersonId: r.geo_sales_person_id ?? null, buSalesPersonId: r.bu_sales_person_id ?? null,
           preSalesPersonId: r.pre_sales_person_id ?? null, legalPersonId: r.legal_person_id ?? null,
@@ -218,6 +222,7 @@ export const bidsRouter = router({
           updatedBy: r.updated_by ?? null,
           attentionFlag: computeAttentionFlag({ dueAt, hasPendingCorrigendum: pendingCorrigendumBidIds.has(r.id), today }),
           customValues: customValuesByBid.get(r.id) ?? ({} as Record<string, CustomValue>),
+          generalValues,
         }
       })
       return applyFilterRules(rows, input?.filterRules ?? [], ctx.user?.email ?? null, customFieldTypes)

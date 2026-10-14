@@ -16,7 +16,8 @@
     "test:watch": "vitest",
     "test:component": "vitest run --config vitest.component.config.ts",
     "seed:import": "tsx scripts/seed-import.ts",
-    "build-import-fixtures": "tsx scripts/admin-import-fixtures/build-fixtures.ts"
+    "build-import-fixtures": "tsx scripts/admin-import-fixtures/build-fixtures.ts",
+    "rbac:manifest": "node scripts/rbac-manifest.mjs"
   },
   "dependencies": {
     "@aparajita/capacitor-secure-storage": "^8.0.1",
@@ -26,6 +27,7 @@
     "@capacitor/core": "^8.4.2",
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/share": "^8.0.1",
+    "@floating-ui/dom": "^1.8.0",
     "@goms/domain": "*",
     "@tanstack/react-query": "^5.62.0",
     "@tanstack/react-table": "^8.21.3",
