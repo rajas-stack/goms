@@ -12,7 +12,6 @@ import { useBidMutations, useBidsForGrid, useDepartments, useOpportunities } fro
 import type { HierNode, Opportunity } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { NodeFormDialog } from '@/features/nodes/NodeFormDialog'
-import { OpportunityCodePreview } from '@/features/opportunities/OpportunityCodePreview'
 import type { SheetId } from '../sheets'
 
 const MAX_SHOWN = 50
@@ -231,7 +230,6 @@ function CreateBidFlow({ onClose, presetId, sheet, newDepartmentId, onRequestCre
                 {OPPORTUNITY_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </Select>
             </label>
-            <OpportunityCodePreview departmentId={existingId || null} submissionDate={newDue} opportunityType={newType} />
           </div>
         ) : selected && (
           <div>

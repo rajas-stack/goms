@@ -188,6 +188,11 @@ export const opportunityPolicy: Record<string, PolicyEntry> = {
   'tenderWebsites.create': { requirements: [create('bid.columns')] },
   ...same(['tenderWebsites.update', 'tenderWebsites.setEditingLock'], write('bid.columns')),
   'tenderWebsites.delete': { requirements: [remove('bid.columns')] },
+  // Competitors (Settings > Pre-sales) share the tender-website permissions.
+  'competitors.list': { requirements: [readRows] },
+  'competitors.create': { requirements: [create('bid.columns')] },
+  'competitors.update': { requirements: [write('bid.columns')] },
+  'competitors.delete': { requirements: [remove('bid.columns')] },
 
   ...same(['bidSavedViews.create', 'bidSavedViews.update', 'bidSavedViews.delete'], savedViewWrite),
 

@@ -4,8 +4,8 @@ import type { ScopeFacts } from '@goms/domain'
 import type { BidGridRow } from '@/lib/types'
 
 export const COLUMN_ATOM: Record<string, string | null> = {
-  opportunityName: 'opp.identity', opportunityType: 'opp.identity', tenderLink: 'opp.identity', gemTenderId: 'opp.tenderId',
-  departmentName: 'opp.client', city: 'opp.client', vertical: 'opp.client',
+  opportunityName: 'opp.identity', opportunityType: 'opp.identity', tenderLink: 'opp.identity', referenceNo: 'opp.identity', assignmentName: 'opp.identity', gemTenderId: 'opp.tenderId',
+  departmentName: 'opp.client', stateCode: 'opp.client', city: 'opp.client', vertical: 'opp.client',
   geoSalesPersonId: 'opp.teamSales', buSalesPersonId: 'opp.teamSales',
   preSalesPersonId: 'opp.teamDelivery', legalPersonId: 'opp.teamDelivery', bidTeamMemberId: 'opp.teamDelivery',
   ownerEmail: 'ownership.bidEntity', solutionLeadEmail: 'ownership.solutionLead',
@@ -30,6 +30,7 @@ export function rowScopeFacts(row: BidGridRow, myEmail: string, mySalesPersonId:
 
 export function canEditCell(perms: Permissions, row: BidGridRow, columnId: string, me: { email: string; salesPersonId: string | null }): boolean {
   if (!perms.enforced) return true
+  if (columnId.startsWith('general:')) return perms.level(sheetModule(row.sheet)) === 'W'
   const atom = atomOf(columnId)
   if (!atom) return false
   return perms.canEdit(sheetModule(row.sheet), atom, rowScopeFacts(row, me.email, me.salesPersonId))

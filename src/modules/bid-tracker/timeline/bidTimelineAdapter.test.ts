@@ -101,6 +101,24 @@ describe('buildBidTimeline', () => {
     expect(t.milestones).toHaveLength(22)
     expect(t.milestones[21].plannedEnd).toBe('2027-06-30')
   })
+
+  it('builds the opportunity workflow with unplanned Sales work before planned Pre-Sales', () => {
+    const t = buildBidTimeline(input({ opportunityType: 'RFP' }))
+    const firstPresales = t.milestones.find((m) => m.track === 'presales')!
+    expect(t.workflowKind).toBe('reactiveBid')
+    expect(t.milestones.slice(0, 2).map((m) => [m.id, m.track, m.planned])).toEqual([
+      ['sales:rfpReceived', 'sales', false],
+      ['sales:rfpForwarded', 'sales', false],
+    ])
+    expect(firstPresales).toMatchObject({ id: 'solutioning', planned: true, plannedStart: '2026-01-01' })
+  })
+
+  it('uses curated Sales pre-work for direct opportunities', () => {
+    const t = buildBidTimeline(input({ opportunityType: 'Direct' }))
+    expect(t.workflowKind).toBe('curatedOpportunity')
+    expect(t.milestones[0]).toMatchObject({ id: 'sales:productSolution', planned: false, track: 'sales' })
+    expect(t.milestones.find((m) => m.id === 'sales:rfpPublished')).toBeTruthy()
+  })
 })
 
 describe('stageIntervals', () => {

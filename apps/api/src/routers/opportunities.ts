@@ -6,7 +6,7 @@ import { isForeignKeyViolation } from '../db-errors.js'
 import { assertFieldsNotProtected } from '../lib/protectedValues.js'
 import { writeAuditLog } from '../lib/auditLog.js'
 import { assignOpportunityCode } from '../lib/opportunityCode.js'
-import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from '@goms/domain'
+import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP, updateGeneralDocument } from '@goms/domain'
 
 function toOpportunity(row: any) {
   return {
@@ -79,7 +79,7 @@ const patchShape = {
   opportunityCode: z.string().optional(),
 }
 /** Opportunity fields edited from a bid's grid row that belong in the bid's Activity History. */
-const BID_HISTORY_FIELDS = ['opportunityName', 'city', 'vertical', 'opportunityType']
+const BID_HISTORY_FIELDS = ['opportunityName', 'city', 'vertical', 'opportunityType', 'gemTenderId', 'referenceNo', 'assignmentName', 'stateCode']
 const columnFor: Record<string, string> = {
   departmentId: 'department_id', stateCode: 'state_code', stageKey: 'stage_key', closedOn: 'closed_on',
   opportunityName: 'opportunity_name', gemTenderId: 'gem_tender_id', city: 'city', referenceNo: 'reference_no', assignmentName: 'assignment_name',
@@ -273,6 +273,16 @@ export const opportunitiesRouter = router({
           // The fields the Bid Tracker grid edits inline are part of the BID's history:
           // log each real change against the bid, and mark the bid as updated.
           const bid = (await client.query('SELECT id FROM bids WHERE opportunity_id=$1', [input.id])).rows[0]
+          if (bid && ['gemTenderId', 'referenceNo', 'assignmentName'].some(property => property in input.patch)) {
+            const section = (await client.query("SELECT document FROM bid_synopsis_sections WHERE bid_id=$1 AND section='general' FOR UPDATE", [bid.id])).rows[0]
+            if (section) {
+              let document = section.document
+              for (const [property, key] of [['gemTenderId', 'tenderId'], ['referenceNo', 'referenceNo'], ['assignmentName', 'assignmentName']] as const) {
+                if (input.patch[property] !== undefined) document = updateGeneralDocument(document, key, input.patch[property] ?? '')
+              }
+              await client.query("UPDATE bid_synopsis_sections SET document=$2, revision=revision+1, updated_at=now(), updated_by=$3 WHERE bid_id=$1 AND section='general'", [bid.id, JSON.stringify(document), ctx.user?.email ?? null])
+            }
+          }
           const logged = bid ? fields.filter((f) => BID_HISTORY_FIELDS.includes(f)) : []
           let changed = false
           for (const f of logged) {

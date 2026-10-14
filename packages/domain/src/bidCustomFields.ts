@@ -99,7 +99,6 @@ export const STANDARD_BID_FIELD_TYPES: Record<string, CustomFieldType> = {
   submissionDate: 'date',
   valueAmount: 'currency',
   emdAmount: 'currency',
-  opportunityId: 'text',
   opportunityType: 'select',
   bidCode: 'text',
   tenderLink: 'text',

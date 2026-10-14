@@ -236,17 +236,15 @@ describe('CreateBidDialog', () => {
     expect(indiaAi.name).toBe('India AI')
   })
 
-  it('new opportunity: previews the Opportunity ID live, saves the type, and assigns the number on save', async () => {
+  it('new opportunity: saves the type without showing an Opportunity ID preview', async () => {
     await meityIndiaAi()
     renderDialog()
     await startNew()
     await userEvent.type(screen.getByRole('textbox', { name: 'Opportunity name' }), 'Coded')
-    const preview = screen.getByTestId('opportunity-code-preview')
+    expect(screen.queryByTestId('opportunity-code-preview')).not.toBeInTheDocument()
     await userEvent.type(screen.getByRole('textbox', { name: 'Submission date and time' }), '24/09/2026 15:00')
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Opportunity type' }), 'RFP')
-    expect(preview).toHaveTextContent('FY27-Q2-NA-NA-NA-NA-RFP-NA-#')
     await choose('Existing department', 'MeitY → India AI')
-    await waitFor(() => expect(preview).toHaveTextContent('FY27-Q2-NA-CENTRAL-CEN-IA-RFP-NA-#'))
     await userEvent.click(createButtonNew())
     await screen.findByText('Bid detail page')
     const created = (await repository.listOpportunities()).find((o) => o.opportunityName === 'Coded')!

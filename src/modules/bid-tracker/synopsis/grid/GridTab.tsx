@@ -12,6 +12,7 @@ import { useSaveSynopsis, useSynopsis } from '../api'
 import { SECTION_LABELS } from '../documents'
 import { gridDocument, gridToWorksheet, readGridSection, worksheetToGrid } from './gridIO'
 import { updateColumn } from './gridModel'
+import { starterGrid } from './competitionGrid'
 import { SynopsisGridView } from './SynopsisGridView'
 import { CorrigendaToggle, OrphanChanges, useGridCorrigenda } from './corrigendum/GridCorrigenda'
 
@@ -29,6 +30,10 @@ function readDraft(key: string): Draft | null {
   } catch { return null }
 }
 
+/** A saved section as stored; an unsaved one opens with its section's starter columns. */
+const loadSection = (section: BidSynopsisSection, saved: BidSynopsis | null) =>
+  saved ? readGridSection(saved.document) : { grid: starterGrid(section), notes: '', converted: false }
+
 export function GridTab({ bidId, section, module = 'opp.bidTracker' }: { bidId: string; section: BidSynopsisSection; module?: PolicyModuleKey }) {
   const query = useSynopsis(bidId, section)
   const canEdit = useAllowed(module, 'update')
@@ -43,7 +48,7 @@ function GridSectionEditor({ bidId, section, saved, canEdit, onReload }: {
   const label = SECTION_LABELS[section]
   const draftKey = `goms:synopsis-grid:${import.meta.env.VITE_API_BASE_URL || 'local'}:${bidId}:${section}`
   const [initial] = useState(() => {
-    const loaded = readGridSection(saved?.document)
+    const loaded = loadSection(section, saved)
     const draft = canEdit ? readDraft(draftKey) : null
     return { loaded, draft }
   })
@@ -122,7 +127,7 @@ function GridSectionEditor({ bidId, section, saved, canEdit, onReload }: {
     setError(null)
     const result = await onReload()
     if (result.error) { setError('Could not reload the saved section. Your changes have been kept.'); return }
-    const loaded = readGridSection(result.data?.document)
+    const loaded = loadSection(section, result.data ?? null)
     revision.current = result.data?.revision ?? 0
     savedJson.current = JSON.stringify(gridDocument(loaded.grid, loaded.notes))
     commitGrid(loaded.grid); setNotes(loaded.notes); setConverted(loaded.converted); setHistory({ past: [], future: [] })

@@ -1,18 +1,24 @@
 // Bid → OpportunityTimeline. Pure: every input is passed in, so the mapping
 // (stage history → actual dates, status, events) is unit-tested without a store.
 // Planned dates come from the rules module; actual dates from the stage audit trail.
-import { BID_STAGE_MAP, BID_STAGES } from '@goms/domain'
+import { BID_STAGE_MAP, BID_STAGES, type OwnedSheet } from '@goms/domain'
 import type { AvatarPerson } from '@/components/ui/Avatar'
-import type { BidCorrigendum, BidMilestone, FollowUp } from '@/lib/types'
-import { BID_PHASE_RULES, FALLBACK_DURATION_DAYS, generatePlannedPlan, type PhaseRule, type PlannedPhase } from './rules'
+import type { BidCorrigendum, BidMilestone, FollowUp, OpportunityStageChange } from '@/lib/types'
+import { BID_PHASE_RULES, FALLBACK_DURATION_DAYS, generatePlannedPlan, opportunityWorkflowRules, workflowKindForOpportunityType, type PhaseRule, type PlannedPhase } from './rules'
 import { addDays, calendarDay, diffDays, pluralDays, toDay } from './timelineDates'
+import { opportunityLifecycle } from './opportunityLifecycle'
 import type { IsoDate, Milestone, MilestoneStatus, OpportunityTimeline, TimelineEvent, TimelineNote } from './types'
 
 /** One `field === 'stageKey'` audit row for the bid. */
 export interface StageChange { changedAt: string; oldValue: string; newValue: string }
 
 export interface BidTimelineInput {
-  bid: { id: string; opportunityId: string; stageKey: string; createdAt: string }
+  bid: { id: string; opportunityId: string; stageKey: string; createdAt: string; sheet?: OwnedSheet }
+  opportunity?: { id: string; createdAt: string; stageKey: string; opportunityType: string }
+  opportunityStageChanges?: OpportunityStageChange[]
+  sheetChanges?: StageChange[]
+  /** Keeps the Sales origin when a proactive opportunity later becomes a published RFP. */
+  originOpportunityType?: string | null
   /** The opportunity's submission deadline, as stored (date or timestamp). */
   submissionDate?: string | null
   stageChanges: StageChange[]
@@ -22,6 +28,8 @@ export interface BidTimelineInput {
   /** Sales-team people, to show follow-up assignees with their avatar. */
   people?: (AvatarPerson & { id: string; officialEmail?: string | null })[]
   today: IsoDate
+  /** Opportunity type is used only to pick Reactive Bid vs Curated Opportunity sales pre-work. */
+  opportunityType?: string | null
   /** Defaults to the open bid stages. */
   rules?: readonly PhaseRule[]
 }
@@ -83,14 +91,14 @@ interface StatusContext { currentOrder: number; closed: boolean; today: IsoDate;
 function phaseStatus(phase: PlannedPhase, order: number, entered: boolean, ctx: StatusContext): MilestoneStatus {
   const isCurrent = order === ctx.currentOrder && !ctx.closed
   if (isCurrent && phase.key === ctx.terminalKey) return 'COMPLETED'
-  if (isCurrent) return toDay(ctx.today) > toDay(phase.plannedEnd) ? 'DELAYED' : 'IN_PROGRESS'
+  if (isCurrent) return phase.planned !== false && toDay(ctx.today) > toDay(phase.plannedEnd) ? 'DELAYED' : 'IN_PROGRESS'
   if (ctx.closed) return entered || order <= ctx.reachedOrder ? 'COMPLETED' : 'UPCOMING'
   if (order < ctx.currentOrder) return 'COMPLETED'
   return 'UPCOMING'
 }
 
 function buildMilestone(phase: PlannedPhase, visits: StageInterval[] | undefined, ctx: StatusContext): Milestone {
-  const order = BID_STAGE_MAP[phase.key]?.order ?? phase.sequence - 1
+  const order = phase.statusOrder ?? BID_STAGE_MAP[phase.key]?.order ?? phase.sequence - 1
   const entered = !!visits?.length
   const status = phaseStatus(phase, order, entered, ctx)
   const actualStart = visits?.[0]?.enter
@@ -99,7 +107,8 @@ function buildMilestone(phase: PlannedPhase, visits: StageInterval[] | undefined
   const actualEnd = status === 'COMPLETED' ? (terminalReached ? actualStart : lastExit) : undefined
   return {
     id: phase.key, name: phase.name, sequence: phase.sequence, icon: phase.icon,
-    plannedStart: phase.plannedStart, plannedEnd: phase.plannedEnd,
+    plannedStart: phase.plannedStart, plannedEnd: phase.plannedEnd, planned: phase.planned,
+    track: phase.track, owner: phase.owner,
     status,
     ...(actualStart ? { actualStart } : {}),
     ...(actualEnd ? { actualEnd } : {}),
@@ -108,9 +117,14 @@ function buildMilestone(phase: PlannedPhase, visits: StageInterval[] | undefined
 
 /** The phase whose planned span holds `date` (last phase for anything after the end). */
 export function milestoneForDate(milestones: Milestone[], date: IsoDate): string | undefined {
+  const actual = milestones.find(m => m.actualStart && m.actualEnd && date >= m.actualStart && date <= m.actualEnd)
+  if (actual) return actual.id
+  const planned = milestones.filter((m) => m.planned !== false)
+  if (!planned.length) return undefined
   const day = toDay(date)
-  const hit = milestones.find((m) => day >= toDay(m.plannedStart) && day < toDay(m.plannedEnd))
-  return (hit ?? (day < toDay(milestones[0]?.plannedStart ?? date) ? milestones[0] : milestones[milestones.length - 1]))?.id
+  const hit = planned.find((m) => day >= toDay(m.plannedStart) && day < toDay(m.plannedEnd))
+  if (day < toDay(planned[0].plannedStart)) return milestones.find(m => m.track === 'sales')?.id
+  return (hit ?? planned[planned.length - 1])?.id
 }
 
 function corrigendumEvents(corrigenda: BidCorrigendum[]): Omit<TimelineEvent, 'milestoneId'>[] {
@@ -167,29 +181,63 @@ function bidMilestoneEvents(milestones: BidMilestone[], today: IsoDate): Omit<Ti
 }
 
 export function buildBidTimeline(input: BidTimelineInput): OpportunityTimeline {
-  const rules = input.rules ?? BID_PHASE_RULES
-  const startDate = calendarDay(input.bid.createdAt) ?? input.today
-  const { endDate, estimated } = resolveEndDate(startDate, input.submissionDate)
-  const plan = generatePlannedPlan(startDate, endDate, rules)
-  const visits = stageIntervals(rules[0]?.key ?? input.bid.stageKey, startDate, input.stageChanges)
+  const fullWorkflow = !!input.opportunity || input.opportunityType !== undefined
+  const workflowKind = workflowKindForOpportunityType(input.originOpportunityType || input.opportunity?.opportunityType || input.opportunityType)
+  const rules = input.rules ?? (fullWorkflow ? opportunityWorkflowRules(workflowKind) : BID_PHASE_RULES)
+  const bidStart = calendarDay(input.bid.createdAt) ?? input.today
+  const startDate = calendarDay(input.opportunity?.createdAt) ?? bidStart
+  const lifecycleStages = opportunityLifecycle({ createdAt: startDate, bidCreatedAt: bidStart, sheet: input.bid.sheet, sheetChanges: input.sheetChanges })
+  const presalesStart = lifecycleStages.find(stage => stage.name === 'Bid Tracker')?.actualStart
+  const planStart = presalesStart ?? bidStart
+  const { endDate: plannedEnd, estimated } = resolveEndDate(planStart, input.submissionDate)
+  const plan = generatePlannedPlan(planStart, plannedEnd, rules)
+  const visits = stageIntervals(input.bid.stageKey, planStart, input.stageChanges.filter(change => !presalesStart || (calendarDay(change.changedAt) ?? planStart) >= presalesStart))
   const current = BID_STAGE_MAP[input.bid.stageKey]
+  const terminalKey = 'submitted'
   const ctx: StatusContext = {
     currentOrder: current?.order ?? 0,
     closed: !!current?.closed,
     today: input.today,
-    terminalKey: rules[rules.length - 1]?.key ?? '',
+    terminalKey,
     reachedOrder: Math.max(-1, ...[...visits.keys()].filter((k) => !BID_STAGE_MAP[k]?.closed).map((k) => BID_STAGE_MAP[k]?.order ?? -1)),
   }
-  const base = plan.map((phase) => buildMilestone(phase, visits.get(phase.key), ctx))
+  const markerFor = (phase: PlannedPhase) => (input.milestones ?? []).find(marker => marker.key === phase.key || marker.label.toLowerCase() === phase.name.toLowerCase())
+  const base = plan.map((phase) => {
+    const milestone = buildMilestone(phase, visits.get(phase.key), ctx)
+    const marker = markerFor(phase)
+    if (fullWorkflow && !presalesStart && phase.track === 'presales') {
+      return { ...milestone, planned: false, status: 'UPCOMING' as const, actualStart: undefined, actualEnd: undefined }
+    }
+    if (phase.track !== 'presales' && phase.key.startsWith('sales:') && !marker) {
+      return { ...milestone, status: presalesStart && (phase.statusOrder ?? 0) < 0 ? 'COMPLETED' as const : 'UPCOMING' as const, actualStart: undefined, actualEnd: undefined }
+    }
+    const due = calendarDay(marker?.dueAt ?? null)
+    const completed = marker?.status === 'completed'
+    const completedAt = completed ? calendarDay(marker.updatedAt) : null
+    return {
+      ...milestone,
+      ...(due && phase.planned !== false ? { plannedStart: due, plannedEnd: due } : {}),
+      ...(completedAt ? { actualStart: milestone.actualStart ?? completedAt, actualEnd: completedAt, status: 'COMPLETED' as const } : {}),
+    }
+  })
   const events = [
     ...corrigendumEvents(input.corrigenda ?? []),
     ...followUpEvents(input.followUps ?? [], input.people, input.today),
     ...bidMilestoneEvents(input.milestones ?? [], input.today),
   ].map((e) => ({ ...e, milestoneId: milestoneForDate(base, e.date) }))
   const milestones = base.map((m) => ({ ...m, issueCount: events.filter((e) => e.milestoneId === m.id && e.status === 'Open').length }))
+  const salesWorkflows = Object.fromEntries((['reactiveBid', 'curatedOpportunity'] as const).map(kind => [kind,
+    kind === workflowKind ? milestones.filter(m => m.track === 'sales') : generatePlannedPlan(planStart, plannedEnd, opportunityWorkflowRules(kind))
+      .filter(phase => phase.track === 'sales').map(phase => ({ ...buildMilestone(phase, undefined, ctx), status: 'UPCOMING' as const })),
+  ])) as NonNullable<OpportunityTimeline['salesWorkflows']>
+  const latestActual = [...milestones.map(m => m.actualEnd), ...lifecycleStages.map(stage => stage.actualEnd)].filter((date): date is string => !!date).sort().slice(-1)[0]
+  const endDate = [plannedEnd, ...(latestActual ? [latestActual] : []), ...(!ctx.closed && input.today > planStart ? [input.today] : [])].sort().slice(-1)[0] ?? plannedEnd
   return {
     opportunityId: input.bid.opportunityId,
     startDate, endDate, milestones, events,
+    workflowKind,
+    ...(fullWorkflow ? { salesWorkflows, lifecycleStages } : {}),
+    ...(calendarDay(input.submissionDate ?? null) ? { deadlineDate: calendarDay(input.submissionDate ?? null)! } : {}),
     endDateEstimated: estimated,
     outcome: current?.closed ? current.label : null,
     latestNote: latestNote(input.followUps ?? [], input.people),

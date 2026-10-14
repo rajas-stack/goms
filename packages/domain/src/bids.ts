@@ -2,6 +2,7 @@ import {
   CUSTOM_FIELD_PREFIX, STANDARD_BID_FIELD_TYPES, matchesTypedRule,
   isFilterGroup, type CustomFieldType, type FilterNode,
 } from './bidCustomFields.js'
+import { GENERAL_FIELDS } from './bidGeneral.js'
 
 // Bid Tracker's own stage machine — deliberately separate from
 // opportunities.ts's PIPELINE_STAGES (spec §4.4). Data, not a TypeScript
@@ -149,9 +150,10 @@ export function applyFilterRules<T extends Record<string, unknown>>(
   currentUserEmail: string | null,
   fieldTypes: Record<string, CustomFieldType> = {},
 ): T[] {
-  const types = { ...STANDARD_BID_FIELD_TYPES, ...fieldTypes }
+  const generalTypes: Record<string, CustomFieldType> = Object.fromEntries(GENERAL_FIELDS.map(field => [`general:${field.key}`, field.kind === 'date' || field.kind === 'datetime' ? 'date' : field.kind === 'select' ? 'select' : 'text']))
+  const types = { ...STANDARD_BID_FIELD_TYPES, ...generalTypes, ...fieldTypes }
   const applicable = (n: FilterNode): boolean =>
-    isFilterGroup(n) ? n.rules.some(applicable) : !n.field.startsWith(CUSTOM_FIELD_PREFIX) || n.field in types
+    isFilterGroup(n) ? n.rules.some(applicable) : n.field !== 'opportunityId' && (!n.field.startsWith(CUSTOM_FIELD_PREFIX) || n.field in types)
   const live = rules.filter(applicable)
   if (!live.length) return rows
 
@@ -163,11 +165,9 @@ export function applyFilterRules<T extends Record<string, unknown>>(
     // wrongly surface every bid that happens to have no owner assigned.
     if (target === null) return false
     const isCustom = rule.field.startsWith(CUSTOM_FIELD_PREFIX)
-    // The Opportunity ID column shows the human-readable code (the raw id only
-    // for a row that has none yet), so a filter on it matches what is shown.
     const cell = isCustom
       ? (row.customValues as Record<string, unknown> | undefined)?.[rule.field.slice(CUSTOM_FIELD_PREFIX.length)]
-      : rule.field === 'opportunityId' ? (row.opportunityCode || row.opportunityId) : row[rule.field]
+      : rule.field.startsWith('general:') ? (row.generalValues as Record<string, unknown> | undefined)?.[rule.field.slice('general:'.length)] : row[rule.field]
     return matchesTypedRule(types[rule.field] ?? 'text', cell, rule, target)
   }
   const matchNode = (row: T, node: FilterNode): boolean => {

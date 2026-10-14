@@ -14,7 +14,7 @@ const GRID_ID = /^[A-Za-z0-9_-]{1,40}$/
 /** The affected-module each synopsis section records its changes under. */
 export const SECTION_CORRIGENDUM_MODULE: Record<BidSynopsisSection, CorrigendumAffectedModule> = {
   general: 'other', scope: 'sow', pq: 'pq', tq: 'tq', manpower: 'manpower', milestone: 'milestones',
-  payment: 'payment_terms', boq: 'boq', queries: 'other',
+  payment: 'payment_terms', boq: 'boq', queries: 'other', competition: 'other',
 }
 
 export function buildGridFieldKey(ref: GridCellRef): string {

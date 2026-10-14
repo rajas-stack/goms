@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
  *  workspace: switching loads its filters, column visibility and column order.
  *  Changes made on a system view can't be saved into it, so the strip says so
  *  (`modifiedViewId`) and offers to keep them as a new view. */
-export function SavedViewTabs({ sheet, activeViewId, onChange, onCreateNew, onDelete, modifiedViewId }: {
+export function SavedViewTabs({ sheet, activeViewId, onChange, onCreateNew, onDelete, modifiedViewId, canDelete, deleting }: {
   /** The Opportunity sheet whose views are listed (default: Bid Tracker). */
   sheet?: string
   activeViewId: string
@@ -17,9 +17,13 @@ export function SavedViewTabs({ sheet, activeViewId, onChange, onCreateNew, onDe
   onCreateNew: () => void
   onDelete?: (id: string) => void
   modifiedViewId?: string | null
+  canDelete?: (id: string) => boolean
+  deleting?: boolean
 }) {
   const { data: views = [], isLoading } = useBidSavedViews(sheet)
   if (isLoading) return null
+  const selectedView = views.find(view => view.id === activeViewId)
+  const deletable = !!selectedView && !selectedView.isSystem && !!onDelete && (canDelete?.(selectedView.id) ?? true)
   return (
     <div className="flex items-center gap-1 overflow-x-auto border-b border-line bg-grid-tab px-3 py-1" data-testid="saved-view-tabs">
       <span className="mr-1 shrink-0 text-[12px] font-semibold text-muted">Views</span>
@@ -42,13 +46,13 @@ export function SavedViewTabs({ sheet, activeViewId, onChange, onCreateNew, onDe
               {!v.isSystem && v.scope === 'global' && <span className="text-[10px] opacity-70">Global</span>}
               {modified && <span title="Changed since this view was loaded" className="h-1.5 w-1.5 rounded-full bg-amber" />}
             </button>
-            {!v.isSystem && onDelete && (
+            {!v.isSystem && onDelete && (canDelete?.(v.id) ?? true) && (
               <button
-                type="button" aria-label={`Delete view ${v.name}`} title={`Delete view ${v.name}`} onClick={() => onDelete(v.id)}
+                type="button" aria-label={`Delete view ${v.name}`} title={`Delete view ${v.name}`} disabled={deleting} onClick={() => onDelete(v.id)}
                 className={cn('mr-1 flex h-5 w-5 items-center justify-center rounded focus-visible:focus-ring',
                   active ? 'hover:bg-white/20' : 'text-muted hover:bg-crimson-100 hover:text-crimson')}
               >
-                <Icon name="X" size={12} />
+                <Icon name="Trash2" size={14} />
               </button>
             )}
           </span>
@@ -60,6 +64,11 @@ export function SavedViewTabs({ sheet, activeViewId, onChange, onCreateNew, onDe
       <Button variant="ghost" size="sm" className="h-7 shrink-0 px-2" onClick={onCreateNew}>
         <Icon name="Plus" size={14} /> Create Saved View
       </Button>
+      {onDelete && <Button variant="ghost" size="sm" className="h-7 shrink-0 px-2" aria-label="Delete selected view" disabled={!deletable || deleting}
+        title={deletable ? `Delete view ${selectedView!.name}` : selectedView?.isSystem ? 'System views cannot be deleted' : 'You cannot delete this view'}
+        onClick={() => { if (deletable) onDelete(activeViewId) }}>
+        <Icon name="Trash2" size={14} /> Delete View
+      </Button>}
     </div>
   )
 }

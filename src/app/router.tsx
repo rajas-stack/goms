@@ -27,6 +27,9 @@ const TenderWebsitesSettingsPage = lazy(() =>
 const DocumentVerificationsSettingsPage = lazy(() =>
   import('./routes/TenderWebsitesSettingsPage').then((m) => ({ default: m.DocumentVerificationsSettingsPage })),
 )
+const CompetitorsSettingsPage = lazy(() =>
+  import('./routes/CompetitorsSettingsPage').then((m) => ({ default: m.CompetitorsSettingsPage })),
+)
 const SalesWorkspace = lazy(() => import('./routes/SalesWorkspace').then((m) => ({ default: m.SalesWorkspace })))
 const TeamsWorkspace = lazy(() => import('./routes/TeamsWorkspace').then((m) => ({ default: m.TeamsWorkspace })))
 const CommercialCalculatorWorkspace = lazy(() =>
@@ -132,6 +135,7 @@ export const router = createBrowserRouter([
       { path: '/document-maker/:id', element: <DocumentMakerEditor /> },
       { path: '/settings/tender-websites', element: <TenderWebsitesSettingsPage /> },
       { path: '/settings/document-verifications', element: <DocumentVerificationsSettingsPage /> },
+      { path: '/settings/competitors', element: <CompetitorsSettingsPage /> },
       { path: '/admin/access/matrix', element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><AccessMatrix /></RequireAccess> },
       ...bidTrackerRoutes,
       ...adminImportRoutes,

@@ -31,6 +31,7 @@ const TABS = [
   { value: 'payment', label: 'Payment Terms' },
   { value: 'boq', label: 'BoQ' },
   { value: 'queries', label: 'Queries' },
+  { value: 'competition', label: 'Competition' },
   { value: 'rfpTimeline', label: 'RFP Timeline' },
 ] as const
 type Tab = (typeof TABS)[number]['value']
@@ -91,11 +92,6 @@ export function BidDetailWorkspace() {
             )}
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
               <h1 className="font-display text-lg font-semibold text-ink-900">{row?.opportunityName ?? 'Bid'}</h1>
-              {row?.opportunityCode && (
-                <span title="Opportunity ID" className="rounded border border-line bg-panel px-1.5 py-px font-mono text-[12px] font-semibold text-goms-navy">
-                  {row.opportunityCode}
-                </span>
-              )}
               {row && <Badge tone={ATTENTION_TONE[row.attentionFlag]}>{ATTENTION_OPTIONS.find((o) => o.value === row.attentionFlag)?.label}</Badge>}
               {bid.status === 'archived' && <Badge tone="gray">Archived</Badge>}
             </div>

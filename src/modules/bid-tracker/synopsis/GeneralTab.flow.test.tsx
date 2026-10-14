@@ -26,14 +26,14 @@ async function makeBid(values?: GeneralValues) {
 describe('General tab lock-after-save', () => {
   beforeEach(() => resetLocalData())
 
-  it('opens an empty General tab straight in edit mode', async () => {
+  it('opens a new General tab ready to edit shared fields', async () => {
     const bid = await makeBid()
     wrap(<GeneralTab bidId={bid.id} />)
-    expect(await screen.findByRole('button', { name: /^Save$/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /^Done$/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Edit$/ })).not.toBeInTheDocument()
   })
 
-  it('shows saved values read-only until Edit is pressed, and Cancel locks them again', async () => {
+  it('shows saved values read-only until Edit is pressed, and Done ends editing', async () => {
     const bid = await makeBid({ tenderId: 'TND-77', procuringAuthority: 'BRCD' })
     wrap(<GeneralTab bidId={bid.id} />)
     const edit = await screen.findByRole('button', { name: /^Edit$/ })
@@ -44,7 +44,7 @@ describe('General tab lock-after-save', () => {
     expect(screen.getByRole('textbox', { name: 'Tender ID' })).toHaveValue('TND-77')
     expect(screen.getByRole('combobox', { name: 'Procuring Authority' })).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: /^Cancel$/ }))
+    await userEvent.click(screen.getByRole('button', { name: /^Done$/ }))
     expect(await screen.findByRole('button', { name: /^Edit$/ })).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Tender ID' })).not.toBeInTheDocument()
   })

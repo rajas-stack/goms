@@ -49,6 +49,7 @@ describe('saved views', () => {
     expect(screen.queryByText('Smart Transport Bids')).not.toBeInTheDocument()
     expect(screen.queryByText('High Value Deals > 20 Cr')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Create Saved View/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete selected view' })).toBeDisabled()
   })
 
   it('a system view applies its filter (Solutioning) and cannot be deleted', async () => {
@@ -145,7 +146,7 @@ describe('saved views', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderWorkspace()
     await userEvent.click(await screen.findByRole('button', { name: 'Temp' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Delete view Temp' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete selected view' }))
     await waitFor(async () => expect((await repository.listBidSavedViews()).some((v) => v.id === view.id)).toBe(false))
     await waitFor(() => expect(pill('All Bids')).toHaveAttribute('aria-pressed', 'true'))
   })

@@ -13,7 +13,7 @@ import { mergeTeamRosters } from './pre-sales-team'
 import { mergeOrgSeed, syncAllTeamsFromOrg, type OrgPerson } from './org-structure'
 import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
 import type { CommercialCalculatorData } from '@/modules/commercial-calculator/types'
-import type { BidSynopsis, TenderWebsite } from '@goms/domain'
+import type { BidSynopsis, Competitor, TenderWebsite } from '@goms/domain'
 import type { LocalMakerDocument } from './in-memory/makerDocuments'
 
 interface AdminState {
@@ -121,6 +121,8 @@ export interface GormsData {
   credentialPassphrases?: CredentialPassphrase[]
   /** Added in v24: tender portals saved in Settings (General tab dropdown). */
   tenderWebsites: TenderWebsite[]
+  /** Rival companies saved in Settings > Competitors. Optional: older snapshots simply lack it. */
+  competitors?: Competitor[]
 }
 
 export function buildSeed(): GormsData {
@@ -340,6 +342,6 @@ export function buildSeed(): GormsData {
     bids: [], bidSynopsis: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
     protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [],
     bidCustomFields: [], bidCustomFieldValues: [], tenderWebsites: [], credentialPassphrases: [],
-    makerDocuments: [],
+    makerDocuments: [], competitors: [],
   }
 }

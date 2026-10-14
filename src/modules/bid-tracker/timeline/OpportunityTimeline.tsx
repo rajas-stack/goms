@@ -15,7 +15,7 @@ import { ClusterList, EventInfo } from './TimelineDetails'
 import { TimelineHeader } from './TimelineHeader'
 import { formatTimelineDate, fromDay, toDay } from './timelineDates'
 import { activeMilestone, clusterEvents, domainSpan, todayFocusDay, todayPlacement, type EventCluster, type ZoomPreset } from './timelineMath'
-import type { IsoDate, Milestone, OpportunityTimeline as Timeline } from './types'
+import type { IsoDate, Milestone, OpportunityTimeline as Timeline, TimelineViewMode } from './types'
 import { useElementWidth, useViewportGestures } from './useViewportGestures'
 import { useTimelineViewport, type TimelineViewport } from './useTimelineViewport'
 
@@ -58,6 +58,16 @@ function defaultStage(milestones: Milestone[]): string | null {
   return (activeMilestone(milestones) ?? milestones.find((m) => m.status === 'UPCOMING') ?? milestones[milestones.length - 1])?.id ?? null
 }
 
+function filterByMode(timeline: Timeline, mode: TimelineViewMode): Pick<Timeline, 'milestones' | 'events'> {
+  if (mode === 'complete') return { milestones: timeline.milestones, events: timeline.events }
+  const kind = mode === 'sales-proactive' ? 'curatedOpportunity' : 'reactiveBid'
+  const milestones = mode === 'presales' ? timeline.milestones.filter(m => m.track === 'presales')
+    : timeline.salesWorkflows?.[kind] ?? timeline.milestones.filter(m => m.track === 'sales' && (!timeline.workflowKind || timeline.workflowKind === kind))
+  if (!timeline.milestones.some(m => m.track)) return { milestones: timeline.milestones, events: timeline.events }
+  const ids = new Set(milestones.map((m) => m.id))
+  return { milestones, events: timeline.events.filter((e) => !e.milestoneId || ids.has(e.milestoneId)) }
+}
+
 function Legend() {
   const item = 'flex items-center gap-2'
   return (
@@ -80,7 +90,8 @@ export function OpportunityTimeline({ timeline, today = isoToday(), isClosed = !
   const width = useElementWidth(frameRef)
   const vp = useTimelineViewport(timeline.startDate, timeline.endDate, width)
   const { dragging, handlers } = useViewportGestures(frameRef, vp)
-  const { milestones, events } = timeline
+  const [viewMode, setViewMode] = useState<TimelineViewMode>('complete')
+  const { milestones, events } = useMemo(() => filterByMode(timeline, viewMode), [timeline, viewMode])
   const [stageId, setStageId] = useState<string | null>(() => defaultStage(milestones))
   const [issue, setIssue] = useState<FocusTarget | null>(null)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
@@ -90,6 +101,11 @@ export function OpportunityTimeline({ timeline, today = isoToday(), isClosed = !
   const clusters = useMemo(() => clusterEvents(events, vp.pxPerDay, CLUSTER_GAP_PX), [events, vp.pxPerDay])
   const clusterById = useMemo(() => new Map<string, EventCluster>(clusters.map((c) => [c.id, c])), [clusters])
   const stage = milestones.find((m) => m.id === stageId) ?? milestones.find((m) => m.id === defaultStage(milestones))
+
+  useEffect(() => {
+    if (stageId && milestones.some((m) => m.id === stageId)) return
+    setStageId(defaultStage(milestones))
+  }, [milestones, stageId])
 
   useEffect(() => {
     if (!highlightedId) return
@@ -141,7 +157,18 @@ export function OpportunityTimeline({ timeline, today = isoToday(), isClosed = !
   return (
     <section aria-label="Opportunity lifecycle timeline" className={cn('min-w-0 space-y-3 rounded-2xl bg-panel/50 p-3 sm:p-4', className)}>
       <TimelineHeader rangeStart={rangeStart} rangeEnd={rangeEnd} endEstimated={!!timeline.endDateEstimated} outcome={timeline.outcome}
-        zoom={vp.zoom} onZoom={zoomTo} onToday={goToday} onStep={vp.step} />
+        viewMode={viewMode} onViewMode={setViewMode} zoom={vp.zoom} onZoom={zoomTo} onToday={goToday} onStep={vp.step} />
+
+      {viewMode === 'complete' && timeline.lifecycleStages && (
+        <ol aria-label="Opportunity journey" className="flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-line py-2.5 text-[12px]">
+          {timeline.lifecycleStages.map((item, index) => <li key={item.id} className="flex items-center gap-2">
+            {index > 0 && <Icon name="ChevronRight" size={14} className="text-muted" />}
+            <Icon name={item.status === 'COMPLETED' ? 'CircleCheck' : item.status === 'IN_PROGRESS' ? 'CircleDot' : 'Circle'} size={15} className={item.status === 'COMPLETED' ? 'text-emerald' : item.status === 'IN_PROGRESS' ? 'text-blue' : 'text-muted'} />
+            <span className="font-semibold text-ink-900">{item.name}</span>
+            <span className="text-muted">{item.actualStart ? `${formatTimelineDate(item.actualStart)}${item.actualEnd ? ` - ${formatTimelineDate(item.actualEnd)}` : ' onwards'}` : 'Not entered'}</span>
+          </li>)}
+        </ol>
+      )}
 
       <StageCards milestones={milestones} today={today} selectedId={stage?.id ?? null} highlightedId={highlightedId} onSelect={selectStage} />
 
@@ -166,7 +193,7 @@ export function OpportunityTimeline({ timeline, today = isoToday(), isClosed = !
             className={cn('absolute inset-y-0 left-0 will-change-transform', !dragging && 'transition-transform duration-300 ease-out motion-reduce:transition-none')}
             style={{ width: domainSpan(vp.domain) * vp.pxPerDay, transform: `translate3d(${-offsetPx}px,0,0)` }}
           >
-            <GanttLayer milestones={milestones} startDate={timeline.startDate} endDate={timeline.endDate} endEstimated={!!timeline.endDateEstimated}
+            <GanttLayer milestones={milestones} lifecycleStages={viewMode === 'complete' ? timeline.lifecycleStages : undefined} startDate={timeline.startDate} endDate={timeline.endDate} deadlineDate={timeline.deadlineDate} endEstimated={!!timeline.endDateEstimated}
               today={today} showToday={showToday} originDay={originDay} endDay={vp.domain.endDay} pxPerDay={vp.pxPerDay}
               viewStartDay={vp.view.startDay} viewSpanDays={vp.view.spanDays} selectedId={stage?.id ?? null}
               clusters={clusters} onSelectStage={selectStage} onSelect={setIssue} />

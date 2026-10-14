@@ -467,6 +467,9 @@ export interface BidGridRow extends Bid {
   attentionFlag: 'dueSoon' | 'overdue' | 'corrigendumPending' | 'onTrack'
   /** Active custom columns only, keyed by field `key`; absent = no value. */
   customValues: Record<string, CustomValue>
+  generalValues?: Record<string, string>
+  referenceNo?: string | null
+  assignmentName?: string | null
 }
 export interface BidMilestone {
   id: string; bidId: string; milestoneType: string; key: string; label: string

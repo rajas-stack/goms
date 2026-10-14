@@ -12,6 +12,7 @@ interface Props {
   children: ReactNode
   footer?: ReactNode
   size?: 'md' | 'lg' | 'xl'
+  className?: string
 }
 
 // `lg:`-prefixed so the max-width cap only ever applies at the desktop
@@ -24,7 +25,7 @@ const SIZE_CLASS: Record<NonNullable<Props['size']>, string> = {
   xl: 'lg:max-w-4xl',
 }
 
-export function Dialog({ open, onClose, title, description, children, footer, size = 'md' }: Props) {
+export function Dialog({ open, onClose, title, description, children, footer, size = 'md', className }: Props) {
   // Below `lg`, every dialog built on this component presents as a bottom
   // sheet (full-bleed width, anchored to the bottom edge, internal scroll
   // capped at 90vh) instead of the small centered modal — an additive
@@ -71,6 +72,7 @@ export function Dialog({ open, onClose, title, description, children, footer, si
               className={cn(
                 'relative flex max-h-[90vh] w-full flex-col overflow-hidden rounded-t-2xl border border-line bg-paper shadow-pop lg:mt-8 lg:max-h-none lg:overflow-visible lg:rounded-2xl',
                 SIZE_CLASS[size],
+                className,
               )}
               initial={isMobile ? { opacity: 0, y: 48 } : { opacity: 0, y: 16, scale: 0.98 }}
               animate={isMobile ? { opacity: 1, y: 0 } : { opacity: 1, y: 0, scale: 1 }}

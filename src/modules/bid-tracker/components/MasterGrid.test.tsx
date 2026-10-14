@@ -34,13 +34,13 @@ const shownOrder = (spy: ReturnType<typeof vi.fn>) => (spy.mock.calls[spy.mock.c
 
 const STANDARD_GROUPS = ['Identity', 'Client', 'Ownership', 'Decision', 'Dates', 'Documents', 'System']
 const REQUIRED_LEAVES: Record<string, string[]> = {
-  Identity: ['Opportunity ID', 'Opportunity / Mission', 'Opportunity Type', 'Bid ID', 'Tender ID', 'Tender Link'],
+  Identity: ['Opportunity / Mission', 'Opportunity Type', 'Bid ID', 'Tender ID', 'Reference/Bid No.', 'Name of Assignment', 'Tender Link'],
   Client: ['Department / Client', 'State', 'City', 'Sector'],
   Ownership: ['Geo-sales', 'BU-sales', 'Pre-sales', 'Legal', 'Bid', 'Bid Owner', 'Sales Lead / Solution Lead'],
   Decision: ['Bid Stage', 'Next Action', 'Action Owner', 'Action Due', 'Attention', 'Decision'],
   Dates: ['Next Milestone', 'Days Remaining', 'Submission Deadline'],
   Documents: ['Tender Files', 'Latest Corrigendum'],
-  System: ['Last Updated', 'Updated By', 'Data Confidence', 'Manage'],
+  System: ['Last Updated', 'Updated By', 'Data Confidence'],
 }
 
 // jsdom lays nothing out: every element measures 0x0, so @tanstack/react-virtual
@@ -103,15 +103,15 @@ describe('MasterGrid', () => {
   })
 
   describe('row data', () => {
-    it('shows the human-readable Opportunity ID as the details link, and searches by it', async () => {
-      await makeBid('Alpha')
+    it('uses Bid ID as the details link and removes Opportunity ID from search', async () => {
+      const bid = await makeBid('Alpha')
       await makeBid('Beta', { submissionDate: '2026-08-15' })
       renderGrid()
-      expect(await screen.findByRole('button', { name: 'Open FY99-Q4-NA-NA-NA-NA-NA-NA-1' })).toHaveTextContent('FY99-Q4-NA-NA-NA-NA-NA-NA-1')
-      expect(screen.getByRole('button', { name: 'Open FY27-Q2-NA-NA-NA-NA-NA-NA-1' })).toBeInTheDocument()
+      expect(await screen.findByRole('button', { name: 'Open ' + bid.bidCode })).toHaveTextContent(bid.bidCode)
+      expect(screen.queryByRole('button', { name: 'Sort by Opportunity ID' })).not.toBeInTheDocument()
       await userEvent.type(screen.getByRole('searchbox', { name: 'Search bids' }), 'FY27-Q2')
       await waitFor(() => expect(screen.queryByText('Alpha')).not.toBeInTheDocument())
-      expect(screen.getByText('Beta')).toBeInTheDocument()
+      expect(screen.queryByText('Beta')).not.toBeInTheDocument()
     })
 
     it('shows city, owner-facing fields and the Action Owner from the next open action', async () => {
@@ -135,14 +135,16 @@ describe('MasterGrid', () => {
       await makeBid('Beta')
       renderGrid()
       await screen.findByText('Alpha')
-      await userEvent.click(within(screen.getAllByTestId('bid-row')[0]).getByRole('button', { name: 'Archive' }))
+      await userEvent.click(within(screen.getByText('Alpha').closest('tr')!).getByRole('checkbox', { name: 'Select row' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Archive Selected' }))
       await waitFor(() => expect(rowNames()).toEqual(['Beta']))
       expect((await repository.getBid(bid.id))!.status).toBe('archived')
       const toggle = screen.getByRole('button', { name: /^Archived/ })
       expect(toggle).toHaveTextContent('1')
       await userEvent.click(toggle)
       await waitFor(() => expect(rowNames()).toEqual(['Alpha']))
-      await userEvent.click(screen.getByRole('button', { name: 'Unarchive' }))
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select row' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Unarchive Selected' }))
       await waitFor(() => expect(screen.getByTestId('grid-empty')).toHaveTextContent('Nothing archived in this sheet.'))
       await userEvent.click(screen.getByRole('button', { name: /^Archived/ }))
       await waitFor(() => expect(rowNames().sort()).toEqual(['Alpha', 'Beta']))
@@ -248,7 +250,7 @@ describe('MasterGrid', () => {
       await unlock()
       await screen.findByText('Alpha')
       // Department / Client and Next Action became inline-editable; these stay read-only.
-      for (const header of ['Tender ID', 'Submission Deadline', 'State', 'Next Milestone', 'Opportunity ID', 'Bid ID']) {
+      for (const header of ['Submission Deadline', 'Next Milestone', 'Bid ID']) {
         expect(screen.queryByRole('button', { name: `Edit ${header}` })).not.toBeInTheDocument()
       }
     })
@@ -494,7 +496,7 @@ describe('MasterGrid', () => {
       await screen.findByText('Alpha')
       await userEvent.click(screen.getByRole('button', { name: 'Sector column menu' }))
       const items = screen.getAllByRole('menuitem').map((m) => m.textContent?.trim())
-      expect(items).toEqual(['Sort ascending', 'Sort descending', 'Filter by this column', 'Freeze column'])
+      expect(items).toEqual(['Sort ascending', 'Sort descending', 'Filter by this column', 'Auto-fit column', 'Freeze column'])
     })
 
     it('Manage columns in the toolbar hides and restores a column; the header menu has no Manage item', async () => {
@@ -598,6 +600,56 @@ describe('MasterGrid', () => {
   })
 
   describe('selection and bulk actions', () => {
+    it('places favourites beside the opportunity, with no Manage column', async () => {
+      const bid = await makeBid('Alpha')
+      renderGrid()
+      await screen.findByText('Alpha')
+      expect(document.querySelector('th[data-col-id="manage"]')).toBeNull()
+      const star = screen.getByRole('button', { name: 'Add to favourites' })
+      expect(star.closest('td')).toHaveAttribute('data-cell', bid.id + ':opportunityName')
+      await unlock()
+      await userEvent.click(star)
+      expect(screen.getByRole('button', { name: 'Remove from favourites' })).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.queryByRole('textbox', { name: 'Opportunity / Mission' })).not.toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Remove from favourites' }))
+      expect(screen.getByRole('button', { name: 'Add to favourites' })).toHaveAttribute('aria-pressed', 'false')
+    })
+
+    it('confirms deletion of only checked bids and keeps their opportunities', async () => {
+      const bid = await makeBid('Alpha')
+      const untouched = await makeBid('Beta')
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+      renderGrid()
+      await screen.findByText('Alpha')
+      expect(screen.queryByRole('button', { name: 'Delete Selected' })).not.toBeInTheDocument()
+      await userEvent.click(within(screen.getByText('Alpha').closest('tr')!).getByRole('checkbox', { name: 'Select row' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Delete Selected' }))
+      expect(await repository.getBid(bid.id)).not.toBeNull()
+      confirm.mockReturnValue(true)
+      await userEvent.click(screen.getByRole('button', { name: 'Delete Selected' }))
+      await waitFor(() => expect(screen.queryByText('Alpha')).not.toBeInTheDocument())
+      expect(await repository.getBid(bid.id)).toBeNull()
+      expect(await repository.getBid(untouched.id)).not.toBeNull()
+      expect(await repository.getOpportunity(bid.opportunityId)).not.toBeNull()
+      expect(screen.queryByTestId('bulk-toolbar')).not.toBeInTheDocument()
+    })
+
+    it('keeps failed deletions selected while successful rows disappear', async () => {
+      const a = await makeBid('Alpha')
+      await makeBid('Beta')
+      vi.spyOn(window, 'confirm').mockReturnValue(true)
+      vi.spyOn(repository, 'deleteBid').mockRejectedValueOnce(new Error('Delete denied'))
+      renderGrid()
+      await screen.findByText('Alpha')
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Delete Selected' }))
+      await screen.findByRole('alert')
+      expect(screen.getByText('1 selected')).toBeInTheDocument()
+      expect(screen.getByRole('checkbox', { name: 'Select row' })).toBeChecked()
+      expect(await repository.getBid(a.id)).not.toBeNull()
+      expect(screen.queryByText('Beta')).not.toBeInTheDocument()
+    })
+
     it('shows the bulk toolbar only when rows are selected, and Archive Selected archives exactly those rows', async () => {
       const a = await makeBid('Alpha')
       await makeBid('Beta')

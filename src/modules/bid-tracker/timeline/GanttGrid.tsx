@@ -5,7 +5,7 @@ import type { FocusTarget } from './focus'
 import { GANTT } from './statusStyles'
 import { diffDays, formatShortDate, pluralDays, toDay } from './timelineDates'
 import { axisTicks, dayToX, type EventCluster } from './timelineMath'
-import type { IsoDate, Milestone } from './types'
+import type { IsoDate, Milestone, OpportunityLifecycleStage } from './types'
 
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 /** Space kept between a bar's end dot and the next bar's, so the dashed dependency shows. */
@@ -16,8 +16,10 @@ const DOT_ONLY_PX = 24
 
 interface LayerProps {
   milestones: Milestone[]
+  lifecycleStages?: OpportunityLifecycleStage[]
   startDate: IsoDate
   endDate: IsoDate
+  deadlineDate?: IsoDate
   endEstimated: boolean
   today: IsoDate
   showToday: boolean
@@ -135,17 +137,20 @@ export const GanttLayer = memo(function GanttLayer(p: LayerProps) {
   const todayDay = toDay(p.today)
   const inset = (w: number) => Math.min(BAR_INSET_PX, w / 4)
 
-  const planned = p.milestones.map((m) => {
+  const planned = p.milestones.filter((m) => m.planned !== false).sort((a, b) => a.plannedStart.localeCompare(b.plannedStart)).map((m) => {
     const l = x(m.plannedStart), r = x(m.plannedEnd)
     const i = inset(r - l)
     return { m, left: l + i, right: r - i }
   })
 
-  const actual = p.milestones.flatMap((m) => {
+  const journeyMilestones: Milestone[] = (p.lifecycleStages ?? []).filter(stage => stage.name !== 'Bid Tracker' && stage.actualStart).map(stage => ({
+    ...stage, sequence: 0, planned: false, plannedStart: p.startDate, plannedEnd: p.startDate, track: 'sales',
+  }))
+  const actual = [...journeyMilestones, ...p.milestones].sort((a, b) => (a.actualStart ?? '').localeCompare(b.actualStart ?? '')).flatMap((m) => {
     if (!m.actualStart) return []
     const endIso = m.actualEnd ?? p.today
     const ongoing = !m.actualEnd
-    const late = ongoing && todayDay > toDay(m.plannedEnd)
+    const late = ongoing && m.planned !== false && todayDay > toDay(m.plannedEnd)
     const l = x(m.actualStart), r = Math.max(x(endIso), l + 16)
     const i = inset(r - l)
     const days = Math.max(diffDays(m.actualStart, endIso), 0)
@@ -156,7 +161,8 @@ export const GanttLayer = memo(function GanttLayer(p: LayerProps) {
   // Milestone diamonds: completed stage ends, then today and the deadline. Chips that would overlap are dropped.
   const doneMarks = p.milestones.filter((m) => m.actualEnd && m.status === 'COMPLETED').map((m) => ({ id: m.id, x: x(m.actualEnd!), date: m.actualEnd! }))
   const todayX = dayToX(todayDay, p.originDay, p.pxPerDay)
-  const endX = x(p.endDate)
+  const deadline = p.deadlineDate ?? p.endDate
+  const endX = x(deadline)
   const reserved = [p.showToday ? todayX : null, endX].filter((v): v is number => v !== null)
   let lastChip = -Infinity
   // A completion diamond sitting on the Today / Deadline diamond would hide it: drop it.
@@ -176,6 +182,11 @@ export const GanttLayer = memo(function GanttLayer(p: LayerProps) {
       <span aria-hidden className="absolute inset-x-0 border-t border-line/70" style={{ top: msTop }} />
 
       {/* Planned */}
+      {planned.length === 0 && (
+        <span className="absolute flex items-center px-3 text-[12px] font-semibold text-muted" style={{ left: 0, top: plannedTop, height: GANTT.rowH }}>
+          No fixed planned timeline for this view
+        </span>
+      )}
       {planned.map((b, i) => (
         <span key={b.m.id}>
           {i > 0 && <Dashed from={planned[i - 1].right + 6} to={b.left - 6} top={plannedTop} className="border-blue/50" />}
@@ -198,7 +209,7 @@ export const GanttLayer = memo(function GanttLayer(p: LayerProps) {
         </span>
       ))}
       {/* Upcoming: grey dashed placeholders on the actual row */}
-      {p.milestones.filter((m) => !m.actualStart).map((m) => {
+      {p.milestones.filter((m) => m.planned !== false && !m.actualStart).map((m) => {
         const l = Math.max(x(m.plannedStart), (lastActualRight ?? -Infinity) + 6), r = x(m.plannedEnd)
         if (r - l < 8) return null
         return (
@@ -224,7 +235,7 @@ export const GanttLayer = memo(function GanttLayer(p: LayerProps) {
       <span className="absolute" style={{ left: endX, top: msTop + 22 }} data-testid="deadline-marker">
         <Diamond className="absolute -translate-x-1/2 border-2 border-white bg-edge shadow" size={13} />
         <span className="neu-raised-sm absolute -top-1.5 right-3 whitespace-nowrap rounded-md px-1.5 py-0.5 text-right text-[10px] font-semibold leading-tight text-ink-900">
-          {formatShortDate(p.endDate)}<br /><span className="font-medium text-muted">{p.endEstimated ? 'Est. end' : 'Deadline'}</span>
+          {formatShortDate(deadline)}<br /><span className="font-medium text-muted">{p.endEstimated ? 'Est. end' : 'Deadline'}</span>
         </span>
       </span>
 

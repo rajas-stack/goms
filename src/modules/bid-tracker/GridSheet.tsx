@@ -23,6 +23,8 @@ export function GridSheet({ sheet }: { sheet: SheetId }) {
   // Editing or deleting a GLOBAL view needs the right to manage columns; personal views are the user's own (gap A3).
   const canManageGlobalViews = useAllowed('bid.columns', 'update')
   const [activeViewId, setActiveViewId] = useState(DEFAULT_VIEW_ID)
+  const activeViewIdRef = useRef(activeViewId)
+  activeViewIdRef.current = activeViewId
   // The grid's working copy. Switching views replaces it from the view; editing
   // it changes only this copy — and, for a USER view, is persisted back (spec
   // §8). System views have no row to persist into, so edits there are
@@ -30,6 +32,7 @@ export function GridSheet({ sheet }: { sheet: SheetId }) {
   const [rules, setRules] = useState<FilterNode[]>([])
   const [visibleColumns, setVisibleColumns] = useState<string[] | undefined>(() => readSystemColumns(sheet, DEFAULT_VIEW_ID))
   const [createOpen, setCreateOpen] = useState(false)
+  const [viewError, setViewError] = useState<string | null>(null)
   // Master only: which sheet's columns to look at (default: every sheet's, together).
   const [scope, setScope] = useState<MasterScope>('all')
 
@@ -73,9 +76,13 @@ export function GridSheet({ sheet }: { sheet: SheetId }) {
   const onDelete = (id: string) => {
     if (views.find((v) => v.id === id)?.scope === 'global' && !canManageGlobalViews) return
     if (!window.confirm('Delete this saved view?')) return
+    setViewError(null)
     if (pending.current?.id === id) { clearTimeout(persistTimer.current); pending.current = null } // nothing to save into a deleted view
     // Only leave the current view when that is the one deleted.
-    remove.mutate(id, { onSuccess: () => { if (id === activeViewId) selectView(DEFAULT_VIEW_ID) } })
+    remove.mutate(id, {
+      onSuccess: () => { if (id === activeViewIdRef.current) selectView(DEFAULT_VIEW_ID) },
+      onError: error => setViewError(error instanceof Error ? error.message : 'Could not delete the view.'),
+    })
   }
 
   return (
@@ -83,7 +90,10 @@ export function GridSheet({ sheet }: { sheet: SheetId }) {
       <SavedViewTabs
         sheet={sheet} activeViewId={activeViewId} onChange={(id) => selectView(id)}
         onCreateNew={() => setCreateOpen(true)} onDelete={onDelete} modifiedViewId={modifiedViewId}
+        canDelete={id => views.find(view => view.id === id)?.scope !== 'global' || canManageGlobalViews}
+        deleting={remove.isPending}
       />
+      {viewError && <p role="alert" className="border-b border-line px-3 py-2 text-sm text-crimson">{viewError}</p>}
       <div className="min-h-0 flex-1 overflow-hidden">
         <MasterGrid
           sheet={sheet}

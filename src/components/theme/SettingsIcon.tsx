@@ -1,4 +1,4 @@
-export type SettingsIconKind = 'storage' | 'tender' | 'verification' | 'credentials' | 'integrations'
+export type SettingsIconKind = 'storage' | 'tender' | 'verification' | 'credentials' | 'integrations' | 'competitors'
 
 /** A consistent navy, partially filled symbol for each settings area. */
 export function SettingsIcon({ kind }: { kind: SettingsIconKind }) {
@@ -39,6 +39,13 @@ export function SettingsIcon({ kind }: { kind: SettingsIconKind }) {
           <path d="M9 10h6M9 13h3" />
           <path d="M6 15h12v5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-5Z" fill="currentColor" stroke="none" />
           <path d="m9 17.5 2 2 4-4" stroke="#fff" strokeWidth={1.5} />
+        </>}
+        {kind === 'competitors' && <>
+          <path d="M4 20v-8h5v8" fill="currentColor" fillOpacity={.1} />
+          <path d="M9.5 20V5h5v15" fill="currentColor" />
+          <path d="M15 20v-5h5v5" fill="currentColor" fillOpacity={.1} />
+          <path d="M3 20.5h18" />
+          <path d="m12 7.6.7 1.4 1.5.2-1.1 1 .3 1.5-1.4-.7-1.4.7.3-1.5-1.1-1 1.5-.2Z" fill="#fff" stroke="none" />
         </>}
       </svg>
     </span>

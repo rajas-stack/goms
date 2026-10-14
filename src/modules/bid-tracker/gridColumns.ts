@@ -4,12 +4,12 @@
 // custom — is described by the same `GridColumnMeta`, so sorting, filtering,
 // search, visibility/order and saved views all work off one shape.
 import {
-  BID_STAGES, ENTITY_FIELD_TYPES, OPPORTUNITY_TYPES, OWNED_SHEETS, OWNED_SHEET_LABELS, flattenRules, parseMultiValue,
-  type CustomFieldType, type FilterNode, type TypedFilterRule,
+  BID_STAGES, ENTITY_FIELD_TYPES, GENERAL_FIELDS, OPPORTUNITY_TYPES, OWNED_SHEETS, OWNED_SHEET_LABELS, flattenRules, parseMultiValue,
+  type CustomFieldType, type FilterNode, type GeneralField, type TypedFilterRule,
 } from '@goms/domain'
 import type { BidCustomField, BidGridRow, DeliveryTeamKey, DeliveryTeamMember } from '@/lib/types'
 
-export type GridGroupId = 'identity' | 'client' | 'ownership' | 'decision' | 'dates' | 'documents' | 'system' | 'custom'
+export type GridGroupId = 'identity' | 'client' | 'ownership' | 'decision' | 'dates' | 'documents' | 'system' | 'general' | 'custom'
 
 /** The seven required groups, in spec §8 order. The Custom group always
  *  follows them and is not part of this list (it only exists when there are
@@ -22,6 +22,7 @@ export const GRID_GROUPS: { id: GridGroupId; label: string }[] = [
   { id: 'dates', label: 'Dates' },
   { id: 'documents', label: 'Documents' },
   { id: 'system', label: 'System' },
+  { id: 'general', label: 'General' },
 ]
 export const CUSTOM_GROUP = { id: 'custom' as const, label: 'Custom' }
 
@@ -37,11 +38,11 @@ export interface ColumnOption {
 
 export interface GridColumnMeta {
   /** Stable id: the `BidGridRow` key for a standard column (also the filter
-   *  `field`), `custom:<key>` for a custom one, `manage` for the actions cell. */
+   *  `field`), `general:<key>` or `custom:<key>` for a shared field. */
   id: string
   header: string
   group: GridGroupId
-  /** null = not a data column (Manage): not sortable/filterable/searchable. */
+  /** A column's data type controls sorting, filtering, and its editor. */
   type: CustomFieldType | null
   /** Fixed choices for a `select` / `multiselect` column (standard enums, or a
    *  custom field's options). Entity types (person, department, state) take
@@ -53,15 +54,13 @@ export interface GridColumnMeta {
    *  `solutionLead` records a new Sales/Solution Lead assignment; `nextAction`
    *  replaces the bid's open follow-up; `verify` marks the bid verified.
    *  Everything else is read-only here. */
-  editable?: 'opportunity' | 'custom' | 'owner' | 'bid' | 'department' | 'solutionLead' | 'nextAction' | 'verify'
+  editable?: 'opportunity' | 'custom' | 'general' | 'owner' | 'bid' | 'department' | 'solutionLead' | 'nextAction' | 'verify'
+  generalField?: GeneralField
   /** Pick-list source when the cell's stored value is not what the list shows:
    *  `personByEmail` = Sales Team by email (the list shows names); `department` = live departments by id. */
   pick?: 'personByEmail' | 'department'
   /** Row field the editor reads when it differs from the displayed one (Department / Client edits `departmentId`). */
   editKey?: keyof BidGridRow
-  /** Read-only by default, but a user may unlock the column (per sheet) to edit it through this
-   *  write path. Interim per-browser switch until role-based access decides who may. */
-  unlockable?: 'opportunity'
   /** Roster source for a role assignment person field. */
   teamKey?: 'sales' | DeliveryTeamKey
   /** Why a standard column is NOT inline-editable (shown as its tooltip). Every
@@ -94,8 +93,6 @@ const CORRIGENDUM_OPTIONS: ColumnOption[] = [
 const std = (id: string, header: string, group: GridGroupId, type: CustomFieldType | null, extra: Partial<GridColumnMeta> = {}): GridColumnMeta =>
   ({ id, header, group, type, ...extra })
 
-const PROTECTED = "Protected value — changed through the bid's Protected Values / corrigendum flow"
-const FROM_DEPARTMENT = "Comes from the opportunity's department — change it in Account Mapping"
 const FROM_FOLLOW_UP = "Comes from the bid's open follow-up — edit it in the bid"
 
 /** Every standard leaf column named by spec §8, in display order — and its
@@ -105,12 +102,13 @@ const FROM_FOLLOW_UP = "Comes from the bid's open follow-up — edit it in the b
  *  corrigendum-controlled values, workflow-controlled fields (stage, decision,
  *  ownership) and anything whose source of truth is another entity. */
 export const STANDARD_COLUMNS: GridColumnMeta[] = [
-  std('opportunityId', 'Opportunity ID', 'identity', 'text', { readOnlyReason: 'Generated identifier' }),
   std('opportunityName', 'Opportunity / Mission', 'identity', 'text', { editable: 'opportunity', required: true }),
   std('opportunityType', 'Opportunity Type', 'identity', 'select', { options: OPPORTUNITY_TYPE_OPTIONS, editable: 'opportunity' }),
   std('bidCode', 'Bid ID', 'identity', 'text', { readOnlyReason: 'Generated identifier' }),
-  // Unlockable: the opportunity update still refuses a value frozen by the Protected Values flow.
-  std('gemTenderId', 'Tender ID', 'identity', 'text', { readOnlyReason: PROTECTED, unlockable: 'opportunity' }),
+  // The opportunity update still rejects a value frozen by the Protected Values flow.
+  std('gemTenderId', 'Tender ID', 'identity', 'text', { editable: 'opportunity', generalField: GENERAL_FIELDS.find(field => field.key === 'tenderId') }),
+  std('referenceNo', 'Reference/Bid No.', 'identity', 'text', { editable: 'opportunity', generalField: GENERAL_FIELDS.find(field => field.key === 'referenceNo') }),
+  std('assignmentName', 'Name of Assignment', 'identity', 'text', { editable: 'opportunity', generalField: GENERAL_FIELDS.find(field => field.key === 'assignmentName') }),
   // Edits go through bids.update, which refuses a frozen (protected) value with its own message.
   std('tenderLink', 'Tender Link', 'identity', 'text', { editable: 'bid' }),
   // Which sheet the row lives in. Shown on Master; hidden by default on the other sheets (every row there is theirs).
@@ -118,7 +116,7 @@ export const STANDARD_COLUMNS: GridColumnMeta[] = [
 
   // Picking a department also moves the opportunity's State to that department's.
   std('departmentName', 'Department / Client', 'client', 'text', { editable: 'department', pick: 'department', editKey: 'departmentId', required: true }),
-  std('stateCode', 'State', 'client', 'state', { readOnlyReason: FROM_DEPARTMENT, unlockable: 'opportunity' }),
+  std('stateCode', 'State', 'client', 'state', { editable: 'opportunity' }),
   std('city', 'City', 'client', 'text', { editable: 'opportunity' }),
   std('vertical', 'Sector', 'client', 'text', { editable: 'opportunity' }),
 
@@ -152,20 +150,19 @@ export const STANDARD_COLUMNS: GridColumnMeta[] = [
   std('updatedBy', 'Updated By', 'system', 'text', { readOnlyReason: 'System field' }),
   // Only "Verified" can be chosen by hand; Needs Review is set by corrigenda and imports.
   std('dataConfidence', 'Data Confidence', 'system', 'select', { options: CONFIDENCE_OPTIONS, editable: 'verify', required: true }),
-  std('manage', 'Manage', 'system', null, { readOnlyReason: 'Row action' }),
 ]
 
 /** Fixed pixel widths. The grid is a `table-layout: fixed` sheet: with auto
  *  layout the browser re-measures every column as rows scroll in and out of the
  *  virtualized window, so columns would jitter sideways while scrolling. */
 const WIDTH_BY_ID: Record<string, number> = {
-  opportunityId: 260, opportunityName: 280, opportunityType: 150, bidCode: 120, gemTenderId: 190, tenderLink: 100, sheet: 170,
+  opportunityName: 280, opportunityType: 150, bidCode: 120, gemTenderId: 190, tenderLink: 100, sheet: 170,
   departmentName: 240, stateCode: 130, city: 130, vertical: 140,
   geoSalesPersonId: 180, buSalesPersonId: 180, preSalesPersonId: 180, legalPersonId: 180, bidTeamMemberId: 180,
   ownerEmail: 210, solutionLeadEmail: 230,
   stageKey: 150, nextActionNote: 220, nextActionAssigneeEmail: 210, nextActionDueDate: 120, attentionFlag: 170, decision: 110,
   nextMilestoneLabel: 180, daysRemaining: 130, submissionDate: 160, documentCount: 110, latestCorrigendumStatus: 170,
-  updatedAt: 150, updatedBy: 170, dataConfidence: 150, manage: 130,
+  updatedAt: 150, updatedBy: 170, dataConfidence: 150,
 }
 const WIDTH_BY_TYPE: Record<string, number> = {
   text: 170, number: 120, date: 130, select: 150, boolean: 110,
@@ -198,7 +195,14 @@ export function resolveColumns(customFields: BidCustomField[]): GridColumnMeta[]
     .filter((f) => f.status === 'active')
     .sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt))
     .map(customColumnMeta)
-  return [...STANDARD_COLUMNS, ...custom]
+  const linked = new Set(STANDARD_COLUMNS.flatMap(column => column.generalField ? [column.generalField.key] : []))
+  const general: GridColumnMeta[] = GENERAL_FIELDS.filter(field => !linked.has(field.key)).map(field => ({
+    id: `general:${field.key}`, header: field.label, group: 'general',
+    type: field.kind === 'date' || field.kind === 'datetime' ? 'date' : field.kind === 'select' ? 'select' : field.kind === 'url' ? 'url' : 'text',
+    options: field.options?.map(option => ({ value: option, label: option })),
+    editable: 'general', generalField: field,
+  }))
+  return [...STANDARD_COLUMNS, ...general, ...custom]
 }
 
 const HIDDEN_COLUMN_PREFIX = '~hidden:'
@@ -247,8 +251,7 @@ export function setColumnVisibility(all: GridColumnMeta[], saved: string[] | und
  *  other sheet every row is that sheet's, so the column would say nothing).
  *  `undefined` = "every column" (the plain default). */
 export function defaultVisibleColumnIds(all: GridColumnMeta[], sheet: string): string[] | undefined {
-  if (sheet === 'master' || !all.some((c) => c.id === 'sheet')) return undefined
-  return setColumnVisibility(all, undefined, 'sheet', false)
+  return all.map(column => (column.group === 'general' || (sheet !== 'master' && column.id === 'sheet')) ? `${HIDDEN_COLUMN_PREFIX}${column.id}` : column.id)
 }
 
 export function showAllColumnIds(all: GridColumnMeta[], saved: string[] | undefined): string[] {
@@ -345,9 +348,7 @@ export const isEmptyCell = (v: unknown) => v === null || v === undefined || v ==
 
 export function cellValue(row: BidGridRow, col: GridColumnMeta): unknown {
   if (col.custom) return row.customValues?.[col.custom.key]
-  // The Opportunity ID column shows the human-readable code (the raw id only for
-  // a row that has none yet) — so search, sort and export all work on the code.
-  if (col.id === 'opportunityId') return row.opportunityCode || row.opportunityId
+  if (col.editable === 'general' && col.generalField) return row.generalValues?.[col.generalField.key]
   return (row as unknown as Record<string, unknown>)[col.id]
 }
 

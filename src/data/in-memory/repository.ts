@@ -11,13 +11,15 @@ import type {
 import type { MyAccess } from '../../../apps/api/src/routers/auth'
 import type { EffectivePermissions, OverrideHistoryFilter, OverrideHistoryRow, PermissionMatrix, UnmatchedOverride } from '../accessTypes'
 import { uid } from '@/lib/utils'
-import { PROTECTED_VALUES_ENFORCED, validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type SaveBidSynopsisInput } from '@goms/domain'
+import { PROTECTED_VALUES_ENFORCED, documentToGeneral, updateGeneralDocument, validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type SaveBidSynopsisInput } from '@goms/domain'
 import { downloadName, MIME_FOR_FILE_TYPE, type MakerDocument, type MakerDocumentKind } from '@goms/domain'
 import {
   base64ToBytes, createLocal, duplicateLocal, LOCAL_OWNER, MakerEditorUnavailable, renameLocal, replaceLocal, requireLocal, toPublic, uploadLocal,
   type LocalMakerDocument, type MakerDownload, type MakerEditorSession, type MakerOwner,
 } from './makerDocuments'
 import { assertUniqueTenderWebsiteName, normalizeTenderWebsiteInput, tenderWebsiteKind, type TenderWebsite, type TenderWebsiteInput, type TenderWebsiteKind, type TenderDscEmployee } from '@goms/domain'
+import type { Competitor, CompetitorInput } from '@goms/domain'
+import { cloneCompetitor, createCompetitorLocal, deleteCompetitorLocal, listCompetitorsLocal, updateCompetitorLocal } from './competitors'
 import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType } from '@/lib/node-types'
 import {
@@ -600,6 +602,11 @@ export interface Repository {
   updateTenderWebsite(id: string, input: TenderWebsiteInput): Promise<TenderWebsite>
   setTenderWebsiteEditingLock(id: string, locked: boolean): Promise<TenderWebsite>
   deleteTenderWebsite(id: string): Promise<void>
+  /** Rival companies managed in Settings > Competitors, sorted by name. */
+  listCompetitors(): Promise<Competitor[]>
+  createCompetitor(input: CompetitorInput): Promise<Competitor>
+  updateCompetitor(id: string, input: CompetitorInput): Promise<Competitor>
+  deleteCompetitor(id: string): Promise<void>
 
   listBidMilestones(bidId: string): Promise<BidMilestone[]>
   listAllBidMilestones(): Promise<BidMilestoneWithBid[]>
@@ -754,6 +761,7 @@ class InMemoryRepository implements Repository {
       // Websites saved before Settings had a verification page are tender portals.
       credentialPassphrases: data.credentialPassphrases ?? [],
       tenderWebsites: (data.tenderWebsites ?? []).map(site => ({ ...site, kind: tenderWebsiteKind(site) })),
+      competitors: data.competitors ?? [],
     }
     // `mergeAudit` postdates some locally persisted snapshots (the static
     // type says it's always there, but a snapshot saved before this field
@@ -1458,14 +1466,25 @@ class InMemoryRepository implements Repository {
     const bidOfOpp = this.data.bids.find((b) => b.opportunityId === id)
     if (bidOfOpp) this.assertNotProtected(bidOfOpp.id, (['valueAmount', 'emdAmount', 'gemTenderId'] as const).filter((f) => f in patch))
     const previousStage = opp.stageKey
-    const before = { opportunityName: opp.opportunityName, city: opp.city, vertical: opp.vertical, opportunityType: opp.opportunityType }
+    const historyFields = ['opportunityName', 'city', 'vertical', 'opportunityType', 'gemTenderId', 'referenceNo', 'assignmentName', 'stateCode'] as const
+    const before = new Map(historyFields.map(field => [field, opp[field]]))
     Object.assign(opp, patch)
+    if (bidOfOpp) {
+      const general = this.data.bidSynopsis.find(section => section.bidId === bidOfOpp.id && section.section === 'general')
+      for (const [property, key] of [['gemTenderId', 'tenderId'], ['referenceNo', 'referenceNo'], ['assignmentName', 'assignmentName']] as const) {
+        if (general && patch[property] !== undefined) {
+          general.document = updateGeneralDocument(general.document, key, patch[property] ?? '')
+          general.revision += 1
+          general.updatedAt = new Date().toISOString()
+        }
+      }
+    }
     // Inline grid edits are part of the bid's history (mirrors opportunities.update).
     if (bidOfOpp) {
       let changed = false
-      for (const f of ['opportunityName', 'city', 'vertical', 'opportunityType'] as const) {
+      for (const f of historyFields) {
         if (!(f in patch)) continue
-        const was = String(before[f] ?? ''); const now = String(opp[f] ?? '')
+        const was = String(before.get(f) ?? ''); const now = String(opp[f] ?? '')
         if (was === now) continue
         changed = true
         this.auditCustom({ entityType: 'bid', entityId: bidOfOpp.id, field: f, oldValue: was, newValue: now, action: 'update' })
@@ -1676,6 +1695,7 @@ class InMemoryRepository implements Repository {
 
   async listBidsForGrid(filterRules: SystemBidViewFilterRule[] = []) {
     const today = isoToday()
+    const generalByBid = new Map(this.data.bidSynopsis.filter(section => section.section === 'general').map(section => [section.bidId, documentToGeneral(section.document)]))
     const owners = buildOwnerMap(
       this.data.ownershipAssignments, 'bid', this.data.bids.map((b) => b.id), today, this.ownershipContext(),
     )
@@ -1723,7 +1743,9 @@ class InMemoryRepository implements Repository {
         stateCode: opp?.stateCode ?? null,
         city: opp?.city ?? null,
         opportunityName: opp?.opportunityName ?? '',
-        gemTenderId: opp?.gemTenderId ?? '',
+        gemTenderId: opp?.gemTenderId || generalByBid.get(bid.id)?.tenderId || '',
+        referenceNo: opp?.referenceNo || generalByBid.get(bid.id)?.referenceNo || '',
+        assignmentName: opp?.assignmentName || generalByBid.get(bid.id)?.assignmentName || '',
         submissionDate: opp?.submissionDate ?? '',
         valueAmount: opp?.valueAmount ?? '',
         valueUnit: opp?.valueUnit ?? '',
@@ -1755,6 +1777,7 @@ class InMemoryRepository implements Repository {
         updatedBy: null,
         attentionFlag: this.attentionFor(bid.id),
         customValues: customValuesByBid.get(bid.id) ?? {},
+        generalValues: generalByBid.get(bid.id) ?? {},
       }
     })
     // Local dev has no signed-in user, so "$currentUser" never matches.
@@ -2111,6 +2134,27 @@ class InMemoryRepository implements Repository {
     const updated = { ...existing, editingLocked: locked, updatedAt: new Date().toISOString() }
     this.data.tenderWebsites = this.data.tenderWebsites.map(site => site.id === id ? updated : site)
     return { ...updated }
+  }
+
+  // --- Competitors (logic in ./competitors; every change replaces the array) ----------------------
+  async listCompetitors(): Promise<Competitor[]> {
+    return listCompetitorsLocal(this.data.competitors ?? [])
+  }
+
+  async createCompetitor(input: CompetitorInput): Promise<Competitor> {
+    const { items, created } = createCompetitorLocal(this.data.competitors ?? [], input)
+    this.data.competitors = items
+    return cloneCompetitor(created)
+  }
+
+  async updateCompetitor(id: string, input: CompetitorInput): Promise<Competitor> {
+    const { items, updated } = updateCompetitorLocal(this.data.competitors ?? [], id, input)
+    this.data.competitors = items
+    return cloneCompetitor(updated)
+  }
+
+  async deleteCompetitor(id: string): Promise<void> {
+    this.data.competitors = deleteCompetitorLocal(this.data.competitors ?? [], id)
   }
 
   async listAllBidMilestones(): Promise<BidMilestoneWithBid[]> {
@@ -3297,6 +3341,7 @@ const MUTATOR_KEYS = [
   'saveBidSynopsis',
   'createMakerDocument', 'uploadMakerDocument', 'replaceMakerDocument', 'renameMakerDocument', 'duplicateMakerDocument', 'deleteMakerDocument',
   'createTenderWebsite', 'updateTenderWebsite', 'deleteTenderWebsite', 'setTenderWebsiteEditingLock',
+  'createCompetitor', 'updateCompetitor', 'deleteCompetitor',
   'createDeliveryTeamMember', 'updateDeliveryTeamMember', 'setDeliveryTeamMemberStatus', 'deleteDeliveryTeamMember',
   'createOrgPerson', 'updateOrgPerson', 'deleteOrgPerson',
   'createNode', 'updateNode', 'setNodeStatus', 'deleteNode', 'moveNode', 'duplicateNode',
@@ -3326,7 +3371,7 @@ const MUTATOR_KEYS = [
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
  *  "classified as a read" apart from "nobody classified it". */
 const READER_KEYS = [
-  'listCredentialPassphrases', 'getBidSynopsis', 'listTenderWebsites', 'listTenderDscEmployees',
+  'listCredentialPassphrases', 'getBidSynopsis', 'listTenderWebsites', 'listTenderDscEmployees', 'listCompetitors',
   'listMakerDocuments', 'getMakerEditorSession', 'getMakerDownload',
   'listDeliveryTeamMembers', 'listOrgPeople',
   'listStates', 'getState', 'getNode', 'listChildren', 'listOrgRoots', 'listDepartments', 'listPostingNodes',

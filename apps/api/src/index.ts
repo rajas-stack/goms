@@ -24,6 +24,7 @@ import { orgPeopleRouter } from './routers/orgPeople.js'
 import { authRouter } from './routers/auth.js'
 import { accessRouter } from './routers/access.js'
 import { tenderWebsitesRouter } from './routers/tenderWebsites.js'
+import { competitorsRouter } from './routers/competitors.js'
 import { credentialPassphrasesRouter } from './routers/credentialPassphrases.js'
 import { googleIntegrationsRouter } from './routers/googleIntegrations.js'
 import { makerDocumentsRouter } from './routers/makerDocuments.js'
@@ -41,6 +42,7 @@ export const appRouter = router({
   orgPeople: orgPeopleRouter,
   auth: authRouter, access: accessRouter,
   tenderWebsites: tenderWebsitesRouter,
+  competitors: competitorsRouter,
   credentialPassphrases: credentialPassphrasesRouter,
   googleIntegrations: googleIntegrationsRouter,
   makerDocuments: makerDocumentsRouter,
