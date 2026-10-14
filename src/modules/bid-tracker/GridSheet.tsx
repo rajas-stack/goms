@@ -44,7 +44,7 @@ export function GridSheet({ sheet }: { sheet: SheetId }) {
   const modifiedViewId = activeView?.isSystem
     && normalize(pruneFilterNodes(rules, isRuleComplete)) !== normalize(activeView.filterRules)
     ? activeView.id : null
-  const persistTimer = useRef<ReturnType<typeof setTimeout>>()
+  const persistTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   // The latest unsent edit. Switching views or unmounting FLUSHES it rather than
   // cancelling the timer, so a change made just before leaving is never lost.
   const pending = useRef<{ id: string; patch: { filterRules: FilterNode[]; visibleColumns: string[] } } | null>(null)

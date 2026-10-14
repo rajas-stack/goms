@@ -81,12 +81,12 @@ export const hierarchyRouter = router({
     return result.rows[0] ? toNode(result.rows[0]) : null
   }),
 
-  getNode: rbacReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+  getNode: rbacReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query(`SELECT * FROM hierarchy_nodes WHERE id = $1`, [input.id])
     return result.rows[0] ? toNode(result.rows[0]) : null
   }),
 
-  listChildren: rbacReadProcedure.input(z.object({ parentId: z.string().uuid() })).query(({ input }) =>
+  listChildren: rbacReadProcedure.input(z.object({ parentId: z.string().guid('Invalid UUID') })).query(({ input }) =>
     activeChildren(input.parentId)
   ),
 
@@ -115,11 +115,11 @@ export const hierarchyRouter = router({
     return result.rows.map(toNode)
   }),
 
-  breadcrumb: rbacReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) =>
+  breadcrumb: rbacReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(({ input }) =>
     fetchBreadcrumb(input.id)
   ),
 
-  childCount: rbacReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+  childCount: rbacReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query(`SELECT COUNT(*)::int AS n FROM hierarchy_nodes WHERE parent_id=$1 AND status='active'`, [input.id])
     return result.rows[0].n
   }),
@@ -129,7 +129,7 @@ export const hierarchyRouter = router({
     return result.rows[0] ? toNode(result.rows[0]) : null
   }),
 
-  childCounts: rbacReadProcedure.input(z.object({ parentId: z.string().uuid() })).query(async ({ input }) => {
+  childCounts: rbacReadProcedure.input(z.object({ parentId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const children = await activeChildren(input.parentId)
     const out: Record<string, number> = {}
     for (const c of children) {
@@ -141,8 +141,8 @@ export const hierarchyRouter = router({
 
   createNode: protectedProcedure
     .input(z.object({
-      domain: domainSchema, typeKey: z.string().min(1), parentId: z.string().uuid().nullable(),
-      stateCode: z.number().int().nullable(), name: z.string().min(1), metadata: z.record(z.string()).optional(),
+      domain: domainSchema, typeKey: z.string().min(1), parentId: z.string().guid('Invalid UUID').nullable(),
+      stateCode: z.number().int().nullable(), name: z.string().min(1), metadata: z.record(z.string(), z.string()).optional(),
     }))
     .mutation(async ({ input }) => {
       // One transaction for every type: the branch dedup's advisory lock is
@@ -163,7 +163,7 @@ export const hierarchyRouter = router({
     }),
 
   updateNode: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), patch: z.object({ name: z.string().min(1).optional(), metadata: z.record(z.string()).optional() }) }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), patch: z.object({ name: z.string().min(1).optional(), metadata: z.record(z.string(), z.string()).optional() }) }))
     .mutation(async ({ input }) => {
       const sets: string[] = []
       const values: any[] = []
@@ -178,13 +178,13 @@ export const hierarchyRouter = router({
     }),
 
   setNodeStatus: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), status: z.enum(['active', 'archived']) }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), status: z.enum(['active', 'archived']) }))
     .mutation(async ({ input }) => {
       const ids = await subtreeIds(input.id)
       await pool.query(`UPDATE hierarchy_nodes SET status=$1, updated_at=now() WHERE id = ANY($2)`, [input.status, ids])
     }),
 
-  deleteNode: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  deleteNode: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     const ids = await subtreeIds(input.id)
     const client = await pool.connect()
     try {
@@ -226,7 +226,7 @@ export const hierarchyRouter = router({
   }),
 
   moveNode: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), newParentId: z.string().uuid().nullable() }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), newParentId: z.string().guid('Invalid UUID').nullable() }))
     .mutation(async ({ input }) => {
       const client = await pool.connect()
       try {
@@ -270,7 +270,7 @@ export const hierarchyRouter = router({
       }
     }),
 
-  duplicateNode: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  duplicateNode: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     const ids = await subtreeIds(input.id)
     // `= ANY` returns rows in arbitrary order, but a child's INSERT needs its parent's clone to
     // exist first (parent_id FK). subtreeIds walks parent-before-child, so insert in ITS order.
@@ -304,7 +304,7 @@ export const hierarchyRouter = router({
   }),
 
   importChildren: protectedProcedure
-    .input(z.object({ parentId: z.string().uuid(), rows: z.array(z.object({ name: z.string(), type: z.string().optional() })) }))
+    .input(z.object({ parentId: z.string().guid('Invalid UUID'), rows: z.array(z.object({ name: z.string(), type: z.string().optional() })) }))
     .mutation(async ({ input }) => {
       const parentResult = await pool.query(`SELECT * FROM hierarchy_nodes WHERE id=$1`, [input.parentId])
       const parent = parentResult.rows[0]
@@ -360,7 +360,7 @@ export const hierarchyRouter = router({
       return toInsert.length
     }),
 
-  moveTargets: rbacReadProcedure.input(z.object({ nodeId: z.string().uuid() })).query(async ({ input }) => {
+  moveTargets: rbacReadProcedure.input(z.object({ nodeId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const nodeResult = await pool.query(`SELECT * FROM hierarchy_nodes WHERE id=$1`, [input.nodeId])
     const node = nodeResult.rows[0]
     if (!node) return []
@@ -376,7 +376,7 @@ export const hierarchyRouter = router({
   }),
 
   reorderNode: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), beforeId: z.string().uuid().nullable() }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), beforeId: z.string().guid('Invalid UUID').nullable() }))
     .mutation(async ({ input }) => {
       const nodeResult = await pool.query(`SELECT * FROM hierarchy_nodes WHERE id=$1`, [input.id])
       const node = nodeResult.rows[0]

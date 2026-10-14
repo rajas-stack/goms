@@ -12,7 +12,7 @@ import type { FuzzyCandidate, ImportDomainKey, ImportFieldDiff, ImportRowResult,
  *  actually accepted, only how forgivingly a valid value can be spelled. */
 export function caseInsensitiveEnum<T extends readonly [string, ...string[]]>(
   values: T,
-  params?: z.RawCreateParams,
+  params?: string,
 ) {
   const byLower = new Map(values.map((v) => [v.toLowerCase(), v] as const))
   return z.preprocess(

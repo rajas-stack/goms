@@ -96,7 +96,7 @@ android {
             // hard-fails just because signing hasn't been configured yet.
             signingConfig hasReleaseSigningConfig ? signingConfigs.release : null
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }

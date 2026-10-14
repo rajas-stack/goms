@@ -37,12 +37,12 @@ function toCitation(row: any) {
 }
 
 export const documentCitationsRouter = router({
-  list: protectedReadProcedure.input(z.object({ documentId: z.string().uuid() })).query(async ({ input }) => {
+  list: protectedReadProcedure.input(z.object({ documentId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query('SELECT * FROM document_citations WHERE document_id=$1 ORDER BY created_at', [input.documentId])
     return result.rows.map(toCitation)
   }),
   create: protectedProcedure
-    .input(z.object({ documentId: z.string().uuid(), pageLabel: z.string().min(1), quoteText: z.string().optional(), fieldRef: z.string().optional() }))
+    .input(z.object({ documentId: z.string().guid('Invalid UUID'), pageLabel: z.string().min(1), quoteText: z.string().optional(), fieldRef: z.string().optional() }))
     .mutation(async ({ input }) => {
       const result = await pool.query(
         `INSERT INTO document_citations (document_id, page_label, quote_text, field_ref) VALUES ($1,$2,$3,$4) RETURNING *`,
@@ -50,7 +50,7 @@ export const documentCitationsRouter = router({
       )
       return toCitation(result.rows[0])
     }),
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) =>
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(({ input }) =>
     pool.query('DELETE FROM document_citations WHERE id=$1', [input.id]).then(() => undefined)
   ),
 })
@@ -58,7 +58,7 @@ export const documentCitationsRouter = router({
 export const documentsRouter = router({
   requestUploadUrl: protectedProcedure
     .input(z.object({
-      entityType: z.string(), entityId: z.string().uuid(), filename: z.string().min(1),
+      entityType: z.string(), entityId: z.string().guid('Invalid UUID'), filename: z.string().min(1),
       contentType: z.string(), sizeBytes: z.number().int().positive(), version: z.string().optional(),
       batch: z.enum(DOCUMENT_BATCHES).optional(), category: z.enum(DOCUMENT_CATEGORIES).optional(),
     }).refine((i) => (i.batch === undefined && i.category === undefined) || (!!i.batch && !!i.category && categoryFitsBatch(i.batch, i.category)), {
@@ -124,25 +124,25 @@ export const documentsRouter = router({
       return toDocument(row)
     }),
 
-  listFor: protectedReadProcedure.input(z.object({ entityType: z.string(), entityId: z.string().uuid() })).query(async ({ input }) => {
+  listFor: protectedReadProcedure.input(z.object({ entityType: z.string(), entityId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query('SELECT * FROM documents WHERE entity_type=$1 AND entity_id=$2 ORDER BY uploaded_at DESC', [input.entityType, input.entityId])
     return result.rows.map(toDocument)
   }),
   /** A fresh signed URL per call — a stored one would outlive its expiry. */
-  getDownloadUrl: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+  getDownloadUrl: protectedReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const doc = (await pool.query('SELECT storage_path FROM documents WHERE id=$1', [input.id])).rows[0]
     if (!doc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Document not found.' })
     return { url: await getSignedDownloadUrl(doc.storage_path) }
   }),
   /** Moves a document to another attachment batch/category. */
   updateFiling: protectedProcedure
-    .input(z.object({ id: z.string().uuid() }).and(filingSchema))
+    .input(z.object({ id: z.string().guid('Invalid UUID') }).and(filingSchema))
     .mutation(async ({ input }) => {
       const row = (await pool.query('UPDATE documents SET batch=$2, category=$3 WHERE id=$1 RETURNING *', [input.id, input.batch, input.category])).rows[0]
       if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Document not found.' })
       return toDocument(row)
     }),
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     const doc = (await pool.query('SELECT * FROM documents WHERE id=$1', [input.id])).rows[0]
     if (!doc) return
     // document_citations cascades via FK. Row deleted first, inside its own

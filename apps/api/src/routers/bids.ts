@@ -84,12 +84,12 @@ const bidActionQueueRouter = router({
 })
 
 export const bidsRouter = router({
-  get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => oneBid(input.id)),
+  get: protectedReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(({ input }) => oneBid(input.id)),
 
   // A cheap single-row lookup for legacy-UI guards (WorksEditor): "does this
   // opportunity have a bid?" must not force the whole grid query.
   getForOpportunity: protectedReadProcedure
-    .input(z.object({ opportunityId: z.string().uuid() }))
+    .input(z.object({ opportunityId: z.string().guid('Invalid UUID') }))
     .query(async ({ input }) => {
       const result = await pool.query('SELECT * FROM bids WHERE opportunity_id=$1', [input.opportunityId])
       return result.rows[0] ? toBid(result.rows[0]) : null
@@ -236,7 +236,7 @@ export const bidsRouter = router({
   // anywhere leaves no new department nodes, no assignment and no bid behind.
   create: protectedProcedure
     .input(z.object({
-      opportunityId: z.string().uuid().optional(),
+      opportunityId: z.string().guid('Invalid UUID').optional(),
       // Create the opportunity as part of the same transaction (department is then mandatory).
       newOpportunity: newBidOpportunitySchema.optional(),
       department: departmentChoiceSchema.optional(),
@@ -300,7 +300,7 @@ export const bidsRouter = router({
 
   update: protectedProcedure
     .input(z.object({
-      id: z.string().uuid(),
+      id: z.string().guid('Invalid UUID'),
       patch: z.object({
         stageKey: z.string().optional(), decision: z.enum(['pending', 'go', 'no_go']).optional(),
         tenderLink: z.string().nullable().optional(),
@@ -375,7 +375,7 @@ export const bidsRouter = router({
       }
     }),
 
-  archive: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  archive: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     await pool.query(`UPDATE bids SET status='archived', archived_at=now(), updated_at=now() WHERE id=$1`, [input.id])
     return (await oneBid(input.id))!
   }),
@@ -386,7 +386,7 @@ export const bidsRouter = router({
    *  flagged by a bulk import (no corrigendum) verifies with a plain flip. The
    *  check and the write are ONE statement, so a change added between them
    *  cannot slip past. */
-  markVerified: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
+  markVerified: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input, ctx }) => {
     const before = (await pool.query('SELECT data_confidence FROM bids WHERE id=$1', [input.id])).rows[0]
     if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Bid not found.' })
     const updated = await pool.query(
@@ -409,12 +409,12 @@ export const bidsRouter = router({
     return (await oneBid(input.id))!
   }),
 
-  unarchive: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  unarchive: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     await pool.query(`UPDATE bids SET status='active', archived_at=NULL, updated_at=now() WHERE id=$1`, [input.id])
     return (await oneBid(input.id))!
   }),
 
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')

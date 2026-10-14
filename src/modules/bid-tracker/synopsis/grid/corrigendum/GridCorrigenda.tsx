@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactElement } from 'react'
 import { corrigendumCode, type BidSynopsisSection, type SynopsisGrid } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
@@ -20,7 +20,7 @@ export interface GridCorrigendaState {
   setVisible: (next: boolean) => void
   /** Passed to SynopsisGridView; undefined while hidden. */
   overlay: GridCorrigendumOverlay | undefined
-  dialogs: JSX.Element
+  dialogs: ReactElement
 }
 
 /** Corrigendum comparison for one grid tab: derives the after-columns from the

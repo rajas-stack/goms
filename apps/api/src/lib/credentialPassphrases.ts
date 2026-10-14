@@ -6,7 +6,7 @@ import type { TenderCredentialLock } from '@goms/domain'
 
 export const credentialEnvelope = z.object({ version: z.literal(1), salt: z.string().regex(/^[A-Za-z0-9+/]{22}==$/),
   iv: z.string().regex(/^[A-Za-z0-9+/]{16}$/), ciphertext: z.string().min(24).max(32768).regex(/^[A-Za-z0-9+/]+={0,2}$/),
-  passphraseId: z.string().uuid().optional(), passphraseRevision: z.string().max(32768).optional() }).strict()
+  passphraseId: z.string().guid('Invalid UUID').optional(), passphraseRevision: z.string().max(32768).optional() }).strict()
 
 /** Serializes creation, rotation and portal writes to avoid stale encrypted keys. */
 export async function credentialTransaction<T>(action: (client: PoolClient) => Promise<T>): Promise<T> {

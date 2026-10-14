@@ -81,7 +81,7 @@ export const amnexDepartmentsRouter = router({
     }
   }),
 
-  rename: protectedProcedure.input(z.object({ id: z.string().uuid(), name: nameInput })).mutation(async ({ input, ctx }) => {
+  rename: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID'), name: nameInput })).mutation(async ({ input, ctx }) => {
     const name = cleanName(input.name)
     try {
       const result = await inTransaction(async (client) => {
@@ -109,7 +109,7 @@ export const amnexDepartmentsRouter = router({
     }
   }),
 
-  reorder: protectedProcedure.input(z.object({ ids: z.array(z.string().uuid()).max(500) })).mutation(async ({ input }) => {
+  reorder: protectedProcedure.input(z.object({ ids: z.array(z.string().guid('Invalid UUID')).max(500) })).mutation(async ({ input }) => {
     await pool.query(
       `UPDATE amnex_departments d SET sort_order = o.ord - 1, updated_at = now()
        FROM unnest($1::uuid[]) WITH ORDINALITY AS o(id, ord) WHERE d.id = o.id AND d.sort_order <> o.ord - 1`,
@@ -118,7 +118,7 @@ export const amnexDepartmentsRouter = router({
     return (await pool.query(`${SELECT} ORDER BY d.sort_order, lower(d.name)`)).rows.map(toDepartment)
   }),
 
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input, ctx }) => {
     const removed = await inTransaction(async (client) => {
       const row = await lockedRow(client, input.id)
       const updated = await client.query(

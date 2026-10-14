@@ -83,7 +83,7 @@ export const competitorsRouter = router({
     }
   }),
 
-  update: protectedProcedure.input(competitorShape.extend({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
+  update: protectedProcedure.input(competitorShape.extend({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input, ctx }) => {
     const item = clean(input)
     try {
       const result = await pool.query(
@@ -100,7 +100,7 @@ export const competitorsRouter = router({
     }
   }),
 
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input, ctx }) => {
     const result = await pool.query('DELETE FROM competitors WHERE id=$1 RETURNING id', [input.id])
     if (!result.rows[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'That competitor no longer exists.' })
     await audit(input.id, 'delete', '', ctx.user?.email)

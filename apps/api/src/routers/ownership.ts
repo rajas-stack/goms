@@ -14,7 +14,7 @@ export const ownershipRouter = router({
     return result.rows.map(toAssignment)
   }),
   listFor: protectedReadProcedure
-    .input(z.object({ entityType: z.string(), entityId: z.string().uuid() }))
+    .input(z.object({ entityType: z.string(), entityId: z.string().guid('Invalid UUID') }))
     .query(async ({ input }) => {
       const result = await pool.query(
         'SELECT * FROM ownership_assignments WHERE entity_type=$1 AND entity_id=$2 ORDER BY start_date DESC',
@@ -23,7 +23,7 @@ export const ownershipRouter = router({
       return result.rows.map(toAssignment)
     }),
   listOwnedBy: protectedReadProcedure
-    .input(z.object({ salesPersonId: z.string().uuid(), asOf: z.string() }))
+    .input(z.object({ salesPersonId: z.string().guid('Invalid UUID'), asOf: z.string() }))
     .query(async ({ input }) => {
       const result = await pool.query(
         `SELECT * FROM ownership_assignments
@@ -33,13 +33,13 @@ export const ownershipRouter = router({
       return result.rows.map(toAssignment)
     }),
   resolveOwner: protectedReadProcedure
-    .input(z.object({ entityType: z.string(), entityId: z.string().uuid(), asOf: z.string() }))
+    .input(z.object({ entityType: z.string(), entityId: z.string().guid('Invalid UUID'), asOf: z.string() }))
     .query(async ({ input }) => {
       const { assignments, ctx } = await loadOwnershipContext()
       return effectiveOwner(assignments, input.entityType, input.entityId, input.asOf, ctx)
     }),
   resolveOwners: protectedReadProcedure
-    .input(z.object({ entityType: z.string(), entityIds: z.array(z.string().uuid()), asOf: z.string() }))
+    .input(z.object({ entityType: z.string(), entityIds: z.array(z.string().guid('Invalid UUID')), asOf: z.string() }))
     .query(async ({ input }) => {
       const { assignments, ctx } = await loadOwnershipContext()
       const map = buildOwnerMap(assignments, input.entityType, input.entityIds, input.asOf, ctx)
@@ -47,7 +47,7 @@ export const ownershipRouter = router({
     }),
   assign: protectedProcedure
     .input(z.object({
-      entityType: z.string(), entityId: z.string().uuid(), salesPersonId: z.string().uuid(),
+      entityType: z.string(), entityId: z.string().guid('Invalid UUID'), salesPersonId: z.string().guid('Invalid UUID'),
       role: z.string().optional(), startDate: z.string(), endDate: z.string().nullable().optional(),
       reason: z.enum(['initial', 'transfer', 'delegation', 'reassignment', 'correction']).optional(),
       note: z.string().optional(),
@@ -119,7 +119,7 @@ export const ownershipRouter = router({
       }
     }),
   end: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), endDate: z.string() }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), endDate: z.string() }))
     .mutation(async ({ input }) => {
       const a = (await pool.query('SELECT * FROM ownership_assignments WHERE id=$1', [input.id])).rows[0]
       if (!a) return
@@ -130,7 +130,7 @@ export const ownershipRouter = router({
     }),
   transferBookOfBusiness: protectedProcedure
     .input(z.object({
-      fromSalesPersonId: z.string().uuid(), toSalesPersonId: z.string().uuid(),
+      fromSalesPersonId: z.string().guid('Invalid UUID'), toSalesPersonId: z.string().guid('Invalid UUID'),
       effectiveDate: z.string(), note: z.string().optional(),
     }))
     .mutation(async ({ input }) => {

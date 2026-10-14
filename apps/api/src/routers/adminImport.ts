@@ -20,8 +20,8 @@ const domainSchema = z.enum([
 // in aggregate) so one domain in a large session can't silently swallow
 // another's row budget.
 const domainRowsSchema = z.union([
-  z.array(z.record(z.any())),
-  z.record(z.string(), z.array(z.record(z.any()))),
+  z.array(z.record(z.string(), z.any())),
+  z.record(z.string(), z.array(z.record(z.string(), z.any()))),
 ]).refine(
   (rows) => {
     const total = Array.isArray(rows) ? rows.length : Object.values(rows).reduce((sum, sheet) => sum + sheet.length, 0)
@@ -30,7 +30,7 @@ const domainRowsSchema = z.union([
   { message: `Total rows for one domain must not exceed ${MAX_IMPORT_ROWS}` },
 )
 
-const sessionDomainsSchema = z.record(domainSchema, domainRowsSchema)
+const sessionDomainsSchema = z.partialRecord(domainSchema, domainRowsSchema)
 
 const excludedRowSchema: z.ZodType<ExcludedRow> = z.object({
   domain: domainSchema,

@@ -14,7 +14,7 @@ const bomRowSchema = z.object({
   parentSkuCode: z.string().min(1, 'Parent SKU Code is required').trim(),
   componentSkuCode: z.string().min(1, 'Component SKU Code is required').trim(),
   mandatory: z.boolean().optional().default(false),
-  quantity: z.number({ invalid_type_error: 'Quantity must be a number' }).optional().default(1),
+  quantity: z.number('Quantity must be a number').optional().default(1),
   notes: z.string().optional().default(''),
 })
 export type BomRow = z.infer<typeof bomRowSchema>
