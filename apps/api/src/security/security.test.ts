@@ -26,10 +26,20 @@ describe('production security', () => {
     expect(rbacMode()).toBe('enforce')
     vi.stubEnv('AUTH_ENFORCEMENT_ENABLED', 'false')
     expect(assertSecurityConfiguration).toThrow('must be true')
-    vi.stubEnv('AUTH_ENFORCEMENT_ENABLED', 'true'); vi.stubEnv('RBAC_MODE', 'shadow')
-    expect(assertSecurityConfiguration).toThrow('must be enforce')
+    vi.stubEnv('AUTH_ENFORCEMENT_ENABLED', 'true'); vi.stubEnv('RBAC_MODE', 'enforced')
+    expect(assertSecurityConfiguration).toThrow('RBAC_MODE must be')
     vi.stubEnv('RBAC_MODE', 'enforce'); vi.stubEnv('CORS_ALLOWED_ORIGINS', 'http://localhost:5173')
     expect(assertSecurityConfiguration).toThrow('HTTPS')
+  })
+  it('lets RBAC activation be staged in production while authentication stays hardened', async () => {
+    for (const mode of ['off', 'shadow'] as const) {
+      vi.stubEnv('RBAC_MODE', mode)
+      expect(assertSecurityConfiguration).not.toThrow()
+      expect(rbacMode()).toBe(mode)
+      await expect(api.createCaller({}).read()).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    }
+    vi.stubEnv('RBAC_MODE', '')
+    expect(rbacMode()).toBe('enforce')
   })
   it('blocks missing, non-Google and non-Amnex identities and requests revocation checks', async () => {
     await expect(api.createCaller({}).read()).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
