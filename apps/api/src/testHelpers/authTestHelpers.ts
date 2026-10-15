@@ -4,7 +4,11 @@
  *  access or real Firebase project credentials. Shared by every auth test in
  *  this workspace (identity.test.ts, trpc.test.ts, every router's auth
  *  enforcement tests, and adminImportTestAuth.ts). */
-export function fakeIdToken(overrides: { uid?: string; email?: string; email_verified?: boolean } = {}): string {
+export function fakeIdToken(overrides: {
+  uid?: string; email?: string; email_verified?: boolean
+  /** Firebase's own claim: the linked sign-in identities (for Google, the Google subject id). */
+  firebase?: { identities?: Record<string, string[]>; sign_in_provider?: string }
+} = {}): string {
   const payload = { uid: 'test-uid', email: 'test@amnex.com', email_verified: true, ...overrides }
   return `fake.${Buffer.from(JSON.stringify(payload)).toString('base64url')}`
 }

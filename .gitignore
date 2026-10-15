@@ -24,6 +24,12 @@ pnpm-debug.log*
 !.env.example
 !apps/api/.env.oauth.example
 
+# Google OAuth client-secret files downloaded from the Cloud Console (client_secret_<id>.apps.googleusercontent.com.json). They hold the client
+# secret: keep them out of the repository; the secret belongs in Secret Manager only.
+client_secret*.json
+client_secrets*.json
+*.apps.googleusercontent.com.json
+
 # Firebase Hosting project alias — names a real GCP project id once goms-prod
 # exists; only .firebaserc.example (a placeholder) is committed.
 .firebaserc
