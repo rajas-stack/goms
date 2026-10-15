@@ -76,7 +76,10 @@ export const customersRouter = router({
       }
       const setClauses = fields.map((f, i) => `${columnFor[f]}=$${i + 1}`)
       const values = fields.map((f) => patch[f])
-      let query = `UPDATE customers SET ${[...setClauses, 'updated_at=now()'].join(', ')} WHERE id=$${fields.length + 1}`
+      // updated_at is millisecond precision: two writes in the same ms would share a token and a stale
+      // write could slip through the concurrency check, so every update moves it forward by ≥1 ms.
+      const bumpUpdatedAt = "updated_at=GREATEST(now(), updated_at + interval '1 millisecond')"
+      let query = `UPDATE customers SET ${[...setClauses, bumpUpdatedAt].join(', ')} WHERE id=$${fields.length + 1}`
       values.push(id)
       if (expectedUpdatedAt) {
         query += ` AND updated_at=$${fields.length + 2}`
