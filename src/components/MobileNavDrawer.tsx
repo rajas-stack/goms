@@ -166,7 +166,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                   navigate('/teams')
                 }}
                 className={cn(
-                  'mt-auto flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
+                  'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
                   teamsActive
                     ? 'bg-white text-ink-900 shadow-sm'
                     : 'text-ink hover:bg-ink-900/[0.05]',
