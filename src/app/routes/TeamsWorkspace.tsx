@@ -114,7 +114,7 @@ export function TeamRoster({ team }: { team: DeliveryTeamKey }) {
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-goms-sky/40 bg-goms-sky/[0.08] px-3 py-2 text-[12px] text-goms-navy">
         <Icon name="Network" size={14} />
         <span>This roster follows the company Org Structure. Add people, set levels and reports-to in Employee Master.</span>
-        <Link to="/settings/masters/employee-master" className="ml-auto font-semibold underline underline-offset-2">Open Employee Master</Link>
+        <Link to="/settings/masters/employees" className="ml-auto font-semibold underline underline-offset-2">Open Employee Master</Link>
       </div>
       {members.some((member) => !member.orgPersonId) && (
         <p className="text-[11px] text-muted"><span className="font-medium text-ink-700">Email.</span> <span>{EMAIL_BINDING_HELP}</span></p>
