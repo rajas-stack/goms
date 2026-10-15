@@ -34,7 +34,7 @@ const CompetitorsSettingsPage = lazy(() =>
   import('./routes/CompetitorsSettingsPage').then((m) => ({ default: m.CompetitorsSettingsPage })),
 )
 const EmployeeMasterSettingsPage = lazy(() =>
-  import('./routes/EmployeeMasterSettingsPage').then((m) => ({ default: m.EmployeeMasterSettingsPage })),
+  import('./routes/SettingsEmployeeMasterPage').then((m) => ({ default: m.SettingsEmployeeMasterPage })),
 )
 const SalesWorkspace = lazy(() => import('./routes/SalesWorkspace').then((m) => ({ default: m.SalesWorkspace })))
 const TeamsWorkspace = lazy(() => import('./routes/TeamsWorkspace').then((m) => ({ default: m.TeamsWorkspace })))
@@ -130,6 +130,8 @@ export const router = createBrowserRouter([
       routed('/commercial-calculator/:section', ROUTE_NODES.commercial, <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess>),
       routed('/commercial-calculator/boq/:boqId', ROUTE_NODES.boq, <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess>),
       // Roles & Access lives in Settings → System settings; the old /admin/access screens (bookmarks) forward there.
+      // Employees used to be a Teams tab; keep old bookmarks working now that the screen is Settings → Masters → Employee Master.
+      { path: '/teams/employees', element: <Navigate to="/settings/masters/employees" replace /> },
       { path: '/admin/access', element: <Navigate to="/settings/access" replace /> },
       { path: '/admin/access/*', element: <Navigate to="/settings/access" replace /> },
       { path: '/settings/access', handle: rbacHandle(ROUTE_NODES.access), element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><RequireNode node={ROUTE_NODES.access}><RolesAccessPage /></RequireNode></RequireAccess> },
