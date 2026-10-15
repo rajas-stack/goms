@@ -6,6 +6,7 @@ import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
 import { useCanReadAny } from '@/lib/permissions'
 import { useNodeFilter } from '@/lib/rbacTree/access'
 import { NAV_MODULES } from '@/lib/routeModules'
+import { ROUTE_NODES } from '@/app/routeNodes'
 
 /** The app's persistent navigation element — a slim left rail with one button
  *  per top-level module (Account Mapping, Commercial Calculator — spec §5).
@@ -23,6 +24,7 @@ export function AccountMappingRail() {
   const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
   const teamsActive = location.pathname.startsWith('/teams')
   const documentMakerActive = location.pathname.startsWith('/document-maker')
+  const insightsActive = location.pathname.startsWith('/analytics')
   // Each entry needs the server policy (A) AND the permission tree. Roles & Access lives in Settings → System settings.
   const tree = useNodeFilter()
   const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping) && tree('accountMapping')
@@ -30,6 +32,7 @@ export function AccountMappingRail() {
   const canOpportunity = useCanReadAny(NAV_MODULES.opportunity) && tree('opportunity')
   const canTeams = useCanReadAny(NAV_MODULES.teams) && tree('teams')
   const canDocumentMaker = tree('documentMaker')
+  const canInsights = useCanReadAny(NAV_MODULES.insights) && tree(ROUTE_NODES.insights)
 
   return (
     <nav className="hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-line bg-panel py-4 lg:flex lg:w-16">
@@ -80,6 +83,18 @@ export function AccountMappingRail() {
       >
         <Icon name="FilePenLine" size={18} />
         <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Document maker</span>
+      </button>}
+      {canInsights && <button
+        onClick={() => navigate('/analytics')}
+        title="GOMS Analytics"
+        aria-current={insightsActive ? 'page' : undefined}
+        className={cn(
+          'flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors lg:w-14',
+          insightsActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600/70 hover:bg-white hover:text-ink-900',
+        )}
+      >
+        <Icon name="BarChart3" size={18} />
+        <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Insights</span>
       </button>}
       {/* `mt-auto` pins Teams to the bottom of the rail, apart from the work modules above. */}
       {canTeams && <button
