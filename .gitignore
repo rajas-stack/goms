@@ -86,6 +86,7 @@ test-results/
 playwright-report/
 test-results-full/
 playwright-report-full/
+/e2e/full/.*.log
 
 # Local-only scratch: design exports, pasted screenshots, spreadsheets, thumbnails.
 # (Env files are already covered by `.env.*` above.)

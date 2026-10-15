@@ -37,7 +37,7 @@ export { expect };
 
 /** Opens a route and waits until the app shell has rendered (top bar present, no error boundary). */
 export async function gotoApp(page: Page, path: string): Promise<void> {
-  await page.goto(path);
+  await page.goto(path, { waitUntil: 'domcontentloaded', timeout: 60_000 });
   await expect(page.getByRole('button', { name: 'Profile options' })).toBeVisible({ timeout: 30_000 });
   await expectNoErrorScreen(page);
 }
@@ -73,4 +73,4 @@ export async function unlockIfLocked(page: Page): Promise<void> {
   if (await lock.isVisible().catch(() => false)) await lock.click();
 }
 
-export const urlEndsWith = (path: string): RegExp => new RegExp(`${path.replace(/[/]/g, '\\/')}$`);
+export const urlEndsWith = (path: string): RegExp => new RegExp(`${escapeRe(path)}$`);

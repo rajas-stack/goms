@@ -1,12 +1,20 @@
 import { spawn, execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, unlinkSync, appendFileSync, renameSync, createWriteStream } from 'node:fs'
-import { mkdir, readFile, writeFile, stat } from 'node:fs/promises'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, appendFileSync, renameSync, createWriteStream } from 'node:fs'
+import { mkdir, open, writeFile } from 'node:fs/promises'
 import { dirname, resolve, relative, isAbsolute, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pipeline } from 'node:stream/promises'
+import { acquireFileLock } from './local-sync-lock.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+/** Reads a JSON file, or returns the fallback when it doesn't exist (no exists-then-read race). */
+function readJsonIfPresent(file, fallback) {
+  try { return JSON.parse(readFileSync(file, 'utf8')) } catch (error) { if (error.code === 'ENOENT') return fallback; throw error }
+}
+function readFileIfPresent(file) {
+  try { return readFileSync(file) } catch (error) { if (error.code === 'ENOENT') return ''; throw error }
+}
 const stateDir = resolve(process.env.GOMS_SYNC_STATE_DIR || resolve(root, '..', '.goms-sync'))
 const pauseFile = resolve(stateDir, 'paused')
 const statusFile = resolve(stateDir, 'status.json')
@@ -27,7 +35,7 @@ if (args.has('--resume')) {
   process.exit(0)
 }
 if (args.has('--status')) {
-  console.log(JSON.stringify({ paused: existsSync(pauseFile), lastRun: existsSync(statusFile) ? JSON.parse(readFileSync(statusFile, 'utf8')) : null }, null, 2))
+  console.log(JSON.stringify({ paused: existsSync(pauseFile), lastRun: readJsonIfPresent(statusFile, null) }, null, 2))
   process.exit(0)
 }
 if (existsSync(pauseFile)) {
@@ -39,7 +47,7 @@ const runId = new Date().toISOString().replace(/[^0-9]/g, '')
 const runDir = resolve(stateDir, 'runs', runId)
 mkdirSync(runDir, { recursive: true })
 const logFile = resolve(runDir, 'run.log')
-const previousStatus = existsSync(statusFile) ? JSON.parse(readFileSync(statusFile, 'utf8')) : {}
+const previousStatus = readJsonIfPresent(statusFile, {})
 const runStatus = { startedAt: new Date().toISOString(), runId, port: 8088, state: 'starting', previousPublished: previousStatus.previousPublished ?? null }
 function log(message) {
   const line = `${new Date().toISOString()} ${message}\n`
@@ -70,17 +78,7 @@ function assertRunning() {
   if (existsSync(pauseFile)) throw new Error('User paused automation; deployment and publishing stopped.')
 }
 function acquireLock() {
-  if (existsSync(lockFile)) {
-    const owner = JSON.parse(readFileSync(lockFile, 'utf8'))
-    try { process.kill(owner.pid, 0); return false }
-    catch (error) { if (error.code !== 'ESRCH') throw error; unlinkSync(lockFile) }
-  }
-  try {
-    const handle = openSync(lockFile, 'wx')
-    writeFileSync(handle, JSON.stringify({ pid: process.pid, runId }))
-    closeSync(handle)
-    return true
-  } catch (error) { if (error.code === 'EEXIST') return false; throw error }
+  return acquireFileLock(lockFile, { pid: process.pid, runId })
 }
 async function mapFiles(files, visitor) {
   let next = 0
@@ -97,9 +95,14 @@ async function capture(destination) {
     const rel = relative(root, source)
     if (rel.startsWith('..') || isAbsolute(rel)) throw new Error(`Source escaped the shared directory: ${file}`)
     try {
-      const info = await stat(source)
-      if (!info.isFile()) return
-      const data = await readFile(source)
+      // stat + read through one open handle, so the file checked is the file read (no check-then-use race).
+      const handle = await open(source, 'r')
+      let info, data
+      try {
+        info = await handle.stat()
+        if (!info.isFile()) return
+        data = await handle.readFile()
+      } finally { await handle.close() }
       hashes[file] = createHash('sha256').update(data).digest('hex')
       if (destination) {
         const target = resolve(destination, file)
@@ -139,7 +142,7 @@ function composeConfiguration(source, images) {
   }
   const envSource = process.env.GOMS_SYNC_ENV_FILE || resolve(root, '.env')
   const envFile = resolve(runDir, 'runtime.env')
-  writeFileSync(envFile, existsSync(envSource) ? readFileSync(envSource) : '')
+  writeFileSync(envFile, readFileIfPresent(envSource))
   const override = resolve(runDir, 'compose.override.json')
   writeFileSync(override, JSON.stringify({ services: {
     api: { image: images.api, build: { context: source } },
@@ -239,5 +242,6 @@ try {
   log(`FAILED: ${error.message}`)
   process.exitCode = 1
 } finally {
-  if (existsSync(lockFile) && JSON.parse(readFileSync(lockFile, 'utf8')).pid === process.pid) unlinkSync(lockFile)
+  try { if (JSON.parse(readFileSync(lockFile, 'utf8')).pid === process.pid) unlinkSync(lockFile) }
+  catch (error) { if (error.code !== 'ENOENT') throw error }
 }

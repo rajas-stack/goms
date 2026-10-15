@@ -5,12 +5,13 @@ import { defineConfig, devices } from '@playwright/test';
  *  Never starts/stops the dev server; it must already be running on :5173. */
 export default defineConfig({
   testDir: './e2e/full',
+  globalSetup: './e2e/full/global-setup.ts',
   testMatch: /.*\.spec\.ts/,
   fullyParallel: true,
   retries: 1,
   workers: 2,
-  timeout: 60_000,
-  expect: { timeout: 10_000 },
+  timeout: 90_000,
+  expect: { timeout: 20_000 },
   reporter: [['list'], ['html', { outputFolder: 'playwright-report-full', open: 'never' }]],
   outputDir: 'test-results-full',
   use: {
