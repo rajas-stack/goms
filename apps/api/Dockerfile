@@ -1,15 +1,17 @@
-FROM node:22-slim AS build
+FROM node:26-slim AS build
 WORKDIR /app
 COPY . .
 # apps/api/node_modules holds the API's own versions of packages that conflict with root ones (e.g. @google-cloud/storage);
 # the mkdir keeps the runtime COPY below valid even if a future lock file hoists everything.
-RUN npm ci --ignore-scripts && npm --workspace packages/domain run build && npm --workspace apps/api run build && npm prune --omit=dev --ignore-scripts \
+# TypeScript is also a tRPC peer, but its native compiler is build-only.
+RUN npm ci --ignore-scripts && npm --workspace packages/domain run build && npm --workspace apps/api run build && npm prune --omit=dev --omit=peer --ignore-scripts \
+  && rm -rf node_modules/typescript node_modules/@typescript \
   && mkdir -p apps/api/node_modules
 
 # Runtime: Alpine has far fewer OS packages than Debian slim (no perl, util-linux, ncurses), and the API only needs
 # `node` — the dependencies are pure JavaScript, so node_modules built on Debian run unchanged. npm, npx, corepack and
 # yarn are removed because nothing runs them at runtime and their bundled dependencies carry their own CVEs.
-FROM node:22-alpine
+FROM node:26-alpine
 RUN apk upgrade --no-cache \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack /opt/yarn-* \
     /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg

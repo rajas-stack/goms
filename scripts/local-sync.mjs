@@ -1,10 +1,11 @@
 import { spawn, execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, openSync, closeSync, readFileSync, writeFileSync, unlinkSync, appendFileSync, renameSync, createWriteStream } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, appendFileSync, renameSync, createWriteStream } from 'node:fs'
 import { mkdir, readFile, writeFile, stat } from 'node:fs/promises'
 import { dirname, resolve, relative, isAbsolute, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { pipeline } from 'node:stream/promises'
+import { acquireFileLock } from './local-sync-lock.mjs'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const stateDir = resolve(process.env.GOMS_SYNC_STATE_DIR || resolve(root, '..', '.goms-sync'))
@@ -70,17 +71,7 @@ function assertRunning() {
   if (existsSync(pauseFile)) throw new Error('User paused automation; deployment and publishing stopped.')
 }
 function acquireLock() {
-  if (existsSync(lockFile)) {
-    const owner = JSON.parse(readFileSync(lockFile, 'utf8'))
-    try { process.kill(owner.pid, 0); return false }
-    catch (error) { if (error.code !== 'ESRCH') throw error; unlinkSync(lockFile) }
-  }
-  try {
-    const handle = openSync(lockFile, 'wx')
-    writeFileSync(handle, JSON.stringify({ pid: process.pid, runId }))
-    closeSync(handle)
-    return true
-  } catch (error) { if (error.code === 'EEXIST') return false; throw error }
+  return acquireFileLock(lockFile, { pid: process.pid, runId })
 }
 async function mapFiles(files, visitor) {
   let next = 0
@@ -239,5 +230,6 @@ try {
   log(`FAILED: ${error.message}`)
   process.exitCode = 1
 } finally {
-  if (existsSync(lockFile) && JSON.parse(readFileSync(lockFile, 'utf8')).pid === process.pid) unlinkSync(lockFile)
+  try { if (JSON.parse(readFileSync(lockFile, 'utf8')).pid === process.pid) unlinkSync(lockFile) }
+  catch (error) { if (error.code !== 'ENOENT') throw error }
 }

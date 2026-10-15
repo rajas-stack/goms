@@ -1,0 +1,117 @@
+name: Complete tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  application:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: goms_test
+          POSTGRES_PASSWORD: goms_test
+          POSTGRES_DB: goms_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U goms_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://goms_test:goms_test@127.0.0.1:5432/goms_test
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+      - run: npm run build --workspace @goms/api
+      - run: node ../../node_modules/node-pg-migrate/bin/node-pg-migrate.js up
+        working-directory: apps/api
+      - name: Logic and domain tests
+        run: npm test -- --maxWorkers=2
+      - name: Script tests
+        run: node --test scripts/local-sync-lock.test.mjs scripts/geo-simplify-lib.test.cjs scripts/simplify-geo-assets.test.cjs scripts/verify-geo-assets.test.cjs scripts/access-matrix/engine.test.cjs scripts/access-matrix/policy.test.cjs
+      - name: Complete API tests
+        run: npm test --workspace @goms/api -- --testTimeout=30000
+      - name: Complete component tests
+        run: npm run test:component -- --maxWorkers=2 --testTimeout=60000
+      - name: HTTP repository integration
+        shell: bash
+        run: |
+          psql "$DATABASE_URL" -c 'CREATE DATABASE goms_integration'
+          export DATABASE_URL=postgres://goms_test:goms_test@127.0.0.1:5432/goms_integration
+          (cd apps/api && node ../../node_modules/node-pg-migrate/bin/node-pg-migrate.js up)
+          PORT=8094 node apps/api/dist/server.js > "$RUNNER_TEMP/goms-test-api.log" 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8094/api/trpc/health.check; then break; fi
+            sleep 1
+          done
+          VITE_API_BASE_URL=http://127.0.0.1:8094 npx vitest run --config vitest.integration.config.ts --testTimeout=30000
+      - name: Build isolated browser fixtures
+        run: npm run build
+        env:
+          VITE_API_BASE_URL: ''
+          VITE_ADMIN_IMPORT_ENABLED: 'true'
+          VITE_BID_TRACKER_ENABLED: 'true'
+      - run: npx playwright install --with-deps chromium
+      - name: Complete browser tests
+        shell: bash
+        run: |
+          node node_modules/vite/bin/vite.js preview --host 127.0.0.1 --port 8095 > "$RUNNER_TEMP/goms-test-web.log" 2>&1 &
+          web_pid=$!
+          trap 'kill "$web_pid"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8095/ > /dev/null; then break; fi
+            sleep 1
+          done
+          BASE_URL=http://127.0.0.1:8095 npx playwright test --reporter=line --timeout=60000
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - name: Java 21 and Android SDK 37
+        shell: bash
+        run: |
+          test -n "$JAVA_HOME_21_X64"
+          echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
+          export JAVA_HOME="$JAVA_HOME_21_X64"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64"
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - name: Native tests and debug APK
+        working-directory: android
+        run: chmod +x gradlew && ./gradlew test assembleDebug --no-daemon
+      - name: Android instrumentation test
+        shell: bash
+        working-directory: android
+        run: |
+          sudo chmod a+rw /dev/kvm
+          echo no | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd --name goms-test --package "system-images;android-36;google_apis;x86_64" --device pixel
+          "$ANDROID_HOME/emulator/emulator" -avd goms-test -no-window -no-audio -no-snapshot -gpu swiftshader_indirect > "$RUNNER_TEMP/goms-emulator.log" 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid"' EXIT
+          adb wait-for-device
+          for attempt in $(seq 1 90); do
+            if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == "1" ]]; then break; fi
+            sleep 2
+          done
+          test "$(adb shell getprop sys.boot_completed | tr -d '\r')" = "1"
+          adb shell input keyevent 82
+          ./gradlew connectedDebugAndroidTest --no-daemon

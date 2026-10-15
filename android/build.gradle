@@ -27,6 +27,10 @@ allprojects {
 
 subprojects {
     plugins.withId('com.android.library') {
+        // SDK 37 is published as android-37.0, including Capacitor plugin modules.
+        extensions.configure('androidComponents') {
+            finalizeDsl { android -> android.compileSdkMinor = 0 }
+        }
         dependencies.constraints.add('testImplementation', "org.json:json:${rootProject.ext.jsonVersion}")
         dependencies.constraints.add('testImplementation', "org.mockito:mockito-core:${rootProject.ext.mockitoVersion}")
     }

@@ -28,9 +28,9 @@ describe('Bid page lifecycle timeline', () => {
     const panel = screen.getByRole('tabpanel')
     expect(panel.firstElementChild?.contains(section)).toBe(true)
     expect(within(section).getByText(/– 15 Jan 2099/)).toBeInTheDocument()
-    expect(await within(section).findByRole('button', { name: /^Solutioning: Completed/ })).toBeInTheDocument()
-    expect(within(section).getByRole('button', { name: /^Qualification: In progress/ })).toBeInTheDocument()
-    expect(within(section).getByRole('button', { name: /^Submitted: Upcoming/ })).toBeInTheDocument()
+    expect(await within(section).findByRole('button', { name: /^Pre-Sales Validation \(Accept \/ Reject\): Completed/ })).toBeInTheDocument()
+    expect(within(section).getByRole('button', { name: /^Opportunity Go \/ No-Go: In progress/ })).toBeInTheDocument()
+    expect(within(section).getByRole('button', { name: /^Bid Submission: Upcoming/ })).toBeInTheDocument()
   })
 
   it('says when the deadline is not set and the end is estimated', async () => {

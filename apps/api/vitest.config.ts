@@ -12,6 +12,8 @@ export default defineConfig({
     // state — the same trade-off `customers`/`hierarchy` never needed to
     // make because only one file touched shared tables until now.
     fileParallelism: false,
+    // Real SQL fixture resets can exceed the default during container builds.
+    hookTimeout: 60000,
     setupFiles: ['./src/testHelpers/setupFirebaseAdminMock.ts'],
   },
 })
