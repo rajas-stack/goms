@@ -11,7 +11,6 @@ export const NAV_MODULES = {
   meetings: ['am.meetings'],
   sales: ['team.sales'],
   teams: ['team.org', 'team.sales'],
-  employeeMaster: ['team.org'],
   commercial: ['com.boqs', 'com.skus', 'com.masters'],
   opportunity: ROW_MODULES,
   adminAccess: ['admin.access'],
