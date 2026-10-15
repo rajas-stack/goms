@@ -16,7 +16,7 @@ const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n
  *  never captures, so the shape's own onClick still fires normally); only a
  *  real drag captures and pans, and its trailing click lands on the div
  *  instead of a shape, so panning never accidentally triggers navigation. */
-export function useMapPanZoom(viewportRef: RefObject<HTMLDivElement>) {
+export function useMapPanZoom(viewportRef: RefObject<HTMLDivElement | null>) {
   const [transform, setTransform] = useState({ x: 0, y: 0, scale: 1 })
   const [dragging, setDragging] = useState(false)
   const dragRef = useRef<{

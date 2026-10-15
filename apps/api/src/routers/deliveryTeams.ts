@@ -63,7 +63,7 @@ export const deliveryTeamsRouter = router({
     name: z.string().trim().min(1).max(200),
     email: z.string().trim().max(254).optional(),
     designation: z.string().trim().max(200).optional(),
-    managerId: z.string().uuid().nullable().optional(),
+    managerId: z.string().guid('Invalid UUID').nullable().optional(),
   })).mutation(async ({ input, ctx }) => {
     // A member's email binds a login to their team assignments (SYSTEM_ADMIN_ONLY, every RBAC mode): adding one needs a System Admin.
     if (emailChanges(input.email, '')) requireSystemAdmin(ctx, EMAIL_BINDING_MESSAGE, 'deliveryTeams.create#email')
@@ -82,12 +82,12 @@ export const deliveryTeamsRouter = router({
     }
   }),
   update: protectedProcedure.input(z.object({
-    id: z.string().uuid(),
+    id: z.string().guid('Invalid UUID'),
     patch: z.object({
       name: z.string().trim().min(1).max(200).optional(),
       email: z.string().trim().max(254).optional(),
       designation: z.string().trim().max(200).optional(),
-      managerId: z.string().uuid().nullable().optional(),
+      managerId: z.string().guid('Invalid UUID').nullable().optional(),
     }),
   })).mutation(async ({ input, ctx }) => {
     const fields = Object.keys(input.patch)
@@ -131,11 +131,11 @@ export const deliveryTeamsRouter = router({
     }
     return oneMember(input.id)
   }),
-  setStatus: protectedProcedure.input(z.object({ id: z.string().uuid(), status: z.enum(['active', 'inactive']) }))
+  setStatus: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID'), status: z.enum(['active', 'inactive']) }))
     .mutation(async ({ input }) => {
       await pool.query('UPDATE delivery_team_members SET status=$1, updated_at=now() WHERE id=$2', [input.status, input.id])
     }),
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     await pool.query('DELETE FROM delivery_team_members WHERE id=$1', [input.id])
   }),
 })

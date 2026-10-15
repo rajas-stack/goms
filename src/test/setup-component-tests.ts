@@ -1,5 +1,9 @@
 import { vi } from 'vitest'
+import { configure } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
+
+// Query-driven screens can take longer on shared build hosts.
+configure({ asyncUtilTimeout: 5000 })
 
 // @/lib/firebaseAuth calls getAuth() at module-load time, which throws
 // "auth/invalid-api-key" without a real Firebase project configured — every

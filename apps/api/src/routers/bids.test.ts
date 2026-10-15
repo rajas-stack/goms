@@ -151,7 +151,7 @@ describe('bids router', () => {
     expect(milestonesGone.rows).toHaveLength(0)
   })
 
-  it('refuses hard delete when the bid has a corrigendum, a protected value, a document, or a follow-up', async () => {
+  it('refuses hard delete with corrigenda, documents or follow-ups, but ignores disabled protected-value enforcement', async () => {
     const caller = appRouter.createCaller({})
     const bidWithCorrigendum = await caller.bids.create({ opportunityId })
     await pool.query(`INSERT INTO bid_corrigenda (bid_id, corrigendum_number) VALUES ($1, 1)`, [bidWithCorrigendum.id])
@@ -163,7 +163,8 @@ describe('bids router', () => {
       `INSERT INTO protected_values (entity_type, entity_id, field_key, frozen) VALUES ('bid', $1, 'submissionDeadline', true)`,
       [bidWithProtectedValue.id],
     )
-    await expect(caller.bids.delete({ id: bidWithProtectedValue.id })).rejects.toMatchObject({ code: 'CONFLICT' })
+    await caller.bids.delete({ id: bidWithProtectedValue.id })
+    expect(await caller.bids.get({ id: bidWithProtectedValue.id })).toBeNull()
 
     const opp3 = await caller.opportunities.create({ departmentId, opportunityName: 'Third' })
     const bidWithDocument = await caller.bids.create({ opportunityId: opp3.id })

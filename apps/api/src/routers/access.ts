@@ -94,7 +94,7 @@ export const accessRouter = router({
     }),
 
   /** System Admin only. Removing an override that does not exist is a no-op (nothing is logged). */
-  removeOverride: systemAdminProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
+  removeOverride: systemAdminProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input, ctx }) => {
     const actor = normalizeEmail(ctx.user?.email ?? 'unknown')
     await inOverrideTransaction(async (client) => {
       const target = (await client.query('SELECT * FROM user_role_overrides WHERE id=$1 FOR UPDATE', [input.id])).rows[0]

@@ -25,8 +25,10 @@ if (existsSync('/run/secrets/google_credentials')) {
 }
 if (existsSync('/run/secrets/onlyoffice_jwt')) process.env.ONLYOFFICE_JWT_SECRET = readFileSync('/run/secrets/onlyoffice_jwt', 'utf8').trim()
 const args = process.argv[2] === 'migrate'
-  ? ['node_modules/node-pg-migrate/bin/node-pg-migrate.js', 'up', '--migrations-dir', 'migrations/**/*.sql', '--use-glob', '--no-verbose']
-  : process.argv[2] === 'seed' ? ['node_modules/tsx/dist/cli.mjs', 'scripts/seed-import.ts'] : ['dist/server.js']
+  // The API image keeps the npm workspace layout (apps/api/...); node-pg-migrate names migrations by file basename,
+  // so the directory itself is not recorded in the pgmigrations table.
+  ? ['node_modules/node-pg-migrate/bin/node-pg-migrate.js', 'up', '--migrations-dir', 'apps/api/migrations/**/*.sql', '--use-glob', '--no-verbose']
+  : process.argv[2] === 'seed' ? ['node_modules/tsx/dist/cli.mjs', 'scripts/seed-import.ts'] : ['apps/api/dist/server.js']
 const child = spawn(process.execPath, args, { stdio: 'inherit', env: process.env })
 for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => child.kill(signal))
 child.on('error', () => process.exit(1))

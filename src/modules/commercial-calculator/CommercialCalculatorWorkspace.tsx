@@ -1,4 +1,5 @@
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import type { ReactElement } from 'react'
 import type { PolicyModuleKey } from '@goms/domain'
 import { usePermissions } from '@/lib/permissions'
 import { definePermissionNodes } from '@/lib/rbacTree/registry'
@@ -72,7 +73,7 @@ interface SidebarNavGroup {
  *  in either tab's sidebar directly (they're reached through the single
  *  "Hierarchy" row's tree view) but still need entries here purely so
  *  `Record<CommercialItemKey, …>` type-checks as total. */
-const ITEM_CONTENT: Record<CommercialItemKey, () => JSX.Element> = {
+const ITEM_CONTENT: Record<CommercialItemKey, () => ReactElement> = {
   hierarchy: HierarchyView,
   'sku-catalog': SkuCatalog,
   verticals: () => <MasterCrudScreen masterKey="verticals" />,

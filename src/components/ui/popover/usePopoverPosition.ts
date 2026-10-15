@@ -4,8 +4,8 @@ const EDGE_PAD = 8
 
 interface PopoverPositionOptions {
   open: boolean
-  anchorRef: RefObject<HTMLElement>
-  panelRef: RefObject<HTMLElement>
+  anchorRef: RefObject<HTMLElement | null>
+  panelRef: RefObject<HTMLElement | null>
   matchAnchorWidth?: boolean
   align?: 'start' | 'end'
   maxPanelHeight?: number

@@ -6,7 +6,7 @@ import { useDismiss } from './useDismiss'
 
 interface PopoverPanelProps {
   open: boolean
-  anchorRef: RefObject<HTMLElement>
+  anchorRef: RefObject<HTMLElement | null>
   onClose: () => void
   /** Panel width tracks the anchor's width exactly (typeahead selects). When
    *  false, the panel sizes to its own content (menus, canvas pickers). */

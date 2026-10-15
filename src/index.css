@@ -1,8 +1,38 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss" source(none);
+@config "../tailwind.config.ts";
+@source "./";
+@source "../index.html";
+
+/* Preserve the v3 scales while the application moves to Tailwind 4. */
+@theme {
+  --radius-sm: 0.125rem;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --blur-sm: 4px;
+  --default-ring-width: 3px;
+  --default-ring-color: var(--color-blue-500);
+}
+
+@utility outline-none {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
 
 @layer base {
+  *, ::before, ::after, ::backdrop, ::file-selector-button {
+    border-color: var(--color-gray-200, currentColor);
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  dialog {
+    margin: auto;
+  }
   /* Theme tokens — RGB channels consumed by tailwind.config.ts's `c()`.
      `.dark` is toggled on <html> by src/lib/theme.ts (and pre-paint by the
      inline script in index.html, so a reload never flashes light). */

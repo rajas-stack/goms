@@ -35,7 +35,8 @@ describe('coverage', () => {
     expect(count('deliveryTeams.')).toBe(5)
     expect(count('search.')).toBe(3)
     expect(keys).toContain('auditLogs.list')
-    expect(keys).toHaveLength(74)
+    expect(count('amnexDepartments.')).toBe(5)
+    expect(keys).toHaveLength(79)
   })
 })
 

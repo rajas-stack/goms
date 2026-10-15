@@ -39,7 +39,7 @@ afterEach(cleanupRbacFixtures)
 describe('registry coverage for this area', () => {
   it('registers exactly the 82 opportunity / bid procedures', () => {
     expect(Object.keys(opportunityPolicy).sort()).toEqual([
-      'bidCorrigenda.addChanges', 'bidCorrigenda.create', 'bidCorrigenda.listForBid', 'bidCorrigenda.reviewChange',
+      'bidCorrigenda.addChanges', 'bidCorrigenda.create', 'bidCorrigenda.listForBid', 'bidCorrigenda.reviewChange', 'bidCorrigenda.updateRegister',
       'bidCustomFields.archive', 'bidCustomFields.create', 'bidCustomFields.delete', 'bidCustomFields.list', 'bidCustomFields.reorder',
       'bidCustomFields.setValue', 'bidCustomFields.unarchive', 'bidCustomFields.update', 'bidCustomFields.valuesForBid',
       'bidMilestones.create', 'bidMilestones.delete', 'bidMilestones.listAll', 'bidMilestones.listForBid', 'bidMilestones.update',

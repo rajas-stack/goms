@@ -42,8 +42,9 @@ describe.skipIf(!import.meta.env.VITE_API_BASE_URL)('RemoteRepository (integrati
 
   it('round-trips an employee through create/get/transfer/timeline/delete', async () => {
     const dept = await repo.createNode!({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Integration Test Dept' })
-    const officeA = await repo.createNode!({ domain: 'org', typeKey: 'office', parentId: dept.id, stateCode: 27, name: 'Office A' })
-    const officeB = await repo.createNode!({ domain: 'org', typeKey: 'office', parentId: dept.id, stateCode: 27, name: 'Office B' })
+    const branch = await repo.createNode!({ domain: 'org', typeKey: 'branch', parentId: dept.id, stateCode: 27, name: 'Integration Branch' })
+    const officeA = await repo.createNode!({ domain: 'org', typeKey: 'office', parentId: branch.id, stateCode: 27, name: 'Office A' })
+    const officeB = await repo.createNode!({ domain: 'org', typeKey: 'office', parentId: branch.id, stateCode: 27, name: 'Office B' })
 
     const emp = await repo.createEmployee!({
       name: 'Integration Employee', designation: 'Officer', email: 'test@example.com', phone: '9999999999',
@@ -171,6 +172,10 @@ describe.skipIf(!import.meta.env.VITE_API_BASE_URL)('RemoteRepository (integrati
   })
 
   it('round-trips a BOQ through create/addLineItem/updateStatus/revise/duplicate/delete', async () => {
+    const approval = await repo.createMaster!('approvalMatrix', {
+      code: `INT-A-${Date.now()}`, name: 'Integration Auto Approval', description: '',
+      minDiscountPct: 0, maxDiscountPct: 90, approvalLevelLabel: 'Auto', allowAutoApproval: true,
+    })
     const dept = await repo.createNode!({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Integration BOQ Dept' })
     const salesPerson = await repo.createSalesPerson!({
       name: 'Integration BOQ Sales', officialEmail: `integration-boq-${Date.now()}@example.com`,
@@ -183,7 +188,7 @@ describe.skipIf(!import.meta.env.VITE_API_BASE_URL)('RemoteRepository (integrati
     const feature = await repo.createMaster!('features', { code: `INT-BOQ-F-${Date.now()}`, name: 'Integration Feature', description: '', moduleId: module_.id, status: 'new' })
     const category = await repo.createMaster!('skuCategories', { code: `INT-BOQ-CAT-${Date.now()}`, name: 'Integration Category', description: '' })
     const uom = await repo.createMaster!('unitsOfMeasure', { code: `INT-BOQ-UOM-${Date.now()}`, name: 'Integration UoM', description: '' })
-    const currency = await repo.createMaster!('currencies', { code: `INTBOQ${Date.now()}`.slice(0, 8), name: 'Integration Currency', description: '', symbol: '$', decimalPlaces: 2, exchangeRate: 1, isBaseCurrency: false })
+    const currency = await repo.createMaster!('currencies', { code: `I${Date.now().toString(36)}`, name: 'Integration Currency', description: '', symbol: '$', decimalPlaces: 2, exchangeRate: 1, isBaseCurrency: false })
     const taxClass = await repo.createMaster!('taxClasses', { code: `INT-BOQ-TAX-${Date.now()}`, name: 'Integration Tax', description: '', ratePct: 18 })
     const billingType = await repo.createMaster!('billingTypes', { code: `INT-BOQ-BIL-${Date.now()}`, name: 'Integration Billing', description: '' })
 
@@ -241,6 +246,7 @@ describe.skipIf(!import.meta.env.VITE_API_BASE_URL)('RemoteRepository (integrati
     await repo.deleteMaster!('currencies', currency.id)
     await repo.deleteMaster!('taxClasses', taxClass.id)
     await repo.deleteMaster!('billingTypes', billingType.id)
+    await repo.deleteMaster!('approvalMatrix', approval.id)
     await repo.deleteSalesPerson!(salesPerson.id)
     await repo.deleteNode!(dept.id)
   })
@@ -298,7 +304,8 @@ describe.skipIf(!import.meta.env.VITE_API_BASE_URL)('RemoteRepository (integrati
 
   it('round-trips a follow-up through create/listForEntity/setStatus/delete', async () => {
     const dept = await repo.createNode!({ domain: 'org', typeKey: 'department', parentId: null, stateCode: 27, name: 'Integration FollowUp Dept' })
-    const office = await repo.createNode!({ domain: 'org', typeKey: 'office', parentId: dept.id, stateCode: 27, name: 'Integration FollowUp Office' })
+    const branch = await repo.createNode!({ domain: 'org', typeKey: 'branch', parentId: dept.id, stateCode: 27, name: 'Integration FollowUp Branch' })
+    const office = await repo.createNode!({ domain: 'org', typeKey: 'office', parentId: branch.id, stateCode: 27, name: 'Integration FollowUp Office' })
     const emp = await repo.createEmployee!({
       name: 'Integration FollowUp Contact', designation: 'Officer', email: 'fu@example.com', phone: '9999999999',
       orgNodeId: office.id, managerId: null,

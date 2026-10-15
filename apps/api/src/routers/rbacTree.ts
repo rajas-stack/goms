@@ -19,7 +19,7 @@ const email = z.string().trim().toLowerCase().email().max(254)
 const subjectSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('role'), id: z.string().min(1).max(80) }),
   z.object({ type: z.literal('user'), id: email }),
-  z.object({ type: z.literal('template'), id: z.string().uuid() }),
+  z.object({ type: z.literal('template'), id: z.string().guid('Invalid UUID') }),
 ])
 const linkable = z.discriminatedUnion('type', [
   z.object({ type: z.literal('role'), id: z.string().min(1).max(80) }),
@@ -32,7 +32,7 @@ const roleShape = z.object({
 const actorOf = (ctx: { user?: { email: string } }): string | null => ctx.user?.email?.toLowerCase() ?? null
 const customUuid = (id: string): string => {
   const uuid = id.startsWith('custom:') ? id.slice(7) : ''
-  if (!z.string().uuid().safeParse(uuid).success) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown role.' })
+  if (!z.string().guid('Invalid UUID').safeParse(uuid).success) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Unknown role.' })
   return uuid
 }
 const bad = (error: unknown): never => { throw new TRPCError({ code: 'BAD_REQUEST', message: error instanceof Error ? error.message : 'Invalid input.' }) }
@@ -180,7 +180,7 @@ export const rbacTreeRouter = router({
       return changed({ id })
     }),
   updateTemplate: systemAdminProcedure
-    .input(z.object({ id: z.string().uuid(), name: z.string().max(RBAC_LIMITS.label * 2), description: z.string().max(RBAC_LIMITS.description * 2).optional() }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), name: z.string().max(RBAC_LIMITS.label * 2), description: z.string().max(RBAC_LIMITS.description * 2).optional() }))
     .mutation(async ({ input, ctx }) => {
       let name = ''
       try { name = normalizeTemplateName(input.name) } catch (e) { bad(e) }
@@ -197,7 +197,7 @@ export const rbacTreeRouter = router({
         await auditTree(client, `template:${input.id}`, 'template', '', name, 'update', actorOf(ctx))
       })
     }),
-  duplicateTemplate: systemAdminProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
+  duplicateTemplate: systemAdminProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input, ctx }) => {
     const id = await inTransaction(async (client) => {
       const source = (await client.query('SELECT * FROM rbac_templates WHERE id=$1', [input.id])).rows[0]
       if (!source) throw new TRPCError({ code: 'NOT_FOUND', message: 'That template no longer exists.' })
@@ -211,7 +211,7 @@ export const rbacTreeRouter = router({
     })
     return { id }
   }),
-  deleteTemplate: systemAdminProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
+  deleteTemplate: systemAdminProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input, ctx }) => {
     await inTransaction(async (client) => {
       await client.query(`DELETE FROM rbac_grants WHERE subject_type='template' AND subject_id=$1`, [input.id])
       const { rows } = await client.query('DELETE FROM rbac_templates WHERE id=$1 RETURNING name', [input.id])
@@ -221,7 +221,7 @@ export const rbacTreeRouter = router({
   }),
   /** Links the template to every subject (linked mode). `replace` also clears their own overrides (each removal audited). */
   applyTemplate: systemAdminProcedure
-    .input(z.object({ templateId: z.string().uuid(), subjects: z.array(linkable).min(1).max(RBAC_LIMITS.subjects), mode: z.enum(['keep', 'replace']) }))
+    .input(z.object({ templateId: z.string().guid('Invalid UUID'), subjects: z.array(linkable).min(1).max(RBAC_LIMITS.subjects), mode: z.enum(['keep', 'replace']) }))
     .mutation(async ({ input, ctx }) => {
       await inTransaction(async (client) => {
         if (!(await client.query('SELECT 1 FROM rbac_templates WHERE id=$1', [input.templateId])).rows[0]) {

@@ -11,7 +11,7 @@ function toFollowUp(row: any) {
 
 export const followUpsRouter = router({
   listForEntity: protectedReadProcedure
-    .input(z.object({ entityType: z.string(), entityId: z.string().uuid() }))
+    .input(z.object({ entityType: z.string(), entityId: z.string().guid('Invalid UUID') }))
     .query(async ({ input }) => {
       const result = await pool.query(
         'SELECT * FROM follow_ups WHERE entity_type=$1 AND entity_id=$2 ORDER BY due_date',
@@ -25,8 +25,8 @@ export const followUpsRouter = router({
   }),
   create: protectedProcedure
     .input(z.object({
-      entityType: z.string(), entityId: z.string().uuid(), dueDate: z.string(),
-      note: z.string().optional(), assigneeId: z.string().uuid().nullable().optional(),
+      entityType: z.string(), entityId: z.string().guid('Invalid UUID'), dueDate: z.string(),
+      note: z.string().optional(), assigneeId: z.string().guid('Invalid UUID').nullable().optional(),
     }))
     .mutation(async ({ input, ctx }) => {
       const result = await pool.query(
@@ -37,11 +37,11 @@ export const followUpsRouter = router({
       return toFollowUp(result.rows[0])
     }),
   setStatus: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), status: z.enum(['open', 'done', 'cancelled']) }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), status: z.enum(['open', 'done', 'cancelled']) }))
     .mutation(({ input }) =>
       pool.query('UPDATE follow_ups SET status=$1 WHERE id=$2', [input.status, input.id]).then(() => undefined)
     ),
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) =>
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(({ input }) =>
     pool.query('DELETE FROM follow_ups WHERE id=$1', [input.id]).then(() => undefined)
   ),
 })

@@ -25,7 +25,7 @@ export async function syncSubmissionDeadlineToOpportunity(client: any, bidId: st
 }
 
 export const bidMilestonesRouter = router({
-  listForBid: protectedReadProcedure.input(z.object({ bidId: z.string().uuid() })).query(async ({ input }) => {
+  listForBid: protectedReadProcedure.input(z.object({ bidId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query('SELECT * FROM bid_milestones WHERE bid_id=$1 ORDER BY due_at NULLS LAST', [input.bidId])
     return result.rows.map(toBidMilestone)
   }),
@@ -47,7 +47,7 @@ export const bidMilestonesRouter = router({
 
   create: protectedProcedure
     .input(z.object({
-      bidId: z.string().uuid(), milestoneType: z.string().min(1), key: z.string().min(1), label: z.string().min(1),
+      bidId: z.string().guid('Invalid UUID'), milestoneType: z.string().min(1), key: z.string().min(1), label: z.string().min(1),
       dueAt: z.string().nullable().optional(), venue: z.string().optional(), notes: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
@@ -80,7 +80,7 @@ export const bidMilestonesRouter = router({
 
   update: protectedProcedure
     .input(z.object({
-      id: z.string().uuid(),
+      id: z.string().guid('Invalid UUID'),
       patch: z.object({
         label: z.string().optional(), dueAt: z.string().nullable().optional(),
         venue: z.string().nullable().optional(), notes: z.string().nullable().optional(),
@@ -117,7 +117,7 @@ export const bidMilestonesRouter = router({
       }
     }),
 
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     const milestone = (await pool.query('SELECT bid_id, key FROM bid_milestones WHERE id=$1', [input.id])).rows[0]
     if (!milestone) return
     // Review Focus (Task 12): a pending corrigendum change still targeting

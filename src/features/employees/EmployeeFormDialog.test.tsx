@@ -111,6 +111,8 @@ function renderDialog(props: {
 }
 
 beforeEach(() => {
+  localStorage.clear()
+  sessionStorage.clear()
   createMutateAsync.mockReset()
   updateMutateAsync.mockReset()
   addTimelineMutateAsync.mockReset()

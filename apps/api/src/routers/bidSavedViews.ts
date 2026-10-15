@@ -36,7 +36,7 @@ export const bidSavedViewsRouter = router({
     return [...systemViews, ...dbResult.rows.map(toSavedView)]
   }),
 
-  get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input, ctx }) => {
+  get: protectedReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(async ({ input, ctx }) => {
     const result = await pool.query('SELECT * FROM bid_saved_views WHERE id=$1', [input.id])
     const row = result.rows[0]
     if (!row) return null

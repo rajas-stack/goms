@@ -17,7 +17,7 @@ const WORKER_EXEC_ARGV = NODE_MAJOR >= 25 ? ['--no-experimental-webstorage'] : [
 export default defineConfig({
   plugins: [react()],
   resolve: {
-    alias: { '@': path.resolve(__dirname, 'src') },
+    alias: { '@': path.resolve(import.meta.dirname, 'src') },
   },
   test: {
     environment: 'jsdom',

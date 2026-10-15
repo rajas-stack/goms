@@ -77,7 +77,7 @@ const commercialMastersRouter = router({
     }),
 
   get: rbacReadProcedure
-    .input(z.object({ key: masterKeySchema, id: z.string().uuid() }))
+    .input(z.object({ key: masterKeySchema, id: z.string().guid('Invalid UUID') }))
     .query(({ input }) => oneMaster(input.key, input.id)),
 
   create: protectedProcedure
@@ -139,7 +139,7 @@ const commercialMastersRouter = router({
     }),
 
   update: protectedProcedure
-    .input(z.object({ key: masterKeySchema, id: z.string().uuid(), patch: z.record(z.any()), changeReason: z.string().optional() }))
+    .input(z.object({ key: masterKeySchema, id: z.string().guid('Invalid UUID'), patch: z.record(z.string(), z.any()), changeReason: z.string().optional() }))
     .mutation(async ({ input: { key, id, patch, changeReason } }) => {
       const client = await pool.connect()
       try {
@@ -203,14 +203,14 @@ const commercialMastersRouter = router({
     }),
 
   setActive: protectedProcedure
-    .input(z.object({ key: masterKeySchema, id: z.string().uuid(), active: z.boolean() }))
+    .input(z.object({ key: masterKeySchema, id: z.string().guid('Invalid UUID'), active: z.boolean() }))
     .mutation(({ input }) =>
       pool.query('UPDATE commercial_masters SET active=$1, updated_at=now() WHERE master_key=$2 AND id=$3', [input.active, input.key, input.id])
         .then(() => undefined),
     ),
 
   delete: protectedProcedure
-    .input(z.object({ key: masterKeySchema, id: z.string().uuid() }))
+    .input(z.object({ key: masterKeySchema, id: z.string().guid('Invalid UUID') }))
     .mutation(async ({ input }) => {
       // MASTER_CHILD_OF only flags kinds with a real child concept (verticals/
       // products/modules); every child's link is the same self-referencing
@@ -269,7 +269,7 @@ const commercialMastersRouter = router({
     }),
 
   listEditionFeatures: rbacReadProcedure
-    .input(z.object({ editionId: z.string().uuid() }))
+    .input(z.object({ editionId: z.string().guid('Invalid UUID') }))
     .query(async ({ input }) => {
       const result = await pool.query('SELECT * FROM edition_features WHERE edition_id=$1 ORDER BY display_order', [input.editionId])
       return result.rows.map(toEditionFeature)
@@ -277,8 +277,8 @@ const commercialMastersRouter = router({
 
   setEditionFeatures: protectedProcedure
     .input(z.object({
-      editionId: z.string().uuid(),
-      rows: z.array(z.object({ featureId: z.string().uuid(), mandatory: z.boolean() })),
+      editionId: z.string().guid('Invalid UUID'),
+      rows: z.array(z.object({ featureId: z.string().guid('Invalid UUID'), mandatory: z.boolean() })),
     }))
     .mutation(async ({ input }) => {
       const client = await pool.connect()
@@ -375,13 +375,13 @@ async function resolveStandardEditionId(client: any): Promise<string> {
 
 const createSkuInputShape = {
   name: z.string().min(1),
-  categoryId: z.string().uuid(),
-  featureId: z.string().uuid(),
-  editionId: z.string().uuid().optional(),
-  uomId: z.string().uuid(),
-  currencyId: z.string().uuid(),
-  taxClassId: z.string().uuid(),
-  billingTypeId: z.string().uuid(),
+  categoryId: z.string().guid('Invalid UUID'),
+  featureId: z.string().guid('Invalid UUID'),
+  editionId: z.string().guid('Invalid UUID').optional(),
+  uomId: z.string().guid('Invalid UUID'),
+  currencyId: z.string().guid('Invalid UUID'),
+  taxClassId: z.string().guid('Invalid UUID'),
+  billingTypeId: z.string().guid('Invalid UUID'),
   activeFrom: z.string().min(1),
   activeTill: z.string().nullable(),
   lifecycleStatus: lifecycleStatusSchema.optional(),
@@ -398,13 +398,13 @@ const createSkuInputShape = {
 
 const skuPatchShape = {
   name: z.string().min(1).optional(),
-  categoryId: z.string().uuid().optional(),
-  featureId: z.string().uuid().optional(),
-  editionId: z.string().uuid().optional(),
-  uomId: z.string().uuid().optional(),
-  currencyId: z.string().uuid().optional(),
-  taxClassId: z.string().uuid().optional(),
-  billingTypeId: z.string().uuid().optional(),
+  categoryId: z.string().guid('Invalid UUID').optional(),
+  featureId: z.string().guid('Invalid UUID').optional(),
+  editionId: z.string().guid('Invalid UUID').optional(),
+  uomId: z.string().guid('Invalid UUID').optional(),
+  currencyId: z.string().guid('Invalid UUID').optional(),
+  taxClassId: z.string().guid('Invalid UUID').optional(),
+  billingTypeId: z.string().guid('Invalid UUID').optional(),
   activeFrom: z.string().min(1).optional(),
   activeTill: z.string().nullable().optional(),
   lifecycleStatus: lifecycleStatusSchema.optional(),
@@ -463,7 +463,7 @@ const commercialSkusRouter = router({
     return result.rows.map(toSku)
   }),
 
-  get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+  get: protectedReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query('SELECT * FROM commercial_skus WHERE id=$1', [input.id])
     return result.rows[0] ? toSku(result.rows[0]) : null
   }),
@@ -538,7 +538,7 @@ const commercialSkusRouter = router({
    *  exists (Phase 6), this also closes the audit-log deferral Phase 5 left
    *  open, writing one entry per touched sensitive field. */
   update: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), patch: z.object(skuPatchShape), changeReason: z.string().optional() }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), patch: z.object(skuPatchShape), changeReason: z.string().optional() }))
     .mutation(async ({ input }) => {
       const client = await pool.connect()
       try {
@@ -588,7 +588,7 @@ const commercialSkusRouter = router({
    *  half now that `commercial_boq_line_items` exists (Phase 6), closing the
    *  deferral Phase 5 left open (same pattern as Phase 2's employees.delete
    *  leaving the follow_ups cleanup for Phase 7). */
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     const inUse = await pool.query(
       `SELECT 1 FROM commercial_bom_items WHERE parent_sku_id=$1 OR component_sku_id=$1
        UNION ALL SELECT 1 FROM commercial_boq_line_items WHERE sku_id=$1 LIMIT 1`,
@@ -604,7 +604,7 @@ const commercialSkusRouter = router({
 // --- Commercial BOM (spec §6.4/§14) ----------------------------------------
 
 const commercialBomRouter = router({
-  listForSku: rbacReadProcedure.input(z.object({ parentSkuId: z.string().uuid() })).query(async ({ input }) => {
+  listForSku: rbacReadProcedure.input(z.object({ parentSkuId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query('SELECT * FROM commercial_bom_items WHERE parent_sku_id=$1', [input.parentSkuId])
     return result.rows.map(toBomItem)
   }),
@@ -616,7 +616,7 @@ const commercialBomRouter = router({
 
   create: protectedProcedure
     .input(z.object({
-      parentSkuId: z.string().uuid(), componentSkuId: z.string().uuid(),
+      parentSkuId: z.string().guid('Invalid UUID'), componentSkuId: z.string().guid('Invalid UUID'),
       mandatory: z.boolean(), quantity: z.number(), notes: z.string(),
     }))
     .mutation(async ({ input }) => {
@@ -638,9 +638,9 @@ const commercialBomRouter = router({
 
   update: protectedProcedure
     .input(z.object({
-      id: z.string().uuid(),
+      id: z.string().guid('Invalid UUID'),
       patch: z.object({
-        parentSkuId: z.string().uuid().optional(), componentSkuId: z.string().uuid().optional(),
+        parentSkuId: z.string().guid('Invalid UUID').optional(), componentSkuId: z.string().guid('Invalid UUID').optional(),
         mandatory: z.boolean().optional(), quantity: z.number().optional(), notes: z.string().optional(),
       }),
     }))
@@ -674,7 +674,7 @@ const commercialBomRouter = router({
       return toBomItem(result.rows[0])
     }),
 
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     await pool.query('DELETE FROM commercial_bom_items WHERE id=$1', [input.id])
   }),
 })
@@ -866,24 +866,24 @@ const boqColumnFor: Record<string, string> = {
 // blank name (findBoqByOpportunityName treats blanks as never-clashing);
 // "must be non-blank" is a CreateBoq.tsx save-readiness check, UI-only.
 const boqInputShape = {
-  opportunityName: z.string(), departmentId: z.string().uuid(),
+  opportunityName: z.string(), departmentId: z.string().guid('Invalid UUID'),
   customerName: z.string(), customerOrganization: z.string(), customerAddress: z.string(), customerContact: z.string(),
-  verticalId: z.string().uuid(),
+  verticalId: z.string().guid('Invalid UUID'),
   budgetAmount: z.string(), budgetUnit: z.string(), budgetKnown: z.string(), emdAmount: z.string(), emdUnit: z.string(),
-  salesPersonId: z.string().uuid(), buSalesPersonId: z.string().uuid().nullable(), preSalesId: z.string().uuid().nullable(),
-  currency: z.string().min(1), opportunityId: z.string().uuid().nullable().optional(),
+  salesPersonId: z.string().guid('Invalid UUID'), buSalesPersonId: z.string().guid('Invalid UUID').nullable(), preSalesId: z.string().guid('Invalid UUID').nullable(),
+  currency: z.string().min(1), opportunityId: z.string().guid('Invalid UUID').nullable().optional(),
 }
 
 const boqPatchShape = {
-  opportunityName: z.string().optional(), departmentId: z.string().uuid().optional(),
+  opportunityName: z.string().optional(), departmentId: z.string().guid('Invalid UUID').optional(),
   customerName: z.string().optional(), customerOrganization: z.string().optional(),
   customerAddress: z.string().optional(), customerContact: z.string().optional(),
-  verticalId: z.string().uuid().optional(),
+  verticalId: z.string().guid('Invalid UUID').optional(),
   budgetAmount: z.string().optional(), budgetUnit: z.string().optional(), budgetKnown: z.string().optional(),
   emdAmount: z.string().optional(), emdUnit: z.string().optional(),
-  salesPersonId: z.string().uuid().optional(), buSalesPersonId: z.string().uuid().nullable().optional(),
-  preSalesId: z.string().uuid().nullable().optional(), currency: z.string().min(1).optional(),
-  opportunityId: z.string().uuid().nullable().optional(),
+  salesPersonId: z.string().guid('Invalid UUID').optional(), buSalesPersonId: z.string().guid('Invalid UUID').nullable().optional(),
+  preSalesId: z.string().guid('Invalid UUID').nullable().optional(), currency: z.string().min(1).optional(),
+  opportunityId: z.string().guid('Invalid UUID').nullable().optional(),
 }
 
 // isForeignKeyViolation/isUniqueViolation now live in ../db-errors.js —
@@ -933,13 +933,13 @@ const commercialBoqRouter = router({
     return withTotals.map(toBoq)
   }),
 
-  get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+  get: protectedReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query('SELECT * FROM commercial_boqs WHERE id=$1', [input.id])
     if (!result.rows[0]) return null
     return toBoq(await withLiveDraftGrandTotal(pool, result.rows[0]))
   }),
 
-  listLineItems: protectedReadProcedure.input(z.object({ boqId: z.string().uuid() })).query(async ({ input }) => {
+  listLineItems: protectedReadProcedure.input(z.object({ boqId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const boqResult = await pool.query('SELECT * FROM commercial_boqs WHERE id=$1', [input.boqId])
     const linesResult = await pool.query('SELECT * FROM commercial_boq_line_items WHERE boq_id=$1 ORDER BY sort_order', [input.boqId])
     const lines = boqResult.rows[0] ? await withLiveDraftPricing(pool, boqResult.rows[0], linesResult.rows) : linesResult.rows
@@ -991,7 +991,7 @@ const commercialBoqRouter = router({
 
   /** BOQ-level metadata patch — throws unless `status === 'draft'` (BOQ
    *  editable-workspace overhaul spec §3). */
-  update: protectedProcedure.input(z.object({ id: z.string().uuid(), patch: z.object(boqPatchShape) })).mutation(async ({ input }) => {
+  update: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID'), patch: z.object(boqPatchShape) })).mutation(async ({ input }) => {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
@@ -1037,8 +1037,8 @@ const commercialBoqRouter = router({
 
   addLineItem: protectedProcedure
     .input(z.object({
-      boqId: z.string().uuid(), skuId: z.string().uuid(), quantity: z.number(), unitPrice: z.number(), discountPct: z.number(),
-      approverId: z.string().uuid().nullable().optional(), approvalRemarks: z.string().optional(),
+      boqId: z.string().guid('Invalid UUID'), skuId: z.string().guid('Invalid UUID'), quantity: z.number(), unitPrice: z.number(), discountPct: z.number(),
+      approverId: z.string().guid('Invalid UUID').nullable().optional(), approvalRemarks: z.string().optional(),
       pricingLevels: z.array(linePricingLevelSchema).optional(), activePricingLevel: pricingLevelKeySchema.nullable().optional(),
     }))
     .mutation(async ({ input }) => {
@@ -1097,10 +1097,10 @@ const commercialBoqRouter = router({
 
   updateLineItem: protectedProcedure
     .input(z.object({
-      id: z.string().uuid(),
+      id: z.string().guid('Invalid UUID'),
       patch: z.object({
         quantity: z.number().optional(), unitPrice: z.number().optional(), discountPct: z.number().optional(),
-        approverId: z.string().uuid().nullable().optional(), approvalDate: z.string().nullable().optional(),
+        approverId: z.string().guid('Invalid UUID').nullable().optional(), approvalDate: z.string().nullable().optional(),
         approvalRemarks: z.string().optional(), approvalStatus: z.enum(['auto_approved', 'pending', 'approved', 'rejected']).optional(),
         pricingLevels: z.array(linePricingLevelSchema).optional(), activePricingLevel: pricingLevelKeySchema.nullable().optional(),
       }),
@@ -1199,7 +1199,7 @@ const commercialBoqRouter = router({
       return toLineItem(result.rows[0])
     }),
 
-  removeLineItem: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  removeLineItem: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
@@ -1227,7 +1227,7 @@ const commercialBoqRouter = router({
    *  BOQ's current line item ids, each exactly once, in the desired order.
    *  Throws unless `status === 'draft'` (BOQ workbench spec §6). */
   reorderLineItems: protectedProcedure
-    .input(z.object({ boqId: z.string().uuid(), orderedIds: z.array(z.string().uuid()) }))
+    .input(z.object({ boqId: z.string().guid('Invalid UUID'), orderedIds: z.array(z.string().guid('Invalid UUID')) }))
     .mutation(async ({ input }) => {
       const boqResult = await pool.query('SELECT status FROM commercial_boqs WHERE id=$1', [input.boqId])
       const boq = boqResult.rows[0]
@@ -1257,7 +1257,7 @@ const commercialBoqRouter = router({
    *  blocks a transition to `approved` while any line item's approval status
    *  isn't cleared (PCS-029). */
   updateStatus: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), nextStatus: boqStatusSchema, changeReason: z.string() }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), nextStatus: boqStatusSchema, changeReason: z.string() }))
     .mutation(async ({ input }) => {
       const client = await pool.connect()
       try {
@@ -1300,7 +1300,7 @@ const commercialBoqRouter = router({
 
   /** Creates a new BOQ row carrying the same `boqNumber` forward, with
    *  `boqVersion` incremented and its line items copied (spec §9/§13). */
-  revise: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  revise: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
@@ -1343,7 +1343,7 @@ const commercialBoqRouter = router({
    *  `boqVersion: 1`, no `parentBoqId` — copying this BOQ's fields and line
    *  items as a starting point. Distinct from `revise`, which keeps the same
    *  `boqNumber` and links back via `parentBoqId`. */
-  duplicate: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  duplicate: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
@@ -1394,7 +1394,7 @@ const commercialBoqRouter = router({
    *  left the deletable set. Locking the row here also means a concurrent
    *  `updateStatus` (which itself takes FOR UPDATE, see below) simply waits
    *  its turn rather than racing. */
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')

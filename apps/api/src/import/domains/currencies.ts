@@ -9,8 +9,8 @@ const currencyRowSchema = z.object({
   // Currency precision essentially always defaults to 2 (matching almost
   // every real-world currency); an admin uploading a 0- or 3-decimal
   // currency still overrides this explicitly via the column.
-  decimalPlaces: z.number({ invalid_type_error: 'decimalPlaces must be a number' }).optional().default(2),
-  exchangeRate: z.number({ invalid_type_error: 'exchangeRate must be a number' }),
+  decimalPlaces: z.number('decimalPlaces must be a number').optional().default(2),
+  exchangeRate: z.number('exchangeRate must be a number'),
   isBaseCurrency: z.boolean().optional().default(false),
   active: z.boolean().optional().default(true),
   displayOrder: z.number().optional().default(0),
