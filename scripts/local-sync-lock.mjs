@@ -13,7 +13,7 @@ function stale(lockFile) {
   let owner
   // A new owner's file can be temporarily empty; unreadable ownership is not stale.
   try { owner = JSON.parse(readFileSync(lockFile, 'utf8')) } catch { return false }
-  if (!Number.isInteger(owner.pid) || owner.pid <= 0) return false
+  if (!owner || !Number.isInteger(owner.pid) || owner.pid <= 0) return false
   try { process.kill(owner.pid, 0); return false }
   catch (error) { if (error.code === 'ESRCH') return true; throw error }
 }

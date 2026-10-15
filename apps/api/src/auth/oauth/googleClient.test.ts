@@ -23,6 +23,14 @@ describe('verifyGoogleIdToken', () => {
   it('accepts the bare accounts.google.com issuer', async () => {
     await expect(verifyGoogleIdToken(await mint({}, { iss: 'accounts.google.com' }), 'N1', { clientId: CLIENT, keys })).resolves.toBeTruthy()
   })
+  it.each(['exp', 'iat', 'sub'])('rejects a signed ID token without %s', async claim => {
+    const now = Math.floor(Date.now() / 1000)
+    const payload: Record<string, unknown> = { email: 'someone@amnex.com', email_verified: true, nonce: 'N1', sub: '123', iat: now, exp: now + 300 }
+    delete payload[claim]
+    const token = await new SignJWT(payload).setProtectedHeader({ alg: 'RS256' })
+      .setIssuer('https://accounts.google.com').setAudience(CLIENT).sign(privateKey)
+    expect(await reason(verifyGoogleIdToken(token, 'N1', { clientId: CLIENT, keys }))).toBe('token')
+  })
   it.each([
     ['wrong issuer', () => mint({}, { iss: 'https://evil.example' }), 'token'],
     ['wrong audience', () => mint({}, { aud: 'someone-elses-client' }), 'token'],

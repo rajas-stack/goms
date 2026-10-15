@@ -39,7 +39,7 @@ jobs:
       - name: Logic and domain tests
         run: npm test -- --maxWorkers=2
       - name: Script tests
-        run: node --test scripts/local-sync-lock.test.mjs scripts/geo-simplify-lib.test.cjs scripts/simplify-geo-assets.test.cjs scripts/verify-geo-assets.test.cjs scripts/access-matrix/engine.test.cjs scripts/access-matrix/policy.test.cjs
+        run: node --test scripts/security-check.test.mjs scripts/local-sync-lock.test.mjs scripts/geo-simplify-lib.test.cjs scripts/simplify-geo-assets.test.cjs scripts/verify-geo-assets.test.cjs scripts/access-matrix/engine.test.cjs scripts/access-matrix/policy.test.cjs
       - name: Complete API tests
         run: npm test --workspace @goms/api -- --testTimeout=30000
       - name: Complete component tests

@@ -84,6 +84,15 @@ describe('download guard', () => {
     expect(internalFetchUrl(url, settings).href).toBe(url.href)
     expect(internalFetchUrl(new URL('http://onlyoffice/x'), inCompose).href).toBe('http://onlyoffice/x')
   })
+  it.each(['//169.254.169.254/latest', '//other.example/output.docx', '/%2f%2fother.example/output.docx'])('keeps remapped downloads on the configured origin for %s', path => {
+    const inCompose = onlyofficeSettings({ ...ENV, ONLYOFFICE_INTERNAL_URL: 'http://onlyoffice:8080' })
+    const original = assertAllowedDownload(`http://localhost:8082${path}?md5=x`, inCompose.downloadOrigins)
+    const mapped = internalFetchUrl(original, inCompose)
+    expect(mapped.origin).toBe('http://onlyoffice:8080')
+    expect(mapped.pathname).toBe(original.pathname)
+    expect(mapped.search).toBe('?md5=x')
+    expect(original.origin).toBe('http://localhost:8082')
+  })
   it('caps the download size and refuses redirects', async () => {
     const fetchImpl = vi.fn(async () => new Response(new Uint8Array(20))) as unknown as typeof fetch
     await expect(downloadFile(new URL('http://localhost:8082/f'), 10, fetchImpl)).rejects.toThrow('too large')
