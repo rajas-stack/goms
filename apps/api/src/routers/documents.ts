@@ -38,7 +38,7 @@ function toCitation(row: any) {
 
 export const documentCitationsRouter = router({
   list: protectedReadProcedure.input(z.object({ documentId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
-    const result = await pool.query('SELECT * FROM document_citations WHERE document_id=$1 ORDER BY created_at', [input.documentId])
+    const result = await pool.query('SELECT * FROM document_citations WHERE document_id=$1 ORDER BY created_at, insert_seq', [input.documentId])
     return result.rows.map(toCitation)
   }),
   create: protectedProcedure
@@ -125,7 +125,7 @@ export const documentsRouter = router({
     }),
 
   listFor: protectedReadProcedure.input(z.object({ entityType: z.string(), entityId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
-    const result = await pool.query('SELECT * FROM documents WHERE entity_type=$1 AND entity_id=$2 ORDER BY uploaded_at DESC', [input.entityType, input.entityId])
+    const result = await pool.query('SELECT * FROM documents WHERE entity_type=$1 AND entity_id=$2 ORDER BY uploaded_at DESC, insert_seq DESC', [input.entityType, input.entityId])
     return result.rows.map(toDocument)
   }),
   /** A fresh signed URL per call — a stored one would outlive its expiry. */

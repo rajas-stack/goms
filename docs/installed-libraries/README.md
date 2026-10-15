@@ -10,6 +10,7 @@ Dependency inventory for the GOMS application, updated 2026-10-15.
 - [Android package and build-tool version checks](android-version-check.md)
 - [Version changes](version-changes.md)
 - [Release verification](release-verification.md)
+- [Security review, fixes and remaining controls](security-review.md)
 
 The original reports, refresh scripts and live test/build logs are retained at
 `E:\goms\Technical documentation\installed libraries`. This directory is the

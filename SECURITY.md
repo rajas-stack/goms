@@ -35,6 +35,8 @@
 
 ## Verification
 
+The [2026-10-15 security follow-up](docs/installed-libraries/security-review.md) records source fixes, local test results, classified Git-history scan findings and remaining production controls. APK work was excluded.
+
 Run the CI security checks and production-mode negative tests. In staging, check rejected anonymous/non-Amnex/revoked users, disabled accounts, role-denied reads/writes, locked deletion, audit database outages, cross-origin requests, oversized batches and account-switch cleanup. Exercise Google popup sign-in, Drive file operations, signed GCS uploads/downloads and OCR under the deployed CSP. Confirm cloud logs contain no bearer tokens, passphrases, decrypted credentials or raw database errors.
 
 References: [OWASP ASVS](https://cheatsheetseries.owasp.org/IndexASVS), [Firebase revocation](https://firebase.google.com/docs/auth/admin/manage-sessions), [Google OAuth practices](https://developers.google.com/identity/protocols/oauth2/resources/best-practices).

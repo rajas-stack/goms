@@ -27,7 +27,7 @@ export const bidCorrigendaRouter = router({
     const corrigenda = (await pool.query('SELECT * FROM bid_corrigenda WHERE bid_id=$1 ORDER BY corrigendum_number', [input.bidId])).rows
     const out = []
     for (const c of corrigenda) {
-      const changes = (await pool.query('SELECT * FROM bid_corrigendum_changes WHERE corrigendum_id=$1 ORDER BY created_at', [c.id])).rows
+      const changes = (await pool.query('SELECT * FROM bid_corrigendum_changes WHERE corrigendum_id=$1 ORDER BY created_at, insert_seq', [c.id])).rows
       out.push(toBidCorrigendum(c, changes))
     }
     return out
@@ -144,7 +144,7 @@ export const bidCorrigendaRouter = router({
         await client.query(`UPDATE bids SET data_confidence='needs_review', updated_at=now() WHERE id=$1`, [corrigendum.bid_id])
         await client.query('COMMIT')
         const row = (await pool.query('SELECT * FROM bid_corrigenda WHERE id=$1', [corrigendum.id])).rows[0]
-        const changes = (await pool.query('SELECT * FROM bid_corrigendum_changes WHERE corrigendum_id=$1 ORDER BY created_at', [corrigendum.id])).rows
+        const changes = (await pool.query('SELECT * FROM bid_corrigendum_changes WHERE corrigendum_id=$1 ORDER BY created_at, insert_seq', [corrigendum.id])).rows
         return toBidCorrigendum(row, changes)
       } catch (e) {
         await client.query('ROLLBACK')
@@ -169,7 +169,7 @@ export const bidCorrigendaRouter = router({
           reason: '', action: 'corrigendum_register_updated', changedBy: ctx.user?.email,
         })
       }
-      const changes = (await pool.query('SELECT * FROM bid_corrigendum_changes WHERE corrigendum_id=$1 ORDER BY created_at', [row.id])).rows
+      const changes = (await pool.query('SELECT * FROM bid_corrigendum_changes WHERE corrigendum_id=$1 ORDER BY created_at, insert_seq', [row.id])).rows
       return toBidCorrigendum(row, changes)
     }),
 

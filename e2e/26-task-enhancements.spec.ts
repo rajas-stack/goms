@@ -41,8 +41,12 @@ async function openQaTestDepartment(page: Page) {
 }
 
 async function unlockSalesEditing(page: Page) {
-  const lockBtn = page.getByRole('button', { name: /tap to unlock/ });
-  if (await lockBtn.count() > 0) await lockBtn.click();
+  // Wait for the toggle to render in either state first: an immediate count() raced the
+  // roster's first paint on slower runners, saw nothing, and left editing locked.
+  const toggle = page.getByRole('button', { name: /Sales team editing (locked|unlocked)/ });
+  await expect(toggle).toBeVisible();
+  if (await toggle.getAttribute('aria-pressed') !== 'true') await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-pressed', 'true');
 }
 
 /** Opens the FAB's "Create Department" flow, picks a real state (never

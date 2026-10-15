@@ -554,7 +554,7 @@ export const employeesRouter = router({
       }
     }),
   listMergeAudit: protectedReadProcedure.query(async () => {
-    const result = await pool.query('SELECT * FROM employee_merge_audit ORDER BY merged_at DESC')
+    const result = await pool.query('SELECT * FROM employee_merge_audit ORDER BY merged_at DESC, insert_seq DESC')
     return result.rows.map((row) => ({
       id: row.id, survivorId: row.survivor_id, survivorName: row.survivor_name,
       duplicateId: row.duplicate_id, duplicateName: row.duplicate_name,
