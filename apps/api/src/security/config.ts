@@ -1,5 +1,12 @@
 export const productionSecurity = () => process.env.NODE_ENV === 'production' || process.env.SECURITY_ENFORCEMENT_ENABLED === 'true'
 
+/** Longest time (seconds) since the user last signed in with Google that production still accepts. Default 12 h; set
+ *  AUTH_MAX_SESSION_AGE_SECONDS (15 min - 90 days) so staff are not forced to sign in again every 12 h. Anything else falls back to 12 h. */
+export function maxSessionAgeSeconds(): number {
+  const seconds = Number(process.env.AUTH_MAX_SESSION_AGE_SECONDS)
+  return Number.isInteger(seconds) && seconds >= 900 && seconds <= 7776000 ? seconds : 43200
+}
+
 /** Production never silently inherits the permissive local development defaults. */
 export function assertSecurityConfiguration() {
   if (!productionSecurity()) return

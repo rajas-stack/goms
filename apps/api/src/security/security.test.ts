@@ -41,6 +41,15 @@ describe('production security', () => {
     vi.stubEnv('RBAC_MODE', '')
     expect(rbacMode()).toBe('enforce')
   })
+  it('rejects a sign-in older than the configured session age, 12 h by default', async () => {
+    const twoDaysAgo = Math.floor(Date.now() / 1000) - 2 * 86400
+    mocks.verify.mockResolvedValue({ uid: 'old', email: 'security@amnex.com', email_verified: true, auth_time: twoDaysAgo, firebase: { sign_in_provider: 'google.com' } })
+    await expect(verifyFirebaseToken('Bearer token')).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    vi.stubEnv('AUTH_MAX_SESSION_AGE_SECONDS', '604800')
+    await expect(verifyFirebaseToken('Bearer token')).resolves.toMatchObject({ uid: 'old' })
+    vi.stubEnv('AUTH_MAX_SESSION_AGE_SECONDS', 'banana')
+    await expect(verifyFirebaseToken('Bearer token')).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+  })
   it('blocks missing, non-Google and non-Amnex identities and requests revocation checks', async () => {
     await expect(api.createCaller({}).read()).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
     await expect(api.createCaller({ authHeader: 'Bearer token' }).read()).resolves.toBe('private')

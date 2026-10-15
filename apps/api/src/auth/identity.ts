@@ -1,6 +1,6 @@
 import { TRPCError } from '@trpc/server'
 import { getFirebaseAuth } from './firebaseAdmin.js'
-import { productionSecurity } from '../security/config.js'
+import { maxSessionAgeSeconds, productionSecurity } from '../security/config.js'
 import { AccessTokenError, isGomsToken, verifyAccessToken } from './oauth/accessToken.js'
 import { OAuthConfigError, authProvider, firebaseAccepted, gomsAccepted } from './oauth/config.js'
 
@@ -33,7 +33,7 @@ export async function verifyFirebaseToken(authHeader: string | undefined): Promi
     throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in with a verified Google account.' })
   }
   if (productionSecurity() && decoded.firebase?.sign_in_provider !== 'google.com') throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in with your Google account.' })
-  if (productionSecurity() && (!decoded.auth_time || Date.now() / 1000 - decoded.auth_time > 43200 || decoded.auth_time > Date.now() / 1000 + 300)) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in again to renew your session.' })
+  if (productionSecurity() && (!decoded.auth_time || Date.now() / 1000 - decoded.auth_time > maxSessionAgeSeconds() || decoded.auth_time > Date.now() / 1000 + 300)) throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Sign in again to renew your session.' })
 
   return { uid: decoded.uid, email: decoded.email, ...(productionSecurity() ? { authTime: decoded.auth_time } : {}) }
 }
