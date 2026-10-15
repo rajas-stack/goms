@@ -73,4 +73,4 @@ export async function unlockIfLocked(page: Page): Promise<void> {
   if (await lock.isVisible().catch(() => false)) await lock.click();
 }
 
-export const urlEndsWith = (path: string): RegExp => new RegExp(`${path.replace(/[/]/g, '\\/')}$`);
+export const urlEndsWith = (path: string): RegExp => new RegExp(`${escapeRe(path)}$`);

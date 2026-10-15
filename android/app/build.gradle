@@ -61,7 +61,6 @@ if (releaseSigningPropsPresentCount > 0 && !hasReleaseSigningConfig) {
 android {
     namespace = "com.gorms.app"
     compileSdk = rootProject.ext.compileSdkVersion
-    compileSdkMinor = 0
     defaultConfig {
         applicationId "com.gorms.app"
         minSdkVersion rootProject.ext.minSdkVersion

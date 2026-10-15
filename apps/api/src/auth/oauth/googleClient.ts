@@ -38,7 +38,7 @@ export async function verifyGoogleIdToken(
 ): Promise<GoogleClaims> {
   let payload: Record<string, unknown>
   try {
-    ;({ payload } = await jwtVerify(idToken, deps.keys, { issuer: ISSUERS, audience: deps.clientId, algorithms: ['RS256'], currentDate: deps.now }))
+    ;({ payload } = await jwtVerify(idToken, deps.keys, { issuer: ISSUERS, audience: deps.clientId, algorithms: ['RS256'], requiredClaims: ['exp', 'iat', 'sub'], currentDate: deps.now }))
   } catch {
     throw new GoogleAuthError('token')
   }

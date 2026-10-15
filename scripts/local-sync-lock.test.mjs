@@ -44,7 +44,7 @@ test('another reclaimer cannot delete a lock while recovery is in progress', t =
   assert.equal(readFileSync(file, 'utf8'), original)
 })
 
-for (const data of ['', '{', '{}', '{"pid":0}', '{"pid":null}']) {
+for (const data of ['', '{', '{}', 'null', '{"pid":0}', '{"pid":null}']) {
   test(`does not reclaim incomplete or invalid ownership ${JSON.stringify(data)}`, t => {
     const file = fixture(t)
     writeFileSync(file, data)

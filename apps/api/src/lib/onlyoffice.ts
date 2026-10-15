@@ -116,7 +116,12 @@ export function assertAllowedDownload(raw: unknown, allowedOrigins: readonly str
 
 /** The Document Server builds file URLs from the browser-facing host; fetch those through the internal URL when set. */
 export function internalFetchUrl(url: URL, settings: Pick<OnlyofficeSettings, 'publicUrl' | 'internalUrl'>): URL {
-  return settings.internalUrl && url.origin === settings.publicUrl ? new URL(url.pathname + url.search, settings.internalUrl) : url
+  if (!settings.internalUrl || url.origin !== settings.publicUrl) return url
+  const internal = new URL(settings.internalUrl)
+  // Set components directly: a pathname beginning with // must never replace the host.
+  internal.pathname = url.pathname
+  internal.search = url.search
+  return internal
 }
 
 /** Downloads at most `maxBytes`, refusing redirects (a redirect could point anywhere). */

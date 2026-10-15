@@ -39,7 +39,7 @@ jobs:
       - name: Logic and domain tests
         run: npm test -- --maxWorkers=2
       - name: Script tests
-        run: node --test scripts/local-sync-lock.test.mjs scripts/geo-simplify-lib.test.cjs scripts/simplify-geo-assets.test.cjs scripts/verify-geo-assets.test.cjs scripts/access-matrix/engine.test.cjs scripts/access-matrix/policy.test.cjs
+        run: node --test scripts/security-check.test.mjs scripts/local-sync-lock.test.mjs scripts/geo-simplify-lib.test.cjs scripts/simplify-geo-assets.test.cjs scripts/verify-geo-assets.test.cjs scripts/access-matrix/engine.test.cjs scripts/access-matrix/policy.test.cjs
       - name: Complete API tests
         run: npm test --workspace @goms/api -- --testTimeout=30000
       - name: Complete component tests
@@ -85,13 +85,17 @@ jobs:
         with:
           node-version-file: .node-version
           cache: npm
-      - name: Java 21 and Android SDK 37
+      - name: Java 21 and Android SDK 36
         shell: bash
         run: |
           test -n "$JAVA_HOME_21_X64"
           echo "JAVA_HOME=$JAVA_HOME_21_X64" >> "$GITHUB_ENV"
           export JAVA_HOME="$JAVA_HOME_21_X64"
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "platform-tools" "emulator" "system-images;android-36;google_apis;x86_64"
+          # adb and the emulator live outside the default PATH on GitHub runners.
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
       - run: npm ci
       - run: npm run build
       - run: npx cap sync android
@@ -108,7 +112,7 @@ jobs:
           emulator_pid=$!
           trap 'kill "$emulator_pid"' EXIT
           adb wait-for-device
-          for attempt in $(seq 1 90); do
+          for attempt in $(seq 1 150); do
             if [[ "$(adb shell getprop sys.boot_completed | tr -d '\r')" == "1" ]]; then break; fi
             sleep 2
           done

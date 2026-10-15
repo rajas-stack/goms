@@ -151,8 +151,8 @@ export const documentsRouter = router({
     await pool.query('DELETE FROM documents WHERE id=$1', [input.id])
     try {
       await deleteObject(doc.storage_path)
-    } catch (e) {
-      console.error(`Failed to delete GCS object ${doc.storage_path} for deleted document ${input.id}`, e)
+    } catch {
+      console.error(JSON.stringify({ event: 'security.document_cleanup_failed', documentId: input.id }))
     }
   }),
   citations: documentCitationsRouter,

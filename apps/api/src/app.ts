@@ -1,4 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify'
+import { STATUS_CODES } from 'node:http'
 import cors from '@fastify/cors'
 import rateLimit from '@fastify/rate-limit'
 import type { TRPCError } from '@trpc/server'
@@ -69,6 +70,20 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     connectionTimeout: 10000,
     keepAliveTimeout: 5000,
     trustProxy: proxyTrust.trustProxy,
+  })
+
+  // Framework errors and 404 messages bypass the request serializer and can contain secrets.
+  app.setNotFoundHandler((_request, reply) => reply.code(404).send({
+    statusCode: 404, error: 'Not Found', message: 'Route not found',
+  }))
+  app.setErrorHandler((error, request, reply) => {
+    const rawStatus = error && typeof error === 'object' && 'statusCode' in error ? error.statusCode : undefined
+    const statusCode = typeof rawStatus === 'number' && Number.isInteger(rawStatus) && rawStatus >= 400 && rawStatus <= 599 ? rawStatus : 500
+    const category = STATUS_CODES[statusCode] ?? 'Request rejected'
+    const details = { event: 'http.request_failed', statusCode }
+    if (statusCode >= 500) request.log.error(details, 'HTTP request failed')
+    else request.log.warn(details, 'HTTP request rejected')
+    return reply.code(statusCode).send({ statusCode, error: category, message: statusCode >= 500 ? 'Internal server error' : category })
   })
 
   const configuredOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? '')

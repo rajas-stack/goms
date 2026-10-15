@@ -7,9 +7,8 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:9.4.1'
-        classpath 'com.google.gms:google-services:4.5.0'
-        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21'
+        classpath 'com.android.tools.build:gradle:8.13.0'
+        classpath 'com.google.gms:google-services:4.4.4'
 
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
@@ -22,17 +21,6 @@ allprojects {
     repositories {
         google()
         mavenCentral()
-    }
-}
-
-subprojects {
-    plugins.withId('com.android.library') {
-        // SDK 37 is published as android-37.0, including Capacitor plugin modules.
-        extensions.configure('androidComponents') {
-            finalizeDsl { android -> android.compileSdkMinor = 0 }
-        }
-        dependencies.constraints.add('testImplementation', "org.json:json:${rootProject.ext.jsonVersion}")
-        dependencies.constraints.add('testImplementation', "org.mockito:mockito-core:${rootProject.ext.mockitoVersion}")
     }
 }
 

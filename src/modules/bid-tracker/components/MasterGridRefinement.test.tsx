@@ -66,6 +66,7 @@ describe('Master Grid refinement', () => {
       const beforeName = width('opportunityName'), beforeCity = width('city')
       await userEvent.click(screen.getByRole('button', { name: 'Opportunity / Mission column menu' }))
       await userEvent.click(screen.getByRole('menuitem', { name: 'Freeze column' }))
+      await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Freeze column' })).not.toBeInTheDocument())
       await userEvent.click(screen.getByRole('button', { name: 'City column menu' }))
       await userEvent.click(screen.getByRole('menuitem', { name: 'Freeze column' }))
       expect(screen.queryByRole('button', { name: 'Auto-fit columns' })).not.toBeInTheDocument()
@@ -358,12 +359,14 @@ describe('Master Grid refinement', () => {
 
       await userEvent.click(screen.getByRole('button', { name: 'Tender ID column menu' }))
       await userEvent.click(screen.getByRole('menuitem', { name: 'Freeze column' }))
+      await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Freeze column' })).not.toBeInTheDocument())
       expect(leafHeaders()[0]).toBe('Tender ID') // pinned to the left edge
       expect(leafTh('gemTenderId').className).toContain('sticky')
       expect(leafTh('gemTenderId').style.left).toBe('40px') // right after the 40px selection column
 
       await userEvent.click(screen.getByRole('button', { name: 'Opportunity / Mission column menu' }))
       await userEvent.click(screen.getByRole('menuitem', { name: 'Freeze column' }))
+      await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Freeze column' })).not.toBeInTheDocument())
       // Two frozen columns, in their normal relative order, each offset by the widths before it.
       expect(leafHeaders().slice(0, 2)).toEqual(['Opportunity / Mission', 'Tender ID'])
       const first = leafTh('opportunityName'); const second = leafTh('gemTenderId')
