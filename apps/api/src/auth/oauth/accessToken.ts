@@ -1,8 +1,8 @@
 import { SignJWT, decodeJwt, errors, jwtVerify } from 'jose'
 import { accessTtlSeconds, sessionKey } from './config.js'
 
-export const ISSUER = 'goms'
-export const AUDIENCE = 'goms-api'
+const ISSUER = 'goms'
+const AUDIENCE = 'goms-api'
 
 export interface AccessClaims { uid: string; email: string; familyId: string }
 

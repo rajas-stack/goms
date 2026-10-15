@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { signAccessToken } from './accessToken.js'
-import { OAuthConfigError, appScheme, oauthConfig, sessionKey } from './config.js'
+import { OAuthConfigError, appScheme, oauthConfig, oauthEnabled, sessionKey } from './config.js'
 import { createExchangeCode, redeemExchangeCode } from './exchangeCodes.js'
 import { consumeFlow, createFlow } from './flows.js'
 import { GoogleAuthError, buildAuthUrl, type GoogleGateway } from './googleClient.js'
@@ -21,6 +21,7 @@ const reasonFor = (e: unknown): Reason => {
 const safeLabel = (v: unknown): string | undefined => (typeof v === 'string' && /^[A-Za-z0-9_.-]{1,48}$/.test(v) ? v : undefined)
 
 const noStore = (reply: FastifyReply) => reply.header('Cache-Control', 'no-store').header('Pragma', 'no-cache').header('Referrer-Policy', 'no-referrer')
+const notFound = (reply: FastifyReply) => reply.code(404).send({ error: 'Not found' })
 
 /** The page an Android Custom Tab lands on. `scheme` is this deployment's own app scheme (`appScheme()`), so a dev API can only open the dev app. A meta refresh plus a visible link (browsers may refuse an unprompted custom-scheme
  *  redirect). It carries a one-time code or a reason code — never a token. Values are base64url or a fixed word, so no escaping is needed. */
@@ -35,17 +36,22 @@ function appPage(scheme: string, query: string): string {
 }
 
 export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void {
+  // AUTH_PROVIDER=firebase (the default) must be a true no-op: register nothing, so Fastify's own 404 applies (no content-type
+  // parsing, no per-route rate limit, no custom 404 body). AUTH_PROVIDER is read once, at app boot.
+  if (!oauthEnabled()) return
+
   // Tighter than the global limiter: these are the only unauthenticated, state-creating endpoints.
   const limited = { config: { rateLimit: { max: 60, timeWindow: '5 minutes' } } }
   // The three POST bodies are tiny JSON ({code, client} / {refreshToken}); the app-wide 8 MB limit is for the admin import, not for these.
   const postRoute = { ...limited, bodyLimit: 4096 }
 
-  /** Runs `fn` with the shared headers and error handling. Misconfiguration becomes a generic 503 that never names a value. ANY other failure
+  /** Runs `fn` only when OAuth is switched on. Misconfiguration becomes a generic 503 that never names a value. ANY other failure
    *  (database down, missing table, a bug) becomes a generic 500 and one reason-only log line: Fastify has no `logger` here, so its own
    *  error path would send `error.message` (a SQL error, a private IP) to the browser and leave nothing in the logs.
    *  A JSON 500 is used on every route, the callback included: a redirect with `auth_error=google` is the convention for failures
    *  Google itself reports (bad code, token, domain), not for our own faults, and our other server-side fault (503 above) is JSON too. */
   const guarded = (route: string, fn: (req: any, reply: FastifyReply) => Promise<unknown>) => async (req: any, reply: FastifyReply) => {
+    if (!oauthEnabled()) return notFound(reply) // second layer: AUTH_PROVIDER changed after boot (routes were registered)
     noStore(reply)
     try {
       return await fn(req, reply)
