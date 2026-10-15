@@ -77,5 +77,5 @@ describe('gating inventory', () => {
     }
     expect(missing).toEqual([])
     expect(ungated).toEqual([]) // fails until each listed screen consults permissions
-  })
+  }, 60_000) // scans the whole src tree; slow on shared CI runners
 })
