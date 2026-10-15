@@ -182,7 +182,7 @@ export async function insertOpportunity(
 export const opportunitiesRouter = router({
   list: protectedReadProcedure.query(async () => {
     const result = await pool.query(
-      `SELECT * FROM opportunities ORDER BY created_at DESC, opportunity_name`,
+      `SELECT * FROM opportunities ORDER BY created_at DESC, insert_seq DESC`,
     )
     return result.rows.map(toOpportunity)
   }),

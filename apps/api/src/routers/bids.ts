@@ -142,14 +142,14 @@ export const bidsRouter = router({
           LEFT JOIN LATERAL (
             SELECT changed_by FROM commercial_audit_logs a
             WHERE a.entity_type = 'bid' AND a.entity_id = b.id::text
-            ORDER BY a.changed_at DESC LIMIT 1
+            ORDER BY a.changed_at DESC, a.insert_seq DESC LIMIT 1
           ) last_audit ON true
           LEFT JOIN LATERAL (
             SELECT sales_person_id FROM ownership_assignments oa
             WHERE oa.entity_type = 'bid' AND oa.entity_id = b.id AND oa.role = 'solutionLead' AND oa.end_date IS NULL
             LIMIT 1
           ) solution_lead ON true
-          ORDER BY b.created_at DESC
+          ORDER BY b.created_at DESC, b.insert_seq DESC
         `),
         pool.query(`
           SELECT c.bid_id FROM bid_corrigenda c

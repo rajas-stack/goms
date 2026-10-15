@@ -60,7 +60,7 @@ export const bidCustomFieldsRouter = router({
     .input(z.object({ includeArchived: z.boolean().optional() }).optional())
     .query(async ({ input }) => {
       const result = await pool.query(
-        `SELECT * FROM bid_custom_fields ${input?.includeArchived ? '' : `WHERE status='active'`} ORDER BY position, created_at`,
+        `SELECT * FROM bid_custom_fields ${input?.includeArchived ? '' : `WHERE status='active'`} ORDER BY position, created_at, insert_seq`,
       )
       return result.rows.map(toBidCustomField)
     }),
@@ -161,7 +161,7 @@ export const bidCustomFieldsRouter = router({
           reason: '', action: 'custom_field_reordered', changedBy: ctx.user?.email,
         })
       }
-      const rows = (await client.query(`SELECT * FROM bid_custom_fields WHERE status='active' ORDER BY position, created_at`)).rows
+      const rows = (await client.query(`SELECT * FROM bid_custom_fields WHERE status='active' ORDER BY position, created_at, insert_seq`)).rows
       return (rows as any[]).map(toBidCustomField)
     })),
 

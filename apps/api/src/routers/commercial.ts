@@ -916,7 +916,7 @@ const commercialBoqRouter = router({
   // query per BOQ (previously: 1 + N round trips for N draft BOQs, on every
   // load of this list — see the function comment on withLiveDraftGrandTotal).
   list: protectedReadProcedure.query(async () => {
-    const result = await pool.query('SELECT * FROM commercial_boqs ORDER BY created_at DESC')
+    const result = await pool.query('SELECT * FROM commercial_boqs ORDER BY created_at DESC, insert_seq DESC')
     const draftIds = result.rows.filter((r: any) => r.status === 'draft').map((r: any) => r.id)
     const linesByBoqId = new Map<string, any[]>()
     if (draftIds.length) {

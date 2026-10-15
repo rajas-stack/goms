@@ -53,6 +53,6 @@ export async function listAuditLogs(filter?: { entityType?: string; entityId?: s
   const conditions: string[] = ['entity_type <> ALL($1::text[])']
   if (filter?.entityType) { params.push(filter.entityType); conditions.push(`entity_type=$${params.length}`) }
   if (filter?.entityId) { params.push(filter.entityId); conditions.push(`entity_id=$${params.length}`) }
-  const result = await pool.query(`SELECT * FROM commercial_audit_logs WHERE ${conditions.join(' AND ')} ORDER BY changed_at DESC`, params)
+  const result = await pool.query(`SELECT * FROM commercial_audit_logs WHERE ${conditions.join(' AND ')} ORDER BY changed_at DESC, insert_seq DESC`, params)
   return result.rows.map(toAuditLog)
 }

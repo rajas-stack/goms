@@ -26,7 +26,7 @@ export async function syncSubmissionDeadlineToOpportunity(client: any, bidId: st
 
 export const bidMilestonesRouter = router({
   listForBid: protectedReadProcedure.input(z.object({ bidId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
-    const result = await pool.query('SELECT * FROM bid_milestones WHERE bid_id=$1 ORDER BY due_at NULLS LAST', [input.bidId])
+    const result = await pool.query('SELECT * FROM bid_milestones WHERE bid_id=$1 ORDER BY due_at NULLS LAST, created_at, insert_seq', [input.bidId])
     return result.rows.map(toBidMilestone)
   }),
 
@@ -40,7 +40,7 @@ export const bidMilestonesRouter = router({
       JOIN bids b ON b.id = m.bid_id
       JOIN opportunities o ON o.id = b.opportunity_id
       WHERE b.status = 'active' AND m.status <> 'superseded'
-      ORDER BY m.due_at NULLS LAST, m.created_at
+      ORDER BY m.due_at NULLS LAST, m.created_at, m.insert_seq
     `)
     return result.rows.map((r: any) => ({ ...toBidMilestone(r), bidCode: r.bid_code, opportunityName: r.opportunity_name }))
   }),

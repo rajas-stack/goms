@@ -20,7 +20,7 @@ export function toMakerDocument(row: any): MakerDocument {
 export interface Owner { email: string; name: string }
 
 export async function listOwned(ownerEmail: string): Promise<MakerDocument[]> {
-  const { rows } = await pool.query(`SELECT ${META_COLUMNS} FROM maker_documents WHERE owner_email=$1 ORDER BY updated_at DESC LIMIT 1000`, [ownerEmail])
+  const { rows } = await pool.query(`SELECT ${META_COLUMNS} FROM maker_documents WHERE owner_email=$1 ORDER BY updated_at DESC, insert_seq DESC LIMIT 1000`, [ownerEmail])
   return rows.map(toMakerDocument)
 }
 
