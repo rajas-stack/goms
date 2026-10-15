@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactElement } from 'react'
 import { cn } from '@/lib/utils'
 import { initials } from '@/lib/utils'
 import { Icon } from './Icon'
@@ -29,7 +29,7 @@ export function Avatar({
   person: AvatarPerson
   size?: AvatarSize
   className?: string
-}): JSX.Element {
+}): ReactElement {
   // A broken/expired photo URL falls back to initials instead of a broken-image glyph.
   const [photoFailed, setPhotoFailed] = useState(false)
   useEffect(() => setPhotoFailed(false), [person.photoUrl])

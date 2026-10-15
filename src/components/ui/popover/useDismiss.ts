@@ -3,8 +3,8 @@ import { useEffect, useRef, type RefObject } from 'react'
 interface UseDismissOptions {
   open: boolean
   onClose: () => void
-  anchorRef: RefObject<HTMLElement>
-  panelRef: RefObject<HTMLElement>
+  anchorRef: RefObject<HTMLElement | null>
+  panelRef: RefObject<HTMLElement | null>
 }
 
 /** Closes on a pointerdown outside both the anchor and the (portaled) panel,

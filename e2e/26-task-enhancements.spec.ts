@@ -36,7 +36,7 @@ import { test, expect, Page } from '@playwright/test';
 async function openQaTestDepartment(page: Page) {
   await page.goto('/state/0', { waitUntil: 'networkidle' });
   const listBtn = page.getByRole('button', { name: 'list', exact: true });
-  if (await listBtn.count() > 0) await listBtn.click();
+  await listBtn.click();
   await page.getByText('QA Test', { exact: true }).click();
 }
 
@@ -163,13 +163,11 @@ test.describe('Account Mapping — Department State/District/STD (per-row; no Ci
 
     await dialog.getByLabel('State 1').selectOption({ label: 'Odisha' });
     await dialog.getByLabel('Type 1').selectOption({ label: 'Landline / EPBX' });
-    // Khordha is the seeded district for the Bhubaneswar → 0674 STD mapping
-    // (src/data/std-codes.ts, the only city mapped to Khordha) — must pick
-    // it specifically, not just "any" district.
-    await dialog.getByLabel('District 1').selectOption({ label: 'Khordha' });
+    // Cuttack has one mapped city; Khordha now has multiple towns and codes.
+    await dialog.getByLabel('District 1').selectOption({ label: 'Cuttack' });
 
     const stdField = dialog.getByLabel('STD code 1');
-    await expect(stdField).toHaveValue('0674');
+    await expect(stdField).toHaveValue('0671');
     // Number is available in the same instant, no further gating on a city.
     await dialog.getByPlaceholder('2345678').fill('2345678');
     await expect(dialog.getByPlaceholder('2345678')).toHaveValue('2345678');
@@ -416,11 +414,11 @@ test.describe('Meetings — Agenda/Outcome/Next Steps', () => {
     await page.getByRole('button', { name: 'Add meeting', exact: true }).first().click();
 
     await page.getByLabel('Title').fill('E2E Sales Meeting');
-    await page.getByLabel('Agenda').fill('Discuss Q4 strategy');
-    await page.getByLabel('Outcome').fill('Agreed on pricing');
-    await page.getByLabel('Next steps').fill('Follow up next week');
+    await page.getByRole('textbox', { name: 'Agenda', exact: true }).fill('Discuss Q4 strategy');
+    await page.getByRole('textbox', { name: 'Outcome', exact: true }).fill('Agreed on pricing');
+    await page.getByRole('textbox', { name: 'Next steps', exact: true }).fill('Follow up next week');
 
-    await page.getByRole('button', { name: 'Add entry' }).click();
+    await page.getByRole('dialog', { name: 'Add New Meeting' }).getByRole('button', { name: 'Add Meeting', exact: true }).click();
     // .first(): same reasoning as the Opportunity test above — no cleanup
     // step exists against this live goms-dev data, so re-running this test
     // accumulates one more same-named real timeline entry per run, not a
@@ -450,7 +448,7 @@ test.describe('Meetings — Edit Meeting', () => {
     const typeSelect = page.getByLabel('Meeting type');
     await expect(typeSelect).toBeDisabled();
 
-    const outcomeField = page.getByLabel('Outcome');
+    const outcomeField = page.getByRole('textbox', { name: 'Outcome', exact: true });
     const currentValue = await outcomeField.inputValue();
     await outcomeField.fill(`${currentValue} - EDITED ${Date.now()}`);
     await page.getByRole('button', { name: 'Save changes' }).click();
@@ -523,7 +521,8 @@ test.describe('Sales Team — RM/GM Editing', () => {
     await page.getByRole('button', { name: 'Save changes' }).click();
 
     await page.goto('/sales/orgchart', { waitUntil: 'networkidle' });
-    await expect(page.locator('[data-testid^="org-chart-node-"]', { hasText: 'Jayendrasinh Puwar' })).toBeVisible();
+    await page.getByRole('button', { name: 'Expand all', exact: true }).click();
+    await expect(page.locator('[data-testid^="sales-org-chart-card-"]', { hasText: 'Jayendrasinh Puwar' })).toBeVisible();
   });
 });
 
@@ -621,6 +620,7 @@ test.describe('Item 2 — Department Contact display (read view)', () => {
     await dialog.getByLabel('State 1').selectOption({ label: 'Odisha' });
     await dialog.getByLabel('Type 1').selectOption({ label: 'Landline / EPBX' });
     await dialog.getByLabel('District 1').selectOption({ label: 'Khordha' });
+    await pickCombobox(page, dialog.getByRole('combobox', { name: 'City/Town 1' }), 'Bhubaneswar');
     await expect(dialog.getByLabel('STD code 1')).toHaveValue('0674');
     await dialog.getByPlaceholder('2345678').fill('2345678');
     await dialog.getByRole('button', { name: 'Create department' }).click();
@@ -638,7 +638,8 @@ test.describe('Item 4 — Employee inherits Website/Address from its Department'
     const deptName = `QA E2E Inheritance Test ${Date.now()}`;
     const dialog = await createDepartmentUnderState(page, 'Odisha', deptName);
     await fieldByLabel(page, 'Website').getByRole('textbox').fill('https://example-dept.gov.in');
-    await fieldByLabel(page, 'Office address').getByRole('textbox').fill('1 Test Secretariat Road');
+    await dialog.getByRole('button', { name: 'Add location' }).click();
+    await dialog.getByRole('textbox', { name: 'Address', exact: true }).fill('1 Test Secretariat Road');
     await dialog.getByRole('button', { name: 'Create department' }).click();
 
     // The "Add employee" button is a Menu trigger (NodeDetails.tsx), not a

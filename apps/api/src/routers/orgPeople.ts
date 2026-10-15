@@ -106,7 +106,7 @@ export const orgPeopleRouter = router({
     designation: z.string().trim().max(200).optional(),
     level: z.number().int().min(0).max(7),
     departments: departments.optional(),
-    managerId: z.string().uuid().nullable().optional(),
+    managerId: z.string().guid('Invalid UUID').nullable().optional(),
     email: z.string().trim().max(254).optional(),
   })).mutation(({ input, ctx }) => inOrgTransaction(ctx, async (client) => {
     // The email is what derives this person's role (SYSTEM_ADMIN_ONLY, every RBAC mode): adding one needs a System Admin.
@@ -124,14 +124,14 @@ export const orgPeopleRouter = router({
   })),
 
   update: protectedProcedure.input(z.object({
-    id: z.string().uuid(),
+    id: z.string().guid('Invalid UUID'),
     patch: z.object({
       name: name.optional(),
       designation: z.string().trim().max(200).optional(),
       email: z.string().trim().max(254).optional(),
       level: z.number().int().min(0).max(7).optional(),
       departments: departments.optional(),
-      managerId: z.string().uuid().nullable().optional(),
+      managerId: z.string().guid('Invalid UUID').nullable().optional(),
       status: z.enum(['active', 'inactive']).optional(),
     }),
   })).mutation(({ input, ctx }) => inOrgTransaction(ctx, async (client) => {
@@ -165,7 +165,7 @@ export const orgPeopleRouter = router({
     return toPerson(result.rows[0])
   })),
 
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input, ctx }) => inOrgTransaction(ctx, async (client) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(({ input, ctx }) => inOrgTransaction(ctx, async (client) => {
     const person = (await client.query('SELECT id, manager_id FROM org_people WHERE id=$1 FOR UPDATE', [input.id])).rows[0]
     if (!person) return
     // their reports move up to their manager; their roster entries go inactive rather than disappearing

@@ -59,7 +59,7 @@ const featureRowSchema = z.object({
   parentCode: z.string().min(1, 'Parent Code is required').trim(),
   featureStatus: z.preprocess(
     (v) => (v === '' || v === null || v === undefined ? undefined : v),
-    caseInsensitiveEnum(['new', 'existing'], { invalid_type_error: 'featureStatus must be "new" or "existing"' }).default('new'),
+    caseInsensitiveEnum(['new', 'existing'], 'featureStatus must be "new" or "existing"').default('new'),
   ),
 })
 

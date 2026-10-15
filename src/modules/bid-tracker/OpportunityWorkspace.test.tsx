@@ -105,7 +105,9 @@ describe('Opportunity workspace', () => {
       expect(screen.getByRole('button', { name: /Master grid editing locked/ })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /^Filters/ })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Manage columns/ })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Add column/ })).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: /Manage columns/ }))
+      expect(await screen.findByRole('button', { name: /Add column/ })).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: /Manage columns/ }))
       await userEvent.click(screen.getByRole('button', { name: 'Tender ID column menu' }))
       expect(screen.getByRole('menuitem', { name: 'Freeze column' })).toBeEnabled()
     },

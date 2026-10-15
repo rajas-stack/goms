@@ -17,7 +17,7 @@ export function validateGoogleSettings(value: GoogleDeploymentSettings): GoogleD
   if (!['global', 'us', 'eu'].includes(value.notebookLocation)) throw new Error('Choose a NotebookLM location.')
   if (value.disabledServices && (!Array.isArray(value.disabledServices) || value.disabledServices.some(service => !GOOGLE_SERVICES.includes(service)))) throw new Error('Invalid service activation.')
   if (value.mapsEmbedKey && !/^[\w-]{1,200}$/.test(value.mapsEmbedKey)) throw new Error('Enter a valid Maps Embed browser key.')
-  const disabledPages: GoogleIntegrationSettings['disabledPages'] = {}
+  const disabledPages = Object.fromEntries(GOOGLE_SERVICES.map((service) => [service, [] as string[]])) as GoogleIntegrationSettings['disabledPages']
   for (const service of GOOGLE_SERVICES) {
     const pages = value.disabledPages?.[service]
     if (pages && (!Array.isArray(pages) || pages.some(page => !/^[a-z][a-z0-9-]{0,79}$/.test(page)))) throw new Error('Invalid integration page selection.')

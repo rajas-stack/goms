@@ -1,0 +1,75 @@
+# Latest Version Checks
+
+Checked against official npm latest tags on 2026-10-15 (Asia/Calcutta). SheetJS uses its official distribution; internal workspaces have no external release. Indirect packages follow their upstream dependency ranges; arbitrary indirect major upgrades cannot be forced safely.
+
+| Library | Installed | Latest | Result | Source |
+| --- | --- | --- | --- | --- |
+| @aparajita/capacitor-secure-storage | 8.0.1 | 8.0.1 | Latest | [Registry/vendor](https://registry.npmjs.org/%40aparajita%2Fcapacitor-secure-storage/latest) |
+| @capacitor/android | 8.5.3 | 8.5.3 | Latest | [Registry/vendor](https://registry.npmjs.org/%40capacitor%2Fandroid/latest) |
+| @capacitor/app | 8.1.2 | 8.1.2 | Latest | [Registry/vendor](https://registry.npmjs.org/%40capacitor%2Fapp/latest) |
+| @capacitor/browser | 8.0.5 | 8.0.5 | Latest | [Registry/vendor](https://registry.npmjs.org/%40capacitor%2Fbrowser/latest) |
+| @capacitor/core | 8.5.3 | 8.5.3 | Latest | [Registry/vendor](https://registry.npmjs.org/%40capacitor%2Fcore/latest) |
+| @capacitor/filesystem | 8.1.4 | 8.1.4 | Latest | [Registry/vendor](https://registry.npmjs.org/%40capacitor%2Ffilesystem/latest) |
+| @capacitor/share | 8.0.3 | 8.0.3 | Latest | [Registry/vendor](https://registry.npmjs.org/%40capacitor%2Fshare/latest) |
+| @floating-ui/dom | 1.8.0 | 1.8.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40floating-ui%2Fdom/latest) |
+| @goms/domain | 0.1.0 | 0.1.0 | Internal workspace | Local workspace |
+| @tanstack/react-query | 5.104.2 | 5.104.2 | Latest | [Registry/vendor](https://registry.npmjs.org/%40tanstack%2Freact-query/latest) |
+| @tanstack/react-table | 9.3.1 | 9.3.1 | Latest | [Registry/vendor](https://registry.npmjs.org/%40tanstack%2Freact-table/latest) |
+| @tanstack/react-virtual | 3.14.19 | 3.14.19 | Latest | [Registry/vendor](https://registry.npmjs.org/%40tanstack%2Freact-virtual/latest) |
+| @tiptap/core | 3.32.0 | 3.32.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40tiptap%2Fcore/latest) |
+| @tiptap/extension-highlight | 3.32.0 | 3.32.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40tiptap%2Fextension-highlight/latest) |
+| @tiptap/extension-table | 3.32.0 | 3.32.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40tiptap%2Fextension-table/latest) |
+| @tiptap/extension-text-align | 3.32.0 | 3.32.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40tiptap%2Fextension-text-align/latest) |
+| @tiptap/extension-text-style | 3.32.0 | 3.32.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40tiptap%2Fextension-text-style/latest) |
+| @tiptap/pm | 3.32.0 | 3.32.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40tiptap%2Fpm/latest) |
+| @tiptap/react | 3.32.0 | 3.32.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40tiptap%2Freact/latest) |
+| @tiptap/starter-kit | 3.32.0 | 3.32.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40tiptap%2Fstarter-kit/latest) |
+| @trpc/client | 11.19.0 | 11.19.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40trpc%2Fclient/latest) |
+| clsx | 2.1.1 | 2.1.1 | Latest | [Registry/vendor](https://registry.npmjs.org/clsx/latest) |
+| d3-geo | 3.1.1 | 3.1.1 | Latest | [Registry/vendor](https://registry.npmjs.org/d3-geo/latest) |
+| firebase | 13.0.0 | 13.0.0 | Latest | [Registry/vendor](https://registry.npmjs.org/firebase/latest) |
+| framer-motion | 14.2.0 | 14.2.0 | Latest | [Registry/vendor](https://registry.npmjs.org/framer-motion/latest) |
+| lucide-react | 1.57.0 | 1.57.0 | Latest | [Registry/vendor](https://registry.npmjs.org/lucide-react/latest) |
+| react | 19.3.1 | 19.3.1 | Latest | [Registry/vendor](https://registry.npmjs.org/react/latest) |
+| react-dom | 19.3.1 | 19.3.1 | Latest | [Registry/vendor](https://registry.npmjs.org/react-dom/latest) |
+| react-router-dom | 7.18.4 | 7.18.4 | Latest | [Registry/vendor](https://registry.npmjs.org/react-router-dom/latest) |
+| tailwind-merge | 3.7.0 | 3.7.0 | Latest | [Registry/vendor](https://registry.npmjs.org/tailwind-merge/latest) |
+| tesseract.js | 7.0.0 | 7.0.0 | Latest | [Registry/vendor](https://registry.npmjs.org/tesseract.js/latest) |
+| xlsx | 0.20.3 | 0.20.3 | Official vendor tarball; npm registry is stale | [Registry/vendor](https://docs.sheetjs.com/docs/getting-started/installation/nodejs/) |
+| @capacitor/cli | 8.5.3 | 8.5.3 | Latest | [Registry/vendor](https://registry.npmjs.org/%40capacitor%2Fcli/latest) |
+| @playwright/test | 1.64.1 | 1.64.1 | Latest | [Registry/vendor](https://registry.npmjs.org/%40playwright%2Ftest/latest) |
+| @tailwindcss/postcss | 4.3.3 | 4.3.3 | Latest | [Registry/vendor](https://registry.npmjs.org/%40tailwindcss%2Fpostcss/latest) |
+| @testing-library/jest-dom | 7.0.1 | 7.0.1 | Latest | [Registry/vendor](https://registry.npmjs.org/%40testing-library%2Fjest-dom/latest) |
+| @testing-library/react | 16.3.3 | 16.3.3 | Latest | [Registry/vendor](https://registry.npmjs.org/%40testing-library%2Freact/latest) |
+| @testing-library/user-event | 14.6.8 | 14.6.8 | Latest | [Registry/vendor](https://registry.npmjs.org/%40testing-library%2Fuser-event/latest) |
+| @turf/simplify | 7.4.0 | 7.4.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40turf%2Fsimplify/latest) |
+| @types/d3-geo | 3.1.1 | 3.1.1 | Latest | [Registry/vendor](https://registry.npmjs.org/%40types%2Fd3-geo/latest) |
+| @types/geojson | 7946.0.16 | 7946.0.16 | Latest | [Registry/vendor](https://registry.npmjs.org/%40types%2Fgeojson/latest) |
+| @types/pg | 8.23.1 | 8.23.1 | Latest | [Registry/vendor](https://registry.npmjs.org/%40types%2Fpg/latest) |
+| @types/react | 19.3.0 | 19.3.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40types%2Freact/latest) |
+| @types/react-dom | 19.3.0 | 19.3.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40types%2Freact-dom/latest) |
+| @vitejs/plugin-react | 6.1.2 | 6.1.2 | Latest | [Registry/vendor](https://registry.npmjs.org/%40vitejs%2Fplugin-react/latest) |
+| 7zip-min | 3.0.1 | 3.0.1 | Latest | [Registry/vendor](https://registry.npmjs.org/7zip-min/latest) |
+| autoprefixer | 10.6.1 | 10.6.1 | Latest | [Registry/vendor](https://registry.npmjs.org/autoprefixer/latest) |
+| jsdom | 30.1.2 | 30.1.2 | Latest | [Registry/vendor](https://registry.npmjs.org/jsdom/latest) |
+| pg | 8.23.1 | 8.23.1 | Latest | [Registry/vendor](https://registry.npmjs.org/pg/latest) |
+| polygon-clipping | 0.15.7 | 0.15.7 | Latest | [Registry/vendor](https://registry.npmjs.org/polygon-clipping/latest) |
+| postcss | 8.5.30 | 8.5.30 | Latest | [Registry/vendor](https://registry.npmjs.org/postcss/latest) |
+| proj4 | 2.22.0 | 2.22.0 | Latest | [Registry/vendor](https://registry.npmjs.org/proj4/latest) |
+| shapefile | 0.6.6 | 0.6.6 | Latest | [Registry/vendor](https://registry.npmjs.org/shapefile/latest) |
+| tailwindcss | 4.3.3 | 4.3.3 | Latest | [Registry/vendor](https://registry.npmjs.org/tailwindcss/latest) |
+| tsx | 4.23.15 | 4.23.15 | Latest | [Registry/vendor](https://registry.npmjs.org/tsx/latest) |
+| typescript | 7.0.2 | 7.0.2 | Latest | [Registry/vendor](https://registry.npmjs.org/typescript/latest) |
+| vite | 8.3.4 | 8.3.4 | Latest | [Registry/vendor](https://registry.npmjs.org/vite/latest) |
+| vite-plugin-compression2 | 2.5.3 | 2.5.3 | Latest | [Registry/vendor](https://registry.npmjs.org/vite-plugin-compression2/latest) |
+| vitest | 5.0.4 | 5.0.4 | Latest | [Registry/vendor](https://registry.npmjs.org/vitest/latest) |
+| @fastify/cors | 11.3.1 | 11.3.1 | Latest | [Registry/vendor](https://registry.npmjs.org/%40fastify%2Fcors/latest) |
+| @fastify/rate-limit | 11.2.1 | 11.2.1 | Latest | [Registry/vendor](https://registry.npmjs.org/%40fastify%2Frate-limit/latest) |
+| @google-cloud/storage | 8.4.0 | 8.4.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40google-cloud%2Fstorage/latest) |
+| @trpc/server | 11.19.0 | 11.19.0 | Latest | [Registry/vendor](https://registry.npmjs.org/%40trpc%2Fserver/latest) |
+| fastify | 5.12.7 | 5.12.7 | Latest | [Registry/vendor](https://registry.npmjs.org/fastify/latest) |
+| firebase-admin | 14.5.0 | 14.5.0 | Latest | [Registry/vendor](https://registry.npmjs.org/firebase-admin/latest) |
+| node-pg-migrate | 9.0.0 | 9.0.0 | Latest | [Registry/vendor](https://registry.npmjs.org/node-pg-migrate/latest) |
+| jose | 6.2.12 | 6.2.12 | Latest | [Registry/vendor](https://registry.npmjs.org/jose/latest) |
+| zod | 4.6.7 | 4.6.7 | Latest | [Registry/vendor](https://registry.npmjs.org/zod/latest) |
+| @types/node | 26.6.5 | 26.6.5 | Latest | [Registry/vendor](https://registry.npmjs.org/%40types%2Fnode/latest) |

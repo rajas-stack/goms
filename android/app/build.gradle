@@ -61,6 +61,7 @@ if (releaseSigningPropsPresentCount > 0 && !hasReleaseSigningConfig) {
 android {
     namespace = "com.gorms.app"
     compileSdk = rootProject.ext.compileSdkVersion
+    compileSdkMinor = 0
     defaultConfig {
         applicationId "com.gorms.app"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -96,7 +97,7 @@ android {
             // hard-fails just because signing hasn't been configured yet.
             signingConfig hasReleaseSigningConfig ? signingConfigs.release : null
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }

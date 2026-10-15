@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
+import { flexRender, type SortingState } from '@tanstack/react-table'
 import {
-  createColumnHelper, flexRender, getCoreRowModel, getSortedRowModel, useReactTable,
-  type ColumnDef, type Row, type SortingState,
-} from '@tanstack/react-table'
+  getCoreRowModel, getSortedRowModel, legacyCreateColumnHelper as createColumnHelper, useLegacyTable as useReactTable,
+  type LegacyColumnDef as ColumnDef, type LegacyRow as Row,
+} from '@tanstack/react-table/legacy'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   OPERATORS_BY_TYPE, flattenRules, parseMultiValue, pruneFilterNodes,
@@ -495,7 +496,7 @@ export function MasterGrid(props: MasterGridProps) {
       // column here starts ascending, like a spreadsheet.
       sortDescFirst: false,
       sortUndefined: 'last',
-      sortingFn: (a: Row<BidGridRow>, b: Row<BidGridRow>, id: string) => compareTyped(meta.type, a.getValue(id), b.getValue(id)),
+      sortFn: (a: Row<BidGridRow>, b: Row<BidGridRow>, id: string) => compareTyped(meta.type, a.getValue(id), b.getValue(id)),
       meta,
     }) as ColumnDef<BidGridRow, unknown>),
     [displayCols, lookups],

@@ -23,7 +23,7 @@ function registerAssignments(patch: RegisterPatch, firstParam: number) {
 }
 
 export const bidCorrigendaRouter = router({
-  listForBid: protectedReadProcedure.input(z.object({ bidId: z.string().uuid() })).query(async ({ input }) => {
+  listForBid: protectedReadProcedure.input(z.object({ bidId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const corrigenda = (await pool.query('SELECT * FROM bid_corrigenda WHERE bid_id=$1 ORDER BY corrigendum_number', [input.bidId])).rows
     const out = []
     for (const c of corrigenda) {
@@ -35,7 +35,7 @@ export const bidCorrigendaRouter = router({
 
   create: protectedProcedure
     .input(z.object({
-      bidId: z.string().uuid(), corrigendumNumber: z.number().int().positive(), sourceDocumentId: z.string().uuid().optional(),
+      bidId: z.string().guid('Invalid UUID'), corrigendumNumber: z.number().int().positive(), sourceDocumentId: z.string().guid('Invalid UUID').optional(),
       register: registerSchema.optional(),
       changes: z.array(changeSchema).min(1).max(200),
     }))
@@ -117,7 +117,7 @@ export const bidCorrigendaRouter = router({
   /** Appends clause changes (e.g. recorded from a synopsis grid cell) to an
    *  existing corrigendum. Earlier change rows are never touched. */
   addChanges: protectedProcedure
-    .input(z.object({ corrigendumId: z.string().uuid(), changes: z.array(changeSchema.extend({ kind: z.literal('clause') })).min(1).max(200) }))
+    .input(z.object({ corrigendumId: z.string().guid('Invalid UUID'), changes: z.array(changeSchema.extend({ kind: z.literal('clause') })).min(1).max(200) }))
     .mutation(async ({ input }) => {
       const client = await pool.connect()
       try {
@@ -156,7 +156,7 @@ export const bidCorrigendaRouter = router({
 
   /** Register fields only — change rows are append-only and never rewritten. */
   updateRegister: protectedProcedure
-    .input(z.object({ corrigendumId: z.string().uuid(), patch: registerSchema }))
+    .input(z.object({ corrigendumId: z.string().guid('Invalid UUID'), patch: registerSchema }))
     .mutation(async ({ input, ctx }) => {
       const set = registerAssignments(input.patch, 2)
       const row = set.sql.length
@@ -174,7 +174,7 @@ export const bidCorrigendaRouter = router({
     }),
 
   reviewChange: protectedProcedure
-    .input(z.object({ changeId: z.string().uuid(), decision: z.enum(['accepted', 'rejected']), reason: z.string().optional() }))
+    .input(z.object({ changeId: z.string().guid('Invalid UUID'), decision: z.enum(['accepted', 'rejected']), reason: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {

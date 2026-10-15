@@ -1,0 +1,145 @@
+{
+  "checkedAt": "2026-10-14T22:35:41.168Z",
+  "libraries": [
+    {
+      "name": "com.android.tools.build:gradle",
+      "installed": "9.4.1",
+      "latest": "9.4.1",
+      "status": "Latest stable",
+      "source": "https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/maven-metadata.xml"
+    },
+    {
+      "name": "com.google.gms:google-services",
+      "installed": "4.5.0",
+      "latest": "4.5.0",
+      "status": "Latest stable",
+      "source": "https://dl.google.com/dl/android/maven2/com/google/gms/google-services/maven-metadata.xml"
+    },
+    {
+      "name": "androidx.activity:activity",
+      "installed": "1.13.0",
+      "latest": "1.13.0",
+      "status": "Latest stable",
+      "source": "https://dl.google.com/dl/android/maven2/androidx/activity/activity/maven-metadata.xml"
+    },
+    {
+      "name": "androidx.appcompat:appcompat",
+      "installed": "1.8.0",
+      "latest": "1.8.0",
+      "status": "Latest stable",
+      "source": "https://dl.google.com/dl/android/maven2/androidx/appcompat/appcompat/maven-metadata.xml"
+    },
+    {
+      "name": "androidx.coordinatorlayout:coordinatorlayout",
+      "installed": "1.3.0",
+      "latest": "1.3.0",
+      "status": "Latest stable",
+      "source": "https://dl.google.com/dl/android/maven2/androidx/coordinatorlayout/coordinatorlayout/maven-metadata.xml"
+    },
+    {
+      "name": "androidx.core:core",
+      "installed": "1.19.1",
+      "latest": "1.19.1",
+      "status": "Latest stable",
+      "source": "https://dl.google.com/dl/android/maven2/androidx/core/core/maven-metadata.xml"
+    },
+    {
+      "name": "androidx.fragment:fragment",
+      "installed": "1.9.1",
+      "latest": "1.9.1",
+      "status": "Latest stable",
+      "source": "https://dl.google.com/dl/android/maven2/androidx/fragment/fragment/maven-metadata.xml"
+    },
+    {
+      "name": "androidx.core:core-splashscreen",
+      "installed": "1.2.0",
+      "latest": "1.2.0",
+      "status": "Latest stable",
+      "source": "https://dl.google.com/dl/android/maven2/androidx/core/core-splashscreen/maven-metadata.xml"
+    },
+    {
+      "name": "androidx.webkit:webkit",
+      "installed": "1.17.1",
+      "latest": "1.17.1",
+      "status": "Latest stable",
+      "source": "https://dl.google.com/dl/android/maven2/androidx/webkit/webkit/maven-metadata.xml"
+    },
+    {
+      "name": "androidx.browser:browser",
+      "installed": "1.10.0",
+      "latest": "1.10.0",
+      "status": "Latest stable",
+      "source": "https://dl.google.com/dl/android/maven2/androidx/browser/browser/maven-metadata.xml"
+    },
+    {
+      "name": "org.jetbrains.kotlin:kotlin-gradle-plugin",
+      "installed": "2.4.21",
+      "latest": "2.4.21",
+      "status": "Latest stable",
+      "source": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-gradle-plugin/maven-metadata.xml"
+    },
+    {
+      "name": "org.jetbrains.kotlinx:kotlinx-coroutines-core",
+      "installed": "1.11.0",
+      "latest": "1.11.0",
+      "status": "Latest stable",
+      "source": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core/maven-metadata.xml"
+    },
+    {
+      "name": "org.json:json",
+      "installed": "20260814",
+      "latest": "20260814",
+      "status": "Latest stable",
+      "source": "https://repo.maven.apache.org/maven2/org/json/json/maven-metadata.xml"
+    },
+    {
+      "name": "org.mockito:mockito-core",
+      "installed": "5.24.0",
+      "latest": "5.24.0",
+      "status": "Latest stable",
+      "source": "https://repo.maven.apache.org/maven2/org/mockito/mockito-core/maven-metadata.xml"
+    },
+    {
+      "name": "io.ionic.libs:ionfilesystem-android",
+      "installed": "1.1.1",
+      "latest": "1.1.1",
+      "status": "Latest stable",
+      "source": "https://repo.maven.apache.org/maven2/io/ionic/libs/ionfilesystem-android/maven-metadata.xml"
+    },
+    {
+      "name": "androidx.test.ext:junit",
+      "installed": "1.3.0",
+      "latest": "1.3.0",
+      "status": "Latest stable",
+      "source": "https://dl.google.com/dl/android/maven2/androidx/test/ext/junit/maven-metadata.xml"
+    },
+    {
+      "name": "androidx.test.espresso:espresso-core",
+      "installed": "3.7.0",
+      "latest": "3.7.0",
+      "status": "Latest stable",
+      "source": "https://dl.google.com/dl/android/maven2/androidx/test/espresso/espresso-core/maven-metadata.xml"
+    },
+    {
+      "name": "junit:junit",
+      "installed": "4.13.2",
+      "latest": "4.13.2",
+      "status": "Latest stable",
+      "source": "https://repo.maven.apache.org/maven2/junit/junit/maven-metadata.xml"
+    },
+    {
+      "name": "org.apache.cordova:framework",
+      "installed": "15.1.0",
+      "latest": "15.1.0",
+      "status": "Latest stable",
+      "source": "https://repo.maven.apache.org/maven2/org/apache/cordova/framework/maven-metadata.xml"
+    },
+    {
+      "name": "Gradle",
+      "installed": "9.8.1",
+      "latest": "9.8.1",
+      "status": "Latest stable",
+      "source": "https://services.gradle.org/versions/current"
+    }
+  ]
+}

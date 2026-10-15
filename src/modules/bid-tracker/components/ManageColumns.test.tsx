@@ -28,6 +28,7 @@ const openColumns = async () => userEvent.click(screen.getByRole('button', { nam
 const customRow = (name: string) => screen.getAllByTestId('custom-column-row').find((r) => r.textContent?.includes(name))!
 
 async function addColumnViaDialog(name: string, type?: string, options?: string[]) {
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   // Add column lives at the top of the Manage columns dropdown.
   await openColumns()
   await userEvent.click(await screen.findByRole('button', { name: /Add column/ }))
@@ -104,6 +105,7 @@ describe('custom column management', () => {
     const dup = await addColumnViaDialog(' region ')
     expect(await within(dup).findByRole('alert')).toHaveTextContent(/already exists/)
     await userEvent.click(within(dup).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(dup).not.toBeInTheDocument())
     const sel = await addColumnViaDialog('Empty select', 'select')
     expect(await within(sel).findByRole('alert')).toHaveTextContent(/at least one option/)
   })

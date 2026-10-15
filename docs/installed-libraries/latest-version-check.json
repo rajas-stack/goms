@@ -1,0 +1,908 @@
+{
+  "checkedAt": "2026-10-15T04:56:07.705Z",
+  "dependencies": [
+    {
+      "name": "@aparajita/capacitor-secure-storage",
+      "version": "8.0.1",
+      "requested": "^8.0.1",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Secure token storage in the Android/native shell.",
+      "ui": "Native OAuth/session persistence in `src/lib/auth/native.ts`; affects login and Google integration flows when running inside the GOMS Android shell.",
+      "latest": "8.0.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40aparajita%2Fcapacitor-secure-storage/latest"
+    },
+    {
+      "name": "@capacitor/android",
+      "version": "8.5.3",
+      "requested": "^8.5.3",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Android platform package for the Capacitor app.",
+      "ui": "Entire Android WebView shell under `android/`; all web UI routes when packaged as the native app.",
+      "latest": "8.5.3",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40capacitor%2Fandroid/latest"
+    },
+    {
+      "name": "@capacitor/app",
+      "version": "8.1.2",
+      "requested": "^8.1.2",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Android hardware back-button and app/deep-link events.",
+      "ui": "Back-button behavior in `src/app/AppLayout.tsx`; OAuth deep-link and launch URL handling in `src/lib/auth/native.ts`.",
+      "latest": "8.1.2",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40capacitor%2Fapp/latest"
+    },
+    {
+      "name": "@capacitor/browser",
+      "version": "8.0.5",
+      "requested": "^8.0.5",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Opens OAuth flows in the native browser/custom tab.",
+      "ui": "Native Google sign-in flow in `src/lib/auth/native.ts`; user-facing login/auth prompts and Google integration binding.",
+      "latest": "8.0.5",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40capacitor%2Fbrowser/latest"
+    },
+    {
+      "name": "@capacitor/core",
+      "version": "8.5.3",
+      "requested": "^8.5.3",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Native-platform detection and Capacitor plugin availability.",
+      "ui": "Android shell capability checks in `src/lib/nativeShell.ts`; app shell back-button support in `src/app/AppLayout.tsx`; native export handling in `src/lib/file-export.ts`.",
+      "latest": "8.5.3",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40capacitor%2Fcore/latest"
+    },
+    {
+      "name": "@capacitor/filesystem",
+      "version": "8.1.4",
+      "requested": "^8.1.4",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Writes exported files on Android devices.",
+      "ui": "Export/download behavior in native shell via `src/lib/file-export.ts`; used by app export actions such as `src/features/import/ExportDialog.tsx`.",
+      "latest": "8.1.4",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40capacitor%2Ffilesystem/latest"
+    },
+    {
+      "name": "@capacitor/share",
+      "version": "8.0.3",
+      "requested": "^8.0.3",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Opens the Android share/open-with dialog for exported files.",
+      "ui": "Native export completion in `src/lib/file-export.ts`; user-facing export/download flows.",
+      "latest": "8.0.3",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40capacitor%2Fshare/latest"
+    },
+    {
+      "name": "@floating-ui/dom",
+      "version": "1.8.0",
+      "requested": "^1.8.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Floating element positioning library.",
+      "ui": "No direct import was found outside `package.json`; no current UI function appears to depend on it. It is likely reserved or legacy for menus/popovers.",
+      "latest": "1.8.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40floating-ui%2Fdom/latest"
+    },
+    {
+      "name": "@goms/domain",
+      "version": "0.1.0",
+      "requested": "*",
+      "owners": [
+        "root:dependencies",
+        "apps/api:dependencies"
+      ],
+      "purpose": "Shared domain types, constants, validation helpers, RBAC/commercial/business rules.",
+      "ui": "Shared by most UI modules and API routers. UI examples: bid tracker custom fields, commercial calculator rules, document maker file types, RBAC access matrices. Source package: `packages/domain/src/`.",
+      "latest": "0.1.0",
+      "status": "Internal workspace"
+    },
+    {
+      "name": "@tanstack/react-query",
+      "version": "5.104.2",
+      "requested": "^5.104.2",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Client-side query cache, mutation state, refetching, async server state.",
+      "ui": "Remote-data UI across the app: directory, geography/map, DMS, integrations, tender websites, commercial calculator, bid tracker, admin import, and RBAC pages. Representative files: `src/features/directory/PeopleDirectory.tsx`, `src/features/map/IndiaMap.tsx`, `src/modules/admin-data-import/*`, `src/modules/rbac-tree/*`.",
+      "latest": "5.104.2",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40tanstack%2Freact-query/latest"
+    },
+    {
+      "name": "@tanstack/react-table",
+      "version": "9.3.1",
+      "requested": "^9.3.1",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Column definitions, sorting, row model, table rendering helpers.",
+      "ui": "Bid Tracker Master Grid at `/bid-tracker/master`; implementation in `src/modules/bid-tracker/components/MasterGrid.tsx`.",
+      "latest": "9.3.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40tanstack%2Freact-table/latest"
+    },
+    {
+      "name": "@tanstack/react-virtual",
+      "version": "3.14.19",
+      "requested": "^3.14.19",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Virtualized long lists and grids.",
+      "ui": "Meetings list in `src/app/routes/Meetings.tsx`; people directory in `src/features/directory/PeopleDirectory.tsx`; Bid Tracker Master Grid in `src/modules/bid-tracker/components/MasterGrid.tsx`.",
+      "latest": "3.14.19",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40tanstack%2Freact-virtual/latest"
+    },
+    {
+      "name": "@tiptap/core",
+      "version": "3.32.0",
+      "requested": "^3.32.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Core editor primitives/extensions.",
+      "ui": "Bid Synopsis editor extension setup in `src/modules/bid-tracker/synopsis/extensions.ts`.",
+      "latest": "3.32.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40tiptap%2Fcore/latest"
+    },
+    {
+      "name": "@tiptap/extension-highlight",
+      "version": "3.32.0",
+      "requested": "^3.32.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Highlight formatting extension.",
+      "ui": "Bid Synopsis rich-text formatting in `src/modules/bid-tracker/synopsis/extensions.ts`.",
+      "latest": "3.32.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40tiptap%2Fextension-highlight/latest"
+    },
+    {
+      "name": "@tiptap/extension-table",
+      "version": "3.32.0",
+      "requested": "^3.32.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Table support inside rich-text content.",
+      "ui": "Bid Synopsis rich-text/table editing in `src/modules/bid-tracker/synopsis/extensions.ts`.",
+      "latest": "3.32.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40tiptap%2Fextension-table/latest"
+    },
+    {
+      "name": "@tiptap/extension-text-align",
+      "version": "3.32.0",
+      "requested": "^3.32.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Text alignment extension.",
+      "ui": "Bid Synopsis rich-text alignment controls through `src/modules/bid-tracker/synopsis/extensions.ts`.",
+      "latest": "3.32.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40tiptap%2Fextension-text-align/latest"
+    },
+    {
+      "name": "@tiptap/extension-text-style",
+      "version": "3.32.0",
+      "requested": "^3.32.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Text style marks used by richer editor formatting.",
+      "ui": "Bid Synopsis editor setup in `src/modules/bid-tracker/synopsis/extensions.ts`.",
+      "latest": "3.32.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40tiptap%2Fextension-text-style/latest"
+    },
+    {
+      "name": "@tiptap/pm",
+      "version": "3.32.0",
+      "requested": "^3.32.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "ProseMirror packages used by TipTap extensions.",
+      "ui": "Bid Synopsis editor internals in `src/modules/bid-tracker/synopsis/extensions.ts`.",
+      "latest": "3.32.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40tiptap%2Fpm/latest"
+    },
+    {
+      "name": "@tiptap/react",
+      "version": "3.32.0",
+      "requested": "^3.32.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "React bindings for the rich-text editor.",
+      "ui": "Bid Synopsis rich-text editor in `src/modules/bid-tracker/synopsis/SynopsisTab.tsx`, reached from Bid Detail/Synopsis flows.",
+      "latest": "3.32.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40tiptap%2Freact/latest"
+    },
+    {
+      "name": "@tiptap/starter-kit",
+      "version": "3.32.0",
+      "requested": "^3.32.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Base rich-text editor toolkit.",
+      "ui": "Bid Synopsis editor formatting in `src/modules/bid-tracker/synopsis/extensions.ts`.",
+      "latest": "3.32.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40tiptap%2Fstarter-kit/latest"
+    },
+    {
+      "name": "@trpc/client",
+      "version": "11.19.0",
+      "requested": "^11.19.0",
+      "owners": [
+        "root:dependencies",
+        "apps/api:devDependencies"
+      ],
+      "purpose": "Type-safe frontend calls to the API and test clients.",
+      "ui": "Remote repository access in `src/data/remote/repository.ts`; auth prompt links in `src/data/remote/authPromptLink.ts`; integrations settings in `src/features/integrations/settings.ts`; admin data import API in `src/modules/admin-data-import/api.ts`.",
+      "latest": "11.19.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40trpc%2Fclient/latest"
+    },
+    {
+      "name": "clsx",
+      "version": "2.1.1",
+      "requested": "^2.1.1",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Conditional class-name composition.",
+      "ui": "Shared `cn()` utility in `src/lib/utils.ts`; used by reusable UI controls, layout components, cards, tables, dialogs, and feature pages.",
+      "latest": "2.1.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/clsx/latest"
+    },
+    {
+      "name": "d3-geo",
+      "version": "3.1.1",
+      "requested": "^3.1.1",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Geographic projection and SVG path generation.",
+      "ui": "India/state geography UI in `src/features/map/IndiaMap.tsx` and `src/features/geography/GeoMapView.tsx`; user-facing routes `/map`, `/state/:code`, and geography explorer panels.",
+      "latest": "3.1.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/d3-geo/latest"
+    },
+    {
+      "name": "firebase",
+      "version": "13.0.0",
+      "requested": "^13.0.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Client Firebase authentication and token/session handling.",
+      "ui": "Login/authentication and Google account binding. Files include `src/lib/auth/firebaseProvider.ts`, `src/lib/firebaseAuth.ts`, `src/lib/useSignedIn.ts`, `src/features/integrations/GoogleAccountBinder.tsx`, and `src/features/tender-websites/TenderCredentialsDialog.tsx`.",
+      "latest": "13.0.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/firebase/latest"
+    },
+    {
+      "name": "framer-motion",
+      "version": "14.2.0",
+      "requested": "^14.2.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "UI animation, layout transitions, drawers, dialogs, tabs, menus.",
+      "ui": "App shell and interaction polish in `src/components/CommandPalette.tsx`, `src/components/GlobalFab.tsx`, `src/components/MobileNavDrawer.tsx`, `src/components/ui/Dialog.tsx`, `src/components/ui/Menu.tsx`, `src/components/ui/Tabs.tsx`, plus route pages such as `src/app/routes/Home.tsx` and `src/app/routes/SalesWorkspace.tsx`.",
+      "latest": "14.2.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/framer-motion/latest"
+    },
+    {
+      "name": "lucide-react",
+      "version": "1.57.0",
+      "requested": "^1.57.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Icon set used by reusable UI and feature screens.",
+      "ui": "Icon rendering through `src/components/ui/Icon.tsx`; DMS pages in `src/features/dms/*`; settings pages such as `src/app/routes/DmsSettingsPage.tsx`; bid synopsis screens in `src/modules/bid-tracker/synopsis/*`.",
+      "latest": "1.57.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/lucide-react/latest"
+    },
+    {
+      "name": "react",
+      "version": "19.3.1",
+      "requested": "^19.3.1",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Component model, hooks, rendering application state.",
+      "ui": "Entire web UI. Entry points include `src/main.tsx`, `src/app/router.tsx`, `src/app/AppLayout.tsx`, and all route components under `src/app/routes/`.",
+      "latest": "19.3.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/react/latest"
+    },
+    {
+      "name": "react-dom",
+      "version": "19.3.1",
+      "requested": "^19.3.1",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Browser DOM rendering and portals.",
+      "ui": "App boot in `src/main.tsx`; portals for overlays/popovers in `src/components/ui/popover/Portal.tsx`; context menu portal in `src/modules/bid-tracker/components/GridContextMenu.tsx`.",
+      "latest": "19.3.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/react-dom/latest"
+    },
+    {
+      "name": "react-router-dom",
+      "version": "7.18.4",
+      "requested": "^7.18.4",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Route tree, navigation, nested layouts, redirects, route params.",
+      "ui": "All app navigation. Main route map in `src/app/router.tsx`; shell routing in `src/app/AppLayout.tsx`; routes include `/map`, `/directory`, `/meetings`, `/sales`, `/teams`, `/commercial-calculator`, `/bid-tracker`, `/settings/*`, `/documents/:module`, and `/document-maker`.",
+      "latest": "7.18.4",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/react-router-dom/latest"
+    },
+    {
+      "name": "tailwind-merge",
+      "version": "3.7.0",
+      "requested": "^3.7.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Resolves conflicting Tailwind utility classes in composed UI class names.",
+      "ui": "Shared `cn()` utility in `src/lib/utils.ts`; affects styling across components using merged class names.",
+      "latest": "3.7.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/tailwind-merge/latest"
+    },
+    {
+      "name": "tesseract.js",
+      "version": "7.0.0",
+      "requested": "^7.0.0",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "OCR for visiting-card/contact extraction.",
+      "ui": "Employee contact capture: `src/features/employees/contact-ocr.ts`, used by `src/features/employees/EmployeeFormDialog.tsx` and `src/features/employees/VisitingCard.tsx` through the \"Pick up contact\" style OCR action.",
+      "latest": "7.0.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/tesseract.js/latest"
+    },
+    {
+      "name": "xlsx",
+      "version": "0.20.3",
+      "requested": "https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz",
+      "owners": [
+        "root:dependencies"
+      ],
+      "purpose": "Reading and writing Excel workbooks.",
+      "ui": "Classic import dialog in `src/features/import/ImportDialog.tsx` via `src/features/import/workbookToCsv.ts`; Admin Data Import workbook upload in `src/modules/admin-data-import/SessionImportWizard.tsx` and `src/modules/admin-data-import/sessionUpload.ts`; Bid Synopsis grid import/export in `src/modules/bid-tracker/synopsis/grid/GridTab.tsx`; generated templates in `src/modules/admin-data-import/templates.ts`.",
+      "latest": "0.20.3",
+      "status": "Official vendor tarball; npm registry is stale",
+      "source": "https://docs.sheetjs.com/docs/getting-started/installation/nodejs/"
+    },
+    {
+      "name": "@capacitor/cli",
+      "version": "8.5.3",
+      "requested": "^8.5.3",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Capacitor sync/build tooling.",
+      "ui": "Maintains Android native project from the web build. Config: `capacitor.config.ts`; generated Gradle integration under `android/`.",
+      "latest": "8.5.3",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40capacitor%2Fcli/latest"
+    },
+    {
+      "name": "@playwright/test",
+      "version": "1.64.1",
+      "requested": "1.64.1",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Browser end-to-end and visual/runtime verification.",
+      "ui": "E2E tests in `e2e/26-task-enhancements.spec.ts`; verification scripts under `.dms-build-check/`; config `playwright.config.ts`.",
+      "latest": "1.64.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40playwright%2Ftest/latest"
+    },
+    {
+      "name": "@tailwindcss/postcss",
+      "version": "4.3.3",
+      "requested": "^4.3.3",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Tailwind 4 PostCSS integration.",
+      "ui": "Compiles styling for every UI route through `postcss.config.js` and `src/index.css`.",
+      "latest": "4.3.3",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40tailwindcss%2Fpostcss/latest"
+    },
+    {
+      "name": "@testing-library/jest-dom",
+      "version": "7.0.1",
+      "requested": "^7.0.1",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "DOM-specific matchers for tests.",
+      "ui": "Test setup in `src/test/setup-component-tests.ts`.",
+      "latest": "7.0.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40testing-library%2Fjest-dom/latest"
+    },
+    {
+      "name": "@testing-library/react",
+      "version": "16.3.3",
+      "requested": "^16.3.3",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "React component rendering/testing utilities.",
+      "ui": "Component tests for routes and controls, including `src/app/routes/*.test.tsx`, `src/components/**/*.test.tsx`, and feature/module tests.",
+      "latest": "16.3.3",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40testing-library%2Freact/latest"
+    },
+    {
+      "name": "@testing-library/user-event",
+      "version": "14.6.8",
+      "requested": "^14.6.8",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Simulated user interactions in tests.",
+      "ui": "Button, form, keyboard, dialog, and grid interaction tests throughout `src/**/*.test.tsx`.",
+      "latest": "14.6.8",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40testing-library%2Fuser-event/latest"
+    },
+    {
+      "name": "@turf/simplify",
+      "version": "7.4.0",
+      "requested": "^7.4.0",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Simplifies GeoJSON geometry.",
+      "ui": "Geo asset simplification in `scripts/geo-simplify-lib.cjs`; indirectly supports `/map` and geography explorer performance.",
+      "latest": "7.4.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40turf%2Fsimplify/latest"
+    },
+    {
+      "name": "@types/d3-geo",
+      "version": "3.1.1",
+      "requested": "^3.1.1",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "TypeScript types for `d3-geo`.",
+      "ui": "Compile-time typing for map/geography UI files.",
+      "latest": "3.1.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40types%2Fd3-geo/latest"
+    },
+    {
+      "name": "@types/geojson",
+      "version": "7946.0.16",
+      "requested": "^7946.0.16",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "TypeScript types for GeoJSON structures.",
+      "ui": "Map/geography assets and data transformation scripts.",
+      "latest": "7946.0.16",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40types%2Fgeojson/latest"
+    },
+    {
+      "name": "@types/pg",
+      "version": "8.23.1",
+      "requested": "^8.23.1",
+      "owners": [
+        "root:devDependencies",
+        "apps/api:devDependencies"
+      ],
+      "purpose": "TypeScript types for PostgreSQL client.",
+      "ui": "API database code and seed/import scripts.",
+      "latest": "8.23.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40types%2Fpg/latest"
+    },
+    {
+      "name": "@types/react",
+      "version": "19.3.0",
+      "requested": "^19.3.0",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "TypeScript types for React.",
+      "ui": "Compile-time typing for all React UI files.",
+      "latest": "19.3.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40types%2Freact/latest"
+    },
+    {
+      "name": "@types/react-dom",
+      "version": "19.3.0",
+      "requested": "^19.3.0",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "TypeScript types for React DOM APIs.",
+      "ui": "Compile-time typing for `src/main.tsx`, portals, and DOM rendering helpers.",
+      "latest": "19.3.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40types%2Freact-dom/latest"
+    },
+    {
+      "name": "@vitejs/plugin-react",
+      "version": "6.1.2",
+      "requested": "^6.1.2",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "React transform and Fast Refresh integration for Vite/Vitest.",
+      "ui": "UI development/build pipeline in `vite.config.ts` and `vitest.component.config.ts`.",
+      "latest": "6.1.2",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40vitejs%2Fplugin-react/latest"
+    },
+    {
+      "name": "7zip-min",
+      "version": "3.0.1",
+      "requested": "^3.0.1",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Extracts `.7z` archives during geography asset builds.",
+      "ui": "Geography data build script `scripts/build-geo-from-lgd.cjs`; indirectly feeds map/geography UI assets.",
+      "latest": "3.0.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/7zip-min/latest"
+    },
+    {
+      "name": "autoprefixer",
+      "version": "10.6.1",
+      "requested": "^10.6.1",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Adds vendor prefixes in generated CSS.",
+      "ui": "Frontend CSS compatibility pipeline.",
+      "latest": "10.6.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/autoprefixer/latest"
+    },
+    {
+      "name": "jsdom",
+      "version": "30.1.2",
+      "requested": "^30.1.2",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Browser-like DOM environment for tests.",
+      "ui": "React component tests and DOM interaction tests configured through Vitest setup.",
+      "latest": "30.1.2",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/jsdom/latest"
+    },
+    {
+      "name": "pg",
+      "version": "8.23.1",
+      "requested": "^8.23.1",
+      "owners": [
+        "root:devDependencies",
+        "apps/api:dependencies"
+      ],
+      "purpose": "PostgreSQL client for API persistence and local/seed scripts.",
+      "ui": "Database-backed UI modules: directory, meetings, sales/teams, bid tracker, commercial calculator, settings/admin import/RBAC. Entry points include `apps/api/src/db.ts` and routers under `apps/api/src/routers/`.",
+      "latest": "8.23.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/pg/latest"
+    },
+    {
+      "name": "polygon-clipping",
+      "version": "0.15.7",
+      "requested": "^0.15.7",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Polygon union/clipping operations.",
+      "ui": "Geography repair/union scripts: `scripts/repair-fragmented-talukas.cjs`, `scripts/robust-union.cjs`; indirectly supports map/geography assets.",
+      "latest": "0.15.7",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/polygon-clipping/latest"
+    },
+    {
+      "name": "postcss",
+      "version": "8.5.30",
+      "requested": "^8.5.30",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "CSS transform pipeline used by Tailwind and Autoprefixer.",
+      "ui": "Frontend styling build pipeline.",
+      "latest": "8.5.30",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/postcss/latest"
+    },
+    {
+      "name": "proj4",
+      "version": "2.22.0",
+      "requested": "^2.22.0",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Coordinate reprojection for GIS inputs.",
+      "ui": "Geography data generation in `scripts/build-geo-from-lgd.cjs` and `scripts/generate-village-data.cjs`; indirectly supports map/geography UI.",
+      "latest": "2.22.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/proj4/latest"
+    },
+    {
+      "name": "shapefile",
+      "version": "0.6.6",
+      "requested": "^0.6.6",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Reads shapefile datasets.",
+      "ui": "Geography data generation scripts: `scripts/build-geo-from-lgd.cjs`, `scripts/generate-village-data.cjs`, `scripts/patch-stub-hierarchies.cjs`; indirectly supports map/geography UI.",
+      "latest": "0.6.6",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/shapefile/latest"
+    },
+    {
+      "name": "tailwindcss",
+      "version": "4.3.3",
+      "requested": "^4.3.3",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Utility CSS framework.",
+      "ui": "Styling for the complete UI. Config: `tailwind.config.ts`; global CSS: `src/index.css`.",
+      "latest": "4.3.3",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/tailwindcss/latest"
+    },
+    {
+      "name": "tsx",
+      "version": "4.23.15",
+      "requested": "^4.23.15",
+      "owners": [
+        "root:devDependencies",
+        "apps/api:devDependencies"
+      ],
+      "purpose": "Runs TypeScript scripts and API dev server without prebuild.",
+      "ui": "Scripts such as `scripts/seed-import.ts`; API dev command `tsx watch src/server.ts`; admin fixture builders.",
+      "latest": "4.23.15",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/tsx/latest"
+    },
+    {
+      "name": "typescript",
+      "version": "7.0.2",
+      "requested": "^7.0.2",
+      "owners": [
+        "root:devDependencies",
+        "apps/api:devDependencies"
+      ],
+      "purpose": "Type checking and TypeScript compilation.",
+      "ui": "Build correctness for frontend, API, and shared domain workspaces. Configs: `tsconfig.json`, `apps/api/tsconfig.json`, `packages/domain/tsconfig.json`.",
+      "latest": "7.0.2",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/typescript/latest"
+    },
+    {
+      "name": "vite",
+      "version": "8.3.4",
+      "requested": "^8.3.4",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Frontend dev server and production bundler.",
+      "ui": "Builds the complete web UI. Config: `vite.config.ts`; integration/component configs: `vitest.integration.config.ts`, `vitest.component.config.ts`.",
+      "latest": "8.3.4",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/vite/latest"
+    },
+    {
+      "name": "vite-plugin-compression2",
+      "version": "2.5.3",
+      "requested": "^2.5.3",
+      "owners": [
+        "root:devDependencies"
+      ],
+      "purpose": "Pre-compressed production assets.",
+      "ui": "Web deployment asset compression in `vite.config.ts`; Android build excludes `.gz`/`.br` duplicates through `android/app/build.gradle`.",
+      "latest": "2.5.3",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/vite-plugin-compression2/latest"
+    },
+    {
+      "name": "vitest",
+      "version": "5.0.4",
+      "requested": "^5.0.4",
+      "owners": [
+        "root:devDependencies",
+        "apps/api:devDependencies"
+      ],
+      "purpose": "Unit, integration, and component test runner.",
+      "ui": "Tests across `src/**/*.test.tsx`, `apps/api/src/**/*.test.ts`, and package tests. Configs: `vitest.component.config.ts`, `vitest.integration.config.ts`, `apps/api/vitest.config.ts`.",
+      "latest": "5.0.4",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/vitest/latest"
+    },
+    {
+      "name": "@fastify/cors",
+      "version": "11.3.1",
+      "requested": "^11.3.1",
+      "owners": [
+        "apps/api:dependencies"
+      ],
+      "purpose": "Cross-origin request handling for browser clients.",
+      "ui": "Enables browser UI calls from the Vite/frontend origin to the API. Registered in `apps/api/src/app.ts`.",
+      "latest": "11.3.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40fastify%2Fcors/latest"
+    },
+    {
+      "name": "@fastify/rate-limit",
+      "version": "11.2.1",
+      "requested": "^11.2.1",
+      "owners": [
+        "apps/api:dependencies"
+      ],
+      "purpose": "Request rate limiting and abuse protection.",
+      "ui": "Protects API-backed UI actions such as sign-in, imports, saves, and data fetches. Registered in `apps/api/src/app.ts`.",
+      "latest": "11.2.1",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40fastify%2Frate-limit/latest"
+    },
+    {
+      "name": "@google-cloud/storage",
+      "version": "8.4.0",
+      "requested": "^8.4.0",
+      "owners": [
+        "apps/api:dependencies"
+      ],
+      "purpose": "Signed upload/download URLs and object metadata for Google Cloud Storage.",
+      "ui": "Bid Tracker document attachments/source documents in Bid Detail/Commercial & Files. Backend wrapper: `apps/api/src/lib/gcs.ts`; document router: `apps/api/src/routers/documents.ts`; UI files include `src/modules/bid-tracker/pages/CommercialAndFilesTab.tsx`.",
+      "latest": "8.4.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40google-cloud%2Fstorage/latest"
+    },
+    {
+      "name": "@trpc/server",
+      "version": "11.19.0",
+      "requested": "^11.19.0",
+      "owners": [
+        "apps/api:dependencies"
+      ],
+      "purpose": "Type-safe API router/procedure layer.",
+      "ui": "All tRPC-backed UI modules: access/RBAC, organization people, departments, admin import, bid tracker, commercial calculator, DMS/document flows. Router/procedure code lives under `apps/api/src/routers/` and `apps/api/src/trpc.ts`.",
+      "latest": "11.19.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40trpc%2Fserver/latest"
+    },
+    {
+      "name": "fastify",
+      "version": "5.12.7",
+      "requested": "^5.12.7",
+      "owners": [
+        "apps/api:dependencies"
+      ],
+      "purpose": "HTTP server framework for the API.",
+      "ui": "All remote-backed UI screens depend on it indirectly. API app setup is in `apps/api/src/app.ts`; document-maker routes in `apps/api/src/routes/documentMakerRoutes.ts`.",
+      "latest": "5.12.7",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/fastify/latest"
+    },
+    {
+      "name": "firebase-admin",
+      "version": "14.5.0",
+      "requested": "^14.5.0",
+      "owners": [
+        "apps/api:dependencies"
+      ],
+      "purpose": "Server-side Firebase token verification/admin SDK.",
+      "ui": "Authenticated API access for signed-in UI users. Main file: `apps/api/src/auth/firebaseAdmin.ts`; affects all gated routes in `src/app/router.tsx`.",
+      "latest": "14.5.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/firebase-admin/latest"
+    },
+    {
+      "name": "node-pg-migrate",
+      "version": "9.0.0",
+      "requested": "^9.0.0",
+      "owners": [
+        "apps/api:dependencies"
+      ],
+      "purpose": "Database migration runner.",
+      "ui": "No direct UI component imports it, but every persisted UI module depends on the schema it creates/updates. Migrations live in `apps/api/migrations/`.",
+      "latest": "9.0.0",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/node-pg-migrate/latest"
+    },
+    {
+      "name": "jose",
+      "version": "6.2.12",
+      "requested": "^6.2.12",
+      "owners": [
+        "apps/api:dependencies"
+      ],
+      "purpose": "JWT/JWS/JWK handling for OAuth and OnlyOffice token flows.",
+      "ui": "Google OAuth server flow and document-maker/OnlyOffice security. Files include `apps/api/src/auth/oauth/accessToken.ts`, `apps/api/src/auth/oauth/googleClient.ts`, and `apps/api/src/lib/onlyoffice.ts`; UI areas: Login/Google Integration and `/document-maker`.",
+      "latest": "6.2.12",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/jose/latest"
+    },
+    {
+      "name": "zod",
+      "version": "4.6.7",
+      "requested": "^4.6.7",
+      "owners": [
+        "apps/api:dependencies"
+      ],
+      "purpose": "Runtime input validation and schema parsing.",
+      "ui": "Validates API inputs for user-facing workflows including admin import, filters, credentials, opportunity/bid data, and commercial data. Examples: `apps/api/src/import/domains/*`, `apps/api/src/routers/adminImport.ts`, `apps/api/src/lib/filterRuleSchema.ts`.",
+      "latest": "4.6.7",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/zod/latest"
+    },
+    {
+      "name": "@types/node",
+      "version": "26.6.5",
+      "requested": "^26.6.5",
+      "owners": [
+        "apps/api:devDependencies"
+      ],
+      "purpose": "TypeScript types for Node.js APIs.",
+      "ui": "API build/test typing and backend scripts.",
+      "latest": "26.6.5",
+      "status": "Latest",
+      "source": "https://registry.npmjs.org/%40types%2Fnode/latest"
+    }
+  ]
+}

@@ -6,7 +6,7 @@ const taxClassRowSchema = z.object({
   code: z.string().min(1, 'Code is required').trim(),
   name: z.string().min(1, 'Name is required'),
   description: z.string().optional().default(''),
-  ratePct: z.number({ invalid_type_error: 'ratePct must be a number' }),
+  ratePct: z.number('ratePct must be a number'),
   active: z.boolean().optional().default(true),
   displayOrder: z.number().optional().default(0),
 })

@@ -15,7 +15,7 @@ const schedule = (cb: () => void): number =>
 const cancel = (id: number) => (typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame(id) : window.clearTimeout(id))
 
 /** Tracks an element's content width (ResizeObserver when available). */
-export function useElementWidth(ref: RefObject<HTMLElement>): number {
+export function useElementWidth(ref: RefObject<HTMLElement | null>): number {
   const [width, setWidth] = useState(FALLBACK_WIDTH_PX)
   useLayoutEffect(() => {
     const el = ref.current
@@ -30,7 +30,7 @@ export function useElementWidth(ref: RefObject<HTMLElement>): number {
   return width
 }
 
-export function useViewportGestures(ref: RefObject<HTMLElement>, vp: TimelineViewport) {
+export function useViewportGestures(ref: RefObject<HTMLElement | null>, vp: TimelineViewport) {
   const latest = useRef(vp)
   latest.current = vp
   const drag = useRef<DragState | null>(null)

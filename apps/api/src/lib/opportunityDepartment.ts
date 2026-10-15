@@ -8,12 +8,12 @@ const name = z.string().trim().min(1, 'Enter a name.').max(200)
 
 /** Wire shape of `DepartmentChoice` (packages/domain/src/bids.ts). */
 export const departmentChoiceSchema = z.discriminatedUnion('mode', [
-  z.object({ mode: z.literal('existing'), departmentId: z.string().uuid() }),
+  z.object({ mode: z.literal('existing'), departmentId: z.string().guid('Invalid UUID') }),
   z.object({
     mode: z.literal('create'),
     name,
     parent: z.discriminatedUnion('mode', [
-      z.object({ mode: z.literal('existing'), departmentId: z.string().uuid() }),
+      z.object({ mode: z.literal('existing'), departmentId: z.string().guid('Invalid UUID') }),
       z.object({ mode: z.literal('create'), name, stateCode: z.number().int().nullable() }),
     ]),
   }),

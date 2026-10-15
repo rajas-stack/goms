@@ -30,7 +30,7 @@ const personPatchShape = {
   personalEmail: z.string().optional(), mobile: z.string().optional(), altMobile: z.string().optional(),
   joinedOn: z.string().nullable().optional(), leftOn: z.string().nullable().optional(),
   status: statusSchema.optional(), photoUrl: photoUrlSchema,
-  notes: z.string().optional(), metadata: z.record(z.string()).optional(),
+  notes: z.string().optional(), metadata: z.record(z.string(), z.string()).optional(),
 }
 const personColumnFor: Record<string, string> = {
   employeeCode: 'employee_code', name: 'name', officialEmail: 'official_email', personalEmail: 'personal_email',
@@ -49,8 +49,8 @@ export const salesRouter = router({
     const result = await pool.query('SELECT * FROM sales_persons ORDER BY name')
     return result.rows.map(toSalesPerson)
   }),
-  getPerson: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => onePerson(input.id)),
-  listPostings: protectedReadProcedure.input(z.object({ salesPersonId: z.string().uuid() })).query(async ({ input }) => {
+  getPerson: protectedReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(({ input }) => onePerson(input.id)),
+  listPostings: protectedReadProcedure.input(z.object({ salesPersonId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query('SELECT * FROM sales_postings WHERE sales_person_id=$1 ORDER BY start_date DESC', [input.salesPersonId])
     return result.rows.map(toSalesPosting)
   }),
@@ -65,7 +65,7 @@ export const salesRouter = router({
       name: z.string().min(1), officialEmail: z.string().min(1), personalEmail: z.string().optional(),
       mobile: z.string().optional(), altMobile: z.string().optional(), notes: z.string().optional(),
       photoUrl: photoUrlSchema,
-      designation: z.string().min(1), tierKey: z.string().min(1), managerId: z.string().uuid().nullable().optional(),
+      designation: z.string().min(1), tierKey: z.string().min(1), managerId: z.string().guid('Invalid UUID').nullable().optional(),
     }))
     .mutation(async ({ input }) => {
       const dup = await pool.query('SELECT 1 FROM sales_persons WHERE official_email=$1', [input.officialEmail])
@@ -94,7 +94,7 @@ export const salesRouter = router({
       }
     }),
   update: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), patch: z.object(personPatchShape) }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), patch: z.object(personPatchShape) }))
     .mutation(async ({ input }) => {
       const fields = Object.keys(input.patch)
       if (!fields.length) return onePerson(input.id)
@@ -105,9 +105,9 @@ export const salesRouter = router({
       return onePerson(input.id)
     }),
   setStatus: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), status: statusSchema }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), status: statusSchema }))
     .mutation(({ input }) => pool.query('UPDATE sales_persons SET status=$1, updated_at=now() WHERE id=$2', [input.status, input.id]).then(() => undefined)),
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     // sales_postings and ownership_assignments both cascade via FK — but
     // commercial_boqs.sales_person_id is RESTRICT (commercial-boq.sql:26),
     // not cascade, and isn't pre-checked here, so deleting a salesperson
@@ -124,8 +124,8 @@ export const salesRouter = router({
   }),
   transfer: protectedProcedure
     .input(z.object({
-      salesPersonId: z.string().uuid(), designation: z.string().min(1), tierKey: z.string().min(1),
-      managerId: z.string().uuid().nullable().optional(), office: z.string().optional(),
+      salesPersonId: z.string().guid('Invalid UUID'), designation: z.string().min(1), tierKey: z.string().min(1),
+      managerId: z.string().guid('Invalid UUID').nullable().optional(), office: z.string().optional(),
       effectiveDate: z.string(), reason: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
@@ -166,7 +166,7 @@ export const salesRouter = router({
    *  then has no current posting until a Change posting / transfer. */
   updatePostingDates: protectedProcedure
     .input(z.object({
-      postingId: z.string().uuid(),
+      postingId: z.string().guid('Invalid UUID'),
       startDate: z.string().optional(),
       lastDayHeld: z.string().nullable().optional(),
     }))
@@ -210,12 +210,12 @@ export const salesRouter = router({
     }),
   updatePostingManager: protectedProcedure
     .input(z.object({
-      personId: z.string().uuid(),
-      managerId: z.string().uuid().nullable().optional(),
+      personId: z.string().guid('Invalid UUID'),
+      managerId: z.string().guid('Invalid UUID').nullable().optional(),
       // Item 1: independently-settable GM/Higher Reporting Manager — omitted
       // leaves it untouched (e.g. an RM-only change), set to null reverts to
       // auto-deriving from the RM chain.
-      gmOverrideId: z.string().uuid().nullable().optional(),
+      gmOverrideId: z.string().guid('Invalid UUID').nullable().optional(),
     }))
     .mutation(async ({ input }) => {
       const sets: string[] = []

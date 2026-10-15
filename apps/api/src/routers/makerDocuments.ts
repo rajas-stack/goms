@@ -20,7 +20,7 @@ async function owner(ctx: Context): Promise<Owner> {
   return { email, name: email.split('@')[0] }
 }
 
-const id = z.string().uuid()
+const id = z.string().guid('Invalid UUID')
 const title = z.string().max(MAKER_LIMITS.title * 2).transform((value, zctx) => {
   try { return normalizeMakerTitle(value) } catch (error) {
     zctx.addIssue({ code: z.ZodIssueCode.custom, message: (error as Error).message }); return z.NEVER
