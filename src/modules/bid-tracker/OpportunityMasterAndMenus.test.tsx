@@ -126,6 +126,7 @@ describe('Master aggregates every sheet\'s columns', () => {
     renderSheet('master')
     await screen.findByText('Alpha')
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Sheet' }), 'Campaign')
+    await userEvent.click(screen.getByRole('button', { name: /^Manage columns/ }))
     await userEvent.click(screen.getByRole('button', { name: /Add column/ }))
     const dialog = await screen.findByRole('dialog')
     await userEvent.type(within(dialog).getByRole('textbox', { name: /Column name/ }), 'Camp Note')
@@ -150,13 +151,18 @@ describe('Manage cell, archive button, right-click menus, drag to reorder', () =
     await resetLocalData()
   })
 
-  it('the Manage cell has favourite, archive and delete buttons', async () => {
+  it('the Manage cell has a favourite button; archive and delete live in the context menu', async () => {
     const bid = await makeBid('Alpha')
     renderSheet('bidTracker')
     await screen.findByText('Alpha')
     const row = screen.getByTestId('bid-row')
-    expect(within(row).getByRole('button', { name: 'Archive' })).toBeInTheDocument()
-    expect(within(row).getByRole('button', { name: 'Delete bid' })).toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Delete bid' })).not.toBeInTheDocument()
+    fireEvent.contextMenu(within(row).getByText('Alpha').closest('td')!)
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getByRole('menuitem', { name: 'Archive' })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitem', { name: /^Delete bid/ })).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
     const fav = within(row).getByRole('button', { name: 'Add to favourites' })
     expect(fav).toHaveAttribute('aria-pressed', 'false')
     await userEvent.click(fav)
@@ -173,9 +179,11 @@ describe('Manage cell, archive button, right-click menus, drag to reorder', () =
     renderSheet('bidTracker')
     await screen.findByText('Alpha')
     const alphaRow = () => screen.getAllByTestId('bid-row').find((r) => within(r).queryByText('Alpha'))!
-    await userEvent.click(within(alphaRow()).getByRole('button', { name: 'Delete bid' }))
+    fireEvent.contextMenu(within(alphaRow()).getByText('Alpha').closest('td')!)
+    await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: /^Delete bid/ }))
     expect(await repository.getBid(bid.id)).toBeTruthy() // declined
-    await userEvent.click(within(alphaRow()).getByRole('button', { name: 'Delete bid' }))
+    fireEvent.contextMenu(within(alphaRow()).getByText('Alpha').closest('td')!)
+    await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: /^Delete bid/ }))
     await waitFor(async () => expect(await repository.getBid(bid.id)).toBeFalsy())
     expect(confirm).toHaveBeenCalledTimes(2)
     await waitFor(() => expect(screen.queryByText('Alpha')).not.toBeInTheDocument())
@@ -194,7 +202,8 @@ describe('Manage cell, archive button, right-click menus, drag to reorder', () =
     expect(archived).toHaveAttribute('aria-pressed', 'true')
     expect(await screen.findByText('Alpha')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Archive' })).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Unarchive' }))
+    fireEvent.contextMenu(screen.getByText('Alpha').closest('td')!)
+    await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Unarchive' }))
     await waitFor(async () => expect((await repository.getBid(bid.id))!.status).toBe('active'))
   })
 

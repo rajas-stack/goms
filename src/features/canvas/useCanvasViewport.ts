@@ -20,8 +20,8 @@ export interface CanvasTransform {
  *  card navigation) stays in the calling canvas — this hook only owns the
  *  transform itself. */
 export function useCanvasViewport(
-  viewportRef: RefObject<HTMLDivElement>,
-  contentRef: RefObject<HTMLDivElement>,
+  viewportRef: RefObject<HTMLDivElement | null>,
+  contentRef: RefObject<HTMLDivElement | null>,
   initial: CanvasTransform = { x: 40, y: 56, scale: 1 },
 ) {
   const [transform, setTransform] = useState<CanvasTransform>(initial)

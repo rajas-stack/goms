@@ -1,4 +1,5 @@
 import { Pool, types } from 'pg'
+import { productionSecurity } from './security/config.js'
 
 // DATE (OID 1082) as a raw 'YYYY-MM-DD' string — the default parser returns a
 // JS Date, which reintroduces a timezone conversion this app has never had
@@ -18,6 +19,7 @@ types.setTypeParser(1700, (val) => Number(val))
 
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ...(productionSecurity() ? { statement_timeout: 30000, query_timeout: 35000, idle_in_transaction_session_timeout: 30000 } : {}),
   // Unset, `pg.Pool` defaults to max: 10 with no connection timeout — fine
   // in isolation, but Cloud Run's own default concurrency (80 requests/
   // instance) means a burst of concurrent mutations could ask for far more

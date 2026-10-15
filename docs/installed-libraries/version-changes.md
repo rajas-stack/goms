@@ -1,0 +1,75 @@
+# Dependency Version Changes
+
+Comparison with manifest requirements committed in HEAD. Existing uncommitted user changes are preserved; HEAD is a reference point, not a claim about the exact pre-task installation.
+
+| Library | HEAD requirement | Installed now | Latest stable tag |
+| --- | --- | --- | --- |
+| @aparajita/capacitor-secure-storage | ^8.0.1 | 8.0.1 | 8.0.1 |
+| @capacitor/android | ^8.4.2 | 8.5.3 | 8.5.3 |
+| @capacitor/app | ^8.1.1 | 8.1.2 | 8.1.2 |
+| @capacitor/browser | ^8.0.5 | 8.0.5 | 8.0.5 |
+| @capacitor/core | ^8.4.2 | 8.5.3 | 8.5.3 |
+| @capacitor/filesystem | ^8.1.2 | 8.1.4 | 8.1.4 |
+| @capacitor/share | ^8.0.1 | 8.0.3 | 8.0.3 |
+| @floating-ui/dom | ^1.8.0 | 1.8.0 | 1.8.0 |
+| @goms/domain | * | 0.1.0 | 0.1.0 |
+| @tanstack/react-query | ^5.62.0 | 5.104.2 | 5.104.2 |
+| @tanstack/react-table | ^8.21.3 | 9.3.1 | 9.3.1 |
+| @tanstack/react-virtual | ^3.14.8 | 3.14.19 | 3.14.19 |
+| @tiptap/core | ^3.31.4 | 3.32.0 | 3.32.0 |
+| @tiptap/extension-highlight | ^3.31.4 | 3.32.0 | 3.32.0 |
+| @tiptap/extension-table | ^3.31.4 | 3.32.0 | 3.32.0 |
+| @tiptap/extension-text-align | ^3.31.4 | 3.32.0 | 3.32.0 |
+| @tiptap/extension-text-style | ^3.31.4 | 3.32.0 | 3.32.0 |
+| @tiptap/pm | ^3.31.4 | 3.32.0 | 3.32.0 |
+| @tiptap/react | ^3.31.4 | 3.32.0 | 3.32.0 |
+| @tiptap/starter-kit | ^3.31.4 | 3.32.0 | 3.32.0 |
+| @trpc/client | ^11.0.0 | 11.19.0 | 11.19.0 |
+| clsx | ^2.1.1 | 2.1.1 | 2.1.1 |
+| d3-geo | ^3.1.1 | 3.1.1 | 3.1.1 |
+| firebase | ^12.18.0 | 13.0.0 | 13.0.0 |
+| framer-motion | ^11.15.0 | 14.2.0 | 14.2.0 |
+| lucide-react | ^0.468.0 | 1.57.0 | 1.57.0 |
+| react | ^18.3.1 | 19.3.1 | 19.3.1 |
+| react-dom | ^18.3.1 | 19.3.1 | 19.3.1 |
+| react-router-dom | ^7.18.4 | 7.18.4 | 7.18.4 |
+| tailwind-merge | ^2.5.5 | 3.7.0 | 3.7.0 |
+| tesseract.js | ^7.0.0 | 7.0.0 | 7.0.0 |
+| xlsx | https://cdn.sheetjs.com/xlsx-latest/xlsx-latest.tgz | 0.20.3 | 0.20.3 |
+| @capacitor/cli | ^8.4.2 | 8.5.3 | 8.5.3 |
+| @playwright/test | 1.62.1 | 1.64.1 | 1.64.1 |
+| @tailwindcss/postcss | New dependency | 4.3.3 | 4.3.3 |
+| @testing-library/jest-dom | ^6.9.1 | 7.0.1 | 7.0.1 |
+| @testing-library/react | ^16.3.2 | 16.3.3 | 16.3.3 |
+| @testing-library/user-event | ^14.6.5 | 14.6.8 | 14.6.8 |
+| @turf/simplify | ^7.3.5 | 7.4.0 | 7.4.0 |
+| @types/d3-geo | ^3.1.0 | 3.1.1 | 3.1.1 |
+| @types/geojson | ^7946.0.16 | 7946.0.16 | 7946.0.16 |
+| @types/pg | ^8.11.10 | 8.23.1 | 8.23.1 |
+| @types/react | ^18.3.17 | 19.3.0 | 19.3.0 |
+| @types/react-dom | ^18.3.5 | 19.3.0 | 19.3.0 |
+| @vitejs/plugin-react | ^4.3.4 | 6.1.2 | 6.1.2 |
+| 7zip-min | ^3.0.1 | 3.0.1 | 3.0.1 |
+| autoprefixer | ^10.4.20 | 10.6.1 | 10.6.1 |
+| jsdom | ^25.0.1 | 30.1.2 | 30.1.2 |
+| pg | ^8.13.1 | 8.23.1 | 8.23.1 |
+| polygon-clipping | ^0.15.7 | 0.15.7 | 0.15.7 |
+| postcss | ^8.4.49 | 8.5.30 | 8.5.30 |
+| proj4 | ^2.20.9 | 2.22.0 | 2.22.0 |
+| shapefile | ^0.6.6 | 0.6.6 | 0.6.6 |
+| tailwindcss | ^3.4.17 | 4.3.3 | 4.3.3 |
+| tsx | ^4.19.2 | 4.23.15 | 4.23.15 |
+| typescript | ^5.7.2 | 7.0.2 | 7.0.2 |
+| vite | ^6.0.3 | 8.3.4 | 8.3.4 |
+| vite-plugin-compression2 | ^2.5.3 | 2.5.3 | 2.5.3 |
+| vitest | ^4.1.11 | 5.0.4 | 5.0.4 |
+| @fastify/cors | ^10.0.1 | 11.3.1 | 11.3.1 |
+| @fastify/rate-limit | ^11.2.0 | 11.2.1 | 11.2.1 |
+| @google-cloud/storage | ^8.4.0 | 8.4.0 | 8.4.0 |
+| @trpc/server | ^11.0.0 | 11.19.0 | 11.19.0 |
+| fastify | ^5.1.0 | 5.12.7 | 5.12.7 |
+| firebase-admin | ^14.3.0 | 14.5.0 | 14.5.0 |
+| node-pg-migrate | ^9.0.0 | 9.0.0 | 9.0.0 |
+| jose | ^6.2.12 | 6.2.12 | 6.2.12 |
+| zod | ^3.23.8 | 4.6.7 | 4.6.7 |
+| @types/node | ^22.10.2 | 26.6.5 | 26.6.5 |

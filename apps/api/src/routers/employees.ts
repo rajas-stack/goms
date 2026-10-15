@@ -19,7 +19,7 @@ const visitingCardSchema = z.object({
   backUrl: z.string().nullable(), backName: z.string().nullable(),
 })
 const chargeInputShape = {
-  kind: chargeKindSchema, title: z.string().min(1), orgNodeId: z.string().uuid().nullable(),
+  kind: chargeKindSchema, title: z.string().min(1), orgNodeId: z.string().guid('Invalid UUID').nullable(),
   startDate: z.string().nullable(), endDate: z.string().nullable(), reason: z.string(),
 }
 
@@ -102,14 +102,14 @@ const employeePatchShape = {
   name: z.string().min(1).optional(), designation: z.string().min(1).optional(),
   email: z.string().optional(), phone: z.string().optional(), company: z.string().optional(),
   address: z.string().optional(), website: z.string().optional(), photoUrl: photoUrlSchema,
-  orgNodeId: z.string().uuid().optional(), managerId: z.string().uuid().nullable().optional(),
+  orgNodeId: z.string().guid('Invalid UUID').optional(), managerId: z.string().guid('Invalid UUID').nullable().optional(),
   vacant: z.boolean().optional(), connected: z.boolean().optional(),
   relationshipStatus: relationshipStatusSchema.optional(), relationshipQuality: relationshipQualitySchema.optional(),
   relationshipType: z.string().optional(), introducedBy: z.string().optional(),
   importantContact: z.boolean().optional(), preferredComm: z.array(preferredCommSchema).optional(),
   lastInteractionAt: z.string().nullable().optional(), followUpDate: z.string().nullable().optional(),
   notes: z.string().optional(), visitingCards: z.array(visitingCardSchema).optional(),
-  metadata: z.record(z.string()).optional(), status: z.enum(['active', 'archived']).optional(),
+  metadata: z.record(z.string(), z.string()).optional(), status: z.enum(['active', 'archived']).optional(),
 }
 
 const employeeColumnFor: Record<string, string> = {
@@ -142,7 +142,7 @@ const timelineEventColumnFor: Record<string, string> = {
 const timelineJsonColumns = new Set(['attendees'])
 
 const timelineRouter = router({
-  listForEmployee: protectedReadProcedure.input(z.object({ employeeId: z.string().uuid() })).query(async ({ input }) => {
+  listForEmployee: protectedReadProcedure.input(z.object({ employeeId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query(`SELECT * FROM timeline_events WHERE employee_id=$1 ORDER BY date DESC, id DESC`, [input.employeeId])
     return result.rows.map(toTimelineEvent)
   }),
@@ -157,7 +157,7 @@ const timelineRouter = router({
     }),
   add: protectedProcedure
     .input(z.object({
-      employeeId: z.string().uuid(), type: timelineEventTypeSchema, title: z.string().min(1),
+      employeeId: z.string().guid('Invalid UUID'), type: timelineEventTypeSchema, title: z.string().min(1),
       customLabel: z.string().optional(), date: z.string(), time: z.string().optional(),
       note: z.string().optional(),
       // Legacy plain-string attendee, or the new ID-carrying snapshot
@@ -181,7 +181,7 @@ const timelineRouter = router({
       return toTimelineEvent(result.rows[0])
     }),
   update: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), patch: z.object(timelineEventPatchShape) }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), patch: z.object(timelineEventPatchShape) }))
     .mutation(async ({ input }) => {
       const fields = Object.keys(input.patch)
       if (!fields.length) {
@@ -195,22 +195,22 @@ const timelineRouter = router({
       return toTimelineEvent(result.rows[0])
     }),
   setAttended: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), attended: z.boolean().optional() }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), attended: z.boolean().optional() }))
     .mutation(({ input }) => pool.query(`UPDATE timeline_events SET attended=$1 WHERE id=$2`, [input.attended ?? null, input.id]).then(() => undefined)),
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) =>
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(({ input }) =>
     pool.query('DELETE FROM timeline_events WHERE id=$1', [input.id]).then(() => undefined)
   ),
 })
 
 const transfersRouter = router({
-  listForEmployee: protectedReadProcedure.input(z.object({ employeeId: z.string().uuid() })).query(async ({ input }) => {
+  listForEmployee: protectedReadProcedure.input(z.object({ employeeId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query(`SELECT * FROM transfers WHERE employee_id=$1 ORDER BY effective_date DESC`, [input.employeeId])
     return result.rows.map(toTransfer)
   }),
   transfer: protectedProcedure
     .input(z.object({
-      employeeId: z.string().uuid(), toOrgNodeId: z.string().uuid(), toDesignation: z.string(),
-      toManagerId: z.string().uuid().nullable().optional(), effectiveDate: z.string(),
+      employeeId: z.string().guid('Invalid UUID'), toOrgNodeId: z.string().guid('Invalid UUID'), toDesignation: z.string(),
+      toManagerId: z.string().guid('Invalid UUID').nullable().optional(), effectiveDate: z.string(),
       reason: z.string(), remarks: z.string().optional(),
     }))
     .mutation(async ({ input }) => {
@@ -260,12 +260,12 @@ const transfersRouter = router({
 })
 
 export const employeesRouter = router({
-  listUnder: protectedReadProcedure.input(z.object({ orgNodeId: z.string().uuid() })).query(async ({ input }) => {
+  listUnder: protectedReadProcedure.input(z.object({ orgNodeId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const ids = await subtreeIds(input.orgNodeId)
     const result = await pool.query(`SELECT * FROM employees WHERE org_node_id = ANY($1) AND status='active' ORDER BY name`, [ids])
     return attachCharges(result.rows)
   }),
-  listDirect: protectedReadProcedure.input(z.object({ orgNodeId: z.string().uuid() })).query(async ({ input }) => {
+  listDirect: protectedReadProcedure.input(z.object({ orgNodeId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query(`SELECT * FROM employees WHERE org_node_id=$1 AND status='active' ORDER BY name`, [input.orgNodeId])
     return attachCharges(result.rows)
   }),
@@ -295,11 +295,11 @@ export const employeesRouter = router({
     for (const row of result.rows) out[row.employee_id] = { id: row.dept_id, name: row.dept_name }
     return out
   }),
-  get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => oneEmployee(input.id)),
-  directReports: protectedReadProcedure.input(z.object({ employeeId: z.string().uuid() })).query(async ({ input }) =>
+  get: protectedReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(({ input }) => oneEmployee(input.id)),
+  directReports: protectedReadProcedure.input(z.object({ employeeId: z.string().guid('Invalid UUID') })).query(async ({ input }) =>
     attachCharges((await pool.query(`SELECT * FROM employees WHERE manager_id=$1 AND status='active'`, [input.employeeId])).rows)
   ),
-  reportingChain: protectedReadProcedure.input(z.object({ employeeId: z.string().uuid() })).query(async ({ input }) => {
+  reportingChain: protectedReadProcedure.input(z.object({ employeeId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const chain: any[] = []
     let cur = (await pool.query('SELECT * FROM employees WHERE id=$1', [input.employeeId])).rows[0]
     while (cur?.manager_id) {
@@ -314,7 +314,7 @@ export const employeesRouter = router({
     .input(z.object({
       name: z.string().min(1), designation: z.string().min(1), email: z.string(), phone: z.string(),
       photoUrl: photoUrlSchema, company: z.string().optional(), address: z.string().optional(),
-      website: z.string().optional(), orgNodeId: z.string().uuid(), managerId: z.string().uuid().nullable(),
+      website: z.string().optional(), orgNodeId: z.string().guid('Invalid UUID'), managerId: z.string().guid('Invalid UUID').nullable(),
       vacant: z.boolean().optional(), connected: z.boolean().optional(),
       relationshipStatus: relationshipStatusSchema.optional(), relationshipQuality: relationshipQualitySchema.optional(),
       relationshipType: z.string().optional(), introducedBy: z.string().optional(),
@@ -323,7 +323,7 @@ export const employeesRouter = router({
       notes: z.string().optional(),
       charges: z.array(z.object(chargeInputShape)).optional(),
       visitingCards: z.array(visitingCardSchema).optional(),
-      metadata: z.record(z.string()).optional(),
+      metadata: z.record(z.string(), z.string()).optional(),
     }))
     .mutation(async ({ input }) => {
       const vacant = input.vacant ?? false
@@ -372,7 +372,7 @@ export const employeesRouter = router({
       }
     }),
   update: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), patch: z.object(employeePatchShape) }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), patch: z.object(employeePatchShape) }))
     .mutation(async ({ input }) => {
       const fields = Object.keys(input.patch)
       if (!fields.length) return oneEmployee(input.id)
@@ -383,7 +383,7 @@ export const employeesRouter = router({
       return oneEmployee(input.id)
     }),
   setManager: protectedProcedure
-    .input(z.object({ employeeId: z.string().uuid(), managerId: z.string().uuid().nullable() }))
+    .input(z.object({ employeeId: z.string().guid('Invalid UUID'), managerId: z.string().guid('Invalid UUID').nullable() }))
     .mutation(async ({ input }) => {
       if (input.employeeId === input.managerId) {
         throw new TRPCError({ code: 'BAD_REQUEST', message: 'An employee cannot report to themselves' })
@@ -424,7 +424,7 @@ export const employeesRouter = router({
         client.release()
       }
     }),
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')
@@ -448,7 +448,7 @@ export const employeesRouter = router({
     }
   }),
   merge: protectedProcedure
-    .input(z.object({ survivorId: z.string().uuid(), duplicateId: z.string().uuid(), resolutions: z.record(z.string()).optional() }))
+    .input(z.object({ survivorId: z.string().guid('Invalid UUID'), duplicateId: z.string().guid('Invalid UUID'), resolutions: z.record(z.string(), z.string()).optional() }))
     .mutation(async ({ input }) => {
       if (input.survivorId === input.duplicateId) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot merge a record with itself' })
       const client = await pool.connect()
@@ -554,7 +554,7 @@ export const employeesRouter = router({
       }
     }),
   listMergeAudit: protectedReadProcedure.query(async () => {
-    const result = await pool.query('SELECT * FROM employee_merge_audit ORDER BY merged_at DESC')
+    const result = await pool.query('SELECT * FROM employee_merge_audit ORDER BY merged_at DESC, insert_seq DESC')
     return result.rows.map((row) => ({
       id: row.id, survivorId: row.survivor_id, survivorName: row.survivor_name,
       duplicateId: row.duplicate_id, duplicateName: row.duplicate_name,
@@ -562,7 +562,7 @@ export const employeesRouter = router({
     }))
   }),
   addCharge: protectedProcedure
-    .input(z.object({ employeeId: z.string().uuid(), charge: z.object(chargeInputShape) }))
+    .input(z.object({ employeeId: z.string().guid('Invalid UUID'), charge: z.object(chargeInputShape) }))
     .mutation(async ({ input }) => {
       const client = await pool.connect()
       try {
@@ -589,11 +589,11 @@ export const employeesRouter = router({
       }
     }),
   removeCharge: protectedProcedure
-    .input(z.object({ employeeId: z.string().uuid(), chargeId: z.string().uuid() }))
+    .input(z.object({ employeeId: z.string().guid('Invalid UUID'), chargeId: z.string().guid('Invalid UUID') }))
     .mutation(({ input }) => pool.query('DELETE FROM employee_charges WHERE id=$1 AND employee_id=$2', [input.chargeId, input.employeeId]).then(() => undefined)),
   import: protectedProcedure
     .input(z.object({
-      orgNodeId: z.string().uuid(),
+      orgNodeId: z.string().guid('Invalid UUID'),
       rows: z.array(z.object({ name: z.string(), designation: z.string(), email: z.string().optional(), phone: z.string().optional(), connected: z.boolean().optional() })),
     }))
     .mutation(async ({ input }) => {

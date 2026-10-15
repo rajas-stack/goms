@@ -64,9 +64,15 @@ describe('tender websites router', () => {
   })
 
   it('deletes by id and validates the id', async () => {
+    db.query.mockResolvedValueOnce({ rows: [{ id }] })
     await caller().delete({ id })
-    expect(db.query).toHaveBeenCalledWith('DELETE FROM tender_websites WHERE id=$1', [id])
+    expect(db.query).toHaveBeenCalledWith('DELETE FROM tender_websites WHERE id=$1 AND NOT editing_locked RETURNING id', [id])
     await expect(caller().delete({ id: 'nope' })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
+  it('rejects direct deletion of a locked website without writing an audit success', async () => {
+    db.query.mockResolvedValueOnce({ rows: [] }).mockResolvedValueOnce({ rows: [{ editing_locked: true }] })
+    await expect(caller().delete({ id })).rejects.toMatchObject({ code: 'CONFLICT' })
+    expect(db.query.mock.calls.some(call => String(call[0]).includes('INSERT INTO commercial_audit_logs'))).toBe(false)
   })
 
   it('stores only the encrypted credential envelope and excludes it from audit values', async () => {

@@ -37,6 +37,7 @@ const pill = (name: string) => within(screen.getByTestId('saved-view-tabs')).get
 describe('saved views', () => {
   beforeEach(async () => {
     stubLayout()
+    localStorage.clear()
     await resetLocalData()
   })
 
@@ -48,6 +49,7 @@ describe('saved views', () => {
     expect(screen.queryByText('Smart Transport Bids')).not.toBeInTheDocument()
     expect(screen.queryByText('High Value Deals > 20 Cr')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Create Saved View/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Delete selected view' })).toBeDisabled()
   })
 
   it('a system view applies its filter (Solutioning) and cannot be deleted', async () => {
@@ -96,14 +98,13 @@ describe('saved views', () => {
     renderWorkspace()
     await screen.findByText('Alpha')
 
-    // System view: hiding a column is session-only.
+    // System column preferences persist on this device without changing the system view record.
     await userEvent.click(screen.getByRole('button', { name: /Manage columns/ }))
     await userEvent.click(await screen.findByRole('button', { name: 'Hide City' }))
     await new Promise((r) => setTimeout(r, 900))
     expect((await repository.listBidSavedViews()).filter((v) => v.isSystem).every((v) => v.visibleColumns.length === 0)).toBe(true)
 
-    // ...and the strip says the change is unsaved, instead of letting it look saved.
-    expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Changes not saved to this view')
+    expect(JSON.parse(localStorage.getItem('gorms:grid-columns:local:bidTracker:allBids')!)).toContain('~hidden:city')
 
     // User view: switching restores its own ordered columns; changing them persists.
     await userEvent.click(await screen.findByRole('button', { name: 'Mine' }))
@@ -145,7 +146,7 @@ describe('saved views', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderWorkspace()
     await userEvent.click(await screen.findByRole('button', { name: 'Temp' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Delete view Temp' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete selected view' }))
     await waitFor(async () => expect((await repository.listBidSavedViews()).some((v) => v.id === view.id)).toBe(false))
     await waitFor(() => expect(pill('All Bids')).toHaveAttribute('aria-pressed', 'true'))
   })

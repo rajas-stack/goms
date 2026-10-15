@@ -1,4 +1,4 @@
-image: node:20
+image: node:22
 
 variables:
   # This flag alone never fixed the pages job's OOM (exit 137): reproduced
@@ -18,9 +18,20 @@ variables:
 
 stages: [test, deploy-dev, deploy] # 'deploy' kept for the existing pages job below, untouched
 
+security-checks:
+  stage: test
+  image: node:22
+  script:
+    - npm ci
+    - node scripts/security-check.mjs
+    - npm audit --omit=dev --audit-level=high
+    - npm --workspace apps/api run build
+    - cd apps/api
+    - npx vitest run src/security/security.test.ts src/auth/identity.test.ts src/auth/rbac/registry/completeness.test.ts src/routers/tenderWebsites.test.ts src/routers/googleIntegrations.test.ts
+
 test-api:
   stage: test
-  image: node:20
+  image: node:22
   services:
     - postgres:16
   variables:

@@ -12,7 +12,7 @@ const kindShape = z.enum(TENDER_WEBSITE_KINDS)
 const websiteShape = z.object({
   name: z.string().max(TENDER_WEBSITE_NAME_MAX * 2), url: z.string().max(TENDER_WEBSITE_URL_MAX),
   credentials: credentialEnvelope.nullable().optional(),
-  dscEmployeeId: z.string().uuid().nullable().optional(),
+  dscEmployeeId: z.string().guid('Invalid UUID').nullable().optional(),
 })
 
 /** Create picks the Settings page; update never moves a website between pages. */
@@ -45,7 +45,7 @@ function duplicateName(name: string): TRPCError {
 
 async function audit(entityId: string, action: string, value: string, changedBy?: string | null) {
   await writeAuditLog(pool, { entityType: 'tenderWebsite', entityId, field: 'website', oldValue: '', newValue: value, reason: '', action, changedBy })
-    .catch(() => undefined) // best-effort, never blocks the change itself
+    .catch(() => { console.error(JSON.stringify({ event: 'security.portal_audit_failed', entityId, action })) })
 }
 
 export const tenderWebsitesRouter = router({
@@ -78,7 +78,7 @@ export const tenderWebsitesRouter = router({
     }
   }),
 
-  update: protectedProcedure.input(websiteShape.extend({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
+  update: protectedProcedure.input(websiteShape.extend({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input, ctx }) => {
     const site = clean(input)
     if (site.dscEmployeeId) {
       const existing = await pool.query('SELECT dsc_employee_id FROM tender_websites WHERE id=$1', [input.id])
@@ -108,12 +108,17 @@ export const tenderWebsitesRouter = router({
     }
   }),
 
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
-    await pool.query('DELETE FROM tender_websites WHERE id=$1', [input.id])
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input, ctx }) => {
+    const result = await pool.query('DELETE FROM tender_websites WHERE id=$1 AND NOT editing_locked RETURNING id', [input.id])
+    if (!result.rows[0]) {
+      const current = await pool.query('SELECT editing_locked FROM tender_websites WHERE id=$1', [input.id])
+      if (current.rows[0]?.editing_locked) throw new TRPCError({ code: 'CONFLICT', message: 'Unlock editing before deleting this website.' })
+      throw new TRPCError({ code: 'NOT_FOUND', message: 'That website no longer exists.' })
+    }
     await audit(input.id, 'delete', '', ctx.user?.email)
   }),
 
-  setEditingLock: protectedProcedure.input(z.object({ id: z.string().uuid(), locked: z.boolean() })).mutation(async ({ input, ctx }) => {
+  setEditingLock: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID'), locked: z.boolean() })).mutation(async ({ input, ctx }) => {
     const result = await pool.query('UPDATE tender_websites SET editing_locked=$1, updated_at=now() WHERE id=$2 RETURNING *', [input.locked, input.id])
     if (!result.rows[0]) throw new TRPCError({ code: 'NOT_FOUND', message: 'That website no longer exists.' })
     await audit(input.id, input.locked ? 'lockEditing' : 'unlockEditing', '', ctx.user?.email)

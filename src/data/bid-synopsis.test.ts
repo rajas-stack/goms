@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { repository, resetLocalData, getFullSnapshot, restoreFromBackup } from './repository'
 import { migrateSnapshot } from './migrations'
 import { paragraph, starterDocument } from '@/modules/bid-tracker/synopsis/documents'
+import { documentToGeneral, generalToDocument } from '@goms/domain'
 
 async function bid(name: string) {
   const opportunity = await repository.createOpportunity({ departmentId: 'dept-1', opportunityName: name })
@@ -32,6 +33,27 @@ describe('bid synopsis persistence', () => {
     expect((await repository.getBidSynopsis(a.id, 'scope'))?.document.content).toHaveLength(1)
     await expect(repository.saveBidSynopsis(input)).rejects.toThrow(/changed elsewhere/)
     expect((await repository.getBidSynopsis(a.id, 'scope'))?.revision).toBe(1)
+  })
+
+  it('projects General fields into grid rows and filters them through their shared keys', async () => {
+    const a = await bid('A'), b = await bid('B')
+    await repository.saveBidSynopsis({ bidId: a.id, section: 'general', document: generalToDocument({ scopeOfWork: 'Smart transit', publishingDate: '2026-10-10' }), expectedRevision: 0 })
+    const rows = await repository.listBidsForGrid([{ field: 'general:scopeOfWork', operator: 'contains', value: 'transit' }])
+    expect(rows.map(row => row.id)).toEqual([a.id])
+    expect(rows[0].generalValues).toMatchObject({ scopeOfWork: 'Smart transit', publishingDate: '2026-10-10' })
+    expect((await repository.listBidsForGrid([{ field: 'general:publishingDate', operator: 'after', value: '2026-10-09' }])).map(row => row.id)).toEqual([a.id])
+    expect(b.id).not.toBe(a.id)
+  })
+
+  it('keeps linked General values in sync when an opportunity value changes or is cleared', async () => {
+    const a = await bid('A')
+    await repository.saveBidSynopsis({ bidId: a.id, section: 'general', document: generalToDocument({ tenderId: 'Legacy tender', referenceNo: 'Legacy reference' }), expectedRevision: 0 })
+    await repository.updateOpportunity(a.opportunityId, { gemTenderId: 'New tender', referenceNo: 'New reference' })
+    expect(documentToGeneral((await repository.getBidSynopsis(a.id, 'general'))?.document)).toMatchObject({ tenderId: 'New tender', referenceNo: 'New reference' })
+    await repository.updateOpportunity(a.opportunityId, { gemTenderId: '', referenceNo: '' })
+    const row = (await repository.listBidsForGrid()).find(candidate => candidate.id === a.id)!
+    expect(row.gemTenderId).toBe('')
+    expect(row.referenceNo).toBe('')
   })
 
   it('migrates old snapshots without dropping data and removes sections when a bid is deleted', async () => {

@@ -123,7 +123,7 @@ export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMile
           <label className="flex items-center gap-1 text-[13px] text-muted">
             Due Date
             <FriendlyDateInput
-              aria-label="Due Date" value={dueDate} onChange={setDueDate} floatingFeedback wrapperClassName="w-[10rem]"
+              aria-label="Due Date" value={dueDate} onChange={setDueDate} floatingFeedback wrapperClassName="w-[11rem]" placeholder="e.g. 21.09.2026"
               className="h-8 rounded-lg border border-line bg-white px-2 text-[13px] text-ink focus-visible:focus-ring"
             />
           </label>

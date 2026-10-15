@@ -1,0 +1,37 @@
+name: Docker Compose validation
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  compose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .node-version
+      - run: node docker/setup.mjs
+      - run: docker compose config --quiet
+      - run: docker compose -f compose.yaml -f compose.onlyoffice.yaml config --quiet
+      - run: docker compose up --build --wait --wait-timeout 180
+      - run: curl --fail http://localhost:8088/healthz && curl --fail http://localhost:8088/api/trpc/health.check
+      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          image-ref: goms-api:local
+          scanners: secret
+          exit-code: '1'
+      - uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1
+        with:
+          image-ref: goms-web:local
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+      - name: Diagnostics
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Stop containers
+        if: always()
+        run: docker compose down

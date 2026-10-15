@@ -20,7 +20,7 @@ describe('tender credential locks', () => {
   })
 
   it('rejects short passphrases and uses a fresh salt and IV for each save', async () => {
-    await expect(lockCredentials({ userId: '', password: 'x' }, 'short')).rejects.toThrow(/at least 8/)
+    await expect(lockCredentials({ userId: '', password: 'x' }, 'short')).rejects.toThrow(/12 to 1024/)
     const a = await lockCredentials({ userId: 'x', password: 'y' }, 'private passphrase')
     const b = await lockCredentials({ userId: 'x', password: 'y' }, 'private passphrase')
     expect(a.salt).not.toBe(b.salt)

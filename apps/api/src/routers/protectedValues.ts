@@ -12,7 +12,7 @@ function toProtectedValue(row: any) {
 
 export const protectedValuesRouter = router({
   listFor: protectedReadProcedure
-    .input(z.object({ entityType: z.string(), entityId: z.string().uuid() }))
+    .input(z.object({ entityType: z.string(), entityId: z.string().guid('Invalid UUID') }))
     .query(async ({ input }) => {
       const result = await pool.query(
         'SELECT * FROM protected_values WHERE entity_type=$1 AND entity_id=$2', [input.entityType, input.entityId],
@@ -21,7 +21,7 @@ export const protectedValuesRouter = router({
     }),
 
   freeze: protectedProcedure
-    .input(z.object({ entityType: z.string(), entityId: z.string().uuid(), fieldKey: z.string().min(1) }))
+    .input(z.object({ entityType: z.string(), entityId: z.string().guid('Invalid UUID'), fieldKey: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {
@@ -47,7 +47,7 @@ export const protectedValuesRouter = router({
     }),
 
   unfreeze: protectedProcedure
-    .input(z.object({ entityType: z.string(), entityId: z.string().uuid(), fieldKey: z.string().min(1), reason: z.string().min(1) }))
+    .input(z.object({ entityType: z.string(), entityId: z.string().guid('Invalid UUID'), fieldKey: z.string().min(1), reason: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {

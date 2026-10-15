@@ -23,11 +23,11 @@ function registerAssignments(patch: RegisterPatch, firstParam: number) {
 }
 
 export const bidCorrigendaRouter = router({
-  listForBid: protectedReadProcedure.input(z.object({ bidId: z.string().uuid() })).query(async ({ input }) => {
+  listForBid: protectedReadProcedure.input(z.object({ bidId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const corrigenda = (await pool.query('SELECT * FROM bid_corrigenda WHERE bid_id=$1 ORDER BY corrigendum_number', [input.bidId])).rows
     const out = []
     for (const c of corrigenda) {
-      const changes = (await pool.query('SELECT * FROM bid_corrigendum_changes WHERE corrigendum_id=$1 ORDER BY created_at', [c.id])).rows
+      const changes = (await pool.query('SELECT * FROM bid_corrigendum_changes WHERE corrigendum_id=$1 ORDER BY created_at, insert_seq', [c.id])).rows
       out.push(toBidCorrigendum(c, changes))
     }
     return out
@@ -35,7 +35,7 @@ export const bidCorrigendaRouter = router({
 
   create: protectedProcedure
     .input(z.object({
-      bidId: z.string().uuid(), corrigendumNumber: z.number().int().positive(), sourceDocumentId: z.string().uuid().optional(),
+      bidId: z.string().guid('Invalid UUID'), corrigendumNumber: z.number().int().positive(), sourceDocumentId: z.string().guid('Invalid UUID').optional(),
       register: registerSchema.optional(),
       changes: z.array(changeSchema).min(1).max(200),
     }))
@@ -114,9 +114,49 @@ export const bidCorrigendaRouter = router({
       }
     }),
 
+  /** Appends clause changes (e.g. recorded from a synopsis grid cell) to an
+   *  existing corrigendum. Earlier change rows are never touched. */
+  addChanges: protectedProcedure
+    .input(z.object({ corrigendumId: z.string().guid('Invalid UUID'), changes: z.array(changeSchema.extend({ kind: z.literal('clause') })).min(1).max(200) }))
+    .mutation(async ({ input }) => {
+      const client = await pool.connect()
+      try {
+        await client.query('BEGIN')
+        const corrigendum = (await client.query('SELECT * FROM bid_corrigenda WHERE id=$1 FOR UPDATE', [input.corrigendumId])).rows[0]
+        if (!corrigendum) throw new TRPCError({ code: 'NOT_FOUND', message: 'Corrigendum not found.' })
+        const existing = new Set((await client.query('SELECT field_key FROM bid_corrigendum_changes WHERE corrigendum_id=$1', [corrigendum.id])).rows.map((r) => r.field_key))
+        const keys = input.changes.map((c) => c.fieldKey)
+        if (new Set(keys).size !== keys.length || keys.some((k) => existing.has(k))) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: 'Each clause can change only once per corrigendum.' })
+        }
+        for (const change of input.changes) {
+          const d = changeDefaults(change)
+          await client.query(
+            `INSERT INTO bid_corrigendum_changes
+               (corrigendum_id, field_key, current_value, proposed_value, kind, clause_title, affected_module, classification, impact_level, source_ref)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            [corrigendum.id, change.fieldKey, change.currentValue, change.proposedValue,
+              d.kind, d.clauseTitle, d.affectedModule, d.classification, d.impactLevel, d.sourceRef],
+          )
+        }
+        // New pending changes reopen the review, as a new corrigendum would.
+        await client.query('UPDATE bid_corrigenda SET reviewed_at=NULL, reviewed_by=NULL WHERE id=$1', [corrigendum.id])
+        await client.query(`UPDATE bids SET data_confidence='needs_review', updated_at=now() WHERE id=$1`, [corrigendum.bid_id])
+        await client.query('COMMIT')
+        const row = (await pool.query('SELECT * FROM bid_corrigenda WHERE id=$1', [corrigendum.id])).rows[0]
+        const changes = (await pool.query('SELECT * FROM bid_corrigendum_changes WHERE corrigendum_id=$1 ORDER BY created_at, insert_seq', [corrigendum.id])).rows
+        return toBidCorrigendum(row, changes)
+      } catch (e) {
+        await client.query('ROLLBACK')
+        throw e
+      } finally {
+        client.release()
+      }
+    }),
+
   /** Register fields only — change rows are append-only and never rewritten. */
   updateRegister: protectedProcedure
-    .input(z.object({ corrigendumId: z.string().uuid(), patch: registerSchema }))
+    .input(z.object({ corrigendumId: z.string().guid('Invalid UUID'), patch: registerSchema }))
     .mutation(async ({ input, ctx }) => {
       const set = registerAssignments(input.patch, 2)
       const row = set.sql.length
@@ -129,12 +169,12 @@ export const bidCorrigendaRouter = router({
           reason: '', action: 'corrigendum_register_updated', changedBy: ctx.user?.email,
         })
       }
-      const changes = (await pool.query('SELECT * FROM bid_corrigendum_changes WHERE corrigendum_id=$1 ORDER BY created_at', [row.id])).rows
+      const changes = (await pool.query('SELECT * FROM bid_corrigendum_changes WHERE corrigendum_id=$1 ORDER BY created_at, insert_seq', [row.id])).rows
       return toBidCorrigendum(row, changes)
     }),
 
   reviewChange: protectedProcedure
-    .input(z.object({ changeId: z.string().uuid(), decision: z.enum(['accepted', 'rejected']), reason: z.string().optional() }))
+    .input(z.object({ changeId: z.string().guid('Invalid UUID'), decision: z.enum(['accepted', 'rejected']), reason: z.string().optional() }))
     .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {

@@ -84,10 +84,15 @@ scripts/admin-import-fixtures/out/
 # Playwright E2E per-run artifacts.
 test-results/
 playwright-report/
+test-results-full/
+playwright-report-full/
+/e2e/full/.*.log
 
 # Local-only scratch: design exports, pasted screenshots, spreadsheets, thumbnails.
 # (Env files are already covered by `.env.*` above.)
 /uploads/
 /.thumbnail
+/.docker/
+!.env.docker.example
 /Copy of Book*.xlsx
 /Access Control Center*.dc.html

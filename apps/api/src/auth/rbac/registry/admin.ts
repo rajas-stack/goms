@@ -23,4 +23,8 @@ export const adminPolicy: Record<string, PolicyEntry> = {
   'access.effectivePermissions': { requirements: [read('admin.access')] },
   'access.setOverride': { requirements: [write('admin.access')] },
   'access.removeOverride': { requirements: [remove('admin.access')] },
+  /** Shared encryption keys affect every connected portal: administration only. */
+  'credentialPassphrases.create': { requirements: [write('admin.access')] },
+  'credentialPassphrases.update': { requirements: [write('admin.access')] },
+  'credentialPassphrases.remove': { requirements: [remove('admin.access')] },
 }

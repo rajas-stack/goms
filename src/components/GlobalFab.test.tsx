@@ -9,7 +9,7 @@ import { GlobalFab } from './GlobalFab'
 // "Create Meeting" and "Log Interaction" were two GlobalFab menu items that
 // both opened the exact same TimelineEventDialog/mutation, just with
 // different typeFilter/initialType props forcing a curated type subset —
-// merged into one "Add Activity" entry that opens the dialog with the full
+// merged into one "Add Meeting" entry that opens the dialog with the full
 // type list instead. This covers the menu itself (no stale labels/handlers)
 // and that the merged entry still reaches a working dialog with Meeting
 // selectable, not any regression in the dialog's own save logic (covered
@@ -42,14 +42,14 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-describe('GlobalFab — Add Activity consolidation', () => {
-  it('offers a single "Add Activity" entry, with no separate "Create Meeting"/"Log Interaction" items', async () => {
+describe('GlobalFab — Add Meeting consolidation', () => {
+  it('offers a single "Add Meeting" entry, with no separate "Create Meeting"/"Log Interaction" items', async () => {
     const user = userEvent.setup()
     renderFab()
 
     await user.click(screen.getByRole('button', { name: 'Create new' }))
 
-    expect(screen.getByRole('menuitem', { name: 'Add Activity' })).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Add Meeting' })).toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: 'Create Meeting' })).not.toBeInTheDocument()
     expect(screen.queryByRole('menuitem', { name: 'Log Interaction' })).not.toBeInTheDocument()
   })
@@ -59,7 +59,7 @@ describe('GlobalFab — Add Activity consolidation', () => {
     renderFab()
 
     await user.click(screen.getByRole('button', { name: 'Create new' }))
-    await user.click(screen.getByRole('menuitem', { name: 'Add Activity' }))
+    await user.click(screen.getByRole('menuitem', { name: 'Add Meeting' }))
 
     // employeeId is null from this entry point, so the dialog opens on its
     // person-search step first — same as before this change.

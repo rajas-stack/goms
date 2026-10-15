@@ -24,8 +24,8 @@ export const credentialPassphrasesRouter = router({
     const slot = [1, 2, 3, 4, 5].find(value => !rows.some(row => row.slot === value))!
     return map((await client.query('INSERT INTO credential_passphrases (slot,name,proof) VALUES ($1,$2,$3) RETURNING *', [slot, clean.name, clean.proof])).rows[0])
   }))),
-  update: protectedProcedure.input(shape.extend({ id: z.string().uuid(), expectedUpdatedAt: z.string(), replacements: z.array(z.object({
-    id: z.string().uuid(), previousCiphertext: z.string().max(32768), credentials: credentialEnvelope,
+  update: protectedProcedure.input(shape.extend({ id: z.string().guid('Invalid UUID'), expectedUpdatedAt: z.string(), replacements: z.array(z.object({
+    id: z.string().guid('Invalid UUID'), previousCiphertext: z.string().max(32768), credentials: credentialEnvelope,
   })).max(1000) })).mutation(({ input }) => unique(() => credentialTransaction(async client => {
     const clean = normalizeCredentialPassphrase(input)
     const record = (await client.query('SELECT * FROM credential_passphrases WHERE id=$1 FOR UPDATE', [input.id])).rows[0]
@@ -41,9 +41,11 @@ export const credentialPassphrasesRouter = router({
         await client.query('UPDATE tender_websites SET credentials=$1, updated_at=now() WHERE id=$2', [replacement.credentials, site.id])
       }
     } else if (input.replacements.length) throw conflict('Invalid credential replacement.')
-    return map((await client.query('UPDATE credential_passphrases SET name=$1, proof=$2, updated_at=now() WHERE id=$3 RETURNING *', [clean.name, clean.proof, input.id])).rows[0])
+    return map((await client.query(
+      // The token is compared at ms precision, so each save must move updated_at forward by ≥1 ms.
+      "UPDATE credential_passphrases SET name=$1, proof=$2, updated_at=GREATEST(now(), updated_at + interval '1 millisecond') WHERE id=$3 RETURNING *", [clean.name, clean.proof, input.id])).rows[0])
   }))),
-  remove: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) => credentialTransaction(async client => {
+  remove: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(({ input }) => credentialTransaction(async client => {
     const { rows } = await client.query("SELECT id FROM tender_websites WHERE credentials->>'passphraseId'=$1 LIMIT 1", [input.id])
     if (rows.length) throw conflict('This passphrase protects saved credentials and cannot be removed.')
     await client.query('DELETE FROM credential_passphrases WHERE id=$1', [input.id])

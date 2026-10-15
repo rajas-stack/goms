@@ -60,7 +60,7 @@ export const bidCustomFieldsRouter = router({
     .input(z.object({ includeArchived: z.boolean().optional() }).optional())
     .query(async ({ input }) => {
       const result = await pool.query(
-        `SELECT * FROM bid_custom_fields ${input?.includeArchived ? '' : `WHERE status='active'`} ORDER BY position, created_at`,
+        `SELECT * FROM bid_custom_fields ${input?.includeArchived ? '' : `WHERE status='active'`} ORDER BY position, created_at, insert_seq`,
       )
       return result.rows.map(toBidCustomField)
     }),
@@ -98,7 +98,7 @@ export const bidCustomFieldsRouter = router({
 
   update: protectedProcedure
     .input(z.object({
-      id: z.string().uuid(),
+      id: z.string().guid('Invalid UUID'),
       // `key` and `dataType` are deliberately not patchable (spec §8.1).
       patch: z.object({ name: fieldName.optional(), options: z.array(z.string()).optional() }),
     }))
@@ -144,7 +144,7 @@ export const bidCustomFieldsRouter = router({
     })),
 
   reorder: protectedProcedure
-    .input(z.object({ ids: z.array(z.string().uuid()) }))
+    .input(z.object({ ids: z.array(z.string().guid('Invalid UUID')) }))
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
       await lockDefinitions(client)
       const active = (await client.query(`SELECT id, position FROM bid_custom_fields WHERE status='active' FOR UPDATE`)).rows
@@ -161,12 +161,12 @@ export const bidCustomFieldsRouter = router({
           reason: '', action: 'custom_field_reordered', changedBy: ctx.user?.email,
         })
       }
-      const rows = (await client.query(`SELECT * FROM bid_custom_fields WHERE status='active' ORDER BY position, created_at`)).rows
+      const rows = (await client.query(`SELECT * FROM bid_custom_fields WHERE status='active' ORDER BY position, created_at, insert_seq`)).rows
       return (rows as any[]).map(toBidCustomField)
     })),
 
   archive: protectedProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().guid('Invalid UUID') }))
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
       const current = await loadField(client, input.id, true)
       if (current.status === 'archived') return toBidCustomField(current)
@@ -181,7 +181,7 @@ export const bidCustomFieldsRouter = router({
     })),
 
   unarchive: protectedProcedure
-    .input(z.object({ id: z.string().uuid() }))
+    .input(z.object({ id: z.string().guid('Invalid UUID') }))
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
       await lockDefinitions(client)
       const current = await loadField(client, input.id, true)
@@ -209,7 +209,7 @@ export const bidCustomFieldsRouter = router({
    *  column whose values were all cleared afterwards is still archive-only. */
   delete: protectedProcedure
     // `withValues` = the person confirmed deleting the column AND every value it holds (audit keeps the record).
-    .input(z.object({ id: z.string().uuid(), withValues: z.boolean().optional() }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), withValues: z.boolean().optional() }))
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
       const current = await loadField(client, input.id, true)
       const valueCount = (await client.query('SELECT count(*)::int AS n FROM bid_custom_field_values WHERE field_id=$1', [input.id])).rows[0].n as number
@@ -233,7 +233,7 @@ export const bidCustomFieldsRouter = router({
    *  Ordinary field write: deliberately NOT routed through
    *  `assertFieldsNotProtected` (spec §8.1). */
   setValue: protectedProcedure
-    .input(z.object({ bidId: z.string().uuid(), fieldId: z.string().uuid(), value: z.union([z.string(), z.number(), z.boolean(), z.null()]) }))
+    .input(z.object({ bidId: z.string().guid('Invalid UUID'), fieldId: z.string().guid('Invalid UUID'), value: z.union([z.string(), z.number(), z.boolean(), z.null()]) }))
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
       const field = await loadField(client, input.fieldId)
       if (field.status === 'archived') throw new TRPCError({ code: 'BAD_REQUEST', message: 'This column is archived.' })
@@ -285,7 +285,7 @@ export const bidCustomFieldsRouter = router({
     })),
 
   valuesForBid: protectedReadProcedure
-    .input(z.object({ bidId: z.string().uuid() }))
+    .input(z.object({ bidId: z.string().guid('Invalid UUID') }))
     .query(async ({ input }) => {
       const result = await pool.query(
         `SELECT f.key, f.data_type, ${CUSTOM_VALUE_COLUMNS}

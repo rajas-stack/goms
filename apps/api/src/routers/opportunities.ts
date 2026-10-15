@@ -6,7 +6,7 @@ import { isForeignKeyViolation } from '../db-errors.js'
 import { assertFieldsNotProtected } from '../lib/protectedValues.js'
 import { writeAuditLog } from '../lib/auditLog.js'
 import { assignOpportunityCode } from '../lib/opportunityCode.js'
-import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP } from '@goms/domain'
+import { DEFAULT_STAGE_KEY, PIPELINE_STAGE_MAP, updateGeneralDocument } from '@goms/domain'
 
 function toOpportunity(row: any) {
   return {
@@ -61,7 +61,7 @@ export async function applyStageChange(client: any, opportunityId: string, newSt
 const OPPORTUNITY_CODE_LOCKED = 'The Opportunity ID is generated when the opportunity is created and cannot be changed.'
 
 const patchShape = {
-  departmentId: z.string().uuid().optional(), stateCode: z.number().int().nullable().optional(),
+  departmentId: z.string().guid('Invalid UUID').optional(), stateCode: z.number().int().nullable().optional(),
   stageKey: z.string().min(1).optional(), closedOn: z.string().nullable().optional(),
   opportunityName: z.string().optional(), gemTenderId: z.string().optional(), city: z.string().nullable().optional(),
   referenceNo: z.string().nullable().optional(), assignmentName: z.string().nullable().optional(),
@@ -70,16 +70,16 @@ const patchShape = {
   currency: z.string().optional(), valueAmount: z.string().optional(), valueUnit: z.string().optional(),
   budgetKnown: z.string().optional(), emdAmount: z.string().optional(), emdUnit: z.string().optional(),
   salesPersonEmail: z.string().optional(),
-  geoSalesPersonId: z.string().uuid().nullable().optional(), buSalesPersonId: z.string().uuid().nullable().optional(),
-  preSalesPersonId: z.string().uuid().nullable().optional(), legalPersonId: z.string().uuid().nullable().optional(),
-  bidTeamMemberId: z.string().uuid().nullable().optional(),
+  geoSalesPersonId: z.string().guid('Invalid UUID').nullable().optional(), buSalesPersonId: z.string().guid('Invalid UUID').nullable().optional(),
+  preSalesPersonId: z.string().guid('Invalid UUID').nullable().optional(), legalPersonId: z.string().guid('Invalid UUID').nullable().optional(),
+  bidTeamMemberId: z.string().guid('Invalid UUID').nullable().optional(),
   opportunityType: z.string().trim().max(40).optional(),
   // The Opportunity ID is locked from creation on: a patch that would change it is refused
   // (echoing the current value back, as an edit form does, is accepted and ignored).
   opportunityCode: z.string().optional(),
 }
 /** Opportunity fields edited from a bid's grid row that belong in the bid's Activity History. */
-const BID_HISTORY_FIELDS = ['opportunityName', 'city', 'vertical', 'opportunityType']
+const BID_HISTORY_FIELDS = ['opportunityName', 'city', 'vertical', 'opportunityType', 'gemTenderId', 'referenceNo', 'assignmentName', 'stateCode']
 const columnFor: Record<string, string> = {
   departmentId: 'department_id', stateCode: 'state_code', stageKey: 'stage_key', closedOn: 'closed_on',
   opportunityName: 'opportunity_name', gemTenderId: 'gem_tender_id', city: 'city', referenceNo: 'reference_no', assignmentName: 'assignment_name',
@@ -96,16 +96,16 @@ const columnFor: Record<string, string> = {
  *  opportunity inside a department); the Bid Tracker's Create Bid creates one WITHOUT a department and
  *  resolves it in the same transaction (see bids.create / resolveBidDepartment). */
 export const createOpportunitySchema = z.object({
-  departmentId: z.string().uuid(), opportunityName: z.string().min(1),
+  departmentId: z.string().guid('Invalid UUID'), opportunityName: z.string().min(1),
   gemTenderId: z.string().optional(), city: z.string().nullable().optional(), publishDate: z.string().optional(), submissionDate: z.string().optional(),
   referenceNo: z.string().nullable().optional(), assignmentName: z.string().nullable().optional(),
   vertical: z.string().optional(), component: z.array(z.string()).optional(), quantity: z.string().optional(),
   currency: z.string().optional(), valueAmount: z.string().optional(), valueUnit: z.string().optional(),
   budgetKnown: z.string().optional(), emdAmount: z.string().optional(), emdUnit: z.string().optional(),
   salesPersonEmail: z.string().optional(), stageKey: z.string().optional(),
-  geoSalesPersonId: z.string().uuid().nullable().optional(), buSalesPersonId: z.string().uuid().nullable().optional(),
-  preSalesPersonId: z.string().uuid().nullable().optional(), legalPersonId: z.string().uuid().nullable().optional(),
-  bidTeamMemberId: z.string().uuid().nullable().optional(),
+  geoSalesPersonId: z.string().guid('Invalid UUID').nullable().optional(), buSalesPersonId: z.string().guid('Invalid UUID').nullable().optional(),
+  preSalesPersonId: z.string().guid('Invalid UUID').nullable().optional(), legalPersonId: z.string().guid('Invalid UUID').nullable().optional(),
+  bidTeamMemberId: z.string().guid('Invalid UUID').nullable().optional(),
   opportunityType: z.string().trim().max(40).optional(),
 })
 
@@ -182,18 +182,18 @@ export async function insertOpportunity(
 export const opportunitiesRouter = router({
   list: protectedReadProcedure.query(async () => {
     const result = await pool.query(
-      `SELECT * FROM opportunities ORDER BY created_at DESC, opportunity_name`,
+      `SELECT * FROM opportunities ORDER BY created_at DESC, insert_seq DESC`,
     )
     return result.rows.map(toOpportunity)
   }),
-  listByDepartment: protectedReadProcedure.input(z.object({ departmentId: z.string().uuid() })).query(async ({ input }) => {
+  listByDepartment: protectedReadProcedure.input(z.object({ departmentId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query(
       `SELECT * FROM opportunities WHERE department_id=$1 ORDER BY opportunity_name`, [input.departmentId],
     )
     return result.rows.map(toOpportunity)
   }),
-  get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => oneOpportunity(input.id)),
-  listStageChanges: protectedReadProcedure.input(z.object({ opportunityId: z.string().uuid() })).query(async ({ input }) => {
+  get: protectedReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(({ input }) => oneOpportunity(input.id)),
+  listStageChanges: protectedReadProcedure.input(z.object({ opportunityId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const result = await pool.query(
       // `seq` (not `id`, a random UUID) breaks a same-day tie in insertion order.
       `SELECT * FROM opportunity_stage_changes WHERE opportunity_id=$1 ORDER BY changed_at, seq`, [input.opportunityId],
@@ -217,7 +217,7 @@ export const opportunitiesRouter = router({
       }
     }),
   update: protectedProcedure
-    .input(z.object({ id: z.string().uuid(), patch: z.object(patchShape) }))
+    .input(z.object({ id: z.string().guid('Invalid UUID'), patch: z.object(patchShape) }))
     .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {
@@ -273,6 +273,16 @@ export const opportunitiesRouter = router({
           // The fields the Bid Tracker grid edits inline are part of the BID's history:
           // log each real change against the bid, and mark the bid as updated.
           const bid = (await client.query('SELECT id FROM bids WHERE opportunity_id=$1', [input.id])).rows[0]
+          if (bid && ['gemTenderId', 'referenceNo', 'assignmentName'].some(property => property in input.patch)) {
+            const section = (await client.query("SELECT document FROM bid_synopsis_sections WHERE bid_id=$1 AND section='general' FOR UPDATE", [bid.id])).rows[0]
+            if (section) {
+              let document = section.document
+              for (const [property, key] of [['gemTenderId', 'tenderId'], ['referenceNo', 'referenceNo'], ['assignmentName', 'assignmentName']] as const) {
+                if (input.patch[property] !== undefined) document = updateGeneralDocument(document, key, input.patch[property] ?? '')
+              }
+              await client.query("UPDATE bid_synopsis_sections SET document=$2, revision=revision+1, updated_at=now(), updated_by=$3 WHERE bid_id=$1 AND section='general'", [bid.id, JSON.stringify(document), ctx.user?.email ?? null])
+            }
+          }
           const logged = bid ? fields.filter((f) => BID_HISTORY_FIELDS.includes(f)) : []
           let changed = false
           for (const f of logged) {
@@ -304,7 +314,7 @@ export const opportunitiesRouter = router({
         client.release()
       }
     }),
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     try {
       // opportunity_stage_changes cascades via FK; bids RESTRICTs (spec §4.7).
       await pool.query('DELETE FROM opportunities WHERE id=$1', [input.id])

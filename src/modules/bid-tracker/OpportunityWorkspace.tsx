@@ -5,7 +5,8 @@ import { cn } from '@/lib/utils'
 import { BidTrackerWorkspace } from './BidTrackerWorkspace'
 import { GridSheet } from './GridSheet'
 import { DashboardPage } from './pages/DashboardPage'
-import { OPPORTUNITY_TABS, PIPELINE_TABS, type OpportunityTab, type PipelineTab } from './sheets'
+import { OPPORTUNITY_TABS, PIPELINE_TABS, opportunityTabNode, type OpportunityTab, type PipelineTab } from './sheets'
+import { useNodeFilter } from '@/lib/rbacTree/access'
 import { usePermissions } from '@/lib/permissions'
 import { OPPORTUNITY_TAB_MODULES } from '@/lib/routeModules'
 
@@ -20,8 +21,15 @@ export function OpportunityWorkspace({ tab }: { tab: OpportunityTab }) {
   const pipeline = PIPELINE_TABS.find((t) => t.value === pipelineParam)
   const perms = usePermissions()
   // A tab follows its sheet's read permission; a direct hit on a hidden tab lands on the first visible one.
-  const visibleTabs = OPPORTUNITY_TABS.filter((t) => !perms.enforced || (OPPORTUNITY_TAB_MODULES[t.value] ?? []).some((m) => perms.level(m) !== 'N'))
-  if (perms.enforced && visibleTabs.length > 0 && !visibleTabs.some((t) => t.value === tab)) return <Navigate to={visibleTabs[0].path} replace />
+  // Both the server policy (A) and the permission tree must allow a tab.
+  const treeAllows = useNodeFilter()
+  const visibleTabs = OPPORTUNITY_TABS.filter((t) => treeAllows(opportunityTabNode(t.value))
+    && (!perms.enforced || (OPPORTUNITY_TAB_MODULES[t.value] ?? []).some((m) => perms.level(m) !== 'N')))
+  if (visibleTabs.length > 0 && !visibleTabs.some((t) => t.value === tab)) return <Navigate to={visibleTabs[0].path} replace />
+  const pipelineTabs = PIPELINE_TABS.filter((t) => treeAllows(`opportunity.pipeline.${t.value}`))
+  if (tab === 'pipeline' && pipelineTabs.length > 0 && !pipelineTabs.some((t) => t.value === pipeline?.value)) {
+    return <Navigate to={`/bid-tracker/pipeline/${pipelineTabs[0].value}`} replace />
+  }
   if (tab === 'pipeline' && !pipeline) return <Navigate to="/bid-tracker/pipeline/funnel" replace />
 
   return (
@@ -49,7 +57,7 @@ export function OpportunityWorkspace({ tab }: { tab: OpportunityTab }) {
         <Tabs<PipelineTab>
           value={pipeline.value}
           onChange={(v) => navigate(`/bid-tracker/pipeline/${v}`)}
-          tabs={PIPELINE_TABS.map(({ value, label }) => ({ value, label }))}
+          tabs={pipelineTabs.map(({ value, label }) => ({ value, label }))}
         />
       )}
 

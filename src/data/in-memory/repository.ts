@@ -11,8 +11,24 @@ import type {
 import type { MyAccess } from '../../../apps/api/src/routers/auth'
 import type { EffectivePermissions, OverrideHistoryFilter, OverrideHistoryRow, PermissionMatrix, UnmatchedOverride } from '../accessTypes'
 import { uid } from '@/lib/utils'
-import { PROTECTED_VALUES_ENFORCED, validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type SaveBidSynopsisInput } from '@goms/domain'
+import { PROTECTED_VALUES_ENFORCED, documentToGeneral, updateGeneralDocument, validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type SaveBidSynopsisInput } from '@goms/domain'
+import { downloadName, MIME_FOR_FILE_TYPE, type MakerDocument, type MakerDocumentKind } from '@goms/domain'
+import {
+  base64ToBytes, createLocal, duplicateLocal, LOCAL_OWNER, MakerEditorUnavailable, renameLocal, replaceLocal, requireLocal, toPublic, uploadLocal,
+  type LocalMakerDocument, type MakerDownload, type MakerEditorSession, type MakerOwner,
+} from './makerDocuments'
 import { assertUniqueTenderWebsiteName, normalizeTenderWebsiteInput, tenderWebsiteKind, type TenderWebsite, type TenderWebsiteInput, type TenderWebsiteKind, type TenderDscEmployee } from '@goms/domain'
+import type { Competitor, CompetitorInput } from '@goms/domain'
+import type { AmnexDepartment } from '@goms/domain'
+import {
+  createDepartmentLocal, deleteDepartmentLocal, listDepartmentsLocal, renameDepartmentLocal, reorderDepartmentsLocal, seedDepartments,
+} from './amnexDepartments'
+import { cloneCompetitor, createCompetitorLocal, deleteCompetitorLocal, listCompetitorsLocal, updateCompetitorLocal } from './competitors'
+import type {
+  ApplyTemplateInput, RbacCustomRole, RbacGrantChange, RbacMyAccess, RbacNode, RbacRoleInput, RbacSubjectConfig, RbacSubjectRef, RbacSubjects,
+  RbacSyncResult, RbacTemplateInput, RbacLinkableRef,
+} from '@goms/domain'
+import * as rbacLocal from './rbacTree'
 import { isoToday } from '@/lib/dates'
 import { NODE_TYPE_MAP, POSTING_TYPES, childTypesOf, isValidChildType } from '@/lib/node-types'
 import {
@@ -51,8 +67,9 @@ import type {
 } from '@/modules/commercial-calculator/types'
 import {
   changeDetails, normalizeChange, normalizeRegister, patchRegister,
-  type CreateCorrigendumInput, type UpdateCorrigendumRegisterInput,
+  type AddCorrigendumChangesInput, type CreateCorrigendumInput, type UpdateCorrigendumRegisterInput,
 } from '@/modules/bid-tracker/corrigenda/model'
+import { normalizeDocumentFiling, type DocumentBatch, type DocumentCategory } from '@goms/domain'
 
 export interface StateSummary {
   code: number
@@ -571,6 +588,17 @@ export interface Repository {
   getBidSynopsis(bidId: string, section: BidSynopsisSection): Promise<BidSynopsis | null>
   saveBidSynopsis(input: SaveBidSynopsisInput): Promise<BidSynopsis>
 
+  /** Document maker (personal Office files). `owner` is used only by the local store; the API takes the signed-in user. */
+  listMakerDocuments(): Promise<MakerDocument[]>
+  createMakerDocument(input: { kind: MakerDocumentKind; title: string; owner?: MakerOwner }): Promise<MakerDocument>
+  uploadMakerDocument(input: { name: string; data: string; owner?: MakerOwner }): Promise<MakerDocument>
+  replaceMakerDocument(id: string, name: string, data: string): Promise<MakerDocument>
+  renameMakerDocument(id: string, title: string): Promise<MakerDocument>
+  duplicateMakerDocument(id: string): Promise<MakerDocument>
+  deleteMakerDocument(id: string): Promise<void>
+  getMakerEditorSession(id: string, theme: 'light' | 'dark'): Promise<MakerEditorSession>
+  getMakerDownload(id: string): Promise<MakerDownload>
+
   /** Tender portals managed in Settings, offered in a bid's General tab. */
   /** Websites on one Settings page; defaults to the tender portals. */
   listCredentialPassphrases(): Promise<CredentialPassphrase[]>
@@ -583,6 +611,35 @@ export interface Repository {
   updateTenderWebsite(id: string, input: TenderWebsiteInput): Promise<TenderWebsite>
   setTenderWebsiteEditingLock(id: string, locked: boolean): Promise<TenderWebsite>
   deleteTenderWebsite(id: string): Promise<void>
+  /** Rival companies managed in Settings > Competitors, sorted by name. */
+  listCompetitors(): Promise<Competitor[]>
+  createCompetitor(input: CompetitorInput): Promise<Competitor>
+  updateCompetitor(id: string, input: CompetitorInput): Promise<Competitor>
+  deleteCompetitor(id: string): Promise<void>
+  /** Settings > Masters > Amnex Departments, in display order, each with its employee count. */
+  listAmnexDepartments(): Promise<AmnexDepartment[]>
+  createAmnexDepartment(name: string): Promise<AmnexDepartment>
+  /** Custom departments only; also renames it on every employee who has it. */
+  renameAmnexDepartment(id: string, name: string): Promise<AmnexDepartment>
+  reorderAmnexDepartments(ids: string[]): Promise<AmnexDepartment[]>
+  /** Custom departments only; also removes it from every employee who has it. */
+  deleteAmnexDepartment(id: string): Promise<{ removedFromEmployees: number }>
+  /** Settings > Roles & Access (UI permission tree). `localEmail` is used only by the local store (no server). */
+  getRbacMyAccess(localEmail: string | null): Promise<RbacMyAccess>
+  listRbacNodes(): Promise<RbacNode[]>
+  syncRbacNodes(): Promise<RbacSyncResult>
+  getRbacSubjects(): Promise<RbacSubjects>
+  getRbacConfig(subject: RbacSubjectRef): Promise<RbacSubjectConfig>
+  setRbacConfig(subject: RbacSubjectRef, changes: RbacGrantChange[]): Promise<void>
+  createRbacRole(input: RbacRoleInput): Promise<RbacCustomRole>
+  updateRbacRole(id: string, input: RbacRoleInput): Promise<void>
+  deleteRbacRole(id: string): Promise<void>
+  createRbacTemplate(input: RbacTemplateInput): Promise<{ id: string }>
+  updateRbacTemplate(id: string, input: { name: string; description?: string }): Promise<void>
+  duplicateRbacTemplate(id: string): Promise<{ id: string }>
+  deleteRbacTemplate(id: string): Promise<void>
+  applyRbacTemplate(input: ApplyTemplateInput): Promise<void>
+  unlinkRbacTemplate(subject: RbacLinkableRef): Promise<void>
 
   listBidMilestones(bidId: string): Promise<BidMilestone[]>
   listAllBidMilestones(): Promise<BidMilestoneWithBid[]>
@@ -598,6 +655,8 @@ export interface Repository {
   /** Edits the register fields only — changes are append-only and never rewritten. */
   updateBidCorrigendumRegister(input: UpdateCorrigendumRegisterInput): Promise<BidCorrigendum>
   reviewCorrigendumChange(input: { changeId: string; decision: 'accepted' | 'rejected'; reason?: string }): Promise<BidCorrigendumChange>
+  /** Appends clause changes to an existing corrigendum — earlier rows are never rewritten. */
+  addCorrigendumChanges(input: AddCorrigendumChangesInput): Promise<BidCorrigendum>
 
   listProtectedValues(entityType: string, entityId: string): Promise<ProtectedValue[]>
   freezeValue(entityType: string, entityId: string, fieldKey: string): Promise<void>
@@ -605,8 +664,11 @@ export interface Repository {
 
   requestDocumentUploadUrl(input: {
     entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+    batch?: DocumentBatch; category?: DocumentCategory
   }): Promise<{ uploadId: string; uploadUrl: string }>
   confirmDocumentUpload(uploadId: string): Promise<BidDocument>
+  /** Re-files a document into another attachment batch/category. */
+  updateDocumentFiling(input: { id: string; batch: DocumentBatch; category: DocumentCategory }): Promise<BidDocument>
   listDocuments(entityType: string, entityId: string): Promise<BidDocument[]>
   deleteDocument(id: string): Promise<void>
   getDocumentDownloadUrl(id: string): Promise<string>
@@ -651,7 +713,19 @@ let inMemoryBidSeq = 1
 /** Upload slots handed out by `requestDocumentUploadUrl`, awaiting confirm. */
 const pendingBidUploads = new Map<string, {
   entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+  batch?: DocumentBatch; category?: DocumentCategory
 }>()
+
+/** Same allow-list and limit the API enforces (apps/api/src/lib/gcs.ts). */
+const LOCAL_DOCUMENT_TYPES = [
+  'application/pdf', 'image/jpeg', 'image/png',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+]
+const LOCAL_DOCUMENT_MAX_BYTES = 50 * 1024 * 1024
+
+/** A stored document with its filing defaulted (rows saved before batches existed). */
+const withFiling = (doc: BidDocument): BidDocument => ({ ...doc, ...normalizeDocumentFiling(doc.batch, doc.category) })
 
 /** A bid's sheet must be one it can live in (never 'master', never a typo). */
 function assertOwnedSheet(sheet: unknown): asserts sheet is OwnedSheet {
@@ -707,6 +781,7 @@ class InMemoryRepository implements Repository {
       ownershipAssignments: data.ownershipAssignments ?? [],
       bids: data.bids ?? [],
       bidSynopsis: data.bidSynopsis ?? [],
+      makerDocuments: data.makerDocuments ?? [],
       bidMilestones: data.bidMilestones ?? [],
       bidCorrigenda: data.bidCorrigenda ?? [],
       bidCorrigendumChanges: data.bidCorrigendumChanges ?? [],
@@ -719,6 +794,9 @@ class InMemoryRepository implements Repository {
       // Websites saved before Settings had a verification page are tender portals.
       credentialPassphrases: data.credentialPassphrases ?? [],
       tenderWebsites: (data.tenderWebsites ?? []).map(site => ({ ...site, kind: tenderWebsiteKind(site) })),
+      competitors: data.competitors ?? [],
+      amnexDepartments: data.amnexDepartments ?? seedDepartments(data.orgPeople ?? []),
+      rbacTree: data.rbacTree ?? rbacLocal.emptyRbacState(),
     }
     // `mergeAudit` postdates some locally persisted snapshots (the static
     // type says it's always there, but a snapshot saved before this field
@@ -1423,14 +1501,25 @@ class InMemoryRepository implements Repository {
     const bidOfOpp = this.data.bids.find((b) => b.opportunityId === id)
     if (bidOfOpp) this.assertNotProtected(bidOfOpp.id, (['valueAmount', 'emdAmount', 'gemTenderId'] as const).filter((f) => f in patch))
     const previousStage = opp.stageKey
-    const before = { opportunityName: opp.opportunityName, city: opp.city, vertical: opp.vertical, opportunityType: opp.opportunityType }
+    const historyFields = ['opportunityName', 'city', 'vertical', 'opportunityType', 'gemTenderId', 'referenceNo', 'assignmentName', 'stateCode'] as const
+    const before = new Map(historyFields.map(field => [field, opp[field]]))
     Object.assign(opp, patch)
+    if (bidOfOpp) {
+      const general = this.data.bidSynopsis.find(section => section.bidId === bidOfOpp.id && section.section === 'general')
+      for (const [property, key] of [['gemTenderId', 'tenderId'], ['referenceNo', 'referenceNo'], ['assignmentName', 'assignmentName']] as const) {
+        if (general && patch[property] !== undefined) {
+          general.document = updateGeneralDocument(general.document, key, patch[property] ?? '')
+          general.revision += 1
+          general.updatedAt = new Date().toISOString()
+        }
+      }
+    }
     // Inline grid edits are part of the bid's history (mirrors opportunities.update).
     if (bidOfOpp) {
       let changed = false
-      for (const f of ['opportunityName', 'city', 'vertical', 'opportunityType'] as const) {
+      for (const f of historyFields) {
         if (!(f in patch)) continue
-        const was = String(before[f] ?? ''); const now = String(opp[f] ?? '')
+        const was = String(before.get(f) ?? ''); const now = String(opp[f] ?? '')
         if (was === now) continue
         changed = true
         this.auditCustom({ entityType: 'bid', entityId: bidOfOpp.id, field: f, oldValue: was, newValue: now, action: 'update' })
@@ -1530,6 +1619,44 @@ class InMemoryRepository implements Repository {
       if (opportunity.legalPersonId === id) opportunity.legalPersonId = null
       if (opportunity.bidTeamMemberId === id) opportunity.bidTeamMemberId = null
     }
+  }
+
+  // --- Amnex Departments master (logic in ./amnexDepartments; every change replaces the arrays) ---
+
+  private departmentState() {
+    if (!this.data.amnexDepartments) this.data.amnexDepartments = seedDepartments(this.data.orgPeople)
+    return { departments: this.data.amnexDepartments, people: this.data.orgPeople }
+  }
+
+  async listAmnexDepartments(): Promise<AmnexDepartment[]> {
+    return listDepartmentsLocal(this.departmentState())
+  }
+
+  async createAmnexDepartment(name: string): Promise<AmnexDepartment> {
+    const { departments, created } = createDepartmentLocal(this.departmentState().departments, name)
+    this.data.amnexDepartments = departments
+    return { ...created, employeeCount: 0 }
+  }
+
+  async renameAmnexDepartment(id: string, name: string): Promise<AmnexDepartment> {
+    const next = renameDepartmentLocal(this.departmentState(), id, name)
+    this.data.amnexDepartments = next.departments
+    this.data.orgPeople = next.people
+    const renamed = listDepartmentsLocal(this.departmentState()).find((d) => d.id === id)
+    if (!renamed) throw new Error('That department no longer exists.')
+    return renamed
+  }
+
+  async reorderAmnexDepartments(ids: string[]): Promise<AmnexDepartment[]> {
+    this.data.amnexDepartments = reorderDepartmentsLocal(this.departmentState().departments, ids)
+    return listDepartmentsLocal(this.departmentState())
+  }
+
+  async deleteAmnexDepartment(id: string): Promise<{ removedFromEmployees: number }> {
+    const next = deleteDepartmentLocal(this.departmentState(), id)
+    this.data.amnexDepartments = next.departments
+    this.data.orgPeople = next.people
+    return { removedFromEmployees: next.removedFromEmployees }
   }
 
   // --- Org Structure: the source of truth the delivery-team rosters derive from ---
@@ -1641,6 +1768,7 @@ class InMemoryRepository implements Repository {
 
   async listBidsForGrid(filterRules: SystemBidViewFilterRule[] = []) {
     const today = isoToday()
+    const generalByBid = new Map(this.data.bidSynopsis.filter(section => section.section === 'general').map(section => [section.bidId, documentToGeneral(section.document)]))
     const owners = buildOwnerMap(
       this.data.ownershipAssignments, 'bid', this.data.bids.map((b) => b.id), today, this.ownershipContext(),
     )
@@ -1688,7 +1816,9 @@ class InMemoryRepository implements Repository {
         stateCode: opp?.stateCode ?? null,
         city: opp?.city ?? null,
         opportunityName: opp?.opportunityName ?? '',
-        gemTenderId: opp?.gemTenderId ?? '',
+        gemTenderId: opp?.gemTenderId || generalByBid.get(bid.id)?.tenderId || '',
+        referenceNo: opp?.referenceNo || generalByBid.get(bid.id)?.referenceNo || '',
+        assignmentName: opp?.assignmentName || generalByBid.get(bid.id)?.assignmentName || '',
         submissionDate: opp?.submissionDate ?? '',
         valueAmount: opp?.valueAmount ?? '',
         valueUnit: opp?.valueUnit ?? '',
@@ -1720,6 +1850,7 @@ class InMemoryRepository implements Repository {
         updatedBy: null,
         attentionFlag: this.attentionFor(bid.id),
         customValues: customValuesByBid.get(bid.id) ?? {},
+        generalValues: generalByBid.get(bid.id) ?? {},
       }
     })
     // Local dev has no signed-in user, so "$currentUser" never matches.
@@ -1948,6 +2079,41 @@ class InMemoryRepository implements Repository {
     return structuredClone(updated)
   }
 
+  // --- Document maker (logic in ./makerDocuments; every change replaces the array) -----------------
+  private get makerDocs(): LocalMakerDocument[] { return this.data.makerDocuments ?? [] }
+  private putMakerDoc(doc: LocalMakerDocument): MakerDocument {
+    this.data.makerDocuments = [doc, ...this.makerDocs.filter((item) => item.id !== doc.id)]
+    return toPublic(doc)
+  }
+  async listMakerDocuments(): Promise<MakerDocument[]> {
+    return [...this.makerDocs].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)).map(toPublic)
+  }
+  async createMakerDocument(input: { kind: MakerDocumentKind; title: string; owner?: MakerOwner }): Promise<MakerDocument> {
+    return this.putMakerDoc(createLocal(input.kind, input.title, input.owner ?? LOCAL_OWNER))
+  }
+  async uploadMakerDocument(input: { name: string; data: string; owner?: MakerOwner }): Promise<MakerDocument> {
+    return this.putMakerDoc(uploadLocal(input.name, input.data, input.owner ?? LOCAL_OWNER))
+  }
+  async replaceMakerDocument(id: string, name: string, data: string): Promise<MakerDocument> {
+    return this.putMakerDoc(replaceLocal(requireLocal(this.makerDocs, id), name, data))
+  }
+  async renameMakerDocument(id: string, title: string): Promise<MakerDocument> {
+    return this.putMakerDoc(renameLocal(requireLocal(this.makerDocs, id), title))
+  }
+  async duplicateMakerDocument(id: string): Promise<MakerDocument> {
+    return this.putMakerDoc(duplicateLocal(requireLocal(this.makerDocs, id)))
+  }
+  async deleteMakerDocument(id: string): Promise<void> {
+    requireLocal(this.makerDocs, id)
+    this.data.makerDocuments = this.makerDocs.filter((item) => item.id !== id)
+  }
+  async getMakerEditorSession(): Promise<MakerEditorSession> { throw new MakerEditorUnavailable() }
+  async getMakerDownload(id: string): Promise<MakerDownload> {
+    const doc = requireLocal(this.makerDocs, id)
+    const blob = new Blob([base64ToBytes(doc.contentBase64) as BlobPart], { type: MIME_FOR_FILE_TYPE[doc.fileType] })
+    return { url: URL.createObjectURL(blob), name: downloadName(doc) }
+  }
+
   async listCredentialPassphrases(): Promise<CredentialPassphrase[]> { return structuredClone(this.data.credentialPassphrases ?? []) }
   async createCredentialPassphrase(input: CredentialPassphraseInput): Promise<CredentialPassphrase> {
     const clean = normalizeCredentialPassphrase(input)
@@ -2041,6 +2207,46 @@ class InMemoryRepository implements Repository {
     const updated = { ...existing, editingLocked: locked, updatedAt: new Date().toISOString() }
     this.data.tenderWebsites = this.data.tenderWebsites.map(site => site.id === id ? updated : site)
     return { ...updated }
+  }
+
+  // --- Roles & Access permission tree (logic in ./rbacTree; every change replaces the state) ------------
+  private get rbac(): rbacLocal.RbacLocalState { return this.data.rbacTree ?? rbacLocal.emptyRbacState() }
+  private set rbac(state: rbacLocal.RbacLocalState) { this.data.rbacTree = state }
+  async getRbacMyAccess(localEmail: string | null): Promise<RbacMyAccess> { return rbacLocal.localMyAccess(this.rbac, this.data.bidSavedViews, localEmail) }
+  async listRbacNodes(): Promise<RbacNode[]> { return rbacLocal.listLocalNodes(this.rbac, this.data.bidSavedViews) }
+  async syncRbacNodes(): Promise<RbacSyncResult> { const { state, result } = rbacLocal.syncLocalNodes(this.rbac); this.rbac = state; return result }
+  async getRbacSubjects(): Promise<RbacSubjects> { return rbacLocal.localSubjects(this.rbac) }
+  async getRbacConfig(subject: RbacSubjectRef): Promise<RbacSubjectConfig> { return rbacLocal.getLocalConfig(this.rbac, subject) }
+  async setRbacConfig(subject: RbacSubjectRef, changes: RbacGrantChange[]): Promise<void> { this.rbac = rbacLocal.setLocalConfig(this.rbac, subject, changes) }
+  async createRbacRole(input: RbacRoleInput): Promise<RbacCustomRole> { const { state, role } = rbacLocal.createLocalRole(this.rbac, input); this.rbac = state; return role }
+  async updateRbacRole(id: string, input: RbacRoleInput): Promise<void> { this.rbac = rbacLocal.updateLocalRole(this.rbac, id, input) }
+  async deleteRbacRole(id: string): Promise<void> { this.rbac = rbacLocal.deleteLocalRole(this.rbac, id) }
+  async createRbacTemplate(input: RbacTemplateInput): Promise<{ id: string }> { const { state, id } = rbacLocal.createLocalTemplate(this.rbac, input); this.rbac = state; return { id } }
+  async updateRbacTemplate(id: string, input: { name: string; description?: string }): Promise<void> { this.rbac = rbacLocal.updateLocalTemplate(this.rbac, id, input) }
+  async duplicateRbacTemplate(id: string): Promise<{ id: string }> { const { state, id: copy } = rbacLocal.duplicateLocalTemplate(this.rbac, id); this.rbac = state; return { id: copy } }
+  async deleteRbacTemplate(id: string): Promise<void> { this.rbac = rbacLocal.deleteLocalTemplate(this.rbac, id) }
+  async applyRbacTemplate(input: ApplyTemplateInput): Promise<void> { this.rbac = rbacLocal.applyLocalTemplate(this.rbac, input) }
+  async unlinkRbacTemplate(subject: RbacLinkableRef): Promise<void> { this.rbac = rbacLocal.unlinkLocalTemplate(this.rbac, subject) }
+
+  // --- Competitors (logic in ./competitors; every change replaces the array) ----------------------
+  async listCompetitors(): Promise<Competitor[]> {
+    return listCompetitorsLocal(this.data.competitors ?? [])
+  }
+
+  async createCompetitor(input: CompetitorInput): Promise<Competitor> {
+    const { items, created } = createCompetitorLocal(this.data.competitors ?? [], input)
+    this.data.competitors = items
+    return cloneCompetitor(created)
+  }
+
+  async updateCompetitor(id: string, input: CompetitorInput): Promise<Competitor> {
+    const { items, updated } = updateCompetitorLocal(this.data.competitors ?? [], id, input)
+    this.data.competitors = items
+    return cloneCompetitor(updated)
+  }
+
+  async deleteCompetitor(id: string): Promise<void> {
+    this.data.competitors = deleteCompetitorLocal(this.data.competitors ?? [], id)
   }
 
   async listAllBidMilestones(): Promise<BidMilestoneWithBid[]> {
@@ -2144,6 +2350,31 @@ class InMemoryRepository implements Repository {
     return this.joinCorrigendum(corrigendum)
   }
 
+  async addCorrigendumChanges(input: AddCorrigendumChangesInput) {
+    const corrigendum = this.data.bidCorrigenda.find((c) => c.id === input.corrigendumId)
+    if (!corrigendum) throw new Error(`No such corrigendum: ${input.corrigendumId}`)
+    const bid = this.requireBid(corrigendum.bidId)
+    if (!input.changes.length) throw new Error('Add at least one change.')
+    if (input.changes.length > 200) throw new Error('A corrigendum can record up to 200 changes at once.')
+    const existingKeys = new Set(this.data.bidCorrigendumChanges.filter((ch) => ch.corrigendumId === corrigendum.id).map((ch) => ch.fieldKey))
+    const keys = input.changes.map((ch) => ch.fieldKey.trim())
+    if (keys.some((k) => !k)) throw new Error('Every change needs a clause or field key.')
+    if (new Set(keys).size !== keys.length || keys.some((k) => existingKeys.has(k))) throw new Error('Each clause can change only once per corrigendum.')
+    // Appended changes are tender clauses only — milestone fields are recorded with a new corrigendum.
+    if (input.changes.some((ch) => ch.kind !== 'clause')) throw new Error('Only clause changes can be added to an existing corrigendum.')
+    const changes = input.changes.map((ch) => ({
+      id: uid('cch'), corrigendumId: corrigendum.id, fieldKey: ch.fieldKey.trim(),
+      currentValue: ch.currentValue, proposedValue: ch.proposedValue,
+      decision: 'pending' as const, decidedAt: null, decidedBy: null, ...changeDetails({ ...ch, fieldKey: ch.fieldKey.trim() }),
+    }))
+    const reopened = { ...corrigendum, status: 'pending_review' as const, reviewedAt: null, reviewedBy: null }
+    this.data.bidCorrigenda = this.data.bidCorrigenda.map((c) => (c.id === corrigendum.id ? reopened : c))
+    this.data.bidCorrigendumChanges = [...this.data.bidCorrigendumChanges, ...changes]
+    bid.dataConfidence = 'needs_review'
+    bid.updatedAt = new Date().toISOString()
+    return this.joinCorrigendum(reopened)
+  }
+
   async updateBidCorrigendumRegister(input: UpdateCorrigendumRegisterInput) {
     const existing = this.data.bidCorrigenda.find((c) => c.id === input.corrigendumId)
     if (!existing) throw new Error(`No such corrigendum: ${input.corrigendumId}`)
@@ -2230,9 +2461,16 @@ class InMemoryRepository implements Repository {
 
   async requestDocumentUploadUrl(input: {
     entityType: string; entityId: string; filename: string; contentType: string; sizeBytes: number; version?: string
+    batch?: DocumentBatch; category?: DocumentCategory
   }) {
     // Local dev has no object storage: the "upload URL" is a placeholder and
     // the file bytes are never stored — only the metadata row.
+    if (!LOCAL_DOCUMENT_TYPES.includes(input.contentType)) throw new Error(`Unsupported file type: ${input.contentType}`)
+    if (!Number.isFinite(input.sizeBytes) || input.sizeBytes <= 0 || input.sizeBytes > LOCAL_DOCUMENT_MAX_BYTES) throw new Error('File exceeds the 50 MB limit.')
+    if ((input.batch !== undefined || input.category !== undefined)
+      && (normalizeDocumentFiling(input.batch, input.category).category !== input.category)) {
+      throw new Error('Choose a category that belongs to the selected batch.')
+    }
     const uploadId = uid('upl')
     pendingBidUploads.set(uploadId, input)
     return { uploadId, uploadUrl: `local://bid-upload/${uploadId}` }
@@ -2247,15 +2485,27 @@ class InMemoryRepository implements Repository {
       storagePath: `local://${pending.entityType}/${pending.entityId}/${pending.filename}`,
       version: pending.version ?? '1', contentType: pending.contentType, sizeBytes: pending.sizeBytes,
       uploadedBy: null, uploadedAt: new Date().toISOString(),
+      ...normalizeDocumentFiling(pending.batch, pending.category),
     }
-    this.data.bidDocuments.push(doc)
-    return doc
+    this.data.bidDocuments = [...this.data.bidDocuments, doc]
+    return { ...doc }
   }
 
   async listDocuments(entityType: string, entityId: string) {
     return this.data.bidDocuments
       .filter((d) => d.entityType === entityType && d.entityId === entityId)
       .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt))
+      .map(withFiling)
+  }
+
+  async updateDocumentFiling(input: { id: string; batch: DocumentBatch; category: DocumentCategory }) {
+    const doc = this.data.bidDocuments.find((d) => d.id === input.id)
+    if (!doc) throw new Error(`No such document: ${input.id}`)
+    const filing = normalizeDocumentFiling(input.batch, input.category)
+    if (filing.batch !== input.batch || filing.category !== input.category) throw new Error('Choose a category that belongs to the selected batch.')
+    const updated = { ...doc, ...filing }
+    this.data.bidDocuments = this.data.bidDocuments.map((d) => (d.id === doc.id ? updated : d))
+    return { ...updated }
   }
 
   async deleteDocument(id: string) {
@@ -3181,7 +3431,12 @@ class InMemoryRepository implements Repository {
 const MUTATOR_KEYS = [
   'createCredentialPassphrase', 'updateCredentialPassphrase', 'deleteCredentialPassphrase',
   'saveBidSynopsis',
+  'createMakerDocument', 'uploadMakerDocument', 'replaceMakerDocument', 'renameMakerDocument', 'duplicateMakerDocument', 'deleteMakerDocument',
   'createTenderWebsite', 'updateTenderWebsite', 'deleteTenderWebsite', 'setTenderWebsiteEditingLock',
+  'createCompetitor', 'updateCompetitor', 'deleteCompetitor',
+  'createAmnexDepartment', 'renameAmnexDepartment', 'reorderAmnexDepartments', 'deleteAmnexDepartment',
+  'syncRbacNodes', 'setRbacConfig', 'createRbacRole', 'updateRbacRole', 'deleteRbacRole', 'createRbacTemplate', 'updateRbacTemplate',
+  'duplicateRbacTemplate', 'deleteRbacTemplate', 'applyRbacTemplate', 'unlinkRbacTemplate',
   'createDeliveryTeamMember', 'updateDeliveryTeamMember', 'setDeliveryTeamMemberStatus', 'deleteDeliveryTeamMember',
   'createOrgPerson', 'updateOrgPerson', 'deleteOrgPerson',
   'createNode', 'updateNode', 'setNodeStatus', 'deleteNode', 'moveNode', 'duplicateNode',
@@ -3199,8 +3454,8 @@ const MUTATOR_KEYS = [
   'createCustomer', 'updateCustomer', 'deleteCustomer',
   'createBid', 'createBidForNewOpportunity', 'updateBid', 'archiveBid', 'markBidVerified', 'unarchiveBid', 'deleteBid',
   'createBidMilestone', 'updateBidMilestone', 'deleteBidMilestone',
-  'createBidCorrigendum', 'updateBidCorrigendumRegister', 'reviewCorrigendumChange', 'freezeValue', 'unfreezeValue',
-  'requestDocumentUploadUrl', 'confirmDocumentUpload', 'deleteDocument', 'createDocumentCitation', 'deleteDocumentCitation',
+  'createBidCorrigendum', 'updateBidCorrigendumRegister', 'reviewCorrigendumChange', 'addCorrigendumChanges', 'freezeValue', 'unfreezeValue',
+  'requestDocumentUploadUrl', 'confirmDocumentUpload', 'updateDocumentFiling', 'deleteDocument', 'createDocumentCitation', 'deleteDocumentCitation',
   'createBidSavedView', 'updateBidSavedView', 'deleteBidSavedView',
   'createBidCustomField', 'updateBidCustomField', 'reorderBidCustomFields', 'archiveBidCustomField',
   'unarchiveBidCustomField', 'deleteBidCustomField', 'setBidCustomValue',
@@ -3211,7 +3466,9 @@ const MUTATOR_KEYS = [
 /** Read-only methods. Listed only so the exhaustiveness check below can tell
  *  "classified as a read" apart from "nobody classified it". */
 const READER_KEYS = [
-  'listCredentialPassphrases', 'getBidSynopsis', 'listTenderWebsites', 'listTenderDscEmployees',
+  'listCredentialPassphrases', 'getBidSynopsis', 'listTenderWebsites', 'listTenderDscEmployees', 'listCompetitors', 'listAmnexDepartments',
+  'getRbacMyAccess', 'listRbacNodes', 'getRbacSubjects', 'getRbacConfig',
+  'listMakerDocuments', 'getMakerEditorSession', 'getMakerDownload',
   'listDeliveryTeamMembers', 'listOrgPeople',
   'listStates', 'getState', 'getNode', 'listChildren', 'listOrgRoots', 'listDepartments', 'listPostingNodes',
   'breadcrumb', 'childCount', 'geoRoot', 'childCounts',

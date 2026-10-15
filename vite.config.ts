@@ -2,12 +2,20 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
-import { compression } from 'vite-plugin-compression2'
+import { compression, defineAlgorithm } from 'vite-plugin-compression2'
+import { constants } from 'node:zlib'
 
 export default defineConfig({
-  plugins: [react(), compression()],
+  plugins: [react(), compression({
+    algorithms: [
+      'gzip',
+      defineAlgorithm('brotliCompress', { params: { [constants.BROTLI_PARAM_QUALITY]: 5 } }),
+    ],
+    // The geography dataset contains thousands of assets; bound open files.
+    scheduler: { limit: 4, isHighMemory: () => true },
+  })],
   resolve: {
-    alias: { '@': path.resolve(__dirname, 'src') },
+    alias: { '@': path.resolve(import.meta.dirname, 'src') },
   },
   test: {
     // Pure-logic tests only — no DOM, no IndexedDB. Anything needing those

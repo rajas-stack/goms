@@ -21,11 +21,15 @@ import { auditLogsRouter } from './routers/auditLogs.js'
 import { deliveryTeamsRouter } from './routers/deliveryTeams.js'
 import { bidSynopsisRouter } from './routers/bidSynopsis.js'
 import { orgPeopleRouter } from './routers/orgPeople.js'
+import { amnexDepartmentsRouter } from './routers/amnexDepartments.js'
 import { authRouter } from './routers/auth.js'
 import { accessRouter } from './routers/access.js'
 import { tenderWebsitesRouter } from './routers/tenderWebsites.js'
+import { competitorsRouter } from './routers/competitors.js'
 import { credentialPassphrasesRouter } from './routers/credentialPassphrases.js'
 import { googleIntegrationsRouter } from './routers/googleIntegrations.js'
+import { makerDocumentsRouter } from './routers/makerDocuments.js'
+import { rbacTreeRouter } from './routers/rbacTree.js'
 
 export const appRouter = router({
   health: healthRouter, customers: customersRouter, hierarchy: hierarchyRouter,
@@ -38,9 +42,13 @@ export const appRouter = router({
   deliveryTeams: deliveryTeamsRouter,
   bidSynopsis: bidSynopsisRouter,
   orgPeople: orgPeopleRouter,
+  amnexDepartments: amnexDepartmentsRouter,
   auth: authRouter, access: accessRouter,
   tenderWebsites: tenderWebsitesRouter,
+  competitors: competitorsRouter,
   credentialPassphrases: credentialPassphrasesRouter,
   googleIntegrations: googleIntegrationsRouter,
+  makerDocuments: makerDocumentsRouter,
+  rbacTree: rbacTreeRouter,
 })
 export type AppRouter = typeof appRouter

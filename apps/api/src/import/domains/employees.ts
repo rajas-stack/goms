@@ -21,9 +21,7 @@ const employeeRowSchema = z.object({
   vacant: z.boolean().optional().default(false),
   status: z.preprocess(
     (v) => (blankToNull(v) === null ? 'active' : v),
-    caseInsensitiveEnum(STATUSES, {
-      errorMap: () => ({ message: `Status must be one of: ${STATUSES.join(', ')}` }),
-    }),
+    caseInsensitiveEnum(STATUSES, `Status must be one of: ${STATUSES.join(', ')}`),
   ),
   // NEW (design spec §6.4): names an org node this employee heads. Resolved
   // against hierarchy_nodes(domain='org', type_key='department') as it

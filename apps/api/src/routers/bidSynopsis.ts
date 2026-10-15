@@ -5,7 +5,7 @@ import { router, protectedProcedure, protectedReadProcedure } from '../trpc.js'
 import { pool } from '../db.js'
 import { writeAuditLog } from '../lib/auditLog.js'
 
-const identity = z.object({ bidId: z.string().uuid(), section: z.enum(BID_SYNOPSIS_SECTIONS) })
+const identity = z.object({ bidId: z.string().guid('Invalid UUID'), section: z.enum(BID_SYNOPSIS_SECTIONS) })
 const documentSchema = z.unknown().transform((value, ctx): SynopsisNode => {
   try { validateSynopsisDocument(value); return value } catch (error) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: error instanceof Error ? error.message : 'Invalid section.' })

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { connectDrive, disconnectDrive, getDriveSession, getFolder, listFiles, trashFile, uploadFile } from './googleDrive'
+import { connectDrive, disconnectDrive, disconnectAllDrive, getDriveSession, getFolder, listFiles, trashFile, uploadFile } from './googleDrive'
 import { getGoogleSession, saveGoogleSession, setGoogleAccount } from '@/features/integrations/session'
 
 const scope = 'https://www.googleapis.com/auth/drive'
@@ -52,6 +52,19 @@ describe('Google Drive integration', () => {
     initTokenClient.mockImplementation((config) => ({ requestAccessToken: () => config.callback({ access_token: 'token', scope: 'openid' }) }))
     await expect(connectDrive(clientId)).rejects.toThrow('permission')
     expect(getDriveSession()).toBeNull()
+  })
+  it('rejects a different DMS Google account and clears all explicit grants on sign-out', async () => {
+    setGoogleAccount({ uid: 'signed-user', email: 'signed@amnex.com', googleId: 'signed-google' })
+    fetchMock.mockResolvedValueOnce(Response.json({ user: { emailAddress: 'another@amnex.com' } }))
+    await expect(connectDrive(clientId)).rejects.toThrow('Amnex Google account signed in')
+    expect(getDriveSession()).toBeNull()
+    fetchMock.mockResolvedValueOnce(Response.json({ user: { emailAddress: 'signed@amnex.com' } }))
+    fetchMock.mockResolvedValueOnce(Response.json({ sub: 'signed-google', email: 'signed@amnex.com', email_verified: true, hd: 'amnex.com' }))
+    await connectDrive(clientId)
+    expect(initTokenClient.mock.calls[0][0]).toMatchObject({ login_hint: 'signed@amnex.com', hd: 'amnex.com' })
+    disconnectAllDrive()
+    expect(getDriveSession()).toBeNull()
+    setGoogleAccount(null)
   })
 
   it('loads every page of the chosen folder and supports shared drives', async () => {

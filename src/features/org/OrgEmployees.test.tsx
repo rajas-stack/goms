@@ -11,6 +11,7 @@ const { people } = vi.hoisted(() => ({ people: [
 vi.mock('@/data/repository', () => ({
   repository: {
     listOrgPeople: vi.fn(), createOrgPerson: vi.fn(), updateOrgPerson: vi.fn(), deleteOrgPerson: vi.fn(), getMyAccess: vi.fn(),
+    listDeliveryTeamMembers: vi.fn(), listSalesPersons: vi.fn(), listAmnexDepartments: vi.fn(), createAmnexDepartment: vi.fn(),
   },
 }))
 import { repository } from '@/data/repository'
@@ -24,6 +25,7 @@ const renderAs = (access: ReturnType<typeof as>) => render(
     <PermissionsProvider access={access as never}><OrgEmployees /></PermissionsProvider>
   </QueryClientProvider>,
 )
+const DEPARTMENTS = ['Leadership', 'Pre-Sales', 'Legal'].map((name, i) => ({ id: `d${i}`, name, systemKey: null, sortOrder: i, employeeCount: 0, createdAt: '', updatedAt: '' }))
 const HELPER = /Used to derive this person's role\. Only System Admins can change it\./
 const SERVER_REFUSAL = 'Only a System Admin can set or change an email address.'
 
@@ -31,6 +33,10 @@ beforeEach(() => {
   vi.mocked(repository.listOrgPeople).mockReset().mockResolvedValue(people as never)
   vi.mocked(repository.updateOrgPerson).mockReset().mockResolvedValue({} as never)
   vi.mocked(repository.createOrgPerson).mockReset().mockResolvedValue({} as never)
+  vi.mocked(repository.listDeliveryTeamMembers).mockReset().mockResolvedValue([])
+  vi.mocked(repository.listSalesPersons).mockReset().mockResolvedValue([])
+  vi.mocked(repository.listAmnexDepartments).mockReset().mockResolvedValue(DEPARTMENTS as never)
+  vi.mocked(repository.createAmnexDepartment).mockReset()
 })
 
 describe('OrgEmployees — email (System Admin only; the server enforces it)', () => {
@@ -163,5 +169,39 @@ describe('OrgEmployees — email (System Admin only; the server enforces it)', (
     const second = vi.mocked(repository.createOrgPerson).mock.calls[1][0]
     expect(second.name).toBe('Deepa')
     expect(second).not.toHaveProperty('email')
+  })
+})
+
+describe('OrgEmployees — master list, compact level and department dropdown', () => {
+  it('lists people who are only in the Sales roster and adds them to employees prefilled', async () => {
+    vi.mocked(repository.listSalesPersons).mockResolvedValue([
+      { id: 's1', name: 'Neha Shah', officialEmail: 'neha@amnex.com', status: 'active', metadata: {} },
+      { id: 's2', name: 'asha rao', officialEmail: 'ASHA@amnex.com', status: 'active', metadata: {} }, // same person as p1
+    ] as never)
+    renderAs(as('enforce', 'system_admin'))
+    const row = (await screen.findByText('Neha Shah')).closest('tr')!
+    expect(screen.getAllByText(/asha rao/i)).toHaveLength(1)
+    expect(within(row).getByTitle('In the Sales roster')).toBeInTheDocument()
+    await userEvent.click(within(row).getByRole('button', { name: 'Add Neha Shah to employees' }))
+    expect(repository.createOrgPerson).toHaveBeenCalledWith(expect.objectContaining({ name: 'Neha Shah', email: 'neha@amnex.com', departments: ['Sales'], level: 4 }))
+  })
+
+  it('changes the level from the compact L-select', async () => {
+    renderAs(as('enforce', 'system_admin'))
+    await userEvent.selectOptions(await screen.findByLabelText('Bala Iyer level'), '3')
+    expect(repository.updateOrgPerson).toHaveBeenCalledWith('p2', { level: 3 })
+  })
+
+  it('toggles departments from the master and creates a new department from the dropdown', async () => {
+    vi.mocked(repository.createAmnexDepartment).mockResolvedValue({ ...DEPARTMENTS[0], id: 'd9', name: 'Data Science' } as never)
+    renderAs(as('enforce', 'system_admin'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Bala Iyer departments' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Pre-Sales' }))
+    expect(repository.updateOrgPerson).toHaveBeenLastCalledWith('p2', { departments: ['Legal', 'Pre-Sales'] })
+
+    await userEvent.type(screen.getByLabelText('Search departments'), 'Data Science')
+    await userEvent.click(screen.getByRole('button', { name: /Create department “Data Science”/ }))
+    expect(repository.createAmnexDepartment).toHaveBeenCalledWith('Data Science')
+    expect(repository.updateOrgPerson).toHaveBeenLastCalledWith('p2', { departments: ['Legal', 'Data Science'] })
   })
 })

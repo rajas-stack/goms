@@ -11,8 +11,8 @@ const formatValue = (v: string) => (/^\d{4}-\d{2}-\d{2}T/.test(v) && !Number.isN
 
 /** Explicit accept/reject review of one corrigendum's detected changes (spec
  *  §12). Nothing is applied until "Save": ticked rows are accepted, the rest
- *  keep their existing value. A frozen field rejects the accept and the
- *  message is shown inline — it is never overridden. */
+ *  keep their existing value. Protected values are disabled, so an old freeze
+ *  record never blocks an accept; any server error is shown inline. */
 export function CorrigendumReviewDialog({ open = true, bidId, corrigendumId, onClose }: {
   open?: boolean; bidId: string; corrigendumId: string; onClose: () => void
 }) {

@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { useGoogleAccount } from '@/features/integrations/session'
 import { Link } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { MAX_CREDENTIAL_PASSPHRASES, type CredentialPassphrase } from '@goms/domain'
@@ -12,6 +13,7 @@ import { lockCredentials, unlockCredentials } from '@/features/tender-websites/c
 import { TENDER_WEBSITES_KEY, useTenderWebsites } from '@/features/tender-websites/api'
 
 export function CredentialsSettingsPage() {
+  const account = useGoogleAccount()
   const { data: records = [], isLoading, isError, refetch } = useCredentialPassphrases()
   const tender = useTenderWebsites('tender')
   const verification = useTenderWebsites('verification')
@@ -29,6 +31,7 @@ export function CredentialsSettingsPage() {
   const [managedId, setManagedId] = useState('')
   const legacySites = sites.filter(site => site.credentials && !site.credentials.passphraseId)
   const reset = () => { setForm(null); setName(''); setCurrent(''); setPhrase(''); setConfirmation(''); setError('') }
+  useEffect(() => { reset(); setLinking(false); setSiteId(''); setManagedId('') }, [account?.uid])
   const open = (editing?: CredentialPassphrase) => { reset(); setForm({ editing }); setName(editing?.name ?? '') }
   const refresh = () => Promise.all([cache.invalidateQueries({ queryKey: PASSPHRASES_KEY }), cache.invalidateQueries({ queryKey: TENDER_WEBSITES_KEY })])
   async function save(event: FormEvent) {
@@ -37,7 +40,7 @@ export function CredentialsSettingsPage() {
     setBusy(true); setError('')
     try {
       const editing = form?.editing
-      if ((!editing || phrase) && (phrase.length < 8 || phrase !== confirmation)) throw new Error(phrase.length < 8 ? 'Use at least 8 characters.' : 'The passphrases do not match.')
+      if ((!editing || phrase) && (phrase.length < 12 || phrase !== confirmation)) throw new Error(phrase.length < 12 ? 'Use at least 12 characters.' : 'The passphrases do not match.')
       const proof = phrase ? await createPassphraseProof(phrase) : editing!.proof
       if (editing) {
         const replacements = []

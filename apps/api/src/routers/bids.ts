@@ -6,7 +6,7 @@ import { isUniqueViolation } from '../db-errors.js'
 import { assertFieldsNotProtected } from '../lib/protectedValues.js'
 import {
   DEPARTMENT_REQUIRED_MESSAGE, formatBidCode, DEFAULT_BID_STAGE_KEY, DEFAULT_OWNED_SHEET, OWNED_SHEETS, isAtOrAfterSubmitted, PIPELINE_STAGE_MAP,
-  computeAttentionFlag, applyFilterRules, buildOwnerMap, type CustomFieldType, type CustomValue, type OwnedSheet, PROTECTED_VALUES_ENFORCED } from '@goms/domain'
+  computeAttentionFlag, applyFilterRules, buildOwnerMap, documentToGeneral, type CustomFieldType, type CustomValue, type OwnedSheet, PROTECTED_VALUES_ENFORCED } from '@goms/domain'
 import { applyStageChange, insertOpportunity } from './opportunities.js'
 import { loadOwnershipContext } from '../lib/ownershipContext.js'
 import { writeAuditLog } from '../lib/auditLog.js'
@@ -84,12 +84,12 @@ const bidActionQueueRouter = router({
 })
 
 export const bidsRouter = router({
-  get: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(({ input }) => oneBid(input.id)),
+  get: protectedReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(({ input }) => oneBid(input.id)),
 
   // A cheap single-row lookup for legacy-UI guards (WorksEditor): "does this
   // opportunity have a bid?" must not force the whole grid query.
   getForOpportunity: protectedReadProcedure
-    .input(z.object({ opportunityId: z.string().uuid() }))
+    .input(z.object({ opportunityId: z.string().guid('Invalid UUID') }))
     .query(async ({ input }) => {
       const result = await pool.query('SELECT * FROM bids WHERE opportunity_id=$1', [input.opportunityId])
       return result.rows[0] ? toBid(result.rows[0]) : null
@@ -100,7 +100,7 @@ export const bidsRouter = router({
     .query(async ({ input, ctx }) => {
       const [gridResult, corrigendaPendingResult, { assignments, ctx: ownershipCtx }, customFieldsResult, customValuesResult] = await Promise.all([
         pool.query(`
-             SELECT b.*, o.opportunity_code, o.opportunity_type, o.department_id, o.state_code, o.city, o.opportunity_name, o.gem_tender_id, o.submission_date,
+             SELECT b.*, o.opportunity_code, o.opportunity_type, o.department_id, o.state_code, o.city, o.opportunity_name, o.gem_tender_id, o.reference_no, o.assignment_name, o.submission_date,
                o.geo_sales_person_id, o.bu_sales_person_id, o.pre_sales_person_id, o.legal_person_id, o.bid_team_member_id, o.created_by,
                  o.value_amount, o.value_unit, o.emd_amount, o.emd_unit, o.vertical,
                  dept.name AS department_name,
@@ -110,10 +110,12 @@ export const bidsRouter = router({
                  next_action.note AS next_action_note, next_action.due_date AS next_action_due_date,
                  next_action.assignee_id AS next_action_assignee_id,
                  last_audit.changed_by AS updated_by,
-                 solution_lead.sales_person_id AS solution_lead_sales_person_id
+                 solution_lead.sales_person_id AS solution_lead_sales_person_id,
+                 general.document AS general_document
           FROM bids b
           JOIN opportunities o ON o.id = b.opportunity_id
           LEFT JOIN hierarchy_nodes dept ON dept.id = o.department_id
+          LEFT JOIN bid_synopsis_sections general ON general.bid_id = b.id AND general.section = 'general'
           LEFT JOIN LATERAL (
             SELECT count(*)::int AS document_count FROM documents d WHERE d.entity_type='bid' AND d.entity_id=b.id
           ) doc_counts ON true
@@ -140,14 +142,14 @@ export const bidsRouter = router({
           LEFT JOIN LATERAL (
             SELECT changed_by FROM commercial_audit_logs a
             WHERE a.entity_type = 'bid' AND a.entity_id = b.id::text
-            ORDER BY a.changed_at DESC LIMIT 1
+            ORDER BY a.changed_at DESC, a.insert_seq DESC LIMIT 1
           ) last_audit ON true
           LEFT JOIN LATERAL (
             SELECT sales_person_id FROM ownership_assignments oa
             WHERE oa.entity_type = 'bid' AND oa.entity_id = b.id AND oa.role = 'solutionLead' AND oa.end_date IS NULL
             LIMIT 1
           ) solution_lead ON true
-          ORDER BY b.created_at DESC
+          ORDER BY b.created_at DESC, b.insert_seq DESC
         `),
         pool.query(`
           SELECT c.bid_id FROM bid_corrigenda c
@@ -192,6 +194,7 @@ export const bidsRouter = router({
       const emailById = new Map(emailsResult.rows.map((r: any) => [r.id, r.official_email]))
 
       const rows = gridResult.rows.map((r: any) => {
+        const generalValues = documentToGeneral(r.general_document)
         const dueAt = r.submission_date && !Number.isNaN(new Date(r.submission_date).getTime()) ? r.submission_date : null
         const owner = ownerMap.get(r.id)
         const nextMilestoneDueAt: string | null = r.next_milestone_due_at ? new Date(r.next_milestone_due_at).toISOString() : null
@@ -199,7 +202,8 @@ export const bidsRouter = router({
           ...toBid(r), opportunityCode: r.opportunity_code ?? '', opportunityType: r.opportunity_type ?? '',
           departmentId: r.department_id, departmentName: r.department_name ?? null,
           stateCode: r.state_code, city: r.city ?? null, opportunityName: r.opportunity_name,
-          gemTenderId: r.gem_tender_id, submissionDate: r.submission_date, valueAmount: r.value_amount,
+          gemTenderId: r.gem_tender_id || generalValues.tenderId || '', submissionDate: r.submission_date, valueAmount: r.value_amount,
+          referenceNo: r.reference_no || generalValues.referenceNo || '', assignmentName: r.assignment_name || generalValues.assignmentName || '',
           valueUnit: r.value_unit, emdAmount: r.emd_amount, emdUnit: r.emd_unit, vertical: r.vertical,
           geoSalesPersonId: r.geo_sales_person_id ?? null, buSalesPersonId: r.bu_sales_person_id ?? null,
           preSalesPersonId: r.pre_sales_person_id ?? null, legalPersonId: r.legal_person_id ?? null,
@@ -218,6 +222,7 @@ export const bidsRouter = router({
           updatedBy: r.updated_by ?? null,
           attentionFlag: computeAttentionFlag({ dueAt, hasPendingCorrigendum: pendingCorrigendumBidIds.has(r.id), today }),
           customValues: customValuesByBid.get(r.id) ?? ({} as Record<string, CustomValue>),
+          generalValues,
         }
       })
       return applyFilterRules(rows, input?.filterRules ?? [], ctx.user?.email ?? null, customFieldTypes)
@@ -231,7 +236,7 @@ export const bidsRouter = router({
   // anywhere leaves no new department nodes, no assignment and no bid behind.
   create: protectedProcedure
     .input(z.object({
-      opportunityId: z.string().uuid().optional(),
+      opportunityId: z.string().guid('Invalid UUID').optional(),
       // Create the opportunity as part of the same transaction (department is then mandatory).
       newOpportunity: newBidOpportunitySchema.optional(),
       department: departmentChoiceSchema.optional(),
@@ -295,7 +300,7 @@ export const bidsRouter = router({
 
   update: protectedProcedure
     .input(z.object({
-      id: z.string().uuid(),
+      id: z.string().guid('Invalid UUID'),
       patch: z.object({
         stageKey: z.string().optional(), decision: z.enum(['pending', 'go', 'no_go']).optional(),
         tenderLink: z.string().nullable().optional(),
@@ -370,7 +375,7 @@ export const bidsRouter = router({
       }
     }),
 
-  archive: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  archive: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     await pool.query(`UPDATE bids SET status='archived', archived_at=now(), updated_at=now() WHERE id=$1`, [input.id])
     return (await oneBid(input.id))!
   }),
@@ -381,7 +386,7 @@ export const bidsRouter = router({
    *  flagged by a bulk import (no corrigendum) verifies with a plain flip. The
    *  check and the write are ONE statement, so a change added between them
    *  cannot slip past. */
-  markVerified: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input, ctx }) => {
+  markVerified: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input, ctx }) => {
     const before = (await pool.query('SELECT data_confidence FROM bids WHERE id=$1', [input.id])).rows[0]
     if (!before) throw new TRPCError({ code: 'NOT_FOUND', message: 'Bid not found.' })
     const updated = await pool.query(
@@ -404,12 +409,12 @@ export const bidsRouter = router({
     return (await oneBid(input.id))!
   }),
 
-  unarchive: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  unarchive: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     await pool.query(`UPDATE bids SET status='active', archived_at=NULL, updated_at=now() WHERE id=$1`, [input.id])
     return (await oneBid(input.id))!
   }),
 
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     const client = await pool.connect()
     try {
       await client.query('BEGIN')

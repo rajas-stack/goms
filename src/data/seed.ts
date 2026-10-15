@@ -13,7 +13,10 @@ import { mergeTeamRosters } from './pre-sales-team'
 import { mergeOrgSeed, syncAllTeamsFromOrg, type OrgPerson } from './org-structure'
 import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
 import type { CommercialCalculatorData } from '@/modules/commercial-calculator/types'
-import type { BidSynopsis, TenderWebsite } from '@goms/domain'
+import type { BidSynopsis, Competitor, TenderWebsite } from '@goms/domain'
+import type { StoredDepartment } from './in-memory/amnexDepartments'
+import type { LocalMakerDocument } from './in-memory/makerDocuments'
+import type { RbacLocalState } from './in-memory/rbacTree'
 
 interface AdminState {
   st_code: number
@@ -69,6 +72,8 @@ for (const sd of subdistricts) {
 
 export interface GormsData {
   bidSynopsis: BidSynopsis[]
+  /** Document maker files (with their bytes as base64). Optional: snapshots before it existed simply lack it. */
+  makerDocuments?: LocalMakerDocument[]
   nodes: HierNode[]
   employees: Employee[]
   externalIds: ExternalId[]
@@ -118,6 +123,12 @@ export interface GormsData {
   credentialPassphrases?: CredentialPassphrase[]
   /** Added in v24: tender portals saved in Settings (General tab dropdown). */
   tenderWebsites: TenderWebsite[]
+  /** Rival companies saved in Settings > Competitors. Optional: older snapshots simply lack it. */
+  competitors?: Competitor[]
+  /** Settings > Masters > Amnex Departments. Optional: older snapshots lack it (seeded from the org on load). */
+  amnexDepartments?: StoredDepartment[]
+  /** Settings > Roles & Access: the UI permission tree (nodes, grants, roles, templates). Optional: older snapshots lack it. */
+  rbacTree?: RbacLocalState
 }
 
 export function buildSeed(): GormsData {
@@ -337,5 +348,6 @@ export function buildSeed(): GormsData {
     bids: [], bidSynopsis: [], bidMilestones: [], bidCorrigenda: [], bidCorrigendumChanges: [],
     protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [],
     bidCustomFields: [], bidCustomFieldValues: [], tenderWebsites: [], credentialPassphrases: [],
+    makerDocuments: [], competitors: [],
   }
 }

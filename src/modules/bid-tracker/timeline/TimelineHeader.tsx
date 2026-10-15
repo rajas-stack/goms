@@ -2,9 +2,22 @@ import { Icon } from '@/components/ui/Icon'
 import { Menu, MenuDivider, MenuItem } from '@/components/ui/Menu'
 import { cn } from '@/lib/utils'
 import { ZOOM_PRESETS, type ZoomLevel, type ZoomPreset } from './timelineMath'
+import type { TimelineViewMode } from './types'
 
 const ZOOM_LABEL: Record<ZoomPreset, string> = {
   All: 'Whole lifecycle', '3M': '3 months', '1M': '1 month', '1W': '1 week',
+}
+export const TIMELINE_VIEW_LABEL: Record<TimelineViewMode, string> = {
+  'sales-reactive': 'Sales Reactive',
+  'sales-proactive': 'Sales Proactive',
+  presales: 'Pre-sales',
+  complete: 'Complete',
+}
+const VIEW_ICON: Record<TimelineViewMode, string> = {
+  'sales-reactive': 'Briefcase',
+  'sales-proactive': 'Users',
+  presales: 'Briefcase',
+  complete: 'Layers',
 }
 const raisedButton = 'neu-raised inline-flex h-8 items-center gap-2 rounded-lg px-3 text-[12px] font-semibold text-ink-900 transition-transform duration-100 hover:-translate-y-px active:translate-y-px focus-visible:focus-ring'
 
@@ -14,13 +27,15 @@ interface HeaderProps {
   rangeEnd: string
   endEstimated: boolean
   outcome?: string | null
+  viewMode: TimelineViewMode
+  onViewMode: (mode: TimelineViewMode) => void
   zoom: ZoomLevel
   onZoom: (preset: ZoomPreset) => void
   onToday: () => void
   onStep: (direction: -1 | 1) => void
 }
 
-export function TimelineHeader({ rangeStart, rangeEnd, endEstimated, outcome, zoom, onZoom, onToday, onStep }: HeaderProps) {
+export function TimelineHeader({ rangeStart, rangeEnd, endEstimated, outcome, viewMode, onViewMode, zoom, onZoom, onToday, onStep }: HeaderProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="flex min-w-0 items-center gap-3">
@@ -35,6 +50,23 @@ export function TimelineHeader({ rangeStart, rangeEnd, endEstimated, outcome, zo
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
+        <Menu align="end" trigger={({ open, toggle }) => (
+          <button type="button" className={raisedButton} onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Timeline view ${TIMELINE_VIEW_LABEL[viewMode]}. Change view`}>
+            <Icon name={VIEW_ICON[viewMode]} size={14} className="text-goms-navy" />
+            <span>{TIMELINE_VIEW_LABEL[viewMode]}</span>
+            <Icon name="ChevronDown" size={13} className={cn('text-muted transition-transform', open && 'rotate-180')} />
+          </button>
+        )}>
+          {(close) => (
+            <>
+              {(['presales', 'sales-reactive', 'sales-proactive', 'complete'] as const).map((mode) => (
+                <MenuItem key={mode} icon={viewMode === mode ? <Icon name="Check" size={14} /> : <Icon name={VIEW_ICON[mode]} size={14} />} onClick={() => { onViewMode(mode); close() }}>
+                  {TIMELINE_VIEW_LABEL[mode]}
+                </MenuItem>
+              ))}
+            </>
+          )}
+        </Menu>
         <Menu align="end" trigger={({ open, toggle }) => (
           <button type="button" className={raisedButton} onClick={toggle} aria-haspopup="menu" aria-expanded={open} aria-label={`Visible range ${rangeStart} to ${rangeEnd}. Change range`}>
             <Icon name="CalendarDays" size={14} className="text-goms-navy" />

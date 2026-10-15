@@ -25,7 +25,7 @@ function clippingBounds(el: HTMLElement): { left: number; right: number; top: nu
  *  ancestor's own scroll boundary and effectively invisible or unreachable —
  *  this nudges it back into the nearest clipping ancestor (or the viewport)
  *  on both axes, and keeps it corrected across a window resize while open. */
-export function useClampToAncestor(open: boolean, popupRef: RefObject<HTMLElement>): CSSProperties | undefined {
+export function useClampToAncestor(open: boolean, popupRef: RefObject<HTMLElement | null>): CSSProperties | undefined {
   const [clampStyle, setClampStyle] = useState<CSSProperties>()
   const clampRef = useRef({ dx: 0, dy: 0 })
   const recomputeRef = useRef<() => void>(() => {})

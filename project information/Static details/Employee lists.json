@@ -1,0 +1,418 @@
+{
+  "snapshotDate": "2026-10-12",
+  "kind": "static-source-reference",
+  "teams": [
+    {
+      "name": "Sales",
+      "source": "src/data/sales-team.ts",
+      "entries": [
+        {
+          "name": "Jayendrasinh Puwar",
+          "email": "jayendra@amnex.com",
+          "designation": "Sales Head"
+        },
+        {
+          "name": "Mr. Rohit Tiku",
+          "email": "rohitt@amnex.com",
+          "designation": "Regional Head",
+          "reportsTo": "jayendra@amnex.com"
+        },
+        {
+          "name": "Prameet Srivastava",
+          "email": "prameet@amnex.com",
+          "designation": "Regional Manager",
+          "reportsTo": "rohitt@amnex.com"
+        },
+        {
+          "name": "Vishal Sharma",
+          "email": "vishal4@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "prameet@amnex.com"
+        },
+        {
+          "name": "Rimjhim Rai",
+          "email": "rimjhim@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "prameet@amnex.com"
+        },
+        {
+          "name": "Saurabh Gupta",
+          "email": "saurabh5@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "prameet@amnex.com"
+        },
+        {
+          "name": "Akriti Nagpal",
+          "email": "akriti@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "rohitt@amnex.com"
+        },
+        {
+          "name": "Saket Kumar Rai",
+          "email": "saket@amnex.com",
+          "designation": "Regional Manager",
+          "reportsTo": "rohitt@amnex.com"
+        },
+        {
+          "name": "Abhinandan Singh",
+          "email": "abhinandan@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "saket@amnex.com"
+        },
+        {
+          "name": "Paresh Bhatti",
+          "email": "paresh@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "saket@amnex.com"
+        },
+        {
+          "name": "Parichay Das",
+          "email": "parichay@amnex.com",
+          "designation": "Regional Manager & Head",
+          "reportsTo": "jayendra@amnex.com"
+        },
+        {
+          "name": "Akash Swain",
+          "email": "akash13@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "parichay@amnex.com"
+        },
+        {
+          "name": "Rajesh Lahoria",
+          "email": "rajeshl@amnex.com",
+          "designation": "Regional Head",
+          "reportsTo": "jayendra@amnex.com"
+        },
+        {
+          "name": "Suhas Nikam",
+          "email": "suhas@amnex.com",
+          "designation": "Regional Manager",
+          "reportsTo": "rajeshl@amnex.com"
+        },
+        {
+          "name": "Sham Vibhandik",
+          "email": "sham@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "suhas@amnex.com"
+        },
+        {
+          "name": "Vicky Kothmire",
+          "email": "vicky2@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "suhas@amnex.com"
+        },
+        {
+          "name": "Yogesh Shinde",
+          "email": "yogesh10@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "suhas@amnex.com"
+        },
+        {
+          "name": "T Vinod",
+          "email": "vinod@amnex.com",
+          "designation": "Regional Manager",
+          "reportsTo": "rajeshl@amnex.com"
+        },
+        {
+          "name": "Kondala Rao",
+          "email": "kondala@amnex.com",
+          "designation": "Regional Manager & Head",
+          "reportsTo": "rajeshl@amnex.com"
+        },
+        {
+          "name": "Senthilnathan R",
+          "email": "senthilnathan@amnex.com",
+          "designation": "Regional Manager & Head",
+          "reportsTo": "rajeshl@amnex.com"
+        },
+        {
+          "name": "Sunil Kumar Sharma",
+          "email": "sunilkumar@amnex.com",
+          "designation": "Regional Manager & Head",
+          "reportsTo": "jayendra@amnex.com"
+        },
+        {
+          "name": "Ketan Thakkar",
+          "email": "ketant@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "sunilkumar@amnex.com"
+        },
+        {
+          "name": "Darshan Bhatt",
+          "email": "darshan3@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "sunilkumar@amnex.com"
+        },
+        {
+          "name": "Anuradha Chauhan",
+          "email": "anuradha@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "sunilkumar@amnex.com"
+        },
+        {
+          "name": "Manish Arora",
+          "email": "manish13@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "sunilkumar@amnex.com"
+        },
+        {
+          "name": "Jitendra Kumavat",
+          "email": "jitendrak@amnex.com",
+          "designation": "Account Manager",
+          "reportsTo": "sunilkumar@amnex.com"
+        },
+        {
+          "name": "Prashanth Reddy",
+          "email": "prashanth@amnex.com",
+          "designation": "BU Sales Agriculture",
+          "reportsTo": "jayendra@amnex.com"
+        },
+        {
+          "name": "Manoj Kaushik",
+          "email": "manoj4@amnex.com",
+          "designation": "BU Sales Smart City & EPC",
+          "reportsTo": "jayendra@amnex.com"
+        },
+        {
+          "name": "Shubham Mehra",
+          "email": "shubham16@amnex.com",
+          "designation": "BU Sales Data Fabrics",
+          "reportsTo": "jayendra@amnex.com"
+        },
+        {
+          "name": "Siddharth Biswas",
+          "email": "siddharth2@amnex.com",
+          "designation": "BU Sales Highways & Traffic",
+          "reportsTo": "jayendra@amnex.com"
+        }
+      ]
+    },
+    {
+      "name": "Pre-sales",
+      "source": "src/data/pre-sales-team.ts",
+      "entries": [
+        {
+          "team": "preSales",
+          "name": "Shamik Joshi",
+          "designation": "Pre-Sales Head",
+          "reportsTo": null
+        },
+        {
+          "team": "preSales",
+          "name": "Sagar Chudasama",
+          "designation": "Analyst",
+          "reportsTo": "Shamik Joshi"
+        },
+        {
+          "team": "preSales",
+          "name": "Manthan Soni",
+          "designation": "SVP",
+          "reportsTo": "Shamik Joshi"
+        },
+        {
+          "team": "preSales",
+          "name": "Harsh Pandit",
+          "designation": "Senior Manager",
+          "reportsTo": "Shamik Joshi"
+        },
+        {
+          "team": "preSales",
+          "name": "Gaurav Singal",
+          "designation": "AVP",
+          "reportsTo": "Shamik Joshi"
+        },
+        {
+          "team": "preSales",
+          "name": "Srinivas Rao",
+          "designation": "AVP",
+          "reportsTo": "Manthan Soni"
+        },
+        {
+          "team": "preSales",
+          "name": "Mohd Faiaz",
+          "designation": "Manager",
+          "reportsTo": "Manthan Soni"
+        },
+        {
+          "team": "preSales",
+          "name": "Dilip Panchal",
+          "designation": "VP",
+          "reportsTo": "Manthan Soni"
+        },
+        {
+          "team": "preSales",
+          "name": "Dev Patel",
+          "designation": "Lead Consultant",
+          "reportsTo": "Manthan Soni"
+        },
+        {
+          "team": "preSales",
+          "name": "Vidwams Madduri",
+          "designation": "Manager",
+          "reportsTo": "Manthan Soni"
+        },
+        {
+          "team": "preSales",
+          "name": "Rajesh Rathod",
+          "designation": "Manager",
+          "reportsTo": "Harsh Pandit"
+        },
+        {
+          "team": "preSales",
+          "name": "Nitish Thakkar",
+          "designation": "Manager",
+          "reportsTo": "Harsh Pandit"
+        },
+        {
+          "team": "preSales",
+          "name": "Mrinmoy Dhara",
+          "designation": "Senior Analyst",
+          "reportsTo": "Harsh Pandit"
+        },
+        {
+          "team": "preSales",
+          "name": "Rajas Saji",
+          "designation": "",
+          "reportsTo": "Harsh Pandit"
+        },
+        {
+          "team": "preSales",
+          "name": "Maher Thakkar",
+          "designation": "Associate Developer",
+          "reportsTo": "Harsh Pandit"
+        },
+        {
+          "team": "preSales",
+          "name": "Utkarsh Raval",
+          "designation": "Associate Analyst",
+          "reportsTo": "Harsh Pandit"
+        },
+        {
+          "team": "preSales",
+          "name": "Baidyanath Hazra",
+          "designation": "Lead Analyst",
+          "reportsTo": "Nitish Thakkar"
+        },
+        {
+          "team": "preSales",
+          "name": "Sapna Singh",
+          "designation": "Analyst",
+          "reportsTo": "Rajesh Rathod"
+        },
+        {
+          "team": "preSales",
+          "name": "Kampan Vyas",
+          "designation": "Associate Analyst",
+          "reportsTo": "Gaurav Singal"
+        },
+        {
+          "team": "preSales",
+          "name": "Milap Shah",
+          "designation": "DM",
+          "reportsTo": "Gaurav Singal"
+        },
+        {
+          "team": "preSales",
+          "name": "Urvish Suthar",
+          "designation": "Senior Analyst",
+          "reportsTo": "Gaurav Singal"
+        },
+        {
+          "team": "preSales",
+          "name": "Shwetang Kotla",
+          "designation": "",
+          "reportsTo": "Kampan Vyas"
+        },
+        {
+          "team": "preSales",
+          "name": "Mukesh Mehta",
+          "designation": "Senior Analyst",
+          "reportsTo": "Kampan Vyas"
+        }
+      ]
+    },
+    {
+      "name": "Bid",
+      "source": "src/data/pre-sales-team.ts",
+      "entries": [
+        {
+          "team": "bid",
+          "name": "Shamik Joshi",
+          "designation": "Pre-Sales Head",
+          "reportsTo": null
+        },
+        {
+          "team": "bid",
+          "name": "Dharmesh Dhamecha",
+          "designation": "DGM",
+          "reportsTo": "Shamik Joshi"
+        },
+        {
+          "team": "bid",
+          "name": "Krutika Shah",
+          "designation": "Manager",
+          "reportsTo": "Dharmesh Dhamecha"
+        },
+        {
+          "team": "bid",
+          "name": "Hritika Nainwani",
+          "designation": "Senior Analyst",
+          "reportsTo": "Dharmesh Dhamecha"
+        },
+        {
+          "team": "bid",
+          "name": "Rajeev Maurya",
+          "designation": "Senior Analyst",
+          "reportsTo": "Krutika Shah"
+        },
+        {
+          "team": "bid",
+          "name": "Shivani Thakkar",
+          "designation": "Analyst",
+          "reportsTo": "Krutika Shah"
+        }
+      ]
+    },
+    {
+      "name": "Legal",
+      "source": "apps/api/migrations/1790600000000_legal-roster.sql",
+      "entries": [
+        {
+          "name": "Utpal Gandhi",
+          "designation": "MD",
+          "reportsTo": null
+        },
+        {
+          "name": "Denish",
+          "designation": "CFO – Finance & Legal",
+          "reportsTo": "Utpal Gandhi"
+        },
+        {
+          "name": "Karan Shah",
+          "designation": "Assistant Manager",
+          "reportsTo": "Denish"
+        },
+        {
+          "name": "Chetana Vora",
+          "designation": "Deputy Manager",
+          "reportsTo": "Denish"
+        },
+        {
+          "name": "Laveena Vangani",
+          "designation": "Manager",
+          "reportsTo": "Denish"
+        },
+        {
+          "name": "Shijo Shaji",
+          "designation": "Manager",
+          "reportsTo": "Denish"
+        },
+        {
+          "name": "Sharon Itagi",
+          "designation": "Executive",
+          "reportsTo": "Karan Shah"
+        }
+      ]
+    }
+  ]
+}

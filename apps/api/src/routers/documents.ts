@@ -6,12 +6,18 @@ import { pool } from '../db.js'
 import { isUniqueViolation } from '../db-errors.js'
 import { ALLOWED_DOCUMENT_CONTENT_TYPES, MAX_DOCUMENT_SIZE_BYTES, getSignedUploadUrl, getSignedDownloadUrl, getObjectMetadata, moveObject, deleteObject } from '../lib/gcs.js'
 import { pendingUploads } from '../lib/pendingUploads.js'
+import { DOCUMENT_BATCHES, DOCUMENT_CATEGORIES, categoryFitsBatch, normalizeDocumentFiling } from '@goms/domain'
+
+/** Batch + category must be given together and the category must belong to the batch. */
+const filingSchema = z.object({ batch: z.enum(DOCUMENT_BATCHES), category: z.enum(DOCUMENT_CATEGORIES) })
+  .refine((f) => categoryFitsBatch(f.batch, f.category), { message: 'Choose a category that belongs to the selected batch.' })
 
 export function toDocument(row: any) {
   return {
     id: row.id, entityType: row.entity_type, entityId: row.entity_id, filename: row.filename,
     storagePath: row.storage_path, version: row.version, contentType: row.content_type,
     sizeBytes: Number(row.size_bytes), uploadedBy: row.uploaded_by, uploadedAt: row.uploaded_at,
+    ...normalizeDocumentFiling(row.batch, row.category),
   }
 }
 
@@ -31,12 +37,12 @@ function toCitation(row: any) {
 }
 
 export const documentCitationsRouter = router({
-  list: protectedReadProcedure.input(z.object({ documentId: z.string().uuid() })).query(async ({ input }) => {
-    const result = await pool.query('SELECT * FROM document_citations WHERE document_id=$1 ORDER BY created_at', [input.documentId])
+  list: protectedReadProcedure.input(z.object({ documentId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
+    const result = await pool.query('SELECT * FROM document_citations WHERE document_id=$1 ORDER BY created_at, insert_seq', [input.documentId])
     return result.rows.map(toCitation)
   }),
   create: protectedProcedure
-    .input(z.object({ documentId: z.string().uuid(), pageLabel: z.string().min(1), quoteText: z.string().optional(), fieldRef: z.string().optional() }))
+    .input(z.object({ documentId: z.string().guid('Invalid UUID'), pageLabel: z.string().min(1), quoteText: z.string().optional(), fieldRef: z.string().optional() }))
     .mutation(async ({ input }) => {
       const result = await pool.query(
         `INSERT INTO document_citations (document_id, page_label, quote_text, field_ref) VALUES ($1,$2,$3,$4) RETURNING *`,
@@ -44,7 +50,7 @@ export const documentCitationsRouter = router({
       )
       return toCitation(result.rows[0])
     }),
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(({ input }) =>
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(({ input }) =>
     pool.query('DELETE FROM document_citations WHERE id=$1', [input.id]).then(() => undefined)
   ),
 })
@@ -52,8 +58,11 @@ export const documentCitationsRouter = router({
 export const documentsRouter = router({
   requestUploadUrl: protectedProcedure
     .input(z.object({
-      entityType: z.string(), entityId: z.string().uuid(), filename: z.string().min(1),
+      entityType: z.string(), entityId: z.string().guid('Invalid UUID'), filename: z.string().min(1),
       contentType: z.string(), sizeBytes: z.number().int().positive(), version: z.string().optional(),
+      batch: z.enum(DOCUMENT_BATCHES).optional(), category: z.enum(DOCUMENT_CATEGORIES).optional(),
+    }).refine((i) => (i.batch === undefined && i.category === undefined) || (!!i.batch && !!i.category && categoryFitsBatch(i.batch, i.category)), {
+      message: 'Choose a category that belongs to the selected batch.',
     }))
     .mutation(async ({ input }) => {
       if (!(ALLOWED_DOCUMENT_CONTENT_TYPES as readonly string[]).includes(input.contentType)) {
@@ -68,7 +77,8 @@ export const documentsRouter = router({
       const version = input.version ?? 'v1.0'
       const pendingPath = `bid-tracker/_pending/${uploadId}/${safeFilename}`
       const canonicalPath = `bid-tracker/${input.entityType}/${input.entityId}/${documentId}/${safeFilename}`
-      pendingUploads.set(uploadId, { entityType: input.entityType, entityId: input.entityId, filename: safeFilename, version, pendingPath, canonicalPath })
+      const filing = normalizeDocumentFiling(input.batch, input.category)
+      pendingUploads.set(uploadId, { entityType: input.entityType, entityId: input.entityId, filename: safeFilename, version, pendingPath, canonicalPath, ...filing })
       const uploadUrl = await getSignedUploadUrl(pendingPath, input.contentType)
       return { uploadId, uploadUrl }
     }),
@@ -96,9 +106,10 @@ export const documentsRouter = router({
       let row: any
       try {
         row = (await pool.query(
-          `INSERT INTO documents (entity_type, entity_id, filename, storage_path, version, content_type, size_bytes, uploaded_by)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-          [pending.entityType, pending.entityId, pending.filename, pending.canonicalPath, pending.version, metadata.contentType, metadata.size, ctx.user?.email ?? null],
+          `INSERT INTO documents (entity_type, entity_id, filename, storage_path, version, content_type, size_bytes, uploaded_by, batch, category)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+          [pending.entityType, pending.entityId, pending.filename, pending.canonicalPath, pending.version, metadata.contentType, metadata.size, ctx.user?.email ?? null,
+            pending.batch, pending.category],
         )).rows[0]
       } catch (e) {
         if (isUniqueViolation(e)) {
@@ -113,17 +124,25 @@ export const documentsRouter = router({
       return toDocument(row)
     }),
 
-  listFor: protectedReadProcedure.input(z.object({ entityType: z.string(), entityId: z.string().uuid() })).query(async ({ input }) => {
-    const result = await pool.query('SELECT * FROM documents WHERE entity_type=$1 AND entity_id=$2 ORDER BY uploaded_at DESC', [input.entityType, input.entityId])
+  listFor: protectedReadProcedure.input(z.object({ entityType: z.string(), entityId: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
+    const result = await pool.query('SELECT * FROM documents WHERE entity_type=$1 AND entity_id=$2 ORDER BY uploaded_at DESC, insert_seq DESC', [input.entityType, input.entityId])
     return result.rows.map(toDocument)
   }),
   /** A fresh signed URL per call — a stored one would outlive its expiry. */
-  getDownloadUrl: protectedReadProcedure.input(z.object({ id: z.string().uuid() })).query(async ({ input }) => {
+  getDownloadUrl: protectedReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(async ({ input }) => {
     const doc = (await pool.query('SELECT storage_path FROM documents WHERE id=$1', [input.id])).rows[0]
     if (!doc) throw new TRPCError({ code: 'NOT_FOUND', message: 'Document not found.' })
     return { url: await getSignedDownloadUrl(doc.storage_path) }
   }),
-  delete: protectedProcedure.input(z.object({ id: z.string().uuid() })).mutation(async ({ input }) => {
+  /** Moves a document to another attachment batch/category. */
+  updateFiling: protectedProcedure
+    .input(z.object({ id: z.string().guid('Invalid UUID') }).and(filingSchema))
+    .mutation(async ({ input }) => {
+      const row = (await pool.query('UPDATE documents SET batch=$2, category=$3 WHERE id=$1 RETURNING *', [input.id, input.batch, input.category])).rows[0]
+      if (!row) throw new TRPCError({ code: 'NOT_FOUND', message: 'Document not found.' })
+      return toDocument(row)
+    }),
+  delete: protectedProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).mutation(async ({ input }) => {
     const doc = (await pool.query('SELECT * FROM documents WHERE id=$1', [input.id])).rows[0]
     if (!doc) return
     // document_citations cascades via FK. Row deleted first, inside its own
@@ -132,8 +151,8 @@ export const documentsRouter = router({
     await pool.query('DELETE FROM documents WHERE id=$1', [input.id])
     try {
       await deleteObject(doc.storage_path)
-    } catch (e) {
-      console.error(`Failed to delete GCS object ${doc.storage_path} for deleted document ${input.id}`, e)
+    } catch {
+      console.error(JSON.stringify({ event: 'security.document_cleanup_failed', documentId: input.id }))
     }
   }),
   citations: documentCitationsRouter,

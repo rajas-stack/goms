@@ -56,7 +56,69 @@ describe('Master Grid refinement', () => {
   })
 
   describe('toolbar', () => {
-    it('reads Search / Filters / Add column → Lock → Columns → Create Bid, with Columns only once', async () => {
+    it('double-clicks column edges to fit all row values and keeps frozen offsets aligned', async () => {
+      const title = 'A detailed project description '.repeat(3)
+      await makeBid(title)
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({ font: '', measureText: (text: string) => ({ width: text.length * 8 }) } as any)
+      renderGrid()
+      await screen.findByText(title.trim())
+      const width = (id: string) => Number.parseFloat((document.querySelector('col[data-col-id="' + id + '"]') as HTMLElement).style.width)
+      const beforeName = width('opportunityName'), beforeCity = width('city')
+      await userEvent.click(screen.getByRole('button', { name: 'Opportunity / Mission column menu' }))
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Freeze column' }))
+      await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Freeze column' })).not.toBeInTheDocument())
+      await userEvent.click(screen.getByRole('button', { name: 'City column menu' }))
+      await userEvent.click(screen.getByRole('menuitem', { name: 'Freeze column' }))
+      expect(screen.queryByRole('button', { name: 'Auto-fit columns' })).not.toBeInTheDocument()
+      await userEvent.dblClick(screen.getByRole('separator', { name: 'Resize Opportunity / Mission column' }))
+      await userEvent.dblClick(screen.getByRole('separator', { name: 'Resize City column' }))
+      expect(width('opportunityName')).toBeGreaterThan(beforeName)
+      expect(width('city')).toBeLessThan(beforeCity)
+      expect(leafTh('city').style.left).toBe((40 + width('opportunityName')) + 'px')
+    })
+
+    it('drags column edges wider and narrower without sorting or reordering', async () => {
+      await makeBid('Alpha')
+      renderGrid()
+      await screen.findByText('Alpha')
+      const edge = screen.getByRole('separator', { name: 'Resize Bid ID column' })
+      const col = document.querySelector('col[data-col-id="bidCode"]') as HTMLElement
+      const start = Number.parseFloat(col.style.width)
+      fireEvent.mouseDown(edge, { clientX: 200, button: 0 })
+      fireEvent.mouseMove(document, { clientX: 260 })
+      fireEvent.mouseUp(document, { clientX: 260 })
+      expect(Number.parseFloat(col.style.width)).toBe(start + 60)
+      fireEvent.mouseDown(edge, { clientX: 260, button: 0 })
+      fireEvent.mouseMove(document, { clientX: 220 })
+      fireEvent.mouseUp(document, { clientX: 220 })
+      expect(Number.parseFloat(col.style.width)).toBe(start + 20)
+      fireEvent.keyDown(edge, { key: 'ArrowLeft' })
+      expect(Number.parseFloat(col.style.width)).toBe(start + 4)
+      expect(leafTh('bidCode')).toHaveAttribute('aria-sort', 'none')
+    })
+
+    it('wraps full bid identifiers, multiline text, and every selected value', async () => {
+      const bid = await makeBid('Alpha')
+      const note = await repository.createBidCustomField({ name: 'Long note', dataType: 'text' })
+      const tags = await repository.createBidCustomField({ name: 'Tags', dataType: 'multiselect', options: ['First', 'Second', 'Third'] })
+      await repository.setBidCustomValue(bid.id, note.id, 'First line\nSecond line with a long explanation')
+      await repository.setBidCustomValue(bid.id, tags.id, JSON.stringify(['First', 'Second', 'Third']))
+      renderGrid()
+      await screen.findByText('Alpha')
+      const bidLink = screen.getByRole('button', { name: /^Open BID/ })
+      expect(bidLink.className).not.toContain('truncate')
+      expect(bidLink.closest('td')).toHaveClass('whitespace-pre-wrap')
+      const row = screen.getByTestId('bid-row')
+      expect(within(row).getByText('Third')).toBeInTheDocument()
+      expect(within(row).queryByText('+1')).not.toBeInTheDocument()
+      await unlock()
+      const cell = screen.getByRole('button', { name: 'Edit Long note' })
+      expect(cell).toHaveClass('min-h-[35px]', 'whitespace-pre-wrap')
+      await userEvent.click(cell)
+      expect(screen.getByRole('textbox', { name: 'Long note' }).tagName).toBe('TEXTAREA')
+    })
+
+    it('reads Search / Filters → Lock → Columns (with Add column inside) → Create Bid, with Columns only once', async () => {
       await makeBid('Alpha')
       renderGrid()
       await screen.findByText('Alpha')
@@ -64,8 +126,8 @@ describe('Master Grid refinement', () => {
       const labels = Array.from(toolbar.querySelectorAll('button')).map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim())
       const at = (re: RegExp) => labels.findIndex((l) => re.test(l ?? ''))
       expect(at(/^Filters/)).toBeGreaterThanOrEqual(0)
-      expect(at(/Add column/)).toBeGreaterThan(at(/^Filters/))
-      expect(at(/Master grid editing/)).toBeGreaterThan(at(/Add column/))
+      expect(at(/Add column/)).toBe(-1) // moved into the Manage columns dropdown
+      expect(at(/Master grid editing/)).toBeGreaterThan(at(/^Filters/))
       expect(at(/^Manage columns/)).toBeGreaterThan(at(/Master grid editing/))
       expect(at(/Create Bid/)).toBeGreaterThan(at(/^Manage columns/))
       expect(labels.filter((l) => /^Manage columns/.test(l ?? ''))).toHaveLength(1)
@@ -98,22 +160,19 @@ describe('Master Grid refinement', () => {
       expect(screen.queryByRole('button', { name: /^Edit / })).not.toBeInTheDocument()
       expect(document.querySelector('[data-editable-cell]')).toBeNull()
       expect(screen.queryByTitle('Editable column')).not.toBeInTheDocument()
-      for (const column of screen.getAllByRole('button', { name: /^Unlock .+ column$/ })) {
-        expect(column).toHaveAttribute('aria-pressed', 'false')
-        expect(column).toBeDisabled()
-      }
+      expect(screen.queryAllByRole('button', { name: /^Unlock .+ column$/ })).toHaveLength(0)
       expect(screen.queryByRole('button', { name: /^Lock .+ column$/ })).not.toBeInTheDocument()
     })
 
-    it('no cell edits while locked; clicking a row does not open the bid, only its Opportunity ID does', async () => {
+    it('no cell edits while locked; the Bid ID opens the bid', async () => {
       await makeBid('Alpha')
       renderGrid()
       await screen.findByText('Alpha')
       const row = screen.getByTestId('bid-row')
       await userEvent.click(within(row).getAllByRole('cell')[4])
       expect(document.querySelector('input[type=text]')).toBeNull()
-      // The Opportunity ID cell shows the human opportunity code and is the details link.
-      expect(within(row).getByRole('button', { name: /^Open FY\d{2}-Q\d-/ })).toBeInTheDocument()
+      // The Bid ID is the details link.
+      expect(within(row).getByRole('button', { name: /^Open BID-/ })).toBeInTheDocument()
     })
 
     it('unlocking makes editable cells editable and marks them; read-only ones stay read-only', async () => {
@@ -125,7 +184,7 @@ describe('Master Grid refinement', () => {
       expect(lockSwitch()).toHaveAttribute('aria-pressed', 'true')
       expect(lockSwitch()).toHaveAttribute('title', lockSwitch().getAttribute('aria-label'))
       const editable = [
-        'Opportunity / Mission', 'Opportunity Type', 'Tender Link', 'Department / Client', 'City', 'Sector',
+        'Opportunity / Mission', 'Opportunity Type', 'Tender ID', 'Reference/Bid No.', 'Name of Assignment', 'Tender Link', 'Department / Client', 'State', 'City', 'Sector',
         'Geo-sales', 'BU-sales', 'Pre-sales', 'Legal', 'Bid', 'Bid Owner', 'Sales Lead / Solution Lead',
         'Bid Stage', 'Next Action', 'Action Owner', 'Action Due', 'Decision', 'Data Confidence', 'Note',
       ]
@@ -133,46 +192,31 @@ describe('Master Grid refinement', () => {
         expect(screen.getByRole('button', { name: `Edit ${header}` })).toBeInTheDocument()
       }
       expect(screen.getAllByTitle('Editable column').length).toBe(editable.length)
-      for (const header of ['Opportunity ID', 'Bid ID', 'Tender ID', 'State', 'Next Milestone', 'Days Remaining', 'Submission Deadline', 'Tender Files', 'Latest Corrigendum', 'Last Updated', 'Updated By', 'Attention']) {
+      for (const header of ['Bid ID', 'Next Milestone', 'Days Remaining', 'Submission Deadline', 'Tender Files', 'Latest Corrigendum', 'Last Updated', 'Updated By', 'Attention']) {
         expect(screen.queryByRole('button', { name: `Edit ${header}` })).not.toBeInTheDocument()
       }
       // Read-only cells become a focusable lock box once unlocked.
       expect(document.querySelectorAll('[data-readonly-cell]').length).toBeGreaterThan(0)
     })
 
-    it('per-column locks: opens Tender ID, locks City, keeps calculated columns locked, and remembers the choice', async () => {
+    it('uses only the top lock and ignores legacy per-column lock settings', async () => {
       await makeBid('Alpha')
+      localStorage.setItem('goms:bidGrid:columnLocks:bidTracker', JSON.stringify({ locked: ['city'], unlocked: [] }))
       const view = renderGrid()
       await screen.findByText('Alpha')
+      expect(screen.queryAllByRole('button', { name: /lock .+ column/i })).toHaveLength(0)
       await unlock()
-      expect(screen.queryByRole('button', { name: 'Edit Tender ID' })).not.toBeInTheDocument()
-      await userEvent.click(screen.getByRole('button', { name: 'Unlock Tender ID column' }))
       expect(screen.getByRole('button', { name: 'Edit Tender ID' })).toBeInTheDocument()
-      await userEvent.click(screen.getByRole('button', { name: 'Lock City column' }))
-      expect(screen.queryByRole('button', { name: 'Edit City' })).not.toBeInTheDocument()
-      // Calculated / system columns have no write path, so they offer no switch.
-      expect(screen.queryByRole('button', { name: /lock Days Remaining column/i })).not.toBeInTheDocument()
-      const savedChoices = localStorage.getItem('goms:bidGrid:columnLocks:bidTracker')
+      expect(screen.getByRole('button', { name: 'Edit City' })).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Edit Days Remaining' })).not.toBeInTheDocument()
       await userEvent.click(lockSwitch())
-      for (const column of screen.getAllByRole('button', { name: /^Unlock .+ column$/ })) {
-        expect(column).toHaveAttribute('aria-pressed', 'false')
-        expect(column).toBeDisabled()
-      }
-      expect(screen.queryByRole('button', { name: /^Lock .+ column$/ })).not.toBeInTheDocument()
-      await userEvent.click(screen.getByRole('button', { name: 'Unlock Tender ID column' }))
-      expect(localStorage.getItem('goms:bidGrid:columnLocks:bidTracker')).toBe(savedChoices)
-      await unlock()
-      expect(screen.getByRole('button', { name: 'Edit Tender ID' })).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Edit City' })).not.toBeInTheDocument()
-      // The choice survives a remount (remembered per sheet).
       view.unmount()
       renderGrid()
       await screen.findByText('Alpha')
-      expect(screen.getByRole('button', { name: 'Unlock Tender ID column' })).toBeDisabled()
-      expect(screen.queryByRole('button', { name: /^Lock .+ column$/ })).not.toBeInTheDocument()
       await unlock()
-      expect(screen.getByRole('button', { name: 'Edit Tender ID' })).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Edit City' })).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Edit City' })).toBeInTheDocument()
+      expect(screen.queryAllByRole('img', { name: 'Always locked' })).toHaveLength(0)
     })
 
     it('read-only cells say why when the grid is unlocked', async () => {
@@ -180,7 +224,7 @@ describe('Master Grid refinement', () => {
       renderGrid()
       await screen.findByText('Alpha')
       await unlock()
-      const cell = within(screen.getByTestId('bid-row')).getAllByRole('cell').find((c) => /Protected value/.test(c.getAttribute('title') ?? ''))
+      const cell = within(screen.getByTestId('bid-row')).getAllByRole('cell').find((c) => /Protected deadline/.test(c.getAttribute('title') ?? ''))
       expect(cell).toBeTruthy()
     })
 
@@ -315,12 +359,14 @@ describe('Master Grid refinement', () => {
 
       await userEvent.click(screen.getByRole('button', { name: 'Tender ID column menu' }))
       await userEvent.click(screen.getByRole('menuitem', { name: 'Freeze column' }))
+      await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Freeze column' })).not.toBeInTheDocument())
       expect(leafHeaders()[0]).toBe('Tender ID') // pinned to the left edge
       expect(leafTh('gemTenderId').className).toContain('sticky')
       expect(leafTh('gemTenderId').style.left).toBe('40px') // right after the 40px selection column
 
       await userEvent.click(screen.getByRole('button', { name: 'Opportunity / Mission column menu' }))
       await userEvent.click(screen.getByRole('menuitem', { name: 'Freeze column' }))
+      await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Freeze column' })).not.toBeInTheDocument())
       // Two frozen columns, in their normal relative order, each offset by the widths before it.
       expect(leafHeaders().slice(0, 2)).toEqual(['Opportunity / Mission', 'Tender ID'])
       const first = leafTh('opportunityName'); const second = leafTh('gemTenderId')
@@ -428,7 +474,7 @@ describe('Master Grid refinement', () => {
       expect(screen.queryByRole('link', { name: 'ravi@client.in' })).not.toBeInTheDocument()
       await userEvent.click(lockSwitch())
       expect(await screen.findByRole('link', { name: 'ravi@client.in' })).toHaveAttribute('href', 'mailto:ravi@client.in')
-      expect(screen.getByRole('link', { name: 'gem.gov.in/b/1' })).toHaveAttribute('href', 'https://gem.gov.in/b/1')
+      expect(screen.getByRole('link', { name: 'https://gem.gov.in/b/1' })).toHaveAttribute('href', 'https://gem.gov.in/b/1')
       expect(screen.getByRole('link', { name: '9876543210' })).toHaveAttribute('href', 'tel:9876543210')
     })
 
@@ -500,7 +546,8 @@ describe('Master Grid refinement', () => {
       await makeBid('Alpha')
       renderGrid()
       await screen.findByText('Alpha')
-      await userEvent.click(screen.getByRole('button', { name: /Add column/ }))
+      await userEvent.click(screen.getByRole('button', { name: /^Manage columns/ }))
+      await userEvent.click(await screen.findByRole('button', { name: /Add column/ }))
       const dialog = await screen.findByRole('dialog')
       const select = within(dialog).getByRole('combobox')
       const options = within(select).getAllByRole('option').map((o) => o.textContent)

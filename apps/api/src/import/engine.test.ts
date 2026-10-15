@@ -33,10 +33,8 @@ describe('caseInsensitiveEnum', () => {
     expect(schema.safeParse(42).success).toBe(false)
   })
 
-  it('preserves a custom errorMap for the underlying enum', () => {
-    const withMessage = caseInsensitiveEnum(['active', 'archived'] as const, {
-      errorMap: () => ({ message: 'custom message' }),
-    })
+  it('preserves a custom error message for the underlying enum', () => {
+    const withMessage = caseInsensitiveEnum(['active', 'archived'] as const, 'custom message')
     const result = withMessage.safeParse('bogus')
     expect(result.success).toBe(false)
     if (!result.success) expect(result.error.issues[0].message).toBe('custom message')

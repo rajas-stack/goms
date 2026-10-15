@@ -97,6 +97,8 @@ const citationWrite = (by: 'document' | 'citation'): Requirement => async (raw) 
   const row: ScopeFacts | null = by === 'document' ? await rowForDocument(raw?.documentId) : await rowForCitation(raw?.id)
   return { module: 'bid.documents', action: 'update', atoms: ['doc.upload'], row: row ?? undefined }
 }
+const documentFilingWrite: Requirement = async (raw) =>
+  ({ module: 'bid.documents', action: 'update', atoms: ['doc.upload'], row: (await rowForDocument(raw?.id)) ?? undefined })
 const protectedValueRead = (raw: any): Check => {
   if (raw?.entityType !== 'bid') throw new DenyCall('Protected values apply to bids only.')
   return { module: 'bid.protected', action: 'read' }
@@ -161,6 +163,7 @@ export const opportunityPolicy: Record<string, PolicyEntry> = {
 
   'bidCorrigenda.listForBid': { requirements: [read('bid.corrigenda')] },
   'bidCorrigenda.create': { requirements: [create('bid.corrigenda')] },
+  'bidCorrigenda.addChanges': { requirements: [create('bid.corrigenda')] },
   'bidCorrigenda.updateRegister': { requirements: [write('bid.corrigenda')] },
   'bidCorrigenda.reviewChange': {
     requirements: [write('bid.corrigenda', ['corrigendum.review']), corrigendumTenderLink, corrigendumMilestone, corrigendumSubmissionDate],
@@ -185,6 +188,11 @@ export const opportunityPolicy: Record<string, PolicyEntry> = {
   'tenderWebsites.create': { requirements: [create('bid.columns')] },
   ...same(['tenderWebsites.update', 'tenderWebsites.setEditingLock'], write('bid.columns')),
   'tenderWebsites.delete': { requirements: [remove('bid.columns')] },
+  // Competitors (Settings > Pre-sales) share the tender-website permissions.
+  'competitors.list': { requirements: [readRows] },
+  'competitors.create': { requirements: [create('bid.columns')] },
+  'competitors.update': { requirements: [write('bid.columns')] },
+  'competitors.delete': { requirements: [remove('bid.columns')] },
 
   ...same(['bidSavedViews.create', 'bidSavedViews.update', 'bidSavedViews.delete'], savedViewWrite),
 
@@ -193,6 +201,7 @@ export const opportunityPolicy: Record<string, PolicyEntry> = {
   'documents.requestUploadUrl': { requirements: [(raw) => documentCreate(raw?.entityType, raw?.entityId)] },
   'documents.confirmUpload': { requirements: [confirmUpload] },
   'documents.delete': { requirements: [remove('bid.documents')] },
+  'documents.updateFiling': { requirements: [documentFilingWrite] },
   'documents.citations.list': { requirements: [read('bid.documents')] },
   'documents.citations.create': { requirements: [citationWrite('document')] },
   'documents.citations.delete': { requirements: [citationWrite('citation')] },

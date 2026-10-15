@@ -44,7 +44,7 @@ function toEntry(r: any): ImportHistoryEntry {
 export async function listImportHistory(domain: string): Promise<ImportHistoryEntry[]> {
   const result = await pool.query(
     `SELECT id, session_id, domain, summary, jsonb_array_length(rejected_rows) AS rejected_row_count, excluded_rows, committed_at, actor_email
-     FROM admin_import_runs WHERE domain=$1 ORDER BY committed_at DESC LIMIT 50`,
+     FROM admin_import_runs WHERE domain=$1 ORDER BY committed_at DESC, insert_seq DESC LIMIT 50`,
     [domain],
   )
   return result.rows.map(toEntry)

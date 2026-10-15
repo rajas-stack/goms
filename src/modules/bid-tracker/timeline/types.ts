@@ -6,6 +6,18 @@ import type { AvatarPerson } from '@/components/ui/Avatar'
 /** Calendar date, `YYYY-MM-DD`. All timeline math works in whole UTC days. */
 export type IsoDate = string
 
+export type TimelineViewMode = 'presales' | 'sales-reactive' | 'sales-proactive' | 'complete'
+export type MilestoneTrack = 'sales' | 'presales' | 'project'
+export type OpportunityWorkflowKind = 'reactiveBid' | 'curatedOpportunity'
+
+export interface OpportunityLifecycleStage {
+  id: string
+  name: 'Campaign' | 'Pipeline' | 'Bid Tracker'
+  actualStart?: IsoDate
+  actualEnd?: IsoDate
+  status: MilestoneStatus
+}
+
 export type MilestoneStatus = 'COMPLETED' | 'IN_PROGRESS' | 'UPCOMING' | 'DELAYED' | 'BLOCKED'
 
 export interface Milestone {
@@ -13,10 +25,14 @@ export interface Milestone {
   name: string
   plannedStart: IsoDate
   plannedEnd: IsoDate
+  /** False for activities, such as Sales work, with no fixed planned timeline. */
+  planned?: boolean
   actualStart?: IsoDate
   actualEnd?: IsoDate
   status: MilestoneStatus
   sequence: number
+  track?: MilestoneTrack
+  owner?: string
   /** Name from the shared Icon registry. */
   icon?: string
   issueCount?: number
@@ -51,6 +67,12 @@ export interface OpportunityTimeline {
   endDate: IsoDate
   milestones: Milestone[]
   events: TimelineEvent[]
+  workflowKind?: OpportunityWorkflowKind
+  /** The two alternative Sales paths share the same Pre-sales lifecycle. */
+  salesWorkflows?: Record<OpportunityWorkflowKind, Milestone[]>
+  lifecycleStages?: OpportunityLifecycleStage[]
+  /** Published submission deadline, which may precede the lifecycle's end. */
+  deadlineDate?: IsoDate
   /** True when the end date is a rule-based fallback (no usable deadline on record). */
   endDateEstimated?: boolean
   /** Final outcome label once the opportunity is closed ("Go Approved", "Dropped"). */

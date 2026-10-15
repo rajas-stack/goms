@@ -20,7 +20,7 @@ const FK_COLUMNS = [
 
 const LIFECYCLE_STATUSES = ['draft', 'active', 'inactive', 'retired'] as const
 
-const numericField = (label: string) => z.number({ invalid_type_error: `${label} must be a number` }).optional().default(0)
+const numericField = (label: string) => z.number(`${label} must be a number`).optional().default(0)
 
 function blankToNull(v: unknown): unknown {
   if (v === undefined || v === null) return null
@@ -67,7 +67,7 @@ const skuRowSchema = z.object({
   corporatePrice: numericField('corporatePrice'),
   listPrice: numericField('listPrice'),
   // No default — required per the DB's own NOT NULL constraint.
-  minimumAllowedPrice: z.number({ invalid_type_error: 'minimumAllowedPrice must be a number' }),
+  minimumAllowedPrice: z.number('minimumAllowedPrice must be a number'),
   maximumDiscountPercent: z.number().optional().default(90),
 })
 export type SkuRow = z.infer<typeof skuRowSchema>

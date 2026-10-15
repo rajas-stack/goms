@@ -1,6 +1,14 @@
+.settings-dialog > div:first-child h2 {
+  font-size: 20px;
+}
+
+.settings-dialog > div:first-child p {
+  font-size: 14px;
+}
+
 .settings-back {
   display: inline-flex;
-  min-height: 34px;
+  min-height: 36px;
   align-items: center;
   gap: 7px;
   margin-bottom: 20px;
@@ -9,7 +17,7 @@
   border-radius: 10px;
   background: rgb(var(--c-white));
   color: rgb(var(--c-muted));
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .settings-icon {
@@ -35,6 +43,21 @@
 .dark .settings-icon {
   background: linear-gradient(145deg, #ededed, #c9c9c9);
   box-shadow: 3px 3px 8px rgb(var(--c-shadow) / .35), inset 0 1px 0 rgb(255 255 255 / .65);
+}
+
+.settings-menu-item .settings-icon {
+  width: 16px;
+  height: 16px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+}
+
+.settings-menu-item .settings-icon__symbol {
+  width: 16px;
+  height: 16px;
 }
 
 @media (hover: hover) and (pointer: fine) {

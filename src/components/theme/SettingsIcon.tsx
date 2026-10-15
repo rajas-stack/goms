@@ -1,4 +1,4 @@
-export type SettingsIconKind = 'storage' | 'tender' | 'verification' | 'credentials' | 'integrations' | 'masters'
+export type SettingsIconKind = 'storage' | 'tender' | 'verification' | 'credentials' | 'integrations' | 'competitors' | 'access' | 'employees'
 
 /** A consistent navy, partially filled symbol for each settings area. */
 export function SettingsIcon({ kind }: { kind: SettingsIconKind }) {
@@ -12,11 +12,6 @@ export function SettingsIcon({ kind }: { kind: SettingsIconKind }) {
           <rect x="15" y="3" width="6" height="6" rx="1.5" fill="currentColor" fillOpacity={.1} />
           <rect x="3" y="15" width="6" height="6" rx="1.5" fill="currentColor" fillOpacity={.1} />
           <path d="M9 6h6M6 9v6M18 9v6M9 18h6" />
-        </>}
-        {kind === 'masters' && <>
-          <path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3V6Z" fill="currentColor" fillOpacity={.08} />
-          <ellipse cx="12" cy="6" rx="8" ry="3" fill="currentColor" />
-          <path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3M4 18c0 1.7 3.6 3 8 3s8-1.3 8-3" />
         </>}
         {kind === 'credentials' && <>
           <rect x="5" y="10" width="14" height="11" rx="2" fill="currentColor" />
@@ -44,6 +39,24 @@ export function SettingsIcon({ kind }: { kind: SettingsIconKind }) {
           <path d="M9 10h6M9 13h3" />
           <path d="M6 15h12v5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-5Z" fill="currentColor" stroke="none" />
           <path d="m9 17.5 2 2 4-4" stroke="#fff" strokeWidth={1.5} />
+        </>}
+        {kind === 'access' && <>
+          <path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6L12 3Z" fill="currentColor" fillOpacity={.1} />
+          <circle cx="12" cy="10" r="2.6" fill="currentColor" stroke="none" />
+          <path d="M7.8 16.8a4.6 4.6 0 0 1 8.4 0" fill="currentColor" stroke="none" />
+        </>}
+        {kind === 'employees' && <>
+          <rect x="3" y="4" width="18" height="16" rx="2" fill="currentColor" fillOpacity={.1} />
+          <circle cx="9" cy="10" r="2.4" fill="currentColor" stroke="none" />
+          <path d="M5 17a4 4 0 0 1 8 0Z" fill="currentColor" stroke="none" />
+          <path d="M15 9h3M15 12h3M15 15h2" />
+        </>}
+        {kind === 'competitors' && <>
+          <path d="M4 20v-8h5v8" fill="currentColor" fillOpacity={.1} />
+          <path d="M9.5 20V5h5v15" fill="currentColor" />
+          <path d="M15 20v-5h5v5" fill="currentColor" fillOpacity={.1} />
+          <path d="M3 20.5h18" />
+          <path d="m12 7.6.7 1.4 1.5.2-1.1 1 .3 1.5-1.4-.7-1.4.7.3-1.5-1.1-1 1.5-.2Z" fill="#fff" stroke="none" />
         </>}
       </svg>
     </span>

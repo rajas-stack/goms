@@ -21,7 +21,7 @@ function Item({ icon, children, onClick, disabled }: {
  *  filter, freeze. Moving,
  *  hiding, renaming and archiving live only in that panel, so each action has
  *  exactly one home. */
-export function ColumnHeaderMenu({ header, sorted, canSort, onSort, onFilter, frozen, freezeBlockedReason, onToggleFreeze }: {
+export function ColumnHeaderMenu({ header, sorted, canSort, onSort, onFilter, frozen, freezeBlockedReason, onToggleFreeze, onAutoFit }: {
   header: string
   sorted: false | 'asc' | 'desc'
   canSort: boolean
@@ -32,6 +32,7 @@ export function ColumnHeaderMenu({ header, sorted, canSort, onSort, onFilter, fr
   /** Set when freezing is unavailable right now (no room left), with why. */
   freezeBlockedReason?: string | null
   onToggleFreeze: (() => void) | null
+  onAutoFit?: () => void
 }) {
   const [open, setOpen] = useState(false)
   const anchorRef = useRef<HTMLDivElement>(null)
@@ -63,6 +64,7 @@ export function ColumnHeaderMenu({ header, sorted, canSort, onSort, onFilter, fr
               </>
             )}
             {onFilter && <Item icon="SlidersHorizontal" onClick={run(onFilter)}>Filter by this column</Item>}
+            {onAutoFit && <Item icon="ArrowLeftRight" onClick={run(onAutoFit)}>Auto-fit column</Item>}
             {onToggleFreeze && (
               <Item
                 icon={frozen ? "PinOff" : "Pin"} disabled={!frozen && !!freezeBlockedReason}

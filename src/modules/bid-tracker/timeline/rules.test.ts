@@ -44,6 +44,18 @@ describe('generatePlannedPlan', () => {
     expectContiguous(plan, '2025-01-01', '2026-12-31')
   })
 
+  it('leaves unplanned sales phases blank while planning starts at pre-sales', () => {
+    const rules: PhaseRule[] = [
+      { key: 'sales:a', name: 'Sales A', weight: 1, planned: false, track: 'sales' },
+      { key: 'pre:a', name: 'Pre A', weight: 25, track: 'presales' },
+      { key: 'pre:b', name: 'Pre B', weight: 75, track: 'presales' },
+    ]
+    const plan = generatePlannedPlan('2026-01-01', '2026-01-21', rules)
+    expect(plan[0]).toMatchObject({ key: 'sales:a', planned: false, plannedStart: '2026-01-01', plannedEnd: '2026-01-01' })
+    expect(plan[1]).toMatchObject({ key: 'pre:a', planned: true, plannedStart: '2026-01-01', plannedEnd: '2026-01-06' })
+    expect(plan[2]).toMatchObject({ key: 'pre:b', planned: true, plannedStart: '2026-01-06', plannedEnd: '2026-01-21' })
+  })
+
   it('rejects an end before the start, bad dates and non-positive weights', () => {
     expect(() => generatePlannedPlan('2026-02-01', '2026-01-01', BID_PHASE_RULES)).toThrow()
     expect(() => generatePlannedPlan('nope', '2026-01-01', BID_PHASE_RULES)).toThrow()

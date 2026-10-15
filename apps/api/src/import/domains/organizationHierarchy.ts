@@ -17,18 +17,14 @@ function blankToNull(v: unknown): unknown {
 const orgHierarchyRowSchema = z.object({
   // Case-insensitive: an export spelled "Department"/"DEPARTMENT" is
   // ordinary Excel formatting variance, not a different business value.
-  nodeType: caseInsensitiveEnum(NODE_TYPES, {
-    errorMap: () => ({ message: `Node Type must be one of: ${NODE_TYPES.join(', ')}` }),
-  }),
+  nodeType: caseInsensitiveEnum(NODE_TYPES, `Node Type must be one of: ${NODE_TYPES.join(', ')}`),
   name: z.string().min(1, 'Name is required'),
   code: z.string().min(1, 'Code is required').trim(),
   parentCode: z.preprocess(blankToNull, z.string().trim().min(1).nullable()),
-  stateCode: z.preprocess(blankToNull, z.number({ invalid_type_error: 'State Code must be a number' }).nullable()),
+  stateCode: z.preprocess(blankToNull, z.number('State Code must be a number').nullable()),
   status: z.preprocess(
     (v) => (blankToNull(v) === null ? 'active' : v),
-    caseInsensitiveEnum(STATUSES, {
-      errorMap: () => ({ message: `Status must be one of: ${STATUSES.join(', ')}` }),
-    }),
+    caseInsensitiveEnum(STATUSES, `Status must be one of: ${STATUSES.join(', ')}`),
   ),
 })
 export type OrgHierarchyRow = z.infer<typeof orgHierarchyRowSchema>
