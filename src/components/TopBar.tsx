@@ -21,9 +21,10 @@ export function TopBar({ onOpenDrawer }: Props) {
   const isSettings = location.pathname.startsWith('/settings')
   const isDocuments = location.pathname.startsWith('/documents')
   const isDocumentMaker = location.pathname.startsWith('/document-maker')
+  const isInsights = location.pathname.startsWith('/insights') || location.pathname.startsWith('/analytics')
   // Import and Export work with Account Mapping's hierarchy data.
-  const hidesImportExport = isCommercialCalculator || isBidTracker || isTeams || isSettings || isDocuments || isDocumentMaker
-  const moduleLabel = isDocumentMaker ? 'Document maker' : isDocuments ? 'Documents' : isSettings ? 'Settings' : isCommercialCalculator ? 'Commercial Calculator' : isBidTracker ? 'Opportunity' : isTeams ? 'Teams' : 'Accounts Mapping'
+  const hidesImportExport = isCommercialCalculator || isBidTracker || isTeams || isSettings || isDocuments || isDocumentMaker || isInsights
+  const moduleLabel = isInsights ? 'Insights' : isDocumentMaker ? 'Document maker' : isDocuments ? 'Documents' : isSettings ? 'Settings' : isCommercialCalculator ? 'Commercial Calculator' : isBidTracker ? 'Opportunity' : isTeams ? 'Teams' : 'Accounts Mapping'
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-paper/90 px-3 sm:gap-3 sm:px-5">
       <button

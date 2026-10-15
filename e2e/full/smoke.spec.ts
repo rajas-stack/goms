@@ -36,6 +36,7 @@ test.describe('smoke: every route loads', () => {
 
 test.describe('smoke: desktop left rail', () => {
   const RAIL: { name: string; url: RegExp }[] = [
+    { name: 'Insights', url: /\/insights$/ },
     { name: 'Account Mapping', url: /\/map$/ },
     { name: 'Commercial Calculator', url: /\/commercial-calculator$/ },
     { name: 'Opportunity', url: /\/bid-tracker$/ },
@@ -58,7 +59,9 @@ test.describe('smoke: desktop left rail', () => {
 
   test('@regression Account Mapping secondary nav links (Map, Directory, Insights, Meetings)', async ({ page }) => {
     await gotoApp(page, '/map');
-    for (const [name, url] of [['Directory', /\/directory$/], ['Insights', /\/analytics$/], ['Meetings', /\/meetings$/], ['Map', /\/map$/]] as const) {
+    for (const [name, url] of [['Directory', /\/directory$/], ['Insights', /\/insights$/], ['Meetings', /\/meetings$/], ['Map', /\/map$/]] as const) {
+      // Insights now has its own module navigation; return to Account Mapping for its other sections.
+      if (name === 'Meetings') await page.getByRole('navigation').getByRole('button', { name: 'Account Mapping', exact: true }).click();
       await page.getByRole('link', { name, exact: true }).click();
       await expect(page).toHaveURL(url);
     }
@@ -96,7 +99,7 @@ test.describe('smoke: mobile drawer', () => {
     await gotoApp(page, '/');
     await expect(page.getByRole('navigation').getByRole('button', { name: 'Account Mapping', exact: true })).toBeHidden();
     await page.getByRole('button', { name: 'Open menu' }).click();
-    for (const name of ['Account Mapping', 'Commercial Calculator', 'Opportunity', 'Document maker', 'Teams']) {
+    for (const name of ['Insights', 'Account Mapping', 'Commercial Calculator', 'Opportunity', 'Document maker', 'Teams']) {
       await expect(page.getByRole('dialog').getByText(name).first()).toBeVisible();
     }
   });

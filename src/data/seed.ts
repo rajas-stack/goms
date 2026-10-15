@@ -14,6 +14,7 @@ import { mergeOrgSeed, syncAllTeamsFromOrg, type OrgPerson } from './org-structu
 import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
 import type { CommercialCalculatorData } from '@/modules/commercial-calculator/types'
 import type { BidSynopsis, Competitor, TenderWebsite } from '@goms/domain'
+import type { InsightReport, InsightVisual } from '@goms/domain'
 import type { StoredDepartment } from './in-memory/amnexDepartments'
 import type { LocalMakerDocument } from './in-memory/makerDocuments'
 import type { RbacLocalState } from './in-memory/rbacTree'
@@ -129,6 +130,9 @@ export interface GormsData {
   amnexDepartments?: StoredDepartment[]
   /** Settings > Roles & Access: the UI permission tree (nodes, grants, roles, templates). Optional: older snapshots lack it. */
   rbacTree?: RbacLocalState
+  /** Insights Studio saved visuals and reports. Optional: older snapshots lack them. */
+  insightVisuals?: InsightVisual[]
+  insightReports?: InsightReport[]
 }
 
 export function buildSeed(): GormsData {

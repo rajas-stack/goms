@@ -35,6 +35,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const canOpportunity = useCanReadAny(NAV_MODULES.opportunity) && tree('opportunity')
   const canTeams = useCanReadAny(NAV_MODULES.teams) && tree('teams')
   const canDocumentMaker = tree('documentMaker')
+  const canInsights = useCanReadAny(NAV_MODULES.insights) && tree('accountMapping.insights')
 
   useEffect(() => {
     if (!open) return
@@ -80,6 +81,9 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                   <Icon name="X" size={18} />
                 </button>
               </div>
+              {canInsights && <button onClick={() => { onClose(); navigate('/insights') }} aria-current={/^\/(insights|analytics)/.test(location.pathname) ? 'page' : undefined} className="flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-ink hover:bg-ink-900/[0.05]">
+                <Icon name="BarChart3" size={17}/>Insights
+              </button>}
               {canAccountMapping && <button
                 onClick={() => {
                   onClose()
