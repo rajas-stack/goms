@@ -46,7 +46,6 @@ function NavTile({ to, end, icon, label }: { to: string; end?: boolean; icon: st
 export function SecondaryNav() {
   const canMap = useCanReadAny(NAV_MODULES.map)
   const canDirectory = useCanReadAny(NAV_MODULES.directory)
-  const canInsights = useCanReadAny(NAV_MODULES.insights)
   const canMeetings = useCanReadAny(NAV_MODULES.meetings)
   return (
     <nav
@@ -59,7 +58,6 @@ export function SecondaryNav() {
     >
       {canMap && <NavTile to="/map" icon="Map" label="Map" />}
       {canDirectory && <NavTile to="/directory" icon="Network" label="Directory" />}
-      {canInsights && <NavTile to="/analytics" icon="BarChart3" label="Insights" />}
       {canMeetings && <NavTile to="/meetings" icon="CalendarClock" label="Meetings" />}
     </nav>
   )

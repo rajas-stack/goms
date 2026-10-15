@@ -57,6 +57,7 @@ export function AppLayout() {
     && !location.pathname.startsWith('/commercial-calculator')
     && !location.pathname.startsWith('/bid-tracker')
     && !location.pathname.startsWith('/teams')
+    && !location.pathname.startsWith('/analytics')
     && !location.pathname.startsWith('/settings')
     && !location.pathname.startsWith('/documents')
   // `MobileDetailsSheet` only renders as an overlay below `lg` (it's

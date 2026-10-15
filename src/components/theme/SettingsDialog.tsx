@@ -3,6 +3,8 @@ import { Icon } from '@/components/ui/Icon'
 import { Link } from 'react-router-dom'
 import { WEBSITE_KIND_COPY, type WebsiteKindCopy } from '@/features/tender-websites/websiteKinds'
 import { SettingsIcon, type SettingsIconKind } from './SettingsIcon'
+import { useCanReadAny } from '@/lib/permissions'
+import { NAV_MODULES } from '@/lib/routeModules'
 import './SettingsMenu.css'
 
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -19,15 +21,17 @@ const websitePage = ({ route, title, hint }: WebsiteKindCopy, kind: SettingsIcon
 const SETTINGS_PAGES = [
   { to: '/settings/integrations', kind: 'integrations' as const, title: 'Integrations', hint: 'Connect Google services.' },
   { to: '/settings/credentials', kind: 'credentials' as const, title: 'Credentials', hint: 'Manage shared passphrases.' },
+  { to: '/settings/masters', kind: 'masters' as const, title: 'Masters', hint: 'Manage employee and organization master data.' },
   { to: '/settings/dms', kind: 'storage' as const, title: 'DMS Settings', hint: 'Connect Drive and organize documents.' },
   websitePage(WEBSITE_KIND_COPY.tender, 'tender'),
   websitePage(WEBSITE_KIND_COPY.verification, 'verification'),
 ]
 
 export function SettingsMenu({ onNavigate }: { onNavigate?: () => void }) {
+  const canEmployeeMaster = useCanReadAny(NAV_MODULES.employeeMaster)
   return (
     <div className="flex flex-col gap-3">
-      {SETTINGS_PAGES.map(page => (
+      {SETTINGS_PAGES.filter((page) => page.to !== '/settings/masters' || canEmployeeMaster).map(page => (
         <Link key={page.to} to={page.to} onClick={onNavigate} className="group flex items-center gap-4 rounded-2xl border border-line bg-white p-4 text-ink transition-colors hover:border-ink-600/30 hover:bg-panel focus-visible:focus-ring sm:p-5">
           <SettingsIcon kind={page.kind} />
           <span className="min-w-0 flex-1"><span className="block text-[15px] font-semibold text-ink-900">{page.title}</span><span className="mt-1 block text-xs text-muted">{page.hint}</span></span>

@@ -26,6 +26,8 @@ export function AccountMappingRail() {
   const canCommercial = useCanReadAny(NAV_MODULES.commercial)
   const canOpportunity = useCanReadAny(NAV_MODULES.opportunity)
   const canTeams = useCanReadAny(NAV_MODULES.teams)
+  const canInsights = useCanReadAny(NAV_MODULES.insights)
+  const insightsActive = location.pathname.startsWith('/analytics')
   // Enforce: only when the role can open it. Off / shadow: any signed-in user (the screen itself says "Only System Admins can
   // manage access" to anyone the server refuses). Link visibility is NOT authorization; see useShowAccessNav. Shared with the
   // mobile drawer so the two cannot disagree.
@@ -69,6 +71,17 @@ export function AccountMappingRail() {
           <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Opportunity</span>
         </button>
       )}
+      {canInsights && <button
+        onClick={() => navigate('/analytics')}
+        title="GOMS Analytics"
+        className={cn(
+          'flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors lg:w-14',
+          insightsActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600/70 hover:bg-white hover:text-ink-900',
+        )}
+      >
+        <Icon name="BarChart3" size={18} />
+        <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Insights</span>
+      </button>}
       {canAccess && <button
         onClick={() => navigate('/admin/access')}
         title="Role & Access"

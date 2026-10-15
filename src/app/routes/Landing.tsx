@@ -2,16 +2,22 @@ import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { IndiaMap } from '@/features/map/IndiaMap'
-import { useStates } from '@/lib/api'
+import { useAllEmployees, useSalesPersons, useStates } from '@/lib/api'
 
 export function Landing() {
   const { data: states = [] } = useStates()
-  const totals = useMemo(() => ({
-    states: states.length,
-    departments: states.reduce((s, x) => s + x.departments, 0),
-    offices: states.reduce((s, x) => s + x.offices, 0),
-    employees: states.reduce((s, x) => s + x.employees, 0),
-  }), [states])
+  const { data: employees = [] } = useAllEmployees()
+  const { data: salesPersons = [] } = useSalesPersons()
+  const totals = useMemo(() => {
+    const officers = employees.filter(e => !e.vacant)
+    const ias = officers.filter(e => /\bIAS\b/i.test(`${e.name} ${e.designation}`)).length
+    return {
+      iasOfficers: ias,
+      departments: states.reduce((s, x) => s + x.departments, 0),
+      deptOfficers: officers.length - ias,
+      salesMembers: salesPersons.filter(p => p.status === 'active').length,
+    }
+  }, [states, employees, salesPersons])
 
   return (
     <div className="grid h-full grid-cols-1 overflow-y-auto scrollbar-thin lg:grid-cols-[minmax(340px,440px)_1fr] lg:overflow-hidden">
@@ -56,10 +62,10 @@ export function Landing() {
         >
           <span className="eyebrow">Mapping Statistics</span>
           <div className="mt-2 grid grid-cols-2 gap-3">
-            <StatCard label="States & UTs" value={totals.states} accent="teal" />
+            <StatCard label="IAS Officers" value={totals.iasOfficers} accent="teal" />
             <StatCard label="Departments" value={totals.departments} accent="ink" />
-            <StatCard label="Offices" value={totals.offices} accent="ink" />
-            <StatCard label="Employees" value={totals.employees} accent="indigo" />
+            <StatCard label="Dept Officers" value={totals.deptOfficers} accent="ink" />
+            <StatCard label="Sales Members" value={totals.salesMembers} accent="indigo" />
           </div>
         </motion.div>
       </section>

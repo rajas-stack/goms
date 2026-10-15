@@ -2,11 +2,11 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { GOOGLE_SERVICES, DEFAULT_GOOGLE_INTEGRATIONS } from '@goms/domain'
 import { protectedProcedure, protectedReadProcedure, router, type Context } from '../trpc.js'
-import { isAmnexAccount, verifyFirebaseToken } from '../auth/identity.js'
+import { isAmnexAccount, verifyIdentity } from '../auth/identity.js'
 import { pool } from '../db.js'
 
 async function account(ctx: Context) {
-  const user = await verifyFirebaseToken(ctx.authHeader)
+  const user = await verifyIdentity(ctx.authHeader)
   if (!isAmnexAccount(user.email)) throw new TRPCError({ code: 'FORBIDDEN', message: 'Sign in with your @amnex.com Google account.' })
   return user
 }
@@ -16,7 +16,7 @@ const settingsShape = z.object({
   docsId: z.string().max(200).regex(/^[\w-]*$/), sheetsId: z.string().max(200).regex(/^[\w-]*$/),
   cloudProject: z.string().max(100).regex(/^$|^[a-z0-9][a-z0-9-]*$/), notebookLocation: z.enum(['global', 'us', 'eu']),
 }).strict()
-/** Identity is verified even when the application's staged authentication flags are off. */
+/** Identity is verified here even when the application's staged RBAC flags are off. */
 export const googleIntegrationsRouter = router({
   get: protectedReadProcedure.input(z.object({ accountUid: z.string().min(1).max(200) }).strict()).query(async ({ input, ctx }) => {
     const user = await account(ctx)

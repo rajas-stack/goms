@@ -1,16 +1,3 @@
-export type AuthProvider = 'firebase' | 'both' | 'oauth'
-
-/** Read on every call so tests (and an env-only Cloud Run revision) take effect without a restart of module state. */
-export function authProvider(): AuthProvider {
-  const raw = (process.env.AUTH_PROVIDER ?? 'firebase').trim().toLowerCase()
-  if (raw === 'both' || raw === 'oauth') return raw
-  if (raw !== '' && raw !== 'firebase') console.warn(JSON.stringify({ event: 'auth.invalid_provider', using: 'firebase' }))
-  return 'firebase'
-}
-export const oauthEnabled = (): boolean => authProvider() !== 'firebase'
-export const gomsAccepted = (): boolean => authProvider() !== 'firebase'
-export const firebaseAccepted = (): boolean => authProvider() !== 'oauth'
-
 export class OAuthConfigError extends Error {}
 
 /** The deep-link scheme this API deployment hands the Android app (thin-shell design §6.4). A fixed allow-list: the dev API sets
@@ -23,7 +10,7 @@ export function appScheme(): (typeof APP_SCHEMES)[number] {
   throw new OAuthConfigError('OAUTH_APP_SCHEME is not an allowed value')
 }
 
-/** HS256 signing key. Needed to verify GOMS tokens in `both`/`oauth`, so it does not require the Google credentials. */
+/** HS256 signing key. Needed to verify GOMS tokens, so it does not require the Google credentials. */
 export function sessionKey(): Uint8Array {
   const raw = process.env.AUTH_SESSION_SECRET ?? ''
   if (Buffer.byteLength(raw) < 32) throw new OAuthConfigError('AUTH_SESSION_SECRET must be at least 32 bytes')

@@ -34,6 +34,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const canCommercial = useCanReadAny(NAV_MODULES.commercial)
   const canOpportunity = useCanReadAny(NAV_MODULES.opportunity)
   const canTeams = useCanReadAny(NAV_MODULES.teams)
+  const canInsights = useCanReadAny(NAV_MODULES.insights)
 
   useEffect(() => {
     if (!open) return
@@ -126,6 +127,21 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                   Opportunity
                 </button>
               )}
+              {canInsights && <button
+                onClick={() => {
+                  onClose()
+                  navigate('/analytics')
+                }}
+                className={cn(
+                  'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
+                  location.pathname.startsWith('/analytics')
+                    ? 'bg-white text-ink-900 shadow-sm'
+                    : 'text-ink hover:bg-ink-900/[0.05]',
+                )}
+              >
+                <Icon name="BarChart3" size={17} />
+                Insights
+              </button>}
               {canAccess && <button
                 onClick={() => {
                   onClose()

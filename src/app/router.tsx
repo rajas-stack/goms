@@ -17,6 +17,8 @@ const Meetings = lazy(() => import('./routes/Meetings').then((m) => ({ default: 
 const CredentialsSettingsPage = lazy(() => import('./routes/CredentialsSettingsPage').then(m => ({ default: m.CredentialsSettingsPage })))
 const IntegrationsSettingsPage = lazy(() => import('./routes/IntegrationsSettingsPage').then(m => ({ default: m.IntegrationsSettingsPage })))
 const SettingsPage = lazy(() => import('./routes/SettingsPage').then((m) => ({ default: m.SettingsPage })))
+const SettingsMastersPage = lazy(() => import('./routes/SettingsMastersPage').then((m) => ({ default: m.SettingsMastersPage })))
+const SettingsEmployeeMasterPage = lazy(() => import('./routes/SettingsEmployeeMasterPage').then((m) => ({ default: m.SettingsEmployeeMasterPage })))
 const DmsSettingsPage = lazy(() => import('./routes/DmsSettingsPage').then((m) => ({ default: m.DmsSettingsPage })))
 const DmsConnectionPage = lazy(() => import('./routes/DmsConnectionPage').then((m) => ({ default: m.DmsConnectionPage })))
 const DmsDocumentsPage = lazy(() => import('./routes/DmsDocumentsPage').then((m) => ({ default: m.DmsDocumentsPage })))
@@ -104,6 +106,8 @@ export const router = createBrowserRouter([
       { path: '/meetings', element: <RequireAccess anyOf={NAV_MODULES.meetings}><Meetings /></RequireAccess> },
       { path: '/sales', element: <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess> },
       { path: '/sales/:section', element: <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess> },
+      // Keep old Employee bookmarks working after the screen moves into Settings → Masters.
+      { path: '/teams/employees', element: <Navigate to="/settings/masters/employee-master" replace /> },
       { path: '/teams', element: <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess> },
       { path: '/teams/:team', element: <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess> },
       { path: '/teams/:team/:section', element: <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess> },
@@ -115,6 +119,8 @@ export const router = createBrowserRouter([
       { path: '/settings/credentials', element: <CredentialsSettingsPage /> },
       { path: '/settings/integrations', element: <IntegrationsSettingsPage /> },
       { path: '/settings', element: <SettingsPage /> },
+      { path: '/settings/masters', element: <RequireAccess anyOf={NAV_MODULES.employeeMaster}><SettingsMastersPage /></RequireAccess> },
+      { path: '/settings/masters/employee-master', element: <RequireAccess anyOf={NAV_MODULES.employeeMaster}><SettingsEmployeeMasterPage /></RequireAccess> },
       { path: '/settings/dms', element: <DmsSettingsPage /> },
       { path: '/settings/dms/new', element: <DmsConnectionPage /> },
       { path: '/settings/dms/:connectionId', element: <DmsConnectionPage /> },

@@ -12,7 +12,20 @@ vi.mock('@/features/map/IndiaMap', () => ({ IndiaMap: () => <div data-testid="in
 describe('Landing — headline typography', () => {
   it('uses the font-display face at bold weight', () => {
     vi.spyOn(api, 'useStates').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useStates>)
+    vi.spyOn(api, 'useAllEmployees').mockReturnValue({
+      data: [
+        { vacant: false, name: 'A', designation: 'Secretary (IAS)' },
+        { vacant: false, name: 'B', designation: 'Section Officer' },
+        { vacant: true, name: '', designation: 'Director' },
+      ],
+    } as unknown as ReturnType<typeof api.useAllEmployees>)
+    vi.spyOn(api, 'useSalesPersons').mockReturnValue({
+      data: [{ status: 'active' }, { status: 'resigned' }],
+    } as unknown as ReturnType<typeof api.useSalesPersons>)
     render(<MemoryRouter><Landing /></MemoryRouter>)
+    for (const label of ['IAS Officers', 'Departments', 'Dept Officers', 'Sales Members']) {
+      expect(screen.getByText(label)).toBeInTheDocument()
+    }
     const heading = screen.getByRole('heading', { level: 1 })
     expect(heading).toHaveClass('font-display')
     expect(heading).toHaveClass('font-bold')

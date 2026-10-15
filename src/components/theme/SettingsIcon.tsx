@@ -1,4 +1,4 @@
-export type SettingsIconKind = 'storage' | 'tender' | 'verification' | 'credentials' | 'integrations'
+export type SettingsIconKind = 'storage' | 'tender' | 'verification' | 'credentials' | 'integrations' | 'masters'
 
 /** A consistent navy, partially filled symbol for each settings area. */
 export function SettingsIcon({ kind }: { kind: SettingsIconKind }) {
@@ -12,6 +12,11 @@ export function SettingsIcon({ kind }: { kind: SettingsIconKind }) {
           <rect x="15" y="3" width="6" height="6" rx="1.5" fill="currentColor" fillOpacity={.1} />
           <rect x="3" y="15" width="6" height="6" rx="1.5" fill="currentColor" fillOpacity={.1} />
           <path d="M9 6h6M6 9v6M18 9v6M9 18h6" />
+        </>}
+        {kind === 'masters' && <>
+          <path d="M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3v12c0 1.7-3.6 3-8 3s-8-1.3-8-3V6Z" fill="currentColor" fillOpacity={.08} />
+          <ellipse cx="12" cy="6" rx="8" ry="3" fill="currentColor" />
+          <path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3M4 18c0 1.7 3.6 3 8 3s8-1.3 8-3" />
         </>}
         {kind === 'credentials' && <>
           <rect x="5" y="10" width="14" height="11" rx="2" fill="currentColor" />

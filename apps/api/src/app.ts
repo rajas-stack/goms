@@ -93,8 +93,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     keyGenerator: (request) => resolveClientIp(request.headers, request.ip, proxyTrust),
   })
 
-  // Google OAuth login (docs/superpowers/specs/2026-10-06-google-oauth-login-design.md). Routes are registered only when
-  // AUTH_PROVIDER is `both` or `oauth` (read at boot); in the default `firebase` mode this registers nothing.
+  // Google OAuth login (docs/superpowers/specs/2026-10-06-google-oauth-login-design.md): the only way to sign in.
   registerOAuthRoutes(app, { google: opts.oauth?.google ?? googleGateway })
 
   app.register(fastifyTRPCPlugin, {
