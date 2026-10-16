@@ -1,3 +1,4 @@
+import { useNonPassiveWheel } from '@/lib/useNonPassiveWheel'
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 
 const MIN_ZOOM = 0.6
@@ -49,7 +50,7 @@ export function useMapPanZoom(viewportRef: RefObject<HTMLDivElement | null>) {
     })
   }, [viewportRef])
 
-  function onWheel(e: React.WheelEvent) {
+  function handleWheel(e: Pick<WheelEvent, 'preventDefault' | 'clientX' | 'clientY' | 'deltaY'>) {
     e.preventDefault()
     const rect = viewportRef.current!.getBoundingClientRect()
     const cx = e.clientX - rect.left
@@ -60,6 +61,8 @@ export function useMapPanZoom(viewportRef: RefObject<HTMLDivElement | null>) {
       return { scale: next, x: cx - (cx - t.x) * ratio, y: cy - (cy - t.y) * ratio }
     })
   }
+
+  useNonPassiveWheel(viewportRef, handleWheel)
 
   function onPointerDown(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest('[data-map-ui]')) return
@@ -165,5 +168,5 @@ export function useMapPanZoom(viewportRef: RefObject<HTMLDivElement | null>) {
     }
   }, [dragging])
 
-  return { transform, setTransform, dragging, resetView, zoomBy, onWheel, onPointerDown, onPointerMove, endPan }
+  return { transform, setTransform, dragging, resetView, zoomBy, onPointerDown, onPointerMove, endPan }
 }

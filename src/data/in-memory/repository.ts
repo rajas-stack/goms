@@ -255,8 +255,9 @@ export interface CreateOrgPersonInput {
   departments?: string[]
   managerId?: string | null
   email?: string
+  photoUrl?: string | null
 }
-export type UpdateOrgPersonPatch = Partial<Pick<OrgPerson, 'name' | 'designation' | 'level' | 'departments' | 'managerId' | 'email' | 'status'>>
+export type UpdateOrgPersonPatch = Partial<Pick<OrgPerson, 'name' | 'designation' | 'level' | 'departments' | 'managerId' | 'email' | 'status' | 'photoUrl'>>
 
 export interface CreateSalesPersonInput {
   name: string
@@ -1688,7 +1689,7 @@ class InMemoryRepository implements Repository {
     const person: OrgPerson = {
       id: uid('org'), name, designation: input.designation?.trim() ?? '', level: input.level,
       departments: [...new Set(input.departments ?? [])], managerId: input.managerId || null,
-      email: input.email?.trim() ?? '', status: 'active', createdAt: isoToday(),
+      email: input.email?.trim() ?? '', status: 'active', photoUrl: input.photoUrl ?? null, createdAt: isoToday(),
     }
     const problem = managerProblem(person, person.managerId, [...this.data.orgPeople, person])
     if (problem) throw new Error(problem)
@@ -1709,6 +1710,7 @@ class InMemoryRepository implements Repository {
       ...(patch.departments !== undefined ? { departments: [...new Set(patch.departments)] } : {}),
       ...(patch.managerId !== undefined ? { managerId: patch.managerId || null } : {}),
       ...(patch.status !== undefined ? { status: patch.status } : {}),
+      ...(patch.photoUrl !== undefined ? { photoUrl: patch.photoUrl } : {}),
     }
     if (!next.name) throw new Error('Enter the employee name.')
     const people = this.data.orgPeople.map((p) => (p.id === id ? next : p))
