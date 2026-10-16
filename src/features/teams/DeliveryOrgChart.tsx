@@ -6,7 +6,7 @@ import { Avatar } from '@/components/ui/Avatar'
 import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { EmailTip } from '@/components/ui/EmailTip'
-import { useDeliveryTeamMembers } from '@/lib/api'
+import { useDeliveryTeamMembers, useOrgPeople } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { DeliveryTeamKey } from '@/lib/types'
 
@@ -131,9 +131,12 @@ function Branch({ member, depth, parentKey, tree }: { member: ChartPerson; depth
  *  card language as the Sales Org Chart, driven by `managerId` (reports-to). */
 export function DeliveryOrgChart({ team }: { team: DeliveryTeamKey }) {
   const { data: members = [], isLoading } = useDeliveryTeamMembers(team)
+  const { data: orgPeople = [] } = useOrgPeople()
+  // A member mirrored from the Org Structure shows that person's profile photo (set in Edit on Employee Master).
+  const photoByOrgPerson = new Map(orgPeople.map((person) => [person.id, person.photoUrl ?? null]))
   return (
     <PeopleOrgChart
-      people={members.filter((member) => member.status === 'active')} isLoading={isLoading}
+      people={members.filter((member) => member.status === 'active').map((member) => ({ ...member, photoUrl: member.orgPersonId ? photoByOrgPerson.get(member.orgPersonId) ?? null : null }))} isLoading={isLoading}
       emptyMessage="No one on this team yet — add people in Teams → Org Structure."
     />
   )

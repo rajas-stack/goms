@@ -9,7 +9,7 @@ import { Icon } from '@/components/ui/Icon'
 import { PersonName } from '@/components/ui/PersonName'
 import { Combobox, type ComboboxOption } from '@/components/ui/Combobox'
 import { Tabs } from '@/components/ui/Tabs'
-import { useDeliveryTeamMemberMutations, useDeliveryTeamMembers, useOpportunities } from '@/lib/api'
+import { useDeliveryTeamMemberMutations, useDeliveryTeamMembers, useOpportunities, useOrgPeople } from '@/lib/api'
 import { normalizeEmail } from '@/lib/inputNormalization'
 import { EMAIL_BINDING_HELP, EMAIL_FORMAT_MESSAGE, clearEmailConfirmText, useCanEditEmailBinding } from '@/modules/admin-access/useIsSystemAdmin'
 import { PIPELINE_STAGE_MAP } from '@/data/pipeline-stages'
@@ -71,6 +71,8 @@ function reportsUnder(id: string, members: DeliveryTeamMember[]): Set<string> {
  *  from the org person (Settings → Masters → Employee Master). */
 export function TeamRoster({ team }: { team: DeliveryTeamKey }) {
   const { data: members = [], isLoading } = useDeliveryTeamMembers(team)
+  const { data: orgPeople = [] } = useOrgPeople()
+  const photoByOrgPerson = new Map(orgPeople.map((person) => [person.id, person.photoUrl ?? null]))
   const { update, setStatus, remove } = useDeliveryTeamMemberMutations()
   const emailEditable = useCanEditEmailBinding()
   const [error, setError] = useState<string | null>(null)
@@ -131,7 +133,7 @@ export function TeamRoster({ team }: { team: DeliveryTeamKey }) {
               return (
               <li key={member.id} className="flex min-h-12 flex-wrap items-center gap-3 px-3 py-2">
                 {/* A hand-added member's email has its own control below; an org-linked member's follows the org person. */}
-                <PersonName person={member} size="sm" subtitle={[member.designation, member.orgPersonId ? member.email : ''].filter(Boolean).join(' · ') || undefined} className="flex-1" nameClassName="text-sm font-medium text-ink-900" />
+                <PersonName person={{ ...member, photoUrl: member.orgPersonId ? photoByOrgPerson.get(member.orgPersonId) ?? null : null }} size="sm" subtitle={[member.designation, member.orgPersonId ? member.email : ''].filter(Boolean).join(' · ') || undefined} className="flex-1" nameClassName="text-sm font-medium text-ink-900" />
                 {member.orgPersonId ? (
                   <span className="flex w-56 items-center gap-1.5 text-[12px] text-muted" title="Set in Settings → Masters → Employee Master">
                     {member.managerId && nameOf.get(member.managerId)
