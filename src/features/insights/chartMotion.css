@@ -1,0 +1,33 @@
+.insight-chart-tooltip { position: fixed; z-index: 1500; pointer-events: none; padding: 10px 12px; border: 1px solid #bad4f4; border-radius: 6px; background: rgb(255 255 255 / .9); backdrop-filter: blur(8px); color: #162c50; font-size: 11px; letter-spacing: 0; box-sizing: border-box; overflow-wrap: anywhere; }
+.insight-chart-tooltip > strong { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 1.4; }
+.insight-chart-tooltip i { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.insight-chart-tooltip dl { margin: 7px 0 0; display: grid; gap: 5px; }
+.insight-chart-tooltip dl > div { display: flex; justify-content: space-between; gap: 10px; }
+.insight-chart-tooltip dt { color: #526987; }.insight-chart-tooltip dd { margin: 0; text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; }
+.insights-page [data-chart-muted] { opacity: .55; }
+.insight-chart-pick, .insight-donut-legend button { transition: opacity 200ms cubic-bezier(.2,.8,.2,1); }
+.insight-stage-group path[data-series] { transition: filter 200ms cubic-bezier(.2,.8,.2,1); }
+.insights-page [data-chart-active] path[data-series] { filter: brightness(1.12); }
+.insights-page circle[data-chart-active] { filter: brightness(1.12); }
+.insight-donut-segment[data-chart-active] circle:not(.insight-hit) { filter: brightness(1.12); }
+.insight-legacy-bar { transition: opacity 200ms cubic-bezier(.2,.8,.2,1); outline-offset: 3px; }
+.insight-legacy-bar:focus-visible { outline: 2px solid #2688e8; }
+.insight-legacy :has(> .insight-legacy-bar[data-chart-active]) > .insight-legacy-bar:not([data-chart-active]) { opacity: .55; }
+.insight-legacy-bar[data-chart-active] .insight-bar-track > div { transform: scaleY(1.12); filter: brightness(1.12); }
+.insight-legacy-bar .insight-bar-track > div { transition: transform 200ms cubic-bezier(.2,.8,.2,1), filter 200ms cubic-bezier(.2,.8,.2,1); transform-origin: center; }
+.insight-bars > button { transition: opacity 200ms cubic-bezier(.2,.8,.2,1); }
+.insight-bar-track { overflow: visible; }
+.insight-bar-track > span { transform-origin: center; transition: transform 200ms cubic-bezier(.2,.8,.2,1), filter 200ms cubic-bezier(.2,.8,.2,1); }
+.insight-bars > [data-chart-active] .insight-bar-track > span { transform: scaleY(1.12); filter: brightness(1.12); }
+.insight-india path { transition: fill 200ms cubic-bezier(.2,.8,.2,1), stroke 200ms cubic-bezier(.2,.8,.2,1), opacity 200ms cubic-bezier(.2,.8,.2,1); }
+.insight-india path[data-chart-active] { fill: #123b83; stroke: #062355; stroke-width: 1.2px; }
+.insight-donut-layout > svg { overflow: visible; }
+.insight-trend-area { transition: opacity 200ms cubic-bezier(.2,.8,.2,1); }
+.insight-tracking-line { stroke: #718dab; stroke-dasharray: 3 3; stroke-width: 1; }
+.insight-spark { overflow: visible; }
+@media (prefers-reduced-motion: reduce) {
+  .insight-chart-pick, .insight-donut-legend button, .insight-stage-group path[data-series], .insight-bars > button, .insight-bar-track > span, .insight-india path, .insight-trend-area { transition: none; }
+  .insight-bars > [data-chart-active] .insight-bar-track > span { transform: none; }
+  .insight-legacy-bar, .insight-legacy-bar .insight-bar-track > div { transition: none; }
+  .insight-legacy-bar[data-chart-active] .insight-bar-track > div { transform: none; }
+}

@@ -1,0 +1,283 @@
+import { test, expect, type Page } from '@playwright/test'
+
+// Fixtures are written only to a new browser context on a local test server, never a hosted account.
+test.skip(!/^http:\/\/(localhost|127\.0\.0\.1):/.test(process.env.BASE_URL ?? ''), 'Insights fixtures require an isolated local server')
+function snapshot() {
+  const now = new Date(), today = now.toISOString().slice(0, 10)
+  const names = ['AI Sangrah - 2nd call', 'Citizen Data Platform', 'Urban Observatory', 'State Data Lakehouse', 'Welfare Management', 'Transit Intelligence', 'Revenue Portal', 'Smart Grid', 'GIS Logistics', 'Rural Services', 'Cloud Platform', 'Transport Analytics']
+  const nodes = ['Gujarat Informatics Ltd.(GIL)', 'ITE&C', 'Rural Development'].map((name, i) => ({ id: `insights-dept-${i}`, domain: 'org', typeKey: 'department', parentId: null, stateCode: [24, 27, 9][i], name, code: '', sortOrder: i, metadata: {}, status: 'active' }))
+  const opportunities = names.map((name, i) => ({ id: `insights-opp-${i}`, opportunityCode: `INSIGHTS-${i}`, departmentId: nodes[i % 3].id, stateCode: nodes[i % 3].stateCode, opportunityName: name, city: i % 3 ? 'Mumbai' : 'Gandhinagar', gemTenderId: `GEM-${i}`, referenceNo: '', assignmentName: name,
+    stageKey: i === 4 ? 'won' : i === 5 ? 'lost' : ['pipeline', 'qualified', 'submitted'][i % 3], closedOn: i === 4 || i === 5 ? today : null,
+    vertical: ['Data Fabric & AI', 'Traffic', 'GIS'][i % 3], opportunityType: 'RFP', component: [], quantity: '', currency: 'INR', valueAmount: String([70, 58, 49, 42, 29, 18][i % 6]), valueUnit: 'cr', budgetKnown: 'yes', emdAmount: '', emdUnit: 'lakh', salesPersonEmail: '', preSalesPersonId: 'insights-pre', bidTeamMemberId: 'insights-bid',
+    publishDate: '', submissionDate: i === 0 ? '2020-01-01' : '2030-12-01', createdAt: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i % 10, 1)).toISOString(), createdBy: null }))
+  const bids = opportunities.map((o, i) => ({ id: `insights-bid-${i}`, opportunityId: o.id, bidCode: `BID-2026-${i}`, stageKey: i === 4 ? 'goApproved' : i === 5 ? 'dropped' : ['solutioning', 'qualification', 'preBidQueries', 'commercialProposal', 'submitted'][i % 5], decision: i === 4 ? 'go' : 'pending', status: 'active', dataConfidence: 'verified', tenderLink: null, sheet: 'bidTracker', archivedAt: null, createdAt: o.createdAt, updatedAt: o.createdAt }))
+  const bidMilestones = bids.map((b, i) => ({ id: `milestone-${i}`, bidId: b.id, milestoneType: 'submission', key: 'submissionDeadline', label: 'Submission Deadline', dueAt: i === 0 ? '2020-01-01T12:00:00Z' : '2030-12-01T12:00:00Z', venue: null, notes: null, status: 'open', source: 'manual', createdAt: b.createdAt, updatedAt: b.createdAt }))
+  const ownershipAssignments = bids.map(b => ({ id: `owner-${b.id}`, entityType: 'bid', entityId: b.id, salesPersonId: 'insights-sales', role: 'owner', startDate: '2020-01-01', endDate: null, createdAt: today, createdBy: null }))
+  return { nodes, opportunities, bids, bidMilestones, ownershipAssignments, bidSynopsis: [{ bidId: bids[0].id, section: 'competition', revision: 1, updatedAt: today, updatedBy: null, document: { type: 'doc', content: [{ type: 'grid', attrs: { grid: { columns: [{ id: 'competitor', name: 'Competitor', type: 'text' }], rows: [{ id: 'rival', cells: { competitor: 'Example Systems' } }] } } }] } }],
+    employees: [], externalIds: [], timeline: [], transfers: [], opportunityStageChanges: [], opportunityCodeSequences: {}, followUps: [], salesPostings: [], mergeAudit: [], customers: [], orgPeople: [],
+    salesPersons: [{ id: 'insights-sales', name: 'Sales owner', officialEmail: 'smoke-sales@amnex.com', status: 'active', metadata: {} }],
+    deliveryTeamMembers: [{ id: 'insights-pre', team: 'preSales', name: 'Presales owner', email: 'smoke-pre@amnex.com', status: 'active', managerId: null }, { id: 'insights-bid', team: 'bid', name: 'Bid owner', email: 'smoke-bid@amnex.com', status: 'active', managerId: null }],
+    bidCorrigenda: [], bidCorrigendumChanges: [], protectedValues: [], bidDocuments: [], documentCitations: [], bidSavedViews: [], bidCustomFields: [], bidCustomFieldValues: [], tenderWebsites: [], competitors: [], commercialCalculator: { masters: [], skus: [], bomItems: [], boqs: [], boqLineItems: [], auditLogs: [] } }
+}
+async function seed(page: Page) {
+  await page.route('**/__insights_fixture__', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Insights test fixture</title>' }))
+  await page.goto('/__insights_fixture__', { waitUntil: 'domcontentloaded' })
+  await page.evaluate(async data => {
+    localStorage.setItem('goms.insights.sampleData', '0')
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('gorms', 2)
+      request.onupgradeneeded = () => { request.result.createObjectStore('snapshot'); request.result.createObjectStore('blobs') }
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => {
+        const db = request.result, tx = db.transaction('snapshot', 'readwrite')
+        tx.objectStore('snapshot').put({ version: 25, savedAt: new Date().toISOString(), data }, 'data')
+        tx.oncomplete = () => { db.close(); resolve() }; tx.onerror = () => reject(tx.error)
+      }
+    })
+  }, snapshot())
+}
+async function open(page: Page, tab = 'overview') {
+  await page.goto(`/insights?tab=${tab}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'Insights', exact: true })).toBeVisible({ timeout: 90000 })
+  await expect(page.getByRole('region', { name: 'Headline statistics' })).toBeVisible({ timeout: 30000 })
+}
+test.beforeEach(async ({ page }) => { await seed(page) })
+test('Overview covers every screenshot visual with rendered chart data', async ({ page }, info) => {
+  await page.setViewportSize({ width: 1920, height: 1000 }); await open(page)
+  for (const name of ['Opportunity Pipeline by Stage', 'Pipeline by Vertical', 'Pipeline by Department', 'Opportunity Trend', 'Geographic Distribution', 'Recent Opportunities', 'Key Insights']) await expect(page.getByRole('region', { name })).toBeVisible()
+  expect(await page.locator('.insight-stage-chart rect').count()).toBeGreaterThan(5)
+  expect(await page.locator('.insight-india path').count()).toBeGreaterThan(30)
+  expect(await page.locator('.insight-trend-chart circle').count()).toBeGreaterThan(20)
+  await expect(page.getByRole('region', { name: 'Recent Opportunities' }).getByRole('link', { name: 'Overdue' })).toBeVisible()
+  await page.screenshot({ path: info.outputPath('insights-desktop.png'), fullPage: true })
+})
+for (const [tab, title] of [['sales', 'Opportunities by Sales Owner'], ['presales', 'Presales Opportunity Load'], ['bids', 'Bid Attention'], ['revenue', 'Won Opportunity Value'], ['competitors', 'Recorded Competitor Exposure'], ['team', 'Bid Team Workload'], ['forecast', 'Weighted Forecast by Due Quarter']]) {
+  test(`${tab} view loads real aggregates and drill-through`, async ({ page }) => { await open(page, tab); await expect(page.getByRole('region', { name: title })).toBeVisible(); await page.getByRole('button', { name: 'View All' }).click(); await expect(page.getByRole('dialog', { name: 'All opportunities' })).toBeVisible() })
+}
+test('Period, vertical, state, search, reset and reload preserve filter state', async ({ page }) => {
+  await open(page); await page.getByLabel('Insights period').selectOption('6'); await page.getByLabel('Insights vertical').selectOption('Data Fabric & AI'); await page.getByLabel('Insights state').selectOption('24')
+  await expect(page).toHaveURL(/months=6/); await page.reload({ waitUntil: 'domcontentloaded' }); await expect(page.getByLabel('Insights vertical')).toHaveValue('Data Fabric & AI')
+  await page.getByLabel('Search insights').fill('AI Sangrah'); await expect(page.getByRole('region', { name: 'Recent Opportunities' }).getByRole('link', { name: 'AI Sangrah - 2nd call' })).toBeVisible()
+  await page.getByLabel('Clear insights filters').click(); await expect(page.getByLabel('Insights period')).toHaveValue('12')
+})
+test('All chart interactions open the correct source records', async ({ page }) => {
+  await open(page)
+  for (const title of ['Opportunity Pipeline by Stage', 'Pipeline by Vertical', 'Pipeline by Department', 'Opportunity Trend', 'Geographic Distribution']) {
+    const buttons = page.getByRole('region', { name: title }).locator('button, [role="button"]').filter({ hasNot: page.locator('[aria-pressed]') })
+    // Restrict to chart marks/legend rows, excluding toolbar segments and the India map filter.
+    const chart = title === 'Opportunity Trend' ? page.locator('.insight-trend-chart [role=button]').filter({ hasText: '' }) : title === 'Geographic Distribution' ? page.getByRole('region', { name: title }).locator('.insight-bars button') : title === 'Opportunity Pipeline by Stage' ? page.locator('.insight-stage-chart [role=button]') : buttons
+    expect(await chart.count()).toBeGreaterThan(0); await chart.first().click(); await expect(page.getByRole('dialog')).toBeVisible(); await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0)
+  }
+  await page.getByRole('button', { name: 'Quarterly', exact: true }).click(); await page.getByRole('group', { name: 'Trend measure' }).getByRole('button', { name: 'Count', exact: true }).click()
+  await expect(page.getByRole('img', { name: 'Opportunity trend by count' })).toBeVisible()
+  await page.getByRole('group', { name: 'Stage measures' }).getByRole('button', { name: 'Count', exact: true }).click()
+  await page.getByLabel('Department ranking').selectOption('9999')
+})
+test('Recent status and row actions navigate to the exact bid screens', async ({ page }) => {
+  await open(page); await page.getByRole('button', { name: 'Actions for AI Sangrah - 2nd call' }).click()
+  for (const [name, tab] of [['Open Overview', 'overview'], ['Open General', 'general'], ['Open Competition', 'competition']]) await expect(page.getByRole('link', { name })).toHaveAttribute('href', `/bid-tracker/bid/insights-bid-0?tab=${tab}`)
+  await page.getByRole('link', { name: 'Open Overview' }).click(); await expect(page).toHaveURL(/insights-bid-0\?tab=overview/)
+  await expect(page.getByRole('heading', { name: 'AI Sangrah - 2nd call', exact: true })).toBeVisible(); await expect(page.getByText('Overdue', { exact: true }).first()).toBeVisible()
+})
+test('Filtered export, refresh and import work', async ({ page }) => {
+  await open(page); await page.getByLabel('Insights vertical').selectOption('GIS')
+  const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export', exact: true }).click(); expect((await download).suggestedFilename()).toMatch(/^insights-overview-.*\.csv$/)
+  await page.getByLabel('Refresh insights').click(); await page.getByRole('button', { name: 'Import', exact: true }).click(); await expect(page.getByRole('dialog')).toBeVisible()
+})
+test('Sidebar, legacy URL and both original analytics views remain available', async ({ page }) => {
+  await open(page); await page.getByRole('navigation').getByRole('button', { name: 'Insights', exact: true }).click(); await expect(page).toHaveURL(/\/insights$/)
+  await page.goto('/analytics', { waitUntil: 'domcontentloaded' }); await expect(page.getByRole('heading', { name: 'Insights', exact: true })).toBeVisible()
+  await page.getByRole('navigation', { name: 'Insights views' }).getByRole('button', { name: 'Sales Team Insights', exact: true }).click(); await expect(page.getByRole('heading', { name: 'Sales Team Insights', exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Relationship Analytics', exact: true }).click(); await expect(page.getByRole('heading', { name: 'Relationship Analytics', exact: true })).toBeVisible()
+})
+test('Mobile layout, map filtering and menu navigation work without page overflow', async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 }); await open(page)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(2)
+  const state = page.getByRole('button', { name: /^Filter Gujarat:/ }); await state.click(); await expect(page.getByLabel('Insights state')).toHaveValue('24')
+  await page.getByLabel('Open menu').click(); await page.getByRole('dialog', { name: 'Menu' }).getByRole('button', { name: 'Insights', exact: true }).click(); await expect(page).toHaveURL(/\/insights$/)
+  await page.screenshot({ path: info.outputPath('insights-mobile.png'), fullPage: true })
+})
+test('Every headline and key insight opens its source records', async ({ page }) => {
+  await open(page)
+  for (const name of ['Total Pipeline', 'Weighted Pipeline', 'Bid Win Rate', 'Active Opportunities']) {
+    await page.getByRole('region', { name: 'Headline statistics' }).getByRole('button', { name: new RegExp(`^${name}`) }).click()
+    await expect(page.getByRole('dialog', { name, exact: true })).toBeVisible(); await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0)
+  }
+  const keys = page.getByRole('region', { name: 'Key Insights' }).getByRole('button')
+  expect(await keys.count()).toBe(3)
+  for (let i = 0; i < 3; i++) { await keys.nth(i).click(); await expect(page.getByRole('dialog')).toBeVisible(); await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0) }
+  await expect(page.getByRole('region', { name: 'Key Insights' }).getByRole('link')).toHaveAttribute('href', /\/bid-tracker\/bid\/insights-bid-\d+\?tab=overview/)
+})
+test('Night theme preserves chart data and readable surfaces', async ({ page }, info) => {
+  await page.emulateMedia({ colorScheme: 'dark' }); await open(page)
+  await expect(page.locator('html')).toHaveClass(/dark/)
+  expect(await page.locator('.insight-kpi').first().evaluate(el => getComputedStyle(el).backgroundColor)).toBe('rgb(10, 10, 10)')
+  await page.screenshot({ path: info.outputPath('insights-dark.png'), fullPage: true })
+})
+
+test('Sample data fills all eight views and restores untouched live statistics', async ({ page }) => {
+  await open(page)
+  const active = page.getByRole('region', { name: 'Headline statistics' }).getByRole('button', { name: /^Active Opportunities/ })
+  await expect(active.locator('strong')).toHaveText('10')
+  await page.getByRole('switch', { name: 'Use sample data' }).check()
+  await expect(page).toHaveURL(/demo=1/)
+  await expect(page.getByRole('button', { name: 'Import', exact: true })).toBeDisabled()
+  const recent = page.getByRole('region', { name: 'Recent Opportunities' })
+  await expect(recent.getByRole('link')).toHaveCount(0)
+  await recent.getByRole('button', { name: 'AI Sangrah - 2nd call', exact: true }).click()
+  const preview = page.getByRole('dialog', { name: 'AI Sangrah - 2nd call', exact: true })
+  await expect(preview.getByText('Overdue', { exact: true })).toBeVisible()
+  await preview.getByRole('button', { name: 'General', exact: true }).click(); await expect(preview.getByText('Sales owner', { exact: true })).toBeVisible()
+  await preview.getByRole('button', { name: 'Competition', exact: true }).click(); await expect(preview.getByRole('list', { name: 'Sample competitors' })).toBeVisible()
+  await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0)
+  for (const [tab, title] of [['Sales', 'Opportunities by Sales Owner'], ['Presales', 'Presales Opportunity Load'], ['Bids', 'Bid Attention'], ['Revenue', 'Won Opportunity Value'], ['Competitors', 'Recorded Competitor Exposure'], ['Team', 'Bid Team Workload'], ['Forecast', 'Weighted Forecast by Due Quarter']]) {
+    await page.getByRole('navigation', { name: 'Insights views' }).getByRole('button', { name: tab, exact: true }).click()
+    await expect(page.getByRole('region', { name: title })).toBeVisible()
+    await expect(page.getByRole('switch', { name: 'Use sample data' })).toBeChecked()
+  }
+  await page.getByRole('switch', { name: 'Use sample data' }).uncheck()
+  await expect(active.locator('strong')).toHaveText('10')
+  await expect(page.getByRole('button', { name: 'Import', exact: true })).toBeEnabled()
+})
+
+test('Sample filters, pagination, export and responsive visuals work', async ({ page }, info) => {
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  await page.goto('/insights?demo=1', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('region', { name: 'Headline statistics' })).toBeVisible({ timeout: 90000 })
+  await page.screenshot({ path: info.outputPath('insights-demo-desktop.png'), fullPage: true })
+  await page.getByRole('button', { name: 'View All', exact: true }).click()
+  const list = page.getByRole('dialog', { name: 'Sample: All opportunities', exact: true })
+  await expect(list.getByRole('button', { name: 'Next page' })).toBeEnabled(); await list.getByRole('button', { name: 'Next page' }).click()
+  await expect(list.getByRole('button', { name: 'Previous page' })).toBeEnabled()
+  await list.getByLabel('Search opportunity details').fill('AI Sangrah')
+  await expect(list.getByRole('button', { name: 'AI Sangrah - 2nd call', exact: true })).toBeVisible()
+  await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0)
+  await page.getByLabel('Insights vertical').selectOption('Data & AI')
+  await page.getByLabel('Insights state').selectOption('27')
+  await page.getByLabel('Clear insights filters').click(); await expect(page.getByRole('switch', { name: 'Use sample data' })).toBeChecked()
+  const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export', exact: true }).click()
+  expect((await download).suggestedFilename()).toMatch(/^insights-sample-/)
+  await page.getByLabel('Refresh insights').click(); await expect(page.getByRole('switch', { name: 'Use sample data' })).toBeChecked()
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(2)
+  await page.screenshot({ path: info.outputPath('insights-demo-mobile.png'), fullPage: true })
+})
+
+test('Stage visual matches the reference treatment and sample selection survives reopening', async ({ page }, info) => {
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  await page.goto('/insights?demo=1', { waitUntil: 'domcontentloaded' })
+  const stage = page.getByRole('region', { name: 'Opportunity Pipeline by Stage', exact: true })
+  await expect(stage).toBeVisible()
+  await expect(stage.locator('linearGradient')).toHaveCount(3)
+  await expect(stage.locator('[data-series=value]')).toHaveCount(7)
+  await expect(stage.locator('[data-series=count]')).toHaveCount(7)
+  await expect(stage.locator('.insight-stage-value-label')).toHaveCount(7)
+  expect(await stage.locator('[data-series=value]').evaluateAll(paths => paths.every(path => (path as SVGGraphicsElement).getBBox().width <= 40.01))).toBe(true)
+  await stage.screenshot({ path: info.outputPath('stage-chart-desktop.png') })
+  const legend = stage.getByRole('group', { name: 'Stage measures' })
+  await legend.getByRole('button', { name: 'Count', exact: true }).click(); await expect(stage.locator('[data-series=count]')).toHaveCount(0)
+  await legend.getByRole('button', { name: 'Count', exact: true }).click()
+  await page.goto('/insights', { waitUntil: 'domcontentloaded' }); await expect(page.getByRole('switch', { name: 'Use sample data' })).toBeChecked()
+  await page.setViewportSize({ width: 390, height: 844 })
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(2)
+  await stage.screenshot({ path: info.outputPath('stage-chart-mobile.png') })
+  await page.goto('/insights?demo=0', { waitUntil: 'domcontentloaded' }); await expect(page.getByRole('switch', { name: 'Use sample data' })).not.toBeChecked()
+})
+
+test('Chart micro-interactions share exact tooltips and preserve keyboard drill-through', async ({ page }, info) => {
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  await page.goto('/insights?demo=1', { waitUntil: 'domcontentloaded' })
+  const frame = page.getByRole('region', { name: 'Opportunity Pipeline by Stage', exact: true })
+  const stage = frame.locator('.insight-stage-group').first()
+  await stage.hover()
+  const tooltip = page.getByRole('tooltip')
+  await expect(tooltip).toContainText('Pipeline value')
+  await expect(frame.locator('[data-chart-muted]')).toHaveCount(6)
+  await expect(stage).toHaveAttribute('aria-describedby', await tooltip.getAttribute('id') ?? '')
+  const bounds = await tooltip.boundingBox(), panel = await frame.boundingBox()
+  await expect(tooltip).toHaveAttribute('data-placement', 'right')
+  expect(bounds!.x).toBeGreaterThanOrEqual(panel!.x + panel!.width - 14)
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1920 - 8)
+  await expect(tooltip).toHaveCSS('opacity', '1')
+  await page.screenshot({ path: info.outputPath('chart-motion-desktop.png'), fullPage: true })
+  await stage.focus(); await page.keyboard.press('Escape'); await expect(tooltip).toHaveCount(0)
+  await stage.press('Enter'); await expect(page.getByRole('dialog')).toBeVisible()
+  await page.keyboard.press('Escape')
+  for (const selector of ['.insight-donut-legend button', '.insight-bars button', '.insight-trend-chart [role=button]', '.insight-india [role=button]']) {
+    const mark = page.locator(selector).first()
+    await mark.focus(); await expect(tooltip).toBeVisible()
+    await expect(mark).toHaveAttribute('aria-describedby', await tooltip.getAttribute('id') ?? '')
+    await page.keyboard.press('Escape'); await expect(tooltip).toHaveCount(0)
+  }
+  const kpi = page.locator('.insight-kpi').first()
+  await kpi.focus(); await expect(tooltip).toContainText('Total Pipeline')
+  const current = await tooltip.textContent()
+  await page.keyboard.press('ArrowLeft'); await expect(tooltip).not.toHaveText(current ?? '')
+  await page.keyboard.press('Escape'); await expect(tooltip).toHaveCount(0)
+})
+
+test.describe('Accessible mobile chart motion', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 }, reducedMotion: 'reduce' })
+  test('reduced motion, bounded tooltips and touch drill remain available', async ({ page }, info) => {
+    await page.goto('/insights?demo=1', { waitUntil: 'domcontentloaded' })
+    const stage = page.locator('.insight-stage-group').first()
+    await stage.focus()
+    await expect(page.getByRole('tooltip')).toBeVisible()
+    const bounds = await page.getByRole('tooltip').boundingBox()
+    expect(bounds!.x).toBeGreaterThanOrEqual(0); expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390)
+    expect(await stage.locator('g').evaluate(el => getComputedStyle(el).transform)).toMatch(/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/)
+    await page.screenshot({ path: info.outputPath('chart-motion-mobile.png'), fullPage: true })
+    await page.keyboard.press('Escape')
+    await stage.tap(); await expect(page.getByRole('dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await page.getByRole('button', { name: /^Filter Gujarat:/ }).tap()
+    await expect(page.getByLabel('Insights state')).toHaveValue('24')
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(2)
+  })
+})
+
+test('Retained analytics chart primitives support the shared focus previews', async ({ page }) => {
+  await page.goto('/insights?tab=salesTeam', { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { name: 'Sales Team Insights', exact: true })).toBeVisible()
+  const bar = page.locator('.insight-legacy-bar').first()
+  await bar.focus(); await expect(page.getByRole('tooltip')).toBeVisible()
+  await expect(page.getByRole('tooltip')).toContainText('Value')
+  await page.keyboard.press('Escape'); await expect(page.getByRole('tooltip')).toHaveCount(0)
+  await page.getByRole('button', { name: 'Relationship Analytics', exact: true }).click()
+  await page.getByRole('img', { name: /^Connected: / }).focus()
+  await expect(page.getByRole('tooltip')).toContainText('Contacts')
+})
+
+for (const theme of ['light', 'dark'] as const) test(`Glossy chart surfaces preserve ${theme} theme and keep tooltips beside plots`, async ({ page }, info) => {
+  await page.emulateMedia({ colorScheme: theme })
+  await page.setViewportSize({ width: 1920, height: 1000 })
+  await page.goto('/insights?demo=1', { waitUntil: 'domcontentloaded' })
+  const stage = page.locator('.insight-stage-group').first()
+  await expect(stage).toBeVisible()
+  expect(await page.locator('html').evaluate(el => el.classList.contains('dark'))).toBe(theme === 'dark')
+  const donut = page.getByRole('region', { name: 'Pipeline by Vertical', exact: true })
+  const stops = await donut.locator('linearGradient').first().locator('stop').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).stopColor))
+  expect(new Set(stops).size).toBeGreaterThan(2)
+  expect(await page.locator('.insight-bars .insight-bar-track > span').first().evaluate(el => getComputedStyle(el).backgroundImage)).toContain('linear-gradient')
+  for (const selector of ['.insight-kpi', '.insight-frame']) expect(await page.locator(selector).first().evaluate(el => getComputedStyle(el).boxShadow)).toBe('none')
+  await stage.hover()
+  const tooltip = page.getByRole('tooltip')
+  await expect(tooltip).toHaveAttribute('data-placement', 'right')
+  const plot = await page.locator('.insight-stage-chart').boundingBox(), tip = await tooltip.boundingBox()
+  expect(tip!.x).toBeGreaterThan(plot!.x + plot!.width)
+  if (theme === 'dark') expect(await tooltip.evaluate(el => getComputedStyle(el).color)).toBe('rgb(237, 246, 255)')
+  await expect(tooltip).toHaveCSS('opacity', '1')
+  await page.screenshot({ path: info.outputPath(`glossy-${theme}-desktop.png`), fullPage: true })
+  const departments = page.getByRole('region', { name: 'Pipeline by Department', exact: true }).locator('.insight-bars')
+  await departments.getByRole('button').first().hover()
+  await expect(tooltip).toHaveAttribute('data-placement', 'left')
+  const bars = await departments.boundingBox(), flipped = await tooltip.boundingBox()
+  expect(flipped!.x + flipped!.width).toBeLessThan(bars!.x)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await stage.scrollIntoViewIfNeeded(); await stage.focus()
+  await expect(tooltip).toBeVisible()
+  const mobile = await tooltip.boundingBox()
+  expect(mobile!.x).toBeGreaterThanOrEqual(8); expect(mobile!.x + mobile!.width).toBeLessThanOrEqual(382)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(2)
+  await page.screenshot({ path: info.outputPath(`glossy-${theme}-mobile.png`), fullPage: true })
+})

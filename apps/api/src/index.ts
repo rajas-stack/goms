@@ -1,4 +1,5 @@
 import { router } from './trpc.js'
+import { insightsRouter } from './routers/insights.js'
 import { healthRouter } from './routers/health.js'
 import { customersRouter } from './routers/customers.js'
 import { hierarchyRouter } from './routers/hierarchy.js'
@@ -30,8 +31,10 @@ import { credentialPassphrasesRouter } from './routers/credentialPassphrases.js'
 import { googleIntegrationsRouter } from './routers/googleIntegrations.js'
 import { makerDocumentsRouter } from './routers/makerDocuments.js'
 import { rbacTreeRouter } from './routers/rbacTree.js'
+import { insightsStudioRouter } from './routers/insightsStudio.js'
 
 export const appRouter = router({
+  insights: insightsRouter,
   health: healthRouter, customers: customersRouter, hierarchy: hierarchyRouter,
   employees: employeesRouter, sales: salesRouter, commercial: commercialRouter,
   ownership: ownershipRouter, opportunities: opportunitiesRouter, followUps: followUpsRouter, search: searchRouter,
@@ -50,5 +53,6 @@ export const appRouter = router({
   googleIntegrations: googleIntegrationsRouter,
   makerDocuments: makerDocumentsRouter,
   rbacTree: rbacTreeRouter,
+  insightsStudio: insightsStudioRouter,
 })
 export type AppRouter = typeof appRouter

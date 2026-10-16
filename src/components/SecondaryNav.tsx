@@ -59,7 +59,7 @@ export function SecondaryNav() {
     >
       {canMap && <NavTile to="/map" icon="Map" label="Map" />}
       {canDirectory && <NavTile to="/directory" icon="Network" label="Directory" />}
-      {canInsights && <NavTile to="/analytics" icon="BarChart3" label="Insights" />}
+      {canInsights && <NavTile to="/insights" icon="BarChart3" label="Insights" />}
       {canMeetings && <NavTile to="/meetings" icon="CalendarClock" label="Meetings" />}
     </nav>
   )

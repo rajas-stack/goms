@@ -1,4 +1,5 @@
 import { MAX_CREDENTIAL_PASSPHRASES, normalizeCredentialPassphrase, type CredentialPassphrase, type CredentialPassphraseInput, type CredentialPassphraseUpdate } from '@goms/domain'
+import { competitionNames, computeInsights, insightValueCr, type InsightsFilters, type InsightsData } from '@goms/domain'
 import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/routers/access'
 import type {
   ActionQueueEntry, AttendeeRef, Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue,
@@ -24,6 +25,8 @@ import {
   createDepartmentLocal, deleteDepartmentLocal, listDepartmentsLocal, renameDepartmentLocal, reorderDepartmentsLocal, seedDepartments,
 } from './amnexDepartments'
 import { cloneCompetitor, createCompetitorLocal, deleteCompetitorLocal, listCompetitorsLocal, updateCompetitorLocal } from './competitors'
+import type { InsightCorrigendumRow, InsightReport, InsightReportInput, InsightVisual, InsightVisualInput } from '@goms/domain'
+import * as studioLocal from './insightsStudio'
 import type {
   ApplyTemplateInput, RbacCustomRole, RbacGrantChange, RbacMyAccess, RbacNode, RbacRoleInput, RbacSubjectConfig, RbacSubjectRef, RbacSubjects,
   RbacSyncResult, RbacTemplateInput, RbacLinkableRef,
@@ -314,6 +317,7 @@ export interface CreateFollowUpInput {
 export interface SetRoleOverrideInput { email: string; role: string; effect: 'grant' | 'revoke'; reason: string }
 
 export interface Repository {
+  getInsights(filters: InsightsFilters): Promise<InsightsData>
   /** The caller's roles and roster facts (RBAC). The local store has no server: RBAC is off. */
   getMyAccess(): Promise<MyAccess>
   /** Role & Access Management (RBAC). The local store has no server and no roles, so these are empty no-ops. */
@@ -616,6 +620,16 @@ export interface Repository {
   createCompetitor(input: CompetitorInput): Promise<Competitor>
   updateCompetitor(id: string, input: CompetitorInput): Promise<Competitor>
   deleteCompetitor(id: string): Promise<void>
+  /** Insights Studio: saved visuals and reports (own + shared), and the corrigendum register across all bids. */
+  listInsightVisuals(): Promise<InsightVisual[]>
+  createInsightVisual(input: InsightVisualInput): Promise<InsightVisual>
+  updateInsightVisual(id: string, input: InsightVisualInput): Promise<InsightVisual>
+  deleteInsightVisual(id: string): Promise<void>
+  listInsightReports(): Promise<InsightReport[]>
+  createInsightReport(input: InsightReportInput): Promise<InsightReport>
+  updateInsightReport(id: string, input: InsightReportInput): Promise<InsightReport>
+  deleteInsightReport(id: string): Promise<void>
+  listInsightCorrigenda(): Promise<InsightCorrigendumRow[]>
   /** Settings > Masters > Amnex Departments, in display order, each with its employee count. */
   listAmnexDepartments(): Promise<AmnexDepartment[]>
   createAmnexDepartment(name: string): Promise<AmnexDepartment>
@@ -1857,6 +1871,24 @@ class InMemoryRepository implements Repository {
     return applyFilterRules(rows as unknown as Record<string, unknown>[], filterRules, null, fieldTypes) as unknown as BidGridRow[]
   }
 
+  async getInsights(filters: InsightsFilters): Promise<InsightsData> {
+    const rows = await this.listBidsForGrid()
+    const opportunities = new Map(this.data.opportunities.map(o => [o.id, o]))
+    const names = new Map([...this.data.salesPersons, ...this.data.deliveryTeamMembers].map(p => [p.id, p.name]))
+    const competition = new Map(this.data.bidSynopsis.filter(s => s.section === 'competition').map(s => [s.bidId, competitionNames(s.document)]))
+    return computeInsights(rows.flatMap(row => {
+      const opportunity = opportunities.get(row.opportunityId)
+      if (!opportunity) return []
+      return [{ id: row.id, opportunityId: row.opportunityId, name: row.opportunityName, department: row.departmentName || 'Unassigned',
+        vertical: row.vertical || 'Unassigned', stateCode: row.stateCode, stageKey: row.stageKey, opportunityStageKey: opportunity.stageKey,
+        sheet: row.sheet, status: row.status, attentionFlag: row.attentionFlag, createdAt: opportunity.createdAt,
+        closedOn: opportunity.closedOn, dueAt: row.nextMilestoneDueAt || row.submissionDate || null,
+        valueCr: insightValueCr(row.valueAmount, row.valueUnit, opportunity.currency), owner: row.ownerEmail || 'Unassigned',
+        presales: names.get(row.preSalesPersonId ?? '') || row.solutionLeadEmail || 'Unassigned', team: names.get(row.bidTeamMemberId ?? '') || 'Unassigned',
+        competitors: competition.get(row.id) ?? [] }]
+    }), filters)
+  }
+
   async getBid(id: string) {
     return this.data.bids.find((b) => b.id === id) ?? null
   }
@@ -2247,6 +2279,44 @@ class InMemoryRepository implements Repository {
 
   async deleteCompetitor(id: string): Promise<void> {
     this.data.competitors = deleteCompetitorLocal(this.data.competitors ?? [], id)
+  }
+
+  // --- Insights Studio (logic in ./insightsStudio; every change replaces the arrays) ---------------
+  async listInsightVisuals(): Promise<InsightVisual[]> { return studioLocal.listVisualsLocal(this.data.insightVisuals ?? []) }
+  async createInsightVisual(input: InsightVisualInput): Promise<InsightVisual> {
+    const { items, created } = studioLocal.createVisualLocal(this.data.insightVisuals ?? [], input)
+    this.data.insightVisuals = items
+    return created
+  }
+  async updateInsightVisual(id: string, input: InsightVisualInput): Promise<InsightVisual> {
+    const { items, updated } = studioLocal.updateVisualLocal(this.data.insightVisuals ?? [], id, input)
+    this.data.insightVisuals = items
+    return updated
+  }
+  async deleteInsightVisual(id: string): Promise<void> {
+    this.data.insightVisuals = studioLocal.deleteVisualLocal(this.data.insightVisuals ?? [], id)
+  }
+  async listInsightReports(): Promise<InsightReport[]> { return studioLocal.listReportsLocal(this.data.insightReports ?? []) }
+  async createInsightReport(input: InsightReportInput): Promise<InsightReport> {
+    const { items, created } = studioLocal.createReportLocal(this.data.insightReports ?? [], this.data.insightVisuals ?? [], input)
+    this.data.insightReports = items
+    return created
+  }
+  async updateInsightReport(id: string, input: InsightReportInput): Promise<InsightReport> {
+    const { items, updated } = studioLocal.updateReportLocal(this.data.insightReports ?? [], this.data.insightVisuals ?? [], id, input)
+    this.data.insightReports = items
+    return updated
+  }
+  async deleteInsightReport(id: string): Promise<void> {
+    this.data.insightReports = studioLocal.deleteReportLocal(this.data.insightReports ?? [], id)
+  }
+  async listInsightCorrigenda(): Promise<InsightCorrigendumRow[]> {
+    const bids = new Map(this.data.bids.map((b) => [b.id, b]))
+    const names = new Map(this.data.opportunities.map((o) => [o.id, o.opportunityName]))
+    return this.data.bidCorrigenda.map((c) => {
+      const bid = bids.get(c.bidId)
+      return studioLocal.corrigendumRowLocal(this.joinCorrigendum(c), bid, names.get(bid?.opportunityId ?? '') ?? '')
+    })
   }
 
   async listAllBidMilestones(): Promise<BidMilestoneWithBid[]> {
@@ -3434,6 +3504,7 @@ const MUTATOR_KEYS = [
   'createMakerDocument', 'uploadMakerDocument', 'replaceMakerDocument', 'renameMakerDocument', 'duplicateMakerDocument', 'deleteMakerDocument',
   'createTenderWebsite', 'updateTenderWebsite', 'deleteTenderWebsite', 'setTenderWebsiteEditingLock',
   'createCompetitor', 'updateCompetitor', 'deleteCompetitor',
+  'createInsightVisual', 'updateInsightVisual', 'deleteInsightVisual', 'createInsightReport', 'updateInsightReport', 'deleteInsightReport',
   'createAmnexDepartment', 'renameAmnexDepartment', 'reorderAmnexDepartments', 'deleteAmnexDepartment',
   'syncRbacNodes', 'setRbacConfig', 'createRbacRole', 'updateRbacRole', 'deleteRbacRole', 'createRbacTemplate', 'updateRbacTemplate',
   'duplicateRbacTemplate', 'deleteRbacTemplate', 'applyRbacTemplate', 'unlinkRbacTemplate',
@@ -3467,6 +3538,7 @@ const MUTATOR_KEYS = [
  *  "classified as a read" apart from "nobody classified it". */
 const READER_KEYS = [
   'listCredentialPassphrases', 'getBidSynopsis', 'listTenderWebsites', 'listTenderDscEmployees', 'listCompetitors', 'listAmnexDepartments',
+  'listInsightVisuals', 'listInsightReports', 'listInsightCorrigenda',
   'getRbacMyAccess', 'listRbacNodes', 'getRbacSubjects', 'getRbacConfig',
   'listMakerDocuments', 'getMakerEditorSession', 'getMakerDownload',
   'listDeliveryTeamMembers', 'listOrgPeople',
@@ -3479,7 +3551,7 @@ const READER_KEYS = [
   'listFollowUps', 'listOpenFollowUps',
   'listSalesPersons', 'getSalesPerson', 'listSalesPostings', 'currentPostings',
   'listOwnershipAssignments', 'listOwnershipFor', 'listOwnedBy', 'resolveOwner', 'resolveOwners',
-  'search', 'relatedRecords', 'moveTargets', 'relationshipAnalytics',
+  'search', 'relatedRecords', 'moveTargets', 'relationshipAnalytics', 'getInsights',
   'listMaster', 'getMaster', 'listEditionFeatures',
   'listSkus', 'getSku', 'listBomItemsForSku', 'listAllBomItems', 'listBoqs', 'getBoq', 'listBoqLineItems',
   'listAllBoqLineItems', 'listAuditLogs',
