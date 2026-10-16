@@ -84,11 +84,11 @@ const OrgCard = forwardRef<HTMLDivElement, {
           onClick={(event) => { event.stopPropagation(); onToggle() }}
           aria-label={expanded ? 'Collapse' : 'Expand'}
           className={cn(
-            'absolute -bottom-3 left-1/2 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border bg-white text-muted shadow-sm hover:border-ink-600 hover:text-ink-900',
+            'absolute -bottom-2 left-1/2 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full border bg-white text-muted shadow-sm hover:border-ink-600 hover:text-ink-900',
             expanded && 'border-ink-600 text-ink-900',
           )}
         >
-          <Icon name={expanded ? 'ChevronUp' : 'ChevronDown'} size={13} />
+          <Icon name={expanded ? 'ChevronUp' : 'ChevronDown'} size={10} />
         </button>
       </Tooltip>
     )}
