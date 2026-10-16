@@ -20,7 +20,7 @@ vi.mock('@/modules/document-maker/api', () => ({ useMakerDocuments: () => mocks.
 vi.mock('@/modules/bid-tracker/enabled', () => ({ isBidTrackerEnabled: () => true }))
 vi.mock('@/lib/auth', () => ({ useAuthUser: () => ({ user: { displayName: 'Rajas Saji', email: 'rajas@amnex.com', photoUrl: null, emailVerified: true }, loading: false }) }))
 import { Home } from './Home'
-import { INDIA_MAP_STATES } from '@/features/home/indiaMapPaths'
+import { INDIA_STATES } from '@/features/home/indiaStates'
 
 const renderHome = () => render(<MemoryRouter><Home /></MemoryRouter>)
 const day = (offset: number) => { const d = new Date(); d.setDate(d.getDate() + offset); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
@@ -68,7 +68,7 @@ describe('Home', () => {
   })
 
   it('shows a card per module with live numbers, each linking to its module', () => {
-    mocks.states = { isLoading: false, data: [{ code: INDIA_MAP_STATES[0].code, name: 'X', departments: 1, offices: 2, employees: 3 }, { code: INDIA_MAP_STATES[1].code, name: 'Y', departments: 0, offices: 0, employees: 0 }] }
+    mocks.states = { isLoading: false, data: [{ code: INDIA_STATES[0].code, name: 'X', departments: 1, offices: 2, employees: 3 }, { code: INDIA_STATES[1].code, name: 'Y', departments: 0, offices: 0, employees: 0 }] }
     mocks.boqs = { isLoading: false, data: [
       { id: 'a', boqNumber: 'A', opportunityName: '', customerName: '', status: 'approved' },
       { id: 'b', boqNumber: 'B', opportunityName: '', customerName: '', status: 'draft' },
@@ -102,9 +102,9 @@ describe('Home', () => {
     expect(screen.getByRole('img', { name: /May 26: 5 crore/ })).toBeInTheDocument()
   })
 
-  it('shows the map coverage count', () => {
-    mocks.states = { isLoading: false, data: INDIA_MAP_STATES.slice(0, 14).map((s) => ({ code: s.code, name: s.name, departments: 1, offices: 1, employees: 1 })) }
+  it('has no map card on the page (coverage lives on the Account Mapping card)', () => {
     renderHome()
-    expect(screen.getByText('14 of 36 states and UTs covered')).toBeInTheDocument()
+    expect(screen.queryByText(/states and UTs covered/)).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Account Mapping/ })).toHaveAttribute('href', '/map')
   })
 })

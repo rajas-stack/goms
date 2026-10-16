@@ -10,7 +10,7 @@ import { NAV_MODULES } from '@/lib/routeModules'
 import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
 import { useBoqs } from '@/modules/commercial-calculator/api'
 import { useMakerDocuments } from '@/modules/document-maker/api'
-import { INDIA_MAP_STATES, INDIA_MAP_VIEWBOX } from '@/features/home/indiaMapPaths'
+import { INDIA_STATES } from '@/features/home/indiaStates'
 import {
   attentionRows, attentionSummary, crore, firstNameOf, greetingFor, initials, longDay, shortDay, todayIso, type AttentionRow,
 } from '@/features/home/homeData'
@@ -49,8 +49,8 @@ export function Home() {
   const insights = useInsights({ months: 6 }, canInsights || canOpportunity)
 
   const coveredCodes = useMemo(() => new Set((states.data ?? []).filter((s) => s.offices > 0 || s.employees > 0).map((s) => s.code)), [states.data])
-  const coveredCount = INDIA_MAP_STATES.filter((s) => coveredCodes.has(s.code)).length
-  const totalStates = INDIA_MAP_STATES.length
+  const coveredCount = INDIA_STATES.filter((s) => coveredCodes.has(s.code)).length
+  const totalStates = INDIA_STATES.length
 
   const attention = useMemo(
     () => attentionRows(queue.data ?? [], boqs.data ?? [], today, { opportunity: canOpportunity, commercial: canCommercial }),
@@ -88,16 +88,7 @@ export function Home() {
             <h1 className="hm-greet font-display">
               <span className="hm-date">{longDay(now)}</span> <span className="hm-sep">·</span> {greetingFor(now)}{first ? `, ${first}` : ''}
             </h1>
-            {canMap && (
-              <Link to="/map" className="hm-mapcard" aria-label={`Account Mapping: ${coveredCount} of ${totalStates} states and UTs covered`}>
-                <svg viewBox={INDIA_MAP_VIEWBOX} role="img" aria-hidden="true">
-                  {INDIA_MAP_STATES.map((s) => (
-                    <path key={s.code} d={s.d} fill={coveredCodes.has(s.code) ? 'var(--map-on)' : 'var(--map-off)'} stroke="var(--surface)" strokeWidth={0.7} strokeLinejoin="round" />
-                  ))}
-                </svg>
-                <span className="hm-mapcap">{coveredCount} of {totalStates} states and UTs covered</span>
-              </Link>
-            )}
+            {attention.length > 0 && <p className="hm-sub">{attention.length === 1 ? '1 item needs' : `${attention.length} items need`} you today.</p>}
           </section>
 
           {(canOpportunity || canCommercial) && (
@@ -123,7 +114,7 @@ export function Home() {
                 {canMap && (
                   <ModuleCard to="/map" name="Account Mapping" desc="Offices by state and department" tone="teal" icon="Map" foot={`${coveredCount} of ${totalStates} states`}>
                     <div className="hm-dots" aria-hidden="true">
-                      {[...INDIA_MAP_STATES].sort((a, b) => Number(coveredCodes.has(b.code)) - Number(coveredCodes.has(a.code))).map((s) => <i key={s.code} className={coveredCodes.has(s.code) ? 'on' : undefined} />)}
+                      {[...INDIA_STATES].sort((a, b) => Number(coveredCodes.has(b.code)) - Number(coveredCodes.has(a.code))).map((s) => <i key={s.code} className={coveredCodes.has(s.code) ? 'on' : undefined} />)}
                     </div>
                   </ModuleCard>
                 )}
