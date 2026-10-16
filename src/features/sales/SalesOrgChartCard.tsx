@@ -22,7 +22,6 @@ export const SalesOrgChartCard = forwardRef<HTMLDivElement, {
     data-canvas-card
     data-testid={`sales-org-chart-card-${person.id}`}
     onClick={onSelect}
-    title={person.officialEmail || undefined}
     className={cn(
       'relative flex w-[196px] cursor-pointer flex-col items-center gap-1.5 rounded-card border bg-white px-3 py-2.5 text-center shadow-panel transition-colors',
       selected ? 'border-ink-900/30 ring-2 ring-ink-900/10' : 'border-line hover:border-ink-600/40',

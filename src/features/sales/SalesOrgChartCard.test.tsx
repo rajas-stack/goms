@@ -29,7 +29,6 @@ describe('SalesOrgChartCard', () => {
     expect(screen.getByText('Alice Anderson')).toBeInTheDocument()
     expect(screen.getByText('Regional Manager')).toBeInTheDocument()
     expect(screen.queryByText('alice@amnex.com')).not.toBeInTheDocument()
-    expect(screen.getByTestId('sales-org-chart-card-sp-alice')).toHaveAttribute('title', 'alice@amnex.com')
     const avatar = screen.getByTestId('avatar')
     expect(avatar).toHaveTextContent('AA')
     expect(screen.queryByRole('img')).not.toBeInTheDocument()

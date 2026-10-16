@@ -5,6 +5,7 @@ import { CanvasControls } from '@/features/canvas/CanvasControls'
 import { Avatar } from '@/components/ui/Avatar'
 import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
+import { EmailTip } from '@/components/ui/EmailTip'
 import { useDeliveryTeamMembers } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { DeliveryTeamKey } from '@/lib/types'
@@ -61,7 +62,6 @@ const OrgCard = forwardRef<HTMLDivElement, {
   <div
     ref={ref}
     data-canvas-card
-    title={member.email || undefined}
     className={cn(
       'relative flex w-[184px] flex-col items-center gap-1.5 rounded-card border border-line bg-white px-3 py-2.5 text-center shadow-panel',
       member.status === 'inactive' && 'opacity-60',
@@ -115,7 +115,9 @@ function Branch({ member, depth, parentKey, tree }: { member: ChartPerson; depth
 
   return (
     <div className="flex flex-col items-center">
-      <OrgCard ref={ref} member={member} reportCount={kids.length} expanded={expanded} onToggle={() => canvas.setNodeExpanded(key, depth, !expanded)} />
+      <EmailTip email={member.email}>
+        <OrgCard ref={ref} member={member} reportCount={kids.length} expanded={expanded} onToggle={() => canvas.setNodeExpanded(key, depth, !expanded)} />
+      </EmailTip>
       {expanded && kids.length > 0 && (
         <div className="mt-8 flex items-start gap-8">
           {kids.map((kid) => <Branch key={kid.id} member={kid} depth={depth + 1} parentKey={key} tree={tree} />)}
