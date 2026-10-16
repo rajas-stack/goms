@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
+import { useNonPassiveWheel } from '@/lib/useNonPassiveWheel'
 
 const MIN_ZOOM = 0.3
 const MAX_ZOOM = 1.8
@@ -84,23 +85,7 @@ export function useCanvasViewport(
     }
   }
 
-  // React registers onWheel as a PASSIVE listener, where preventDefault() is refused ("Unable to preventDefault inside passive
-  // event listener") and the page scrolls under the canvas. So the wheel is attached natively with passive:false, and re-attached
-  // if the viewport element changes (canvases render a loading state first). The returned `onWheel` stays for callers/tests but
-  // is a no-op in the browser: the native listener already handled the event.
-  const wheelElRef = useRef<HTMLDivElement | null>(null)
-  const wheelRef = useRef(handleWheel)
-  wheelRef.current = handleWheel
-  const nativeWheel = useRef((e: WheelEvent) => wheelRef.current(e)).current
-  useEffect(() => {
-    const el = viewportRef.current
-    if (el === wheelElRef.current) return
-    wheelElRef.current?.removeEventListener('wheel', nativeWheel)
-    el?.addEventListener('wheel', nativeWheel, { passive: false })
-    wheelElRef.current = el
-  })
-  useEffect(() => () => { wheelElRef.current?.removeEventListener('wheel', nativeWheel); wheelElRef.current = null }, [nativeWheel])
-  const onWheel = (_e: React.WheelEvent) => undefined
+  useNonPassiveWheel(viewportRef, handleWheel)
 
   // Keep the card you just expanded/collapsed where it is on screen. Expanding or collapsing changes the tree's width, and the
   // cards are laid out from the content's left edge, so with the pan unchanged everything slid sideways and (especially after
@@ -266,7 +251,7 @@ export function useCanvasViewport(
 
   return {
     transform, dragging, userInteractedRef,
-    onWheel, onPointerDown, onPointerMove, endPan,
+    onPointerDown, onPointerMove, endPan,
     fitToScreen, centerView, zoomBy, resetView, setTransform,
   }
 }

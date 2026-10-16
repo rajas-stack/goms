@@ -190,7 +190,6 @@ function Stage({ people: members, isLoading = false, emptyMessage, version }: { 
     <div
       ref={viewportRef}
       className={cn('survey-grid relative h-full w-full touch-none select-none overflow-hidden', dragging ? 'cursor-grabbing' : 'cursor-grab')}
-      onWheel={viewport.onWheel}
       onPointerDown={viewport.onPointerDown}
       onPointerMove={viewport.onPointerMove}
       onPointerUp={viewport.endPan}

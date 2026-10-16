@@ -102,7 +102,7 @@ export function GeoMapView({
 }) {
   const [hoverCode, setHoverCode] = useState<string | null>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
-  const { transform, setTransform, dragging, resetView, zoomBy, onWheel, onPointerDown, onPointerMove, endPan } = useMapPanZoom(viewportRef)
+  const { transform, setTransform, dragging, resetView, zoomBy, onPointerDown, onPointerMove, endPan } = useMapPanZoom(viewportRef)
 
   // Whenever the selected feature changes (drilling in or out), the
   // projection itself already re-fits the new content to the frame — so any
@@ -154,7 +154,6 @@ export function GeoMapView({
           // `hoverCode` instead keeps exactly one element's cursor changing.
           dragging ? 'cursor-grabbing' : hoverCode && clickable ? 'cursor-pointer' : 'cursor-grab',
         )}
-        onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endPan}
