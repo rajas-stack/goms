@@ -2,6 +2,7 @@ import { useMemo, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { BID_STAGE_MAP } from '@goms/domain'
 import { useBidActionQueue, useInsights, useOrgPeople, useSalesPersons, useStates } from '@/lib/api'
+import { Icon } from '@/components/ui/Icon'
 import { useAuthUser } from '@/lib/auth'
 import { useCanReadAny } from '@/lib/permissions'
 import { useNodeFilter } from '@/lib/rbacTree/access'
@@ -120,14 +121,14 @@ export function Home() {
               </div>
               <div className="hm-grid">
                 {canMap && (
-                  <ModuleCard to="/map" name="Account Mapping" desc="Offices by state and department" tone="teal" icon={<circle cx="8" cy="8" r="5.5" />} foot={`${coveredCount} of ${totalStates} states`} extra={<circle cx="8" cy="8" r="1.6" fill="currentColor" />}>
+                  <ModuleCard to="/map" name="Account Mapping" desc="Offices by state and department" tone="teal" icon="Map" foot={`${coveredCount} of ${totalStates} states`}>
                     <div className="hm-dots" aria-hidden="true">
                       {[...INDIA_MAP_STATES].sort((a, b) => Number(coveredCodes.has(b.code)) - Number(coveredCodes.has(a.code))).map((s) => <i key={s.code} className={coveredCodes.has(s.code) ? 'on' : undefined} />)}
                     </div>
                   </ModuleCard>
                 )}
                 {canCommercial && (
-                  <ModuleCard to="/commercial-calculator" name="Commercial Calculator" desc="Pricing, BOQs and approvals" tone="ochre" icon={<rect x="2.5" y="2.5" width="11" height="11" rx="2" />} foot={`${openBoqs} open BOQ${openBoqs === 1 ? '' : 's'}`}>
+                  <ModuleCard to="/commercial-calculator" name="Commercial Calculator" desc="Pricing, BOQs and approvals" tone="ochre" icon="Calculator" foot={`${openBoqs} open BOQ${openBoqs === 1 ? '' : 's'}`}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <div className="hm-small" style={{ display: 'flex', justifyContent: 'space-between' }}><span>{approvedBoqs} of {boqList.length} approved</span><span>{boqList.length ? Math.round((approvedBoqs / boqList.length) * 100) : 0}%</span></div>
                       <div className="hm-track"><div style={{ width: `${boqList.length ? (approvedBoqs / boqList.length) * 100 : 0}%` }} /></div>
@@ -135,7 +136,7 @@ export function Home() {
                   </ModuleCard>
                 )}
                 {canOpportunity && (
-                  <ModuleCard to="/bid-tracker" name="Opportunity" desc="Tender and bid tracking, through to award" tone="blue" icon={<path d="M8 2.5 13.5 8 8 13.5 2.5 8Z" />} foot={`${insight?.metrics.active ?? 0} open bids`}>
+                  <ModuleCard to="/bid-tracker" name="Opportunity" desc="Tender and bid tracking, through to award" tone="blue" icon="Briefcase" foot={`${insight?.metrics.active ?? 0} open bids`}>
                     {openStages.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <div className="hm-stages" aria-hidden="true">{openStages.map((g, i) => <i key={g.key} style={{ flex: g.count, opacity: 0.35 + (0.65 * i) / Math.max(1, openStages.length - 1) }} />)}</div>
@@ -145,17 +146,17 @@ export function Home() {
                   </ModuleCard>
                 )}
                 {canDocuments && (
-                  <ModuleCard to="/document-maker" name="Document maker" desc="Proposals, letters and annexures" tone="indigo" icon={<rect x="3.5" y="2" width="9" height="12" rx="1.5" />} foot={`${docs.length} file${docs.length === 1 ? '' : 's'}`}>
+                  <ModuleCard to="/document-maker" name="Document maker" desc="Proposals, letters and annexures" tone="indigo" icon="FilePenLine" foot={`${docs.length} file${docs.length === 1 ? '' : 's'}`}>
                     <div className="hm-docs" aria-hidden="true">{docs.slice(0, 3).map((d, i) => <i key={d.id} style={i === 2 ? { opacity: 0.5 } : undefined} />)}</div>
                   </ModuleCard>
                 )}
                 {canInsights && (
-                  <ModuleCard to="/insights" name="Insights" desc="Pipeline and win-rate analytics" tone="plum" icon={<path d="M4 13V9M8 13V5M12 13V7" />} foot={`${crore(pipelineValue)} pipeline`}>
+                  <ModuleCard to="/insights" name="Insights" desc="Pipeline and win-rate analytics" tone="plum" icon="BarChart3" foot={`${crore(pipelineValue)} pipeline`}>
                     <Sparkline values={trend.map((t) => t.value)} />
                   </ModuleCard>
                 )}
                 {canTeams && (
-                  <ModuleCard to="/teams" name="Teams" desc="Org chart, rosters and headcount" tone="sage" icon={<><circle cx="5.5" cy="8" r="2.5" /><circle cx="10.5" cy="8" r="2.5" /></>} foot={`${people.length} people`}>
+                  <ModuleCard to="/teams" name="Teams" desc="Org chart, rosters and headcount" tone="sage" icon="Users" foot={`${people.length} people`}>
                     <div className="hm-stack" aria-hidden="true">{people.slice(0, 5).map((p) => <span key={p.id}>{initials(p.name)}</span>)}</div>
                   </ModuleCard>
                 )}
@@ -234,14 +235,15 @@ const TONES = {
   indigo: ['var(--indigo-t)', 'var(--indigo)'], plum: ['var(--plum-t)', 'var(--plum)'], sage: ['var(--sage-t)', 'var(--sage)'],
 } as const
 
-function ModuleCard({ to, name, desc, tone, icon, extra, foot, children }: {
-  to: string; name: string; desc: string; tone: keyof typeof TONES; icon: ReactNode; extra?: ReactNode; foot: string; children: ReactNode
+/** `icon` is the same lucide name the left rail uses for that module, so the two always match. */
+function ModuleCard({ to, name, desc, tone, icon, foot, children }: {
+  to: string; name: string; desc: string; tone: keyof typeof TONES; icon: string; foot: string; children: ReactNode
 }) {
   return (
     <Link to={to} className="hm-card">
       <div className="hm-cardhead">
         <span className="hm-icon" style={{ background: TONES[tone][0], color: TONES[tone][1] }}>
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">{icon}{extra}</svg>
+          <Icon name={icon} size={18} />
         </span>
         <span className="hm-cardname">{name}</span>
       </div>
