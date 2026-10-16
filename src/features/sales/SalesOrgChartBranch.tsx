@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef } from 'react'
 import { useCanvas } from '@/features/canvas/canvasContext'
 import { useWorkspace } from '@/features/workspace/context'
 import { SalesOrgChartCard } from './SalesOrgChartCard'
+import { EmailTip } from '@/components/ui/EmailTip'
 import { useSalesDetailsSidebar } from './SalesDetailsSidebar'
 import type { SalesOrgTree } from './salesHierarchyTree'
 import type { SalesPerson, SalesPosting } from '@/lib/types'
@@ -33,6 +34,7 @@ export function SalesOrgChartBranch({ person, depth, parentKey, tree, postings, 
 
   return (
     <div className="flex flex-col items-center">
+      <EmailTip email={person.officialEmail}>
       <SalesOrgChartCard
         ref={ref}
         person={person}
@@ -45,6 +47,7 @@ export function SalesOrgChartBranch({ person, depth, parentKey, tree, postings, 
         onSelect={() => { ws.select('salesPerson', person.id); details.reveal() }}
         onToggle={() => canvas.setNodeExpanded(key, depth, !expanded)}
       />
+      </EmailTip>
       {expanded && kids.length > 0 && (
         <div className="mt-8 flex items-start gap-8">
           {kids.map((k) => (

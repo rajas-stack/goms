@@ -24,6 +24,8 @@ export interface OrgPerson {
   managerId: string | null
   email: string
   status: 'active' | 'inactive'
+  /** Profile picture as a data URL (resized in the browser); null/absent shows initials. */
+  photoUrl?: string | null
   createdAt: string
 }
 

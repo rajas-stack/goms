@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({ refetch: vi.fn(), import: vi.fn(), export: vi.
 vi.mock('@/app/AppLayout', () => ({ useShell: () => ({ openImport: mocks.import }) }))
 vi.mock('@/lib/csv', async original => ({ ...await original<typeof import('@/lib/csv')>(), downloadCsv: mocks.export }))
 vi.mock('@/lib/rbacTree/access', () => ({ useNodeFilter: () => (id: string) => id !== mocks.deny }))
-vi.mock('@/app/routes/SalesTeamInsights', () => ({ SalesTeamInsights: () => <div>Original sales team analytics</div> }))
 vi.mock('@/app/routes/RelationshipAnalytics', () => ({ RelationshipAnalytics: () => <div>Original relationship analytics</div> }))
 vi.mock('@/lib/api', () => ({ useInsights: (filters: InsightsFilters, enabled: boolean) => { mocks.query(filters, enabled); return { data: computeInsights(mocks.state === 'empty' ? [] : records, filters, '2026-10-15'), isLoading: mocks.state === 'loading', isError: mocks.state === 'error', isFetching: false, refetch: mocks.refetch } } }))
 import { Insights } from './InsightsDashboard'
@@ -29,9 +28,8 @@ describe('Insights screenshot coverage', () => {
   it.each([['Sales', 'Opportunities by Sales Owner'], ['Presales', 'Presales Opportunity Load'], ['Bids', 'Bid Attention'], ['Revenue', 'Won Opportunity Value'], ['Competitors', 'Recorded Competitor Exposure'], ['Team', 'Bid Team Workload'], ['Forecast', 'Weighted Forecast by Due Quarter']])('opens the working %s view', async (tab, title) => {
     boot(); await userEvent.click(within(screen.getByRole('navigation', { name: 'Insights views' })).getByRole('button', { name: tab })); expect(screen.getByRole('region', { name: title })).toBeVisible()
   })
-  it('preserves both existing analytics views', async () => {
-    boot(); await userEvent.click(screen.getByRole('button', { name: 'Sales Team Insights' })); expect(screen.getByText('Original sales team analytics')).toBeVisible()
-    await userEvent.click(screen.getByRole('button', { name: 'Relationship Analytics' })); expect(screen.getByText('Original relationship analytics')).toBeVisible()
+  it('preserves the existing relationship analytics view', async () => {
+    boot(); await userEvent.click(screen.getByRole('button', { name: 'Relationship Analytics' })); expect(screen.getByText('Original relationship analytics')).toBeVisible()
   })
   it('filters actual statistics by vertical, state, search and clear', async () => {
     boot(); await userEvent.selectOptions(screen.getByLabelText('Insights vertical'), 'GIS')

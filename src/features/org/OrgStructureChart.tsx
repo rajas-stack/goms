@@ -45,7 +45,7 @@ export function OrgStructureChart() {
         {top && <span className="ml-auto text-[12px] text-muted">{descendantsOf(top.id, people).size - 1} people under {top.name}</span>}
       </div>
       <div className="min-h-0 flex-1">
-        <PeopleOrgChart people={shown} isLoading={isLoading} emptyMessage="No one in the org yet — add people from the Employees tab." />
+         <PeopleOrgChart people={shown} isLoading={isLoading} emptyMessage="No one in the org yet — add people from Settings → Masters → Employee Master." />
       </div>
     </div>
   )

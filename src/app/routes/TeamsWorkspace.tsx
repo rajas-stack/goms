@@ -9,22 +9,20 @@ import { Icon } from '@/components/ui/Icon'
 import { PersonName } from '@/components/ui/PersonName'
 import { Combobox, type ComboboxOption } from '@/components/ui/Combobox'
 import { Tabs } from '@/components/ui/Tabs'
-import { useDeliveryTeamMemberMutations, useDeliveryTeamMembers, useOpportunities } from '@/lib/api'
+import { useDeliveryTeamMemberMutations, useDeliveryTeamMembers, useOpportunities, useOrgPeople } from '@/lib/api'
 import { normalizeEmail } from '@/lib/inputNormalization'
 import { EMAIL_BINDING_HELP, EMAIL_FORMAT_MESSAGE, clearEmailConfirmText, useCanEditEmailBinding } from '@/modules/admin-access/useIsSystemAdmin'
 import { PIPELINE_STAGE_MAP } from '@/data/pipeline-stages'
 import type { DeliveryTeamKey, DeliveryTeamMember, Opportunity } from '@/lib/types'
 import { cn } from '@/lib/utils'
 import { DeliveryOrgChart } from '@/features/teams/DeliveryOrgChart'
-import { OrgEmployees } from '@/features/org/OrgEmployees'
 import { OrgStructureChart } from '@/features/org/OrgStructureChart'
 import { SalesWorkspace } from './SalesWorkspace'
 
-type TeamKey = 'org' | 'employees' | 'sales' | DeliveryTeamKey
+type TeamKey = 'org' | 'sales' | DeliveryTeamKey
 
 const TABS: { value: TeamKey; label: string }[] = [
   { value: 'org', label: 'Org Structure' },
-  { value: 'employees', label: 'Employees' },
   { value: 'sales', label: 'Sales' },
   { value: 'preSales', label: 'Pre-sales' },
   { value: 'legal', label: 'Legal' },
@@ -64,15 +62,17 @@ function reportsUnder(id: string, members: DeliveryTeamMember[]): Set<string> {
 
 /** A delivery team's roster. Members mirrored from Org Structure (most of them)
  *  are read-only here — their reports-to, designation and membership come from
- *  the org, edited in Teams → Employees. Anyone added by hand before the org
+ *  the org, edited in Settings → Masters → Employee Master.
  *  existed (no org link) keeps the old inline controls.
  *
  *  A hand-added member's email binds their login to their team assignments, so changing it is System Admin only: the server
  *  refuses it from anyone else in every RBAC mode. The field is editable for a System Admin (and while the browser cannot tell
  *  who is one) and plain text for everyone else; that is a convenience, not the boundary. Org-linked members take their email
- *  from the org person (Teams → Employees). */
+ *  from the org person (Settings → Masters → Employee Master). */
 export function TeamRoster({ team }: { team: DeliveryTeamKey }) {
   const { data: members = [], isLoading } = useDeliveryTeamMembers(team)
+  const { data: orgPeople = [] } = useOrgPeople()
+  const photoByOrgPerson = new Map(orgPeople.map((person) => [person.id, person.photoUrl ?? null]))
   const { update, setStatus, remove } = useDeliveryTeamMemberMutations()
   const emailEditable = useCanEditEmailBinding()
   const [error, setError] = useState<string | null>(null)
@@ -115,8 +115,8 @@ export function TeamRoster({ team }: { team: DeliveryTeamKey }) {
     <section aria-label={`${team} roster`} className="flex min-h-0 flex-1 flex-col gap-3 p-3">
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-goms-sky/40 bg-goms-sky/[0.08] px-3 py-2 text-[12px] text-goms-navy">
         <Icon name="Network" size={14} />
-        <span>This roster follows the company Org Structure. Add people, set levels and reports-to in Employees.</span>
-        <Link to="/teams/employees" className="ml-auto font-semibold underline underline-offset-2">Open Employees</Link>
+        <span>This roster follows the company Org Structure. Add people, set levels and reports-to in Employee Master.</span>
+        <Link to="/settings/masters/employees" className="ml-auto font-semibold underline underline-offset-2">Open Employee Master</Link>
       </div>
       {members.some((member) => !member.orgPersonId) && (
         <p className="text-[11px] text-muted"><span className="font-medium text-ink-700">Email.</span> <span>{EMAIL_BINDING_HELP}</span></p>
@@ -133,9 +133,9 @@ export function TeamRoster({ team }: { team: DeliveryTeamKey }) {
               return (
               <li key={member.id} className="flex min-h-12 flex-wrap items-center gap-3 px-3 py-2">
                 {/* A hand-added member's email has its own control below; an org-linked member's follows the org person. */}
-                <PersonName person={member} size="sm" subtitle={[member.designation, member.orgPersonId ? member.email : ''].filter(Boolean).join(' · ') || undefined} className="flex-1" nameClassName="text-sm font-medium text-ink-900" />
+                <PersonName person={{ ...member, photoUrl: member.orgPersonId ? photoByOrgPerson.get(member.orgPersonId) ?? null : null }} size="sm" subtitle={[member.designation, member.orgPersonId ? member.email : ''].filter(Boolean).join(' · ') || undefined} className="flex-1" nameClassName="text-sm font-medium text-ink-900" />
                 {member.orgPersonId ? (
-                  <span className="flex w-56 items-center gap-1.5 text-[12px] text-muted" title="Set in Teams → Employees">
+                  <span className="flex w-56 items-center gap-1.5 text-[12px] text-muted" title="Set in Settings → Masters → Employee Master">
                     {member.managerId && nameOf.get(member.managerId)
                       ? <>Reports to <PersonName person={nameOf.get(member.managerId)!} size="2xs" className="min-w-0" nameClassName="text-ink-700" /></>
                       : 'Heads this team'}
@@ -279,7 +279,6 @@ export function TeamsWorkspace() {
       </div>
       <div className="min-h-0 flex-1">
         {tab.value === 'org' ? <OrgStructureChart />
-          : tab.value === 'employees' ? <OrgEmployees />
           : tab.value === 'sales' ? <SalesWorkspace basePath="/teams/sales" />
           : <DeliveryTeam key={tab.value} team={tab.value} label={tab.label} section={section} />}
       </div>

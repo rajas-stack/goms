@@ -34,10 +34,6 @@ export function AccountMappingRail() {
 
   return (
     <nav className="hidden w-14 shrink-0 flex-col items-center gap-1.5 border-r border-line bg-panel py-4 lg:flex lg:w-16">
-      {canInsights && <button onClick={() => navigate('/insights')} title="Insights" aria-current={/^\/(insights|analytics)/.test(location.pathname) ? 'page' : undefined}
-        className={cn('flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 transition-colors lg:w-14', /^\/(insights|analytics)/.test(location.pathname) ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600/70 hover:bg-white hover:text-ink-900')}>
-        <Icon name="BarChart3" size={18}/><span className="text-center text-[9px] font-medium leading-tight">Insights</span>
-      </button>}
       {canAccountMapping && <button
         onClick={() => navigate('/map')}
         title="Account Mapping"
@@ -86,12 +82,15 @@ export function AccountMappingRail() {
         <Icon name="FilePenLine" size={18} />
         <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Document maker</span>
       </button>}
-      {/* `mt-auto` pins Teams to the bottom of the rail, apart from the work modules above. */}
+      {canInsights && <button onClick={() => navigate('/insights')} title="Insights" aria-current={/^\/(insights|analytics)/.test(location.pathname) ? 'page' : undefined}
+        className={cn('flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-lg px-1 py-2 transition-colors lg:w-14', /^\/(insights|analytics)/.test(location.pathname) ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600/70 hover:bg-white hover:text-ink-900')}>
+        <Icon name="BarChart3" size={18}/><span className="text-center text-[9px] font-medium leading-tight">Insights</span>
+      </button>}
       {canTeams && <button
         onClick={() => navigate('/teams')}
         title="Teams"
         className={cn(
-          'mt-auto flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors lg:w-14',
+          'flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors lg:w-14',
           teamsActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600/70 hover:bg-white hover:text-ink-900',
         )}
       >

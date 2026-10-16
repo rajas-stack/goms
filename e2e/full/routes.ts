@@ -10,11 +10,11 @@ export interface RouteSpec {
 }
 
 export const STATIC_ROUTES: RouteSpec[] = [
-  { path: '/', expect: /mapped to its ground/i },
+  { path: '/', expect: /The app/ },
   { path: '/map', expect: /mapped to its ground/i },
   { path: '/state/0', expect: /Central Ministries/i },
   { path: '/directory', expect: /Directory/ },
-  { path: '/analytics', expect: /Sales Team Insights/ },
+  { path: '/analytics', expect: /Opportunity Pipeline by Stage/ },
   { path: '/insights', expect: /Opportunity Pipeline by Stage/ },
   { path: '/meetings', expect: /Meetings/ },
   { path: '/sales', expect: /Total sales people/ },

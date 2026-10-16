@@ -19,7 +19,6 @@ export const RBAC_NODE_MANIFEST: readonly RbacNodeDef[] = [
   {"id":"accountMapping.insights.competitors","parentId":"accountMapping.insights","label":"Competitors","kind":"tab","actions":["view","create","edit","delete","download","manage"],"order":8},
   {"id":"accountMapping.insights.team","parentId":"accountMapping.insights","label":"Team","kind":"tab","actions":["view","create","edit","delete","download","manage"],"order":9},
   {"id":"accountMapping.insights.forecast","parentId":"accountMapping.insights","label":"Forecast","kind":"tab","actions":["view","create","edit","delete","download","manage"],"order":10},
-  {"id":"accountMapping.insights.salesTeam","parentId":"accountMapping.insights","label":"Sales Team Insights","kind":"tab","actions":["view","create","edit","delete","download","manage"],"order":11},
   {"id":"accountMapping.insights.relationships","parentId":"accountMapping.insights","label":"Relationship Analytics","kind":"tab","actions":["view","create","edit","delete","download","manage"],"order":12},
   {"id":"accountMapping.meetings","parentId":"accountMapping","label":"Meetings","kind":"page","actions":["view","create","edit","delete","download","manage"],"order":3},
   {"id":"accountMapping.meetings.detail","parentId":"accountMapping.meetings","label":"Meeting details","kind":"page","actions":["view","create","edit","delete","download","manage"],"order":0},

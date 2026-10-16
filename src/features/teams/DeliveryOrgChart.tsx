@@ -5,7 +5,8 @@ import { CanvasControls } from '@/features/canvas/CanvasControls'
 import { Avatar } from '@/components/ui/Avatar'
 import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
-import { useDeliveryTeamMembers } from '@/lib/api'
+import { EmailTip } from '@/components/ui/EmailTip'
+import { useDeliveryTeamMembers, useOrgPeople } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import type { DeliveryTeamKey } from '@/lib/types'
 
@@ -62,7 +63,7 @@ const OrgCard = forwardRef<HTMLDivElement, {
     ref={ref}
     data-canvas-card
     className={cn(
-      'relative flex w-[200px] flex-col items-center gap-2 rounded-card border border-line bg-white px-3.5 py-3 text-center shadow-panel',
+      'relative flex w-[184px] flex-col items-center gap-1.5 rounded-card border border-line bg-white px-3 py-2.5 text-center shadow-panel',
       member.status === 'inactive' && 'opacity-60',
     )}
   >
@@ -71,11 +72,10 @@ const OrgCard = forwardRef<HTMLDivElement, {
     )}
     <Avatar person={{ name: member.name, photoUrl: member.photoUrl }} size="md" />
     <div className="w-full min-w-0">
-      <div className="truncate text-[13px] font-semibold text-ink-900">{member.name}</div>
-      <div className="truncate text-[11px] text-muted">{member.designation || '—'}</div>
-      {member.email && <div className="truncate text-[10px] text-muted/80">{member.email}</div>}
+      <div className="truncate text-[15px] font-semibold text-ink-900">{member.name}</div>
+      <div className="truncate text-[12.5px] text-muted">{member.designation || '—'}</div>
     </div>
-    <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium', member.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-panel text-muted')}>
+    <span className={cn('rounded-full px-1.5 py-px text-[9px] font-medium', member.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-panel text-muted')}>
       {member.status === 'active' ? 'Active' : 'Inactive'}
     </span>
     {reportCount > 0 && (
@@ -84,11 +84,11 @@ const OrgCard = forwardRef<HTMLDivElement, {
           onClick={(event) => { event.stopPropagation(); onToggle() }}
           aria-label={expanded ? 'Collapse' : 'Expand'}
           className={cn(
-            'absolute -bottom-3 left-1/2 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border bg-white text-muted shadow-sm hover:border-ink-600 hover:text-ink-900',
+            'absolute left-1/2 top-full -mt-px flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full border bg-white text-muted shadow-sm hover:border-ink-600 hover:text-ink-900',
             expanded && 'border-ink-600 text-ink-900',
           )}
         >
-          <Icon name={expanded ? 'ChevronUp' : 'ChevronDown'} size={13} />
+          <Icon name={expanded ? 'ChevronUp' : 'ChevronDown'} size={10} />
         </button>
       </Tooltip>
     )}
@@ -115,7 +115,9 @@ function Branch({ member, depth, parentKey, tree }: { member: ChartPerson; depth
 
   return (
     <div className="flex flex-col items-center">
-      <OrgCard ref={ref} member={member} reportCount={kids.length} expanded={expanded} onToggle={() => canvas.setNodeExpanded(key, depth, !expanded)} />
+      <EmailTip email={member.email}>
+        <OrgCard ref={ref} member={member} reportCount={kids.length} expanded={expanded} onToggle={() => canvas.setNodeExpanded(key, depth, !expanded)} />
+      </EmailTip>
       {expanded && kids.length > 0 && (
         <div className="mt-8 flex items-start gap-8">
           {kids.map((kid) => <Branch key={kid.id} member={kid} depth={depth + 1} parentKey={key} tree={tree} />)}
@@ -129,9 +131,12 @@ function Branch({ member, depth, parentKey, tree }: { member: ChartPerson; depth
  *  card language as the Sales Org Chart, driven by `managerId` (reports-to). */
 export function DeliveryOrgChart({ team }: { team: DeliveryTeamKey }) {
   const { data: members = [], isLoading } = useDeliveryTeamMembers(team)
+  const { data: orgPeople = [] } = useOrgPeople()
+  // A member mirrored from the Org Structure shows that person's profile photo (set in Edit on Employee Master).
+  const photoByOrgPerson = new Map(orgPeople.map((person) => [person.id, person.photoUrl ?? null]))
   return (
     <PeopleOrgChart
-      people={members.filter((member) => member.status === 'active')} isLoading={isLoading}
+      people={members.filter((member) => member.status === 'active').map((member) => ({ ...member, photoUrl: member.orgPersonId ? photoByOrgPerson.get(member.orgPersonId) ?? null : null }))} isLoading={isLoading}
       emptyMessage="No one on this team yet — add people in Teams → Org Structure."
     />
   )
@@ -188,7 +193,6 @@ function Stage({ people: members, isLoading = false, emptyMessage, version }: { 
     <div
       ref={viewportRef}
       className={cn('survey-grid relative h-full w-full touch-none select-none overflow-hidden', dragging ? 'cursor-grabbing' : 'cursor-grab')}
-      onWheel={viewport.onWheel}
       onPointerDown={viewport.onPointerDown}
       onPointerMove={viewport.onPointerMove}
       onPointerUp={viewport.endPan}

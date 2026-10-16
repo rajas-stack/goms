@@ -11,6 +11,7 @@ import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import { cn } from '@/lib/utils'
+import { useNonPassiveWheel } from '@/lib/useNonPassiveWheel'
 
 const W = 760
 const H = 860
@@ -159,7 +160,7 @@ export function IndiaMap() {
     })
   }, [])
 
-  function onWheel(e: React.WheelEvent) {
+  function handleWheel(e: Pick<WheelEvent, 'preventDefault' | 'clientX' | 'clientY' | 'deltaY'>) {
     e.preventDefault()
     const rect = viewportRef.current!.getBoundingClientRect()
     const cx = e.clientX - rect.left
@@ -170,6 +171,8 @@ export function IndiaMap() {
       return { scale: next, x: cx - (cx - t.x) * ratio, y: cy - (cy - t.y) * ratio }
     })
   }
+
+  useNonPassiveWheel(viewportRef, handleWheel)
 
   function onPointerDown(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest('[data-map-ui]')) return
@@ -364,7 +367,6 @@ export function IndiaMap() {
           // `hover` instead keeps exactly one element's cursor ever changing.
           dragging ? 'cursor-grabbing' : hover ? 'cursor-pointer' : 'cursor-grab',
         )}
-        onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endPan}

@@ -81,9 +81,6 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                   <Icon name="X" size={18} />
                 </button>
               </div>
-              {canInsights && <button onClick={() => { onClose(); navigate('/insights') }} aria-current={/^\/(insights|analytics)/.test(location.pathname) ? 'page' : undefined} className="flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-ink hover:bg-ink-900/[0.05]">
-                <Icon name="BarChart3" size={17}/>Insights
-              </button>}
               {canAccountMapping && <button
                 onClick={() => {
                   onClose()
@@ -146,13 +143,16 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                 <Icon name="FilePenLine" size={17} />
                 Document maker
               </button>}
+              {canInsights && <button onClick={() => { onClose(); navigate('/insights') }} aria-current={/^\/(insights|analytics)/.test(location.pathname) ? 'page' : undefined} className="flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-ink hover:bg-ink-900/[0.05]">
+                <Icon name="BarChart3" size={17}/>Insights
+              </button>}
               {canTeams && <button
                 onClick={() => {
                   onClose()
                   navigate('/teams')
                 }}
                 className={cn(
-                  'mt-auto flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
+                  'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
                   teamsActive
                     ? 'bg-white text-ink-900 shadow-sm'
                     : 'text-ink hover:bg-ink-900/[0.05]',
