@@ -9,6 +9,8 @@ const GATED = new Set([
   'modules/bid-tracker/attachments/BidAttachmentsSection.tsx',
   'modules/bid-tracker/corrigenda/CorrigendaSection.tsx', 'modules/bid-tracker/synopsis/GeneralTab.tsx',
   'modules/rbac-tree/RolesAccessPage.tsx',
+  'features/insights-studio/pages/ReportPage.tsx', 'features/insights-studio/pages/ReportsPage.tsx',
+  'features/insights-studio/pages/VisualBuilderPage.tsx', 'features/insights-studio/pages/VisualLibraryPage.tsx',
   'app/routes/TeamsWorkspace.tsx', 'features/canvas/CanvasBranch.tsx', 'features/canvas/HierarchyCanvas.tsx',
   'features/details/EmployeeDetails.tsx', 'features/details/NodeDetails.tsx', 'features/details/SalesPersonDetails.tsx',
   'features/employees/ChargeDialog.tsx', 'features/employees/EmployeeFormDialog.tsx', 'features/employees/MarkDuplicateDialog.tsx',
@@ -73,8 +75,10 @@ describe('gating inventory', () => {
         continue
       }
       if (!GATED.has(rel)) missing.push(rel)
-      else if (!/usePermissions|useAllowed|useIsSystemAdmin|<Can\b|canEditCell/.test(src)) ungated.push(rel)
+      else if (!/usePermissions|useAllowed|useIsSystemAdmin|<Can\b|canEditCell|useCanEditItem\(/.test(src)) ungated.push(rel)
     }
+    // Insights Studio screens gate through useCanEditItem, which must itself consult permissions.
+    expect(readFileSync(join(root, 'features/insights-studio/api.ts'), 'utf8')).toMatch(/function useCanEditItem[\s\S]{0,200}usePermissions\(\)/)
     expect(missing).toEqual([])
     expect(ungated).toEqual([]) // fails until each listed screen consults permissions
   }, 60_000) // scans the whole src tree; slow on shared CI runners

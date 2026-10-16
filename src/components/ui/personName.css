@@ -1,13 +1,15 @@
-.person-name { border-radius: 4px; transition: background-color 200ms cubic-bezier(.2,.8,.2,1), color 200ms cubic-bezier(.2,.8,.2,1); }
+.person-name { max-width: 100%; border-radius: 4px; transition: background-color 200ms cubic-bezier(.2,.8,.2,1), color 200ms cubic-bezier(.2,.8,.2,1); }
 .person-name > img, .person-name > [data-testid=avatar] { position: relative; z-index: 1; transform-origin: center; transition: transform 220ms cubic-bezier(.2,.8,.2,1), box-shadow 220ms cubic-bezier(.2,.8,.2,1); }
 @media (hover: hover) and (pointer: fine) {
-  .person-name:hover { color: #103a69; background: linear-gradient(135deg, rgb(220 237 255 / .9), rgb(177 209 240 / .45)); backdrop-filter: blur(8px); }
-  .person-name:hover > img, .person-name:hover > [data-testid=avatar] { transform: scale(1.5); box-shadow: 0 2px 7px rgb(15 44 78 / .2); }
+  .person-name:hover { color: #eef7ff; background: linear-gradient(135deg, rgb(22 67 105 / .94), rgb(10 33 60 / .86)); backdrop-filter: blur(8px); outline: 1px solid rgb(131 174 216 / .45); outline-offset: 2px; }
+  .person-name:hover > img, .person-name:hover > [data-testid=avatar] { transform: scale(1.5); animation: profile-reveal 220ms cubic-bezier(.2,.8,.2,1); box-shadow: 0 2px 7px rgb(15 44 78 / .2); }
   .person-name:hover > span { color: inherit; }
+  .person-name:hover > span > span:first-child { color: inherit; }
   html.dark .person-name:hover { color: #dcf0ff; background: linear-gradient(135deg, rgb(32 64 99 / .9), rgb(14 35 62 / .8)); }
   tr:has(.person-name:hover) ~ tr { opacity: .6; }
 }
+@keyframes profile-reveal { from { transform: scale(0); opacity: 0; } to { transform: scale(1.5); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .person-name, .person-name > img, .person-name > [data-testid=avatar] { transition: none; }
-  .person-name:hover > img, .person-name:hover > [data-testid=avatar] { transform: none; }
+  .person-name:hover > img, .person-name:hover > [data-testid=avatar] { transform: none; animation: none; }
 }

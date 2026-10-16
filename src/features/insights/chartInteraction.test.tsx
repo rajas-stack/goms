@@ -30,6 +30,27 @@ describe('Chart contextual interaction', () => {
     fireEvent.click(row); expect(pick).toHaveBeenCalledWith(groups[0])
     fireEvent.blur(row); expect(screen.queryByRole('tooltip')).toBeNull()
   })
+  it('keeps paired-stage Value and Count previews separate', async () => {
+    const { container } = render(<StageChart groups={groups} showValue showCount onPick={() => {}}/>)
+    fireEvent.pointerEnter(container.querySelector('[data-series=value]')!, { pointerType: 'mouse' })
+    await waitFor(() => expect(screen.getByRole('tooltip')).toHaveTextContent('Pipeline value'))
+    expect(screen.getByRole('tooltip')).not.toHaveTextContent('Opportunities')
+    fireEvent.pointerEnter(container.querySelector('[data-series=count]')!, { pointerType: 'mouse' })
+    expect(screen.getAllByRole('tooltip')).toHaveLength(1)
+    expect(screen.getByRole('tooltip')).toHaveTextContent('Opportunities')
+    expect(screen.getByRole('tooltip')).not.toHaveTextContent('Pipeline value')
+  })
+  it('legend selection isolates a trend with its own fill and can restore all series', () => {
+    const trend = [{ key: '2026-10-01', label: 'Oct 26', value: 70, count: 30, wonValue: 10, wonCount: 4, lostValue: 5, lostCount: 2 }] as InsightTrend[]
+    const { container } = render(<TrendChart data={trend} count={false} onPick={() => {}}/>)
+    const legend = screen.getByRole('group', { name: 'Trend series' })
+    fireEvent.click(within(legend).getByRole('button', { name: 'Closed (Won)' }))
+    expect(container.querySelectorAll('[data-trend-series]')).toHaveLength(1)
+    expect(container.querySelector('[data-trend-series]')).toHaveAttribute('data-trend-series', 'won')
+    expect(container.querySelector('[data-trend-series] polygon')).toHaveAttribute('fill', expect.stringContaining('-won-area'))
+    fireEvent.click(within(legend).getByRole('button', { name: 'Closed (Won)' }))
+    expect(container.querySelectorAll('[data-trend-series]')).toHaveLength(3)
+  })
   it('donut legend offers the same keyboard preview as its segment', async () => {
     render(<DonutChart groups={groups} onPick={() => {}}/>)
     fireEvent.focus(screen.getByRole('button', { name: /Gujarat/ }))

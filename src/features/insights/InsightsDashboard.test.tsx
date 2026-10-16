@@ -74,14 +74,16 @@ describe('Insights screenshot coverage', () => {
   })
   it.each(['loading', 'error', 'empty'])('handles the %s state without invented records', state => { mocks.state = state; boot(); expect(screen.getByTestId('insights-page')).toBeVisible(); if (state === 'loading') expect(screen.getByRole('status')).toBeVisible(); if (state === 'error') expect(screen.getByRole('alert')).toBeVisible(); if (state === 'empty') expect(screen.getAllByText('No matching records').length).toBeGreaterThan(0) })
   it('does not render a permission-denied tab', () => { mocks.deny = 'accountMapping.insights.forecast'; boot(); expect(screen.queryByRole('button', { name: 'Forecast' })).not.toBeInTheDocument() })
-  it('isolates sample data, disables live requests/import and restores live data', async () => {
+  it('isolates sample data and restores live data before opening protected import', async () => {
     boot('/insights?demo=1')
     expect(screen.getByRole('switch', { name: 'Use sample data' })).toBeChecked()
     expect(mocks.query).toHaveBeenLastCalledWith(expect.anything(), false)
-    expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Import' })).toBeEnabled()
     await userEvent.click(screen.getByLabelText('Refresh insights')); expect(mocks.refetch).not.toHaveBeenCalled()
     await userEvent.click(screen.getByRole('button', { name: 'Export' })); expect(mocks.export.mock.calls[0][0]).toContain('insights-sample-')
-    await userEvent.click(screen.getByRole('switch', { name: 'Use sample data' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Import' }))
+    expect(mocks.import).toHaveBeenCalledOnce()
+    expect(screen.getByRole('switch', { name: 'Use sample data' })).not.toBeChecked()
     expect(mocks.query).toHaveBeenLastCalledWith(expect.anything(), true)
     expect(within(screen.getByRole('region', { name: 'Headline statistics' })).getByText('\u20b930 Cr')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Import' })).toBeEnabled()
@@ -107,7 +109,7 @@ describe('Insights screenshot coverage', () => {
   it('starts the requested visual review with clearly labeled samples when no preference exists', () => {
     localStorage.removeItem('goms.insights.sampleData'); boot()
     expect(screen.getByRole('switch', { name: 'Use sample data' })).toBeChecked()
-    expect(screen.getByRole('button', { name: 'Import' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Import' })).toBeEnabled()
     expect(mocks.query).toHaveBeenLastCalledWith(expect.anything(), false)
   })
   it('uses the two-series reference legend without permitting a blank chart', async () => {
