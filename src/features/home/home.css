@@ -1,0 +1,123 @@
+/* Home page (design: "GOMS Home v2"). Colours are scoped variables so the page follows the app's .dark toggle. */
+.hm {
+  --surface: #FBFAF6; --line: #E2DDD2; --line2: #ECE8DF; --ink: #1E2430; --ink9: #0F2942; --muted: #6B6A64;
+  --track: #E6E1D5; --av: #ECE8DE; --teal: #2A7F6F; --teal-t: #E1EFEB; --amber: #8A5A12; --amber-t: #F5EAD3; --amber-d: #C98A1E;
+  --red: #9B2C3A; --red-t: #F6E3E5; --red-d: #B23A48; --blue: #1F5A9E; --blue-t: #E2ECF8; --blue-d: #2F6FBF;
+  --ochre: #7E6322; --ochre-t: #F3EDDC; --indigo: #4E579A; --indigo-t: #E7E8F5; --plum: #7A4F8C; --plum-t: #F1EAF5;
+  --sage: #3F7A4C; --sage-t: #E6F0E7; --map-off: #E6E2D8; --map-on: #7FB3A6;
+  --hover-shadow: 0 10px 24px rgba(15, 41, 66, .08);
+  color: var(--ink); font-size: 14px;
+}
+.dark .hm {
+  --surface: #161614; --line: #2A2A26; --line2: #22221F; --ink: #E8E6E1; --ink9: #F3F1EC; --muted: #9A978F;
+  --track: #2A2A26; --av: #2A2A26; --teal: #6CC2AF; --teal-t: #15302B; --amber: #E8B873; --amber-t: #2C2315; --amber-d: #E0A550;
+  --red: #F29AA3; --red-t: #2E1A1D; --red-d: #F07077; --blue: #9CC3F0; --blue-t: #142238; --blue-d: #7DB3F0;
+  --ochre: #D9B865; --ochre-t: #2A2415; --indigo: #A9AFEA; --indigo-t: #1E2034; --plum: #C39AD6; --plum-t: #281E2E;
+  --sage: #8CC796; --sage-t: #17261B; --map-off: #2A2A26; --map-on: #3F8A79;
+  --hover-shadow: 0 10px 24px rgba(0, 0, 0, .35);
+}
+.hm * { box-sizing: border-box; }
+.hm-mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.hm-layout { display: flex; gap: 28px; padding: 40px 28px 56px 44px; min-height: 100%; }
+.hm-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 44px; }
+.hm-aside { width: 300px; flex-shrink: 0; }
+.hm-panel { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+
+.hm-top { display: flex; align-items: center; justify-content: space-between; gap: 32px; }
+.hm-greet { font-size: 28px; font-weight: 500; letter-spacing: -0.01em; color: var(--ink9); line-height: 1.25; margin: 0; }
+.hm-date { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 20px; font-weight: 400; color: var(--muted); }
+.hm-sep { color: var(--muted); }
+.hm-mapcard { width: 320px; flex-shrink: 0; border-radius: 14px; background: var(--teal-t); display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 18px 14px; color: var(--ink); text-decoration: none; transition: transform .2s ease, box-shadow .2s ease; }
+.hm-mapcard:hover { transform: translateY(-2px); box-shadow: var(--hover-shadow); }
+.hm-mapcard svg { height: 250px; width: auto; }
+.hm-mapcap { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; }
+
+.hm-att { padding: 4px 24px 8px; }
+.hm-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.hm-att .hm-head { padding: 18px 0 10px; }
+.hm-h2 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink9); }
+.hm-count { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+.hm-row { display: grid; grid-template-columns: 112px minmax(0, 1fr) 28px 104px; gap: 18px; align-items: center; padding: 16px 0; border-top: 1px solid var(--line2); color: inherit; text-decoration: none; }
+.hm-row:hover .hm-rowtext { text-decoration: underline; text-underline-offset: 3px; }
+.hm-eyebrow { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.hm-rowtext { margin-top: 4px; font-size: 15px; }
+.hm-pill { justify-self: start; display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.hm-pill i { width: 6px; height: 6px; border-radius: 50%; }
+.hm-pill--overdue { background: var(--red-t); color: var(--red); } .hm-pill--overdue i { background: var(--red-d); }
+.hm-pill--soon { background: var(--amber-t); color: var(--amber); } .hm-pill--soon i { background: var(--amber-d); }
+.hm-pill--waiting { background: var(--blue-t); color: var(--blue); } .hm-pill--waiting i { background: var(--blue-d); }
+.hm-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--av); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: var(--ink); }
+.hm-due { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; text-align: right; color: var(--ink); }
+.hm-due--overdue { color: var(--red); }
+.hm-empty { padding: 28px 0 24px; border-top: 1px solid var(--line2); color: var(--muted); font-size: 15px; }
+
+.hm-apps { display: flex; flex-direction: column; gap: 18px; }
+.hm-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.hm-card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 14px; color: inherit; text-decoration: none; transition: transform .2s ease, box-shadow .2s ease; }
+.hm-card:hover { transform: translateY(-2px); box-shadow: var(--hover-shadow); }
+.hm-card:focus-visible, .hm-row:focus-visible, .hm-mapcard:focus-visible, .hm-doc:focus-visible { outline: 2px solid var(--blue-d); outline-offset: 2px; }
+.hm-cardhead { display: flex; align-items: center; gap: 12px; }
+.hm-icon { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.hm-cardname { font-size: 16px; font-weight: 600; color: var(--ink9); }
+.hm-carddesc { font-size: 13px; color: var(--muted); margin-top: -6px; }
+.hm-foot { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--line2); font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 14px; }
+.hm-small { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; color: var(--muted); }
+.hm-dots { display: grid; grid-template-columns: repeat(18, 1fr); gap: 3px; }
+.hm-dots i { height: 10px; border-radius: 2px; background: var(--track); }
+.hm-dots i.on { background: var(--teal); }
+.hm-track { height: 8px; border-radius: 999px; background: var(--track); overflow: hidden; }
+.hm-track > div { height: 100%; background: var(--ochre); }
+.hm-stages { display: flex; gap: 3px; height: 10px; }
+.hm-stages i { border-radius: 3px; background: var(--blue-d); }
+.hm-docs { display: flex; gap: 8px; align-items: flex-end; }
+.hm-docs i { width: 26px; height: 32px; border-radius: 4px; border: 1.5px solid var(--indigo); background: var(--indigo-t); }
+.hm-spark { width: 100%; height: 40px; }
+.hm-spark polyline { fill: none; stroke: var(--plum); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.hm-stack { display: flex; }
+.hm-stack span { width: 30px; height: 30px; border-radius: 50%; background: var(--av); border: 2px solid var(--surface); display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: var(--ink); }
+.hm-stack span + span { margin-left: -8px; }
+
+.hm-sidepanel { padding: 20px 22px; display: flex; flex-direction: column; gap: 26px; }
+.hm-sect { display: flex; flex-direction: column; gap: 12px; }
+.hm-bars { display: flex; align-items: flex-end; gap: 10px; height: 124px; }
+.hm-bar { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; height: 100%; }
+.hm-bar div { width: 100%; border-radius: 4px 4px 0 0; background: var(--track); min-height: 3px; }
+.hm-bar.cur div { background: var(--blue-d); }
+.hm-bar span { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; color: var(--muted); }
+.hm-bar.cur span { color: var(--ink); }
+.hm-doc { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line2); color: inherit; text-decoration: none; }
+.hm-doc:hover .hm-doctitle { text-decoration: underline; text-underline-offset: 3px; }
+.hm-chip { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; font-weight: 500; padding: 3px 6px; border-radius: 6px; text-transform: uppercase; }
+.hm-doctitle { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hm-big { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 28px; color: var(--ink9); }
+.hm-split { display: flex; gap: 3px; height: 8px; }
+.hm-split i { border-radius: 3px; }
+
+@media (max-width: 1100px) {
+  .hm-layout { flex-direction: column; padding: 28px 24px 48px; }
+  .hm-aside { width: auto; }
+  .hm-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .hm-layout { padding: 20px 16px 40px; gap: 20px; }
+  .hm-main { gap: 28px; }
+  .hm-top { flex-direction: column; align-items: stretch; gap: 16px; }
+  .hm-greet { font-size: 22px; }
+  .hm-date { font-size: 16px; display: block; }
+  .hm-sep { display: none; }
+  .hm-mapcard { width: auto; }
+  .hm-mapcard svg { height: 220px; }
+  .hm-att { padding: 4px 16px 6px; }
+  .hm-att .hm-head { padding: 16px 0 6px; }
+  .hm-h2 { font-size: 18px; }
+  .hm-row { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 14px 0; }
+  .hm-row .hm-pill { grid-column: 1; grid-row: 1; }
+  .hm-row .hm-due { grid-column: 2; grid-row: 1; }
+  .hm-row > div { grid-column: 1 / -1; grid-row: 2; }
+  .hm-row .hm-avatar { grid-column: 2; grid-row: 2; justify-self: end; align-self: start; }
+  .hm-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hm-card, .hm-mapcard { transition: none; }
+  .hm-card:hover, .hm-mapcard:hover { transform: none; }
+}
