@@ -23,20 +23,20 @@ export const SalesOrgChartCard = forwardRef<HTMLDivElement, {
     data-testid={`sales-org-chart-card-${person.id}`}
     onClick={onSelect}
     className={cn(
-      'relative flex w-[220px] cursor-pointer flex-col items-center gap-2 rounded-card border bg-white px-3.5 py-3 text-center shadow-panel transition-colors',
+      'relative flex w-[196px] cursor-pointer flex-col items-center gap-1.5 rounded-card border bg-white px-3 py-2.5 text-center shadow-panel transition-colors',
       selected ? 'border-ink-900/30 ring-2 ring-ink-900/10' : 'border-line hover:border-ink-600/40',
       flagged && 'border-dashed border-amber',
     )}
   >
     <Avatar person={{ name: person.name, photoUrl: person.photoUrl }} size="md" />
     <div className="min-w-0">
-      <div className="truncate text-[13px] font-semibold text-ink-900">{person.name}</div>
-      <div className="truncate text-[11px] text-muted">{posting?.designation || '—'}</div>
+      <div className="truncate text-[15px] font-semibold text-ink-900">{person.name}</div>
+      <div className="truncate text-[12.5px] text-muted">{posting?.designation || '—'}</div>
       {person.officialEmail && (
         <div className="truncate text-[10px] text-muted/80">{person.officialEmail}</div>
       )}
     </div>
-    <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium', STATUS_STYLE[person.status])}>
+    <span className={cn('rounded-full px-1.5 py-px text-[9px] font-medium', STATUS_STYLE[person.status])}>
       {STATUS_LABEL[person.status] ?? person.status}
     </span>
     {flagged && (
@@ -53,7 +53,7 @@ export const SalesOrgChartCard = forwardRef<HTMLDivElement, {
           aria-label={expanded ? 'Collapse' : 'Expand'}
           data-testid={`sales-org-chart-toggle-${person.id}`}
           className={cn(
-            'absolute -bottom-2 left-1/2 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full border bg-white text-muted shadow-sm hover:border-ink-600 hover:text-ink-900',
+            'absolute left-1/2 top-full -mt-px flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full border bg-white text-muted shadow-sm hover:border-ink-600 hover:text-ink-900',
             expanded && 'border-ink-600 text-ink-900',
           )}
         >

@@ -62,7 +62,7 @@ const OrgCard = forwardRef<HTMLDivElement, {
     ref={ref}
     data-canvas-card
     className={cn(
-      'relative flex w-[200px] flex-col items-center gap-2 rounded-card border border-line bg-white px-3.5 py-3 text-center shadow-panel',
+      'relative flex w-[184px] flex-col items-center gap-1.5 rounded-card border border-line bg-white px-3 py-2.5 text-center shadow-panel',
       member.status === 'inactive' && 'opacity-60',
     )}
   >
@@ -71,11 +71,11 @@ const OrgCard = forwardRef<HTMLDivElement, {
     )}
     <Avatar person={{ name: member.name, photoUrl: member.photoUrl }} size="md" />
     <div className="w-full min-w-0">
-      <div className="truncate text-[13px] font-semibold text-ink-900">{member.name}</div>
-      <div className="truncate text-[11px] text-muted">{member.designation || '—'}</div>
+      <div className="truncate text-[15px] font-semibold text-ink-900">{member.name}</div>
+      <div className="truncate text-[12.5px] text-muted">{member.designation || '—'}</div>
       {member.email && <div className="truncate text-[10px] text-muted/80">{member.email}</div>}
     </div>
-    <span className={cn('rounded-full px-1.5 py-0.5 text-[10px] font-medium', member.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-panel text-muted')}>
+    <span className={cn('rounded-full px-1.5 py-px text-[9px] font-medium', member.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-panel text-muted')}>
       {member.status === 'active' ? 'Active' : 'Inactive'}
     </span>
     {reportCount > 0 && (
@@ -84,7 +84,7 @@ const OrgCard = forwardRef<HTMLDivElement, {
           onClick={(event) => { event.stopPropagation(); onToggle() }}
           aria-label={expanded ? 'Collapse' : 'Expand'}
           className={cn(
-            'absolute -bottom-2 left-1/2 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full border bg-white text-muted shadow-sm hover:border-ink-600 hover:text-ink-900',
+            'absolute left-1/2 top-full -mt-px flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full border bg-white text-muted shadow-sm hover:border-ink-600 hover:text-ink-900',
             expanded && 'border-ink-600 text-ink-900',
           )}
         >
