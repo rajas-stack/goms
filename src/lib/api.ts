@@ -14,6 +14,9 @@ import type {
 export const useMyAccess = () =>
   useQuery({ queryKey: ['myAccess'], queryFn: () => repository.getMyAccess(), staleTime: 60_000, retry: false })
 
+export const useInsights = (filters: import('@goms/domain').InsightsFilters, enabled = true) =>
+  useQuery({ queryKey: ['insights', filters], queryFn: () => repository.getInsights(filters), staleTime: 0, refetchOnWindowFocus: true, refetchInterval: 60_000, enabled })
+
 const qk = {
   states: ['states'] as const,
   state: (code: number) => ['state', code] as const,

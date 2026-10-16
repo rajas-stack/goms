@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils'
 import { QUALITY_DOT } from '@/lib/node-colors'
 import type { Charge, Employee, RelationshipQuality, RelationshipStatus } from '@/lib/types'
+import './badge.css'
 
 export function CodeChip({ code, className }: { code: string | null; className?: string }) {
   if (!code) return null
@@ -29,7 +30,7 @@ export function Badge({ children, tone = 'neutral', className }: {
     gray: 'bg-panel text-muted',
   }
   return (
-    <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium', tones[tone], className)}>
+    <span data-badge-tone={tone} className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium', tones[tone], className)}>
       {children}
     </span>
   )

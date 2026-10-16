@@ -79,10 +79,20 @@ describe('AdminImportAuthGate', () => {
     expect(link).toHaveAttribute('href', expect.stringContaining('someone-else%40gmail.com'))
   })
 
-  it('falls through to the protected content for a non-FORBIDDEN error (e.g. a transient network failure)', () => {
+  it('keeps protected content locked when the access check fails without claiming the account is forbidden', () => {
     onAuthStateChanged.mockImplementation((_auth, cb) => { cb({ email: 'admin@amnex.com' }); return () => {} })
     useAdminImportDomains.mockReturnValue({ isPending: false, isError: true, error: { data: { code: 'INTERNAL_SERVER_ERROR' } } })
     render(<AdminImportAuthGate><div>Protected content</div></AdminImportAuthGate>)
-    expect(screen.getByText('Protected content')).toBeInTheDocument()
+    expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry access check' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('Import access could not be verified')
+  })
+  it('reports a rejected Google popup instead of leaving an unhandled promise rejection', async () => {
+    onAuthStateChanged.mockImplementation((_auth, cb) => { cb(null); return () => {} })
+    signInWithPopup.mockRejectedValue({ code: 'auth/popup-blocked' })
+    render(<AdminImportAuthGate><div>Protected content</div></AdminImportAuthGate>)
+    fireEvent.click(screen.getByRole('button', { name: /sign in with google/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('browser blocked Google sign-in')
+    expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
   })
 })

@@ -1,0 +1,44 @@
+.insight-bars > button { grid-template-columns: 112px minmax(24px, 1fr) 82px 28px; gap: 8px; }
+.insight-bars .insight-bar-label { min-width: 0; text-align: left; }
+.insight-bars .insight-bar-track { width: 100%; justify-self: stretch; }
+.insight-bars > button > strong { text-align: right; }
+.insight-geography .insight-bars > button { grid-template-columns: 80px minmax(24px, 1fr) 78px; }
+.insight-person-bars > button { min-height: 38px; grid-template-columns: 140px minmax(24px, 1fr) 82px 28px; }
+.insight-person-bars:has(> button:hover) > button:not(:hover), .insight-person-bars:has(> button:focus-visible) > button:not(:focus-visible) { opacity: .6; }
+.insight-chart-legend > button { display: inline-flex; align-items: center; gap: 5px; padding: 3px 0; min-height: 28px; font-size: 10px; }
+.insight-chart-legend > button[aria-pressed=false] { opacity: .45; }
+.insight-status { display: inline-flex; align-items: center; gap: 4px; min-height: 23px; padding: 3px 7px; border-radius: 4px; border: 1px solid #11694a; background: #11694a; color: #fff; font-size: 10px; font-weight: 650; white-space: nowrap; text-decoration: none !important; }
+.insight-status-overdue { background: #a92442; color: white; border-color: #a92442; }
+.insight-status-dueSoon { background: #855111; color: white; border-color: #855111; }
+.insight-status-corrigendumPending { background: #24558e; color: white; border-color: #24558e; }
+html.dark .insight-status { background: #153e32; color: #b4f4d5; border-color: #347f62; }
+html.dark .insight-status-overdue { background: #4b1c2b; color: #ffd0dc; border-color: #a54a65; }
+html.dark .insight-status-dueSoon { background: #45321a; color: #ffe0a2; border-color: #a27833; }
+html.dark .insight-status-corrigendumPending { background: #1c3551; color: #c6e4ff; border-color: #4e7ea9; }
+.insight-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.insight-summary > :first-child { border-left: 0; padding-left: 0; }
+.insight-kpi-icon { border: 1px solid rgb(70 130 200 / .18); background: linear-gradient(145deg, #f1f8ff, #d6e8fc); color: #174d91; }
+.insight-kpi-icon svg, .insight-toolbar-actions button > svg, .insight-summary > button > svg, .insight-summary > a > svg { transition: transform 220ms cubic-bezier(.2,.8,.2,1), filter 220ms cubic-bezier(.2,.8,.2,1); transform-origin: center; }
+.insight-spark { transform-origin: bottom right; transition: opacity 220ms cubic-bezier(.2,.8,.2,1), transform 220ms cubic-bezier(.2,.8,.2,1); }
+.insight-spark polygon { transform-origin: center bottom; transform-box: fill-box; transform: scaleY(0); transition: transform 220ms cubic-bezier(.2,.8,.2,1); }
+.insight-kpi:hover .insight-spark, .insight-kpi:focus-visible .insight-spark { opacity: 1; transform: scale(1.04); }
+.insight-kpi:hover .insight-spark polygon, .insight-kpi:focus-visible .insight-spark polygon { transform: scaleY(1); }
+.insight-kpi:hover .insight-kpi-icon svg, .insight-kpi:focus-visible .insight-kpi-icon svg, .insight-summary > button:hover > svg, .insight-summary > a:hover > svg { transform: translateY(-2px) scale(1.08); filter: drop-shadow(0 2px 2px rgb(23 77 145 / .2)); }
+.insight-toolbar-actions button:hover > svg { transform: translateY(-1px) scale(1.08); }
+html.dark .insight-kpi-icon { background: linear-gradient(145deg, #20334c, #101f33); color: #aed6ff; border-color: #345275; }
+.insight-record-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; text-align: left; }
+.insight-record-name > svg { flex-shrink: 0; color: #52749a; }
+.insight-record-name > span { overflow-wrap: anywhere; }
+.insight-record-name:hover { color: #174d91; text-decoration: none; background: rgb(218 234 253 / .55); border-radius: 3px; }
+html.dark .insight-record-name:hover { color: #d4eaff; background: rgb(28 59 95 / .6); }
+.insight-table tbody:has(.insight-record-name:hover) > tr:not(:has(.insight-record-name:hover)) { opacity: .6; }
+@media (max-width: 680px) {
+  .insight-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .insight-bars > button { grid-template-columns: 95px minmax(24px, 1fr) 76px 26px; gap: 6px; }
+  .insight-person-bars > button { grid-template-columns: 116px minmax(24px, 1fr) 76px 26px; }
+  .insight-geography .insight-bars > button { grid-template-columns: 64px minmax(20px, 1fr) 70px; gap: 4px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .insight-kpi-icon svg, .insight-toolbar-actions button > svg, .insight-summary > button > svg, .insight-summary > a > svg, .insight-spark, .insight-spark polygon { transition: none; }
+  .insight-kpi:hover .insight-kpi-icon svg, .insight-kpi:focus-visible .insight-kpi-icon svg, .insight-summary > button:hover > svg, .insight-summary > a:hover > svg, .insight-toolbar-actions button:hover > svg, .insight-kpi:hover .insight-spark, .insight-kpi:focus-visible .insight-spark { transform: none; filter: none; }
+}
