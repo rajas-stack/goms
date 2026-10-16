@@ -136,6 +136,7 @@ const bookOfBusinessTransfer: Requirement = async (raw) => ({
 })
 
 export const opportunityPolicy: Record<string, PolicyEntry> = {
+  'insights.dashboard': { requirements: [read('an.operational'), readRows] },
   // reads: any role that can read at least one of the three sheet modules
   ...same([
     'bids.get', 'bids.getForOpportunity', 'bids.actionQueue.list',
