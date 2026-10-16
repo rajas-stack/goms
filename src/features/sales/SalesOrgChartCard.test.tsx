@@ -24,11 +24,12 @@ function baseProps(overrides: Partial<Parameters<typeof SalesOrgChartCard>[0]> =
 }
 
 describe('SalesOrgChartCard', () => {
-  it('renders name, designation, email, and an initials-only avatar', () => {
+  it('renders name, designation and an initials-only avatar, with the email as a hover tooltip', () => {
     render(<SalesOrgChartCard {...baseProps()} />)
     expect(screen.getByText('Alice Anderson')).toBeInTheDocument()
     expect(screen.getByText('Regional Manager')).toBeInTheDocument()
-    expect(screen.getByText('alice@amnex.com')).toBeInTheDocument()
+    expect(screen.queryByText('alice@amnex.com')).not.toBeInTheDocument()
+    expect(screen.getByTestId('sales-org-chart-card-sp-alice')).toHaveAttribute('title', 'alice@amnex.com')
     const avatar = screen.getByTestId('avatar')
     expect(avatar).toHaveTextContent('AA')
     expect(screen.queryByRole('img')).not.toBeInTheDocument()

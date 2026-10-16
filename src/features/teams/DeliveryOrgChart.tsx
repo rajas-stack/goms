@@ -61,6 +61,7 @@ const OrgCard = forwardRef<HTMLDivElement, {
   <div
     ref={ref}
     data-canvas-card
+    title={member.email || undefined}
     className={cn(
       'relative flex w-[184px] flex-col items-center gap-1.5 rounded-card border border-line bg-white px-3 py-2.5 text-center shadow-panel',
       member.status === 'inactive' && 'opacity-60',
@@ -73,7 +74,6 @@ const OrgCard = forwardRef<HTMLDivElement, {
     <div className="w-full min-w-0">
       <div className="truncate text-[15px] font-semibold text-ink-900">{member.name}</div>
       <div className="truncate text-[12.5px] text-muted">{member.designation || '—'}</div>
-      {member.email && <div className="truncate text-[10px] text-muted/80">{member.email}</div>}
     </div>
     <span className={cn('rounded-full px-1.5 py-px text-[9px] font-medium', member.status === 'active' ? 'bg-emerald-50 text-emerald-700' : 'bg-panel text-muted')}>
       {member.status === 'active' ? 'Active' : 'Inactive'}
