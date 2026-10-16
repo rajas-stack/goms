@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 
 const MIN_ZOOM = 0.3
 const MAX_ZOOM = 1.8
@@ -67,7 +67,7 @@ export function useCanvasViewport(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function onWheel(e: React.WheelEvent) {
+  function handleWheel(e: Pick<WheelEvent, 'preventDefault' | 'ctrlKey' | 'metaKey' | 'clientX' | 'clientY' | 'deltaX' | 'deltaY'>) {
     e.preventDefault()
     userInteractedRef.current = true
     const rect = viewportRef.current!.getBoundingClientRect()
@@ -83,6 +83,57 @@ export function useCanvasViewport(
       setTransform((t) => ({ ...t, x: t.x - e.deltaX, y: t.y - e.deltaY }))
     }
   }
+
+  // React registers onWheel as a PASSIVE listener, where preventDefault() is refused ("Unable to preventDefault inside passive
+  // event listener") and the page scrolls under the canvas. So the wheel is attached natively with passive:false, and re-attached
+  // if the viewport element changes (canvases render a loading state first). The returned `onWheel` stays for callers/tests but
+  // is a no-op in the browser: the native listener already handled the event.
+  const wheelElRef = useRef<HTMLDivElement | null>(null)
+  const wheelRef = useRef(handleWheel)
+  wheelRef.current = handleWheel
+  const nativeWheel = useRef((e: WheelEvent) => wheelRef.current(e)).current
+  useEffect(() => {
+    const el = viewportRef.current
+    if (el === wheelElRef.current) return
+    wheelElRef.current?.removeEventListener('wheel', nativeWheel)
+    el?.addEventListener('wheel', nativeWheel, { passive: false })
+    wheelElRef.current = el
+  })
+  useEffect(() => () => { wheelElRef.current?.removeEventListener('wheel', nativeWheel); wheelElRef.current = null }, [nativeWheel])
+  const onWheel = (_e: React.WheelEvent) => undefined
+
+  // Keep the card you just expanded/collapsed where it is on screen. Expanding or collapsing changes the tree's width, and the
+  // cards are laid out from the content's left edge, so with the pan unchanged everything slid sideways and (especially after
+  // zooming) off screen: "pressing the arrow makes all the cards disappear". A capture-phase click on any button inside a card
+  // remembers that card's position; after the re-render the pan is shifted by however far the card moved. It also counts as the
+  // user taking over the view, so the automatic re-centring does not fight it.
+  const anchorRef = useRef<{ el: Element; left: number; top: number } | null>(null)
+  const rememberAnchor = useRef((e: MouseEvent) => {
+    const target = e.target as Element | null
+    const card = target?.closest?.('[data-canvas-card]')
+    if (!card || !target?.closest('button')) return
+    const rect = card.getBoundingClientRect()
+    anchorRef.current = { el: card, left: rect.left, top: rect.top }
+    userInteractedRef.current = true
+  }).current
+  const clickElRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = viewportRef.current
+    if (el === clickElRef.current) return
+    clickElRef.current?.removeEventListener('click', rememberAnchor, true)
+    el?.addEventListener('click', rememberAnchor, true)
+    clickElRef.current = el
+  })
+  useEffect(() => () => { clickElRef.current?.removeEventListener('click', rememberAnchor, true); clickElRef.current = null }, [rememberAnchor])
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current
+    if (!anchor) return
+    anchorRef.current = null
+    if (!anchor.el.isConnected) return
+    const rect = anchor.el.getBoundingClientRect()
+    const dx = anchor.left - rect.left, dy = anchor.top - rect.top
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) setTransform((t) => ({ ...t, x: t.x + dx, y: t.y + dy }))
+  })
 
   function onPointerDown(e: React.PointerEvent) {
     if ((e.target as HTMLElement).closest('[data-canvas-card], [data-canvas-ui]')) return
@@ -138,10 +189,13 @@ export function useCanvasViewport(
     panRafRef.current = requestAnimationFrame(() => {
       panRafRef.current = null
       const point = panPointRef.current
-      if (!point || !dragRef.current) return
-      const dx = point.clientX - dragRef.current.startX
-      const dy = point.clientY - dragRef.current.startY
-      setTransform((t) => ({ ...t, x: dragRef.current!.originX + dx, y: dragRef.current!.originY + dy }))
+      const drag = dragRef.current
+      if (!point || !drag) return
+      const x = drag.originX + (point.clientX - drag.startX)
+      const y = drag.originY + (point.clientY - drag.startY)
+      // Values are computed NOW: React runs this updater later, and by then endPan may have nulled dragRef
+      // ("Cannot read properties of null (reading 'originX')" crashed the page into the error boundary).
+      setTransform((t) => ({ ...t, x, y }))
     })
   }
 
