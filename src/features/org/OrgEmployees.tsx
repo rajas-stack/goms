@@ -11,6 +11,8 @@ import { EMAIL_BINDING_HELP, EMAIL_FORMAT_MESSAGE, clearEmailConfirmText, useCan
 import { ORG_DEPARTMENTS, ORG_LEVELS, eligibleManagers, levelLabel, managerProblem, reportsBrokenByLevel, type OrgPerson } from '@/data/org-structure'
 import { useAmnexDepartmentMutations, useAmnexDepartments } from '@/features/departments/api'
 import { OrgEmployeeRow, toManagerOption, type OrgRowActions } from './OrgEmployeeRow'
+import { OrgImportDialog } from './OrgImportDialog'
+import { OrgPersonEditDialog, type OrgPersonChange } from './OrgPersonEditDialog'
 import { OtherEmployeeRow } from './OtherEmployeeRow'
 import { matchesEmployee, type MasterEmployee } from './masterEmployees'
 import { useMasterEmployees } from './useMasterEmployees'
@@ -38,6 +40,8 @@ export function OrgEmployees() {
   const [query, setQuery] = useState('')
   const [department, setDepartment] = useState('all')
   const [error, setError] = useState<string | null>(null)
+  const [editing, setEditing] = useState<OrgPerson | null>(null)
+  const [importing, setImporting] = useState(false)
   const [emailResets, setEmailResets] = useState<Record<string, number>>({}) // per row id, bumped when that row's email change is refused so its field shows the stored value again; other rows' unsaved input is untouched
   const resetEmailField = (id: string) => setEmailResets((r) => ({ ...r, [id]: (r[id] ?? 0) + 1 }))
   const [draft, setDraft] = useState({ name: '', designation: '', level: '4', department: 'Pre-Sales', managerId: '', email: '' })
@@ -94,6 +98,7 @@ export function OrgEmployees() {
     changeDesignation: (person, designation) => void patch(person, { designation }, 'Could not save.'),
     changeDepartments: (person, departments) => void patch(person, { departments }, 'Could not change departments.'),
     createDepartment: canCreateDepartment ? async (name) => (await departmentMutations.create.mutateAsync(name)).name : undefined,
+    edit: setEditing,
     toggleStatus: (person) => void patch(person, { status: person.status === 'active' ? 'inactive' : 'active' }, 'Could not save.'),
     remove: (person) => {
       const boss = orgById.get(person.managerId ?? '')?.name ?? 'the top'
@@ -105,6 +110,12 @@ export function OrgEmployees() {
     name: e.name, designation: e.designation, level: DEFAULT_NEW_LEVEL, departments: e.departments, managerId: null,
     ...(emailEditable && e.email ? { email: e.email } : {}), // setting an email needs a System Admin; others add without it
   }), `Could not add ${e.name}.`)
+
+  /** Saves the edit dialog's changes in one call; returns the refusal message (shown in the dialog) or null. */
+  const saveEdit = async (person: OrgPerson, change: OrgPersonChange): Promise<string | null> => {
+    if (!canEdit) return NO_PERMISSION_TITLE
+    try { await update.mutateAsync({ id: person.id, patch: change }); return null } catch (cause) { return cause instanceof Error ? cause.message : 'Could not save the changes.' }
+  }
 
   const draftLevel = Number(draft.level)
   const draftManagers = eligibleManagers({ id: '', level: draftLevel }, orgPeople)
@@ -170,7 +181,8 @@ export function OrgEmployees() {
             </button>
           ))}
         </div>
-        <span className="ml-auto text-[12px] text-muted">{rows.length} of {employees.length} people · {people.length} in the org</span>
+        <Button variant="secondary" size="sm" className="ml-auto" disabled={!canEdit} title={canEdit ? undefined : NO_PERMISSION_TITLE} onClick={() => setImporting(true)}><Icon name="Upload" size={14} /> Import</Button>
+        <span className="text-[12px] text-muted">{rows.length} of {employees.length} people · {people.length} in the org</span>
       </div>
       <p className="text-[11px] text-muted"><span className="font-medium text-ink-700">Email.</span> <span>{EMAIL_BINDING_HELP}</span></p>
       {error && (
@@ -208,6 +220,18 @@ export function OrgEmployees() {
           </table>
         )}
       </div>
+      {editing && orgById.get(editing.id) && (
+        <OrgPersonEditDialog
+          key={editing.id} person={orgById.get(editing.id)!} people={orgPeople} departmentOptions={departmentOptions} emailEditable={emailEditable}
+          createDepartment={actions.createDepartment} onSave={(change) => saveEdit(editing, change)} onClose={() => setEditing(null)}
+        />
+      )}
+      {importing && (
+        <OrgImportDialog
+          people={orgPeople} departmentOptions={departmentOptions} emailEditable={emailEditable} canEdit={canEdit}
+          create={(input) => create.mutateAsync(input)} onClose={() => setImporting(false)}
+        />
+      )}
     </section>
   )
 }

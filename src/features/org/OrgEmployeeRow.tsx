@@ -22,6 +22,7 @@ export interface OrgRowActions {
   createDepartment?: (name: string) => Promise<string>
   toggleStatus: (person: OrgPerson) => void
   remove: (person: OrgPerson) => void
+  edit: (person: OrgPerson) => void
 }
 
 const CELL = 'border-b border-line/70 px-3 py-1.5'
@@ -86,6 +87,9 @@ export function OrgEmployeeRow({ person: p, people, sources, departmentOptions, 
       </td>
       <td className={cn(CELL, 'text-right')}>
         <div className="flex justify-end gap-1">
+          <Button variant="ghost" size="icon" disabled={!canEdit} aria-label={`Edit ${p.name}`} title="Edit all details" onClick={() => actions.edit(p)}>
+            <Icon name="Pencil" size={14} />
+          </Button>
           <Button variant="secondary" size="sm" disabled={!canEdit} onClick={() => actions.toggleStatus(p)}>
             {p.status === 'active' ? 'Deactivate' : 'Activate'}
           </Button>
