@@ -8,7 +8,6 @@ import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
 import { useCanReadAny } from '@/lib/permissions'
 import { useNodeFilter } from '@/lib/rbacTree/access'
 import { NAV_MODULES } from '@/lib/routeModules'
-import { ROUTE_NODES } from '@/app/routeNodes'
 
 interface Props {
   open: boolean
@@ -29,7 +28,6 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
   const teamsActive = location.pathname.startsWith('/teams')
   const documentMakerActive = location.pathname.startsWith('/document-maker')
-  const insightsActive = location.pathname.startsWith('/analytics')
   // Same rule as the desktop rail: the server policy (A) AND the permission tree. Roles & Access lives in Settings.
   const tree = useNodeFilter()
   const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping) && tree('accountMapping')
@@ -37,7 +35,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const canOpportunity = useCanReadAny(NAV_MODULES.opportunity) && tree('opportunity')
   const canTeams = useCanReadAny(NAV_MODULES.teams) && tree('teams')
   const canDocumentMaker = tree('documentMaker')
-  const canInsights = useCanReadAny(NAV_MODULES.insights) && tree(ROUTE_NODES.insights)
+  const canInsights = useCanReadAny(NAV_MODULES.insights) && tree('accountMapping.insights')
 
   useEffect(() => {
     if (!open) return
@@ -145,20 +143,8 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                 <Icon name="FilePenLine" size={17} />
                 Document maker
               </button>}
-              {canInsights && <button
-                onClick={() => {
-                  onClose()
-                  navigate('/analytics')
-                }}
-                className={cn(
-                  'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
-                  insightsActive
-                    ? 'bg-white text-ink-900 shadow-sm'
-                    : 'text-ink hover:bg-ink-900/[0.05]',
-                )}
-              >
-                <Icon name="BarChart3" size={17} />
-                Insights
+              {canInsights && <button onClick={() => { onClose(); navigate('/insights') }} aria-current={/^\/(insights|analytics)/.test(location.pathname) ? 'page' : undefined} className="flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-ink hover:bg-ink-900/[0.05]">
+                <Icon name="BarChart3" size={17}/>Insights
               </button>}
               {canTeams && <button
                 onClick={() => {

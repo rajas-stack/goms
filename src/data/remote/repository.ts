@@ -1,4 +1,5 @@
 import type { CredentialPassphrase, CredentialPassphraseInput, CredentialPassphraseUpdate } from '@goms/domain'
+import type { InsightsFilters, InsightsData } from '@goms/domain'
 // tRPC-backed Repository implementation — only wired in when
 // VITE_API_BASE_URL is set (see ../repository.ts). Implements every method of
 // Repository (declared as Partial<Repository> only so a future new method
@@ -12,6 +13,7 @@ import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import type { BidSynopsis, BidSynopsisSection, SaveBidSynopsisInput } from '@goms/domain'
 import type { TenderWebsite, TenderWebsiteInput, TenderWebsiteKind } from '@goms/domain'
 import type { AmnexDepartment, Competitor, CompetitorInput } from '@goms/domain'
+import type { InsightCorrigendumRow, InsightReport, InsightReportInput, InsightVisual, InsightVisualInput } from '@goms/domain'
 import type {
   ApplyTemplateInput, RbacCustomRole, RbacGrantChange, RbacMyAccess, RbacNode, RbacRoleInput, RbacSubjectConfig, RbacSubjectRef, RbacSubjects,
   RbacSyncResult, RbacTemplateInput, RbacLinkableRef,
@@ -69,6 +71,18 @@ export class RemoteRepository implements Partial<Repository> {
   updateCompetitor = (id: string, input: CompetitorInput): Promise<Competitor> =>
     this.client.competitors.update.mutate({ id, ...input })
   deleteCompetitor = async (id: string): Promise<void> => { await this.client.competitors.delete.mutate({ id }) }
+  // Insights Studio — the API scopes rows to the verified caller (own + shared) and validates every spec.
+  listInsightVisuals = (): Promise<InsightVisual[]> => this.client.insightsStudio.listVisuals.query() as Promise<InsightVisual[]>
+  createInsightVisual = (input: InsightVisualInput): Promise<InsightVisual> => this.client.insightsStudio.createVisual.mutate(input as never) as Promise<InsightVisual>
+  updateInsightVisual = (id: string, input: InsightVisualInput): Promise<InsightVisual> =>
+    this.client.insightsStudio.updateVisual.mutate({ id, ...input } as never) as Promise<InsightVisual>
+  deleteInsightVisual = async (id: string): Promise<void> => { await this.client.insightsStudio.deleteVisual.mutate({ id }) }
+  listInsightReports = (): Promise<InsightReport[]> => this.client.insightsStudio.listReports.query() as Promise<InsightReport[]>
+  createInsightReport = (input: InsightReportInput): Promise<InsightReport> => this.client.insightsStudio.createReport.mutate(input as never) as Promise<InsightReport>
+  updateInsightReport = (id: string, input: InsightReportInput): Promise<InsightReport> =>
+    this.client.insightsStudio.updateReport.mutate({ id, ...input } as never) as Promise<InsightReport>
+  deleteInsightReport = async (id: string): Promise<void> => { await this.client.insightsStudio.deleteReport.mutate({ id }) }
+  listInsightCorrigenda = (): Promise<InsightCorrigendumRow[]> => this.client.insightsStudio.corrigenda.query() as Promise<InsightCorrigendumRow[]>
   // Roles & Access permission tree. The server resolves the caller from the verified sign-in (never from `localEmail`).
   getRbacMyAccess = (): Promise<RbacMyAccess> => this.client.rbacTree.myAccess.query()
   listRbacNodes = (): Promise<RbacNode[]> => this.client.rbacTree.nodes.query()
@@ -289,6 +303,7 @@ export class RemoteRepository implements Partial<Repository> {
     this.client.commercial.auditLogs.list.query(filter)
 
   listOpportunities = (): Promise<Opportunity[]> => this.client.opportunities.list.query()
+  getInsights = (filters: InsightsFilters): Promise<InsightsData> => this.client.insights.dashboard.query(filters)
   listOpportunitiesByDepartment = (departmentId: string): Promise<Opportunity[]> =>
     this.client.opportunities.listByDepartment.query({ departmentId })
   getOpportunity = (id: string): Promise<Opportunity | null> => this.client.opportunities.get.query({ id })

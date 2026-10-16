@@ -16,6 +16,11 @@ const Landing = lazy(() => import('./routes/Landing').then((m) => ({ default: m.
 const StateWorkspace = lazy(() => import('./routes/StateWorkspace').then((m) => ({ default: m.StateWorkspace })))
 const Directory = lazy(() => import('./routes/Directory').then((m) => ({ default: m.Directory })))
 const Insights = lazy(() => import('./routes/Insights').then((m) => ({ default: m.Insights })))
+const VisualLibraryPage = lazy(() => import('@/features/insights-studio/pages/VisualLibraryPage').then((m) => ({ default: m.VisualLibraryPage })))
+const VisualBuilderPage = lazy(() => import('@/features/insights-studio/pages/VisualBuilderPage').then((m) => ({ default: m.VisualBuilderPage })))
+const ReportsPage = lazy(() => import('@/features/insights-studio/pages/ReportsPage').then((m) => ({ default: m.ReportsPage })))
+const ReportPage = lazy(() => import('@/features/insights-studio/pages/ReportPage').then((m) => ({ default: m.ReportPage })))
+const DataSourcesPage = lazy(() => import('@/features/insights-studio/pages/DataSourcesPage').then((m) => ({ default: m.DataSourcesPage })))
 const Meetings = lazy(() => import('./routes/Meetings').then((m) => ({ default: m.Meetings })))
 const MeetingDetails = lazy(() => import('./routes/MeetingDetails').then(m => ({ default: m.MeetingDetails })))
 const CredentialsSettingsPage = lazy(() => import('./routes/CredentialsSettingsPage').then(m => ({ default: m.CredentialsSettingsPage })))
@@ -119,6 +124,13 @@ export const router = createBrowserRouter([
       routed('/state/:code', ROUTE_NODES.state, <RequireAccess anyOf={NAV_MODULES.map}><StateWorkspace /></RequireAccess>),
       routed('/directory', ROUTE_NODES.directory, <RequireAccess anyOf={NAV_MODULES.directory}><Directory /></RequireAccess>),
       routed('/analytics', ROUTE_NODES.insights, <RequireAccess anyOf={NAV_MODULES.insights}><Insights /></RequireAccess>),
+      routed('/insights', ROUTE_NODES.insights, <RequireAccess anyOf={NAV_MODULES.insights}><Insights /></RequireAccess>),
+      routed('/insights/studio/visuals', ROUTE_NODES.insightsStudioVisuals, <RequireAccess anyOf={NAV_MODULES.insights}><VisualLibraryPage /></RequireAccess>),
+      routed('/insights/studio/visuals/new', ROUTE_NODES.insightsStudioVisuals, <RequireAccess anyOf={NAV_MODULES.insights}><VisualBuilderPage /></RequireAccess>),
+      routed('/insights/studio/visuals/:id', ROUTE_NODES.insightsStudioVisuals, <RequireAccess anyOf={NAV_MODULES.insights}><VisualBuilderPage /></RequireAccess>),
+      routed('/insights/studio/reports', ROUTE_NODES.insightsStudioReports, <RequireAccess anyOf={NAV_MODULES.insights}><ReportsPage /></RequireAccess>),
+      routed('/insights/studio/reports/:id', ROUTE_NODES.insightsStudioReports, <RequireAccess anyOf={NAV_MODULES.insights}><ReportPage /></RequireAccess>),
+      routed('/insights/data-sources', ROUTE_NODES.insightsDataSources, <RequireAccess anyOf={NAV_MODULES.insights}><DataSourcesPage /></RequireAccess>),
       routed('/meetings', ROUTE_NODES.meetings, <RequireAccess anyOf={NAV_MODULES.meetings}><Meetings /></RequireAccess>),
       routed('/meetings/:meetingId', ROUTE_NODES.meeting, <RequireAccess anyOf={NAV_MODULES.meetings}><MeetingDetails /></RequireAccess>),
       routed('/sales', ROUTE_NODES.sales, <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess>),
