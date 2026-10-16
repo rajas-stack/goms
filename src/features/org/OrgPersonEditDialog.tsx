@@ -3,13 +3,14 @@ import { Button } from '@/components/ui/Button'
 import { Combobox } from '@/components/ui/Combobox'
 import { Dialog } from '@/components/ui/Dialog'
 import { Field, Input, Select } from '@/components/ui/Field'
+import { PhotoUploadField } from '@/components/ui/PhotoUploadField'
 import { ORG_LEVELS, eligibleManagers, levelLabel, managerProblem, reportsBrokenByLevel, type OrgPerson } from '@/data/org-structure'
 import { DepartmentMultiSelect } from '@/features/departments/DepartmentMultiSelect'
 import { normalizeEmail } from '@/lib/inputNormalization'
 import { EMAIL_FORMAT_MESSAGE } from '@/modules/admin-access/useIsSystemAdmin'
 import { toManagerOption } from './OrgEmployeeRow'
 
-export type OrgPersonChange = { name?: string; designation?: string; level?: number; departments?: string[]; managerId?: string | null; email?: string }
+export type OrgPersonChange = { name?: string; designation?: string; level?: number; departments?: string[]; managerId?: string | null; email?: string; photoUrl?: string | null }
 
 /** Edits everything about one org person in one place (the grid edits single fields in place; this also renames).
  *  Only fields that actually changed are sent, so a non-admin never submits an email they did not touch. */
@@ -29,6 +30,7 @@ export function OrgPersonEditDialog({ person, people, departmentOptions, emailEd
   const [managerId, setManagerId] = useState(person.managerId ?? '')
   const [departments, setDepartments] = useState<string[]>(person.departments)
   const [email, setEmail] = useState(person.email)
+  const [photoUrl, setPhotoUrl] = useState<string | null>(person.photoUrl ?? null)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -52,6 +54,7 @@ export function OrgPersonEditDialog({ person, people, departmentOptions, emailEd
     if (nextLevel !== person.level) change.level = nextLevel
     if ((nextManager || null) !== (person.managerId ?? null)) change.managerId = nextManager || null
     if (departments.join('\n') !== person.departments.join('\n')) change.departments = departments
+    if (photoUrl !== (person.photoUrl ?? null)) change.photoUrl = photoUrl
     if (emailEditable && nextEmail.toLowerCase() !== (person.email ?? '').trim().toLowerCase()) {
       if (!nextEmail && !window.confirm(`Clearing ${person.name}'s email removes the role it gives them. Continue?`)) return
       change.email = nextEmail
@@ -72,6 +75,7 @@ export function OrgPersonEditDialog({ person, people, departmentOptions, emailEd
       </>}
     >
       <div className="grid gap-3 sm:grid-cols-2">
+        <div className="sm:col-span-2"><PhotoUploadField photoUrl={photoUrl} onChange={setPhotoUrl} hint="Upload, or click here and press Ctrl+V to paste an image. Shown on the org chart and in the grid." /></div>
         <Field label="Full name" required><Input aria-label="Full name" value={name} onChange={(e) => setName(e.target.value)} /></Field>
         <Field label="Designation"><Input aria-label="Designation" value={designation} onChange={(e) => setDesignation(e.target.value)} /></Field>
         <Field label="Level">

@@ -50,6 +50,16 @@ describe('OrgEmployees — edit dialog and bulk import', () => {
     expect(repository.updateOrgPerson).toHaveBeenCalledWith('p2', { name: 'Bala S. Iyer' })
   })
 
+  it('lets the Edit dialog add a profile photo, resized by the shared photo field, and sends it as photoUrl', async () => {
+    renderAs(as('enforce', 'system_admin'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Bala Iyer' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Bala Iyer' })
+    const input = dialog.querySelector('input[type="file"]') as HTMLInputElement
+    await userEvent.upload(input, new File([Uint8Array.from([137, 80, 78, 71])], 'me.png', { type: 'image/png' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
+    expect(repository.updateOrgPerson).toHaveBeenCalledWith('p2', { photoUrl: expect.stringMatching(/^data:image\/png;base64,/) })
+  })
+
   it('imports a CSV: previews every row, then creates the valid ones top-down with the manager resolved', async () => {
     renderAs(as('enforce', 'system_admin'))
     await userEvent.click(await screen.findByRole('button', { name: /Import/ }))

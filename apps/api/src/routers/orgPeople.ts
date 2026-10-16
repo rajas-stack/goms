@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server'
 import type { PoolClient } from 'pg'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { photoUrlSchema } from '../photoUrl.js'
 import { EMAIL_BINDING_MESSAGE, ORG_SYNC_EMAIL_MESSAGE, emailChanges, lacksSystemAdmin, requireSystemAdmin, type CallerContext } from '../auth/rbac/systemAdminOnly.js'
 
 // Org Structure: the company chart. Pre-Sales / Bid / Legal rosters are mirrored from it by the
@@ -25,6 +26,7 @@ function toPerson(row: any) {
     managerId: (row.manager_id ?? null) as string | null,
     email: row.email as string,
     status: row.status as 'active' | 'inactive',
+    photoUrl: (row.photo_url ?? null) as string | null,
     createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : String(row.created_at),
   }
 }
@@ -108,6 +110,7 @@ export const orgPeopleRouter = router({
     departments: departments.optional(),
     managerId: z.string().guid('Invalid UUID').nullable().optional(),
     email: z.string().trim().max(254).optional(),
+    photoUrl: photoUrlSchema,
   })).mutation(({ input, ctx }) => inOrgTransaction(ctx, async (client) => {
     // The email is what derives this person's role (SYSTEM_ADMIN_ONLY, every RBAC mode): adding one needs a System Admin.
     if (emailChanges(input.email, '')) requireSystemAdmin(ctx, EMAIL_BINDING_MESSAGE, 'orgPeople.create#email')
@@ -116,9 +119,9 @@ export const orgPeopleRouter = router({
     const problem = managerProblem({ id: '', level: input.level }, input.managerId ?? null, people)
     if (problem) throw bad(problem)
     const result = await client.query(
-      `INSERT INTO org_people (name, designation, level, departments, manager_id, email)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [input.name, input.designation ?? '', input.level, [...new Set(input.departments ?? [])], input.managerId ?? null, input.email ?? ''],
+      `INSERT INTO org_people (name, designation, level, departments, manager_id, email, photo_url)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [input.name, input.designation ?? '', input.level, [...new Set(input.departments ?? [])], input.managerId ?? null, input.email ?? '', input.photoUrl ?? null],
     )
     return toPerson(result.rows[0])
   })),
@@ -133,6 +136,7 @@ export const orgPeopleRouter = router({
       departments: departments.optional(),
       managerId: z.string().guid('Invalid UUID').nullable().optional(),
       status: z.enum(['active', 'inactive']).optional(),
+      photoUrl: photoUrlSchema,
     }),
   })).mutation(({ input, ctx }) => inOrgTransaction(ctx, async (client) => {
     const current = (await client.query('SELECT * FROM org_people WHERE id=$1 FOR UPDATE', [input.id])).rows[0]
@@ -150,6 +154,7 @@ export const orgPeopleRouter = router({
       departments: p.departments !== undefined ? [...new Set(p.departments)] : current.departments,
       managerId: p.managerId !== undefined ? p.managerId : current.manager_id,
       status: p.status ?? current.status,
+      photoUrl: p.photoUrl !== undefined ? p.photoUrl : current.photo_url,
     }
     if (await nameTaken(client, next.name, input.id)) throw new TRPCError({ code: 'CONFLICT', message: 'Someone with this name is already in the org.' })
     const people = (await loadPeople(client)).map((o) => (o.id === input.id ? { ...o, level: next.level, manager_id: next.managerId } : o))
@@ -158,9 +163,9 @@ export const orgPeopleRouter = router({
     const broken = people.filter((o) => o.manager_id === input.id && o.level <= next.level)
     if (broken.length) throw bad(`${broken.map((o) => o.name).join(', ')} would report to someone at their own level or below — move them first.`)
     const result = await client.query(
-      `UPDATE org_people SET name=$2, designation=$3, email=$4, level=$5, departments=$6, manager_id=$7, status=$8, updated_at=now()
+      `UPDATE org_people SET name=$2, designation=$3, email=$4, level=$5, departments=$6, manager_id=$7, status=$8, photo_url=$9, updated_at=now()
        WHERE id=$1 RETURNING *`,
-      [input.id, next.name, next.designation, next.email, next.level, next.departments, next.managerId, next.status],
+      [input.id, next.name, next.designation, next.email, next.level, next.departments, next.managerId, next.status, next.photoUrl ?? null],
     )
     return toPerson(result.rows[0])
   })),
