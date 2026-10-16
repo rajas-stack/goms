@@ -20,11 +20,13 @@ export async function loadInsightRecords(ctx: Context): Promise<InsightRecord[]>
   const peopleIds = [...new Set(rows.flatMap(r => [r.preSalesPersonId, r.bidTeamMemberId]).filter((id): id is string => !!id))]
   const [opportunities, people, competition] = await Promise.all([
     pool.query('SELECT id, stage_key, closed_on, currency, created_at FROM opportunities WHERE id = ANY($1::uuid[])', [opportunityIds]),
-    pool.query('SELECT id, name FROM sales_persons WHERE id = ANY($1::uuid[]) UNION ALL SELECT id, name FROM delivery_team_members WHERE id = ANY($1::uuid[])', [peopleIds]),
+    pool.query('SELECT id, name, official_email AS email, photo_url FROM sales_persons WHERE id = ANY($1::uuid[]) OR official_email = ANY($2::text[]) UNION ALL SELECT id, name, email, NULL::text AS photo_url FROM delivery_team_members WHERE id = ANY($1::uuid[])', [peopleIds, [...new Set(rows.flatMap(r => [r.ownerEmail, r.solutionLeadEmail].filter(Boolean)))]]),
     pool.query("SELECT bid_id, document FROM bid_synopsis_sections WHERE section = 'competition' AND bid_id = ANY($1::uuid[])", [rows.map(r => r.id)]),
   ])
   const opportunityById = new Map(opportunities.rows.map(o => [o.id, o]))
   const names = new Map(people.rows.map(p => [p.id, p.name as string]))
+  const photos = new Map(people.rows.map(p => [p.id, p.photo_url as string | null]))
+  const photosByEmail = new Map(people.rows.filter(p => p.email).map(p => [p.email, p.photo_url as string | null]))
   const competitors = new Map(competition.rows.map(c => [c.bid_id, competitionNames(c.document)]))
   return rows.flatMap(row => {
     const opportunity = opportunityById.get(row.opportunityId)
@@ -35,6 +37,7 @@ export async function loadInsightRecords(ctx: Context): Promise<InsightRecord[]>
       closedOn: opportunity.closed_on ? dateString(opportunity.closed_on) : null, dueAt: row.nextMilestoneDueAt ? dateString(row.nextMilestoneDueAt) : row.submissionDate || null,
       valueCr: insightValueCr(row.valueAmount, row.valueUnit, opportunity.currency), owner: row.ownerEmail || 'Unassigned',
       presales: names.get(row.preSalesPersonId) || row.solutionLeadEmail || 'Unassigned', team: names.get(row.bidTeamMemberId) || 'Unassigned',
+      ownerPhotoUrl: photosByEmail.get(row.ownerEmail) ?? null, presalesPhotoUrl: photos.get(row.preSalesPersonId) ?? photosByEmail.get(row.solutionLeadEmail) ?? null, teamPhotoUrl: photos.get(row.bidTeamMemberId) ?? null,
       competitors: competitors.get(row.id) ?? [] }]
   })
 }

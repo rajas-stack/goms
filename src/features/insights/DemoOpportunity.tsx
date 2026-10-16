@@ -3,6 +3,8 @@ import { BID_STAGE_MAP, PIPELINE_STAGE_MAP, type InsightRecord } from '@goms/dom
 import { Dialog } from '@/components/ui/Dialog'
 import { money, stateName } from './InsightCharts'
 import { Segment, STATUS } from './InsightTables'
+import { PersonName } from '@/components/ui/PersonName'
+import './insightPolish.css'
 
 export function DemoOpportunity({ record, onClose }: { record: InsightRecord; onClose: () => void }) {
   const [section, setSection] = useState('Overview')
@@ -17,6 +19,6 @@ export function DemoOpportunity({ record, onClose }: { record: InsightRecord; on
   ]
   return <Dialog open title={record.name} description="Sample data" size="lg" onClose={onClose}><div className="insight-demo-preview">
     <Segment label="Sample opportunity sections" options={['Overview', 'General', 'Competition']} value={section} onChange={setSection}/>
-    {section === 'Competition' ? <ul aria-label="Sample competitors">{record.competitors.length ? record.competitors.map(name => <li key={name}>{name}</li>) : <li>No competition recorded</li>}</ul> : <dl>{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>}
+    {section === 'Competition' ? <ul aria-label="Sample competitors">{record.competitors.length ? record.competitors.map(name => <li key={name}>{name}</li>) : <li>No competition recorded</li>}</ul> : <dl>{fields.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{label === 'Status' ? <span className={`insight-status insight-status-${record.attentionFlag}`}>{value}</span> : ['Sales owner', 'Presales', 'Bid team'].includes(label) ? <PersonName person={{ name: value, photoUrl: label === 'Sales owner' ? record.ownerPhotoUrl : label === 'Presales' ? record.presalesPhotoUrl : record.teamPhotoUrl }}/> : value}</dd></div>)}</dl>}
   </div></Dialog>
 }

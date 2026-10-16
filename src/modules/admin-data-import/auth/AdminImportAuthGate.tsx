@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { authApi, useAuthUser, type AuthUser } from '@/lib/auth'
 import { Avatar } from '@/components/ui/Avatar'
 import { Button } from '@/components/ui/Button'
@@ -7,9 +7,8 @@ import { useAdminImportDomains } from '../api'
 /** True only for a verified TRPCClientError carrying the server's FORBIDDEN
  *  code (apps/api/src/auth/verifyAdminImportToken.ts) — a signed-in Google
  *  account that isn't on ADMIN_IMPORT_ALLOWED_EMAILS. Deliberately narrow:
- *  any other error (network hiccup, UNAUTHORIZED from an expired token)
- *  falls through to the existing signed-in view instead of this screen, so
- *  this never claims "not authorized" for a reason that isn't actually that. */
+ *  other errors show a retry state without claiming the account is forbidden
+ *  or treating an unverified permission check as authorization. */
 function isForbiddenError(error: unknown): boolean {
   return (error as { data?: { code?: string } } | null)?.data?.code === 'FORBIDDEN'
 }
@@ -31,10 +30,24 @@ function AccountName({ user }: { user: AuthUser }) {
   )
 }
 
-export type AdminImportAuthPhase = 'loading' | 'signedOut' | 'forbidden' | 'authorized'
+export type AdminImportAuthPhase = 'loading' | 'signedOut' | 'forbidden' | 'error' | 'authorized'
 
 export function AdminImportAuthGate({ children, onPhaseChange }: { children: ReactNode; onPhaseChange?: (phase: AdminImportAuthPhase, user: AuthUser | null) => void }) {
   const { user, loading } = useAuthUser()
+  const [signingIn, setSigningIn] = useState(false), [signInError, setSignInError] = useState('')
+  const signIn = async () => {
+    setSigningIn(true); setSignInError('')
+    try { await authApi.signIn() }
+    catch (error) {
+      const code = (error as { code?: string })?.code
+      setSignInError(code === 'auth/popup-blocked' ? 'Your browser blocked Google sign-in. Allow popups and retry.' : code === 'auth/popup-closed-by-user' ? 'Sign-in was cancelled. Please retry.' : 'Google sign-in could not be completed. Please retry.')
+    } finally { setSigningIn(false) }
+  }
+  let portalUrl: string | undefined
+  try {
+    const url = new URL(import.meta.env.VITE_ADMIN_IMPORT_PORTAL_URL ?? '')
+    if (url.protocol === 'https:' || url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname)) portalUrl = url.href
+  } catch { /* An unconfigured deployment must stay locked. */ }
   // The security boundary is the server (verifyAdminImportToken's allow-list
   // check, enforced on every adminImport.* call regardless of this gate) —
   // this probe only exists so a non-allow-listed signed-in account sees an
@@ -43,7 +56,7 @@ export function AdminImportAuthGate({ children, onPhaseChange }: { children: Rea
   // cheapest existing adminImport.* call and shares its cache with
   // AdminImportDashboard's own identical query, so this adds no extra
   // request once past this gate.
-  const { isPending: authorizing, isError, error } = useAdminImportDomains({ enabled: !!user })
+  const { isPending: authorizing, isError, error, refetch } = useAdminImportDomains({ enabled: !!user })
 
   // Optional — lets a caller (AdminImportModal) react to which screen this
   // gate is showing without duplicating its auth/allow-list logic. Fired
@@ -53,6 +66,7 @@ export function AdminImportAuthGate({ children, onPhaseChange }: { children: Rea
     loading || (!!user && authorizing) ? 'loading'
       : !user ? 'signedOut'
       : isError && isForbiddenError(error) ? 'forbidden'
+      : isError ? 'error'
       : 'authorized'
   useEffect(() => { onPhaseChange?.(phase, user) }, [phase, user, onPhaseChange])
 
@@ -64,15 +78,22 @@ export function AdminImportAuthGate({ children, onPhaseChange }: { children: Rea
         <p className="max-w-sm text-sm text-muted">
           Sign in with your Amnex Google account to use Admin Data Import.
         </p>
-        <Button variant="primary" disabled={!authApi.configured} onClick={() => { void authApi.signIn() }}>
-          Sign in with Google
+        <Button variant="primary" disabled={!authApi.configured || signingIn} onClick={() => { void signIn() }}>
+          {signingIn ? 'Signing in...' : 'Sign in with Google'}
         </Button>
-        {!authApi.configured && <p className="text-xs text-muted">Sign-in is not configured for this deployment.</p>}
+        {!authApi.configured && <p role="alert" className="text-xs text-muted">Google sign-in is not configured for this deployment. Admin Import remains locked.</p>}
+        {!authApi.configured && portalUrl && <a className="text-sm font-medium text-blue-600 underline" href={portalUrl}>Open authenticated import</a>}
+        {signInError && <p role="alert" className="text-sm text-crimson">{signInError}</p>}
       </div>
     )
   }
 
   if (authorizing) return null
+  if (isError && !isForbiddenError(error)) return <div className="flex h-full flex-col items-center justify-center gap-4 bg-paper p-8 text-center">
+    <p role="alert" className="text-sm text-muted">Import access could not be verified. Check your connection and retry.</p>
+    <Button variant="primary" onClick={() => { void refetch() }}>Retry access check</Button>
+    <Button variant="ghost" onClick={() => { void authApi.signOut() }}>Sign out</Button>
+  </div>
 
   if (isError && isForbiddenError(error)) {
     const requestAccessHref =

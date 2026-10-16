@@ -12,11 +12,11 @@ describe('Chart contextual interaction', () => {
   it('shows exact stage details for pointer and focus, mutes siblings, and dismisses on Escape', async () => {
     render(<Frame title="Stages"><StageChart groups={groups} showValue showCount onPick={() => {}}/></Frame>)
     const mark = screen.getByRole('button', { name: /^Gujarat:/ })
-    fireEvent.pointerEnter(mark, { pointerType: 'mouse' })
+    fireEvent.pointerEnter(mark.querySelector('[data-series=value]')!, { pointerType: 'mouse' })
     await waitFor(() => expect(within(screen.getByRole('tooltip')).getByText('70', { exact: false })).toBeVisible())
     expect(mark).toHaveAttribute('aria-describedby', screen.getByRole('tooltip').id)
     expect(screen.getByRole('button', { name: /^Maharashtra:/ })).toHaveAttribute('data-chart-muted', 'true')
-    fireEvent.pointerLeave(mark)
+    fireEvent.pointerLeave(mark.querySelector('[data-series=value]')!)
     expect(screen.queryByRole('tooltip')).toBeNull()
     fireEvent.focus(mark); await waitFor(() => expect(screen.getByRole('tooltip')).toBeVisible())
     fireEvent.keyUp(mark, { key: 'Escape' }); expect(screen.queryByRole('tooltip')).toBeNull()

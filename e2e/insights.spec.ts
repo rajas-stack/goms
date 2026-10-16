@@ -225,7 +225,7 @@ test.describe('Accessible mobile chart motion', () => {
     await expect(page.getByRole('tooltip')).toBeVisible()
     const bounds = await page.getByRole('tooltip').boundingBox()
     expect(bounds!.x).toBeGreaterThanOrEqual(0); expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390)
-    expect(await stage.locator('g').evaluate(el => getComputedStyle(el).transform)).toMatch(/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/)
+    expect(await stage.locator('g').first().evaluate(el => getComputedStyle(el).transform)).toMatch(/^(none|matrix\(1, 0, 0, 1, 0, 0\))$/)
     await page.screenshot({ path: info.outputPath('chart-motion-mobile.png'), fullPage: true })
     await page.keyboard.press('Escape')
     await stage.tap(); await expect(page.getByRole('dialog')).toBeVisible()

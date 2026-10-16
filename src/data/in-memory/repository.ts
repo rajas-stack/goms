@@ -1875,6 +1875,8 @@ class InMemoryRepository implements Repository {
     const rows = await this.listBidsForGrid()
     const opportunities = new Map(this.data.opportunities.map(o => [o.id, o]))
     const names = new Map([...this.data.salesPersons, ...this.data.deliveryTeamMembers].map(p => [p.id, p.name]))
+    const salesByEmail = new Map(this.data.salesPersons.map(p => [p.officialEmail, p]))
+    const salesById = new Map(this.data.salesPersons.map(p => [p.id, p]))
     const competition = new Map(this.data.bidSynopsis.filter(s => s.section === 'competition').map(s => [s.bidId, competitionNames(s.document)]))
     return computeInsights(rows.flatMap(row => {
       const opportunity = opportunities.get(row.opportunityId)
@@ -1885,6 +1887,9 @@ class InMemoryRepository implements Repository {
         closedOn: opportunity.closedOn, dueAt: row.nextMilestoneDueAt || row.submissionDate || null,
         valueCr: insightValueCr(row.valueAmount, row.valueUnit, opportunity.currency), owner: row.ownerEmail || 'Unassigned',
         presales: names.get(row.preSalesPersonId ?? '') || row.solutionLeadEmail || 'Unassigned', team: names.get(row.bidTeamMemberId ?? '') || 'Unassigned',
+        ownerPhotoUrl: salesByEmail.get(row.ownerEmail ?? '')?.photoUrl ?? null,
+        presalesPhotoUrl: salesById.get(row.preSalesPersonId ?? '')?.photoUrl ?? salesByEmail.get(row.solutionLeadEmail ?? '')?.photoUrl ?? null,
+        teamPhotoUrl: salesById.get(row.bidTeamMemberId ?? '')?.photoUrl ?? null,
         competitors: competition.get(row.id) ?? [] }]
     }), filters)
   }

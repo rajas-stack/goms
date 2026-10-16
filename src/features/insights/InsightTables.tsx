@@ -12,7 +12,12 @@ export function Segment({ options, value, onChange, label }: { options: string[]
 }
 export function RecentTable({ rows, onActions, onOpen }: { rows: InsightRecord[]; onActions: (row: InsightRecord) => void; onOpen?: (row: InsightRecord) => void }) {
   return rows.length ? <div className="insight-table-wrap"><table className="insight-table"><thead><tr><th>Opportunity</th><th>Department</th><th>Value</th><th>Stage</th><th>Status</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>
-    {rows.map(row => <tr key={row.id}><td>{onOpen ? <button className="insight-record-button" onClick={() => onOpen(row)} title={row.name}>{row.name}</button> : <Link to={bidUrl(row.id)} title={row.name}>{row.name}</Link>}</td><td title={row.department}>{row.department}</td><td>{row.valueCr === null ? 'Not recorded' : money(row.valueCr)}</td><td>{BID_STAGE_MAP[row.stageKey]?.label ?? row.stageKey}</td><td>{onOpen ? <button onClick={() => onOpen(row)} className={`insight-status insight-status-${row.attentionFlag}`}>{STATUS[row.attentionFlag]}</button> : <Link to={bidUrl(row.id)} className={`insight-status insight-status-${row.attentionFlag}`}>{STATUS[row.attentionFlag]}</Link>}</td><td><button title="Opportunity actions" aria-label={`Actions for ${row.name}`} onClick={() => onActions(row)} className="insight-icon-button"><Icon name="EllipsisVertical" size={15}/></button></td></tr>)}
+    {rows.map(row => <tr key={row.id}>
+      <td>{onOpen ? <button className="insight-record-button insight-record-name" onClick={() => onOpen(row)}><Icon name="BriefcaseBusiness" size={13}/><span>{row.name}</span></button> : <Link className="insight-record-name" to={bidUrl(row.id)}><Icon name="BriefcaseBusiness" size={13}/><span>{row.name}</span></Link>}</td>
+      <td title={row.department}>{row.department}</td><td>{row.valueCr === null ? 'Not recorded' : money(row.valueCr)}</td><td>{BID_STAGE_MAP[row.stageKey]?.label ?? row.stageKey}</td>
+      <td>{onOpen ? <button onClick={() => onOpen(row)} className={`insight-status insight-status-${row.attentionFlag}`}>{STATUS[row.attentionFlag]}</button> : <Link to={bidUrl(row.id)} className={`insight-status insight-status-${row.attentionFlag}`}>{STATUS[row.attentionFlag]}</Link>}</td>
+      <td><button title="Opportunity actions" aria-label={`Actions for ${row.name}`} onClick={() => onActions(row)} className="insight-icon-button"><Icon name="EllipsisVertical" size={15}/></button></td>
+    </tr>)}
   </tbody></table></div> : <EmptyChart/>
 }
 export function DetailList({ title, records, onClose, onActions, onOpen }: { title: string; records: InsightRecord[]; onClose: () => void; onActions: (row: InsightRecord) => void; onOpen?: (row: InsightRecord) => void }) {

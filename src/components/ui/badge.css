@@ -1,0 +1,11 @@
+td [data-badge-tone] { border-radius: 4px; font-weight: 650; border: 1px solid transparent; }
+td [data-badge-tone=emerald], td [data-badge-tone=teal] { background-color: #11694a; color: #fff; border-color: #11694a; }
+td [data-badge-tone=crimson] { background-color: #a92442; color: #fff; border-color: #a92442; }
+td [data-badge-tone=amber] { background-color: #855111; color: #fff; border-color: #855111; }
+td [data-badge-tone=blue], td [data-badge-tone=indigo] { background-color: #24558e; color: #fff; border-color: #24558e; }
+td [data-badge-tone=purple] { background-color: #65528b; color: #fff; border-color: #65528b; }
+html.dark td [data-badge-tone=emerald], html.dark td [data-badge-tone=teal] { background-color: #153e32; color: #b4f4d5; border-color: #347f62; }
+html.dark td [data-badge-tone=crimson] { background-color: #4b1c2b; color: #ffd0dc; border-color: #a54a65; }
+html.dark td [data-badge-tone=amber] { background-color: #45321a; color: #ffe0a2; border-color: #a27833; }
+html.dark td [data-badge-tone=blue], html.dark td [data-badge-tone=indigo] { background-color: #1c3551; color: #c6e4ff; border-color: #4e7ea9; }
+html.dark td [data-badge-tone=purple] { background-color: #332945; color: #e5d8ff; border-color: #807099; }

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import { Avatar, type AvatarPerson, type AvatarSize } from './Avatar'
+import './personName.css'
 
 /** The one way to show a human's name: round photo (initials fallback)
  *  followed by the name. Default `xs` (24px) sits beside 12–14px text;
@@ -19,7 +20,7 @@ export function PersonName({
   nameClassName?: string
 }) {
   return (
-    <span className={cn('inline-flex min-w-0 items-center gap-2 align-middle', size === '2xs' && 'gap-1.5', className)}>
+    <span className={cn('person-name inline-flex min-w-0 items-center gap-2 align-middle', size === '2xs' && 'gap-1.5', className)}>
       <Avatar person={person} size={size} />
       <span className="min-w-0">
         <span className={cn('block truncate', nameClassName)}>{person.name}</span>

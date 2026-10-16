@@ -9,6 +9,7 @@ export interface InsightRecord {
   stageKey: string; opportunityStageKey: string; sheet: OwnedSheet; status: string; attentionFlag: BidAttentionFlag
   createdAt: string; closedOn: string | null; dueAt: string | null; valueCr: number | null
   owner: string; presales: string; team: string; competitors: string[]
+  ownerPhotoUrl?: string | null; presalesPhotoUrl?: string | null; teamPhotoUrl?: string | null
 }
 export interface InsightGroup { key: string; label: string; value: number; count: number; ids: string[] }
 export interface InsightTrend { key: string; label: string; value: number; pipeline: number; count: number; wonValue: number; wonCount: number; lostValue: number; lostCount: number; weighted: number; active: number; winRate: number }

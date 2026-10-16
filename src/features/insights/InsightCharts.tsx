@@ -1,4 +1,6 @@
-import { useEffect, useId, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
+import { PersonName } from '@/components/ui/PersonName'
+import type { AvatarPerson } from '@/components/ui/Avatar'
 import { geoMercator, geoPath } from 'd3-geo'
 import type { FeatureCollection } from 'geojson'
 import india from '@/assets/india-states.json'
@@ -8,7 +10,7 @@ import { chartSpring, useChartInteraction } from './chartInteraction'
 import { ChartMaterial } from './ChartMaterial'
 import './chartMotion.css'
 
-export const COLORS = ['#155ad6', '#22b8ed', '#33b7a2', '#8d6be8', '#e6a237', '#6d829d']
+export const COLORS = ['#174d91', '#26a9d4', '#147d7d', '#7164a8', '#b9842b', '#60758c']
 export const money = (n: number) => `\u20b9${new Intl.NumberFormat('en-IN', { maximumFractionDigits: n > 0 && n < 1 ? 4 : 2 }).format(n)} Cr`
 export const stateNames = new Map((india as FeatureCollection).features.map(f => [String(Number(f.properties?.st_code)), String(f.properties?.st_nm)]))
 stateNames.set('0', 'Central Ministries'); stateNames.set('unassigned', 'Unassigned'); stateNames.set('__others', 'Others')
@@ -57,15 +59,15 @@ export function Sparkline({ values, label = 'Trend', format = String, periods }:
       {interaction.active === String(i) && <motion.circle cx={i * width / Math.max(values.length - 1, 1)} cy={height - 4 - v / max * (height - 8)} r="3" fill="#155ad6" stroke="#b6ddff" strokeWidth="3" initial={{ opacity: 0, scale: interaction.reduced ? 1 : 0 }} animate={{ opacity: 1, scale: 1 }} transition={chartSpring} style={{ transformBox: 'fill-box', transformOrigin: 'center' }}/>}</g>)}
   </svg>{interaction.tooltip}</>
 }
-export function Bars({ groups, onPick, count = false, labels = (g: InsightGroup) => g.label, limit = 7 }: {
-  groups: InsightGroup[]; onPick: (g: InsightGroup) => void; count?: boolean; labels?: (g: InsightGroup) => string; limit?: number
+export function Bars({ groups, onPick, count = false, labels = (g: InsightGroup) => g.label, limit = 7, person }: {
+  groups: InsightGroup[]; onPick: (g: InsightGroup) => void; count?: boolean; labels?: (g: InsightGroup) => string; limit?: number; person?: (g: InsightGroup) => AvatarPerson
 }) {
   const interaction = useChartInteraction(groups)
   const visible = groups.slice(0, limit), rest = groups.slice(limit)
   if (rest.length) visible.push({ key: '__others', label: 'Others', value: rest.reduce((n, g) => n + g.value, 0), count: rest.reduce((n, g) => n + g.count, 0), ids: rest.flatMap(g => g.ids) })
   const maximum = Math.max(1, ...visible.map(g => count ? g.count : g.value)), total = groups.reduce((n, g) => n + (count ? g.count : g.value), 0)
-  return groups.length ? <><div className="insight-bars">{visible.map((g, i) => <button type="button" key={g.key} {...interaction.bind(g.key, { title: labels(g), rows: [['Pipeline value', money(g.value)], ['Opportunities', String(g.count)]], color: COLORS[i % COLORS.length] })} onClick={() => onPick(g)}>
-    <span className="insight-bar-label">{labels(g)}</span><span className="insight-bar-track"><span style={{ width: `${(count ? g.count : g.value) / maximum * 100}%`, background: COLORS[i % COLORS.length] }}/></span>
+  return groups.length ? <><div className={`insight-bars${person ? ' insight-person-bars' : ''}`}>{visible.map(g => <button type="button" key={g.key} {...interaction.bind(g.key, { title: labels(g), rows: [['Value', money(g.value)], ['Opportunities', String(g.count)]], color: count ? COLORS[1] : COLORS[0] })} onClick={() => onPick(g)}>
+    <span className="insight-bar-label">{person && g.key !== '__others' ? <PersonName person={person(g)} size="2xs"/> : labels(g)}</span><span className="insight-bar-track"><span style={{ width: `${(count ? g.count : g.value) / maximum * 100}%`, background: count ? COLORS[1] : COLORS[0] }}/></span>
     <strong>{count ? g.count : money(g.value)}</strong><small>{total ? `${Math.round((count ? g.count : g.value) / total * 100)}%` : '0%'}</small>
   </button>)}</div>{interaction.tooltip}</> : <EmptyChart/>
 }
@@ -103,11 +105,16 @@ export function StageChart({ groups, showValue, showCount, onPick, valueStages }
       const width = Math.min(40, cell * .36), pairWidth = showValue && showCount ? width * 2 - 3 : width
       const center = left + cell * (i + .5), x = center - pairWidth / 2, countX = x + (showValue ? width - 3 : 0)
       const labelY = Math.min(showValue && available ? valueY(g.value) : bottom, showCount ? countY(g.count) : bottom) - 10
-      return <g key={g.key} role="button" tabIndex={0} {...interaction.bind(g.key, { title: g.label, rows: [['Pipeline value', label], ['Opportunities', String(g.count)]] })} aria-label={`${g.label}: ${label}, ${g.count} opportunities`} onClick={() => onPick(g)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(g) } }} className="insight-chart-pick insight-stage-group">
+      const valuePreview = interaction.bind(`${g.key}:value`, { title: g.label, rows: [['Pipeline value', label]], color: COLORS[0] })
+      const countPreview = interaction.bind(`${g.key}:count`, { title: g.label, rows: [['Opportunities', String(g.count)]], color: COLORS[1] })
+      const selected = interaction.active?.startsWith(`${g.key}:`)
+      return <g key={g.key} role="button" tabIndex={0} onFocus={showValue ? valuePreview.onFocus : countPreview.onFocus} onBlur={valuePreview.onBlur} onKeyUp={valuePreview.onKeyUp}
+        aria-describedby={selected ? interaction.tooltipId : undefined} data-chart-active={selected ? 'true' : undefined} data-chart-muted={interaction.active && !selected ? 'true' : undefined}
+        aria-label={`${g.label}: ${label}, ${g.count} opportunities`} onClick={() => onPick(g)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPick(g) } }} className="insight-chart-pick insight-stage-group">
         <rect x={left + i * cell} y="15" width={cell} height="173" fill="transparent"/>
-        <motion.g initial={false} animate={{ scale: interaction.active === g.key && !interaction.reduced ? 1.04 : 1 }} transition={chartSpring} style={{ transformBox: 'fill-box', transformOrigin: 'center bottom', pointerEvents: 'none' }}>
-        {showCount && <path data-series="count" d={roundedBar(countX, countY(g.count), width)} fill={`url(#${id}-count)`} stroke="#b1e5fa" strokeWidth=".7"/>}
-        {showValue && available && g.value > 0 && <><path data-series="value" d={roundedBar(x, valueY(g.value), width)} fill={`url(#${id}-value)`} stroke="#7ca7dd" strokeWidth=".7"/><path d={roundedBar(x, valueY(g.value), width)} fill={`url(#${id}-shine)`} pointerEvents="none"/></>}
+        <motion.g initial={false} animate={{ scale: selected && !interaction.reduced ? 1.04 : 1 }} transition={chartSpring} style={{ transformBox: 'fill-box', transformOrigin: 'center bottom' }}>
+        {showCount && <g {...countPreview}><path data-series="count" d={roundedBar(countX, countY(g.count), width)} fill={`url(#${id}-count)`} stroke="#b1e5fa" strokeWidth=".7"/></g>}
+        {showValue && available && g.value > 0 && <g {...valuePreview}><path data-series="value" d={roundedBar(x, valueY(g.value), width)} fill={`url(#${id}-value)`} stroke="#7ca7dd" strokeWidth=".7"/><path d={roundedBar(x, valueY(g.value), width)} fill={`url(#${id}-shine)`} pointerEvents="none"/></g>}
         </motion.g><text x={center} y={labelY} textAnchor="middle" className={`insight-stage-value-label${showValue && !available ? ' insight-stage-unpriced' : ''}`}>{showValue ? label : g.count}</text>
         <text x={center} y="165" textAnchor="middle" className="insight-stage-name">{g.label.split(' ').map((word, n) => <tspan key={n} x={center} dy={n ? 12 : 0}>{word}</tspan>)}</text>
       </g>
@@ -139,15 +146,17 @@ export function DonutChart({ groups, onPick }: { groups: InsightGroup[]; onPick:
 }
 export function TrendChart({ data, count, onPick }: { data: InsightTrend[]; count: boolean; onPick: (key: string, kind: 'new' | 'won' | 'lost') => void }) {
   const interaction = useChartInteraction(data)
+  const [selectedSeries, setSelectedSeries] = useState<string | null>(null)
   const materialId = useId().replace(/:/g, '')
   const series = [{ label: 'New Opportunities', key: count ? 'count' : 'value', kind: 'new', color: COLORS[0] }, { label: 'Closed (Won)', key: count ? 'wonCount' : 'wonValue', kind: 'won', color: COLORS[1] }, { label: 'Closed (Lost)', key: count ? 'lostCount' : 'lostValue', kind: 'lost', color: COLORS[3] }] as const
-  const max = Math.max(1, ...data.flatMap(d => series.map(s => d[s.key])))
+  const visibleSeries = selectedSeries ? series.filter(s => s.kind === selectedSeries) : series
+  const max = Math.max(1, ...data.flatMap(d => visibleSeries.map(s => d[s.key])))
   const x = (i: number) => 38 + i * 560 / Math.max(data.length - 1, 1), y = (n: number) => 166 - n / max * 125
-  return <><div className="insight-chart-legend">{series.map(s => <span key={s.key}><i style={{ background: s.color }}/>{s.label}</span>)}</div>
+  return <><div className="insight-chart-legend" role="group" aria-label="Trend series">{series.map(s => <button type="button" key={s.kind} aria-pressed={selectedSeries === null || selectedSeries === s.kind} onClick={() => { interaction.clear(); setSelectedSeries(selectedSeries === s.kind ? null : s.kind) }}><i style={{ background: s.color }}/>{s.label}</button>)}</div>
     <svg role="img" aria-label={`Opportunity trend by ${count ? 'count' : 'value'}`} viewBox="0 0 640 200" className="insight-trend-chart">
       {series.map(s => <ChartMaterial key={s.kind} id={`${materialId}-${s.kind}`} color={s.color}/>)}
       {[0, 1, 2, 3, 4].map(i => <g key={i}><line x1="38" x2="600" y1={y(max * i / 4)} y2={y(max * i / 4)} stroke="var(--insight-line)"/><text x="30" y={y(max * i / 4) + 4} textAnchor="end">{(max * i / 4).toFixed(count ? 0 : 1)}</text></g>)}
-      {series.map(s => <g key={s.key}><polygon className="insight-trend-area insight-material-area" points={`38,166 ${data.map((d, i) => `${x(i)},${y(d[s.key])}`).join(' ')} ${x(data.length - 1)},166`} fill={`url(#${materialId}-${s.kind}-area)`} opacity={interaction.active?.endsWith(`:${s.kind}`) ? 1 : .7}/><polyline points={data.map((d, i) => `${x(i)},${y(d[s.key])}`).join(' ')} fill="none" stroke={`url(#${materialId}-${s.kind}-surface)`} strokeWidth="2.5" className="insight-material-line"/><polyline points={data.map((d, i) => `${x(i)},${y(d[s.key])}`).join(' ')} fill="none" stroke={`url(#${materialId}-${s.kind}-sheen)`} strokeWidth=".8" className="insight-material-reflection"/>
+      {visibleSeries.map(s => <g key={s.key} data-trend-series={s.kind}><polygon className="insight-trend-area insight-material-area" points={`38,166 ${data.map((d, i) => `${x(i)},${y(d[s.key])}`).join(' ')} ${x(data.length - 1)},166`} fill={`url(#${materialId}-${s.kind}-area)`} opacity={interaction.active?.endsWith(`:${s.kind}`) ? 1 : .7}/><polyline points={data.map((d, i) => `${x(i)},${y(d[s.key])}`).join(' ')} fill="none" stroke={`url(#${materialId}-${s.kind}-surface)`} strokeWidth="2.5" className="insight-material-line"/><polyline points={data.map((d, i) => `${x(i)},${y(d[s.key])}`).join(' ')} fill="none" stroke={`url(#${materialId}-${s.kind}-sheen)`} strokeWidth=".8" className="insight-material-reflection"/>
         {data.map((d, i) => <g key={d.key} {...interaction.bind(`${d.key}:${s.kind}`, { title: `${d.label} · ${s.label}`, rows: [[count ? 'Opportunities' : 'Value', count ? String(d[s.key]) : money(d[s.key])]], color: s.color })} role={d[s.key] > 0 ? 'button' : 'img'} tabIndex={0} aria-label={`${d.label}, ${s.label}: ${count ? d[s.key] : money(d[s.key])}`} onClick={() => { if (d[s.key] > 0) onPick(d.key, s.kind) }} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (d[s.key] > 0) onPick(d.key, s.kind) } }} className="insight-chart-pick">
           <circle cx={x(i)} cy={y(d[s.key])} r="9" fill="transparent"/>
           <circle cx={x(i)} cy={y(d[s.key])} r="4" fill={`url(#${materialId}-${s.kind}-surface)`} stroke="var(--chart-rim)" pointerEvents="none"/>

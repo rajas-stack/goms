@@ -12,7 +12,7 @@ import type { ImportAction, ImportDomainKey, ImportRowResult, ImportSummary } fr
 const adminImportClient = createTRPCClient<AppRouter>({
   links: [
     httpBatchLink({
-      url: `${import.meta.env.VITE_API_BASE_URL}/api/trpc`,
+      url: `${(import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')}/api/trpc`,
       // Reads the *current* ID token on every request rather than caching
       // one at module-load time — getIdToken() transparently refreshes an
       // expired token, and there is no signed-in user at all until
