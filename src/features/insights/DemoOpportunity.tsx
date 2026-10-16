@@ -4,7 +4,6 @@ import { Dialog } from '@/components/ui/Dialog'
 import { money, stateName } from './InsightCharts'
 import { Segment, STATUS } from './InsightTables'
 import { PersonName } from '@/components/ui/PersonName'
-import './insightPolish.css'
 
 export function DemoOpportunity({ record, onClose }: { record: InsightRecord; onClose: () => void }) {
   const [section, setSection] = useState('Overview')

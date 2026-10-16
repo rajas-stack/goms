@@ -34,3 +34,13 @@ it('rejects unbounded periods and oversized filter values', () => {
   expect(insightsFilterSchema.safeParse({ months: 12, stateCode: -1 }).success).toBe(false)
   expect(insightsFilterSchema.safeParse({ months: 12, search: 'x'.repeat(201) }).success).toBe(false)
 })
+it('loads profile photos only for people referenced by authorized grid rows', async () => {
+  mocks.list.mockResolvedValue([row])
+  mocks.query.mockImplementation(async (sql: string) => ({ rows: sql.includes('FROM opportunities') ? [{ id: 'opp-visible', stage_key: 'submitted', closed_on: null, currency: 'INR', created_at: new Date('2026-10-01T00:00:00Z') }] : sql.includes('FROM sales_persons') ? [
+    { id: 'owner', name: 'Sales owner', email: row.ownerEmail, photo_url: '/photos/owner.png' },
+    { id: 'pre', name: 'Presales owner', email: 'presales@amnex.com', photo_url: '/photos/presales.png' },
+  ] : [] }))
+  const records = await loadInsightRecords({})
+  expect(records[0]).toMatchObject({ ownerPhotoUrl: '/photos/owner.png', presalesPhotoUrl: '/photos/presales.png', teamPhotoUrl: null })
+  expect(mocks.query.mock.calls[1][1]).toEqual([['pre', 'bid-person'], [row.ownerEmail]])
+})

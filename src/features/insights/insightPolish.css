@@ -17,7 +17,7 @@ html.dark .insight-status-dueSoon { background: #45321a; color: #ffe0a2; border-
 html.dark .insight-status-corrigendumPending { background: #1c3551; color: #c6e4ff; border-color: #4e7ea9; }
 .insight-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .insight-summary > :first-child { border-left: 0; padding-left: 0; }
-.insight-kpi-icon { border: 1px solid rgb(70 130 200 / .18); background: linear-gradient(145deg, #f1f8ff, #d6e8fc); color: #174d91; }
+.insights-page .insight-kpi .insight-kpi-icon { border: 1px solid rgb(70 130 200 / .18); background: linear-gradient(145deg, #f1f8ff, #d6e8fc); color: #174d91; }
 .insight-kpi-icon svg, .insight-toolbar-actions button > svg, .insight-summary > button > svg, .insight-summary > a > svg { transition: transform 220ms cubic-bezier(.2,.8,.2,1), filter 220ms cubic-bezier(.2,.8,.2,1); transform-origin: center; }
 .insight-spark { transform-origin: bottom right; transition: opacity 220ms cubic-bezier(.2,.8,.2,1), transform 220ms cubic-bezier(.2,.8,.2,1); }
 .insight-spark polygon { transform-origin: center bottom; transform-box: fill-box; transform: scaleY(0); transition: transform 220ms cubic-bezier(.2,.8,.2,1); }
@@ -25,11 +25,12 @@ html.dark .insight-status-corrigendumPending { background: #1c3551; color: #c6e4
 .insight-kpi:hover .insight-spark polygon, .insight-kpi:focus-visible .insight-spark polygon { transform: scaleY(1); }
 .insight-kpi:hover .insight-kpi-icon svg, .insight-kpi:focus-visible .insight-kpi-icon svg, .insight-summary > button:hover > svg, .insight-summary > a:hover > svg { transform: translateY(-2px) scale(1.08); filter: drop-shadow(0 2px 2px rgb(23 77 145 / .2)); }
 .insight-toolbar-actions button:hover > svg { transform: translateY(-1px) scale(1.08); }
-html.dark .insight-kpi-icon { background: linear-gradient(145deg, #20334c, #101f33); color: #aed6ff; border-color: #345275; }
+html.dark .insights-page .insight-kpi .insight-kpi-icon { background: linear-gradient(145deg, #20334c, #101f33); color: #aed6ff; border-color: #345275; }
 .insight-record-name { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; text-align: left; }
-.insight-record-name > svg { flex-shrink: 0; color: #52749a; }
+.insight-record-name > svg { flex-shrink: 0; color: #52749a; transition: transform 220ms cubic-bezier(.2,.8,.2,1); }
 .insight-record-name > span { overflow-wrap: anywhere; }
 .insight-record-name:hover { color: #174d91; text-decoration: none; background: rgb(218 234 253 / .55); border-radius: 3px; }
+.insight-record-name:hover > svg { transform: scale(1.5); }
 html.dark .insight-record-name:hover { color: #d4eaff; background: rgb(28 59 95 / .6); }
 .insight-table tbody:has(.insight-record-name:hover) > tr:not(:has(.insight-record-name:hover)) { opacity: .6; }
 @media (max-width: 680px) {
@@ -41,4 +42,5 @@ html.dark .insight-record-name:hover { color: #d4eaff; background: rgb(28 59 95 
 @media (prefers-reduced-motion: reduce) {
   .insight-kpi-icon svg, .insight-toolbar-actions button > svg, .insight-summary > button > svg, .insight-summary > a > svg, .insight-spark, .insight-spark polygon { transition: none; }
   .insight-kpi:hover .insight-kpi-icon svg, .insight-kpi:focus-visible .insight-kpi-icon svg, .insight-summary > button:hover > svg, .insight-summary > a:hover > svg, .insight-toolbar-actions button:hover > svg, .insight-kpi:hover .insight-spark, .insight-kpi:focus-visible .insight-spark { transform: none; filter: none; }
+  .insight-record-name > svg { transition: none; }.insight-record-name:hover > svg { transform: none; }
 }

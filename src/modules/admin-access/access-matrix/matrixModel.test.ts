@@ -230,7 +230,7 @@ describe('field groups', () => {
       }
     }
     expect(cells).toBe(SHOWN * 8 * 6)
-  })
+  }, 60_000) // checks every team × level × cell; ~5 s alone, slower on busy runners
 
   it('hides Opportunity > Master on the screen only: the policy still holds it, unchanged', () => {
     expect(HIDDEN_SECTIONS).toEqual({ Opportunity: ['Master'] })

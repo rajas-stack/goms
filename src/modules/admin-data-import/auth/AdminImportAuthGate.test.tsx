@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { AdminImportAuthGate } from './AdminImportAuthGate'
 
 const { onAuthStateChanged, signInWithPopup, signOut } = vi.hoisted(() => ({
@@ -33,11 +33,12 @@ describe('AdminImportAuthGate', () => {
     expect(screen.queryByText('Protected content')).not.toBeInTheDocument()
   })
 
-  it('calls signInWithPopup with the Google provider when the sign-in button is clicked', () => {
+  it('calls signInWithPopup with the Google provider when the sign-in button is clicked', async () => {
     onAuthStateChanged.mockImplementation((_auth, cb) => { cb(null); return () => {} })
     render(<AdminImportAuthGate><div>Protected content</div></AdminImportAuthGate>)
     fireEvent.click(screen.getByRole('button', { name: /sign in with google/i }))
     expect(signInWithPopup).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(screen.getByRole('button', { name: /sign in with google/i })).toBeEnabled())
   })
 
   it('does not probe the allow-list at all while signed out', () => {

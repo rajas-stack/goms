@@ -43,13 +43,13 @@ export function Avatar({
   // Vacant variant takes precedence
   if (person.vacant) {
     return (
-      <div
+      <span
         className={cn(baseClasses, 'bg-amber-100 text-amber-600')}
         data-testid="avatar"
         aria-hidden="true"
       >
         <Icon name="UserX" size={ICON_SIZE[size]} />
-      </div>
+      </span>
     )
   }
 
@@ -69,12 +69,12 @@ export function Avatar({
 
   // Initials variant
   return (
-    <div
+    <span
       className={cn(baseClasses, 'bg-ink-100 font-semibold leading-none text-ink-700')}
       data-testid="avatar"
       aria-hidden="true"
     >
       {initials(person.name)}
-    </div>
+    </span>
   )
 }
