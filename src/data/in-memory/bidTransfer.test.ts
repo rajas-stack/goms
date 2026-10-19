@@ -18,7 +18,7 @@ describe('atomic bid import', () => {
   })
   it('rejects every row and preserves all data when one row fails validation', async () => {
     const before = structuredClone(getFullSnapshot())
-    expect((await repository.importBids({ table: { headers: ['Opportunity Name', 'RFP Published Date'], rows: [['Good', '2026-10-19'], ['Bad', '32/13/2026']] } })).status).toBe('rejected')
+    expect((await repository.importBids({ table: { headers: ['Opportunity Name', 'Scope'], rows: [['Good', 'ok'], ['Bad', '=1+1']] } })).status).toBe('rejected')
     expect(getFullSnapshot()).toEqual(before)
   })
   it('does not publish a partly built batch after an unexpected write failure', async () => {

@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Icon } from '@/components/ui/Icon'
 import { useBidsForGrid } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { WORK_VERTICALS } from '@/features/nodes/department-meta'
+import { useVerticalNames } from '@/features/masters/useMasterOptions'
 import {
   computeDashboard, verticalLabel, verticalOptions,
   type DashboardCounts, type DashboardMeasure, type VerticalBreakdown,
@@ -37,7 +37,8 @@ export function DashboardPage() {
     return next
   }, { replace: true })
 
-  const options = useMemo(() => verticalOptions(rows ?? [], WORK_VERTICALS), [rows])
+  const verticalNames = useVerticalNames()
+  const options = useMemo(() => verticalOptions(rows ?? [], verticalNames), [rows, verticalNames])
   const data = useMemo(() => computeDashboard(rows ?? [], vertical), [rows, vertical])
 
   return (

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { rbacReadProcedure, protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { bidMasterUsage, cascadeBidMasterRename } from '../lib/bidMasterUsage.js'
 import { isForeignKeyViolation, isUniqueViolation } from '../db-errors.js'
 import { writeAuditLog, listAuditLogs } from '../lib/auditLog.js'
 import {
@@ -9,12 +10,13 @@ import {
   SKU_SENSITIVE_FIELDS, type CommercialMasterKey,
   BOQ_TRANSITIONS, LINE_STATES_CLEARED_FOR_APPROVAL, DELETABLE_BOQ_STATUSES, formatBoqNumber, type BoqStatus,
   computeLineTotal, validateLineQuantity, validateLineDiscountPct, resolveApprovalBand, freshLineApprovalState,
-  effectiveUnitPrice, isAbsoluteLinePrice, discountPctForSellingPrice, conversionFactorFromRates,
-} from '@goms/domain'
+  effectiveUnitPrice, isAbsoluteLinePrice, discountPctForSellingPrice, conversionFactorFromRates, isBidTrackerMasterKey } from '@goms/domain'
 
 const masterKeySchema = z.enum([
   'verticals', 'products', 'modules', 'features', 'skuCategories', 'unitsOfMeasure',
   'productEditions', 'billingTypes', 'taxClasses', 'approvalMatrix', 'currencies', 'preSales',
+  // Settings > Masters > Bid Tracker dropdowns (packages/domain/src/bidTrackerFields.ts).
+  'bidPriorities', 'tenderFeeModes', 'emdInstruments', 'rtmTypes', 'zones', 'tenderStatuses', 'buOwners',
 ])
 
 // Returns `any` deliberately — a master row's real shape varies by `key`
@@ -183,6 +185,15 @@ const commercialMastersRouter = router({
           ],
         )
 
+        // Bid Tracker dropdown values are stored on bids by NAME: a rename follows onto every bid.
+        if (isBidTrackerMasterKey(key) && patch.name !== undefined && String(patch.name).trim() && patch.name !== current.name) {
+          await cascadeBidMasterRename(client, key, current.name, String(patch.name).trim())
+        }
+        // Verticals master drives opportunities.vertical by NAME: a rename follows onto every opportunity.
+        if (key === 'verticals' && patch.name !== undefined && String(patch.name).trim() && patch.name !== current.name) {
+          await client.query('UPDATE opportunities SET vertical=$2 WHERE lower(btrim(vertical)) = lower(btrim($1))', [current.name, String(patch.name).trim()])
+        }
+
         if (key === 'currencies' && extraPatch.isBaseCurrency === true) {
           await client.query(
             `UPDATE commercial_masters SET extra = extra || '{"isBaseCurrency": false}'::jsonb
@@ -236,6 +247,12 @@ const commercialMastersRouter = router({
         if (inUse.rows.length) {
           throw new TRPCError({ code: 'CONFLICT', message: `Cannot delete this ${input.key} row — it is still referenced by at least one SKU.` })
         }
+      }
+      // A Bid Tracker value held by any bid is never deleted — deactivate it instead (it stays on those bids).
+      if (isBidTrackerMasterKey(input.key)) {
+        const name = (await pool.query('SELECT name FROM commercial_masters WHERE master_key=$1 AND id=$2', [input.key, input.id])).rows[0]?.name
+        const used = name ? await bidMasterUsage(pool, input.key, name) : 0
+        if (used) throw new TRPCError({ code: 'CONFLICT', message: `"${name}" is used by ${used} bid${used === 1 ? '' : 's'} — deactivate it instead of deleting.` })
       }
       if (input.key === 'verticals') {
         const inUse = await pool.query('SELECT 1 FROM commercial_boqs WHERE vertical_id=$1 LIMIT 1', [input.id])

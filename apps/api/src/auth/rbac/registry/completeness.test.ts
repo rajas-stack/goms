@@ -1,4 +1,5 @@
 import { TRPCError } from '@trpc/server'
+import { EMAIL_CENTER_PROCEDURES } from '@goms/domain'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { appRouter } from '../../../index.js'
 import { ungatedProcedures } from '../../../testHelpers/probeGuard.js'
@@ -26,7 +27,9 @@ describe('PROCEDURE_POLICY completeness', () => {
     expect(exempt).toEqual([
       'outside:adminImport.commitGeographyLoad', 'outside:adminImport.history', 'outside:adminImport.listDomains',
       'outside:adminImport.previewGeographyLoad', 'outside:adminImport.session.commit', 'outside:adminImport.session.history',
-      'outside:adminImport.session.validate', 'public:health.check', 'self:auth.me', 'self:googleIntegrations.get', 'self:googleIntegrations.save',
+      'outside:adminImport.session.validate', 'public:health.check', 'self:auth.me',
+      ...EMAIL_CENTER_PROCEDURES.map(name => `self:emailCenter.${name}`).sort(),
+      'self:googleIntegrations.get', 'self:googleIntegrations.save',
       'self:makerDocuments.create', 'self:makerDocuments.delete', 'self:makerDocuments.downloadUrl', 'self:makerDocuments.duplicate',
       'self:makerDocuments.editorConfig', 'self:makerDocuments.list', 'self:makerDocuments.rename', 'self:makerDocuments.replace',
       'self:makerDocuments.upload', 'self:rbacTree.myAccess',

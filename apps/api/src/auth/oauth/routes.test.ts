@@ -14,6 +14,13 @@ let google: ReturnType<typeof fakeGoogle>
 let warnSpy: ReturnType<typeof vi.spyOn>
 let errorSpy: ReturnType<typeof vi.spyOn>
 const ORIGIN = 'https://goms.test'
+const cookieJar = new Map<string, string>()
+const browserCookies = () => [...cookieJar].map(([name, value]) => name + '=' + value).join('; ')
+function receiveCookies(r: { headers: Record<string, unknown> }) {
+  const header = r.headers['set-cookie']; const values = Array.isArray(header) ? header : header ? [header] : []
+  for (const raw of values) { const value = String(raw); const pair = value.split(';')[0]; const index = pair.indexOf('='); const name = pair.slice(0, index); if (/Max-Age=0(?:;|$)/i.test(value)) cookieJar.delete(name); else cookieJar.set(name, pair.slice(index + 1)) }
+  return r
+}
 
 async function boot(over?: Parameters<typeof fakeGoogle>[0]) {
   google = fakeGoogle(over)
@@ -22,19 +29,20 @@ async function boot(over?: Parameters<typeof fakeGoogle>[0]) {
 beforeEach(async () => {
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-  useOauthEnv('both'); await cleanupOauthTables()
+  cookieJar.clear(); useOauthEnv('both'); await cleanupOauthTables()
 })
 afterEach(async () => { await app?.close(); clearOauthEnv(); warnSpy.mockRestore(); errorSpy.mockRestore(); await cleanupOauthTables() })
 
 const loc = (r: { headers: Record<string, unknown> }) => String(r.headers.location)
 async function start(client: 'web' | 'app', returnTo = '/sales/roster') {
   const r = await app.inject({ method: 'GET', url: `/api/oauth/google/start?client=${client}&return_to=${encodeURIComponent(returnTo)}` })
+  receiveCookies(r)
   const u = new URL(loc(r))
   return { r, u, state: u.searchParams.get('state')!, nonce: u.searchParams.get('nonce')!, challenge: u.searchParams.get('code_challenge')! }
 }
 const callback = (state: string, code = 'google-code') =>
-  app.inject({ method: 'GET', url: `/api/oauth/google/callback?code=${code}&state=${encodeURIComponent(state)}` })
-const post = (url: string, payload: unknown) => app.inject({ method: 'POST', url, payload: payload as object })
+  app.inject({ method: 'GET', headers: { cookie: browserCookies() }, url: `/api/oauth/google/callback?code=${code}&state=${encodeURIComponent(state)}` })
+const post = async (url: string, payload: unknown) => { const r = await app.inject({ method: 'POST', url, headers: { cookie: browserCookies() }, payload: payload as object }); receiveCookies(r); return r }
 
 describe('AUTH_PROVIDER=firebase (the default) is a true no-op: no OAuth route is registered', () => {
   const ROUTES = [['GET', '/api/oauth/google/start?client=web'], ['GET', '/api/oauth/google/callback?state=x&code=y'],
@@ -221,7 +229,7 @@ describe('failure paths never issue a code or a token', () => {
   it('the user denied consent at Google -> "denied"', async () => {
     await boot()
     const s = await start('web')
-    const r = await app.inject({ method: 'GET', url: `/api/oauth/google/callback?error=access_denied&state=${encodeURIComponent(s.state)}` })
+    const r = await app.inject({ method: 'GET', headers: { cookie: browserCookies() }, url: `/api/oauth/google/callback?error=access_denied&state=${encodeURIComponent(s.state)}` })
     expect(reasonOf(r)).toBe('denied')
     expect(await codes()).toBe(0)
   })
@@ -297,10 +305,10 @@ describe('failure logging and page safety', () => {
     await boot()
     const s = await start('app', '/x"><script>alert(1)</script>')
     const evil = encodeURIComponent('"><script>alert(1)</script>')
-    const cb = await app.inject({ method: 'GET', url: `/api/oauth/google/callback?code=${evil}&state=${encodeURIComponent(s.state)}` })
+    const cb = await app.inject({ method: 'GET', headers: { cookie: browserCookies() }, url: `/api/oauth/google/callback?code=${evil}&state=${encodeURIComponent(s.state)}` })
     expect(cb.body).not.toContain('<script')
     expect(cb.body).not.toContain('alert(1)')
-    const denied = await app.inject({ method: 'GET', url: `/api/oauth/google/callback?error=${evil}&state=${encodeURIComponent((await start('app')).state)}` })
+    const denied = await app.inject({ method: 'GET', headers: { cookie: browserCookies() }, url: `/api/oauth/google/callback?error=${evil}&state=${encodeURIComponent((await start('app')).state)}` })
     expect(denied.body).not.toContain('<script')
     expect(denied.body).toContain('com.gorms.app://auth?error=denied')
     expect(denied.headers['cache-control']).toMatch(/no-store/)
@@ -419,5 +427,29 @@ describe('the POST bodies are small: 4 KB limit on exchange, refresh and logout'
   it('an ordinary request body is far below the limit', async () => {
     const s = await start('web'); const code = new URL(loc(await callback(s.state))).searchParams.get('auth_code')!
     expect((await post('/api/oauth/exchange', { code, client: 'web' })).statusCode).toBe(200)
+  })
+})
+
+
+describe('OAuth browser binding', () => {
+  beforeEach(() => boot())
+  it.each(['web', 'app'] as const)('rejects a %s callback opened in another browser without consuming the legitimate flow', async client => {
+    const s = await start(client)
+    expect(String(s.r.headers['set-cookie'])).toMatch(/HttpOnly; SameSite=Lax; Path=\/; Max-Age=600; Secure/)
+    const foreign = await app.inject({ method: 'GET', url: '/api/oauth/google/callback?code=attacker-code&state=' + encodeURIComponent(s.state) })
+    expect(loc(foreign)).toContain('auth_error=state')
+    expect(google.calls.exchange).toHaveLength(0)
+    const legitimate = await callback(s.state)
+    expect(legitimate.statusCode).toBe(client === 'web' ? 302 : 200)
+    expect(google.calls.exchange).toHaveLength(1)
+  })
+  it('rejects a web exchange code pasted into another browser and allows its original browser once', async () => {
+    const s = await start('web'); const cb = await callback(s.state)
+    const code = new URL(loc(cb)).searchParams.get('auth_code')!
+    const foreign = await app.inject({ method: 'POST', url: '/api/oauth/exchange', payload: { code, client: 'web' } })
+    expect(foreign.statusCode).toBe(401)
+    expect((await pool.query('SELECT count(*)::int AS n FROM auth_sessions')).rows[0].n).toBe(0)
+    expect((await post('/api/oauth/exchange', { code, client: 'web' })).statusCode).toBe(200)
+    expect((await post('/api/oauth/exchange', { code, client: 'web' })).statusCode).toBe(401)
   })
 })

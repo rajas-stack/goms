@@ -202,6 +202,7 @@ export function NodeDetails({ nodeId }: { nodeId: string }) {
       </div>
 
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto scrollbar-thin px-6 py-5">
+        {node.domain === 'org' && <EmailQuickPanel entity={{ type: 'department', id: node.id }} title={node.name} />}
         {descriptionField && (
           <Section title="Description">
             <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink-800">
@@ -365,3 +366,4 @@ function DetailRow({ label, icon, children }: { label: string; icon?: string; ch
     </div>
   )
 }
+import { EmailQuickPanel } from '@/features/email-center/EmailQuickPanel'

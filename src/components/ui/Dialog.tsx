@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Icon } from './Icon'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import { cn } from '@/lib/utils'
+import { SPRING_OVERLAY } from '@/lib/motion'
 
 interface Props {
   open: boolean
@@ -77,7 +78,7 @@ export function Dialog({ open, onClose, title, description, children, footer, si
               initial={isMobile ? { opacity: 0, y: 48 } : { opacity: 0, y: 16, scale: 0.98 }}
               animate={isMobile ? { opacity: 1, y: 0 } : { opacity: 1, y: 0, scale: 1 }}
               exit={isMobile ? { opacity: 0, y: 48 } : { opacity: 0, y: 8, scale: 0.98 }}
-              transition={isMobile ? { type: 'spring', stiffness: 340, damping: 32 } : { type: 'spring', stiffness: 320, damping: 28 }}
+              transition={SPRING_OVERLAY}
             >
               <div className="flex shrink-0 items-start justify-between gap-4 border-b border-line px-6 py-4">
                 <div>

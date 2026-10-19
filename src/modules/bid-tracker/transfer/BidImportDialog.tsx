@@ -1,14 +1,19 @@
 import { useMemo, useRef, useState } from 'react'
-import type { BidImportPreview, BidImportTable, BidTransferContext } from '@goms/domain'
+import type { BidImportPreview, BidImportTable, BidRowAction, BidTransferContext } from '@goms/domain'
 import { repository } from '@/data/repository'
+import { usePermissions } from '@/lib/permissions'
 import { useBidTransferMutation } from './api'
 import { downloadBinaryFile } from '@/lib/file-export'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { bidTemplate, failedBidReport, MAX_BID_FILE_BYTES, parseBidWorkbook, WORKBOOK_MIME } from './workbooks'
+import { BidImportMapping } from './BidImportMapping'
+import { BidImportMatches } from './BidImportMatches'
 
 export function BidImportDialog({ open, onClose, customFields = [] }: { open: boolean; onClose: () => void; customFields?: BidTransferContext['customFields'] }) {
   const { importBids } = useBidTransferMutation()
+  // Same gate as the Import button; the server re-checks every field on import.
+  const canImport = usePermissions().can('opp.bidTracker', 'create')
   const [table, setTable] = useState<BidImportTable | null>(null)
   const [preview, setPreview] = useState<BidImportPreview | null>(null)
   const [busy, setBusy] = useState(false)
@@ -19,13 +24,17 @@ export function BidImportDialog({ open, onClose, customFields = [] }: { open: bo
   const generation = useRef(0)
   const committing = useRef(false)
   const lookups = useMemo(() => {
-    const issues = new Map<string, string[]>(), changes = new Map<string, NonNullable<typeof preview>['changes'][number]>()
+    const issues = new Map<string, string[]>(), warnings = new Map<string, string[]>(), changes = new Map<string, NonNullable<typeof preview>['changes'][number]>()
     for (const issue of preview?.issues ?? []) {
       const key = `${issue.row}:${issue.column}`
       issues.set(key, [...(issues.get(key) ?? []), issue.message])
     }
+    for (const warning of preview?.warnings ?? []) {
+      const key = `${warning.row}:${warning.column}`
+      warnings.set(key, [...(warnings.get(key) ?? []), warning.message])
+    }
     for (const change of preview?.changes ?? []) changes.set(`${change.row}:${change.column}`, change)
-    return { issues, changes }
+    return { issues, warnings, changes }
   }, [preview])
 
   function close() {
@@ -50,7 +59,7 @@ export function BidImportDialog({ open, onClose, customFields = [] }: { open: bo
       const result = await repository.previewBidImport({ table: data })
       if (current !== generation.current) return
       setTable(data); setPreview(result)
-      if (!result.valid) await report(data, result)
+      if (!result.valid && !result.matches?.some(m => !m.action)) await report(data, result)
     } catch (e) {
       if (current !== generation.current) return
       const message = e instanceof Error ? e.message : 'Unable to read or validate this file. Correct it and retry.'
@@ -61,8 +70,21 @@ export function BidImportDialog({ open, onClose, customFields = [] }: { open: bo
       await report(data, result)
     } finally { if (current === generation.current) setBusy(false) }
   }
+  /** Step 2/3: the user changed a column's destination or a match decision — re-validate the same rows. */
+  async function revalidate(patch: Pick<BidImportTable, 'mapping'> | Pick<BidImportTable, 'rowActions'>) {
+    if (!table || committing.current) return
+    const current = ++generation.current, next = { ...table, ...patch }
+    setBusy(true); setReviewed(false); setError(''); setSuccess('')
+    try {
+      const result = await repository.previewBidImport({ table: next })
+      if (current !== generation.current) return
+      setTable(next); setPreview(result)
+    } catch (e) {
+      if (current === generation.current) setError(e instanceof Error ? e.message : 'Unable to validate this mapping. Retry.')
+    } finally { if (current === generation.current) setBusy(false) }
+  }
   async function commit() {
-    if (!table || !preview?.valid || !reviewed || committing.current) return
+    if (!table || !canImport || !preview?.valid || !reviewed || committing.current) return
     committing.current = true
     setBusy(true); setError('')
     try {
@@ -72,7 +94,8 @@ export function BidImportDialog({ open, onClose, customFields = [] }: { open: bo
         setError('Live data changed or validation failed. Nothing was added; review the failed report.')
         await report(table, result.preview)
       } else {
-        setSuccess(`${result.count} bids added. Existing bids were preserved.`)
+        const updated = preview.prepared.filter(p => p.mode === 'override').length, added = preview.prepared.length - updated
+        setSuccess(`${added} bids added${updated ? `, ${updated} existing bids updated (Bid IDs kept)` : ''}${preview.skipped?.length ? `, ${preview.skipped.length} rows skipped` : ''}.`)
         setTable(null); setPreview(null); setReviewed(false)
       }
     } catch (e) {
@@ -82,10 +105,10 @@ export function BidImportDialog({ open, onClose, customFields = [] }: { open: bo
       setReviewed(false)
     } finally { committing.current = false; setBusy(false) }
   }
-  return <Dialog open={open} onClose={close} title="Import bids" size="xl" description="Upload → validate in sideload → review → add the complete batch."
-    footer={<><Button disabled={busy} onClick={close}>Close</Button><Button variant="primary" disabled={busy || !preview?.valid || !reviewed} onClick={() => void commit()}>{busy ? 'Working…' : `Add all ${preview?.rowCount ?? 0} bids`}</Button></>}>
+  return <Dialog open={open} onClose={close} title="Import bids" size="xl" description="1 Upload → 2 Map columns → 3 Preview & add the complete batch."
+    footer={<><Button disabled={busy} onClick={close}>Close</Button><Button variant="primary" disabled={busy || !canImport || !preview?.valid || !reviewed} onClick={() => void commit()}>{busy ? 'Working…' : `Import ${preview?.rowCount ?? 0} rows`}</Button></>}>
     <div className="space-y-4">
-      <p className="text-sm text-muted">Department is optional. Blank details can be completed later using the red exclamation beside a bid’s star. Invalid values, unknown columns or duplicates block the entire file.</p>
+      <p className="text-sm text-muted">Upload the template or a historical bid tracker as-is. Columns are matched by header name; dates, amounts (₹, lakh, Cr) and people are recognised automatically. Columns or values the app has no field for are kept with each bid as historical data — nothing is dropped. Search and re-map any column in Map columns. Rows matching an existing bid need your decision: Skip, Add as duplicate (new Bid ID) or Override (updates that bid, keeps its Bid ID) — nothing is overwritten automatically.</p>
       <div className="flex flex-wrap items-center gap-3">
         <Button disabled={busy} onClick={() => void downloadBinaryFile('bid-import-template.xlsx', bidTemplate({ existing: [], people: [], states: [], departments: [], customFields }), WORKBOOK_MIME).catch(() => setError('Template download failed. Please retry.'))}>Download template</Button>
         <label className="min-w-0 flex-1 text-sm">Choose workbook (maximum 500 bids / 5 MB)
@@ -97,6 +120,8 @@ export function BidImportDialog({ open, onClose, customFields = [] }: { open: bo
       {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
       {success && <p role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">{success}</p>}
       {preview && table && <>
+        {!error && <BidImportMapping table={table} customFields={customFields} disabled={busy} onChange={mapping => void revalidate({ mapping })} />}
+        <BidImportMatches matches={preview.matches ?? []} actions={table.rowActions ?? {}} disabled={busy} onChange={(rowActions: Record<string, BidRowAction>) => void revalidate({ rowActions })} />
         <div className={`rounded-lg border p-3 text-sm ${preview.valid ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
           <strong>{preview.valid ? `${preview.rowCount} bids passed validation — staged only` : `${preview.issues.length} issues — nothing imported`}</strong>
           <p className="mt-1">{preview.valid ? 'Review every row and the formatting changes below. The batch is checked again against live data when you add it.' : 'The failed Excel report highlights rejected cells in red, with comments and an Errors sheet explaining each cause.'}</p>
@@ -105,11 +130,12 @@ export function BidImportDialog({ open, onClose, customFields = [] }: { open: bo
         {preview.issues.length > 0 && <ul className="max-h-40 list-disc space-y-1 overflow-auto pl-5 text-sm text-red-800">{preview.issues.slice(0, 100).map((i, n) => <li key={n}>Row {i.row}, {table.headers[i.column] || `column ${i.column + 1}`}: {i.message}</li>)}{preview.issues.length > 100 && <li>All remaining issues are in the failed report.</li>}</ul>}
         <div className="max-h-64 overflow-auto rounded-lg border border-line">
           <table className="w-full text-left text-xs"><thead className="sticky top-0 bg-panel"><tr><th className="p-2">Excel row</th>{table.headers.map((h, c) => <th key={c} className="min-w-40 p-2">{h}</th>)}</tr></thead>
-            <tbody>{table.rows.map((row, r) => <tr key={r} className="border-t border-line"><td className="p-2">{r + 2}</td>{table.headers.map((_, c) => { const issues = [...(lookups.issues.get(`${r + 2}:${c}`) ?? []), ...(lookups.issues.get(`1:${c}`) ?? [])]; const changed = lookups.changes.get(`${r + 2}:${c}`); return <td key={c} className={`max-w-64 whitespace-pre-wrap break-words p-2 ${issues.length ? 'bg-red-100 text-red-900' : changed ? 'bg-amber-50' : ''}`} title={issues.join('\n') || (changed ? `Original: ${changed.before}` : undefined)}>{changed?.after ?? String(row[c] ?? '')}</td> })}</tr>)}</tbody>
+            <tbody>{table.rows.map((row, r) => <tr key={r} className="border-t border-line"><td className="p-2 align-top">{r + 2}</td>{table.headers.map((_, c) => { const issues = [...(lookups.issues.get(`${r + 2}:${c}`) ?? []), ...(lookups.issues.get(`1:${c}`) ?? [])]; const warned = [...(lookups.warnings.get(`${r + 2}:${c}`) ?? []), ...(lookups.warnings.get(`1:${c}`) ?? [])]; const changed = lookups.changes.get(`${r + 2}:${c}`); return <td key={c} className={`max-w-64 whitespace-pre-wrap break-words p-2 align-top ${issues.length ? 'bg-red-100 text-red-900' : warned.length ? 'bg-amber-100' : changed ? 'bg-amber-50' : ''}`} title={issues.join('\n') || warned.join('\n') || (changed ? `Original: ${changed.before}` : undefined)}><div className="max-h-24 overflow-hidden">{changed?.after ?? String(row[c] ?? '')}</div></td> })}</tr>)}</tbody>
           </table>
         </div>
+        {(preview.warnings ?? []).length > 0 && <details className="text-sm" open><summary className="cursor-pointer font-medium text-amber-800">{(preview.warnings ?? []).length} notes — converted, linked or kept as history (review)</summary><ul className="mt-2 max-h-48 list-disc space-y-1 overflow-auto pl-5 text-amber-900">{(preview.warnings ?? []).slice(0, 300).map((w, i) => <li key={i}>{w.row === 1 ? 'Header' : `Row ${w.row}`}, {table.headers[w.column] || `column ${w.column + 1}`}: {w.message}</li>)}</ul></details>}
         <details className="text-sm"><summary className="cursor-pointer font-medium">{preview.changes.length} formatting changes (review)</summary><ul className="mt-2 max-h-40 space-y-1 overflow-auto">{preview.changes.map((c, i) => <li key={i}>Row {c.row}, {table.headers[c.column]}: “{c.before}” → “{c.after}”</li>)}</ul></details>
-        {preview.valid && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} className="mt-1" />I reviewed this complete batch and its formatting changes. Add these {preview.rowCount} new bids.</label>}
+        {preview.valid && <label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={reviewed} onChange={e => setReviewed(e.target.checked)} className="mt-1" />I reviewed this complete batch, its notes and formatting changes. Import these {preview.rowCount} rows.</label>}
       </>}
     </div>
   </Dialog>

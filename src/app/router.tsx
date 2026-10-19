@@ -9,6 +9,7 @@ import { RouteFallback } from '@/components/RouteFallback'
 import { NAV_MODULES } from '@/lib/routeModules'
 import { RequireNode } from '@/lib/rbacTree/RequireNode'
 import { ROUTE_NODES, rbacHandle } from './routeNodes'
+import { MASTER_PAGE_LIST } from '@/features/masters/mastersList'
 import type { ReactNode } from 'react'
 
 const Home = lazy(() => import('./routes/Home').then((m) => ({ default: m.Home })))
@@ -38,6 +39,7 @@ const DocumentVerificationsSettingsPage = lazy(() =>
 const CompetitorsSettingsPage = lazy(() =>
   import('./routes/CompetitorsSettingsPage').then((m) => ({ default: m.CompetitorsSettingsPage })),
 )
+const MasterSettingsPage = lazy(() => import('./routes/MasterSettingsPage').then((m) => ({ default: m.MasterSettingsPage })))
 const EmployeeMasterSettingsPage = lazy(() =>
   import('./routes/EmployeeMasterSettingsPage').then((m) => ({ default: m.EmployeeMasterSettingsPage })),
 )
@@ -71,6 +73,7 @@ const DocumentMakerHome = lazy(() =>
 const DocumentMakerEditor = lazy(() =>
   import('@/modules/document-maker/DocumentMakerEditor').then((m) => ({ default: m.DocumentMakerEditor })),
 )
+const EmailPage = lazy(() => import('./routes/EmailPage').then((m) => ({ default: m.EmailPage })))
 const Login = lazy(() => import('./routes/Login').then((m) => ({ default: m.Login })))
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
@@ -155,10 +158,14 @@ export const router = createBrowserRouter([
       // Personal Office files: every signed-in user; the API scopes each file to its owner.
       routed('/document-maker', ROUTE_NODES.documentMaker, <DocumentMakerHome />),
       routed('/document-maker/:id', ROUTE_NODES.documentEditor, <DocumentMakerEditor />),
+      routed('/email', ROUTE_NODES.email, <EmailPage />),
       routed('/settings/tender-websites', ROUTE_NODES.tenderWebsites, <TenderWebsitesSettingsPage />),
       routed('/settings/document-verifications', ROUTE_NODES.verifications, <DocumentVerificationsSettingsPage />),
       routed('/settings/competitors', ROUTE_NODES.competitors, <CompetitorsSettingsPage />),
       routed('/settings/masters/employees', ROUTE_NODES.employeeMaster, <EmployeeMasterSettingsPage />),
+      // Every other master: Settings > Masters > <title> (src/features/masters/mastersList.ts).
+      ...MASTER_PAGE_LIST.filter((m) => m.kind !== 'employees')
+        .map((m) => routed(`/settings/masters/${m.kind}`, `settings.masters.${m.kind}`, <MasterSettingsPage kind={m.kind} />)),
       ...bidTrackerRoutes,
       ...adminImportRoutes,
       { path: '*', element: <NotFound /> },

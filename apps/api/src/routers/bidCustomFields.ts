@@ -1,12 +1,19 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { CUSTOM_FIELD_TYPES, coerceCustomValue, hasOptions, normalizeOptions, slugifyFieldKey, type CustomFieldType, type CustomValue } from '@goms/domain'
+import { CUSTOM_FIELD_TYPES, bidSystemField, coerceCustomValue, hasOptions, normalizeOptions, slugifyFieldKey, type CustomFieldType, type CustomValue } from '@goms/domain'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isForeignKeyViolation, isUniqueViolation } from '../db-errors.js'
 import { writeAuditLog } from '../lib/auditLog.js'
 import { customValueColumns, customValueFromRow, CUSTOM_VALUE_COLUMNS } from '../lib/customFieldValues.js'
 import { assertEntityExists, auditDisplay } from '../lib/customFieldEntities.js'
+import { liveOptionsFor, withLiveOptions } from '../lib/bidOptionLookups.js'
+import { syncFieldToMilestone } from '../lib/bidTimelineSync.js'
+
+/** Built-in Bid Tracker fields: name and options come from code and Settings > Masters > Bid Tracker. */
+function assertNotSystemField(row: any, what: string): void {
+  if (bidSystemField(row.key)) throw new TRPCError({ code: 'BAD_REQUEST', message: `"${row.name}" is a built-in Bid Tracker field; ${what}` })
+}
 
 function toBidCustomField(row: any) {
   return {
@@ -62,7 +69,7 @@ export const bidCustomFieldsRouter = router({
       const result = await pool.query(
         `SELECT * FROM bid_custom_fields ${input?.includeArchived ? '' : `WHERE status='active'`} ORDER BY position, created_at, insert_seq`,
       )
-      return result.rows.map(toBidCustomField)
+      return withLiveOptions(pool, result.rows.map(toBidCustomField))
     }),
 
   create: protectedProcedure
@@ -105,6 +112,7 @@ export const bidCustomFieldsRouter = router({
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
       await lockDefinitions(client)
       const current = await loadField(client, input.id, true)
+      assertNotSystemField(current, 'edit its options in Settings > Masters > Bid Tracker.')
       const sets: string[] = []
       const values: unknown[] = []
       const audits: Parameters<typeof writeAuditLog>[1][] = []
@@ -212,6 +220,7 @@ export const bidCustomFieldsRouter = router({
     .input(z.object({ id: z.string().guid('Invalid UUID'), withValues: z.boolean().optional() }))
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
       const current = await loadField(client, input.id, true)
+      assertNotSystemField(current, 'it cannot be deleted. Hide it from Manage columns instead.')
       const valueCount = (await client.query('SELECT count(*)::int AS n FROM bid_custom_field_values WHERE field_id=$1', [input.id])).rows[0].n as number
       const used = valueCount > 0
       const blocked = () => new TRPCError({ code: 'CONFLICT', message: 'This column has values — archive it instead, or delete it together with its values.' })
@@ -242,7 +251,8 @@ export const bidCustomFieldsRouter = router({
 
       const dataType = field.data_type as CustomFieldType
       let value: CustomValue
-      try { value = coerceCustomValue(dataType, input.value, field.options) } catch (e) { badRequest(e) }
+      const options = await liveOptionsFor(client, field.key, field.options)
+      try { value = coerceCustomValue(dataType, input.value, options) } catch (e) { badRequest(e) }
       await assertEntityExists(client, dataType, value)
 
       const existing = (await client.query(
@@ -262,6 +272,7 @@ export const bidCustomFieldsRouter = router({
           await client.query('DELETE FROM bid_custom_field_values WHERE bid_id=$1 AND field_id=$2', [input.bidId, input.fieldId])
           await audit('custom_value_cleared')
           await client.query('UPDATE bids SET updated_at=now() WHERE id=$1', [input.bidId])
+          await syncFieldToMilestone(client, input.bidId, field.key, null, ctx.user?.email)
         }
         return { bidId: input.bidId, fieldId: input.fieldId, key: field.key as string, value: null as CustomValue }
       }
@@ -280,6 +291,8 @@ export const bidCustomFieldsRouter = router({
       if (oldValue !== value) {
         await audit('custom_value_set')
         await client.query('UPDATE bids SET updated_at=now() WHERE id=$1', [input.bidId])
+        // Pre-CXO / Final CXO / LOA date move their Timeline phase (BID_TIMELINE_SYNC).
+        await syncFieldToMilestone(client, input.bidId, field.key, value, ctx.user?.email)
       }
       return { bidId: input.bidId, fieldId: input.fieldId, key: field.key as string, value }
     })),

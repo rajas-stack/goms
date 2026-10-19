@@ -37,8 +37,11 @@ beforeEach(async () => {
 afterEach(cleanupRbacFixtures)
 
 describe('registry coverage for this area', () => {
-  it('registers exactly the 84 opportunity / bid procedures', () => {
+  it('registers the opportunity / bid procedures', () => {
     expect(Object.keys(opportunityPolicy).sort()).toEqual([
+      'bidCommunications.ignore',
+      'bidCommunications.contacts', 'bidCommunications.createContact', 'bidCommunications.updateContact',
+      'bidCommunications.addInternal', 'bidCommunications.bindInternalEmail', 'bidCommunications.addClient',
       'bidCorrigenda.addChanges', 'bidCorrigenda.create', 'bidCorrigenda.listForBid', 'bidCorrigenda.reviewChange', 'bidCorrigenda.updateRegister',
       'bidCustomFields.archive', 'bidCustomFields.create', 'bidCustomFields.delete', 'bidCustomFields.list', 'bidCustomFields.reorder',
       'bidCustomFields.setValue', 'bidCustomFields.unarchive', 'bidCustomFields.update', 'bidCustomFields.valuesForBid',

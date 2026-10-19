@@ -1,3 +1,4 @@
+import { useVerticalNames } from '@/features/masters/useMasterOptions'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -10,6 +11,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   OPERATORS_BY_TYPE, flattenRules, parseMultiValue, pruneFilterNodes,
   type FilterNode,
+  QUARTER_DATE_COLUMNS, formatDateWithQuarter,
 } from '@goms/domain'
 import { motion } from 'framer-motion'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
@@ -52,6 +54,7 @@ import { ManageColumnsPanel } from './ManageColumnsPanel'
 import { EditableCell, type CellDraft, type PendingEdits } from './EditableCell'
 import { FilterBuilder } from './FilterBuilder'
 import { BidImportDialog } from '../transfer/BidImportDialog'
+import { TenderFolderCell } from './TenderFolderCell'
 import { exportGridWorkbook, WORKBOOK_MIME } from '../transfer/workbooks'
 import { downloadBinaryFile } from '@/lib/file-export'
 
@@ -252,7 +255,8 @@ export function MasterGrid(props: MasterGridProps) {
   const { assign } = useOwnershipMutations()
   const { data: salesPersons = [] } = useSalesPersons()
 
-  const allColumns = useMemo(() => resolveColumns(customFields), [customFields])
+  const verticalNames = useVerticalNames()
+  const allColumns = useMemo(() => resolveColumns(customFields, verticalNames), [customFields, verticalNames])
   const visibleIds = useMemo(
     () => (chosenVisibleIds?.length ? chosenVisibleIds : defaultVisibleColumnIds(allColumns, sheetId)),
     [chosenVisibleIds, allColumns, sheetId],
@@ -451,6 +455,10 @@ export function MasterGrid(props: MasterGridProps) {
     if (isEmptyCell(v)) return dash
     const person = personOf(col, v, lookups)
     if (person) return <PersonName person={person} className="max-w-full" nameClassName="whitespace-pre-wrap overflow-visible [overflow-wrap:anywhere]" />
+    // Tender Publishing / Receiving and Actual Submission dates show their financial quarter, e.g. 15/10/2026 (Q3).
+    // Tender Folder Link: the Drive folder's files, compact (TenderFolderCell).
+    if (col.id === 'custom:tender_folder' && typeof v === 'string' && links) return <TenderFolderCell url={v} />
+    if (QUARTER_DATE_COLUMNS.has(col.id) && typeof v === 'string') return <span className="tabular-nums">{formatDateWithQuarter(v)}</span>
     switch (col.type) {
       case 'boolean': return v ? <Icon name="Check" size={14} className="text-emerald-600" /> : <span className="text-muted">No</span>
       case 'select': {

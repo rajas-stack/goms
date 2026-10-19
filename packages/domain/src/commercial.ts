@@ -4,14 +4,19 @@
  *  `apps/api`'s commercial router so the Vertical→Product→Module→Feature
  *  parent/child rules and the code-uniqueness check reflect one
  *  authoritative definition. */
+import { BID_TRACKER_MASTER_KEYS, type BidTrackerMasterKey } from './bidTrackerFields.js'
+
 export type CommercialMasterKey =
   | 'verticals' | 'products' | 'modules' | 'features'
   | 'skuCategories' | 'unitsOfMeasure' | 'productEditions' | 'billingTypes'
   | 'taxClasses' | 'approvalMatrix' | 'currencies' | 'preSales'
+  /** Settings > Masters > Bid Tracker dropdowns (bidTrackerFields.ts). */
+  | BidTrackerMasterKey
 
 export const COMMERCIAL_MASTER_KEYS: CommercialMasterKey[] = [
   'verticals', 'products', 'modules', 'features', 'skuCategories', 'unitsOfMeasure',
   'productEditions', 'billingTypes', 'taxClasses', 'approvalMatrix', 'currencies', 'preSales',
+  ...BID_TRACKER_MASTER_KEYS,
 ]
 
 /** Parent-FK field name for each hierarchy master, keyed by child. */
@@ -42,6 +47,7 @@ export const MASTER_EXTRA_FIELDS: Record<CommercialMasterKey, string[]> = {
   approvalMatrix: ['minDiscountPct', 'maxDiscountPct', 'approvalLevelLabel', 'allowAutoApproval'],
   currencies: ['symbol', 'decimalPlaces', 'exchangeRate', 'isBaseCurrency'],
   preSales: [],
+  ...Object.fromEntries(BID_TRACKER_MASTER_KEYS.map(k => [k, []])) as unknown as Record<BidTrackerMasterKey, string[]>,
 }
 
 /** Finds a case-insensitive, trimmed code clash among sibling rows (same

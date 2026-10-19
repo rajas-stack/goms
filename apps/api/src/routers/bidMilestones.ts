@@ -1,3 +1,4 @@
+import { syncMilestoneToField } from '../lib/bidTimelineSync.js'
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
@@ -50,7 +51,7 @@ export const bidMilestonesRouter = router({
       bidId: z.string().guid('Invalid UUID'), milestoneType: z.string().min(1), key: z.string().min(1), label: z.string().min(1),
       dueAt: z.string().nullable().optional(), venue: z.string().optional(), notes: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
@@ -68,6 +69,7 @@ export const bidMilestonesRouter = router({
         if (input.key === 'submissionDeadline') {
           await syncSubmissionDeadlineToOpportunity(client, input.bidId, input.dueAt ?? null)
         }
+        await syncMilestoneToField(client, input.bidId, row.key, row.status, row.due_at ? String(row.due_at) : null, ctx.user?.email)
         await client.query('COMMIT')
         return toBidMilestone(row)
       } catch (e) {
@@ -87,7 +89,7 @@ export const bidMilestonesRouter = router({
         status: z.enum(['open', 'completed', 'superseded']).optional(),
       }),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
@@ -105,6 +107,11 @@ export const bidMilestonesRouter = router({
         }
         if (current.key === 'submissionDeadline' && input.patch.dueAt !== undefined) {
           await syncSubmissionDeadlineToOpportunity(client, current.bid_id, input.patch.dueAt)
+        }
+        if (input.patch.status !== undefined || input.patch.dueAt !== undefined) {
+          // Opportunity / Price Go-No-Go and Work Order Received update Pre-CXO / Final CXO / LOA date.
+          const after = (await client.query('SELECT status, due_at FROM bid_milestones WHERE id=$1', [input.id])).rows[0]
+          await syncMilestoneToField(client, current.bid_id, current.key, after.status, after.due_at ? String(after.due_at) : null, ctx.user?.email)
         }
         await client.query('COMMIT')
         const updated = (await pool.query('SELECT * FROM bid_milestones WHERE id=$1', [input.id])).rows[0]

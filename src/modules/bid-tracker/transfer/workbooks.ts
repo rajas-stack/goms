@@ -5,35 +5,51 @@ import { BID_FIELDS, BID_STAGES, bidTransferFields, resolveBidTransferField, fin
 
 export const WORKBOOK_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 export const MAX_BID_FILE_BYTES = 5 * 1024 * 1024
+/** Reads the bid sheet the way people actually keep it: the data sheet is found by its
+ *  "Opportunity Name" header (other sheets are ignored), title rows above the header are skipped,
+ *  formula cells contribute their calculated value, and Excel date serials become dates. */
 export function parseBidWorkbook(data: ArrayBuffer): BidImportTable {
-  const wb = XLSX.read(data, { type: 'array', raw: true, cellDates: false, cellFormula: true, cellNF: true, sheetRows: 1002 })
-  const dataSheets = wb.SheetNames.filter(n => !['Fields', 'Instructions'].includes(n))
-  if (dataSheets.length !== 1) throw new Error('Use one data sheet named Bids (or a single-sheet CSV). Only Fields and Instructions may accompany it as reference sheets.')
-  const ws = wb.Sheets[dataSheets[0]]
-  const ref = ws['!fullref'] ?? ws['!ref']
-  if (!ref) throw new Error('The file has no header or data rows.')
-  const range = XLSX.utils.decode_range(ref)
-  // Starting somewhere other than A1 is ambiguous: never shift the column/row identities.
-  if (range.s.r !== 0 || range.s.c !== 0) throw new Error('Place the header row at cell A1, with the data immediately below it.')
-  if (range.e.r > 1000 || range.e.c >= BID_IMPORT_MAX_COLUMNS) throw new Error('The sheet is too large. Use at most 500 bids and 100 columns per batch; remove distant formatted cells.')
+  const wb = XLSX.read(data, { type: 'array', raw: true, cellDates: false, cellFormula: true, cellNF: true, sheetRows: 1012 })
+  const date1904 = !!wb.Workbook?.WBProps?.date1904
+  const isNameHeader = (v: unknown) => findBidField(String(v ?? ''))?.key === 'opportunityName' || /^opportunity\s*\/?\s*(name|mission)?$/i.test(String(v ?? '').trim())
+  const candidates: { name: string; headerRow: number; range: XLSX.Range }[] = []
+  // The template's reference sheets also list "Opportunity Name"; they are never data.
+  for (const name of wb.SheetNames.filter(n => !['Fields', 'Instructions', 'Errors', 'Warnings'].includes(n))) {
+    const ws = wb.Sheets[name], ref = ws?.['!fullref'] ?? ws?.['!ref']
+    if (!ref) continue
+    const range = XLSX.utils.decode_range(ref)
+    for (let r = range.s.r; r <= Math.min(range.s.r + 9, range.e.r); r++) {
+      let hit = false
+      for (let c = range.s.c; c <= range.e.c && !hit; c++) hit = isNameHeader(ws[XLSX.utils.encode_cell({ r, c })]?.v)
+      if (hit) { candidates.push({ name, headerRow: r, range }); break }
+    }
+  }
+  if (!candidates.length) {
+    if (wb.SheetNames.length === 1) throw new Error('No "Opportunity Name" header was found in the first 10 rows. Add that column header above the bid rows.')
+    throw new Error('No sheet has an "Opportunity Name" header in its first 10 rows. Add that header to the sheet holding the bids.')
+  }
+  if (candidates.length > 1) throw new Error(`Several sheets look like bid lists (${candidates.map(c => c.name).join(', ')}). Keep the bids in one sheet or upload them one file at a time.`)
+  const { name, headerRow, range } = candidates[0], ws = wb.Sheets[name]
+  if (range.e.r - headerRow > 1000 || range.e.c - range.s.c >= BID_IMPORT_MAX_COLUMNS) throw new Error(`The sheet is too large. Use at most 500 bids and ${BID_IMPORT_MAX_COLUMNS} columns per batch; remove distant formatted cells.`)
   const table: BidImportTable = { headers: [], rows: [], cellIssues: [] }
-  for (let c = 0; c <= range.e.c; c++) table.headers.push(String(ws[XLSX.utils.encode_cell({ r: 0, c })]?.v ?? ''))
-  for (let r = 0; r <= range.e.r; r++) {
+  for (let c = range.s.c; c <= range.e.c; c++) table.headers.push(String(ws[XLSX.utils.encode_cell({ r: headerRow, c })]?.v ?? '').replace(/\s+/g, ' ').trim())
+  const kinds = table.headers.map(h => findBidField(h)?.kind)
+  for (let r = headerRow + 1; r <= range.e.r; r++) {
     const row: (string | number | boolean | null)[] = []
-    for (let c = 0; c <= range.e.c; c++) {
-      const cell = ws[XLSX.utils.encode_cell({ r, c })]
-      if (cell?.f || cell?.t === 'e') table.cellIssues!.push({ row: r + 1, column: c, message: cell.f ? 'Formula cell. Paste the calculated value before importing.' : 'Spreadsheet error cell. Correct the source calculation or enter a value.' })
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })], col = c - range.s.c
+      // Error cells (#N/A, #REF!) carry no usable value; validation treats them as blank with a warning.
+      if (cell?.t === 'e') { table.cellIssues!.push({ row: r - headerRow + 1, column: col, message: 'Spreadsheet error cell.' }); row.push(null); continue }
       let value = cell?.v ?? null
-      if (r && typeof value === 'number' && (XLSX.SSF.is_date(cell.z ?? '') || findBidField(table.headers[c])?.kind === 'date')) {
-        const d = XLSX.SSF.parse_date_code(value, { date1904: !!wb.Workbook?.WBProps?.date1904 })
-        if (!XLSX.SSF.is_date(cell.z ?? '')) table.cellIssues!.push({ row: r + 1, column: c, message: 'Ambiguous numeric date without Excel date formatting. Enter DD/MM/YYYY or format the cell as a date.' })
-        else if (!d || (d.y === 1900 && d.m === 2 && d.d === 29)) table.cellIssues!.push({ row: r + 1, column: c, message: 'Invalid Excel date or time value. Use a date in DD/MM/YYYY format.' })
-        else value = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}` + (value % 1 ? `T${String(d.H).padStart(2, '0')}:${String(d.M).padStart(2, '0')}:${String(d.S).padStart(2, '0')}` : '')
+      const dateish = kinds[col] === 'date' || XLSX.SSF.is_date(cell?.z ?? '')
+      if (typeof value === 'number' && dateish && value > 20000 && value < 80000) {
+        const d = XLSX.SSF.parse_date_code(value, { date1904 })
+        if (d && !(d.y === 1900 && d.m === 2 && d.d === 29)) value = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}` + (value % 1 ? `T${String(d.H).padStart(2, '0')}:${String(d.M).padStart(2, '0')}` : '')
       }
-      if (r && typeof value === 'number' && cell?.z?.replace(/"[^"]*"|\\./g, '').includes('%') && findBidField(table.headers[c])?.kind === 'percent') value *= 100
+      if (typeof value === 'number' && cell?.z?.replace(/"[^"]*"|\\./g, '').includes('%')) value = Math.round(value * 10000) / 100
       row.push(typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ? value : null)
     }
-    if (r) table.rows.push(row)
+    table.rows.push(row)
   }
   return table
 }

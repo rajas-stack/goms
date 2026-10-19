@@ -194,7 +194,7 @@ export function EditableCell({ col, value, display, externalError, onCommit, loo
               className="w-60 overflow-y-auto scrollbar-thin rounded-xl border border-line bg-paper p-1 shadow-pop"
             >
               {options.map((o) => (
-                <label key={o.value} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-ink hover:bg-goms-sky/[0.14]">
+                <label key={o.value} title={o.hint} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-ink hover:bg-goms-sky/[0.14]">
                   <Checkbox aria-label={o.label} checked={chosen.has(o.value)} onChange={() => toggle(o.value)} />
                   {o.label}
                 </label>

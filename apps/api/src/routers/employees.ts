@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { rejectKnownCommunicationEmail } from '../lib/communicationPeople.js'
 import { photoUrlSchema } from '../photoUrl.js'
 import { subtreeIds } from './hierarchy.js'
 import { MERGEABLE_FIELDS, type MergeableField } from '@goms/domain'
@@ -313,6 +314,7 @@ export const employeesRouter = router({
   create: protectedProcedure
     .input(z.object({
       name: z.string().min(1), designation: z.string().min(1), email: z.string(), phone: z.string(),
+      rejectDuplicateEmail: z.boolean().optional(),
       photoUrl: photoUrlSchema, company: z.string().optional(), address: z.string().optional(),
       website: z.string().optional(), orgNodeId: z.string().guid('Invalid UUID'), managerId: z.string().guid('Invalid UUID').nullable(),
       vacant: z.boolean().optional(), connected: z.boolean().optional(),
@@ -331,6 +333,10 @@ export const employeesRouter = router({
       const client = await pool.connect()
       try {
         await client.query('BEGIN')
+        if (input.rejectDuplicateEmail && input.email) {
+          await client.query('LOCK TABLE employees IN SHARE ROW EXCLUSIVE MODE')
+          await rejectKnownCommunicationEmail(client, input.email)
+        }
         const result = await client.query(
           `INSERT INTO employees (
              code, name, designation, email, phone, company, address, website, photo_url,

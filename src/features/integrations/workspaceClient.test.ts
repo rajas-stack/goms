@@ -16,11 +16,11 @@ beforeEach(async () => {
 })
 afterEach(() => { setGoogleAccount(null); vi.unstubAllGlobals() })
 describe('Google Workspace API actions', () => {
-  it('loads Gmail headers from the Gmail API rather than navigating away', async () => {
-    fetchMock.mockResolvedValueOnce(Response.json({ messages: [{ id: 'message-a' }] })).mockResolvedValueOnce(Response.json({ payload: { headers: [{ name: 'Subject', value: 'Tender update' }, { name: 'From', value: 'user@amnex.com' }] } }))
-    expect(await runWorkspaceAction('gmail', 'load')).toMatchObject({ items: [{ id: 'message-a', title: 'Tender update' }] })
-    expect(fetchMock.mock.calls[0][0]).toContain('gmail.googleapis.com/gmail/v1/users/me/messages')
-    expect(fetchMock.mock.calls[1][1].headers.Authorization).toBe('Bearer in-memory-token')
+  it.each(['load', 'create'] as const)('routes Gmail %s through the server Email Center without browser consent', async action => {
+    await expect(runWorkspaceAction('gmail', action)).rejects.toThrow('Email Center')
+    expect(googleFeatureToken).not.toHaveBeenCalled()
+    expect(authorizeGoogle).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
   it('creates and populates a real Google Doc with incremental write consent', async () => {
     fetchMock.mockResolvedValueOnce(Response.json({ documentId: 'new-doc' })).mockResolvedValueOnce(Response.json({}))
@@ -41,19 +41,10 @@ describe('Google Workspace API actions', () => {
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ values: [['=1+1', 'Amnex'], ['2', 'Bid']] })
   })
   it('validates mail headers and event times before requesting consent', async () => {
-    await expect(runWorkspaceAction('gmail', 'create', { to: 'user@amnex.com', title: 'Hi\r\nBcc: bad@example.com', text: 'Body' })).rejects.toThrow('single-line subject')
+    await expect(runWorkspaceAction('gmail', 'create', { to: 'user@amnex.com', title: 'Hi\r\nBcc: bad@example.com', text: 'Body' })).rejects.toThrow('Email Center')
     await expect(runWorkspaceAction('calendar', 'create', { title: 'Bid', start: '2026-10-15T12:00', end: '2026-10-15T11:00' })).rejects.toThrow('end after')
     expect(googleFeatureToken).not.toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
-  })
-  it('sends UTF-8 email through Gmail messages.send', async () => {
-    fetchMock.mockResolvedValue(Response.json({ id: 'sent-a' }))
-    expect(await runWorkspaceAction('gmail', 'create', { to: 'user@amnex.com', title: 'बोली', text: 'Bid details' })).toMatchObject({ message: 'Email sent.' })
-    const raw = JSON.parse(fetchMock.mock.calls[0][1].body).raw
-    const decoded = Buffer.from(raw, 'base64url').toString('utf8')
-    expect(decoded).toContain('To: user@amnex.com\r\nSubject: =?UTF-8?B?')
-    expect(decoded).toContain(Buffer.from('Bid details').toString('base64'))
-    expect(fetchMock.mock.calls[0][0]).toContain('/messages/send')
   })
   it.each([
     ['calendar', { title: 'Event', start: '2026-10-15T10:00', end: '2026-10-15T11:00' }, 'calendar/v3/calendars/primary/events'],

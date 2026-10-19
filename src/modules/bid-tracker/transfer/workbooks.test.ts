@@ -10,16 +10,24 @@ describe('bid transfer workbooks', () => {
     const table = parseBidWorkbook(bidTemplate().buffer as ArrayBuffer)
     expect(table.headers).toHaveLength(58)
     expect(wb.SheetNames).toEqual(['Bids', 'Fields', 'Instructions'])
-    expect(XLSX.utils.sheet_to_json(wb.Sheets.Fields, { header: 1 })).toContainEqual(expect.arrayContaining(['SBU', '', 'Unmapped']))
+    expect(XLSX.utils.sheet_to_json(wb.Sheets.Fields, { header: 1 })).toContainEqual(expect.arrayContaining(['SBU', 'vertical']))
   })
-  it('preserves leading zero text, marks formulas, and refuses ambiguous dates', () => {
+  it('preserves leading zero text, uses formula results and reads unformatted date serials in date columns', () => {
     const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.aoa_to_sheet([['Opportunity Name', 'RFP Published Date', 'Tender ID'], ['New', 45000, '0012']])
+    const ws = XLSX.utils.aoa_to_sheet([['Opportunity Name', 'RFP Published Date', 'Tender ID'], ['New', 46031, '0012']])
     ws.A2.f = 'CONCAT("New")'
     XLSX.utils.book_append_sheet(wb, ws, 'Bids')
     const p = parseBidWorkbook(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }))
-    expect(p.rows[0][2]).toBe('0012')
-    expect(p.cellIssues).toEqual(expect.arrayContaining([expect.objectContaining({ row: 2, column: 0 }), expect.objectContaining({ row: 2, column: 1 })]))
+    expect(p.rows[0]).toEqual(['New', '2026-01-09', '0012'])
+    expect(p.cellIssues).toEqual([])
+  })
+  it('finds the bid sheet and header row in a historical workbook with title rows and extra sheets', () => {
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Summary'], ['Total', 3]]), 'Summary')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Bid Tracker FY25'], [], ['#', 'Opportunity Name', 'SBU'], [1, 'A', 'NGIS'], ['', '', '']]), 'Tracker')
+    const p = parseBidWorkbook(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }))
+    expect(p.headers).toEqual(['#', 'Opportunity Name', 'SBU'])
+    expect(p.rows[0]).toEqual([1, 'A', 'NGIS'])
   })
   it('exports hidden app columns and records with Yes/No visibility', () => {
     const columns = resolveColumns([])

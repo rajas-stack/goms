@@ -2,26 +2,61 @@ import { BID_STAGES, isAtOrAfterSubmitted } from './bids.js'
 import { OPPORTUNITY_TYPES } from './opportunityCode.js'
 import { GENERAL_FIELDS } from './bidGeneral.js'
 import { coerceCustomValue, type CustomFieldType, type CustomValue } from './bidCustomFields.js'
+import { BID_SYSTEM_FIELDS } from './bidTrackerFields.js'
 
 export type BidCell = string | number | boolean | null
 export interface BidIssue { row: number; column: number; message: string }
-export interface BidImportTable { headers: string[]; rows: BidCell[][]; cellIssues?: BidIssue[] }
+export interface BidImportTable {
+  headers: string[]; rows: BidCell[][]; cellIssues?: BidIssue[]
+  /** Import-wizard choice per column: an app field id, '' = skip the column, null/absent = match by header. */
+  mapping?: (string | null)[]
+  /** Decision for a row matching an existing bid (key = Excel row number). Required for every match. */
+  rowActions?: Record<string, BidRowAction>
+}
+/** skip = ignore the row; add = new record with a new Bid ID; override = update the matched record, keeping its Bid ID. */
+export type BidRowAction = 'skip' | 'add' | 'override'
+export interface BidImportMatch {
+  row: number; existingId: string; existingName: string; existingCode?: string; action?: BidRowAction
+  /** Fields the file would change on Override (blank cells never clear a value). */
+  diffs: { field: string; label: string; before: string; after: string }[]
+}
 export interface BidTransferField { id: string; label: string; type: CustomFieldType | 'datetime'; options?: readonly string[]; team?: string }
 export interface BidTransferContext {
-  existing: { opportunityName: string; gemTenderId: string }[]
+  existing: { opportunityName: string; gemTenderId: string; id?: string; bidCode?: string
+    /** Current values keyed by app field id, for the Override diff. */
+    current?: Record<string, string> }[]
   people: { id: string; name: string; email?: string; mobile?: string; team: string }[]
   states: { id: string; name: string }[]
   departments: { id: string; name: string; stateCode?: number | null }[]
   customFields: { id: string; key: string; name: string; dataType: CustomFieldType; options?: string[] | null }[]
+  /** Settings > Masters > Verticals names. When given, a Vertical is matched to its master spelling. */
+  verticals?: string[]
 }
-export interface PreparedBidImport { values: Record<string, CustomValue> }
+export interface PreparedBidImport {
+  values: Record<string, CustomValue>
+  /** Historical values with no app destination (or that could not be linked), keyed by the
+   *  original column header. Stored with the bid as a "Historical import" record — never dropped. */
+  legacy: Record<string, string>
+  /** Excel row number; 'override' updates `targetId` (an opportunity id) instead of adding a bid. */
+  row?: number; mode?: 'add' | 'override'; targetId?: string
+}
 export interface BidImportPreview {
-  valid: boolean; rowCount: number; issues: BidIssue[]
+  valid: boolean; rowCount: number
+  /** Blocking: any issue rejects the whole batch. */
+  issues: BidIssue[]
+  /** Non-blocking: the value was converted, kept as historical text, or derived. Review before adding. */
+  warnings?: BidIssue[]
   changes: { row: number; column: number; before: string; after: string }[]
   prepared: PreparedBidImport[]
+  /** Rows matching an existing bid, with the user's decision and the Override diff. */
+  matches?: BidImportMatch[]
+  /** Rows the user chose to skip. */
+  skipped?: number[]
 }
 export type BidImportResult = { status: 'imported'; count: number } | { status: 'rejected'; preview: BidImportPreview }
 export const BID_IMPORT_MAX_COLUMNS = 100
+/** Audit-log field under which each imported bid's historical-only values are stored. */
+export const BID_LEGACY_AUDIT_FIELD = 'historicalImport'
 
 const NATIVE_FIELDS: BidTransferField[] = [
   { id: 'opportunityName', label: 'Opportunity Name', type: 'text' },
@@ -30,7 +65,8 @@ const NATIVE_FIELDS: BidTransferField[] = [
   { id: 'referenceNo', label: 'Reference/Bid No.', type: 'text' },
   { id: 'departmentId', label: 'Department / Client', type: 'department' },
   { id: 'stateCode', label: 'State', type: 'state' },
-  { id: 'vertical', label: 'Sector', type: 'text' },
+  // Options: Settings > Masters > Verticals (commercial `verticals` master). Historical column "SBU".
+  { id: 'vertical', label: 'Vertical', type: 'text' },
   { id: 'opportunityType', label: 'Opportunity Type', type: 'select', options: OPPORTUNITY_TYPES },
   { id: 'publishDate', label: 'RFP Published Date', type: 'date' },
   { id: 'submissionDate', label: 'Submission Deadline', type: 'date' },
@@ -45,15 +81,20 @@ const NATIVE_FIELDS: BidTransferField[] = [
   { id: 'bidTeamMemberId', label: 'Bid', type: 'person', team: 'bid' },
   { id: 'ownerEmail', label: 'Bid Owner', type: 'person', team: 'sales' },
 ]
+/** Historical tracker column → app field (GOMS historical-Excel mapping). Columns absent
+ *  here have no app destination and are kept as historical values with the bid. */
 const IMPORT_TARGETS: Record<string, string> = {
-  opportunityName: 'opportunityName', gemTenderId: 'gemTenderId', rfpDescription: 'assignmentName',
+  opportunityName: 'opportunityName', gemTenderId: 'gemTenderId', rfpDescription: 'assignmentName', sbu: 'vertical',
   scope: 'general:scopeOfWork', tenderValue: 'valueAmount', publishDate: 'publishDate', receivedDate: 'general:receivingDate',
-  querySubmission: 'general:queriesDeadline', preBidDate: 'general:preBidMeeting', submissionDate: 'submissionDate',
+  querySubmission: 'general:queriesDeadline', preBidDate: 'general:preBidMeeting', dueDate: 'general:bidDeadline', submissionDate: 'submissionDate',
   pqCompliance: 'general:pqCompliance', tqCompliance: 'general:tqCompliance', tenderFee: 'general:tenderFee', tenderEmd: 'emdAmount',
   evaluationType: 'general:evaluationCriteria', submissionType: 'general:submissionMode',
-  salesPersonEmail: 'geoSalesPersonId', state: 'stateCode', buOwner: 'buSalesPersonId', presalesOwner: 'preSalesPersonId',
-  bidTeamOwner: 'bidTeamMemberId', stageKey: 'stageKey', goNoGo: 'decision', tenderWebsite: 'tenderLink',
+  salesPersonEmail: 'geoSalesPersonId', state: 'stateCode', verticalOwner: 'buSalesPersonId', presalesOwner: 'preSalesPersonId',
+  bidTeamOwner: 'ownerEmail', bidTeamLead: 'bidTeamMemberId', stageKey: 'stageKey', goNoGo: 'decision', tenderWebsite: 'tenderLink',
 }
+/** Historical column → built-in Bid Tracker field (bidTrackerFields.ts importKeys). */
+const SYSTEM_IMPORT_TARGETS: Record<string, string> = Object.fromEntries(
+  BID_SYSTEM_FIELDS.flatMap(f => (f.importKeys ?? []).map(k => [k, `custom:${f.key}`])))
 export function bidTransferFields(context: BidTransferContext): BidTransferField[] {
   return [...NATIVE_FIELDS, ...GENERAL_FIELDS.map(f => ({ id: `general:${f.key}`, label: f.label,
     type: (f.kind === 'select' ? 'select' : f.kind === 'date' ? 'date' : f.kind === 'datetime' ? 'datetime' : 'text') as BidTransferField['type'], options: f.options })),
@@ -64,96 +105,265 @@ export function resolveBidTransferField(header: string, fields: BidTransferField
   const direct = fields.filter(f => bidHeaderKey(f.id) === key || bidHeaderKey(f.label) === key)
   if (direct.length === 1) return direct[0]
   if (direct.length > 1) return direct.find(f => f.id === header) ?? direct.find(f => !f.id.includes(':'))
-  return supplied ? fields.find(f => f.id === IMPORT_TARGETS[supplied.key]) : undefined
+  return supplied ? fields.find(f => f.id === (IMPORT_TARGETS[supplied.key] ?? SYSTEM_IMPORT_TARGETS[supplied.key])) : undefined
 }
-function importDate(value: string): string | null {
-  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(value)
-  const iso = m ? `${m[3]}-${m[2]}-${m[1]}` : value
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null
-  const d = new Date(iso + 'T00:00:00Z')
-  return Number.isFinite(d.getTime()) && d.toISOString().slice(0, 10) === iso ? iso : null
+/** Wizard choice: import no app field, but keep the column's values with each bid as history. */
+export const BID_IMPORT_KEEP_AS_HISTORY = '#history'
+/** The app field a column imports into: the wizard's choice when made, otherwise matched by header. */
+export function bidImportTarget(table: BidImportTable, column: number, fields: BidTransferField[]): BidTransferField | undefined {
+  const choice = table.mapping?.[column]
+  if (choice === '' || choice === BID_IMPORT_KEEP_AS_HISTORY) return undefined
+  if (choice) return fields.find(f => f.id === choice)
+  const header = String(table.headers[column] ?? '')
+  return header.trim() ? resolveBidTransferField(header, fields) : undefined
+}
+/** True when the wizard marked the column "Skip": its values are not imported or kept. */
+export const isSkippedBidColumn = (table: BidImportTable, column: number) => table.mapping?.[column] === ''
+
+/** Placeholder text historical trackers use for "no value". Treated as blank, never as data. */
+const BLANK = /^(?:n\/?a|nil|null|none|not applicable|not available|tbd|tba|-+|—|\.|0?\/0?)$/i
+const MONTHS: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12 }
+const monthOf = (word: string): number | undefined => MONTHS[word.slice(0, 4).toLowerCase()] ?? MONTHS[word.slice(0, 3).toLowerCase()]
+function isoDate(y: number, m: number, d: number): string | null {
+  if (y < 100) y += 2000
+  if (y < 1900 || y > 2199) return null
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d
+    ? `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}` : null
+}
+/** Accepts the date shapes found in historical trackers: DD/MM/YYYY (also - or . and 2-digit
+ *  years), YYYY-MM-DD, "9 Jan 2026"/"09-Jan-26", and Excel serial numbers. Day-first, as in India.
+ *  Returns YYYY-MM-DD, or YYYY-MM-DDTHH:MM when the cell states a time — a time is never invented. */
+export function parseImportDate(raw: string): string | null {
+  const text = raw.trim().replace(/\s+/g, ' ')
+  const timeMatch = /^(.*?)(?:[ T,]+(?:at )?(\d{1,2})[:.](\d{2})(?::\d{2}(?:\.\d+)?)?\s*([ap]\.?m\.?)?)?(?:\s*hrs?\.?)?$/i.exec(text)
+  const datePart = (timeMatch?.[1] ?? text).trim()
+  let date: string | null = null, m: RegExpExecArray | null
+  if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(datePart))) date = isoDate(+m[1], +m[2], +m[3])
+  else if ((m = /^(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{2}|\d{4})$/.exec(datePart))) date = isoDate(+m[3], +m[2], +m[1])
+  else if ((m = /^(\d{1,2})(?:st|nd|rd|th)?[\s\-/.,]*([a-z]{3,9})[\s\-/.,]*(\d{2}|\d{4})$/i.exec(datePart)) && monthOf(m[2])) date = isoDate(+m[3], monthOf(m[2])!, +m[1])
+  else if ((m = /^([a-z]{3,9})[\s\-/.,]*(\d{1,2})(?:st|nd|rd|th)?[\s,]*(\d{4})$/i.exec(datePart)) && monthOf(m[1])) date = isoDate(+m[3], monthOf(m[1])!, +m[2])
+  else if ((m = /^(\d{5})(?:\.(\d+))?$/.exec(text)) && +m[1] > 20000 && +m[1] < 80000) {
+    // Excel 1900 date system serial (as text, e.g. from CSV); any fraction is the time of day.
+    const ms = Math.round((+text - 25569) * 86_400_000)
+    const dt = new Date(ms)
+    const d = dt.toISOString()
+    return m[2] && +`0.${m[2]}` > 0 ? `${d.slice(0, 10)}T${d.slice(11, 16)}` : d.slice(0, 10)
+  }
+  if (!date) return null
+  if (!timeMatch?.[2]) return date
+  let h = +timeMatch[2]
+  const min = +timeMatch[3], ampm = timeMatch[4]?.toLowerCase().replace(/\./g, '')
+  if (ampm) { if (h < 1 || h > 12) return null; h = (h % 12) + (ampm === 'pm' ? 12 : 0) }
+  if (h > 23 || min > 59) return null
+  return `${date}T${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
 }
 
-/** Validate against existing app fields and reference lists. No automatic column,
- * department, person or opportunity updates are permitted by this import path. */
+const UNIT_POWER: Record<string, number> = { cr: 7, crs: 7, crore: 7, crores: 7, l: 5, lac: 5, lacs: 5, lakh: 5, lakhs: 5, k: 3, thousand: 3 }
+/** INR amount with optional ₹/Rs/INR and a unit word, returned in `unit` ('cr' or rupees). ₹11 crore ≠ ₹11. */
+export function parseImportAmount(raw: string, unit: 'cr' | 'rupee'): string | null {
+  const m = /^(₹|rs\.?|inr)?\s*([\d,]*\.?\d+)\s*(cr|crs|crores?|l|lacs?|lakhs?|k|thousand)?\.?\s*(\/-)?$/i.exec(raw.trim())
+  if (!m) return null
+  const digits = m[2].replace(/,/g, '')
+  if (!/^\d*\.?\d+$/.test(digits) || Number(digits) > 1e15) return null
+  const n = digits.startsWith('.') ? `0${digits}` : digits
+  const word = m[3]?.toLowerCase()
+  // A bare number is already in the column's unit; a ₹/Rs/INR or "/-" figure without a unit word is rupees.
+  if (!word) return (m[1] || m[4]) && unit === 'cr' ? scaleBidAmount(n, -7) : scaleBidAmount(n, 0)
+  return scaleBidAmount(n, UNIT_POWER[word] - (unit === 'cr' ? 7 : 0))
+}
+
+/** Opportunity Type from explicit wording only; earliest match wins. */
+const TYPE_PATTERNS: readonly [(typeof OPPORTUNITY_TYPES)[number], RegExp][] = [
+  ['RFP', /\bRFP\b|request\s+for\s+proposals?\b/i],
+  ['RFQ', /\bRFQ\b|request\s+for\s+quot(?:e|ation)s?\b/i],
+  ['EOI', /\bEOI\b|expression\s+of\s+interest\b/i],
+  ['RFI', /\bRFI\b|request\s+for\s+information\b/i],
+  ['GeM', /\bGeM\b|government\s+e-?market\s*place/i],
+  ['Tender', /\bNIT\b|notice\s+inviting\s+tenders?\b|\be-?tender\b/i],
+]
+export function deriveOpportunityType(...texts: string[]): string {
+  for (const text of texts) {
+    let best: { type: string; at: number } | null = null
+    for (const [type, re] of TYPE_PATTERNS) {
+      const m = re.exec(text ?? '')
+      if (m && (!best || m.index < best.at)) best = { type, at: m.index }
+    }
+    if (best) return best.type
+  }
+  return ''
+}
+/** Historical decision vocabulary → app decision. */
+function decisionOf(raw: string): 'go' | 'no_go' | 'pending' | null {
+  const v = identity(raw).replace(/[-_/]+/g, ' ').replace(/\s+/g, ' ')
+  if (/^(go|yes|approved|y)$/.test(v)) return 'go'
+  if (/^(no ?go|no|rejected|n|not approved|dropped)$/.test(v)) return 'no_go'
+  if (/under ?approval|pending|awaited|in ?progress/.test(v)) return 'pending'
+  return null
+}
+/** Historical "Tender Stage" wording with an unambiguous app stage. */
+const STAGE_SYNONYMS: Record<string, string> = {
+  'bid submitted': 'submitted', 'submission done': 'submitted', 'technical bid submitted': 'submitted', 'under evaluation': 'submitted',
+  'technical evaluation': 'submitted', 'financial evaluation': 'submitted', 'evaluation': 'submitted',
+  'pre bid': 'preBidQueries', 'prebid': 'preBidQueries', 'pre bid queries': 'preBidQueries', 'queries': 'preBidQueries',
+  'commercial': 'commercialProposal', 'commercial proposal': 'commercialProposal', 'qualification': 'qualification', 'qualified': 'qualification',
+  'not participated': 'dropped', 'not participating': 'dropped', 'no bid': 'dropped', 'cancelled': 'dropped', 'canceled': 'dropped', 'withdrawn': 'dropped', 'dropped': 'dropped',
+}
+const selectSynonym = (fieldId: string, raw: string): string | undefined => {
+  const v = identity(raw)
+  if (fieldId === 'general:submissionMode') return /online|e-?submission|portal|e-?tender/.test(v) && !/offline|physical|both/.test(v) ? 'online' : /^(offline|physical|hard ?copy)$/.test(v) ? 'offline' : undefined
+  if (fieldId === 'general:pqCompliance' || fieldId === 'general:tqCompliance') return /^(yes|y|complied|compliant|fully complied|met|100%?)$/.test(v) ? 'complied' : /partial/.test(v) ? 'partially complied' : /^(no|n|not complied|non ?compliant|not met)$/.test(v) ? 'not complied' : undefined
+  if (fieldId === 'opportunityType') return OPPORTUNITY_TYPES.find(t => identity(t) === v) ?? (deriveOpportunityType(raw) || undefined)
+  return undefined
+}
+
+/** Validate against existing app fields and reference lists. Never auto-creates columns,
+ * departments, people or opportunities; values that cannot be linked are kept as historical text. */
 export function validateBidTransfer(table: BidImportTable, context: BidTransferContext): BidImportPreview {
-  const issues: BidIssue[] = [...(table.cellIssues ?? [])], changes: BidImportPreview['changes'] = [], prepared: PreparedBidImport[] = []
+  const issues: BidIssue[] = [], warnings: BidIssue[] = [], changes: BidImportPreview['changes'] = [], prepared: PreparedBidImport[] = []
   const error = (row: number, column: number, message: string) => issues.push({ row, column, message })
-  const fields = bidTransferFields(context), mapped = table.headers.map(h => resolveBidTransferField(h, fields))
-  const seenHeaders = new Set<string>(), seenTargets = new Set<string>()
+  const warn = (row: number, column: number, message: string) => warnings.push({ row, column, message })
+  // Spreadsheet error cells (#N/A, #REF!) carry no value: treat as blank and say so.
+  for (const ci of table.cellIssues ?? []) warn(ci.row, ci.column, `${ci.message} Treated as blank.`)
+  const blankedCells = new Set((table.cellIssues ?? []).map(ci => `${ci.row}:${ci.column}`))
+  const fields = bidTransferFields(context), mapped = table.headers.map((_, c) => bidImportTarget(table, c, fields))
+  table.mapping?.forEach((choice, c) => {
+    if (choice && choice !== BID_IMPORT_KEEP_AS_HISTORY && !fields.some(f => f.id === choice)) error(1, c, `Mapped to an unknown app field "${choice}". Choose another field or Skip.`)
+  })
+  const seenHeaders = new Set<string>(), seenTargets = new Map<string, number>()
   mapped.forEach((f, c) => {
-    const header = bidHeaderKey(table.headers[c])
+    const header = bidHeaderKey(String(table.headers[c] ?? ''))
+    if (!header) return
+    if (isSkippedBidColumn(table, c)) { warn(1, c, `"${table.headers[c]}" skipped — its values are not imported.`); return }
     if (seenHeaders.has(header)) error(1, c, 'Duplicate header. Keep one column for this field.')
     seenHeaders.add(header)
-    if (f && seenTargets.has(f.id)) error(1, c, 'Two columns target the same app field. Keep one value column.')
-    if (f) seenTargets.add(f.id)
-    else if (!findBidField(table.headers[c])) error(1, c, 'Unknown or ambiguous app column. Use a supported field ID/name from the export or import template.')
+    if (f && seenTargets.has(f.id)) {
+      // Two historical columns feeding one app field: the first one wins, the other is kept as history.
+      warn(1, c, `"${table.headers[c]}" and "${table.headers[seenTargets.get(f.id)!]}" both map to ${f.label}; the first is used and this one is kept as a historical value.`)
+      mapped[c] = undefined
+    } else if (f) seenTargets.set(f.id, c)
+    else if (findBidField(String(table.headers[c]))?.key !== 'serial') warn(1, c, `"${table.headers[c]}" has no app field; its values are stored with each bid as historical import data.`)
   })
   if (!mapped.some(f => f?.id === 'opportunityName')) error(1, 0, 'Opportunity Name is required.')
-  if (table.headers.length > 100) error(1, 0, 'Use at most 100 columns.')
+  if (table.headers.length > BID_IMPORT_MAX_COLUMNS) error(1, 0, `Use at most ${BID_IMPORT_MAX_COLUMNS} columns.`)
   const rows = table.rows.map((cells, i) => ({ cells, row: i + 2 })).filter(r => r.cells.some(v => v !== null && String(v).trim()))
   if (!rows.length || rows.length > 500) error(1, 0, 'Use 1–500 nonempty bid rows per batch.')
-  const names = new Set(context.existing.map(o => identity(o.opportunityName)))
-  const tenders = new Set(context.existing.filter(o => o.gemTenderId).map(o => tenderIdentity(o.gemTenderId)))
+  const fileNames = new Set<string>(), fileTenders = new Set<string>(), matches: BidImportMatch[] = [], skipped: number[] = []
+  const liveMatch = (name: string, tender: string) => context.existing.find(o => (name && identity(o.opportunityName) === name) || (tender && o.gemTenderId && tenderIdentity(o.gemTenderId) === tender))
   for (const { cells, row } of rows.slice(0, 500)) {
-    const values: Record<string, CustomValue> = {}
-    if (cells.slice(table.headers.length).some(v => v !== null && String(v).trim())) error(row, table.headers.length, 'Value has no column header.')
+    const values: Record<string, CustomValue> = {}, legacy: Record<string, string> = {}
+    const keep = (c: number, text: string) => { legacy[String(table.headers[c] ?? `Column ${c + 1}`).trim() || `Column ${c + 1}`] = text }
+    cells.slice(table.headers.length).forEach((v, i) => { if (v !== null && String(v).trim()) { keep(table.headers.length + i, String(v).trim()); warn(row, table.headers.length + i, 'Value has no column header; kept as historical data.') } })
     mapped.forEach((field, c) => {
-      const raw = cells[c] === null || cells[c] === undefined ? '' : String(cells[c]), text = raw.trim()
-      const supplied = findBidField(table.headers[c])
-      if (!text) { if (field?.id === 'opportunityName') error(row, c, 'Opportunity Name is required.'); return }
-      if (supplied?.key === 'serial') { if (!/^\d+$/.test(text)) error(row, c, 'Row number must be a whole number.'); return }
-      if (!field) { error(row, c, 'No matching field exists in the current app. Rename this column to an existing app field or add that field separately, then re-upload. No value was discarded.'); return }
-      try {
-        if (text.startsWith('=') || text.length > 5000 || /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text)) throw new Error('Use plain values up to 5,000 characters, without formulas or control characters.')
-        let value: unknown = text
-        if (supplied?.kind === 'percent') {
-          const n = Number(text.replace(/%$/, '').trim())
-          if (!Number.isFinite(n) || n < 0 || n > 100) throw new Error('Enter a percentage from 0 to 100.')
-          value = String(n)
-        }
-        if (field.type === 'date' || field.type === 'datetime') {
-          const date = importDate(text)
-          if (date) value = date
-          else if (field.type === 'datetime' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?$/.test(text) && importDate(text.slice(0, 10)) && +text.slice(11,13) < 24 && +text.slice(14,16) < 60 && (text.length === 16 || +text.slice(17,19) < 60)) value = text
-          else throw new Error('Invalid calendar date. Use DD/MM/YYYY or YYYY-MM-DD; date/time fields also accept YYYY-MM-DDTHH:MM.')
-        } else if (field.type === 'person' || field.type === 'department' || field.type === 'state') {
-          const people = field.type === 'person' ? context.people.filter(p => p.team === (field.team ?? 'sales')) : field.type === 'department' ? context.departments : context.states
-          const mobile = normalizeBidMobile(text)
-          const matches = people.filter(p => identity(p.id) === identity(text) || identity(p.name) === identity(text) || ('email' in p && identity(String(p.email ?? '')) === identity(text)) || (mobile && 'mobile' in p && normalizeBidMobile(String(p.mobile ?? '')) === mobile))
-          if (matches.length !== 1) throw new Error(matches.length ? 'Ambiguous reference. Use the unique existing record ID or official email.' : `No matching active ${field.team ?? field.type} record. No master records are auto-created.`)
-          value = field.id === 'ownerEmail' ? context.people.find(p => p.id === matches[0].id)?.email : matches[0].id
-          if (field.id === 'ownerEmail' && !value) throw new Error('The selected owner has no official email. Correct the roster first.')
-        } else if (field.type === 'select') {
-          const option = field.options?.find(v => bidHeaderKey(v) === bidHeaderKey(text))
-            ?? (field.id === 'stageKey' ? BID_STAGES.find(s => bidHeaderKey(s.label) === bidHeaderKey(text))?.key : undefined)
-          if (!option) throw new Error(`Choose ${field.options?.join(', ')}.`)
-          value = option
-        } else if (field.type === 'phone') {
-          const mobile = normalizeBidMobile(text)
-          if (!mobile) throw new Error('Use a 10-digit Indian mobile; spaces and explicit 0/+91/0091 prefixes are normalized.')
-          value = mobile
-        }
-        if (field.type !== 'datetime' && !['ownerEmail', 'valueAmount', 'emdAmount'].includes(field.id)) value = coerceCustomValue(field.type, value, field.options ? [...field.options] : undefined)
-        if (field.id === 'valueAmount' || field.id === 'emdAmount') {
-          if (!/^(?:\d+|\d{1,3}(?:,\d{3})+|\d{1,2}(?:,\d{2})*,\d{3})(?:\.\d+)?$/.test(text) || Number(text.replace(/,/g,'')) > 1e15) throw new Error('Enter a nonnegative amount with valid comma grouping; no currency symbols. Tender Value is INR crore; EMD is INR rupees.')
-          value = text.replace(/,/g,'')
-        }
-        values[field.id] = value as CustomValue
-        if (String(value ?? '') !== raw) changes.push({ row, column: c, before: raw, after: String(value ?? '') })
-      } catch (e) { error(row, c, e instanceof Error ? e.message : 'Invalid value for this app field.') }
+      const raw = cells[c] === null || cells[c] === undefined || blankedCells.has(`${row}:${c}`) ? '' : String(cells[c]), text = raw.trim()
+      const supplied = findBidField(String(table.headers[c] ?? ''))
+      if (isSkippedBidColumn(table, c)) return
+      const isOption = !!field?.options?.some(o => bidHeaderKey(o) === bidHeaderKey(text))
+      if (!text || (BLANK.test(text) && !isOption)) { if (field?.id === 'opportunityName') error(row, c, 'Opportunity Name is required.'); return }
+      if (supplied?.key === 'serial') return
+      if (text.length > 5000 || /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(text)) { error(row, c, 'Use plain values up to 5,000 characters, without control characters.'); return }
+      // Formula text (e.g. from a CSV) would execute when an export is opened. Excel formulas arrive as their calculated value.
+      if (/^[=+@]/.test(text) && !/^\+\d/.test(text)) { error(row, c, 'Formula text is not accepted. Paste the calculated value instead.'); return }
+      if (!field) { keep(c, text); return }
+      // A value that cannot be linked or parsed is kept as history (never blocks), except for the name.
+      const soft = (message: string) => { keep(c, text); warn(row, c, `${message} Kept as historical text "${text.slice(0, 80)}".`) }
+      let value: unknown = text
+      if (field.type === 'date' || field.type === 'datetime') {
+        const parsed = parseImportDate(text)
+        if (!parsed) return soft('Not a recognisable date.')
+        value = field.type === 'date' ? parsed.slice(0, 10) : parsed
+      } else if (field.id === 'valueAmount' || field.id === 'emdAmount') {
+        const amount = parseImportAmount(text, field.id === 'valueAmount' ? 'cr' : 'rupee')
+        if (amount === null) return soft(field.id === 'valueAmount' ? 'Not an INR amount (crore).' : 'Not an INR amount (rupees).')
+        value = amount
+      } else if (field.type === 'person' || field.type === 'department' || field.type === 'state') {
+        const pool = field.type === 'person' ? context.people.filter(p => p.team === (field.team ?? 'sales')) : field.type === 'department' ? context.departments : context.states
+        const mobile = normalizeBidMobile(text)
+        const matches = pool.filter(p => identity(p.id) === identity(text) || identity(p.name) === identity(text) || ('email' in p && identity(String(p.email ?? '')) === identity(text)) || (mobile && 'mobile' in p && normalizeBidMobile(String(p.mobile ?? '')) === mobile))
+        // A unique first-name / prefix match is accepted for people ("Ashish" → "Ashish Desai").
+        const loose = field.type === 'person' && !matches.length ? pool.filter(p => identity(p.name).split(' ')[0] === identity(text) || identity(p.name).startsWith(identity(text) + ' ')) : []
+        const found = matches.length ? matches : loose
+        if (found.length !== 1) return soft(found.length ? `Matches ${found.length} ${field.team ?? field.type} records; not linked.` : `No matching ${field.team ?? field.type} record in the app; not linked.`)
+        if (loose.length) warn(row, c, `"${text}" linked to ${found[0].name} by first name. Check it is the right person.`)
+        value = field.id === 'ownerEmail' ? context.people.find(p => p.id === found[0].id)?.email : found[0].id
+        if (field.id === 'ownerEmail' && !value) return soft('The matched owner has no official email.')
+      } else if (field.type === 'multiselect') {
+        // "BG, Online / DD" → each part matched to an option; unmatched parts are reported and kept as history.
+        const parts = text.split(/\s*(?:[,;|/\n]|\band\b|&)\s*/i).map(t => t.trim()).filter(Boolean)
+        const picked = parts.map(t => field.options?.find(o => bidHeaderKey(o) === bidHeaderKey(t)))
+        const unknown = parts.filter((_, i) => !picked[i])
+        if (!picked.some(Boolean)) return soft(`Not one of ${field.options?.join(', ')}.`)
+        if (unknown.length) { keep(c, text); warn(row, c, `${unknown.join(', ')} not in the list; kept as history.`) }
+        value = JSON.stringify((field.options ?? []).filter(o => picked.includes(o)))
+      } else if (field.type === 'select') {
+        let option: string | undefined = field.options?.find(v => bidHeaderKey(v) === bidHeaderKey(text))
+        if (!option && field.id === 'stageKey') option = BID_STAGES.find(s => bidHeaderKey(s.label) === bidHeaderKey(text))?.key ?? STAGE_SYNONYMS[identity(text).replace(/[-_/]+/g, ' ')]
+        if (!option && field.id === 'decision') option = decisionOf(text) ?? undefined
+        if (!option) option = selectSynonym(field.id, text)
+        if (!option) return soft(`Not one of ${field.options?.join(', ')}.`)
+        value = option
+      } else if (field.id === 'vertical' && context.verticals?.length) {
+        const master = context.verticals.find(v => identity(v) === identity(text))
+        if (!master) return soft(`Not in Settings > Masters > Verticals (${context.verticals.join(', ')}).`)
+        value = master
+      } else if (field.type === 'phone') {
+        const mobile = normalizeBidMobile(text)
+        if (!mobile) return soft('Not a 10-digit Indian mobile.')
+        value = mobile
+      }
+      if (field.type !== 'datetime' && !['ownerEmail', 'valueAmount', 'emdAmount'].includes(field.id)) {
+        try { value = coerceCustomValue(field.type, value, field.options ? [...field.options] : undefined) }
+        catch (e) { return soft(e instanceof Error ? e.message : 'Invalid value for this app field.') }
+      }
+      values[field.id] = value as CustomValue
+      if (String(value ?? '') !== raw) changes.push({ row, column: c, before: raw, after: String(value ?? '') })
     })
     const column = (key: string) => Math.max(0, mapped.findIndex(f => f?.id === key))
+    const headerCol = (key: string) => Math.max(0, table.headers.findIndex(h => findBidField(String(h ?? ''))?.key === key))
+    // Derived fields — filled only from explicit evidence in the row.
+    if (values.opportunityType === undefined) {
+      const type = deriveOpportunityType(String(values.assignmentName ?? ''), String(values.opportunityName ?? ''), String(values.gemTenderId ?? ''))
+        || (/\bGEM\/\d{4}\/B\//i.test(String(values.gemTenderId ?? '')) ? 'GeM' : '')
+      if (type) { values.opportunityType = type; warn(row, column('assignmentName'), `Opportunity Type set to ${type} from the assignment wording.`) }
+    }
+    if (values.submissionDate === undefined && typeof values['general:bidDeadline'] === 'string') values.submissionDate = String(values['general:bidDeadline']).slice(0, 10)
+    // The app does not allow Go before Submitted: keep the decision as history instead of rejecting the bid.
+    if (values.decision === 'go' && !isAtOrAfterSubmitted(String(values.stageKey ?? 'solutioning'))) {
+      values.decision = 'pending'
+      legacy['Decision (historical)'] = 'Go'
+      warn(row, column('decision') || headerCol('goNoGo'), 'Go is only allowed from the Submitted stage; imported as Pending and the original Go kept as history.')
+    }
     const name = identity(String(values.opportunityName ?? '')), tender = tenderIdentity(String(values.gemTenderId ?? ''))
-    if (names.has(name)) error(row, column('opportunityName'), 'Opportunity name already exists live or repeats in this file. Imports only create new bids; existing rows are never updated.')
-    if (tender && tenders.has(tender)) error(row, column('gemTenderId'), 'Tender ID already exists live or repeats in this file. No existing opportunity or bid will be overwritten.')
-    names.add(name); if (tender) tenders.add(tender)
-    if (values.decision === 'go' && !isAtOrAfterSubmitted(String(values.stageKey ?? 'solutioning'))) error(row, column('decision'), 'The app does not allow Go before Submitted.')
+    const action = table.rowActions?.[String(row)], live = liveMatch(name, tender)
+    const matchColumn = live && name && identity(live.opportunityName) === name ? column('opportunityName') : column('gemTenderId')
+    let mode: 'add' | 'override' = 'add', targetId: string | undefined
+    if (live) {
+      const diffs = Object.entries(values).flatMap(([field, value]) => {
+        const after = String(value ?? ''), before = live.current?.[field] ?? ''
+        return after && after !== before ? [{ field, label: fields.find(f => f.id === field)?.label ?? field, before, after }] : []
+      })
+      matches.push({ row, existingId: live.id ?? '', existingName: live.opportunityName, existingCode: live.bidCode, action, diffs })
+      if (!action) error(row, matchColumn, `Matches existing bid "${live.opportunityName}". Choose Skip, Add as duplicate or Override.`)
+      else if (action === 'skip') { skipped.push(row); continue }
+      else if (action === 'override') {
+        if (!live.id) error(row, matchColumn, 'This bid cannot be overridden. Choose Skip or Add as duplicate.')
+        mode = 'override'; targetId = live.id
+      }
+    } else if ((name && fileNames.has(name)) || (tender && fileTenders.has(tender))) {
+      matches.push({ row, existingId: '', existingName: 'an earlier row in this file', action, diffs: [] })
+      if (action === 'skip') { skipped.push(row); continue }
+      if (action !== 'add') error(row, name && fileNames.has(name) ? column('opportunityName') : column('gemTenderId'), 'Repeats an earlier row in this file. Choose Skip or Add as duplicate.')
+    }
+    if (name) fileNames.add(name); if (tender) fileTenders.add(tender)
     const dept = context.departments.find(d => d.id === values.departmentId)
-    if (dept && values.stateCode !== undefined && dept.stateCode !== Number(values.stateCode)) error(row, column('stateCode'), 'State differs from the selected existing department.')
-    prepared.push({ values })
+    if (dept && values.stateCode !== undefined && dept.stateCode !== Number(values.stateCode)) {
+      legacy.State = String(context.states.find(s => s.id === String(values.stateCode))?.name ?? values.stateCode)
+      delete values.stateCode
+      warn(row, column('departmentId'), 'State differs from the department; the department\'s state is used and the sheet value kept as history.')
+    }
+    prepared.push({ values, legacy, row, mode, targetId })
   }
-  return { valid: !issues.length, rowCount: rows.length, issues, changes, prepared: issues.length ? [] : prepared }
+  return { valid: !issues.length, rowCount: rows.length - skipped.length, issues, warnings, changes, prepared: issues.length ? [] : prepared, matches, skipped }
 }
 
 type FieldKind = 'text' | 'date' | 'money' | 'percent' | 'owner' | 'state' | 'stage' | 'url' | 'quarter' | 'serial' | 'choice'

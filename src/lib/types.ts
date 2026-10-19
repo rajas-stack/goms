@@ -550,6 +550,8 @@ export interface BidCustomField {
   sheet: ColumnOwner
   /** Non-null exactly for `select`. */
   options: string[] | null
+  /** Built-in Bid Tracker fields: option → full form (tooltip), from Settings > Masters > Bid Tracker. */
+  optionHints?: Record<string, string>
   /** True once any non-null value has EVER been written (never reset, even if
    *  every value is later cleared). Only a column where this is false can be
    *  hard-deleted; all others are archive-only. */

@@ -3,6 +3,7 @@ import { TRPCError } from '@trpc/server'
 import type { PoolClient } from 'pg'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { rejectKnownCommunicationEmail } from '../lib/communicationPeople.js'
 import { EMAIL_BINDING_MESSAGE, ORG_SYNC_EMAIL_MESSAGE, emailChanges, lacksSystemAdmin, requireSystemAdmin, type CallerContext } from '../auth/rbac/systemAdminOnly.js'
 
 // Org Structure: the company chart. Pre-Sales / Bid / Legal rosters are mirrored from it by the
@@ -62,18 +63,19 @@ const memberEmails = async (client: PoolClient): Promise<Map<string, string>> =>
  *  a System Admin may not change team-member emails (SYSTEM_ADMIN_ONLY): their transaction is rolled back (FORBIDDEN) when the mirror
  *  changed the email of a member that existed before it ran. Members it only inserts (a new person's own row) and links that keep the
  *  member's email are the ordinary mirroring and stay allowed. Not applied to a System Admin, nor when auth is not enforced. */
-async function inOrgTransaction<T>(ctx: CallerContext, fn: (client: PoolClient) => Promise<T>): Promise<T> {
+async function inOrgTransaction<T>(ctx: CallerContext, fn: (client: PoolClient) => Promise<T>, preservePopulatedEmails = false): Promise<T> {
   const client = await pool.connect()
   try {
     await client.query('BEGIN')
     await client.query('LOCK TABLE org_people IN SHARE ROW EXCLUSIVE MODE')
     const result = await fn(client)
     const guarded = lacksSystemAdmin(ctx)
-    const before = guarded ? await memberEmails(client) : null
+    const before = guarded || preservePopulatedEmails ? await memberEmails(client) : null
     await client.query('SELECT sync_delivery_teams_from_org()')
     if (before) {
       const after = await memberEmails(client)
       for (const [id, email] of before) {
+        if (preservePopulatedEmails && email?.trim() && after.has(id) && after.get(id) !== email) throw new TRPCError({ code: 'CONFLICT', message: 'Adding this employee would replace an existing team email. Review the employee in Teams first.' })
         if (after.has(id) && after.get(id) !== email) requireSystemAdmin(ctx, ORG_SYNC_EMAIL_MESSAGE, 'orgPeople.update#email')
       }
     }
@@ -108,9 +110,11 @@ export const orgPeopleRouter = router({
     departments: departments.optional(),
     managerId: z.string().guid('Invalid UUID').nullable().optional(),
     email: z.string().trim().max(254).optional(),
+    rejectDuplicateEmail: z.boolean().optional(),
   })).mutation(({ input, ctx }) => inOrgTransaction(ctx, async (client) => {
     // The email is what derives this person's role (SYSTEM_ADMIN_ONLY, every RBAC mode): adding one needs a System Admin.
     if (emailChanges(input.email, '')) requireSystemAdmin(ctx, EMAIL_BINDING_MESSAGE, 'orgPeople.create#email')
+    if (input.rejectDuplicateEmail && input.email) await rejectKnownCommunicationEmail(client, input.email)
     if (await nameTaken(client, input.name, null)) throw new TRPCError({ code: 'CONFLICT', message: 'Someone with this name is already in the org.' })
     const people = await loadPeople(client)
     const problem = managerProblem({ id: '', level: input.level }, input.managerId ?? null, people)
@@ -121,7 +125,7 @@ export const orgPeopleRouter = router({
       [input.name, input.designation ?? '', input.level, [...new Set(input.departments ?? [])], input.managerId ?? null, input.email ?? ''],
     )
     return toPerson(result.rows[0])
-  })),
+  }, input.rejectDuplicateEmail)),
 
   update: protectedProcedure.input(z.object({
     id: z.string().guid('Invalid UUID'),

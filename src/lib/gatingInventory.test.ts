@@ -6,7 +6,7 @@ const GATED = new Set([
   'features/competitors/CompetitorsSection.tsx', 'features/departments/AmnexDepartmentsSection.tsx',
   'features/employees/MeetingDepartmentDialog.tsx', 'features/employees/MeetingPersonDialog.tsx',
   'features/tender-websites/TenderWebsitesSection.tsx',
-  'modules/bid-tracker/attachments/BidAttachmentsSection.tsx',
+  'modules/bid-tracker/attachments/BidAttachmentsSection.tsx', 'modules/bid-tracker/transfer/BidImportDialog.tsx', 'features/masters/BidTrackerMasters.tsx', 'features/employees/SalesPhotosFromDrive.tsx',
   'modules/bid-tracker/corrigenda/CorrigendaSection.tsx', 'modules/bid-tracker/synopsis/GeneralTab.tsx',
   'modules/rbac-tree/RolesAccessPage.tsx',
   'features/insights-studio/pages/ReportPage.tsx', 'features/insights-studio/pages/ReportsPage.tsx',
