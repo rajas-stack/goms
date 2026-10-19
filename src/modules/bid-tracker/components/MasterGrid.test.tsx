@@ -61,6 +61,31 @@ describe('MasterGrid', () => {
     await resetLocalData()
   })
 
+  it('adds transfer controls only to the existing Bid Tracker toolbar', async () => {
+    await makeBid('Alpha')
+    const view = renderGrid()
+    expect(await screen.findByRole('button', { name: 'Import' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Export' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Import' }))
+    expect(await screen.findByRole('dialog', { name: 'Import bids' })).toBeInTheDocument()
+    expect(screen.getByText('Alpha')).toBeInTheDocument()
+    view.unmount()
+    renderGrid({ sheet: 'pipeline-funnel' })
+    expect(screen.queryByRole('button', { name: 'Import' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Export' })).not.toBeInTheDocument()
+  })
+
+  it('cycles missing fields beside the existing star and reveals hidden columns', async () => {
+    await repository.importBids({ table: { headers: ['Opportunity Name'], rows: [['Incomplete']] } })
+    renderGrid({ visibleColumns: ['opportunityName'] })
+    const visit = await screen.findByRole('button', { name: 'Visit next missing field for Incomplete' })
+    expect(screen.getByRole('button', { name: 'Add to favourites' })).toBeInTheDocument()
+    await userEvent.click(visit)
+    await waitFor(() => expect(document.activeElement?.closest('[data-cell]')?.getAttribute('data-cell')).toMatch(/:departmentName$/))
+    await userEvent.click(visit)
+    await waitFor(() => expect(document.activeElement?.closest('[data-cell]')?.getAttribute('data-cell')).toMatch(/:ownerEmail$/))
+  })
+
   describe('column completeness (spec §8)', () => {
     it('renders all seven required groups, in order, with every required leaf column — and no Custom group without custom columns', async () => {
       await makeBid('Alpha')

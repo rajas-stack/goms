@@ -148,6 +148,8 @@ export const opportunityPolicy: Record<string, PolicyEntry> = {
   'bids.listForGrid': { requirements: [readRows], mask: maskGridRows },
 
   'bids.create': { requirements: [sheetCreate, departmentCreate] },
+  'bids.previewImport': { requirements: [create('opp.bidTracker')] },
+  'bids.importNew': { requirements: [create('opp.bidTracker')] },
   'bids.update': { requirements: [bidRow('update', (r) => r?.id, bidPatch), sheetMove] },
   ...same(['bids.archive', 'bids.unarchive'], bidRow('update', (r) => r?.id, () => ['bid.archive'])),
   'bids.markVerified': { requirements: [bidRow('update', (r) => r?.id, () => ['bid.verify'])] },

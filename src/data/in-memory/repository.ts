@@ -1,4 +1,5 @@
 import { MAX_CREDENTIAL_PASSPHRASES, normalizeCredentialPassphrase, type CredentialPassphrase, type CredentialPassphraseInput, type CredentialPassphraseUpdate } from '@goms/domain'
+import { validateBidTransfer, scaleBidAmount, generalToDocument, type BidImportTable, type BidImportPreview, type BidImportResult, type BidTransferContext } from '@goms/domain'
 import { competitionNames, computeInsights, insightValueCr, type InsightsFilters, type InsightsData } from '@goms/domain'
 import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/routers/access'
 import type {
@@ -582,6 +583,8 @@ export interface Repository {
   /** Create Bid for an opportunity that does not exist yet: the opportunity, its department and the bid
    *  are created together (all-or-nothing), exactly as bids.create does server-side. */
   createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice, sheet?: OwnedSheet): Promise<Bid>
+  previewBidImport(input: { table: BidImportTable }): Promise<BidImportPreview>
+  importBids(input: { table: BidImportTable }): Promise<BidImportResult>
   /** `sheet` moves the row to another Opportunity sheet. */
   updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink' | 'sheet'>>): Promise<Bid>
   archiveBid(id: string): Promise<Bid>
@@ -1971,6 +1974,55 @@ class InMemoryRepository implements Repository {
       opportunityType: opportunity.opportunityType?.trim() ?? '',
     })
     return this.createBid(opp.id, undefined, sheet)
+  }
+
+  private bidTransferContext(): BidTransferContext {
+    return {
+      existing: this.data.opportunities,
+      people: [...this.data.salesPersons.filter(p => p.status !== 'inactive' && p.status !== 'resigned').map(p => ({ id: p.id, name: p.name, email: p.officialEmail, mobile: p.mobile, team: 'sales' })),
+        ...this.data.deliveryTeamMembers.filter(p => p.status === 'active')],
+      states: this.data.nodes.filter(n => n.typeKey === 'state').map(n => ({ id: String(n.stateCode), name: n.name })),
+      departments: this.data.nodes.filter(n => n.domain === 'org' && n.typeKey === 'department' && n.status === 'active'),
+      customFields: this.data.bidCustomFields.filter(f => f.status === 'active' && ['bidTracker', 'master'].includes(f.sheet)),
+    }
+  }
+  async previewBidImport(input: { table: BidImportTable }): Promise<BidImportPreview> {
+    return validateBidTransfer(input.table, this.bidTransferContext())
+  }
+  async importBids(input: { table: BidImportTable }): Promise<BidImportResult> {
+    const context = this.bidTransferContext(), preview = validateBidTransfer(input.table, context)
+    if (!preview.valid) return { status: 'rejected', preview }
+    // Use the normal field writers on an isolated copy. Publish once only after
+    // every row succeeds and the live store is still exactly the validated state.
+    const baseline = JSON.stringify(this.data), staged = new InMemoryRepository()
+    staged.hydrate(structuredClone(this.data))
+    for (const { values: v } of preview.prepared) {
+      const text = (key: string) => v[key] == null ? '' : String(v[key])
+      const opp = await staged.createOpportunity({
+        departmentId: text('departmentId'), opportunityName: text('opportunityName'), gemTenderId: text('gemTenderId'),
+        assignmentName: text('assignmentName'), referenceNo: text('referenceNo'), opportunityType: text('opportunityType'),
+        publishDate: text('publishDate'), submissionDate: text('submissionDate'), vertical: text('vertical'),
+        valueAmount: text('valueAmount'), valueUnit: 'cr', currency: 'INR', emdAmount: scaleBidAmount(text('emdAmount'), -3), emdUnit: 'thousand',
+        geoSalesPersonId: text('geoSalesPersonId') || null, buSalesPersonId: text('buSalesPersonId') || null,
+        preSalesPersonId: text('preSalesPersonId') || null, bidTeamMemberId: text('bidTeamMemberId') || null,
+      })
+      if (!opp.departmentId) { opp.opportunityCode = ''; opp.stateCode = v.stateCode === undefined ? null : Number(v.stateCode) }
+      const now = new Date().toISOString(), decision = text('decision') || 'pending'
+      const bid: Bid = { id: uid('bid'), opportunityId: opp.id, bidCode: formatBidCode(new Date().getFullYear(), inMemoryBidSeq++),
+        stageKey: decision === 'no_go' ? 'dropped' : decision === 'go' ? 'goApproved' : text('stageKey') || DEFAULT_BID_STAGE_KEY,
+        decision: decision as Bid['decision'], status: 'active', dataConfidence: 'needs_review', tenderLink: text('tenderLink') || null,
+        sheet: 'bidTracker', archivedAt: null, createdAt: now, updatedAt: now }
+      staged.data.bids.push(bid)
+      staged.data.bidMilestones.push({ id: uid('bms'), bidId: bid.id, milestoneType: 'submissionDeadline', key: 'submissionDeadline', label: 'Submission Deadline', dueAt: parseSubmissionDate(opp.submissionDate), venue: null, notes: null, status: 'open', source: 'manual', createdAt: now, updatedAt: now })
+      const general = Object.fromEntries(Object.entries(v).filter(([key]) => key.startsWith('general:')).map(([key,value]) => [key.slice(8), String(value ?? '')]))
+      if (Object.keys(general).length) await staged.saveBidSynopsis({ bidId: bid.id, section: 'general', document: generalToDocument(general), expectedRevision: 0 })
+      for (const field of context.customFields) if (v[`custom:${field.key}`] !== undefined) await staged.setBidCustomValue(bid.id, field.id, v[`custom:${field.key}`])
+      const owner = context.people.find(p => p.team === 'sales' && p.email === text('ownerEmail'))
+      if (owner) await staged.assignOwner({ entityType: 'bid', entityId: bid.id, salesPersonId: owner.id, startDate: isoToday() })
+    }
+    if (baseline !== JSON.stringify(this.data)) throw new Error('Live data changed during staging. Revalidate the entire file before importing.')
+    this.data = staged.data
+    return { status: 'imported', count: preview.rowCount }
   }
 
   async createBid(opportunityId: string, department?: DepartmentChoice, sheet: OwnedSheet = DEFAULT_OWNED_SHEET) {
@@ -3528,7 +3580,7 @@ const MUTATOR_KEYS = [
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
   'createBoq', 'updateBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'reorderBoqLineItems', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',
   'createCustomer', 'updateCustomer', 'deleteCustomer',
-  'createBid', 'createBidForNewOpportunity', 'updateBid', 'archiveBid', 'markBidVerified', 'unarchiveBid', 'deleteBid',
+  'createBid', 'createBidForNewOpportunity', 'updateBid', 'archiveBid', 'markBidVerified', 'unarchiveBid', 'deleteBid', 'importBids',
   'createBidMilestone', 'updateBidMilestone', 'deleteBidMilestone',
   'createBidCorrigendum', 'updateBidCorrigendumRegister', 'reviewCorrigendumChange', 'addCorrigendumChanges', 'freezeValue', 'unfreezeValue',
   'requestDocumentUploadUrl', 'confirmDocumentUpload', 'updateDocumentFiling', 'deleteDocument', 'createDocumentCitation', 'deleteDocumentCitation',
@@ -3561,7 +3613,7 @@ const READER_KEYS = [
   'listSkus', 'getSku', 'listBomItemsForSku', 'listAllBomItems', 'listBoqs', 'getBoq', 'listBoqLineItems',
   'listAllBoqLineItems', 'listAuditLogs',
   'listCustomers', 'getCustomer',
-  'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
+  'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues', 'previewBidImport',
   'listDocuments', 'listDocumentCitations', 'getDocumentDownloadUrl', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
   'listDeliveryTeamMembers', 'listOrgPeople', 'getMyAccess', 'getAccessReadiness', 'listRoleOverrides',
   'listUnmatchedOverrides', 'listOverrideHistory', 'getPermissionMatrix', 'getEffectivePermissions',
@@ -3623,6 +3675,7 @@ export const repository: Repository = new Proxy(impl, {
       // Save only once the mutation has actually resolved, so a rejected call
       // (e.g. a validation throw) doesn't persist a half-applied state.
       return Promise.resolve(out).then((result) => {
+        if (prop === 'importBids' && result && typeof result === 'object' && 'status' in result && result.status === 'rejected') return result
         scheduleSave(() => target.snapshot())
         return result
       })

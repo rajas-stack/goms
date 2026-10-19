@@ -14,6 +14,7 @@ import { assignOpportunityCode } from '../lib/opportunityCode.js'
 import { departmentChoiceSchema, newBidOpportunitySchema, resolveBidDepartment } from '../lib/opportunityDepartment.js'
 import { filterNodeSchema } from '../lib/filterRuleSchema.js'
 import { CUSTOM_VALUE_COLUMNS, customValueFromRow } from '../lib/customFieldValues.js'
+import { bidTransferSchema, previewBidTransfer, commitBidTransfer } from '../lib/bidTransfer.js'
 
 export function toBid(row: any) {
   return {
@@ -84,6 +85,8 @@ const bidActionQueueRouter = router({
 })
 
 export const bidsRouter = router({
+  previewImport: protectedProcedure.input(bidTransferSchema).mutation(({ input, ctx }) => previewBidTransfer(input.table, ctx.user?.email ?? '')),
+  importNew: protectedProcedure.input(bidTransferSchema).mutation(({ input, ctx }) => commitBidTransfer(input.table, ctx.user?.email ?? null)),
   get: protectedReadProcedure.input(z.object({ id: z.string().guid('Invalid UUID') })).query(({ input }) => oneBid(input.id)),
 
   // A cheap single-row lookup for legacy-UI guards (WorksEditor): "does this
