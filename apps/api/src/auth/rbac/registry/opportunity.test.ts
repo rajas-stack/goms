@@ -37,8 +37,11 @@ beforeEach(async () => {
 afterEach(cleanupRbacFixtures)
 
 describe('registry coverage for this area', () => {
-  it('registers exactly the 82 opportunity / bid procedures', () => {
+  it('registers the opportunity / bid procedures', () => {
     expect(Object.keys(opportunityPolicy).sort()).toEqual([
+      'bidCommunications.ignore',
+      'bidCommunications.contacts', 'bidCommunications.createContact', 'bidCommunications.updateContact',
+      'bidCommunications.addInternal', 'bidCommunications.bindInternalEmail', 'bidCommunications.addClient',
       'bidCorrigenda.addChanges', 'bidCorrigenda.create', 'bidCorrigenda.listForBid', 'bidCorrigenda.reviewChange', 'bidCorrigenda.updateRegister',
       'bidCustomFields.archive', 'bidCustomFields.create', 'bidCustomFields.delete', 'bidCustomFields.list', 'bidCustomFields.reorder',
       'bidCustomFields.setValue', 'bidCustomFields.unarchive', 'bidCustomFields.update', 'bidCustomFields.valuesForBid',
@@ -46,7 +49,7 @@ describe('registry coverage for this area', () => {
       'bidSavedViews.create', 'bidSavedViews.delete', 'bidSavedViews.get', 'bidSavedViews.list', 'bidSavedViews.update',
       'bidSynopsis.get', 'bidSynopsis.save',
       'bids.actionQueue.list', 'bids.archive', 'bids.create', 'bids.delete', 'bids.get', 'bids.getForOpportunity', 'bids.listForGrid',
-      'bids.markVerified', 'bids.unarchive', 'bids.update',
+      'bids.markVerified', 'bids.unarchive', 'bids.update', 'bids.previewImport', 'bids.importNew',
       'documents.citations.create', 'documents.citations.delete', 'documents.citations.list', 'documents.confirmUpload', 'documents.delete',
       'documents.getDownloadUrl', 'documents.listFor', 'documents.requestUploadUrl', 'documents.updateFiling',
       'followUps.create', 'followUps.delete', 'followUps.listForEntity', 'followUps.listOpen', 'followUps.setStatus',

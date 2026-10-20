@@ -49,10 +49,10 @@ export function combineRoles(
 /** Effective roles (spec §3.1): derived ∪ override grants − override revokes; ADMIN_ALLOWED_EMAILS members are then added
  *  as System Admin (spec §3.4), which no override can remove.
  *  Also resolves the caller's roster ids, which scope checks need. Cached per email for 60 s. */
-export async function loadUserFacts(rawEmail: string): Promise<UserFacts> {
+export async function loadUserFacts(rawEmail: string, fresh = false): Promise<UserFacts> {
   const email = normalizeEmail(rawEmail)
   const hit = cache.get(email)
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.facts
+  if (!fresh && hit && Date.now() - hit.at < TTL_MS) return hit.facts
 
   const roles = new Set<Role>()
   let finalRoles: Role[] = []

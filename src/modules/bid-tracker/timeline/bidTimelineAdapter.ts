@@ -213,7 +213,7 @@ export function buildBidTimeline(input: BidTimelineInput): OpportunityTimeline {
     }
     const due = calendarDay(marker?.dueAt ?? null)
     const completed = marker?.status === 'completed'
-    const completedAt = completed ? calendarDay(marker.updatedAt) : null
+    const completedAt = completed ? calendarDay(phase.planned === false && marker.dueAt ? marker.dueAt : marker.updatedAt) : null
     return {
       ...milestone,
       ...(due && phase.planned !== false ? { plannedStart: due, plannedEnd: due } : {}),

@@ -3,12 +3,12 @@ import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
-import { AddableSelect } from '@/components/ui/AddableSelect'
+import { useVerticalNames } from '@/features/masters/useMasterOptions'
 import { MultiSelectDropdown } from '@/components/ui/MultiSelectDropdown'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 import { useFormDraft } from '@/lib/useFormDraft'
 import {
-  WORK_COMPONENT_GROUPS, WORK_CURRENCIES, WORK_VALUE_UNITS, WORK_VERTICALS,
+  WORK_COMPONENT_GROUPS, WORK_CURRENCIES, WORK_VALUE_UNITS,
   convertWorkAmount, estimateBudgetRangeDisplay, workUnitLabel,
 } from './department-meta'
 import { DEFAULT_STAGE_KEY, PIPELINE_STAGES } from '@/data/pipeline-stages'
@@ -23,7 +23,7 @@ type OpportunityDraft = Omit<Opportunity, 'id' | 'opportunityCode' | 'department
 
 const EMPTY: OpportunityDraft = {
   opportunityName: '', gemTenderId: '', publishDate: '', submissionDate: '',
-  vertical: WORK_VERTICALS[0], opportunityType: '', component: [], quantity: '',
+  vertical: '', opportunityType: '', component: [], quantity: '',
   currency: WORK_CURRENCIES[0].code, valueAmount: '', valueUnit: 'lakh',
   budgetKnown: '', emdAmount: '', emdUnit: 'lakh',
   salesPersonEmail: '',
@@ -47,6 +47,7 @@ export function WorkFormDialog({ open, work, departmentId = null, draftKey, mana
   onClose: () => void
   onSave: (draft: OpportunityDraft) => void
 }) {
+  const verticalNames = useVerticalNames()
   const [form, setForm] = useState<OpportunityDraft>(EMPTY)
   const set = <K extends keyof typeof EMPTY>(key: K, value: (typeof EMPTY)[K]) =>
     setForm((f) => ({ ...f, [key]: value }))
@@ -120,7 +121,11 @@ export function WorkFormDialog({ open, work, departmentId = null, draftKey, mana
             <Input value={form.gemTenderId} onChange={(e) => set('gemTenderId', e.target.value)} placeholder="e.g. GEM/2026/B/1234567" />
           </Field>
           <Field label="Vertical">
-            <AddableSelect value={form.vertical} onChange={(v) => set('vertical', v)} options={WORK_VERTICALS} storageKey="work-vertical" />
+            <Select value={form.vertical} onChange={(e) => set('vertical', e.target.value)}>
+              <option value="">Not set</option>
+              {form.vertical && !verticalNames.includes(form.vertical) && <option value={form.vertical}>{form.vertical} (not in master)</option>}
+              {verticalNames.map((v) => <option key={v} value={v}>{v}</option>)}
+            </Select>
           </Field>
           <Field label="Opportunity type">
             <Select value={form.opportunityType} onChange={(e) => set('opportunityType', e.target.value)}>

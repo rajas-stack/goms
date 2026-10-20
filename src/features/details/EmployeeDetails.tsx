@@ -347,6 +347,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
       />
 
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto scrollbar-thin px-6 py-5">
+        <EmailQuickPanel entity={{ type: 'contact', id: emp.id }} title={emp.name} />
         <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
           {!vacant && emp.email && (
             <DetailRow label="Email" icon="Mail">
@@ -777,3 +778,4 @@ function ChainRow({ emp, onClick, current, muted }: {
     </div>
   )
 }
+import { EmailQuickPanel } from '@/features/email-center/EmailQuickPanel'

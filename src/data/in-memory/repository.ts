@@ -1,4 +1,7 @@
+import { fieldValueForMilestone, milestoneStateForField, timelineSyncForField, timelineSyncForMilestone, BID_SYSTEM_FIELDS, BID_TRACKER_MASTER_KEYS, bidSystemField, fieldsUsingMaster, isBidTrackerMasterKey, parseMultiValue, resolveSystemOptions, withSystemOptions, type BidOptionLookups } from '@goms/domain'
+import { buildBidTrackerMasters } from '@/modules/commercial-calculator/seed-defaults'
 import { MAX_CREDENTIAL_PASSPHRASES, normalizeCredentialPassphrase, type CredentialPassphrase, type CredentialPassphraseInput, type CredentialPassphraseUpdate } from '@goms/domain'
+import { BID_LEGACY_AUDIT_FIELD, validateBidTransfer, scaleBidAmount, generalToDocument, type BidImportTable, type BidImportPreview, type BidImportResult, type BidTransferContext, type PreparedBidImport } from '@goms/domain'
 import { competitionNames, computeInsights, insightValueCr, type InsightsFilters, type InsightsData } from '@goms/domain'
 import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/routers/access'
 import type {
@@ -582,6 +585,8 @@ export interface Repository {
   /** Create Bid for an opportunity that does not exist yet: the opportunity, its department and the bid
    *  are created together (all-or-nothing), exactly as bids.create does server-side. */
   createBidForNewOpportunity(opportunity: NewBidOpportunity, department: DepartmentChoice, sheet?: OwnedSheet): Promise<Bid>
+  previewBidImport(input: { table: BidImportTable }): Promise<BidImportPreview>
+  importBids(input: { table: BidImportTable }): Promise<BidImportResult>
   /** `sheet` moves the row to another Opportunity sheet. */
   updateBid(id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink' | 'sheet'>>): Promise<Bid>
   archiveBid(id: string): Promise<Bid>
@@ -771,6 +776,39 @@ class InMemoryRepository implements Repository {
   constructor() {
     // Collapse any duplicate same-name branches under the same parent.
     this.dedupeBranches()
+    this.ensureBidTrackerDefaults()
+  }
+
+  /** Built-in Bid Tracker fields and their masters (packages/domain/src/bidTrackerFields.ts), added to a
+   *  store that predates them. Mirrors migration 1791765200000: an existing column of the same name wins. */
+  private ensureBidTrackerDefaults() {
+    const masters = this.data.commercialCalculator?.masters as Record<string, unknown> | undefined
+    if (masters) {
+      const defaults = buildBidTrackerMasters()
+      for (const key of BID_TRACKER_MASTER_KEYS) if (!Array.isArray(masters[key])) masters[key] = defaults[key]
+    }
+    const fields = this.data.bidCustomFields ?? (this.data.bidCustomFields = [])
+    const now = new Date().toISOString()
+    for (const f of BID_SYSTEM_FIELDS) {
+      if (fields.some(x => x.key === f.key || (x.status === 'active' && x.name.trim().toLowerCase() === f.name.toLowerCase()))) continue
+      const live = f.dataType === 'select' || f.dataType === 'multiselect'
+      fields.push({ id: uid('bcf'), key: f.key, name: f.name, dataType: f.dataType, sheet: 'bidTracker', options: live ? [] : null, hasHeldValue: false,
+        position: fields.reduce((m, x) => Math.max(m, x.position + 1), 0), status: 'active', createdBy: 'system', updatedBy: null, createdAt: now, updatedAt: now })
+    }
+  }
+
+  /** Live option sources for the built-in Bid Tracker fields (same as apps/api/src/lib/bidOptionLookups.ts). */
+  private bidOptionLookups(): BidOptionLookups {
+    const masters: BidOptionLookups['masters'] = {}
+    for (const key of BID_TRACKER_MASTER_KEYS) {
+      masters[key] = listMasterLogic(this.data.commercialCalculator, key).filter(r => r.active)
+        .sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name)).map(r => ({ name: r.name, description: r.description }))
+    }
+    return {
+      masters,
+      competitors: (this.data.competitors ?? []).map(c => c.name).sort((a, b) => a.localeCompare(b)),
+      preSales: this.data.deliveryTeamMembers.filter(p => p.team === 'preSales' && p.status === 'active').map(p => p.name).sort((a, b) => a.localeCompare(b)),
+    }
   }
 
   /** Replaces the whole store — used to restore the locally persisted snapshot
@@ -1973,6 +2011,105 @@ class InMemoryRepository implements Repository {
     return this.createBid(opp.id, undefined, sheet)
   }
 
+  private bidTransferContext(): BidTransferContext {
+    return {
+      existing: this.data.opportunities.map(o => {
+        const bid = this.data.bids.find(b => b.opportunityId === o.id)
+        const general = bid ? documentToGeneral(this.data.bidSynopsis.find(x => x.bidId === bid.id && x.section === 'general')?.document) : {}
+        const str = (v: unknown) => v == null ? '' : String(v)
+        const current: Record<string, string> = {
+          opportunityName: str(o.opportunityName), gemTenderId: str(o.gemTenderId), assignmentName: str(o.assignmentName), referenceNo: str(o.referenceNo),
+          opportunityType: str(o.opportunityType), publishDate: str(o.publishDate), submissionDate: str(o.submissionDate), vertical: str(o.vertical),
+          departmentId: str(o.departmentId), stateCode: str(o.stateCode), geoSalesPersonId: str(o.geoSalesPersonId), buSalesPersonId: str(o.buSalesPersonId),
+          preSalesPersonId: str(o.preSalesPersonId), bidTeamMemberId: str(o.bidTeamMemberId),
+          stageKey: str(bid?.stageKey), decision: str(bid?.decision), tenderLink: str(bid?.tenderLink),
+          ...Object.fromEntries(Object.entries(general).map(([k, v]) => [`general:${k}`, v])),
+        }
+        return { id: o.id, bidCode: bid?.bidCode, opportunityName: o.opportunityName, gemTenderId: o.gemTenderId ?? '', current }
+      }),
+      people: [...this.data.salesPersons.filter(p => p.status !== 'inactive' && p.status !== 'resigned').map(p => ({ id: p.id, name: p.name, email: p.officialEmail, mobile: p.mobile, team: 'sales' })),
+        ...this.data.deliveryTeamMembers.filter(p => p.status === 'active')],
+      states: this.data.nodes.filter(n => n.typeKey === 'state').map(n => ({ id: String(n.stateCode), name: n.name })),
+      departments: this.data.nodes.filter(n => n.domain === 'org' && n.typeKey === 'department' && n.status === 'active'),
+      customFields: withSystemOptions(this.data.bidCustomFields.filter(f => f.status === 'active' && ['bidTracker', 'master'].includes(f.sheet)), this.bidOptionLookups()),
+      verticals: listMasterLogic(this.data.commercialCalculator, 'verticals').filter(v => v.active).map(v => v.name),
+    }
+  }
+  async previewBidImport(input: { table: BidImportTable }): Promise<BidImportPreview> {
+    return validateBidTransfer(input.table, this.bidTransferContext())
+  }
+  async importBids(input: { table: BidImportTable }): Promise<BidImportResult> {
+    const context = this.bidTransferContext(), preview = validateBidTransfer(input.table, context)
+    if (!preview.valid) return { status: 'rejected', preview }
+    // Use the normal field writers on an isolated copy. Publish once only after
+    // every row succeeds and the live store is still exactly the validated state.
+    const baseline = JSON.stringify(this.data), staged = new InMemoryRepository()
+    staged.hydrate(structuredClone(this.data))
+    for (const { values: v, legacy, mode, targetId } of preview.prepared) {
+      const text = (key: string) => v[key] == null ? '' : String(v[key])
+      if (mode === 'override' && targetId) { await staged.overrideImportedBid(targetId, v, legacy, context); continue }
+      const opp = await staged.createOpportunity({
+        departmentId: text('departmentId'), opportunityName: text('opportunityName'), gemTenderId: text('gemTenderId'),
+        assignmentName: text('assignmentName'), referenceNo: text('referenceNo'), opportunityType: text('opportunityType'),
+        publishDate: text('publishDate'), submissionDate: text('submissionDate'), vertical: text('vertical'),
+        valueAmount: text('valueAmount'), valueUnit: 'cr', currency: 'INR', emdAmount: scaleBidAmount(text('emdAmount'), -3), emdUnit: 'thousand',
+        geoSalesPersonId: text('geoSalesPersonId') || null, buSalesPersonId: text('buSalesPersonId') || null,
+        preSalesPersonId: text('preSalesPersonId') || null, bidTeamMemberId: text('bidTeamMemberId') || null,
+      })
+      if (!opp.departmentId) { opp.opportunityCode = ''; opp.stateCode = v.stateCode === undefined ? null : Number(v.stateCode) }
+      const now = new Date().toISOString(), decision = text('decision') || 'pending'
+      const bid: Bid = { id: uid('bid'), opportunityId: opp.id, bidCode: formatBidCode(new Date().getFullYear(), inMemoryBidSeq++),
+        stageKey: decision === 'no_go' ? 'dropped' : decision === 'go' ? 'goApproved' : text('stageKey') || DEFAULT_BID_STAGE_KEY,
+        decision: decision as Bid['decision'], status: 'active', dataConfidence: 'needs_review', tenderLink: text('tenderLink') || null,
+        sheet: 'bidTracker', archivedAt: null, createdAt: now, updatedAt: now }
+      staged.data.bids.push(bid)
+      staged.data.bidMilestones.push({ id: uid('bms'), bidId: bid.id, milestoneType: 'submissionDeadline', key: 'submissionDeadline', label: 'Submission Deadline', dueAt: parseSubmissionDate(opp.submissionDate), venue: null, notes: null, status: 'open', source: 'manual', createdAt: now, updatedAt: now })
+      const general = Object.fromEntries(Object.entries(v).filter(([key]) => key.startsWith('general:')).map(([key,value]) => [key.slice(8), String(value ?? '')]))
+      if (Object.keys(general).length) await staged.saveBidSynopsis({ bidId: bid.id, section: 'general', document: generalToDocument(general), expectedRevision: 0 })
+      for (const field of context.customFields) if (v[`custom:${field.key}`] !== undefined) await staged.setBidCustomValue(bid.id, field.id, v[`custom:${field.key}`])
+      const owner = context.people.find(p => p.team === 'sales' && p.email === text('ownerEmail'))
+      if (owner) await staged.assignOwner({ entityType: 'bid', entityId: bid.id, salesPersonId: owner.id, startDate: isoToday() })
+      // Historical tracker columns with no app field (or values that could not be linked) stay with the bid.
+      if (Object.keys(legacy).length) staged.auditCustom({ entityType: 'bid', entityId: bid.id, field: BID_LEGACY_AUDIT_FIELD, oldValue: '', newValue: JSON.stringify(legacy), action: 'create', reason: 'Historical import values without an app field' })
+    }
+    if (baseline !== JSON.stringify(this.data)) throw new Error('Live data changed during staging. Revalidate the entire file before importing.')
+    this.data = staged.data
+    return { status: 'imported', count: preview.rowCount }
+  }
+
+  /** Import Override: update the matched opportunity/bid in place (Bid ID kept). Only fields the file
+   *  provides change; blank cells never clear a value. Mirrors apps/api/src/lib/bidTransfer.ts overrideBid. */
+  private async overrideImportedBid(opportunityId: string, v: PreparedBidImport['values'], legacy: Record<string, string>, context: BidTransferContext) {
+    const text = (key: string) => v[key] == null ? '' : String(v[key])
+    const patch: Partial<Opportunity> = {}
+    for (const key of ['opportunityName', 'gemTenderId', 'assignmentName', 'referenceNo', 'opportunityType', 'publishDate', 'submissionDate', 'vertical', 'departmentId', 'geoSalesPersonId', 'buSalesPersonId', 'preSalesPersonId', 'bidTeamMemberId'] as const) {
+      if (text(key)) (patch as Record<string, unknown>)[key] = text(key)
+    }
+    if (text('stateCode')) patch.stateCode = Number(text('stateCode'))
+    if (text('valueAmount')) Object.assign(patch, { valueAmount: text('valueAmount'), valueUnit: 'cr' })
+    if (text('emdAmount')) Object.assign(patch, { emdAmount: scaleBidAmount(text('emdAmount'), -3), emdUnit: 'thousand' })
+    if (Object.keys(patch).length) await this.updateOpportunity(opportunityId, patch)
+    const bid = this.data.bids.find(b => b.opportunityId === opportunityId)
+    if (!bid) return
+    const bidPatch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink'>> = {}
+    if (text('stageKey')) bidPatch.stageKey = text('stageKey')
+    if (text('decision')) bidPatch.decision = text('decision') as Bid['decision']
+    if (text('tenderLink')) bidPatch.tenderLink = text('tenderLink')
+    if (Object.keys(bidPatch).length) await this.updateBid(bid.id, bidPatch)
+    const general = Object.entries(v).filter(([key, value]) => key.startsWith('general:') && String(value ?? '').trim())
+    if (general.length) {
+      const existing = this.data.bidSynopsis.find(x => x.bidId === bid.id && x.section === 'general')
+      let doc = existing?.document ?? null
+      for (const [key, value] of general) doc = updateGeneralDocument(doc, key.slice(8), String(value))
+      await this.saveBidSynopsis({ bidId: bid.id, section: 'general', document: doc!, expectedRevision: existing?.revision ?? 0 })
+    }
+    for (const field of context.customFields) {
+      const value = v[`custom:${field.key}`]
+      if (value !== undefined && value !== null && value !== '') await this.setBidCustomValue(bid.id, field.id, value)
+    }
+    if (Object.keys(legacy).length) this.auditCustom({ entityType: 'bid', entityId: bid.id, field: BID_LEGACY_AUDIT_FIELD, oldValue: '', newValue: JSON.stringify(legacy), action: 'update', reason: 'Historical import values without an app field' })
+  }
+
   async createBid(opportunityId: string, department?: DepartmentChoice, sheet: OwnedSheet = DEFAULT_OWNED_SHEET) {
     assertOwnedSheet(sheet)
     const opp = this.data.opportunities.find((o) => o.id === opportunityId)
@@ -2356,6 +2493,7 @@ class InMemoryRepository implements Repository {
       status: 'open', source: 'manual', createdAt: now, updatedAt: now,
     }
     this.data.bidMilestones.push(milestone)
+    this.syncMilestoneToField(milestone)
     return milestone
   }
 
@@ -2368,7 +2506,32 @@ class InMemoryRepository implements Repository {
     // Only a change to the milestone's DATE touches the protected fact; status/notes edits don't.
     if (patch.dueAt !== undefined && patch.dueAt !== m.dueAt) this.assertNotProtected(m.bidId, [m.key])
     Object.assign(m, patch, { updatedAt: new Date().toISOString() })
+    if (patch.status !== undefined || patch.dueAt !== undefined) this.syncMilestoneToField(m)
     return m
+  }
+
+  /** Timeline ⇄ Bid Tracker field sync (BID_TIMELINE_SYNC); mirrors apps/api/src/lib/bidTimelineSync.ts. */
+  private syncMilestoneToField(m: BidMilestone) {
+    const sync = timelineSyncForMilestone(m.key)
+    const field = sync && this.data.bidCustomFields.find(f => f.key === sync.field && f.status === 'active')
+    if (!sync || !field) return
+    const value = fieldValueForMilestone(sync, m.status, m.dueAt)
+    const existing = this.data.bidCustomFieldValues.find(v => v.bidId === m.bidId && v.fieldId === field.id)
+    if ((existing?.value ?? null) === value) return
+    if (value === null) this.data.bidCustomFieldValues = this.data.bidCustomFieldValues.filter(v => v !== existing)
+    else if (existing) Object.assign(existing, { value, updatedAt: new Date().toISOString() })
+    else { this.data.bidCustomFieldValues.push({ bidId: m.bidId, fieldId: field.id, value, updatedAt: new Date().toISOString() }); field.hasHeldValue = true }
+    this.auditCustom({ entityType: 'bidCustomFieldValue', entityId: m.bidId, field: sync.field, oldValue: String(existing?.value ?? ''), newValue: value ?? '', action: 'custom_value_synced', reason: `Synced from Timeline: ${sync.label}` })
+  }
+  private syncFieldToMilestone(bidId: string, fieldKey: string, value: unknown) {
+    const sync = timelineSyncForField(fieldKey)
+    if (!sync) return
+    const m = this.data.bidMilestones.find(x => x.bidId === bidId && x.key === sync.milestoneKey)
+    const next = milestoneStateForField(sync, value, isoToday(), m?.dueAt ? m.dueAt.slice(0, 10) : null)
+    const now = new Date().toISOString()
+    if (!m) {
+      if (next.status === 'completed') this.data.bidMilestones.push({ id: uid('bms'), bidId, milestoneType: 'timeline', key: sync.milestoneKey, label: sync.label, dueAt: next.dueAt, venue: null, notes: null, status: 'completed', source: 'manual', createdAt: now, updatedAt: now })
+    } else if (m.status !== next.status || (m.dueAt ?? '').slice(0, 10) !== (next.dueAt ?? '')) Object.assign(m, { status: next.status, dueAt: next.dueAt, updatedAt: now })
   }
 
   async deleteBidMilestone(id: string) {
@@ -2680,10 +2843,11 @@ class InMemoryRepository implements Repository {
     // Copies, not the live stored objects: other methods mutate them in place,
     // and react-query's structural sharing would otherwise see "no change" after
     // a rename/archive and never re-render anything reading this list.
-    return this.data.bidCustomFields
+    const fields = this.data.bidCustomFields
       .filter((f) => includeArchived || f.status === 'active')
       .map((f) => ({ ...f, options: f.options ? [...f.options] : null }))
       .sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt))
+    return withSystemOptions(fields, this.bidOptionLookups())
   }
 
   async createBidCustomField(input: { name: string; dataType: CustomFieldType; options?: string[]; sheet?: BidCustomField['sheet'] }) {
@@ -2708,6 +2872,7 @@ class InMemoryRepository implements Repository {
 
   async updateBidCustomField(id: string, patch: { name?: string; options?: string[] }) {
     const field = this.requireCustomField(id)
+    if (bidSystemField(field.key)) throw new Error(`"${field.name}" is a built-in Bid Tracker field; edit its options in Settings > Masters > Bid Tracker.`)
     const now = new Date().toISOString()
     if (patch.name !== undefined && patch.name.trim() !== field.name) {
       const name = patch.name.trim()
@@ -2779,6 +2944,7 @@ class InMemoryRepository implements Repository {
 
   async deleteBidCustomField(id: string, withValues = false) {
     const field = this.requireCustomField(id)
+    if (bidSystemField(field.key)) throw new Error(`"${field.name}" is a built-in Bid Tracker field; it cannot be deleted. Hide it from Manage columns instead.`)
     const valueCount = this.data.bidCustomFieldValues.filter((v) => v.fieldId === id).length
     // Without the explicit `withValues` confirmation a column that ever held a value is archive-only.
     if ((field.hasHeldValue || valueCount > 0) && !withValues) {
@@ -2796,7 +2962,8 @@ class InMemoryRepository implements Repository {
     const field = this.requireCustomField(fieldId)
     if (field.status === 'archived') throw new Error('This column is archived.')
     this.requireBid(bidId)
-    const value = coerceCustomValue(field.dataType, raw, field.options)
+    const options = resolveSystemOptions(field.key, this.bidOptionLookups())?.options ?? field.options
+    const value = coerceCustomValue(field.dataType, raw, options)
     this.assertEntityExists(field.dataType, value)
     const existing = this.data.bidCustomFieldValues.find((v) => v.bidId === bidId && v.fieldId === fieldId)
     const oldValue: CustomValue = existing?.value ?? null
@@ -2813,6 +2980,7 @@ class InMemoryRepository implements Repository {
         this.data.bidCustomFieldValues = this.data.bidCustomFieldValues.filter((v) => v !== existing)
         audit('custom_value_cleared')
         touch()
+        this.syncFieldToMilestone(bidId, field.key, null)
       }
       return { bidId, fieldId, key: field.key, value: null as CustomValue }
     }
@@ -2828,6 +2996,7 @@ class InMemoryRepository implements Repository {
     if (oldValue !== value) {
       audit('custom_value_set')
       touch()
+      this.syncFieldToMilestone(bidId, field.key, value)
     }
     return { bidId, fieldId, key: field.key, value }
   }
@@ -3038,14 +3207,45 @@ class InMemoryRepository implements Repository {
   }
 
   async updateMaster<K extends MasterEntityKey>(key: K, id: string, patch: Partial<MasterRowMap[K]>, changeReason?: string) {
-    return updateMasterLogic(this.data.commercialCalculator, key, id, patch, changeReason)
+    const before = key === 'verticals' ? listMasterLogic(this.data.commercialCalculator, 'verticals').find((v) => v.id === id)?.name : undefined
+    const bidBefore = isBidTrackerMasterKey(key) ? listMasterLogic(this.data.commercialCalculator, key).find((v) => v.id === id)?.name : undefined
+    const updated = await updateMasterLogic(this.data.commercialCalculator, key, id, patch, changeReason)
+    const bidAfter = (updated as { name?: string }).name
+    // Bid Tracker dropdown values are stored on bids by NAME: a rename follows onto every bid.
+    if (bidBefore && bidAfter && bidBefore !== bidAfter) this.cascadeBidMasterRename(key, bidBefore, bidAfter)
+    // Verticals master drives opportunity.vertical by NAME: a rename follows onto every opportunity.
+    const after = (updated as { name?: string }).name
+    if (before && after && before !== after) {
+      this.data.opportunities = this.data.opportunities.map((o) => (o.vertical.trim().toLowerCase() === before.trim().toLowerCase() ? { ...o, vertical: after } : o))
+    }
+    return updated
   }
 
   async setMasterActive(key: MasterEntityKey, id: string, active: boolean) {
     return setMasterActiveLogic(this.data.commercialCalculator, key, id, active)
   }
 
+  private bidMasterValues(masterKey: string) {
+    const ids = new Set(this.data.bidCustomFields.filter(f => fieldsUsingMaster(masterKey).some(s => s.key === f.key)).map(f => f.id))
+    return this.data.bidCustomFieldValues.filter(v => ids.has(v.fieldId))
+  }
+  private cascadeBidMasterRename(masterKey: string, from: string, to: string) {
+    for (const v of this.bidMasterValues(masterKey)) {
+      if (v.value === from) v.value = to
+      else if (typeof v.value === 'string' && v.value.startsWith('[')) {
+        const items = parseMultiValue(v.value)
+        if (items.includes(from)) v.value = JSON.stringify(items.map(i => (i === from ? to : i)))
+      }
+    }
+  }
+
   async deleteMaster(key: MasterEntityKey, id: string) {
+    if (isBidTrackerMasterKey(key)) {
+      const name = listMasterLogic(this.data.commercialCalculator, key).find((v) => v.id === id)?.name
+      const used = name ? new Set(this.bidMasterValues(key).filter(v => v.value === name || (typeof v.value === 'string' && v.value.startsWith('[') && parseMultiValue(v.value).includes(name))).map(v => v.bidId)).size : 0
+      // A value held by any bid is never deleted — deactivate it instead (it stays on those bids).
+      if (used) throw new Error(`"${name}" is used by ${used} bid${used === 1 ? '' : 's'} — deactivate it instead of deleting.`)
+    }
     return deleteMasterLogic(this.data.commercialCalculator, key, id)
   }
 
@@ -3528,7 +3728,7 @@ const MUTATOR_KEYS = [
   'createSku', 'updateSku', 'deleteSku', 'createBomItem', 'updateBomItem', 'deleteBomItem',
   'createBoq', 'updateBoq', 'addBoqLineItem', 'updateBoqLineItem', 'removeBoqLineItem', 'reorderBoqLineItems', 'updateBoqStatus', 'reviseBoq', 'duplicateBoq', 'deleteBoq',
   'createCustomer', 'updateCustomer', 'deleteCustomer',
-  'createBid', 'createBidForNewOpportunity', 'updateBid', 'archiveBid', 'markBidVerified', 'unarchiveBid', 'deleteBid',
+  'createBid', 'createBidForNewOpportunity', 'updateBid', 'archiveBid', 'markBidVerified', 'unarchiveBid', 'deleteBid', 'importBids',
   'createBidMilestone', 'updateBidMilestone', 'deleteBidMilestone',
   'createBidCorrigendum', 'updateBidCorrigendumRegister', 'reviewCorrigendumChange', 'addCorrigendumChanges', 'freezeValue', 'unfreezeValue',
   'requestDocumentUploadUrl', 'confirmDocumentUpload', 'updateDocumentFiling', 'deleteDocument', 'createDocumentCitation', 'deleteDocumentCitation',
@@ -3561,7 +3761,7 @@ const READER_KEYS = [
   'listSkus', 'getSku', 'listBomItemsForSku', 'listAllBomItems', 'listBoqs', 'getBoq', 'listBoqLineItems',
   'listAllBoqLineItems', 'listAuditLogs',
   'listCustomers', 'getCustomer',
-  'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues',
+  'listBidsForGrid', 'getBid', 'getBidForOpportunity', 'listBidActionQueue', 'listBidMilestones', 'listAllBidMilestones', 'listBidCorrigenda', 'listProtectedValues', 'previewBidImport',
   'listDocuments', 'listDocumentCitations', 'getDocumentDownloadUrl', 'listBidSavedViews', 'listBidCustomFields', 'listBidCustomValues',
   'listDeliveryTeamMembers', 'listOrgPeople', 'getMyAccess', 'getAccessReadiness', 'listRoleOverrides',
   'listUnmatchedOverrides', 'listOverrideHistory', 'getPermissionMatrix', 'getEffectivePermissions',
@@ -3623,6 +3823,7 @@ export const repository: Repository = new Proxy(impl, {
       // Save only once the mutation has actually resolved, so a rejected call
       // (e.g. a validation throw) doesn't persist a half-applied state.
       return Promise.resolve(out).then((result) => {
+        if (prop === 'importBids' && result && typeof result === 'object' && 'status' in result && result.status === 'rejected') return result
         scheduleSave(() => target.snapshot())
         return result
       })

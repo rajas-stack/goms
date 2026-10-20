@@ -20,6 +20,7 @@ export async function googleApiRequest<T>(url: string, token: string, project?: 
 }
 /** Call from a user action after preloading GIS. Consent is requested only for the service being used. */
 export async function authorizeGoogle(account: GoogleAccount, scopes: readonly string[], clientId: string): Promise<string> {
+  if (scopes.some(scope => scope.includes('/auth/gmail') || scope === 'https://mail.google.com/')) throw new Error('Gmail authorization is managed by the server. Open Email Center.')
   assertGoogleAccount(account)
   const existing = getGoogleSession(scopes, clientId)
   if (existing) return Promise.resolve(existing.accessToken)
@@ -60,6 +61,7 @@ const NOTEBOOK_LOCATIONS: readonly string[] = ['global', 'us', 'eu']
 
 export async function testGoogleConnection(service: GoogleService, account: GoogleAccount, settings: GoogleIntegrationSettings): Promise<ConnectionTest> {
   assertGoogleAccount(account)
+  if (service === 'gmail') return { status: 'account', message: 'Connect Gmail in Email Center. Gmail authorization and credentials stay on the server.' }
   const product = productFor(service)
   if (product.mode === 'web') return { status: 'account', message: service === 'sites' ? 'Account verified. Modern Sites supports web access only.' : 'Account verified. Google Maps opens with this account; Maps Platform APIs require separate project setup.' }
   if (product.mode === 'cloud' && !settings.cloudProject) throw new Error(service === 'notebooklm' ? 'Add a Google Cloud project with NotebookLM Enterprise enabled.' : 'Add a Google Cloud project with Cloud Translation enabled.')
@@ -68,7 +70,7 @@ export async function testGoogleConnection(service: GoogleService, account: Goog
   if (service === 'notebooklm' && !NOTEBOOK_LOCATIONS.includes(settings.notebookLocation)) throw new Error('Choose a NotebookLM location.')
   const token = await authorizeGoogle(account, product.scopes, settings.clientId)
   const endpoints: Partial<Record<GoogleService, string>> = {
-    gmail: 'https://gmail.googleapis.com/gmail/v1/users/me/profile', drive: 'https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)',
+    drive: 'https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)',
     calendar: 'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1', chat: 'https://chat.googleapis.com/v1/spaces?pageSize=1',
     meet: 'https://meet.googleapis.com/v2/conferenceRecords?pageSize=1', keep: 'https://keep.googleapis.com/v1/notes?pageSize=1',
     tasks: 'https://tasks.googleapis.com/tasks/v1/users/@me/lists?maxResults=1',

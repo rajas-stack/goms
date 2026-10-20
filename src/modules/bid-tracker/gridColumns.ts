@@ -31,6 +31,8 @@ export const CUSTOM_GROUP = { id: 'custom' as const, label: 'Custom' }
 export interface ColumnOption {
   value: string
   label: string
+  /** Full form shown as a tooltip (e.g. BG → Bank Guarantee), from the option's master. */
+  hint?: string
   /** A person's official email (the Bid Owner column stores emails). */
   email?: string
   /** Set on person options so grid cells and pickers can show the face beside the name. */
@@ -120,7 +122,8 @@ export const STANDARD_COLUMNS: GridColumnMeta[] = [
   std('departmentName', 'Department / Client', 'client', 'text', { editable: 'department', pick: 'department', editKey: 'departmentId', required: true }),
   std('stateCode', 'State', 'client', 'state', { editable: 'opportunity' }),
   std('city', 'City', 'client', 'text', { editable: 'opportunity' }),
-  std('vertical', 'Sector', 'client', 'text', { editable: 'opportunity' }),
+  // Options come from Settings > Masters > Verticals (resolveColumns' `verticals`).
+  std('vertical', 'Vertical', 'client', 'select', { options: [], editable: 'opportunity' }),
 
   // Picking a person records a new ownership assignment (the history is kept), same as Reassign Owner.
   std('geoSalesPersonId', 'Geo-sales', 'ownership', 'person', { editable: 'opportunity', teamKey: 'sales' }),
@@ -183,7 +186,7 @@ export function customColumnMeta(field: BidCustomField): GridColumnMeta {
     header: field.name,
     group: 'custom',
     type: field.dataType,
-    options: field.options?.map((o) => ({ value: o, label: o })),
+    options: field.options?.map((o) => ({ value: o, label: o, hint: field.optionHints?.[o] })),
     editable: 'custom',
     custom: field,
   }
@@ -192,7 +195,7 @@ export function customColumnMeta(field: BidCustomField): GridColumnMeta {
 /** Standard columns, then the ACTIVE custom columns by `position`. Custom
  *  columns are built from the definitions on every call — nothing about a
  *  particular custom column is hard-coded. */
-export function resolveColumns(customFields: BidCustomField[]): GridColumnMeta[] {
+export function resolveColumns(customFields: BidCustomField[], verticals: readonly string[] = []): GridColumnMeta[] {
   const custom = customFields
     .filter((f) => f.status === 'active')
     .sort((a, b) => a.position - b.position || a.createdAt.localeCompare(b.createdAt))
@@ -204,7 +207,9 @@ export function resolveColumns(customFields: BidCustomField[]): GridColumnMeta[]
     options: field.options?.map(option => ({ value: option, label: option })),
     editable: 'general', generalField: field,
   }))
-  return [...STANDARD_COLUMNS, ...general, ...custom]
+  const standard = STANDARD_COLUMNS.map((column) => (column.id === 'vertical'
+    ? { ...column, options: verticals.map((name) => ({ value: name, label: name })) } : column))
+  return [...standard, ...general, ...custom]
 }
 
 const HIDDEN_COLUMN_PREFIX = '~hidden:'

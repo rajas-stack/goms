@@ -1,7 +1,7 @@
 import type { GoogleService } from '@goms/domain'
 const scope = (name: string) => `https://www.googleapis.com/auth/${name}`
 export const GOOGLE_PRODUCTS: readonly { id: GoogleService; name: string; icon: string; url: string; scopes: string[]; mode: 'api' | 'web' | 'cloud' }[] = [
-  { id: 'gmail', name: 'Gmail', icon: 'Mail', url: 'https://mail.google.com/mail/', scopes: [scope('gmail.metadata')], mode: 'api' },
+  { id: 'gmail', name: 'Gmail', icon: 'Mail', url: 'https://mail.google.com/mail/', scopes: [], mode: 'api' },
   { id: 'drive', name: 'Drive', icon: 'Folder', url: 'https://drive.google.com/drive/', scopes: [scope('drive')], mode: 'api' },
   { id: 'docs', name: 'Docs', icon: 'FileText', url: 'https://docs.google.com/document/', scopes: [scope('documents.readonly'), scope('drive.metadata.readonly')], mode: 'api' },
   { id: 'sheets', name: 'Sheets', icon: 'FileSpreadsheet', url: 'https://docs.google.com/spreadsheets/', scopes: [scope('spreadsheets.readonly'), scope('drive.metadata.readonly')], mode: 'api' },

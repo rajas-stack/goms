@@ -5,6 +5,7 @@ import { Icon } from '@/components/ui/Icon'
 import { Link } from 'react-router-dom'
 import { WEBSITE_KIND_COPY, type WebsiteKindCopy } from '@/features/tender-websites/websiteKinds'
 import { SettingsIcon, type SettingsIconKind } from './SettingsIcon'
+import { MASTER_PAGE_LIST } from '@/features/masters/mastersList'
 import './SettingsMenu.css'
 import { definePermissionNodes } from '@/lib/rbacTree/registry'
 import { useNodeFilter } from '@/lib/rbacTree/access'
@@ -43,7 +44,8 @@ const SETTINGS_GROUPS = definePermissionNodes('settings', [
   },
   {
     id: 'masters', title: 'Masters', icon: 'Database',
-    pages: [{ to: '/settings/masters/employees', kind: 'employees' as const, title: 'Employee Master', hint: 'Amnex departments employees belong to.' }],
+    // Every master lives here (src/features/masters/mastersList.ts) — the menu is generated from that list.
+    pages: MASTER_PAGE_LIST.map((m) => ({ to: `/settings/masters/${m.kind}`, kind: m.kind as SettingsIconKind, title: m.title, hint: m.hint })),
   },
 ], { kind: 'section', key: (g) => g.id, label: (g) => g.title })
 for (const group of SETTINGS_GROUPS) definePermissionNodes(`settings.${group.id}`, group.pages, { kind: 'page', key: (p) => p.kind, label: (p) => p.title })

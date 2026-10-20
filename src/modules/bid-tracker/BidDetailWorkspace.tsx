@@ -21,6 +21,7 @@ import { BidTimelineSection } from './timeline/BidTimelineSection'
 import { BidAttachmentsSection } from './attachments/BidAttachmentsSection'
 import { definePermissionNodes } from '@/lib/rbacTree/registry'
 import { useNodeFilter } from '@/lib/rbacTree/access'
+import { CommunicationTab } from './communication/CommunicationTab'
 
 /** Permission-tree node of the Individual Opportunity page (declared with the route, src/app/routeNodes.ts). */
 const BID_NODE = 'opportunity.bid'
@@ -37,6 +38,7 @@ const TABS = definePermissionNodes(BID_NODE, [
   { value: 'queries', label: 'Queries' },
   { value: 'competition', label: 'Competition' },
   { value: 'rfpTimeline', label: 'RFP Timeline' },
+  { value: 'communication', label: 'Communication' },
 ] as const)
 type Tab = (typeof TABS)[number]['value']
 const isSynopsisSection = (value: Tab): value is BidSynopsisSection => (BID_SYNOPSIS_SECTIONS as readonly string[]).includes(value)
@@ -155,7 +157,10 @@ export function BidDetailWorkspace() {
         {tab === 'rfpTimeline' && <div role="tabpanel" id="synopsis-panel-rfpTimeline" aria-labelledby="synopsis-tab-rfpTimeline">
           <RfpTimelineTab bidId={bid.id} onOpenGeneral={() => setParams(current => { const next = new URLSearchParams(current); next.set('tab', 'general'); return next })} />
         </div>}
-        <BidAttachmentsSection bidId={bid.id} />
+        {tab === 'communication' && <div role="tabpanel" id="synopsis-panel-communication" aria-labelledby="synopsis-tab-communication">
+          <CommunicationTab bidId={bid.id} opportunityId={bid.opportunityId} opportunityName={row?.opportunityName ?? ''} bidCode={bid.bidCode} tenderId={row?.gemTenderId} referenceNo={row?.referenceNo} module={sheetModule(bid.sheet)} />
+        </div>}
+        {tab !== 'communication' && <BidAttachmentsSection bidId={bid.id} />}
       </div>
       <ConfirmDeleteDialog
         open={confirmDelete}

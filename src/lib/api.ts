@@ -426,6 +426,9 @@ export function useOrgPersonMutations() {
     qc.invalidateQueries({ queryKey: ['orgPeople'] })
     qc.invalidateQueries({ queryKey: ['deliveryTeamMembers'] })
     qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+    // Email Center people matching and the sales roster read the same people.
+    qc.invalidateQueries({ queryKey: ['communicationDirectory'] })
+    qc.invalidateQueries({ queryKey: qk.salesPersons })
   }
   const create = useMutation({ mutationFn: (input: CreateOrgPersonInput) => repository.createOrgPerson(input), onSuccess: invalidate })
   const update = useMutation({

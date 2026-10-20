@@ -38,6 +38,7 @@ export const ROUTE_NODES = {
   employeeMaster: 'settings.masters.employees',
   documents: 'documents',
   documentMaker: 'documentMaker',
+  email: 'email',
   documentEditor: page('documentMaker', 'editor', 'Document editor'),
   dataImport: page('settings', 'dataImport', 'Admin data import'),
 } as const

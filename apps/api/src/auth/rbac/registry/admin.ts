@@ -1,10 +1,13 @@
 import { read, remove, write } from './helpers.js'
 import type { PolicyEntry } from './types.js'
+import { EMAIL_CENTER_PROCEDURES } from '@goms/domain'
 
 const outside: PolicyEntry = { requirements: [], kind: 'outside' }
 
 /** Admin Data Import keeps its own allow-list + ADMIN_IMPORT_ENABLED flag (spec §4, "Outside RBAC"). */
 export const adminPolicy: Record<string, PolicyEntry> = {
+  // Mail authenticates itself, enforces its action tree and checks every record/grant afresh, including with RBAC off.
+  ...Object.fromEntries(EMAIL_CENTER_PROCEDURES.map(name => [`emailCenter.${name}`, { requirements: [], kind: 'self' as const }])),
   ...Object.fromEntries([
     'adminImport.commitGeographyLoad', 'adminImport.history', 'adminImport.listDomains', 'adminImport.previewGeographyLoad',
     'adminImport.session.commit', 'adminImport.session.history', 'adminImport.session.validate',

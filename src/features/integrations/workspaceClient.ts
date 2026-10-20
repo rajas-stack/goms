@@ -15,7 +15,6 @@ const body: ActionField = { key: 'text', label: 'Text', type: 'textarea', requir
 const resource: ActionField = { key: 'resource', label: 'Resource ID', required: true }
 const load: ActionDefinition = { id: 'load', label: 'Load recent items', fields: [] }
 export const WORKSPACE_ACTIONS: Partial<Record<GoogleService, ActionDefinition[]>> = {
-  gmail: [load, { id: 'create', label: 'Send email', scopes: [scope('gmail.send')], fields: [{ key: 'to', label: 'To', type: 'email', required: true }, { ...title, label: 'Subject' }, { ...body, label: 'Message' }] }],
   drive: [load, { id: 'create', label: 'Create folder', fields: [title] }, { id: 'upload', label: 'Upload file', fields: [] }],
   docs: [load, { id: 'read', label: 'Read document', fields: [resource] }, { id: 'create', label: 'Create document', scopes: [scope('documents')], fields: [title, body] }],
   sheets: [load, { id: 'read', label: 'Read cells', fields: [resource, { key: 'range', label: 'Range (e.g. A1:F20)', required: true }] }, { id: 'create', label: 'Create spreadsheet', scopes: [scope('spreadsheets')], fields: [title] }, { id: 'append', label: 'Append rows', scopes: [scope('spreadsheets')], fields: [resource, { key: 'range', label: 'Range (e.g. Sheet1!A1)', required: true }, { ...body, label: 'Rows (tab-separated columns)' }] }],
@@ -31,6 +30,7 @@ export const WORKSPACE_ACTIONS: Partial<Record<GoogleService, ActionDefinition[]
 
 /** Fixed API operations, never an arbitrary destination; all results are account-bound. */
 export async function runWorkspaceAction(service: GoogleService, action: WorkspaceAction, fields: Record<string, string> = {}, file?: File, pageId = 'integrations', connectionTest = false): Promise<WorkspaceResult> {
+  if (service === 'gmail') throw new Error('Use the shared Email Center. Gmail credentials never enter the browser.')
   if (connectionTest && !['load', 'read', 'messages', 'translate'].includes(action)) throw new Error('Connection tests cannot change Google data.')
   const definition = WORKSPACE_ACTIONS[service]?.find(item => item.id === action)
   if (!definition) throw new Error('This action is unavailable for this service.')
@@ -41,7 +41,6 @@ export async function runWorkspaceAction(service: GoogleService, action: Workspa
   const settings = googleSettings(account)
   if (['translate', 'notebooklm'].includes(service) && !settings.cloudProject) throw new Error('Save your Google Cloud project in Connection setup.')
   if (service === 'notebooklm' && !['global', 'us', 'eu'].includes(settings.notebookLocation)) throw new Error('Choose a valid NotebookLM location.')
-  if (service === 'gmail' && action === 'create' && (!/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(fields.to) || /[\r\n]/.test(fields.title))) throw new Error('Enter one valid recipient and a single-line subject.')
   if (service === 'calendar' && action === 'create' && (!Number.isFinite(Date.parse(fields.start)) || !Number.isFinite(Date.parse(fields.end)) || Date.parse(fields.end) <= Date.parse(fields.start))) throw new Error('The event must end after it starts.')
   if (service === 'chat' && action !== 'load' && !/^spaces\/[A-Za-z0-9_-]+$/.test(fields.resource)) throw new Error('Choose a valid Chat space.')
   if (action === 'upload' && (!file || file.size > 25 * 1024 * 1024)) throw new Error('Choose a file up to 25 MB.')
@@ -72,23 +71,6 @@ export async function runWorkspaceAction(service: GoogleService, action: Workspa
     const params = new URLSearchParams({ q: `trashed=false${mime ? ` and mimeType='${mime}'` : ''}`, pageSize: '20', orderBy: 'modifiedTime desc', fields: 'files(id,name,mimeType,modifiedTime)' })
     const data = await request<{ files?: { id: string; name: string; mimeType: string }[] }>(`${base}?${params}`)
     return { items: (data.files ?? []).map(item => ({ id: item.id, title: item.name, detail: item.mimeType })), message: service === 'sites' ? 'Sites listed from Drive. Google does not provide a modern Sites page-editing API.' : undefined }
-  }
-  if (service === 'gmail') {
-    const base = 'https://gmail.googleapis.com/gmail/v1/users/me/messages'
-    if (action === 'create') {
-      const subject = `=?UTF-8?B?${base64Utf8(fields.title)}?=`
-      const encodedBody = base64Utf8(fields.text).match(/.{1,76}/g)?.join('\r\n') ?? ''
-      const raw = base64Utf8(`To: ${fields.to}\r\nSubject: ${subject}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${encodedBody}`).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-      const result = await request<{ id: string }>(`${base}/send`, { raw })
-      return { message: 'Email sent.', resourceId: result.id }
-    }
-    const list = await request<{ messages?: { id: string }[] }>(`${base}?maxResults=10`)
-    const items = await Promise.all((list.messages ?? []).map(async item => {
-      const message = await request<{ payload?: { headers?: { name: string; value: string }[] } }>(`${base}/${encodeURIComponent(item.id)}?format=metadata&metadataHeaders=Subject&metadataHeaders=From&metadataHeaders=Date`)
-      const header = (name: string) => message.payload?.headers?.find(h => h.name.toLowerCase() === name)?.value ?? ''
-      return { id: item.id, title: header('subject') || '(No subject)', detail: `${header('from')} · ${header('date')}` }
-    }))
-    return { items }
   }
   if (service === 'docs') {
     const base = 'https://docs.googleapis.com/v1/documents'
@@ -163,7 +145,6 @@ export async function runWorkspaceAction(service: GoogleService, action: Workspa
   return { items: (data.notebooks ?? []).map(item => ({ id: item.notebookId, title: item.title })) }
 }
 
-function base64Utf8(value: string) { return btoa(Array.from(new TextEncoder().encode(value), byte => String.fromCharCode(byte)).join('')) }
 interface DocElement { paragraph?: { elements?: { textRun?: { content?: string } }[] }; table?: { tableRows?: { tableCells?: { content?: DocElement[] }[] }[] } }
 interface DocTab { documentTab?: { body?: { content?: DocElement[] } }; childTabs?: DocTab[] }
 function docText(elements: DocElement[]): string { return elements.map(element => element.paragraph?.elements?.map(run => run.textRun?.content ?? '').join('') ?? element.table?.tableRows?.map(row => row.tableCells?.map(cell => docText(cell.content ?? [])).join('\t')).join('\n') ?? '').join('') }

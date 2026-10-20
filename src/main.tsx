@@ -1,6 +1,7 @@
 // MUST stay the first import: strips a one-time `?auth_code=` before ./app/router creates the browser router (OAuth provider only).
 import './lib/auth/earlyHandoff'
 import { StrictMode } from 'react'
+import { MotionConfig } from 'framer-motion'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -21,7 +22,8 @@ function render() {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+        {/* Animations follow the OS 'reduce motion' setting everywhere (Apple HIG). */}
+        <MotionConfig reducedMotion="user"><RouterProvider router={router} /></MotionConfig>
         <AuthPromptDialog />
       </QueryClientProvider>
     </StrictMode>,

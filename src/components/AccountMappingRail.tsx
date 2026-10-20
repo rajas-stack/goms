@@ -23,6 +23,7 @@ export function AccountMappingRail() {
   const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
   const teamsActive = location.pathname.startsWith('/teams')
   const documentMakerActive = location.pathname.startsWith('/document-maker')
+  const emailActive = location.pathname.startsWith('/email')
   // Each entry needs the server policy (A) AND the permission tree. Roles & Access lives in Settings → System settings.
   const tree = useNodeFilter()
   const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping) && tree('accountMapping')
@@ -30,6 +31,7 @@ export function AccountMappingRail() {
   const canOpportunity = useCanReadAny(NAV_MODULES.opportunity) && tree('opportunity')
   const canTeams = useCanReadAny(NAV_MODULES.teams) && tree('teams')
   const canDocumentMaker = tree('documentMaker')
+  const canEmail = tree('email')
   const canInsights = useCanReadAny(NAV_MODULES.insights) && tree('accountMapping.insights')
 
   return (
@@ -85,6 +87,18 @@ export function AccountMappingRail() {
       >
         <Icon name="FilePenLine" size={18} />
         <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Document maker</span>
+      </button>}
+      {canEmail && <button
+        onClick={() => navigate('/email')}
+        title="E-mail"
+        aria-current={emailActive ? 'page' : undefined}
+        className={cn(
+          'flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors lg:w-14',
+          emailActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600/70 hover:bg-white hover:text-ink-900',
+        )}
+      >
+        <Icon name="Mail" size={18} />
+        <span className="text-center text-[9px] font-medium leading-tight tracking-tight">E-mail</span>
       </button>}
       {/* `mt-auto` pins Teams to the bottom of the rail, apart from the work modules above. */}
       {canTeams && <button

@@ -8,6 +8,7 @@ import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
 import { useCanReadAny } from '@/lib/permissions'
 import { useNodeFilter } from '@/lib/rbacTree/access'
 import { NAV_MODULES } from '@/lib/routeModules'
+import { SPRING_OVERLAY } from '@/lib/motion'
 
 interface Props {
   open: boolean
@@ -28,6 +29,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
   const teamsActive = location.pathname.startsWith('/teams')
   const documentMakerActive = location.pathname.startsWith('/document-maker')
+  const emailActive = location.pathname.startsWith('/email')
   // Same rule as the desktop rail: the server policy (A) AND the permission tree. Roles & Access lives in Settings.
   const tree = useNodeFilter()
   const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping) && tree('accountMapping')
@@ -35,6 +37,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const canOpportunity = useCanReadAny(NAV_MODULES.opportunity) && tree('opportunity')
   const canTeams = useCanReadAny(NAV_MODULES.teams) && tree('teams')
   const canDocumentMaker = tree('documentMaker')
+  const canEmail = tree('email')
   const canInsights = useCanReadAny(NAV_MODULES.insights) && tree('accountMapping.insights')
 
   useEffect(() => {
@@ -69,7 +72,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
-              transition={{ type: 'spring', stiffness: 340, damping: 32 }}
+              transition={SPRING_OVERLAY}
             >
               <div className="mb-2 flex items-center justify-between px-1">
                 <span className="font-display text-sm font-semibold text-ink-900">Menu</span>
@@ -145,6 +148,20 @@ export function MobileNavDrawer({ open, onClose }: Props) {
               >
                 <Icon name="FilePenLine" size={17} />
                 Document maker
+              </button>}
+              {canEmail && <button
+                onClick={() => {
+                  onClose()
+                  navigate('/email')
+                }}
+                aria-current={emailActive ? 'page' : undefined}
+                className={cn(
+                  'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
+                  emailActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink hover:bg-ink-900/[0.05]',
+                )}
+              >
+                <Icon name="Mail" size={17} />
+                E-mail
               </button>}
               {canTeams && <button
                 onClick={() => {

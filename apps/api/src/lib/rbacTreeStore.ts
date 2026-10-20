@@ -130,10 +130,10 @@ async function grantMaps(type: 'role' | 'user' | 'template', ids: readonly strin
 
 /** Resolves the tree for one person: their own overrides, their roles (functional from the server policy + custom by
  *  membership), and the templates linked to them or to any of those roles. Cached per email. */
-export async function resolveForEmail(email: string, functionalRoles: readonly string[]): Promise<RbacMyAccess> {
+export async function resolveForEmail(email: string, functionalRoles: readonly string[], fresh = false): Promise<RbacMyAccess> {
   const mail = email.toLowerCase()
   const hit = cache.get(mail)
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.value
+  if (!fresh && hit && Date.now() - hit.at < CACHE_MS) return hit.value
   const custom = (await pool.query('SELECT role_id FROM rbac_custom_role_members WHERE email=$1', [mail])).rows.map((r) => `custom:${r.role_id}`)
   const roleIds = [...functionalRoles, ...custom]
   const links = (await pool.query(

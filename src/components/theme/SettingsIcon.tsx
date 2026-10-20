@@ -1,4 +1,7 @@
 export type SettingsIconKind = 'storage' | 'tender' | 'verification' | 'credentials' | 'integrations' | 'competitors' | 'access' | 'employees'
+  /** Any other Settings > Masters page (src/features/masters/mastersList.ts) — drawn as a list. */
+  | (string & {})
+const DRAWN_KINDS = ['storage', 'tender', 'verification', 'credentials', 'integrations', 'competitors', 'access', 'employees']
 
 /** A consistent navy, partially filled symbol for each settings area. */
 export function SettingsIcon({ kind }: { kind: SettingsIconKind }) {
@@ -50,6 +53,11 @@ export function SettingsIcon({ kind }: { kind: SettingsIconKind }) {
           <circle cx="9" cy="10" r="2.4" fill="currentColor" stroke="none" />
           <path d="M5 17a4 4 0 0 1 8 0Z" fill="currentColor" stroke="none" />
           <path d="M15 9h3M15 12h3M15 15h2" />
+        </>}
+        {!DRAWN_KINDS.includes(kind) && <>
+          <rect x="3" y="4" width="18" height="5" rx="1.5" fill="currentColor" />
+          <rect x="3" y="10.5" width="18" height="4" rx="1.5" fill="currentColor" fillOpacity={.1} />
+          <rect x="3" y="16" width="18" height="4" rx="1.5" fill="currentColor" fillOpacity={.1} />
         </>}
         {kind === 'competitors' && <>
           <path d="M4 20v-8h5v8" fill="currentColor" fillOpacity={.1} />

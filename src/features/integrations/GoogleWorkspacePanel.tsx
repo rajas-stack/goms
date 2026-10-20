@@ -7,10 +7,12 @@ import { productFor } from './catalog'
 import { googleServiceEnabled, googleSettings } from './settings'
 import { useGoogleAccount } from './session'
 import { WORKSPACE_ACTIONS, runWorkspaceAction, type WorkspaceAction, type WorkspaceResult } from './workspaceClient'
+import { EmailWorkspace } from '@/features/email-center/EmailWorkspace'
 
 /** The same panel can be embedded in a feature page using its registered page ID. */
 export function GoogleWorkspacePanel({ service, pageId = 'integrations', onClose, connectionTest = false }: { service: GoogleService; pageId?: string; onClose?: () => void; connectionTest?: boolean }) {
   const account = useGoogleAccount()
+  if (service === 'gmail') return <EmailWorkspace compact />
   return <WorkspaceContent key={`${service}:${account?.uid}:${account?.googleId}`} service={service} pageId={pageId} onClose={onClose} connectionTest={connectionTest} />
 }
 function WorkspaceContent({ service, pageId, onClose, connectionTest }: { service: GoogleService; pageId: string; onClose?: () => void; connectionTest: boolean }) {

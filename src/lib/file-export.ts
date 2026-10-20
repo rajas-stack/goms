@@ -45,3 +45,20 @@ export async function downloadFile(fileName: string, content: string, mimeType: 
   a.click()
   URL.revokeObjectURL(url)
 }
+
+/** Binary workbook export, including the native share flow used by text exports. */
+export async function downloadBinaryFile(fileName: string, bytes: Uint8Array, mimeType: string): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    let binary = ''
+    for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192))
+    const { uri } = await Filesystem.writeFile({ path: fileName, data: btoa(binary), directory: Directory.External })
+    try { await Share.share({ files: [uri], dialogTitle: 'Open exported workbook' }) } catch { /* dismissed */ }
+    return
+  }
+  const url = URL.createObjectURL(new Blob([bytes.slice().buffer as ArrayBuffer], { type: mimeType }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}

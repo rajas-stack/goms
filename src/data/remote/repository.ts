@@ -342,6 +342,8 @@ export class RemoteRepository implements Partial<Repository> {
   relationshipAnalytics = (): Promise<RelationshipAnalytics> => this.client.search.relationshipAnalytics.query()
 
   // --- Bid Tracker ---
+  previewBidImport = (input: { table: import('@goms/domain').BidImportTable }) => this.client.bids.previewImport.mutate(input)
+  importBids = (input: { table: import('@goms/domain').BidImportTable }) => this.client.bids.importNew.mutate(input)
   listBidsForGrid = (filterRules?: BidSavedView['filterRules']): Promise<BidGridRow[]> =>
     this.client.bids.listForGrid.query({ filterRules }) as unknown as Promise<BidGridRow[]>
   getBid = (id: string): Promise<Bid | null> => this.client.bids.get.query({ id }) as unknown as Promise<Bid | null>

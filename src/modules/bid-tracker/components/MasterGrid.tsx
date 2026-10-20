@@ -1,3 +1,4 @@
+import { useVerticalNames } from '@/features/masters/useMasterOptions'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -10,6 +11,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   OPERATORS_BY_TYPE, flattenRules, parseMultiValue, pruneFilterNodes,
   type FilterNode,
+  QUARTER_DATE_COLUMNS, formatDateWithQuarter,
 } from '@goms/domain'
 import { motion } from 'framer-motion'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
@@ -51,6 +53,10 @@ import { GridContextMenu, type MenuEntry } from './GridContextMenu'
 import { ManageColumnsPanel } from './ManageColumnsPanel'
 import { EditableCell, type CellDraft, type PendingEdits } from './EditableCell'
 import { FilterBuilder } from './FilterBuilder'
+import { BidImportDialog } from '../transfer/BidImportDialog'
+import { TenderFolderCell } from './TenderFolderCell'
+import { exportGridWorkbook, WORKBOOK_MIME } from '../transfer/workbooks'
+import { downloadBinaryFile } from '@/lib/file-export'
 
 const ATTENTION_TONE: Record<BidGridRow['attentionFlag'], BadgeTone> = {
   dueSoon: 'amber', overdue: 'crimson', corrigendumPending: 'blue', onTrack: 'emerald',
@@ -183,6 +189,9 @@ export function MasterGrid(props: MasterGridProps) {
 
   const [addColumnOpen, setAddColumnOpen] = useState(false)
   const [createBidOpen, setCreateBidOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [exportBusy, setExportBusy] = useState(false)
+  const lastMissing = useRef<Record<string, string>>({})
   const [search, setSearch] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({})
@@ -246,7 +255,8 @@ export function MasterGrid(props: MasterGridProps) {
   const { assign } = useOwnershipMutations()
   const { data: salesPersons = [] } = useSalesPersons()
 
-  const allColumns = useMemo(() => resolveColumns(customFields), [customFields])
+  const verticalNames = useVerticalNames()
+  const allColumns = useMemo(() => resolveColumns(customFields, verticalNames), [customFields, verticalNames])
   const visibleIds = useMemo(
     () => (chosenVisibleIds?.length ? chosenVisibleIds : defaultVisibleColumnIds(allColumns, sheetId)),
     [chosenVisibleIds, allColumns, sheetId],
@@ -445,6 +455,10 @@ export function MasterGrid(props: MasterGridProps) {
     if (isEmptyCell(v)) return dash
     const person = personOf(col, v, lookups)
     if (person) return <PersonName person={person} className="max-w-full" nameClassName="whitespace-pre-wrap overflow-visible [overflow-wrap:anywhere]" />
+    // Tender Publishing / Receiving and Actual Submission dates show their financial quarter, e.g. 15/10/2026 (Q3).
+    // Tender Folder Link: the Drive folder's files, compact (TenderFolderCell).
+    if (col.id === 'custom:tender_folder' && typeof v === 'string' && links) return <TenderFolderCell url={v} />
+    if (QUARTER_DATE_COLUMNS.has(col.id) && typeof v === 'string') return <span className="tabular-nums">{formatDateWithQuarter(v)}</span>
     switch (col.type) {
       case 'boolean': return v ? <Icon name="Check" size={14} className="text-emerald-600" /> : <span className="text-muted">No</span>
       case 'select': {
@@ -671,13 +685,40 @@ export function MasterGrid(props: MasterGridProps) {
   const focusCell = (rowIndex: number, colId: string) => {
     const rowId = tableRows[rowIndex]?.original.id
     if (!rowId) return
-    const find = () => parentRef.current?.querySelector<HTMLElement>(
-      `[data-cell="${CSS.escape(`${rowId}:${colId}`)}"] :is([data-editable-cell], [data-readonly-cell])`,
-    )
+    const find = () => {
+      const cell = parentRef.current?.querySelector<HTMLElement>(`[data-cell="${CSS.escape(`${rowId}:${colId}`)}"]`)
+      if (!cell) return undefined
+      const editor = cell.querySelector<HTMLElement>(':is([data-editable-cell], [data-readonly-cell])')
+      if (editor) return editor
+      // Missing-field navigation also works while editing is locked.
+      cell.tabIndex = -1
+      return cell
+    }
     const el = find()
     if (el) { el.focus(); el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); return }
     virtualizer.scrollToIndex(rowIndex, { align: 'auto' })
     requestAnimationFrame(() => { const later = find(); later?.focus(); later?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) })
+  }
+  const missingFields = (row: BidGridRow) => allColumns.filter(c => c.required && isEmptyCell(cellValue(row, c)))
+  const visitMissingField = (row: BidGridRow) => {
+    const missing = missingFields(row)
+    if (!missing.length) return
+    const previous = allColumns.findIndex(c => c.id === lastMissing.current[row.id])
+    const next = missing.find(c => allColumns.indexOf(c) > previous) ?? missing[0]
+    lastMissing.current[row.id] = next.id
+    if (!visible.some(c => c.id === next.id)) setVisibleIds(setColumnVisibility(allColumns, visibleIds, next.id, true))
+    scrollToId.current = next.id
+    setFlashId(next.id)
+    requestAnimationFrame(() => focusCell(tableRows.findIndex(r => r.original.id === row.id), next.id))
+  }
+  const exportAllBids = async () => {
+    if (exportBusy) return
+    setExportBusy(true); setSaveError(null)
+    try {
+      const rows = (await repository.listBidsForGrid()).filter(row => row.sheet === 'bidTracker')
+      await downloadBinaryFile('bid-tracker-export.xlsx', exportGridWorkbook(rows, allColumns, new Set(visible.map(c => c.id)), lookups), WORKBOOK_MIME)
+    } catch (e) { setSaveError(e instanceof Error ? e.message : 'Export failed. Please retry.') }
+    finally { setExportBusy(false) }
   }
   const onGridKeyDown = (e: React.KeyboardEvent) => {
     if (!unlocked) return
@@ -740,6 +781,14 @@ export function MasterGrid(props: MasterGridProps) {
           </span>
         )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {sheetId === 'bidTracker' && <>
+            <Button variant="secondary" size="sm" className="h-7 px-2.5" disabled={exportBusy} onClick={() => void exportAllBids()}>
+              <Icon name="Download" size={14} /> {exportBusy ? 'Exporting...' : 'Export'}
+            </Button>
+            {treeCreate && perms.can('opp.bidTracker', 'create') && <Button variant="secondary" size="sm" className="h-7 px-2.5" onClick={() => setImportOpen(true)}>
+              <Icon name="Upload" size={14} /> Import
+            </Button>}
+          </>}
           <LockSwitch
             size="toolbar" unlocked={unlocked} onToggle={requestToggleLock}
             lockedLabel="Master grid editing locked — tap to unlock"
@@ -969,7 +1018,7 @@ export function MasterGrid(props: MasterGridProps) {
                         )}
                       >
                         <div className={cn('min-w-0', meta.id === 'opportunityName' && 'flex items-center')}>
-                          {meta.id === 'opportunityName' && (
+                          {meta.id === 'opportunityName' && (<>
                             <button
                               type="button" aria-label={favourites.has(row.original.id) ? 'Remove from favourites' : 'Add to favourites'}
                               aria-pressed={favourites.has(row.original.id)} title={favourites.has(row.original.id) ? 'Remove from favourites' : 'Add to favourites'}
@@ -978,7 +1027,13 @@ export function MasterGrid(props: MasterGridProps) {
                             >
                               <Icon name="Star" size={14} className={favourites.has(row.original.id) ? 'fill-amber-400' : undefined} />
                             </button>
-                          )}
+                            {sheetId === 'bidTracker' && missingFields(row.original).length > 0 && <button
+                              type="button" aria-label={`Visit next missing field for ${row.original.opportunityName}`}
+                              title={`${missingFields(row.original).map(c => c.header).join(', ')} missing. Click to visit the next field.`}
+                              onClick={e => { e.stopPropagation(); visitMissingField(row.original) }}
+                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded font-bold text-red-600 hover:bg-red-50 focus-visible:focus-ring"
+                            >!</button>}
+                          </>)}
                           <div className="min-w-0 flex-1">
                             {canEditCell(row.original, meta) ? (
                               <EditableCell
@@ -1051,6 +1106,7 @@ export function MasterGrid(props: MasterGridProps) {
         }}
       />
       <CreateBidDialog open={createBidOpen} onClose={() => setCreateBidOpen(false)} sheet={sheetId} />
+      {sheetId === 'bidTracker' && <BidImportDialog open={importOpen} onClose={() => setImportOpen(false)} customFields={customFields} />}
       <Dialog
         open={reassignOpen} onClose={() => setReassignOpen(false)}
         title={`Reassign owner for ${selectedIds.length} bid${selectedIds.length === 1 ? '' : 's'}`}

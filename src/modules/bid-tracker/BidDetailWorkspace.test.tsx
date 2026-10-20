@@ -27,6 +27,14 @@ async function makeBid() {
 }
 
 describe('BidDetailWorkspace', () => {
+  it('keeps attachments out of Communication and available on Overview', async () => {
+    const bid = await makeBid()
+    renderAt(`/bid-tracker/bid/${bid.id}?tab=communication`)
+    expect(await screen.findByRole('tab', { name: 'Communication' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByText('Attachments', { exact: true })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Overview' }))
+    expect(await screen.findByText('Attachments', { exact: true })).toBeInTheDocument()
+  })
   beforeEach(async () => {
     await resetLocalData()
   })

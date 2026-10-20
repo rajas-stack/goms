@@ -1,3 +1,4 @@
+import { BID_TRACKER_MASTER_KEYS, bidTrackerMasterSeed, type BidTrackerMasterKey } from '@goms/domain'
 import { WORK_VERTICALS } from '@/features/nodes/department-meta'
 import type {
   ApprovalMatrixRule, BillingType, CommercialCalculatorData, CommercialProduct, CommercialSku, Currency,
@@ -176,7 +177,15 @@ function buildDefaultMasters(): MastersState {
     approvalMatrix: APPROVAL_MATRIX.map((r) => ({ ...r })),
     currencies: CURRENCIES.map((r) => ({ ...r })),
     preSales: PRE_SALES.map((r) => ({ ...r })),
+    ...buildBidTrackerMasters(),
   }
+}
+
+/** Initial Settings > Masters > Bid Tracker values (packages/domain/src/bidTrackerFields.ts). */
+export function buildBidTrackerMasters(): Pick<MastersState, BidTrackerMasterKey> {
+  return Object.fromEntries(BID_TRACKER_MASTER_KEYS.map(key => [key, bidTrackerMasterSeed(key).map(([code, name, description], i) => ({
+    id: `btm_${key}_${i}`, code, name, description, active: true, displayOrder: i,
+  }))])) as Pick<MastersState, BidTrackerMasterKey>
 }
 
 /** One active, sellable SKU per seeded `FEATURES` row, generated the same

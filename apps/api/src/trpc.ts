@@ -10,6 +10,7 @@ import { beginSecurityAudit, finishSecurityAudit } from './security/audit.js'
 import { requireSystemAdmin } from './auth/rbac/systemAdminOnly.js'
 
 export interface Context {
+  setCookie?: (value: string) => void
   authHeader?: string
   user?: AuthenticatedUser
   verifiedIdentity?: Promise<AuthenticatedUser>
@@ -18,13 +19,15 @@ export interface Context {
 /** Exported for testing. An RBAC denial is flagged (`data.rbacDenied`) so the client can show a normal "no
  *  permission" message instead of the "sign in with your @amnex.com account" dialog every FORBIDDEN used to trigger. */
 export function formatError({ shape, error }: { shape: any; error: TRPCError }) {
+  // Real records can also be served by a local development deployment. Never expose server stacks.
+  const safeShape = { ...shape, data: { ...shape.data, stack: undefined } }
   if (error.code === 'INTERNAL_SERVER_ERROR') {
-    return { ...shape, message: 'Internal server error', data: { ...shape.data, stack: undefined } }
+    return { ...safeShape, message: 'Internal server error' }
   }
   if (error.cause instanceof RbacDenial) {
-    return { ...shape, data: { ...shape.data, rbacDenied: true } }
+    return { ...safeShape, data: { ...safeShape.data, rbacDenied: true } }
   }
-  return shape
+  return safeShape
 }
 
 export const t = initTRPC.context<Context>().create({ errorFormatter: formatError })

@@ -31,6 +31,8 @@ export function useMasterMutations<K extends MasterEntityKey>(key: K) {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: qk.masters(key) })
     qc.invalidateQueries({ queryKey: ['commercialCalculator', 'master', key] })
+    // Bid Tracker dropdown options are resolved from these masters.
+    qc.invalidateQueries({ queryKey: ['bidCustomFields'] })
   }
   const create = useMutation({
     mutationFn: (input: CreateMasterInput<K>) => repository.createMaster(key, input),

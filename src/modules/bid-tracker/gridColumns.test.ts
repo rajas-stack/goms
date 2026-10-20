@@ -23,7 +23,7 @@ describe('grid column registry — completeness', () => {
   it('names every required leaf column under its own group', () => {
     const byGroup = (id: string) => STANDARD_COLUMNS.filter((c) => c.group === id).map((c) => c.header)
     expect(byGroup('identity')).toEqual(['Opportunity / Mission', 'Opportunity Type', 'Bid ID', 'Tender ID', 'Reference/Bid No.', 'Name of Assignment', 'Tender Link', 'Sheet'])
-    expect(byGroup('client')).toEqual(['Department / Client', 'State', 'City', 'Sector'])
+    expect(byGroup('client')).toEqual(['Department / Client', 'State', 'City', 'Vertical'])
     expect(byGroup('ownership')).toEqual(['Geo-sales', 'BU-sales', 'Pre-sales', 'Legal', 'Bid', 'Bid Owner', 'Sales Lead / Solution Lead'])
     expect(byGroup('decision')).toEqual(['Bid Stage', 'Next Action', 'Action Owner', 'Action Due', 'Attention', 'Decision'])
     expect(byGroup('dates')).toEqual(['Next Milestone', 'Days Remaining', 'Submission Deadline'])
@@ -43,7 +43,8 @@ describe('grid column registry — completeness', () => {
   it('every column has a data type whose operators exist', () => {
     for (const c of STANDARD_COLUMNS) {
       expect(OPERATORS_BY_TYPE[c.type!]).toBeDefined()
-      if (c.type === 'select') expect(c.options?.length).toBeGreaterThan(0)
+      // Vertical's options come from Settings > Masters > Verticals at runtime.
+      if (c.type === 'select' && c.id !== 'vertical') expect(c.options?.length).toBeGreaterThan(0)
     }
   })
 
