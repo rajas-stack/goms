@@ -72,7 +72,7 @@ export const RBAC_NODE_MANIFEST: readonly RbacNodeDef[] = [
   {"id":"settings.dataImport","parentId":"settings","label":"Admin data import","kind":"page","actions":["view","create","edit","delete","download","manage"],"order":0},
   {"id":"settings.system","parentId":"settings","label":"System settings","kind":"section","actions":["view","create","edit","delete","download","manage"],"order":1},
   {"id":"settings.system.integrations","parentId":"settings.system","label":"Integrations","kind":"page","actions":["view","create","edit","delete","download","manage"],"order":0},
-  {"id":"settings.system.storage","parentId":"settings.system","label":"DMS Settings","kind":"page","actions":["view","create","edit","delete","download","manage"],"order":1},
+  {"id":"settings.system.storage","parentId":"settings.system","label":"DMS","kind":"page","actions":["view","create","edit","delete","download","manage"],"order":1},
   {"id":"settings.system.credentials","parentId":"settings.system","label":"Credentials","kind":"page","actions":["view","create","edit","delete","download","manage"],"order":2},
   {"id":"settings.system.access","parentId":"settings.system","label":"Roles & Access","kind":"page","actions":["view","create","edit","delete","download","manage"],"order":3},
   {"id":"settings.bid-team","parentId":"settings","label":"Bid team settings","kind":"section","actions":["view","create","edit","delete","download","manage"],"order":2},

@@ -30,11 +30,27 @@ Select **External DMS (portal link)**, enter an HTTPS URL, and save. The connect
 
 Configuration is saved on this browser/device. Access tokens stay in memory and require reconnection after expiry or reload. Removing a connection removes its GOMS settings and assignments; Drive documents are retained. Collection and refresh run while the app is open, without a background server job.
 
+## Profile Images
+
+**Settings → System settings → DMS → Profile Images** configures a shared, server-managed image folder. A System Admin with DMS edit access connects Google Drive, pastes a folder URL/ID or browses accessible folders, then chooses **Test Connection**, **Save**, or **Sync Now**. The section reports connection status, last successful sync, indexed images, matched people, and errors. Clearing the folder and saving disables this feature.
+
+Profile Images reuses the backend Google OAuth client, registered `/api/oauth/google/callback`, credential encryption, and expiring OAuth flow store already used by Email Center. Existing `EMAIL_GOOGLE_*` settings (or their `GOOGLE_OAUTH_*` fallbacks) and the existing encryption secret must be configured. This separate authorization requests offline `drive.readonly` access; browser-only DMS tokens cannot provide durable server access. The folder stays private and must be accessible to the connected administrator's Google account.
+
+The selected folder, encrypted credentials, file metadata, change cursor, and mappings are stored in the existing `google_integration_settings` JSONB store under a system key. No migration or additional image store is used. Image bytes remain in Drive, with only a bounded, transient server memory cache and private browser caching.
+
+JPG/JPEG, PNG, and WebP files directly inside the selected folder are indexed once, then updated with Drive's paginated changes feed every minute while the API process runs. The first scan captures its change cursor before listing files. Shared-drive folders use their drive-specific change feed. Files moved out, deleted, trashed, or replaced update the index. Failed partial scans retain the last complete cursor for retry; permission loss clears mappings. There is no push notification or claim of instant Drive change detection.
+
+Filenames match People record IDs, emails, or existing employee codes first, then normalized full names. Duplicate names or multiple files matching the same person produce diagnostics and use initials instead of guessing. The directory and workspace People lists use a single version index; rendering never searches Drive per person. Existing photos remain unchanged when this feature is disabled.
+
+Save and Sync Now invalidate active People queries and notify other open tabs after completion. Other Drive changes appear after the next server sync and the directory's 15-second metadata refresh. Visible avatars request authenticated backend thumbnails, preferably 96 pixels, with versioned URLs and ETags. Image delivery applies the existing People policy and directory visibility checks; configuration requires the administrator allow-list and DMS permissions. Google tokens and private thumbnail URLs never reach the frontend.
+
 ## References
 
 - [Google OAuth client setup](https://developers.google.com/identity/oauth2/web/guides/get-google-api-clientid)
 - [Google Identity Services token model](https://developers.google.com/identity/oauth2/web/guides/use-token-model)
 - [Drive uploads](https://developers.google.com/workspace/drive/api/guides/manage-uploads)
 - [Drive authorization scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth)
+- [Drive incremental changes](https://developers.google.com/workspace/drive/api/reference/rest/v3/changes/list)
+- [Private thumbnail links](https://developers.google.com/workspace/drive/api/reference/rest/v3/files)
 
 The integration requests the Drive scope to work with arbitrary existing folders. Configure the Google project's consent screen and verification for the intended audience before deploying.

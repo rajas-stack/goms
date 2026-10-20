@@ -34,6 +34,7 @@ import { googleIntegrationsRouter } from './routers/googleIntegrations.js'
 import { makerDocumentsRouter } from './routers/makerDocuments.js'
 import { rbacTreeRouter } from './routers/rbacTree.js'
 import { insightsStudioRouter } from './routers/insightsStudio.js'
+import { profileImagesRouter } from './routers/profileImages.js'
 
 export const appRouter = router({
   insights: insightsRouter,
@@ -58,5 +59,6 @@ export const appRouter = router({
   makerDocuments: makerDocumentsRouter,
   rbacTree: rbacTreeRouter,
   insightsStudio: insightsStudioRouter,
+  profileImages: profileImagesRouter,
 })
 export type AppRouter = typeof appRouter
