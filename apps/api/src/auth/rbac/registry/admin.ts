@@ -25,6 +25,7 @@ export const adminPolicy: Record<string, PolicyEntry> = {
   'profileImages.save': { requirements: [write('admin.access')] },
   'profileImages.sync': { requirements: [write('admin.access')] },
   'profileImages.index': { requirements: [readAny('am.contacts', 'team.org', 'team.sales')] },
+  'profileImages.refresh': { requirements: [readAny('am.contacts', 'team.org', 'team.sales')] },
   'access.listOverrides': { requirements: [read('admin.access')] },
   'access.readiness': { requirements: [read('admin.access')] },
   'access.unmatchedOverrides': { requirements: [read('admin.access')] },
