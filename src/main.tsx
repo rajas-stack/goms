@@ -10,6 +10,7 @@ import { bootstrapRepository } from './data/repository'
 import { AuthPromptDialog } from './components/AuthPromptDialog'
 import { authApi } from './lib/auth'
 import { installStaleChunkRecovery } from './lib/staleChunkRecovery'
+import { ProfileImagesProvider } from './features/dms/ProfileImagesProvider'
 import './index.css'
 
 const queryClient = new QueryClient({
@@ -23,7 +24,7 @@ function render() {
     <StrictMode>
       <QueryClientProvider client={queryClient}>
         {/* Animations follow the OS 'reduce motion' setting everywhere (Apple HIG). */}
-        <MotionConfig reducedMotion="user"><RouterProvider router={router} /></MotionConfig>
+        <ProfileImagesProvider><MotionConfig reducedMotion="user"><RouterProvider router={router} /></MotionConfig></ProfileImagesProvider>
         <AuthPromptDialog />
       </QueryClientProvider>
     </StrictMode>,

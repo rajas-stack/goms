@@ -24,4 +24,5 @@ export const MASTER_RENDERERS: Readonly<Record<string, () => ReactElement>> = {
   'approval-matrix': () => <MasterCrudScreen masterKey="approvalMatrix" />,
   currencies: () => <MasterCrudScreen masterKey="currencies" />,
   'pre-sales': () => <MasterCrudScreen masterKey="preSales" />,
+  'directory-types': () => <MasterCrudScreen masterKey="directoryTypes" />,
 }

@@ -790,7 +790,7 @@ export function MasterGrid(props: MasterGridProps) {
             </Button>}
           </>}
           <LockSwitch
-            size="toolbar" unlocked={unlocked} onToggle={requestToggleLock}
+            unlocked={unlocked} onToggle={requestToggleLock}
             lockedLabel="Master grid editing locked — tap to unlock"
             unlockedLabel="Master grid editing unlocked — tap to lock"
           />

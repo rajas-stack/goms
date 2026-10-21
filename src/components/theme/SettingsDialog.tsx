@@ -29,7 +29,7 @@ const SETTINGS_GROUPS = definePermissionNodes('settings', [
     id: 'system', title: 'System settings', icon: 'SlidersHorizontal',
     pages: [
       { to: '/settings/integrations', kind: 'integrations' as const, title: 'Integrations', hint: 'Connect Google services.' },
-      { to: '/settings/dms', kind: 'storage' as const, title: 'DMS Settings', hint: 'Connect Drive and organize documents.' },
+      { to: '/settings/dms', kind: 'storage' as const, title: 'DMS', hint: 'Connect Drive and organize documents.' },
       { to: '/settings/credentials', kind: 'credentials' as const, title: 'Credentials', hint: 'Manage shared passphrases.' },
       { to: '/settings/access', kind: 'access' as const, title: 'Roles & Access', hint: 'Who can see and do what in GOMS.' },
     ],

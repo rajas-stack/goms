@@ -14,7 +14,7 @@ import {
 
 const masterKeySchema = z.enum([
   'verticals', 'products', 'modules', 'features', 'skuCategories', 'unitsOfMeasure',
-  'productEditions', 'billingTypes', 'taxClasses', 'approvalMatrix', 'currencies', 'preSales',
+  'productEditions', 'billingTypes', 'taxClasses', 'approvalMatrix', 'currencies', 'preSales', 'directoryTypes',
   // Settings > Masters > Bid Tracker dropdowns (packages/domain/src/bidTrackerFields.ts).
   'bidPriorities', 'tenderFeeModes', 'emdInstruments', 'rtmTypes', 'zones', 'tenderStatuses', 'buOwners',
 ])

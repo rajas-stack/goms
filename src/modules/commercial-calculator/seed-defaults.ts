@@ -177,6 +177,7 @@ function buildDefaultMasters(): MastersState {
     approvalMatrix: APPROVAL_MATRIX.map((r) => ({ ...r })),
     currencies: CURRENCIES.map((r) => ({ ...r })),
     preSales: PRE_SALES.map((r) => ({ ...r })),
+    directoryTypes: DIRECTORY_TYPES.map((r) => ({ ...r })),
     ...buildBidTrackerMasters(),
   }
 }
@@ -216,3 +217,10 @@ export function buildDefaultCommercialCalculatorData(): CommercialCalculatorData
     boqSequenceByYear: {},
   }
 }
+
+/** Initial Settings > Masters > Directory Types. `internal` drives the Amnex Employee tabs; the others list E-mail contacts of that kind. */
+export const DIRECTORY_TYPES = [
+  { id: 'dir_internal', code: 'internal', name: 'Amnex Employee', description: 'Amnex employees, org structure and internal teams', active: true, displayOrder: 0 },
+  { id: 'dir_department', code: 'department', name: 'Departmental', description: 'Client and government department mailboxes', active: true, displayOrder: 1 },
+  { id: 'dir_oem', code: 'oem', name: 'OEMs', description: 'OEM and partner contacts', active: true, displayOrder: 2 },
+]

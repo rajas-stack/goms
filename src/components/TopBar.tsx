@@ -4,6 +4,7 @@ import { Icon } from './ui/Icon'
 import { Button } from './ui/Button'
 import { Tooltip } from './ui/Tooltip'
 import { AuthStatus } from './AuthStatus'
+import { RefreshPhotosButton } from '@/features/dms/RefreshPhotosButton'
 import logo from '@/assets/amnex-logo.svg'
 
 interface Props {
@@ -25,7 +26,7 @@ export function TopBar({ onOpenDrawer }: Props) {
   const isInsights = location.pathname.startsWith('/insights') || location.pathname.startsWith('/analytics')
   // Import and Export work with Account Mapping's hierarchy data.
   const hidesImportExport = isCommercialCalculator || isBidTracker || isTeams || isSettings || isDocuments || isDocumentMaker || isInsights || isEmail
-  const moduleLabel = isEmail ? 'E-mail' : isInsights ? 'Insights' : isDocumentMaker ? 'Document maker' : isDocuments ? 'Documents' : isSettings ? 'Settings' : isCommercialCalculator ? 'Commercial Calculator' : isBidTracker ? 'Opportunity' : isTeams ? 'Teams' : 'Accounts Mapping'
+  const moduleLabel = isEmail ? 'E-mail' : isInsights ? 'Insights' : isDocumentMaker ? 'Document maker' : isDocuments ? 'Documents' : isSettings ? 'Settings' : isCommercialCalculator ? 'Commercial Calculator' : isBidTracker ? 'Opportunity' : isTeams ? 'Directory' : 'Accounts Mapping'
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-paper/90 px-3 sm:gap-3 sm:px-5">
       <button
@@ -79,6 +80,7 @@ export function TopBar({ onOpenDrawer }: Props) {
       )}
 
       <div className="flex shrink-0 items-center gap-2">
+        <RefreshPhotosButton />
         <AuthStatus />
       </div>
     </header>

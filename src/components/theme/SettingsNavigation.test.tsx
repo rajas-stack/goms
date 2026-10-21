@@ -29,17 +29,17 @@ describe('DMS settings navigation', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Profile options' }))
     await userEvent.click(screen.getByRole('menuitem', { name: /Settings/ }))
     await userEvent.click(within(screen.getByRole('dialog', { name: 'Settings' })).getByRole('button', { name: 'System settings' }))
-    await userEvent.click(await within(screen.getByRole('dialog', { name: 'Settings' })).findByRole('link', { name: /DMS Settings/ }))
-    expect(await screen.findByRole('heading', { name: 'DMS Settings' })).toBeInTheDocument()
+    await userEvent.click(await within(screen.getByRole('dialog', { name: 'Settings' })).findByRole('link', { name: /^DMS/ }))
+    expect(await screen.findByRole('heading', { name: 'DMS' })).toBeInTheDocument()
     expect(screen.queryByText('DMS configuration form')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('link', { name: 'Create new' }))
     expect(await screen.findByRole('heading', { name: 'Create new DMS' })).toBeInTheDocument()
     expect(screen.getByText('DMS configuration form')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('link', { name: 'DMS Settings' }))
+    await userEvent.click(screen.getByRole('link', { name: 'DMS' }))
     await userEvent.click(screen.getByRole('link', { name: 'Settings' }))
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'System settings' }))
-    expect(await screen.findByRole('link', { name: /DMS Settings/ })).toHaveAttribute('href', '/settings/dms')
+    expect(await screen.findByRole('link', { name: /^DMS/ })).toHaveAttribute('href', '/settings/dms')
     await userEvent.click(screen.getByRole('link', { name: 'Back to workspace' }))
     expect(screen.getByText('Workspace')).toBeInTheDocument()
   })
@@ -52,7 +52,7 @@ describe('DMS settings navigation', () => {
     expect(within(dialog).queryByRole('link')).not.toBeInTheDocument()
 
     for (const [group, pages] of [
-      ['System settings', ['Integrations', 'DMS Settings', 'Credentials']],
+      ['System settings', ['Integrations', 'DMS', 'Credentials']],
       ['Bid team settings', ['Tender websites', 'Document Verifications']],
       ['Pre-sales', ['Competitors']],
     ] as const) {

@@ -21,3 +21,12 @@ export function useEmployeeDepartmentOptions() { return useAmnexDepartments() }
 export function useClientDepartmentOptions(enabled = true) {
   return useQuery({ queryKey: ['departments'], queryFn: () => repository.listDepartments(), enabled })
 }
+
+/** Settings > Masters > Directory Types: active entries in display order (code `internal` = Amnex Employee). */
+export function useDirectoryTypes(): { code: string; name: string }[] {
+  const { data = [] } = useMasters('directoryTypes')
+  return useMemo(
+    () => [...data].filter((d) => d.active).sort((a, b) => a.displayOrder - b.displayOrder || a.name.localeCompare(b.name)).map((d) => ({ code: d.code, name: d.name })),
+    [data],
+  )
+}

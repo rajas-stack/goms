@@ -1,6 +1,6 @@
 import { usePermissions } from '@/lib/permissions'
 import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -19,6 +19,11 @@ import { DeliveryOrgChart } from '@/features/teams/DeliveryOrgChart'
 import { OrgEmployees } from '@/features/org/OrgEmployees'
 import { OrgStructureChart } from '@/features/org/OrgStructureChart'
 import { SalesWorkspace } from './SalesWorkspace'
+import { useDirectoryTypes } from '@/features/masters/useMasterOptions'
+import { DirectoryContacts } from '@/features/directory/DirectoryContacts'
+
+/** Settings > Masters > Directory Types code whose view is the Amnex employee tabs below. */
+const INTERNAL_DIRECTORY = 'internal'
 
 type TeamKey = 'org' | 'employees' | 'sales' | DeliveryTeamKey
 
@@ -271,14 +276,26 @@ export function TeamsWorkspace() {
   // Org Structure and the delivery teams follow Company Org Structure; the Sales tab follows the Sales Team.
   const tabs = TABS.filter((t) => !perms.enforced || perms.level(t.value === 'sales' ? 'team.sales' : 'team.org') !== 'N')
   const tab = tabs.find((t) => t.value === teamParam) ?? tabs[0] ?? TABS[0]
+  // Directory type comes from Settings > Masters > Directory Types; `?type=` keeps a non-employee view linkable.
+  const directoryTypes = useDirectoryTypes()
+  const [search, setSearch] = useSearchParams()
+  const typeCode = search.get('type') ?? INTERNAL_DIRECTORY
+  const selectedType = directoryTypes.find((d) => d.code === typeCode)
+  const isInternal = typeCode === INTERNAL_DIRECTORY || !selectedType
+  const chooseType = (code: string) => setSearch(code === INTERNAL_DIRECTORY ? {} : { type: code })
 
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 bg-paper/70 px-3 pt-2 sm:px-6">
-        <Tabs tabs={tabs} value={tab.value} onChange={(value) => navigate(`/teams/${value}`)} />
+      <div className="flex shrink-0 items-end gap-3 bg-paper/70 px-3 pt-2 sm:px-6">
+        <Select aria-label="Directory type" value={isInternal ? INTERNAL_DIRECTORY : typeCode} onChange={(event) => chooseType(event.target.value)} className="mb-1.5 h-8 w-auto shrink-0 text-[13px] font-semibold">
+          {directoryTypes.length === 0 && <option value={INTERNAL_DIRECTORY}>Amnex Employee</option>}
+          {directoryTypes.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
+        </Select>
+        {isInternal && <div className="min-w-0 flex-1"><Tabs tabs={tabs} value={tab.value} onChange={(value) => navigate(`/teams/${value}`)} /></div>}
       </div>
       <div className="min-h-0 flex-1">
-        {tab.value === 'org' ? <OrgStructureChart />
+        {!isInternal ? <DirectoryContacts code={typeCode} name={selectedType!.name} />
+          : tab.value === 'org' ? <OrgStructureChart />
           : tab.value === 'employees' ? <OrgEmployees />
           : tab.value === 'sales' ? <SalesWorkspace basePath="/teams/sales" />
           : <DeliveryTeam key={tab.value} team={tab.value} label={tab.label} section={section} />}

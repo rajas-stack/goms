@@ -14,6 +14,8 @@ export const SOURCE_LABEL: Record<EmployeeSource, string> = {
 }
 
 export interface MasterEmployee {
+  /** Source record ID used by the shared Drive avatar index. */
+  id?: string
   /** Stable row key: the org person id, else `<source>:<id>` of the first record seen. */
   key: string
   name: string
@@ -32,6 +34,7 @@ export const normalizeName = (name: string): string => name.normalize('NFKC').re
 export const normalizeEmailKey = (email: string | null | undefined): string => (email ?? '').trim().toLowerCase()
 
 interface Candidate {
+  id: string
   key: string
   name: string
   email: string
@@ -44,20 +47,20 @@ interface Candidate {
 }
 
 const fromOrg = (p: OrgPerson): Candidate => ({
-  key: p.id, name: p.name, email: p.email ?? '', designation: p.designation, level: p.level, departments: p.departments,
+  id: p.id, key: p.id, name: p.name, email: p.email ?? '', designation: p.designation, level: p.level, departments: p.departments,
   source: 'org', orgPersonId: p.id, active: p.status === 'active',
 })
 const fromMember = (m: DeliveryTeamMember): Candidate => ({
-  key: `${m.team}:${m.id}`, name: m.name, email: m.email ?? '', designation: m.designation ?? '', level: null,
+  id: m.id, key: `${m.team}:${m.id}`, name: m.name, email: m.email ?? '', designation: m.designation ?? '', level: null,
   departments: [TEAM_DEPARTMENT[m.team]], source: m.team, orgPersonId: m.orgPersonId ?? null, active: m.status === 'active',
 })
 const fromSales = (s: SalesPerson): Candidate => ({
-  key: `sales:${s.id}`, name: s.name, email: s.officialEmail ?? '', designation: s.metadata?.designation ?? '', level: null,
+  id: s.id, key: `sales:${s.id}`, name: s.name, email: s.officialEmail ?? '', designation: s.metadata?.designation ?? '', level: null,
   departments: ['Sales'], source: 'sales', orgPersonId: null, active: (SALES_ROLE_STATUSES as readonly string[]).includes(s.status),
 })
 
 const toEmployee = (c: Candidate): MasterEmployee => ({
-  key: c.key, name: c.name, email: c.email.trim(), designation: c.designation, level: c.level, departments: [...c.departments],
+  id: c.id, key: c.key, name: c.name, email: c.email.trim(), designation: c.designation, level: c.level, departments: [...c.departments],
   sources: [c.source], orgPersonId: c.orgPersonId, status: c.active ? 'active' : 'inactive',
 })
 

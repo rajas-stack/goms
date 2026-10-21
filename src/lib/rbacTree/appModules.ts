@@ -9,7 +9,7 @@ export const APP_MODULES = definePermissionNodes(null, [
   { value: 'opportunity', label: 'Opportunity' },
   { value: 'documentMaker', label: 'Document maker' },
   { value: 'documents', label: 'Documents' },
-  { value: 'teams', label: 'Teams' },
+  { value: 'teams', label: 'Directory' },
   { value: 'settings', label: 'Settings' },
   { value: 'email', label: 'E-mail' },
 ] as const, { kind: 'module' })

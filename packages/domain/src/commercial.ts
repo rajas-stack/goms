@@ -10,12 +10,14 @@ export type CommercialMasterKey =
   | 'verticals' | 'products' | 'modules' | 'features'
   | 'skuCategories' | 'unitsOfMeasure' | 'productEditions' | 'billingTypes'
   | 'taxClasses' | 'approvalMatrix' | 'currencies' | 'preSales'
+  /** Settings > Masters > Directory Types: the Directory module's dropdown (Amnex Employee, Departmental, OEMs, ...). */
+  | 'directoryTypes'
   /** Settings > Masters > Bid Tracker dropdowns (bidTrackerFields.ts). */
   | BidTrackerMasterKey
 
 export const COMMERCIAL_MASTER_KEYS: CommercialMasterKey[] = [
   'verticals', 'products', 'modules', 'features', 'skuCategories', 'unitsOfMeasure',
-  'productEditions', 'billingTypes', 'taxClasses', 'approvalMatrix', 'currencies', 'preSales',
+  'productEditions', 'billingTypes', 'taxClasses', 'approvalMatrix', 'currencies', 'preSales', 'directoryTypes',
   ...BID_TRACKER_MASTER_KEYS,
 ]
 
@@ -46,7 +48,7 @@ export const MASTER_EXTRA_FIELDS: Record<CommercialMasterKey, string[]> = {
   taxClasses: ['ratePct'],
   approvalMatrix: ['minDiscountPct', 'maxDiscountPct', 'approvalLevelLabel', 'allowAutoApproval'],
   currencies: ['symbol', 'decimalPlaces', 'exchangeRate', 'isBaseCurrency'],
-  preSales: [],
+  preSales: [], directoryTypes: [],
   ...Object.fromEntries(BID_TRACKER_MASTER_KEYS.map(k => [k, []])) as unknown as Record<BidTrackerMasterKey, string[]>,
 }
 

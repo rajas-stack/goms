@@ -14,6 +14,8 @@ import { registerDocumentMakerRoutes } from './routes/documentMakerRoutes.js'
 import { completeMailConnection } from './email/oauth.js'
 import { emailConfiguration } from './email/config.js'
 import { oauthEnabled } from './auth/oauth/config.js'
+import { completeProfileConnection } from './profileImages/oauth.js'
+import { registerProfileImageRoutes } from './routes/profileImageRoutes.js'
 
 export interface BuildAppOptions {
   // Override for tests only — production always gets the defaults below.
@@ -147,11 +149,13 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   // AUTH_PROVIDER is `both` or `oauth` (read at boot); in the default `firebase` mode this registers nothing.
   registerOAuthRoutes(app, { google: opts.oauth?.google ?? googleGateway })
   if (!oauthEnabled() && emailConfiguration().ready) app.get('/api/oauth/google/callback', async (req, reply) => {
+    if (String((req.query as any)?.state ?? '').startsWith('profile.')) return completeProfileConnection(req, reply)
     try { return await completeMailConnection(req, reply) } catch { return reply.code(503).send({ error: 'Email connection is temporarily unavailable.' }) }
   })
 
   // Document maker: file + save-callback routes for the ONLYOFFICE Document Server (JWT-authorised, not tRPC).
   registerDocumentMakerRoutes(app)
+  registerProfileImageRoutes(app)
 
   app.register(fastifyTRPCPlugin, {
     prefix: '/api/trpc',

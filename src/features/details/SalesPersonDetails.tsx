@@ -105,7 +105,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   // The roster entry carries no photo — resolve back to the full record for the face.
   const gmPerson = gmOverride ?? (derivedGm ? people.find((p) => p.officialEmail === derivedGm.email) : undefined)
   const managerValue = manager ? <PersonName person={manager} /> : '—'
-  const gmValue = gmName ? <PersonName person={{ name: gmName, photoUrl: gmPerson?.photoUrl }} /> : '—'
+  const gmValue = gmName ? <PersonName person={{ id: gmPerson?.id, name: gmName, photoUrl: gmPerson?.photoUrl }} /> : '—'
   const deptById = new Map(departments.map((d) => [d.id, d]))
   const empById = new Map(employees.map((e) => [e.id, e]))
   const oppById = new Map(opportunities.map((o) => [o.id, o]))
@@ -121,7 +121,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="flex h-full flex-col overflow-y-auto">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-line px-4 py-4">
-        <Avatar person={{ name: person.name, photoUrl: person.photoUrl }} size="md" />
+        <Avatar person={person} size="md" />
         {/* Wraps (never ellipsizes) so the full name is always readable; the
             basis keeps it from being squeezed below ~9rem before the action
             buttons drop to their own line instead. */}
@@ -365,7 +365,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
                 nameOf={(id) => empById.get(id)?.name ?? id}
                 personOf={(id) => {
                   const e = empById.get(id)
-                  return { name: e?.name ?? id, photoUrl: e?.photoUrl, vacant: e?.vacant }
+                  return { id, name: e?.name ?? id, photoUrl: e?.photoUrl, vacant: e?.vacant }
                 }}
                 onOpen={(id) => ws.select('employee', id)}
               />

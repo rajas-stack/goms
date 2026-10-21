@@ -75,7 +75,7 @@ export function TenderWebsitesSection({ kind = 'tender' }: { kind?: TenderWebsit
                       {site.dscEmployeeId && <span>DSC: {dscEmployees.find(person => person.id === site.dscEmployeeId)?.name ?? 'Assigned employee (unavailable)'}</span>}
                     </div>
                   </div>
-                  <Can module="bid.columns" action="update"><LockSwitch size="sm" unlocked={!site.editingLocked} onToggle={() => void toggleEditing(site)}
+                  <Can module="bid.columns" action="update"><LockSwitch unlocked={!site.editingLocked} onToggle={() => void toggleEditing(site)}
                     lockedLabel={`Unlock editing for ${site.name}`} unlockedLabel={`Lock editing for ${site.name}`} disabled={editLock.isPending} /></Can>
                   {site.credentials && <Button size="icon" variant="ghost" aria-label={`View credentials for ${site.name}`} onClick={() => setViewingId(site.id)}><Icon name="Eye" size={14} /></Button>}
                   {confirmingId === site.id ? (

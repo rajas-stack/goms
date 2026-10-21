@@ -118,7 +118,7 @@ export function TenderWebsiteForm({ existing, editing, busy, submitLabel, onSubm
             <div className="flex gap-1">
               <Input id={`${prefix}-user`} aria-label="User ID" autoComplete="off" value={locked ? '••••••••' : userId}
                 maxLength={200} readOnly={locked} disabled={disabled} placeholder="Portal user ID" onChange={event => setUserId(event.target.value)} />
-              {editing?.credentials && <LockSwitch size="sm" className="self-center" unlocked={!locked} onToggle={locked ? openUnlock : relock}
+              {editing?.credentials && <LockSwitch className="self-center" unlocked={!locked} onToggle={locked ? openUnlock : relock}
                 lockedLabel="Unlock User ID" unlockedLabel="Lock User ID" disabled={disabled} />}
             </div>
           </div>
@@ -127,7 +127,7 @@ export function TenderWebsiteForm({ existing, editing, busy, submitLabel, onSubm
             <div className="flex gap-1">
               <Input id={`${prefix}-password`} aria-label="Password" autoComplete="new-password" type={showPassword && !locked ? 'text' : 'password'}
                 value={locked ? '••••••••' : password} maxLength={2000} readOnly={locked} disabled={disabled} placeholder="Portal password" onChange={event => setPassword(event.target.value)} />
-              {editing?.credentials && <LockSwitch size="sm" className="self-center" unlocked={!locked} onToggle={locked ? openUnlock : relock}
+              {editing?.credentials && <LockSwitch className="self-center" unlocked={!locked} onToggle={locked ? openUnlock : relock}
                 lockedLabel="Unlock Password" unlockedLabel="Lock Password" disabled={disabled} />}
               {!locked && <Button variant="secondary" size="icon" className="h-10 w-10 shrink-0" disabled={disabled}
                 aria-label={showPassword ? 'Hide Password' : 'Show Password'} onClick={() => setShowPassword(!showPassword)}>

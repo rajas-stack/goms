@@ -16,7 +16,7 @@ export function EmailContactsMaster() {
   const [busy, setBusy] = useState(false); const [error, setError] = useState('')
   const { data: departments = [] } = useClientDepartmentOptions(!!editing)
   return <div className="space-y-4 p-4">
-    <p className="text-sm text-muted">Reviewed OEM, external delivery and department mailboxes. Internal employees remain in <Link to="/teams" className="underline">Teams</Link>; client people remain in Account Mapping.</p>
+    <p className="text-sm text-muted">Reviewed OEM, external delivery and department mailboxes. Internal employees remain in <Link to="/teams" className="underline">Directory</Link>; client people remain in Account Mapping.</p>
     {!account && <p>Sign in with your Amnex Google account to load contacts.</p>}
     {query.isLoading && <p>Loading contacts…</p>}{query.error && <p role="alert" className="text-crimson">{query.error.message}</p>}
     <div className="overflow-auto"><table className="w-full text-left text-sm"><thead className="border-b border-line"><tr>{['Name', 'Email', 'Category', 'Organization', ''].map((label, i) => <th key={i} className="p-3">{label}</th>)}</tr></thead><tbody>{query.data?.map(item => <tr key={item.id} className="border-b border-line"><td className="p-3">{item.name}</td><td className="p-3">{item.email}</td><td className="p-3">{COMMUNICATION_PARTY_LABELS[item.party]}</td><td className="p-3">{item.organization}</td><td>{canEdit && <Button size="sm" onClick={() => { setEditing(item); setError('') }}>Edit</Button>}</td></tr>)}</tbody></table></div>

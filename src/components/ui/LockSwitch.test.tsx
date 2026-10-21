@@ -36,10 +36,10 @@ describe('LockSwitch', () => {
     expect(onToggle).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps the labelled pill as the default size', () => {
+  it('uses the Bid tracker toolbar size by default', () => {
     render(<Harness />)
     const toggle = screen.getByRole('button', { name: 'Unlock editing' })
-    expect(toggle).toHaveTextContent('Locked')
-    expect(toggle).not.toHaveAttribute('title')
+    expect(toggle).toHaveClass('lock-switch--toolbar')
+    expect(toggle).toHaveAttribute('title', 'Unlock editing')
   })
 })

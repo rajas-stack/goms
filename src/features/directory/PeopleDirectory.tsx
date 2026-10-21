@@ -11,6 +11,10 @@ import { Avatar } from '@/components/ui/Avatar'
 import { cn } from '@/lib/utils'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import type { Employee, RelationshipStatus } from '@/lib/types'
+import { useProfileImages } from '@/features/dms/profileImagesClient'
+import type { ProfileImageRef } from '@/lib/useProfileImage'
+
+type DirectoryEmployee = Employee & { profileImage?: ProfileImageRef }
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 
@@ -40,7 +44,7 @@ function letterOf(name: string): string {
  *  every row mounted at once. */
 type FlatRow =
   | { kind: 'header'; letter: string }
-  | { kind: 'person'; employee: Employee }
+  | { kind: 'person'; employee: DirectoryEmployee }
 
 /** Phonebook-style list with advanced search + filters: a free-text search
  *  (name, designation, contact number, email, reporting manager) plus
@@ -48,11 +52,16 @@ type FlatRow =
  *  Selection is wired to the shared workspace context so it drives the
  *  details panel in place — the same reusable pattern the canvas uses. */
 export function PeopleDirectory({ employees: allEmployees }: { employees: Employee[] }) {
+  const profiles = useProfileImages()
   const ws = useWorkspace()
   const isNarrow = useMediaQuery('(max-width: 639.98px)')
   const { data: deptById = {} } = useEmployeeDepartments()
   // Vacant positions are seats, not people — the phonebook only lists actual employees.
-  const employees = useMemo(() => allEmployees.filter((e) => !e.vacant), [allEmployees])
+  const employees: DirectoryEmployee[] = useMemo(() => allEmployees.filter((e) => !e.vacant).map(e => {
+    if (!profiles.data?.configured) return e
+    const version = !profiles.isError ? profiles.data.versions[e.id] : undefined
+    return { ...e, photoUrl: null, profileImage: version ? { userId: e.id, version } : undefined }
+  }), [allEmployees, profiles.data, profiles.isError])
   const [query, setQuery] = useState('')
   const [designation, setDesignation] = useState('')
   const [managerId, setManagerId] = useState('')
@@ -83,10 +92,10 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
   }, [employees, deptById])
 
   const managers = useMemo(() => {
-    const photoById = new Map(employees.map((e) => [e.id, e.photoUrl] as const))
+    const photoById = new Map(employees.map((e) => [e.id, { photoUrl: e.photoUrl, profileImage: e.profileImage }] as const))
     const ids = new Set(employees.map((e) => e.managerId).filter((id): id is string => !!id))
     return [...ids]
-      .map((id) => ({ id, name: nameById.get(id) ?? 'Unknown', photoUrl: photoById.get(id) ?? null }))
+      .map((id) => ({ id, name: nameById.get(id) ?? 'Unknown', ...photoById.get(id) }))
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [employees, nameById])
 
@@ -100,7 +109,7 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
     [designations],
   )
   const managerOptions = useMemo(
-    () => managers.map((m) => ({ value: m.id, label: m.name, person: { name: m.name, photoUrl: m.photoUrl } })),
+    () => managers.map((m) => ({ value: m.id, label: m.name, person: m })),
     [managers],
   )
 
@@ -275,7 +284,7 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
 
         {selectedEmp && !selectedEmp.vacant && (
           <div className="flex items-center gap-3 border-b border-line bg-panel/40 px-4 py-3">
-            <Avatar person={{ name: selectedEmp.name, photoUrl: selectedEmp.photoUrl }} size="lg" className="font-display" />
+            <Avatar person={employees.find(e => e.id === selectedEmp.id) ?? selectedEmp} size="lg" className="font-display" />
             <div className="min-w-0">
               <p className="break-words text-sm font-semibold text-ink-900">{selectedEmp.name}</p>
               <p className="break-words text-xs text-muted">{selectedEmp.designation}</p>
@@ -345,7 +354,7 @@ export function PeopleDirectory({ employees: allEmployees }: { employees: Employ
 /** Extracted unchanged from the old inline row markup (same classes, same
  *  behavior) — just given its own component so the virtualized list above
  *  can render it per flattened row without inlining the JSX there. */
-function PersonRow({ employee: e, selected, onSelect }: { employee: Employee; selected: boolean; onSelect: () => void }) {
+function PersonRow({ employee: e, selected, onSelect }: { employee: DirectoryEmployee; selected: boolean; onSelect: () => void }) {
   return (
     <button
       onClick={onSelect}
@@ -355,7 +364,7 @@ function PersonRow({ employee: e, selected, onSelect }: { employee: Employee; se
         selected ? 'bg-ink-900 text-paper' : 'hover:bg-ink-900/[0.05]',
       )}
     >
-      <Avatar person={{ name: e.name, photoUrl: e.photoUrl }} size="sm" />
+      <Avatar person={e} size="sm" />
       <span className="min-w-0 flex-1">
         <span className={cn('block break-words text-[13px] font-medium', selected ? 'text-paper' : 'text-ink-900')}>{e.name}</span>
         <span className={cn('block break-words text-[11px]', selected ? 'text-paper/70' : 'text-muted')}>{e.designation}</span>

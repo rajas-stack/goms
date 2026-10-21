@@ -33,4 +33,5 @@ export const MASTER_PAGE_LIST: readonly MasterPageMeta[] = [
   { kind: 'approval-matrix', title: 'Approval Matrix', hint: 'Discount bands and who approves them.', modules: ['com.approvalMatrix'], wide: true },
   { kind: 'currencies', title: 'Currencies', hint: 'Currencies and exchange rates.', modules: ['com.masters'], wide: true },
   { kind: 'pre-sales', title: 'Pre-Sales', hint: 'Pre-sales reference entries for the Commercial Calculator.', modules: ['com.masters'], wide: true },
+  { kind: 'directory-types', title: 'Directory Types', hint: 'Directory dropdown: Amnex Employee, Departmental, OEMs and more.', modules: ['com.masters'], wide: true },
 ]

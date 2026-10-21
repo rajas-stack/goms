@@ -92,13 +92,13 @@ describe('TenderWebsitesSection', () => {
     expect((await repository.listTenderWebsites('verification')).map(site => site.name)).toEqual(['ISO check', 'MCA'])
   })
 
-  it('uses the compact editing lock switch on each row', async () => {
+  it('uses the Bid tracker toolbar lock switch on each row', async () => {
     await repository.createTenderWebsite({ kind: 'verification', name: 'GST', url: 'https://services.gst.gov.in' })
     renderSection('verification')
     const toggle = await screen.findByRole('button', { name: 'Lock editing for GST' })
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
     expect(toggle).toHaveAttribute('title', 'Lock editing for GST')
-    expect(toggle).toHaveClass('lock-switch--compact')
+    expect(toggle).toHaveClass('lock-switch--toolbar')
     expect(toggle).not.toHaveTextContent(/Unlocked|Locked/)
     await userEvent.click(toggle)
     const locked = await screen.findByRole('button', { name: 'Unlock editing for GST' })

@@ -9,6 +9,7 @@ import { GoogleAuthError, buildAuthUrl, type GoogleGateway } from './googleClien
 import { parseClient, safeReturnTo, webRedirectUrl, type ClientKind } from './redirect.js'
 import { SessionError, revokeFamilyByRefreshToken, rotateRefreshToken, startSession } from './sessions.js'
 import { completeMailConnection } from '../../email/oauth.js'
+import { completeProfileConnection } from '../../profileImages/oauth.js'
 import { browserBindingCookie, hasBrowserBinding } from './browserBinding.js'
 
 export interface OAuthDeps { google: GoogleGateway }
@@ -86,6 +87,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
   }))
 
   app.get('/api/oauth/google/callback', limited, guarded('callback', async (req, reply) => {
+    if (typeof req.query?.state === 'string' && req.query.state.startsWith('profile.')) return completeProfileConnection(req, reply)
     if (typeof req.query?.state === 'string' && req.query.state.startsWith('mail.')) return completeMailConnection(req, reply)
     if (!hasBrowserBinding('login', req.query?.state, req.headers.cookie)) return fail(reply, 'web', 'state')
     const clearBinding = browserBindingCookie('login', req.query.state, true)

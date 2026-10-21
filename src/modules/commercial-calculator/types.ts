@@ -61,7 +61,7 @@ export interface ProductEditionFeature {
 export type MasterEntityKey =
   | 'verticals' | 'products' | 'modules' | 'features'
   | 'skuCategories' | 'unitsOfMeasure' | 'productEditions' | 'billingTypes'
-  | 'taxClasses' | 'approvalMatrix' | 'currencies' | 'preSales'
+  | 'taxClasses' | 'approvalMatrix' | 'currencies' | 'preSales' | 'directoryTypes'
   /** Settings > Masters > Bid Tracker dropdowns (packages/domain/src/bidTrackerFields.ts). */
   | BidTrackerMasterKey
 
@@ -81,6 +81,7 @@ export interface MasterRowMap extends Record<BidTrackerMasterKey, BidTrackerMast
   approvalMatrix: ApprovalMatrixRule
   currencies: Currency
   preSales: PreSales
+  directoryTypes: BidTrackerMasterRow
 }
 
 export type MastersState = { [K in MasterEntityKey]: MasterRowMap[K][] }

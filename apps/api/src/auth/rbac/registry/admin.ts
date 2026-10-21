@@ -1,4 +1,4 @@
-import { read, remove, write } from './helpers.js'
+import { read, readAny, remove, write } from './helpers.js'
 import type { PolicyEntry } from './types.js'
 import { EMAIL_CENTER_PROCEDURES } from '@goms/domain'
 
@@ -18,6 +18,13 @@ export const adminPolicy: Record<string, PolicyEntry> = {
   'auth.me': { requirements: [], kind: 'self' },
   'googleIntegrations.get': { requirements: [], kind: 'self' },
   'googleIntegrations.save': { requirements: [], kind: 'self' },
+  'profileImages.status': { requirements: [read('admin.access')] },
+  'profileImages.folders': { requirements: [read('admin.access')] },
+  'profileImages.connect': { requirements: [write('admin.access')] },
+  'profileImages.test': { requirements: [write('admin.access')] },
+  'profileImages.save': { requirements: [write('admin.access')] },
+  'profileImages.sync': { requirements: [write('admin.access')] },
+  'profileImages.index': { requirements: [readAny('am.contacts', 'team.org', 'team.sales')] },
   'access.listOverrides': { requirements: [read('admin.access')] },
   'access.readiness': { requirements: [read('admin.access')] },
   'access.unmatchedOverrides': { requirements: [read('admin.access')] },
