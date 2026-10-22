@@ -51,6 +51,21 @@ export function ttlSetting(raw: string | undefined, fallback: number): number {
 export const accessTtlSeconds = (): number => ttlSetting(process.env.AUTH_ACCESS_TTL_SECONDS, 900)
 export const refreshTtlDays = (): number => ttlSetting(process.env.AUTH_REFRESH_TTL_DAYS, 30)
 
+/** Per client IP, per OAuth endpoint (start, callback, exchange, refresh, logout), per 5 minutes. Each endpoint has its OWN counter: a route that sets its own
+ *  limit is governed only by it, so the app-wide 300-per-5-minutes limit does NOT also apply to these endpoints (see oauthRateLimit.test.ts). */
+export const OAUTH_RATE_LIMIT_DEFAULT = 60
+/** The most the override may ever set. It can lower the limit or raise it to the app-wide figure, never past it, and it can never switch limiting off. */
+export const OAUTH_RATE_LIMIT_CEILING = 300
+/** AUTH_OAUTH_RATE_LIMIT_MAX: a plain positive integer from 1 to 300 (digits only, no sign, decimal point or exponent). ANYTHING else (empty is "unset") falls back to
+ *  the default 60 and logs one value-free warning: a bad setting can neither disable the limit nor loosen it. Read when the routes are registered, i.e. at boot. */
+export function oauthRateLimitMax(raw: string | undefined = process.env.AUTH_OAUTH_RATE_LIMIT_MAX): number {
+  const text = (raw ?? '').trim()
+  if (text === '') return OAUTH_RATE_LIMIT_DEFAULT
+  if (/^[1-9][0-9]{0,2}$/.test(text) && Number(text) <= OAUTH_RATE_LIMIT_CEILING) return Number(text)
+  console.warn(JSON.stringify({ event: 'auth.invalid_oauth_rate_limit', using: OAUTH_RATE_LIMIT_DEFAULT }))
+  return OAUTH_RATE_LIMIT_DEFAULT
+}
+
 export function oauthConfig(): OAuthConfig {
   const required = ['GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_OAUTH_REDIRECT_URI', 'AUTH_SESSION_SECRET']
   const missing = required.filter((name) => !process.env[name]?.trim())

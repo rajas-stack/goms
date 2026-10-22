@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { signAccessToken } from './accessToken.js'
-import { OAuthConfigError, appScheme, oauthConfig, oauthEnabled, sessionKey } from './config.js'
+import { OAuthConfigError, appScheme, oauthConfig, oauthEnabled, oauthRateLimitMax, sessionKey } from './config.js'
 import { createExchangeCode, redeemExchangeCode } from './exchangeCodes.js'
 import { consumeFlow, createFlow } from './flows.js'
 import { GoogleAuthError, buildAuthUrl, type GoogleGateway } from './googleClient.js'
@@ -44,7 +44,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
   if (!oauthEnabled()) return
 
   // Tighter than the global limiter: these are the only unauthenticated, state-creating endpoints.
-  const limited = { config: { rateLimit: { max: 60, timeWindow: '5 minutes' } } }
+  const limited = { config: { rateLimit: { max: oauthRateLimitMax(), timeWindow: '5 minutes' } } }
   // The three POST bodies are tiny JSON ({code, client} / {refreshToken}); the app-wide 8 MB limit is for the admin import, not for these.
   const postRoute = { ...limited, bodyLimit: 4096 }
 
