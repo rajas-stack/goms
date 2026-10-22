@@ -9,15 +9,17 @@ export interface SessionDeps {
   locks: LockManagerLike | null
   now: () => number
 }
-export interface SessionUser { email: string }
+/** `uid` is the access token's subject: the same id the API derives for this person (`g:<google sub>`). Absent only if the token carried none. */
+export interface SessionUser { email: string; uid?: string }
 type Listener = (user: SessionUser | null, loading: boolean) => void
 
 const REFRESH_SKEW_MS = 60_000
 const LOCK_NAME = 'goms-auth-refresh'
 
-function decodeAccess(jwt: string): { email: string; expiresAt: number } {
+function decodeAccess(jwt: string): { email: string; uid?: string; expiresAt: number } {
   const payload = JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
-  return { email: String(payload.email), expiresAt: Number(payload.exp) * 1000 }
+  const uid = typeof payload.sub === 'string' && payload.sub !== '' ? payload.sub : undefined
+  return { email: String(payload.email), ...(uid ? { uid } : {}), expiresAt: Number(payload.exp) * 1000 }
 }
 
 /** The lifetime the server states, in seconds - only when it is a usable positive number. */
@@ -26,7 +28,8 @@ const usableExpiresIn = (v: unknown): v is number => typeof v === 'number' && Nu
 /** The browser/app side of the GOMS session. Access token: memory only. Refresh token: the injected store. Pure of globals so it
  *  is unit-testable; `oauthProvider.ts` wires the real fetch, storage and locks. */
 export function createSession(deps: SessionDeps) {
-  let access: { token: string; expiresAt: number; email: string } | null = null
+  let access: { token: string; expiresAt: number; email: string; uid?: string } | null = null
+  const publicUser = (): SessionUser | null => (access ? { email: access.email, ...(access.uid ? { uid: access.uid } : {}) } : null)
   let loading = true
   let inflight: Promise<string | null> | null = null
   let ready: Promise<void> = Promise.resolve()
@@ -37,14 +40,14 @@ export function createSession(deps: SessionDeps) {
   /** One throwing subscriber must not skip the others, abort signOut before store.clear(), or reject init()'s `ready`. Fixed message only. */
   const emit = () => {
     for (const l of listeners) {
-      try { l(access ? { email: access.email } : null, loading) } catch { console.error('An auth state listener failed.') }
+      try { l(publicUser(), loading) } catch { console.error('An auth state listener failed.') }
     }
   }
   /** Expiry is the DEVICE clock at receipt + the server's `expiresIn`: the JWT `exp` is server time, and a device clock that is fast (or slow)
    *  would otherwise refresh on every read (or serve an expired token). The JWT is only decoded for the email, and for `exp` as a fallback. */
   const setAccess = (token: string, expiresIn?: unknown) => {
     const decoded = decodeAccess(token)
-    access = { token, email: decoded.email, expiresAt: usableExpiresIn(expiresIn) ? deps.now() + expiresIn * 1000 : decoded.expiresAt }
+    access = { token, email: decoded.email, ...(decoded.uid ? { uid: decoded.uid } : {}), expiresAt: usableExpiresIn(expiresIn) ? deps.now() + expiresIn * 1000 : decoded.expiresAt }
   }
   const post = (path: string, body: unknown) =>
     deps.fetchFn(`${deps.apiBase}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -86,7 +89,7 @@ export function createSession(deps: SessionDeps) {
   }
 
   return {
-    subscribe(cb: Listener): () => void { listeners.add(cb); cb(access ? { email: access.email } : null, loading); return () => { listeners.delete(cb) } },
+    subscribe(cb: Listener): () => void { listeners.add(cb); cb(publicUser(), loading); return () => { listeners.delete(cb) } },
     async init(): Promise<void> {
       ready = (async () => { try { if (await deps.store.get()) await refresh() } catch { /* transient: getAccessToken() retries */ } finally { loading = false; emit() } })()
       await ready

@@ -4,6 +4,10 @@ export interface AuthUser {
   photoUrl: string | null
   /** Display-only hint for the sign-in screen. The API re-verifies identity on every request and stays the authority. */
   emailVerified: boolean
+  /** The id the API knows this person by: a Firebase uid, or `g:<google sub>` for a direct Google OAuth session. Absent only if the provider has none. */
+  uid?: string
+  /** Google's stable subject id for this person (the same number under either provider). */
+  googleId?: string
 }
 
 /** What the rest of the app may know about "who is signed in". Firebase and the GOMS OAuth session both implement it,

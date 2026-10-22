@@ -20,9 +20,15 @@ describe('firebaseProvider (must behave exactly like the pre-facade code)', () =
   it('maps a Firebase user and reports loading=false once Firebase answers', () => {
     const seen: unknown[] = []
     firebaseProvider.subscribe((u, loading) => seen.push([u, loading]))
-    fb.listeners[0]({ email: 'a@amnex.com', displayName: 'Asha', photoURL: 'p.png', emailVerified: true })
+    fb.listeners[0]({ uid: 'fb-1', email: 'a@amnex.com', displayName: 'Asha', photoURL: 'p.png', emailVerified: true, providerData: [{ providerId: 'password', uid: 'x' }, { providerId: 'google.com', uid: '1029384756' }] })
     fb.listeners[0](null)
-    expect(seen).toEqual([[{ email: 'a@amnex.com', displayName: 'Asha', photoUrl: 'p.png', emailVerified: true }, false], [null, false]])
+    expect(seen).toEqual([[{ email: 'a@amnex.com', displayName: 'Asha', photoUrl: 'p.png', emailVerified: true, uid: 'fb-1', googleId: '1029384756' }, false], [null, false]])
+  })
+  it('a Firebase user without a Google provider entry has a uid but no googleId (and never throws)', () => {
+    const seen: unknown[] = []
+    firebaseProvider.subscribe((u) => seen.push(u))
+    fb.listeners[0]({ uid: 'fb-2', email: 'b@amnex.com', displayName: null, photoURL: null, emailVerified: true })
+    expect(seen[0]).toMatchObject({ uid: 'fb-2', googleId: undefined })
   })
   it('with no Firebase config: immediately signed-out and not loading (never throws)', () => {
     fb.auth = null

@@ -2,7 +2,10 @@ import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebas
 import { auth, googleProvider } from '@/lib/firebaseAuth'
 import type { AuthProviderApi, AuthUser } from './types'
 
-const toUser = (u: User): AuthUser => ({ email: u.email, displayName: u.displayName, photoUrl: u.photoURL, emailVerified: u.emailVerified })
+const toUser = (u: User): AuthUser => ({
+  email: u.email, displayName: u.displayName, photoUrl: u.photoURL, emailVerified: u.emailVerified,
+  uid: u.uid, googleId: u.providerData?.find((p) => p.providerId === 'google.com')?.uid,
+})
 
 /** The existing Firebase behaviour, unchanged, behind the facade. */
 export const firebaseProvider: AuthProviderApi = {

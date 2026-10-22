@@ -8,7 +8,7 @@ const { env } = vi.hoisted(() => {
   return { env: { assign } }
 })
 vi.mock('@capacitor/core', () => ({ Capacitor: { isPluginAvailable: () => false } }))
-import { inShell, oauthProvider } from './oauthProvider'
+import { inShell, oauthProvider, toAuthUser } from './oauthProvider'
 
 beforeEach(() => env.assign.mockReset())
 
@@ -39,5 +39,18 @@ describe('oauthProvider (plain browser)', () => {
   })
   it('with no stored session, headers are {} and the user is signed out', async () => {
     await expect(oauthProvider.getAuthorizationHeaders()).resolves.toEqual({})
+  })
+})
+
+describe('toAuthUser (what the rest of the app may know about an OAuth session)', () => {
+  it('carries the API uid (g:<google sub>) and the Google subject id, and is a verified identity', () => {
+    expect(toAuthUser({ email: 'asha@amnex.com', uid: 'g:1029384756' })).toEqual({
+      email: 'asha@amnex.com', displayName: null, photoUrl: null, emailVerified: true, uid: 'g:1029384756', googleId: '1029384756',
+    })
+  })
+  it('has no googleId when the uid is not a g:<sub> identity, and no uid when the token carried none', () => {
+    expect(toAuthUser({ email: 'asha@amnex.com', uid: 'something-else' })).toMatchObject({ uid: 'something-else', googleId: undefined })
+    expect(toAuthUser({ email: 'asha@amnex.com', uid: 'g:' })).toMatchObject({ googleId: undefined })
+    expect(toAuthUser({ email: 'asha@amnex.com' })).toMatchObject({ uid: undefined, googleId: undefined })
   })
 })

@@ -2,9 +2,9 @@ import { hasCapability, isGomsShell, shellScheme } from '@/lib/nativeShell'
 import { bootstrapAuth, bootstrapNativeAuth, HANDOFF_PARAMS } from './bootstrap'
 import { ShellUpdateRequiredError } from './errors'
 import { createAuthFetch } from './authFetch'
-import { createSession, type LockManagerLike } from './session'
+import { createSession, type LockManagerLike, type SessionUser } from './session'
 import { selectTokenStore } from './stores'
-import type { AuthProviderApi } from './types'
+import type { AuthProviderApi, AuthUser } from './types'
 
 const apiBase = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '').replace(/\/$/, '')
 /** True only inside the GOMS Android shell (user-agent token set by native code), never merely "some Capacitor webview". */
@@ -27,10 +27,17 @@ export function webSignInUrl(): string {
   return `${apiBase}/api/oauth/google/start?client=web&return_to=${encodeURIComponent(returnTo)}`
 }
 
+/** A GOMS session is always a verified @amnex.com identity (the API refuses to issue one otherwise). `g:<sub>` is the uid the API derives from
+ *  Google's subject id, so the part after the prefix is that person's Google id. */
+export function toAuthUser(u: SessionUser): AuthUser {
+  const googleId = u.uid?.startsWith('g:') && u.uid.length > 2 ? u.uid.slice(2) : undefined
+  return { email: u.email, displayName: null, photoUrl: null, emailVerified: true, uid: u.uid, googleId }
+}
+
 export const oauthProvider: AuthProviderApi = {
   kind: 'oauth',
   get configured() { return apiBase !== '' },
-  subscribe: (cb) => session.subscribe((u, loading) => cb(u ? { email: u.email, displayName: null, photoUrl: null, emailVerified: true } : null, loading)),
+  subscribe: (cb) => session.subscribe((u, loading) => cb(u ? toAuthUser(u) : null, loading)),
   async signIn() {
     // Decided BEFORE any navigation. Google rejects embedded WebViews, so the shell must never take the full-page web redirect.
     if (!inShell) { window.location.assign(webSignInUrl()); return }

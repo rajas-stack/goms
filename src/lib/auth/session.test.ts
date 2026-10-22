@@ -22,6 +22,26 @@ function setup(opts: { store?: ReturnType<typeof memoryStore>; locks?: LockManag
 }
 const fresh = (email = 'a@amnex.com', ms = 1_000_000) => jwt(email, Math.floor(ms / 1000) + 900)
 
+describe('identity claims', () => {
+  const withSub = (email: string, sub: unknown, ms = 1_000_000) => `${b64({ alg: 'HS256' })}.${b64({ email, sub, exp: Math.floor(ms / 1000) + 900 })}.sig`
+  const signedInUser = async (token: string) => {
+    const f = vi.fn(async () => json(200, { accessToken: token, refreshToken: 'R2', expiresIn: 900 }))
+    const { session } = setup({ fetchFn: f as unknown as typeof fetch })
+    const seen: unknown[] = []
+    session.subscribe((u) => seen.push(u))
+    await session.init()
+    return seen[seen.length - 1]
+  }
+  it('reports the token subject as uid (the same id the API derives: g:<google sub>)', async () => {
+    expect(await signedInUser(withSub('a@amnex.com', 'g:1029384756'))).toEqual({ email: 'a@amnex.com', uid: 'g:1029384756' })
+  })
+  it.each([['absent', undefined], ['empty', ''], ['not a string', 42]])('reports no uid when the subject is %s', async (_n, sub) => {
+    const u = (await signedInUser(withSub('a@amnex.com', sub))) as Record<string, unknown>
+    expect(u).toEqual({ email: 'a@amnex.com' })
+    expect('uid' in u).toBe(false)
+  })
+})
+
 describe('init / getAccessToken', () => {
   it('with a stored refresh token it refreshes once at startup and reports the signed-in user', async () => {
     const f = vi.fn(async () => json(200, { accessToken: fresh(), refreshToken: 'R2', expiresIn: 900 }))
