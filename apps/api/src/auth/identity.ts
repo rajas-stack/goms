@@ -89,7 +89,16 @@ export async function verifyLinkedIdentity(authHeader: string | undefined): Prom
       throw e
     }
   }
-  if (firebaseAccepted()) return verifyFirebaseIdentity(authHeader)
+  if (firebaseAccepted()) {
+    const identity = await verifyFirebaseIdentity(authHeader)
+    // Reached only in `both` (`firebase` returned above, `oauth` does not accept Firebase tokens). While the API accepts either token
+    // kind this is the evidence of who still sends Firebase tokens (the web build, an old Android build, a stale tab), and so of what the
+    // OAuth-only switch would cut off. `firebase` mode logs nothing: every request is a Firebase request, so there is nothing to learn.
+    // One event per verification (a request can verify more than once), so read it as zero / non-zero and as a trend, not as a head
+    // count. It carries no token, uid, email, cookie or query value.
+    console.info(JSON.stringify({ event: 'auth.firebase_token_accepted' }))
+    return identity
+  }
   throw new TRPCError({ code: 'UNAUTHORIZED', message: 'Your session has expired. Please sign in again.' })
 }
 
