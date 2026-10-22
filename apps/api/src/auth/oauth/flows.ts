@@ -3,9 +3,9 @@ import { pkceChallenge, randomToken, sha256Hex } from './crypto.js'
 import type { ClientKind } from './redirect.js'
 
 /** An in-flight authorization request, valid for 10 minutes. `state` is stored hashed; the PKCE verifier and nonce stay server-side. */
-export async function createFlow(client: ClientKind, returnTo: string) {
+export async function createFlow(client: ClientKind, returnTo: string, boundState?: string) {
   await pool.query('DELETE FROM auth_flows WHERE expires_at < now()')
-  const state = randomToken(), verifier = randomToken(), nonce = randomToken()
+  const state = boundState ?? randomToken(), verifier = randomToken(), nonce = randomToken()
   await pool.query(
     `INSERT INTO auth_flows (state_hash, code_verifier, nonce, client, return_to, expires_at)
      VALUES ($1, $2, $3, $4, $5, now() + interval '10 minutes')`,

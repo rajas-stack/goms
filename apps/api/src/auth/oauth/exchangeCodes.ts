@@ -4,9 +4,9 @@ import { parseClient, type ClientKind } from './redirect.js'
 
 /** The GOMS one-time exchange code. NOT PKCE-bound: protected by randomness, hashing at rest, a 60 s life, atomic single use,
  *  and binding to the verified identity, family and client kind. No token exists until it is redeemed. */
-export async function createExchangeCode(i: { uid: string; email: string; familyId: string; client: ClientKind }): Promise<string> {
+export async function createExchangeCode(i: { uid: string; email: string; familyId: string; client: ClientKind; code?: string }): Promise<string> {
   await pool.query(`DELETE FROM auth_exchange_codes WHERE expires_at < now() - interval '1 hour'`)
-  const code = randomToken()
+  const code = i.code ?? randomToken()
   await pool.query(
     `INSERT INTO auth_exchange_codes (code_hash, uid, email, family_id, client, expires_at)
      VALUES ($1, $2, $3, $4, $5, now() + interval '60 seconds')`,

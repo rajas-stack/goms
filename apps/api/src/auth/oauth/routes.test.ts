@@ -14,6 +14,13 @@ let google: ReturnType<typeof fakeGoogle>
 let warnSpy: ReturnType<typeof vi.spyOn>
 let errorSpy: ReturnType<typeof vi.spyOn>
 const ORIGIN = 'https://goms.test'
+const cookieJar = new Map<string, string>()
+const browserCookies = () => [...cookieJar].map(([name, value]) => name + '=' + value).join('; ')
+function receiveCookies<T extends { headers: Record<string, unknown> }>(r: T): T {
+  const header = r.headers['set-cookie']; const values = Array.isArray(header) ? header : header ? [header] : []
+  for (const raw of values) { const value = String(raw); const pair = value.split(';')[0]; const index = pair.indexOf('='); const name = pair.slice(0, index); if (/Max-Age=0(?:;|$)/i.test(value)) cookieJar.delete(name); else cookieJar.set(name, pair.slice(index + 1)) }
+  return r
+}
 
 async function boot(over?: Parameters<typeof fakeGoogle>[0]) {
   google = fakeGoogle(over)
@@ -22,26 +29,31 @@ async function boot(over?: Parameters<typeof fakeGoogle>[0]) {
 beforeEach(async () => {
   warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
   errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-  useOauthEnv('both'); await cleanupOauthTables()
+  cookieJar.clear(); useOauthEnv('both'); await cleanupOauthTables()
 })
 afterEach(async () => { await app?.close(); clearOauthEnv(); warnSpy.mockRestore(); errorSpy.mockRestore(); await cleanupOauthTables() })
 
 const loc = (r: { headers: Record<string, unknown> }) => String(r.headers.location)
 async function start(client: 'web' | 'app', returnTo = '/sales/roster') {
   const r = await app.inject({ method: 'GET', url: `/api/oauth/google/start?client=${client}&return_to=${encodeURIComponent(returnTo)}` })
+  receiveCookies(r)
   const u = new URL(loc(r))
   return { r, u, state: u.searchParams.get('state')!, nonce: u.searchParams.get('nonce')!, challenge: u.searchParams.get('code_challenge')! }
 }
 const callback = (state: string, code = 'google-code') =>
-  app.inject({ method: 'GET', url: `/api/oauth/google/callback?code=${code}&state=${encodeURIComponent(state)}` })
-const post = (url: string, payload: unknown) => app.inject({ method: 'POST', url, payload: payload as object })
+  app.inject({ method: 'GET', headers: { cookie: browserCookies() }, url: `/api/oauth/google/callback?code=${code}&state=${encodeURIComponent(state)}` }).then(receiveCookies)
+const post = async (url: string, payload: unknown) => { const r = await app.inject({ method: 'POST', url, headers: { cookie: browserCookies() }, payload: payload as object }); receiveCookies(r); return r }
+
+// useOauthEnv() loads a full Google credential set. With one, the Email Center is "ready" and registers the shared callback even when login is off
+// (see the next describe), so the pure no-op contract is only asserted for a deployment with no Google credentials.
+const withoutGoogleCredentials = () => { delete process.env.GOOGLE_OAUTH_CLIENT_ID; delete process.env.GOOGLE_OAUTH_CLIENT_SECRET }
 
 describe('AUTH_PROVIDER=firebase (the default) is a true no-op: no OAuth route is registered', () => {
   const ROUTES = [['GET', '/api/oauth/google/start?client=web'], ['GET', '/api/oauth/google/callback?state=x&code=y'],
     ['POST', '/api/oauth/exchange'], ['POST', '/api/oauth/refresh'], ['POST', '/api/oauth/logout']] as const
   const modes: Array<[string, () => void]> = [
-    ['unset', () => { delete process.env.AUTH_PROVIDER }],
-    ["explicitly 'firebase'", () => { process.env.AUTH_PROVIDER = 'firebase' }],
+    ['unset', () => { delete process.env.AUTH_PROVIDER; withoutGoogleCredentials() }],
+    ["explicitly 'firebase'", () => { process.env.AUTH_PROVIDER = 'firebase'; withoutGoogleCredentials() }],
   ]
   // Fastify's default 404 body echoes the request line ("Route GET:/x not found"); normalise only that echo so everything else is compared verbatim.
   const shape = (r: { statusCode: number; body: string; headers: Record<string, unknown> }, method: string, url: string) =>
@@ -221,7 +233,7 @@ describe('failure paths never issue a code or a token', () => {
   it('the user denied consent at Google -> "denied"', async () => {
     await boot()
     const s = await start('web')
-    const r = await app.inject({ method: 'GET', url: `/api/oauth/google/callback?error=access_denied&state=${encodeURIComponent(s.state)}` })
+    const r = await app.inject({ method: 'GET', headers: { cookie: browserCookies() }, url: `/api/oauth/google/callback?error=access_denied&state=${encodeURIComponent(s.state)}` })
     expect(reasonOf(r)).toBe('denied')
     expect(await codes()).toBe(0)
   })
@@ -297,10 +309,11 @@ describe('failure logging and page safety', () => {
     await boot()
     const s = await start('app', '/x"><script>alert(1)</script>')
     const evil = encodeURIComponent('"><script>alert(1)</script>')
-    const cb = await app.inject({ method: 'GET', url: `/api/oauth/google/callback?code=${evil}&state=${encodeURIComponent(s.state)}` })
+    const cb = await app.inject({ method: 'GET', headers: { cookie: browserCookies() }, url: `/api/oauth/google/callback?code=${evil}&state=${encodeURIComponent(s.state)}` })
     expect(cb.body).not.toContain('<script')
     expect(cb.body).not.toContain('alert(1)')
-    const denied = await app.inject({ method: 'GET', url: `/api/oauth/google/callback?error=${evil}&state=${encodeURIComponent((await start('app')).state)}` })
+    const deniedState = (await start('app')).state // start first: its binding cookie must be in the jar before the callback request's headers are built
+    const denied = await app.inject({ method: 'GET', headers: { cookie: browserCookies() }, url: `/api/oauth/google/callback?error=${evil}&state=${encodeURIComponent(deniedState)}` })
     expect(denied.body).not.toContain('<script')
     expect(denied.body).toContain('com.gorms.app://auth?error=denied')
     expect(denied.headers['cache-control']).toMatch(/no-store/)
@@ -419,5 +432,44 @@ describe('the POST bodies are small: 4 KB limit on exchange, refresh and logout'
   it('an ordinary request body is far below the limit', async () => {
     const s = await start('web'); const code = new URL(loc(await callback(s.state))).searchParams.get('auth_code')!
     expect((await post('/api/oauth/exchange', { code, client: 'web' })).statusCode).toBe(200)
+  })
+})
+
+
+describe('OAuth browser binding', () => {
+  beforeEach(() => boot())
+  it.each(['web', 'app'] as const)('rejects a %s callback opened in another browser without consuming the legitimate flow', async client => {
+    const s = await start(client)
+    // The ONLY cookie Firebase Hosting forwards to Cloud Run, and Hosting drops Set-Cookie unless Cache-Control has `private`.
+    expect(String(s.r.headers['set-cookie'])).toMatch(/^__session=[A-Za-z0-9_-]{43}\.[A-Za-z0-9_-]{43}; HttpOnly; SameSite=Lax; Path=\/api; Max-Age=3600; Secure$/)
+    expect(String(s.r.headers['cache-control'])).toContain('private')
+    const foreign = await app.inject({ method: 'GET', url: '/api/oauth/google/callback?code=attacker-code&state=' + encodeURIComponent(s.state) })
+    expect(loc(foreign)).toContain('auth_error=state')
+    expect(google.calls.exchange).toHaveLength(0)
+    const legitimate = await callback(s.state)
+    expect(legitimate.statusCode).toBe(client === 'web' ? 302 : 200)
+    expect(google.calls.exchange).toHaveLength(1)
+  })
+  it('rejects a web exchange code pasted into another browser and allows its original browser once', async () => {
+    const s = await start('web'); const cb = await callback(s.state)
+    const code = new URL(loc(cb)).searchParams.get('auth_code')!
+    const foreign = await app.inject({ method: 'POST', url: '/api/oauth/exchange', payload: { code, client: 'web' } })
+    expect(foreign.statusCode).toBe(401)
+    expect((await pool.query('SELECT count(*)::int AS n FROM auth_sessions')).rows[0].n).toBe(0)
+    expect((await post('/api/oauth/exchange', { code, client: 'web' })).statusCode).toBe(200)
+    expect((await post('/api/oauth/exchange', { code, client: 'web' })).statusCode).toBe(401)
+  })
+})
+
+describe('AUTH_PROVIDER=firebase with the Email Center configured: only the shared callback exists', () => {
+  beforeEach(async () => { process.env.AUTH_PROVIDER = 'firebase'; await boot() })
+  it('registers no login route, and the callback refuses a state it did not issue', async () => {
+    for (const [method, url] of [['GET', '/api/oauth/google/start?client=web'], ['POST', '/api/oauth/exchange'], ['POST', '/api/oauth/refresh'], ['POST', '/api/oauth/logout']] as const) {
+      expect((await app.inject({ method, url, payload: method === 'POST' ? {} : undefined })).statusCode, url).toBe(404)
+    }
+    const forged = await app.inject({ method: 'GET', url: '/api/oauth/google/callback?state=x&code=y' })
+    expect(forged.statusCode).toBe(400)
+    expect(String(forged.headers['set-cookie'] ?? '')).not.toContain('goms_exchange')
+    expect((await pool.query('SELECT count(*)::int AS n FROM auth_exchange_codes')).rows[0].n).toBe(0)
   })
 })

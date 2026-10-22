@@ -10,6 +10,9 @@ import { beginSecurityAudit, finishSecurityAudit } from './security/audit.js'
 import { requireSystemAdmin } from './auth/rbac/systemAdminOnly.js'
 
 export interface Context {
+  setCookie?: (value: string) => void
+  /** The request's Cookie header: Email Center / Profile Images connections reuse the caller's `__session` browser id. */
+  requestCookies?: string
   authHeader?: string
   user?: AuthenticatedUser
   verifiedIdentity?: Promise<AuthenticatedUser>

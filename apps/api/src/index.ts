@@ -30,6 +30,8 @@ import { credentialPassphrasesRouter } from './routers/credentialPassphrases.js'
 import { googleIntegrationsRouter } from './routers/googleIntegrations.js'
 import { makerDocumentsRouter } from './routers/makerDocuments.js'
 import { rbacTreeRouter } from './routers/rbacTree.js'
+import { emailCenterRouter } from './routers/emailCenter.js'
+import { profileImagesRouter } from './routers/profileImages.js'
 
 export const appRouter = router({
   health: healthRouter, customers: customersRouter, hierarchy: hierarchyRouter,
@@ -50,5 +52,7 @@ export const appRouter = router({
   googleIntegrations: googleIntegrationsRouter,
   makerDocuments: makerDocumentsRouter,
   rbacTree: rbacTreeRouter,
+  emailCenter: emailCenterRouter,
+  profileImages: profileImagesRouter,
 })
 export type AppRouter = typeof appRouter

@@ -10,6 +10,10 @@ import { OperationBudget } from './security/operationLimit.js'
 import { googleGateway, type GoogleGateway } from './auth/oauth/googleClient.js'
 import { registerOAuthRoutes } from './auth/oauth/routes.js'
 import { registerDocumentMakerRoutes } from './routes/documentMakerRoutes.js'
+import { completeMailConnection } from './email/oauth.js'
+import { emailConfiguration } from './email/config.js'
+import { oauthEnabled } from './auth/oauth/config.js'
+import { completeProfileConnection } from './profileImages/oauth.js'
 
 export interface BuildAppOptions {
   // Override for tests only — production always gets the defaults below.
@@ -127,6 +131,12 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   // Google OAuth login (docs/superpowers/specs/2026-10-06-google-oauth-login-design.md). Routes are registered only when
   // AUTH_PROVIDER is `both` or `oauth` (read at boot); in the default `firebase` mode this registers nothing.
   registerOAuthRoutes(app, { google: opts.oauth?.google ?? googleGateway })
+  // Gmail / Profile Images connections share Google's one registered callback. When sign-in is off (AUTH_PROVIDER=firebase) the OAuth
+  // routes above are absent, so this callback exists only once the Email Center credentials are fully configured; with none it registers nothing.
+  if (!oauthEnabled() && emailConfiguration().ready) app.get('/api/oauth/google/callback', async (req, reply) => {
+    if (String((req.query as any)?.state ?? '').startsWith('profile.')) return completeProfileConnection(req, reply)
+    try { return await completeMailConnection(req, reply) } catch { return reply.code(503).send({ error: 'Email connection is temporarily unavailable.' }) }
+  })
 
   // Document maker: file + save-callback routes for the ONLYOFFICE Document Server (JWT-authorised, not tRPC).
   registerDocumentMakerRoutes(app)
@@ -135,7 +145,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     prefix: '/api/trpc',
     trpcOptions: {
       router: appRouter,
-      createContext: ({ req }: CreateFastifyContextOptions) => ({ authHeader: req.headers.authorization }),
+      createContext: ({ req, res }: CreateFastifyContextOptions) => ({ authHeader: req.headers.authorization, requestCookies: req.headers.cookie, setCookie: (value: string) => { res.header('Set-Cookie', value) } }),
       // Do not put raw database errors or request secrets into logs.
       onError({ path, error }: { path?: string; error: TRPCError }) {
         if (error.code === 'INTERNAL_SERVER_ERROR') {

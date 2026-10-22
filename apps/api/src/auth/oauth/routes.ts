@@ -8,6 +8,9 @@ import { consumeFlow, createFlow } from './flows.js'
 import { GoogleAuthError, buildAuthUrl, type GoogleGateway } from './googleClient.js'
 import { parseClient, safeReturnTo, webRedirectUrl, type ClientKind } from './redirect.js'
 import { SessionError, revokeFamilyByRefreshToken, rotateRefreshToken, startSession } from './sessions.js'
+import { completeMailConnection } from '../../email/oauth.js'
+import { completeProfileConnection } from '../../profileImages/oauth.js'
+import { browserId, ensureBrowser, loginCookieSecure, newBoundToken, sendBrowserCookie, tokenBoundTo } from './browserBinding.js'
 
 export interface OAuthDeps { google: GoogleGateway }
 
@@ -20,7 +23,7 @@ const reasonFor = (e: unknown): Reason => {
 /** A log label only if it is a short identifier-like token; anything else (free text, a message that ended up in `name`/`code`) is dropped. */
 const safeLabel = (v: unknown): string | undefined => (typeof v === 'string' && /^[A-Za-z0-9_.-]{1,48}$/.test(v) ? v : undefined)
 
-const noStore = (reply: FastifyReply) => reply.header('Cache-Control', 'no-store').header('Pragma', 'no-cache').header('Referrer-Policy', 'no-referrer')
+const noStore = (reply: FastifyReply) => reply.header('Cache-Control', 'private, no-store').header('Pragma', 'no-cache').header('Referrer-Policy', 'no-referrer')
 const notFound = (reply: FastifyReply) => reply.code(404).send({ error: 'Not found' })
 
 /** The page an Android Custom Tab lands on. `scheme` is this deployment's own app scheme (`appScheme()`), so a dev API can only open the dev app. A meta refresh plus a visible link (browsers may refuse an unprompted custom-scheme
@@ -78,11 +81,19 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
     const client = parseClient(req.query?.client)
     if (!client) return reply.code(400).send({ error: 'invalid_request' })
     oauthConfig() // fail fast with a 503 before any state is stored
-    const flow = await createFlow(client, safeReturnTo(req.query?.return_to))
+    // The state is minted for THIS browser (its opaque `__session` id), so only this browser's callback verifies.
+    const browser = ensureBrowser(req.headers.cookie, loginCookieSecure())
+    const flow = await createFlow(client, safeReturnTo(req.query?.return_to), newBoundToken('login', browser.id))
+    sendBrowserCookie(reply, browser.setCookie)
     return reply.code(302).header('Location', buildAuthUrl(flow)).send()
   }))
 
   app.get('/api/oauth/google/callback', limited, guarded('callback', async (req, reply) => {
+    if (typeof req.query?.state === 'string' && req.query.state.startsWith('profile.')) return completeProfileConnection(req, reply)
+    if (typeof req.query?.state === 'string' && req.query.state.startsWith('mail.')) return completeMailConnection(req, reply)
+    // Checked BEFORE the one-use flow is consumed, so a foreign browser can neither pass nor burn the legitimate flow.
+    const browser = browserId(req.headers.cookie)
+    if (!tokenBoundTo('login', req.query?.state, browser)) return fail(reply, 'web', 'state')
     const flow = await consumeFlow(req.query?.state)
     if (!flow) return fail(reply, 'web', 'state') // unknown, replayed or expired; we cannot know which client it was
     if (flow.client === 'app') appScheme() // validate the deployment's scheme BEFORE anything is issued (throws -> generic 503)
@@ -98,7 +109,8 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
       return fail(reply, flow.client, reasonFor(e))
     }
     // Only now, after every Google check, does anything exist: a one-time code. No session or token yet.
-    const exchange = await createExchangeCode({ uid: `g:${claims.sub}`, email: claims.email, familyId: randomUUID(), client: flow.client })
+    // A web exchange code is bound to the browser that completed the callback; the app (Custom Tab) code is redeemed by the app itself.
+    const exchange = await createExchangeCode({ uid: `g:${claims.sub}`, email: claims.email, familyId: randomUUID(), client: flow.client, code: flow.client === 'web' ? newBoundToken('exchange', browser!) : undefined })
     if (flow.client === 'app') return reply.code(200).type('text/html; charset=utf-8').send(appPage(appScheme(), `code=${exchange}`))
     return reply.code(302).header('Location', webRedirectUrl(oauthConfig().webOrigin, flow.returnTo, { auth_code: exchange })).send()
   }))
@@ -107,6 +119,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
     sessionKey() // a misconfigured signing key must answer 503 BEFORE the code is burned or a session row is written
     const { code, client } = (req.body ?? {}) as { code?: unknown; client?: unknown }
     if (typeof code !== 'string' || !parseClient(client)) return reply.code(400).send({ error: 'invalid_request' })
+    if (client === 'web' && !tokenBoundTo('exchange', code, browserId(req.headers.cookie))) return reply.code(401).send({ error: 'invalid_code' })
     const identity = await redeemExchangeCode(code, client)
     if (!identity) return reply.code(401).send({ error: 'invalid_code' })
     const { refreshToken } = await startSession({ ...identity, userAgent: req.headers['user-agent'] })
