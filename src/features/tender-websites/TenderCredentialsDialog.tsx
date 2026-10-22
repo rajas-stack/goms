@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { onAuthStateChanged } from 'firebase/auth'
-import { auth } from '@/lib/firebaseAuth'
+import { onAuthIdentityChange } from '@/lib/auth'
 import type { TenderWebsite } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Dialog } from '@/components/ui/Dialog'
@@ -23,7 +22,8 @@ export function TenderCredentialsDialog({ site, onClose }: { site: TenderWebsite
     const clear = () => { generation.current++; setPassphrase(''); setCredentials(null); setShowPassword(false) }
     const hidden = () => { if (document.visibilityState === 'hidden') clear() }
     document.addEventListener('visibilitychange', hidden)
-    const stop = auth ? onAuthStateChanged(auth, clear) : undefined
+    // Clears when the signed-in person changes or signs out, under either auth provider; a session refresh for the same person does not.
+    const stop = onAuthIdentityChange(clear)
     const timer = window.setInterval(clear, 120000)
     return () => { generation.current++; document.removeEventListener('visibilitychange', hidden); stop?.(); window.clearInterval(timer) }
   }, [])
