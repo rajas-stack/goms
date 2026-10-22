@@ -15,6 +15,7 @@ export const firebaseProvider: AuthProviderApi = {
     if (!auth) { cb(null, false); return () => {} }
     return onAuthStateChanged(auth, (u) => cb(u ? toUser(u) : null, false))
   },
+  currentUser() { return auth?.currentUser ? toUser(auth.currentUser) : null },
   async signIn() { if (auth) await signInWithPopup(auth, googleProvider) },
   async signOut() { if (auth) await signOut(auth) },
   // getIdToken() transparently refreshes a token that is about to expire; if the user is signed out or the refresh fails

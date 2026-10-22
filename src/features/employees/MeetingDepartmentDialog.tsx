@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNodeMutations, useStates } from '@/lib/api'
 import { useAllowed } from '@/lib/permissions'
-import { auth } from '@/lib/firebaseAuth'
+import { currentAuthUid } from '@/lib/auth'
 import { CENTRAL_STATE_CODE } from '@/data/gov-hierarchy'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
@@ -17,7 +17,7 @@ export function MeetingDepartmentDialog({ onBack, onCreated }: { onBack: () => v
   const [name, setName] = useState('')
   const [stateCode, setStateCode] = useState('')
   const [error, setError] = useState('')
-  const owner = auth?.currentUser?.uid ?? 'local'
+  const owner = currentAuthUid() ?? 'local'
   const draft = useMeetingDraft(`${owner}:meeting-department`, { name, stateCode }, true)
   useEffect(() => {
     const saved = draft.take({ name: '', stateCode: '' })

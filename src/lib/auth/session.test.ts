@@ -40,6 +40,16 @@ describe('identity claims', () => {
     expect(u).toEqual({ email: 'a@amnex.com' })
     expect('uid' in u).toBe(false)
   })
+  it('current() is the same snapshot without subscribing: null before restore, the user once signed in, null again after sign-out', async () => {
+    const token = withSub('a@amnex.com', 'g:1029384756')
+    const f = vi.fn(async () => json(200, { accessToken: token, refreshToken: 'R2', expiresIn: 900 }))
+    const { session } = setup({ fetchFn: f as unknown as typeof fetch })
+    expect(session.current()).toBeNull()
+    await session.init()
+    expect(session.current()).toEqual({ email: 'a@amnex.com', uid: 'g:1029384756' })
+    await session.signOut()
+    expect(session.current()).toBeNull()
+  })
 })
 
 describe('init / getAccessToken', () => {

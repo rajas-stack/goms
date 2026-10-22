@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import * as api from '@/lib/api'
+import { authApi } from '@/lib/auth'
 import { ALL_EVENT_TYPES, MEETING_LOG_TYPES } from '@/lib/timeline-meta'
 import { TimelineEventDialog } from './TimelineEventDialog'
 
@@ -92,6 +93,24 @@ it('lets a restored draft be discarded and saves subsequent new typing', async (
   expect(localStorage.getItem('gorms:meeting-draft:local:new:emp-1')).toBeNull()
   await user.type(screen.getByLabelText(/^title$/i), 'Replacement draft')
   expect(JSON.parse(localStorage.getItem('gorms:meeting-draft:local:new:emp-1')!).value.form.title).toBe('Replacement draft')
+})
+
+it('keys the draft by the signed-in uid (Firebase uid or g:<sub> under direct Google OAuth) and never offers another person\'s draft', async () => {
+  const person = (uid: string) => ({ email: 'a@amnex.com', displayName: null, photoUrl: null, emailVerified: true, uid, googleId: uid.replace('g:', '') })
+  const current = vi.spyOn(authApi, 'currentUser').mockReturnValue(person('g:77'))
+  try {
+    const user = userEvent.setup()
+    const first = render(<TimelineEventDialog open employeeId="emp-9" onClose={vi.fn()} />)
+    await user.type(screen.getByLabelText(/^title$/i), 'Mine')
+    expect(JSON.parse(localStorage.getItem('gorms:meeting-draft:g:77:new:emp-9')!).value.form.title).toBe('Mine')
+    expect(localStorage.getItem('gorms:meeting-draft:local:new:emp-9')).toBeNull() // no silent shared key while a person is signed in
+    first.unmount()
+    current.mockReturnValue(person('g:88'))
+    render(<TimelineEventDialog open employeeId="emp-9" onClose={vi.fn()} />)
+    expect(screen.getByLabelText(/^title$/i)).toHaveValue('')
+    expect(screen.queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument()
+    expect(localStorage.getItem('gorms:meeting-draft:g:77:new:emp-9')).not.toBeNull() // the first person's draft is left alone
+  } finally { current.mockRestore() }
 })
 
 it('adds and removes rows while saving every remaining meeting section', async () => {

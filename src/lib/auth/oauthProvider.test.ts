@@ -39,6 +39,7 @@ describe('oauthProvider (plain browser)', () => {
   })
   it('with no stored session, headers are {} and the user is signed out', async () => {
     await expect(oauthProvider.getAuthorizationHeaders()).resolves.toEqual({})
+    expect(oauthProvider.currentUser()).toBeNull()
   })
 })
 

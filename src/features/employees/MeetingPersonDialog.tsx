@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Field'
 import type { Employee, HierNode } from '@/lib/types'
 import { MeetingDepartmentDialog } from './MeetingDepartmentDialog'
-import { auth } from '@/lib/firebaseAuth'
+import { currentAuthUid } from '@/lib/auth'
 import { useMeetingDraft } from './useMeetingDraft'
 import { DraftNotice } from '@/components/ui/DraftNotice'
 
@@ -22,7 +22,7 @@ export function MeetingPersonDialog({ onBack, onCreated }: { onBack: () => void;
   const [designation, setDesignation] = useState('')
   const [orgNodeId, setOrgNodeId] = useState('')
   const [error, setError] = useState('')
-  const owner = auth?.currentUser?.uid ?? 'local'
+  const owner = currentAuthUid() ?? 'local'
   const draft = useMeetingDraft(owner ? `${owner}:new-person` : null, { name, designation, orgNodeId }, true)
   useEffect(() => {
     const saved = draft.take({ name: '', designation: '', orgNodeId: '' })

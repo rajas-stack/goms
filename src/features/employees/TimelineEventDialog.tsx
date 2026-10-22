@@ -11,7 +11,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useAllEmployees, useEmployeeMutations, useSalesPersons } from '@/lib/api'
 import { isoToday } from '@/data/repository'
 import { useMeetingDraft } from './useMeetingDraft'
-import { auth } from '@/lib/firebaseAuth'
+import { currentAuthUid } from '@/lib/auth'
 import { MANUAL_EVENT_TYPES, TIMELINE_META } from '@/lib/timeline-meta'
 import { EmployeePicker } from './EmployeePicker'
 import { MeetingPersonDialog } from './MeetingPersonDialog'
@@ -83,7 +83,7 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
 
   // Scope drafts to the signed-in account and entry point. Global creation
   // includes the selected person; editing has a separate key per meeting.
-  const draftOwner = auth?.currentUser?.uid ?? 'local'
+  const draftOwner = currentAuthUid() ?? 'local'
   const draftKey = draftOwner ? `${draftOwner}:${existingEvent ? `edit:${existingEvent.id}` : `new:${employeeId ?? 'global'}`}` : null
   const draft = useMeetingDraft(draftKey, { personId: activeEmployeeId, form }, open)
   function discardDraft() {

@@ -36,6 +36,13 @@ describe('firebaseProvider (must behave exactly like the pre-facade code)', () =
     firebaseProvider.subscribe((u, l) => seen.push([u, l]))
     expect(seen).toEqual([[null, false]])
   })
+  it('currentUser() is a synchronous snapshot: null when signed out or unconfigured, the mapped user (with uid) when signed in', () => {
+    expect(firebaseProvider.currentUser()).toBeNull()
+    fb.auth = { currentUser: { uid: 'fb-3', email: 'c@amnex.com', displayName: 'C', photoURL: null, emailVerified: true, providerData: [{ providerId: 'google.com', uid: '555' }], getIdToken: async () => 't' } as never }
+    expect(firebaseProvider.currentUser()).toMatchObject({ uid: 'fb-3', email: 'c@amnex.com', googleId: '555', emailVerified: true })
+    fb.auth = null
+    expect(firebaseProvider.currentUser()).toBeNull()
+  })
   it('signIn opens the Google popup; signOut signs out; both are no-ops without Firebase', async () => {
     await firebaseProvider.signIn(); expect(fb.signIn).toHaveBeenCalledWith(fb.auth, { id: 'google' })
     await firebaseProvider.signOut(); expect(fb.signOut).toHaveBeenCalledWith(fb.auth)

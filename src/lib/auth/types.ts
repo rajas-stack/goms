@@ -18,6 +18,8 @@ export interface AuthProviderApi {
   readonly configured: boolean
   /** `loading` is true until the provider knows whether anyone is signed in. Returns an unsubscribe function. */
   subscribe(cb: (user: AuthUser | null, loading: boolean) => void): () => void
+  /** Who is signed in right now, read synchronously (for code that is not a React hook). Null while signed out and before the provider has loaded. */
+  currentUser(): AuthUser | null
   signIn(): Promise<void>
   signOut(): Promise<void>
   getAuthorizationHeaders(): Promise<Record<string, string>>

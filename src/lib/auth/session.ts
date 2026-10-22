@@ -89,6 +89,8 @@ export function createSession(deps: SessionDeps) {
   }
 
   return {
+    /** The signed-in user right now (null before the first restore completes, after sign-out, and after a 401), without subscribing. */
+    current(): SessionUser | null { return publicUser() },
     subscribe(cb: Listener): () => void { listeners.add(cb); cb(publicUser(), loading); return () => { listeners.delete(cb) } },
     async init(): Promise<void> {
       ready = (async () => { try { if (await deps.store.get()) await refresh() } catch { /* transient: getAccessToken() retries */ } finally { loading = false; emit() } })()

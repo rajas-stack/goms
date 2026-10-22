@@ -1,6 +1,6 @@
-import { auth } from '@/lib/firebaseAuth'
+import { currentAuthUid } from '@/lib/auth'
 
-const key = (sheet: string, view: string) => `gorms:grid-columns:${auth?.currentUser?.uid ?? 'local'}:${sheet}:${view}`
+const key = (sheet: string, view: string) => `gorms:grid-columns:${currentAuthUid() ?? 'local'}:${sheet}:${view}`
 export function readSystemColumns(sheet: string, view: string): string[] | undefined {
   try {
     const raw = localStorage.getItem(key(sheet, view))

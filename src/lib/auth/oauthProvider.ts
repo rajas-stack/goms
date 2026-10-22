@@ -38,6 +38,7 @@ export const oauthProvider: AuthProviderApi = {
   kind: 'oauth',
   get configured() { return apiBase !== '' },
   subscribe: (cb) => session.subscribe((u, loading) => cb(u ? toAuthUser(u) : null, loading)),
+  currentUser: () => { const u = session.current(); return u ? toAuthUser(u) : null },
   async signIn() {
     // Decided BEFORE any navigation. Google rejects embedded WebViews, so the shell must never take the full-page web redirect.
     if (!inShell) { window.location.assign(webSignInUrl()); return }
