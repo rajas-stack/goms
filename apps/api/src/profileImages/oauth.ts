@@ -15,6 +15,7 @@ const random = () => randomBytes(32).toString('base64url')
 // The browser binding is derived from the shared Hosting-compatible `__session` browser id (see auth/oauth/browserBinding.ts).
 export async function beginProfileConnection(user: { uid: string; email: string }, setCookie?: (value: string) => void, requestCookies?: string) {
   const cfg = emailConfiguration()
+  if (!cfg.enabled) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Profile Images is not enabled on this server.' })
   if (!cfg.ready) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Configure the existing server Google OAuth client, callback, and encryption key before connecting Profile Images.' })
   if (!setCookie) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Open DMS in a browser to connect.' })
   const state = `profile.${random()}`; const verifier = random(); const nonce = random()
@@ -29,6 +30,7 @@ export async function beginProfileConnection(user: { uid: string; email: string 
   return { url: url.toString() }
 }
 export async function completeProfileConnection(req: { query?: any; headers: { cookie?: string } }, reply: FastifyReply, gateway: MailOAuthGateway = mailOAuthGateway) {
+  if (!emailConfiguration().ready) return reply.code(404).send({ error: 'Not found' }) // Email Center off: nothing is looked up, consumed or exchanged
   const state = req.query?.state
   reply.header('Cache-Control', 'private, no-store').header('Referrer-Policy', 'no-referrer')
   if (typeof state !== 'string' || !/^profile\.[\w-]{43}$/.test(state)) return reply.code(400).send({ error: 'Invalid Profile Images connection.' })

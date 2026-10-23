@@ -3,7 +3,7 @@ import { TRPCError } from '@trpc/server'
 import type { PoolClient } from 'pg'
 import { pool } from '../db.js'
 import { inTransaction } from '../lib/rbacTreeStore.js'
-import { emailConfiguration, openEmailCredentials, sealEmailCredentials, type SealedEmailCredentials } from '../email/config.js'
+import { emailCenterEnabled, emailConfiguration, openEmailCredentials, requireEmailConfiguration, sealEmailCredentials, type SealedEmailCredentials } from '../email/config.js'
 import { isProfileImage, mapProfileImages, type ProfileFile, type ProfileMapping, type ProfilePerson } from './mapping.js'
 
 // System-scoped metadata in the existing settings store; image bytes live only in Drive and transient HTTP caches.
@@ -47,6 +47,7 @@ export class DriveError extends Error {
 }
 export const syncError = (error: unknown) => error instanceof DriveError ? error.message : 'Profile image synchronization failed. Check the server connection and reconnect Google Drive if needed.'
 export async function profileToken(state: ProfileState): Promise<string> {
+  requireEmailConfiguration() // refuses while Email Center is off, before any stored credential is opened or Google is called
   if (!state.credentials) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Connect Google Drive for Profile Images first.' })
   let credentials = openEmailCredentials(state.credentials, PROFILE_CREDENTIAL_BINDING)
   if (credentials.expiresAt > Date.now() + 60_000) return credentials.accessToken
@@ -113,6 +114,7 @@ export async function updateProfileIndex(state: ProfileState, token: string, peo
     lastSyncAt: new Date().toISOString(), error: null, warnings: errors, ...(changed ? { revision: randomUUID() } : {}) })
 }
 export async function syncProfileImages(folderId?: string, onlyIfDue = false) {
+  requireEmailConfiguration() // refuses while Email Center is off: no lock, no read, no Drive call
   return withProfileLock(async (state, db) => {
     if (onlyIfDue && state.lastAttemptAt && Date.now() - Date.parse(state.lastAttemptAt) < 55_000) return profileStatus(state)
     if (folderId !== undefined && folderId !== state.folderId) {
@@ -136,6 +138,7 @@ export async function syncProfileImages(folderId?: string, onlyIfDue = false) {
   })
 }
 export function startProfileImageSynchronizer() {
+  if (!emailCenterEnabled()) return () => {} // Email Center off: no timer is created and nothing is read or called
   let running = false
   const tick = async () => {
     if (running || process.env.EMERGENCY_READ_ONLY === 'true') return
@@ -170,6 +173,7 @@ async function imageBytes(response: Response): Promise<PhotoBytes> {
   return { body: Buffer.concat(chunks), mime }
 }
 export async function profilePhoto(state: Pick<ProfileState, 'folderId' | 'credentials'>, mapping: ProfileMapping): Promise<PhotoBytes> {
+  requireEmailConfiguration() // refuses while Email Center is off, even for a cached photo
   const cached = byteCache.get(mapping.version)
   if (cached) { byteCache.delete(mapping.version); byteCache.set(mapping.version, cached); return cached }
   const existing = pending.get(mapping.version); if (existing) return existing

@@ -89,7 +89,7 @@ describe('the signing key', () => {
   it('falls back to the Email Center encryption secret when login is not configured', () => {
     vi.stubEnv('AUTH_SESSION_SECRET', '')
     vi.stubEnv('GOOGLE_OAUTH_CLIENT_ID', 'client'); vi.stubEnv('GOOGLE_OAUTH_CLIENT_SECRET', 'secret')
-    vi.stubEnv('EMAIL_TOKEN_ENCRYPTION_KEY', 'e'.repeat(40))
+    vi.stubEnv('EMAIL_CENTER_ENABLED', 'true'); vi.stubEnv('EMAIL_TOKEN_ENCRYPTION_KEY', 'e'.repeat(40))
     const { id, setCookie } = issue()
     expect(browserId(sent(setCookie))).toBe(id)
   })

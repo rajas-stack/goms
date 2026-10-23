@@ -8,6 +8,7 @@ import { consumeFlow, createFlow } from './flows.js'
 import { GoogleAuthError, buildAuthUrl, type GoogleGateway } from './googleClient.js'
 import { parseClient, safeReturnTo, webRedirectUrl, type ClientKind } from './redirect.js'
 import { SessionError, revokeFamilyByRefreshToken, rotateRefreshToken, startSession } from './sessions.js'
+import { emailConfiguration } from '../../email/config.js'
 import { completeMailConnection } from '../../email/oauth.js'
 import { completeProfileConnection } from '../../profileImages/oauth.js'
 import { browserId, ensureBrowser, loginCookieSecure, newBoundToken, sendBrowserCookie, tokenBoundTo } from './browserBinding.js'
@@ -89,6 +90,9 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
   }))
 
   app.get('/api/oauth/google/callback', limited, guarded('callback', async (req, reply) => {
+    // The shared callback also serves the Gmail ("mail.") and Profile Images ("profile.") connections. With Email Center off they are answered as not found before any lookup.
+    const emailState = typeof req.query?.state === 'string' && (req.query.state.startsWith('profile.') || req.query.state.startsWith('mail.'))
+    if (emailState && !emailConfiguration().ready) return notFound(reply)
     if (typeof req.query?.state === 'string' && req.query.state.startsWith('profile.')) return completeProfileConnection(req, reply)
     if (typeof req.query?.state === 'string' && req.query.state.startsWith('mail.')) return completeMailConnection(req, reply)
     // Checked BEFORE the one-use flow is consumed, so a foreign browser can neither pass nor burn the legitimate flow.

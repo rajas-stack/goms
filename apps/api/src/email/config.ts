@@ -4,10 +4,18 @@ import { TRPCError } from '@trpc/server'
 export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.modify'
 export interface EmailCredentials { accessToken: string; refreshToken: string; expiresAt: number }
 export interface SealedEmailCredentials { version: 1; iv: string; tag: string; data: string }
-export function emailConfiguration(env = process.env) {
+/** Email Center and Profile Images (the Gmail and Drive connections) are OFF unless EMAIL_CENTER_ENABLED is exactly the text `true` (surrounding spaces ignored; unset,
+ *  empty, `TRUE`, `1`, `yes`, `enabled` and everything else are off). It is independent of the sign-in variables: setting the Google client, the callback or a key never
+ *  turns it on. When off, `emailConfiguration()` reports nothing usable and every entry point that starts a Google flow, opens or seals a stored credential, calls Gmail or
+ *  Drive, or runs the Profile Images sync refuses before it touches the database or the network. */
+export function emailCenterEnabled(env: NodeJS.ProcessEnv = process.env): boolean { return (env.EMAIL_CENTER_ENABLED ?? '').trim() === 'true' }
+const OFF = { enabled: false, clientId: '', clientSecret: '', encryptionSecret: '', redirectUri: '', origin: '', ready: false } as const
+export function emailConfiguration(env: NodeJS.ProcessEnv = process.env) {
+  if (!emailCenterEnabled(env)) return OFF
   const clientId = env.EMAIL_GOOGLE_CLIENT_ID || env.GOOGLE_OAUTH_CLIENT_ID || ''
   const clientSecret = env.EMAIL_GOOGLE_CLIENT_SECRET || env.GOOGLE_OAUTH_CLIENT_SECRET || ''
-  const encryptionSecret = env.EMAIL_TOKEN_ENCRYPTION_KEY || env.AUTH_SESSION_SECRET || ''
+  // The dedicated key only. It never falls back to AUTH_SESSION_SECRET: sealing Gmail and Drive credentials with the sign-in session secret would tie their lifetime to it.
+  const encryptionSecret = env.EMAIL_TOKEN_ENCRYPTION_KEY || ''
   let redirectUri = env.EMAIL_GOOGLE_REDIRECT_URI || env.GOOGLE_OAUTH_REDIRECT_URI || ''
   let origin = ''; let valid = false
   try {
@@ -17,10 +25,11 @@ export function emailConfiguration(env = process.env) {
     origin = url.origin; redirectUri = url.toString()
   } catch { /* Setup remains unavailable, with no secret values returned. */ }
   const ready = !!clientId && !!clientSecret && Buffer.byteLength(encryptionSecret) >= 32 && valid
-  return { clientId, clientSecret, encryptionSecret, redirectUri, origin, ready }
+  return { enabled: true as boolean, clientId, clientSecret, encryptionSecret, redirectUri, origin, ready }
 }
 export function requireEmailConfiguration() {
   const config = emailConfiguration()
+  if (!config.enabled) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Email Center is not enabled on this server.' })
   if (!config.ready) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Email Center needs a server Google OAuth web client, its registered callback, and a server encryption key. See Email Center connection setup.' })
   return config
 }

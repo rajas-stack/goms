@@ -6,7 +6,7 @@ import { GoogleAuthError, type GoogleClaims, type GoogleGateway } from '../auth/
 
 export const TEST_SESSION_SECRET = 'test-session-secret-0123456789-abcdefghijklmnopqrstuvwxyz'
 const KEYS = ['AUTH_PROVIDER', 'GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_OAUTH_REDIRECT_URI', 'AUTH_SESSION_SECRET',
-  'OAUTH_WEB_ORIGIN', 'AUTH_ACCESS_TTL_SECONDS', 'AUTH_REFRESH_TTL_DAYS', 'OAUTH_APP_SCHEME']
+  'OAUTH_WEB_ORIGIN', 'AUTH_ACCESS_TTL_SECONDS', 'AUTH_REFRESH_TTL_DAYS', 'OAUTH_APP_SCHEME', 'AUTH_OAUTH_RATE_LIMIT_MAX', 'EMAIL_CENTER_ENABLED', 'EMAIL_TOKEN_ENCRYPTION_KEY']
 
 /** A complete, fake OAuth environment. Nothing here is a real credential. */
 export function useOauthEnv(provider: AuthProvider = 'both'): void {
@@ -16,6 +16,9 @@ export function useOauthEnv(provider: AuthProvider = 'both'): void {
   process.env.GOOGLE_OAUTH_REDIRECT_URI = 'https://goms.test/api/oauth/google/callback'
   process.env.AUTH_SESSION_SECRET = TEST_SESSION_SECRET
 }
+/** Email Center / Profile Images are off by default. Tests that exercise the Gmail or Drive connection switch them on explicitly, with the dedicated key. */
+export const TEST_EMAIL_KEY = 'test-email-key-0123456789-abcdefghijklmnopqrstuvwxyz'
+export function useEmailCenterEnv(): void { process.env.EMAIL_CENTER_ENABLED = 'true'; process.env.EMAIL_TOKEN_ENCRYPTION_KEY = TEST_EMAIL_KEY }
 export function clearOauthEnv(): void { for (const k of KEYS) delete process.env[k] }
 
 export async function cleanupOauthTables(): Promise<void> {

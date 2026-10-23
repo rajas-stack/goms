@@ -14,7 +14,7 @@ const state = (files: ProfileFile[] = []): ProfileState => ({ folderId: 'folder-
   files, mappings: mapProfileImages('folder-a', files, people).mappings, revision: 'old', error: null, warnings: [], lastSyncAt: null })
 beforeEach(() => {
   vi.stubEnv('EMAIL_GOOGLE_CLIENT_ID', 'test.apps.googleusercontent.com'); vi.stubEnv('EMAIL_GOOGLE_CLIENT_SECRET', 'server-secret')
-  vi.stubEnv('EMAIL_TOKEN_ENCRYPTION_KEY', 'x'.repeat(40)); vi.stubEnv('EMAIL_GOOGLE_REDIRECT_URI', 'http://localhost/api/oauth/google/callback')
+  vi.stubEnv('EMAIL_CENTER_ENABLED', 'true'); vi.stubEnv('EMAIL_TOKEN_ENCRYPTION_KEY', 'x'.repeat(40)); vi.stubEnv('EMAIL_GOOGLE_REDIRECT_URI', 'http://localhost/api/oauth/google/callback')
   mock.query.mockReset(); mock.fetch.mockReset(); mock.state = state(); clearProfileByteCache(); vi.stubGlobal('fetch', mock.fetch)
   mock.query.mockImplementation(async (sql: string, params: any[]) => {
     if (sql.startsWith('SELECT settings')) return { rows: [{ settings: structuredClone(mock.state) }] }

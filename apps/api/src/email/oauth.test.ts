@@ -11,7 +11,7 @@ const gateway: MailOAuthGateway = { exchange: vi.fn(), verify: vi.fn(), profile:
 const response = () => { const reply: any = { header: vi.fn(() => reply), code: vi.fn(() => reply), send: vi.fn(() => reply) }; return reply }
 beforeEach(() => {
   vi.clearAllMocks(); saved = undefined
-  vi.stubEnv('GOOGLE_OAUTH_CLIENT_ID', 'client'); vi.stubEnv('GOOGLE_OAUTH_CLIENT_SECRET', 'secret'); vi.stubEnv('AUTH_SESSION_SECRET', 'x'.repeat(40)); vi.stubEnv('GOOGLE_OAUTH_REDIRECT_URI', 'http://localhost:8088/api/oauth/google/callback')
+  vi.stubEnv('GOOGLE_OAUTH_CLIENT_ID', 'client'); vi.stubEnv('GOOGLE_OAUTH_CLIENT_SECRET', 'secret'); vi.stubEnv('AUTH_SESSION_SECRET', 'x'.repeat(40)); vi.stubEnv('EMAIL_CENTER_ENABLED', 'true'); vi.stubEnv('EMAIL_TOKEN_ENCRYPTION_KEY', 'k'.repeat(40)); vi.stubEnv('GOOGLE_OAUTH_REDIRECT_URI', 'http://localhost:8088/api/oauth/google/callback')
   m.query.mockImplementation(async (sql: string, values?: any[]) => {
     if (sql.startsWith('INSERT INTO email_oauth_flows')) saved = { state_hash: values![0], cookie_hash: values![1], verifier: values![2], nonce: values![3], user_uid: values![4], email: values![5], return_to: values![6] }
     if (sql.startsWith('DELETE FROM email_oauth_flows WHERE state_hash')) { if (saved && values![0] === saved.state_hash && values![1] === saved.cookie_hash) { const flow = saved; saved = undefined; return { rows: [flow] } } }

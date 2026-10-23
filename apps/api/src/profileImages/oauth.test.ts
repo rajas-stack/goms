@@ -12,7 +12,7 @@ const hash = (value: string) => createHash('sha256').update(value).digest('hex')
 beforeEach(() => {
   vi.clearAllMocks(); mock.flow = null; mock.saved = null
   vi.stubEnv('EMAIL_GOOGLE_CLIENT_ID', 'profile.apps.googleusercontent.com'); vi.stubEnv('EMAIL_GOOGLE_CLIENT_SECRET', 'secret')
-  vi.stubEnv('EMAIL_TOKEN_ENCRYPTION_KEY', 'x'.repeat(40)); vi.stubEnv('EMAIL_GOOGLE_REDIRECT_URI', 'https://goms.test/api/oauth/google/callback')
+  vi.stubEnv('EMAIL_CENTER_ENABLED', 'true'); vi.stubEnv('EMAIL_TOKEN_ENCRYPTION_KEY', 'x'.repeat(40)); vi.stubEnv('EMAIL_GOOGLE_REDIRECT_URI', 'https://goms.test/api/oauth/google/callback')
   mock.access.mockResolvedValue(undefined); mock.sync.mockResolvedValue({}); mock.locked.mockImplementation((fn: any) => fn({ mappings: {}, files: [] }, {}))
   mock.write.mockImplementation(async (_db: any, state: any) => { mock.saved = state })
   mock.query.mockImplementation(async (sql: string, params: any[]) => {

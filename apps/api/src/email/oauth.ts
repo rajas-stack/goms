@@ -4,7 +4,7 @@ import type { FastifyReply } from 'fastify'
 import { TRPCError } from '@trpc/server'
 import { safeReturnTo, webRedirectUrl } from '../auth/oauth/redirect.js'
 import { browserId, ensureBrowser, flowBinding } from '../auth/oauth/browserBinding.js'
-import { GMAIL_SCOPE, openEmailCredentials, requireEmailConfiguration, sealEmailCredentials } from './config.js'
+import { GMAIL_SCOPE, emailConfiguration, openEmailCredentials, requireEmailConfiguration, sealEmailCredentials } from './config.js'
 import type { EmailActor } from './access.js'
 import { emailEvent, inTransaction } from './store.js'
 import { pool } from '../db.js'
@@ -49,6 +49,7 @@ export async function beginMailConnection(actor: EmailActor, returnTo: string, s
 }
 /** No Google token is ever returned to the frontend; state + a host-only HttpOnly cookie bind the callback. */
 export async function completeMailConnection(req: { query?: any; headers: { cookie?: string } }, reply: FastifyReply, gateway: MailOAuthGateway = mailOAuthGateway) {
+  if (!emailConfiguration().ready) return reply.code(404).send({ error: 'Not found' }) // Email Center off: nothing is looked up, consumed or exchanged
   const cfg = requireEmailConfiguration(); const state = req.query?.state
   reply.header('Cache-Control', 'private, no-store').header('Referrer-Policy', 'no-referrer')
   if (typeof state !== 'string' || !/^mail\.[\w-]{43}$/.test(state)) return reply.code(400).send({ error: 'Invalid email connection.' })

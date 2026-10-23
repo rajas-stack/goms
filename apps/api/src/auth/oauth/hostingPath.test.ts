@@ -8,7 +8,7 @@ import { buildApp } from '../../app.js'
 import { pool } from '../../db.js'
 import { syncRbacNodes } from '../../lib/rbacTreeStore.js'
 import { Browser, startHostingProxy, type HostingProxy } from '../../testHelpers/hostingProxy.js'
-import { cleanupOauthTables, clearOauthEnv, fakeGoogle, gomsContextForEmail, useOauthEnv } from '../../testHelpers/oauthTestHelpers.js'
+import { cleanupOauthTables, clearOauthEnv, fakeGoogle, gomsContextForEmail, useEmailCenterEnv, useOauthEnv } from '../../testHelpers/oauthTestHelpers.js'
 
 const ADMIN = 'admin@amnex.com'
 let app: Awaited<ReturnType<typeof buildApp>>
@@ -149,6 +149,8 @@ describe('browser binding: cross-browser rejection and replay prevention', () =>
 })
 
 describe('Email Center and Profile Images connections through the Hosting rewrite', () => {
+  // Off by default; this group exercises the connections, so it switches them on explicitly (the app below is built after this runs).
+  beforeEach(() => { useEmailCenterEnv() })
   const connect = async (b: Browser, path: 'emailCenter.connect' | 'profileImages.connect', body?: unknown) => {
     const { authHeader } = await gomsContextForEmail(ADMIN)
     const r = await b.request(`/api/trpc/${path}`, { method: 'POST', body: body ?? (path === 'emailCenter.connect' ? { returnTo: '/bid-tracker' } : {}), headers: { authorization: authHeader } })

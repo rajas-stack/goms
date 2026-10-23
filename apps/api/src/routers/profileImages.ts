@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { profileActor } from '../profileImages/access.js'
+import { requireEmailConfiguration } from '../email/config.js'
 import { beginProfileConnection } from '../profileImages/oauth.js'
 import { profileFolderId } from '../profileImages/mapping.js'
 import { driveJson, profileFolder, profileStatus, profileToken, readProfileIndex, readProfileState, syncError, syncProfileImages, withProfileLock, writeProfileState } from '../profileImages/service.js'
@@ -15,6 +16,7 @@ export const profileImagesRouter = router({
   connect: protectedProcedure.mutation(async ({ ctx }) => beginProfileConnection(await profileActor(ctx, true, true), ctx.setCookie, ctx.requestCookies)),
   folders: protectedReadProcedure.input(z.object({ pageToken: z.string().max(2048).optional() }).strict()).query(async ({ ctx, input }) => {
     await profileActor(ctx, true)
+    requireEmailConfiguration() // Email Center off: no Drive call, no lock
     return withProfileLock(async (state, db) => {
       try {
         const token = await profileToken(state)
@@ -25,6 +27,7 @@ export const profileImagesRouter = router({
   }),
   test: protectedProcedure.input(folderInput).mutation(async ({ ctx, input }) => {
     await profileActor(ctx, true, true)
+    requireEmailConfiguration() // Email Center off: no Drive call, no lock
     const id = folderId(input.folder)
     if (!id) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Choose a Profile Images folder first.' })
     return withProfileLock(async (state, db) => {
@@ -32,8 +35,8 @@ export const profileImagesRouter = router({
       catch (error) { throw new TRPCError({ code: 'BAD_REQUEST', message: syncError(error) }) }
     })
   }),
-  save: protectedProcedure.input(folderInput).mutation(async ({ ctx, input }) => { await profileActor(ctx, true, true); return syncProfileImages(folderId(input.folder)) }),
-  sync: protectedProcedure.mutation(async ({ ctx }) => { await profileActor(ctx, true, true); return syncProfileImages() }),
+  save: protectedProcedure.input(folderInput).mutation(async ({ ctx, input }) => { await profileActor(ctx, true, true); requireEmailConfiguration(); return syncProfileImages(folderId(input.folder)) }),
+  sync: protectedProcedure.mutation(async ({ ctx }) => { await profileActor(ctx, true, true); requireEmailConfiguration(); return syncProfileImages() }),
   index: protectedReadProcedure.query(async ({ ctx }) => {
     await profileActor(ctx)
     const state = await readProfileIndex()

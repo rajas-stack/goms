@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildApp } from '../../app.js'
 import { pool } from '../../db.js'
-import { cleanupOauthTables, clearOauthEnv, fakeGoogle, useOauthEnv } from '../../testHelpers/oauthTestHelpers.js'
+import { cleanupOauthTables, clearOauthEnv, fakeGoogle, useEmailCenterEnv, useOauthEnv } from '../../testHelpers/oauthTestHelpers.js'
 import { verifyAccessToken } from './accessToken.js'
 import { pkceChallenge } from './crypto.js'
 import { startSession } from './sessions.js'
@@ -462,7 +462,7 @@ describe('OAuth browser binding', () => {
 })
 
 describe('AUTH_PROVIDER=firebase with the Email Center configured: only the shared callback exists', () => {
-  beforeEach(async () => { process.env.AUTH_PROVIDER = 'firebase'; await boot() })
+  beforeEach(async () => { process.env.AUTH_PROVIDER = 'firebase'; useEmailCenterEnv(); await boot() })
   it('registers no login route, and the callback refuses a state it did not issue', async () => {
     for (const [method, url] of [['GET', '/api/oauth/google/start?client=web'], ['POST', '/api/oauth/exchange'], ['POST', '/api/oauth/refresh'], ['POST', '/api/oauth/logout']] as const) {
       expect((await app.inject({ method, url, payload: method === 'POST' ? {} : undefined })).statusCode, url).toBe(404)
