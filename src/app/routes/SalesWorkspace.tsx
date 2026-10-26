@@ -116,7 +116,7 @@ export function RosterRow({ person, posting, selected, onSelect }: {
         selected ? 'border-ink-900/20 bg-ink-900/[0.04]' : 'border-line bg-white hover:bg-panel',
       )}
     >
-      <Avatar person={{ name: person.name, photoUrl: person.photoUrl }} size="sm" />
+      <Avatar person={person} size="sm" />
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm font-medium leading-tight text-ink-900">{person.name}</div>
         <div className="truncate text-[12px] leading-tight text-muted">
@@ -340,7 +340,7 @@ export function Ownership() {
       {ownerFilter && (
         <div className="flex items-center gap-2 rounded-lg border border-line bg-panel/50 px-3 py-1.5 text-[12px]">
           <span className="text-muted">Owned by</span>
-          {ownerPerson && <Avatar person={{ name: ownerPerson.name, photoUrl: ownerPerson.photoUrl }} size="xs" />}
+          {ownerPerson && <Avatar person={ownerPerson} size="xs" />}
           <span className="font-medium text-ink-900">{ownerPerson?.name ?? ownerFilter}</span>
           <button onClick={clearOwnerFilter} className="ml-auto font-medium text-ink-600 hover:text-ink-900">Clear</button>
         </div>

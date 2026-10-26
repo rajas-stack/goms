@@ -19,7 +19,7 @@ describe('attentionRows', () => {
   it('says how many days late an overdue item is, and links to the bid', () => {
     const [row] = attentionRows([entry({ attentionFlag: 'overdue', dueDate: '2026-10-14' })], [], '2026-10-16', ALL)
     expect(row.text).toBe('Bihar CCTV: EMD payment, 2 days overdue')
-    expect(row.href).toBe('/bid-tracker/bid/b1')
+    expect(row.href).toBe('/live-bids/bid/b1')
   })
   it('skips on-track follow-ups and BOQs that are not waiting for approval', () => {
     expect(attentionRows([entry({ attentionFlag: 'onTrack' })], [boq({ status: 'approved' }), boq({ id: 'q2', status: 'draft' })], '2026-10-16', ALL)).toEqual([])

@@ -57,7 +57,7 @@ describe('Insights Studio', () => {
   it('asks for a data source first and then offers only that source’s fields (lineage)', async () => {
     await seedSheets()
     boot('/insights/studio/visuals/new')
-    await userEvent.click(await screen.findByRole('button', { name: 'Use Bid Tracker' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Use Live Bids' }))
     const groupBy = await screen.findByRole('combobox', { name: 'Group by' })
     const options = within(groupBy).getAllByRole('option').map((o) => o.textContent)
     expect(options).toContain('Opportunity stage')
@@ -69,13 +69,13 @@ describe('Insights Studio', () => {
     expect(screen.getByRole('note')).toHaveTextContent('Recommended: Line')
     const name = screen.getByRole('textbox', { name: 'Visual name' })
     await userEvent.clear(name)
-    await userEvent.type(name, 'Bid Tracker trend')
+    await userEvent.type(name, 'Live Bids trend')
     await userEvent.click(screen.getByRole('button', { name: /Save visual/ }))
     await waitFor(() => expect(screen.getByLabelText('location')).toHaveTextContent('/insights/studio/visuals'))
     const saved = await repository.listInsightVisuals()
     expect(saved).toHaveLength(1)
     expect(saved[0].spec.query.datasetId).toBe('opportunities.bidTracker')
-    expect(await screen.findByRole('article', { name: 'Bid Tracker trend' })).toBeInTheDocument()
+    expect(await screen.findByRole('article', { name: 'Live Bids trend' })).toBeInTheDocument()
   })
 
   it('renders the built-in H1 Review template with its sections', async () => {

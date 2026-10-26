@@ -11,7 +11,8 @@ export function useCompetitors() {
 /** Create / update / delete, each refreshing the list on success. */
 export function useCompetitorMutations() {
   const queryClient = useQueryClient()
-  const onSuccess = () => queryClient.invalidateQueries({ queryKey: COMPETITORS_KEY })
+  // Live Bids' Competitor dropdown options are resolved from this list too.
+  const onSuccess = () => Promise.all([COMPETITORS_KEY, ['bidCustomFields']].map((queryKey) => queryClient.invalidateQueries({ queryKey })))
   return {
     create: useMutation({ mutationFn: (input: CompetitorInput) => repository.createCompetitor(input), onSuccess }),
     update: useMutation({ mutationFn: ({ id, ...input }: CompetitorInput & { id: string }) => repository.updateCompetitor(id, input), onSuccess }),

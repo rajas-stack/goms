@@ -2,7 +2,7 @@ import { W_ONLY_ATOMS } from './atoms.js'
 import { FUNCTIONAL_ROLES, ROLES, type Grant, type Level, type Role, type Scope } from './types.js'
 
 export const MODULES = [
-  { key: 'opp.bidTracker', label: 'Bid Tracker rows', group: 'Opportunity' },
+  { key: 'opp.bidTracker', label: 'Live Bids rows', group: 'Opportunity' },
   { key: 'opp.pipeline', label: 'Pipeline rows', group: 'Opportunity' },
   { key: 'opp.campaign', label: 'Campaign rows', group: 'Opportunity' },
   { key: 'opp.master', label: 'Master Grid', group: 'Opportunity' },

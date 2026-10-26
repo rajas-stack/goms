@@ -2,11 +2,16 @@ import { useEffect, useState, type ReactElement } from 'react'
 import { cn } from '@/lib/utils'
 import { initials } from '@/lib/utils'
 import { Icon } from './Icon'
+import { useProfileImage, type ProfileImageRef } from '@/lib/useProfileImage'
+import { useProfileImagesIndex } from '@/features/dms/ProfileImagesContext'
+import { profileNameKey } from '@/lib/profileNameKey'
 
 export interface AvatarPerson {
+  id?: string
   name: string
   photoUrl?: string | null
   vacant?: boolean
+  profileImage?: ProfileImageRef
 }
 
 export type AvatarSize = '2xs' | 'xs' | 'sm' | 'md' | 'lg'
@@ -25,14 +30,25 @@ export function Avatar({
   person,
   size = 'md',
   className,
+  cutout = false,
 }: {
   person: AvatarPerson
   size?: AvatarSize
   className?: string
+  /** Show a photo as-is (Drive cutouts have no background) with a soft 3D drop shadow, instead of a cropped circle. */
+  cutout?: boolean
 }): ReactElement {
   // A broken/expired photo URL falls back to initials instead of a broken-image glyph.
   const [photoFailed, setPhotoFailed] = useState(false)
-  useEffect(() => setPhotoFailed(false), [person.photoUrl])
+  const profiles = useProfileImagesIndex()
+  // Many screens pass only a name (or a non-person id), so fall back to the unique-name lookup.
+  const userId = (person.id && profiles?.people?.[person.id]) || (person.id && profiles?.versions[person.id] ? person.id : profiles?.names?.[profileNameKey(person.name)] ?? person.id)
+  const version = userId ? profiles?.versions[userId] : undefined
+  const managed = profiles?.configured && !!userId
+  const image = managed ? (version && userId ? { userId, version } : undefined) : person.profileImage
+  const drivePhoto = useProfileImage(person.vacant ? undefined : image)
+  const photoUrl = managed || image ? drivePhoto.url : person.photoUrl
+  useEffect(() => setPhotoFailed(false), [photoUrl])
 
   const baseClasses = cn(
     'flex shrink-0 items-center justify-center rounded-full',
@@ -54,15 +70,19 @@ export function Avatar({
   }
 
   // Photo variant
-  if (person.photoUrl && !photoFailed) {
+  if (photoUrl && !photoFailed) {
     return (
       <img
-        src={person.photoUrl}
+        ref={drivePhoto.ref}
+        src={photoUrl}
         alt={person.name}
         loading="lazy"
+        decoding="async"
         referrerPolicy="no-referrer"
         onError={() => setPhotoFailed(true)}
-        className={cn(baseClasses, 'bg-ink-100 object-cover ring-1 ring-line')}
+        className={cutout
+          ? cn(baseClasses, 'rounded-none object-contain [filter:drop-shadow(0_6px_6px_rgb(15_23_42/0.28))_drop-shadow(0_1px_1px_rgb(15_23_42/0.2))]')
+          : cn(baseClasses, 'bg-ink-100 object-cover ring-1 ring-line')}
       />
     )
   }
@@ -70,6 +90,7 @@ export function Avatar({
   // Initials variant
   return (
     <span
+      ref={drivePhoto.ref}
       className={cn(baseClasses, 'bg-ink-100 font-semibold leading-none text-ink-700')}
       data-testid="avatar"
       aria-hidden="true"

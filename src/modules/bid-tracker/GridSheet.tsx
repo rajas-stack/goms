@@ -12,12 +12,13 @@ import { useNodeFilter } from '@/lib/rbacTree/access'
 import { Icon } from '@/components/ui/Icon'
 import { MASTER_SCOPES, type MasterScope, type SheetId } from './sheets'
 import { readSystemColumns, saveSystemColumns } from './systemColumnPreferences'
+import { LifecycleSheetHeader } from './lifecycle/LifecycleSheetHeader'
 
 const DEFAULT_VIEW_ID = 'allBids'
 const SAVE_DEBOUNCE_MS = 600
 
 /** One Excel-style sheet: the saved-view strip plus the Master Grid, with this
- *  sheet's own saved views. (Bid Tracker's Master Grid tab and every other
+ *  sheet's own saved views. (Live Bids' Master Grid tab and every other
  *  Opportunity sheet are this same component.) */
 export function GridSheet({ sheet }: { sheet: SheetId }) {
   const { data: views = [] } = useBidSavedViews(sheet)
@@ -95,6 +96,7 @@ export function GridSheet({ sheet }: { sheet: SheetId }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {sheet !== 'master' && <LifecycleSheetHeader sheet={sheet} />}
       <SavedViewTabs
         sheet={sheet} activeViewId={activeViewId} onChange={(id) => selectView(id)}
         onCreateNew={() => setCreateOpen(true)} onDelete={onDelete} modifiedViewId={modifiedViewId}

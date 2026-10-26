@@ -10,7 +10,7 @@ import { useNodeFilter } from '@/lib/rbacTree/access'
 import { usePermissions } from '@/lib/permissions'
 import { OPPORTUNITY_TAB_MODULES } from '@/lib/routeModules'
 
-/** The Opportunity module: Bid Tracker, Pipeline (Funnel / Backup / Commits),
+/** The Opportunity module: Live Bids, Pipeline (Funnel / Backup / Commits),
  *  Campaign, Master and Dashboard. Laid out like Account Mapping's Map / Directory /
  *  Insights / Meetings bar. Every sheet is the same Excel-style grid (custom
  *  columns, filters, freeze, lock) with its own saved views, over the rows that
@@ -28,9 +28,9 @@ export function OpportunityWorkspace({ tab }: { tab: OpportunityTab }) {
   if (visibleTabs.length > 0 && !visibleTabs.some((t) => t.value === tab)) return <Navigate to={visibleTabs[0].path} replace />
   const pipelineTabs = PIPELINE_TABS.filter((t) => treeAllows(`opportunity.pipeline.${t.value}`))
   if (tab === 'pipeline' && pipelineTabs.length > 0 && !pipelineTabs.some((t) => t.value === pipeline?.value)) {
-    return <Navigate to={`/bid-tracker/pipeline/${pipelineTabs[0].value}`} replace />
+    return <Navigate to={`/live-bids/pipeline/${pipelineTabs[0].value}`} replace />
   }
-  if (tab === 'pipeline' && !pipeline) return <Navigate to="/bid-tracker/pipeline/funnel" replace />
+  if (tab === 'pipeline' && !pipeline) return <Navigate to="/live-bids/pipeline/funnel" replace />
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -56,7 +56,7 @@ export function OpportunityWorkspace({ tab }: { tab: OpportunityTab }) {
       {tab === 'pipeline' && pipeline && (
         <Tabs<PipelineTab>
           value={pipeline.value}
-          onChange={(v) => navigate(`/bid-tracker/pipeline/${v}`)}
+          onChange={(v) => navigate(`/live-bids/pipeline/${v}`)}
           tabs={pipelineTabs.map(({ value, label }) => ({ value, label }))}
         />
       )}

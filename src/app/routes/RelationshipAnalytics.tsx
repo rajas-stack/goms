@@ -24,7 +24,7 @@ export function RelationshipAnalytics() {
   const photoById = useMemo(() => new Map(employees.map((e) => [e.id, e.photoUrl] as const)), [employees])
 
   const openPerson = (employeeId: string) =>
-    navigate(`/directory?sel=${employeeId}&kind=employee`)
+    navigate(`/teams/directory?sel=${employeeId}&kind=employee`)
 
   return (
     <div className="flex h-full flex-col">

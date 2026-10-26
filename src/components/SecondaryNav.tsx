@@ -37,16 +37,15 @@ function NavTile({ to, end, icon, label }: { to: string; end?: boolean; icon: st
   )
 }
 
-/** The app's other primary sections — Map/Directory/Insights/Meetings (Home
- *  itself is reached via the Amnex logo, not repeated here). Shown on every
+/** The app's other primary sections — Map/Meetings (Insights lives in the side rail; Home
+ *  itself is reached via the Amnex logo, not repeated here; the Directory
+ *  lives in the sidebar). Shown on every
  *  route except Home (AppLayout's `navExpanded`, derived straight from the
  *  URL) so it survives reloads and deep links instead of depending on how
  *  you got there. Renders as a fixed bottom bar below `lg:` and a horizontal
  *  bar directly under TopBar at `lg:` and up. */
 export function SecondaryNav() {
   const canMap = useCanReadAny(NAV_MODULES.map)
-  const canDirectory = useCanReadAny(NAV_MODULES.directory)
-  const canInsights = useCanReadAny(NAV_MODULES.insights)
   const canMeetings = useCanReadAny(NAV_MODULES.meetings)
   return (
     <nav
@@ -58,8 +57,6 @@ export function SecondaryNav() {
       )}
     >
       {canMap && <NavTile to="/map" icon="Map" label="Map" />}
-      {canDirectory && <NavTile to="/directory" icon="Network" label="Directory" />}
-      {canInsights && <NavTile to="/insights" icon="BarChart3" label="Insights" />}
       {canMeetings && <NavTile to="/meetings" icon="CalendarClock" label="Meetings" />}
     </nav>
   )

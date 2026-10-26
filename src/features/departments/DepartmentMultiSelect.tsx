@@ -16,12 +16,14 @@ interface Props {
   /** How many chips show before "+N". */
   maxChips?: number
   placeholder?: string
+  /** What one option is called in the popover's wording, e.g. 'vertical'. */
+  noun?: string
 }
 
 /** Compact multi-select for departments: chips (then "+N") on the trigger, a checkbox list in the popover, and a
  *  "+ Create department" footer that adds to the master and selects it. */
 export function DepartmentMultiSelect({
-  value, options, onChange, onCreate, disabled, 'aria-label': ariaLabel, maxChips = 2, placeholder = 'No department',
+  value, options, onChange, onCreate, disabled, 'aria-label': ariaLabel, maxChips = 2, placeholder, noun = 'department',
 }: Props) {
   const anchorRef = useRef<HTMLButtonElement>(null)
   const [open, setOpen] = useState(false)
@@ -47,7 +49,7 @@ export function DepartmentMultiSelect({
       if (!has(name)) onChange([...value, name])
       setQuery('')
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Could not create the department.')
+      setError(cause instanceof Error ? cause.message : `Could not create the ${noun}.`)
     } finally {
       setCreating(false)
     }
@@ -63,7 +65,7 @@ export function DepartmentMultiSelect({
         className="flex min-h-8 w-full max-w-[16rem] items-center gap-1 rounded-lg border border-line bg-white px-1.5 py-1 text-left text-[12px] transition-colors hover:border-ink-600/30 focus-visible:focus-ring disabled:cursor-not-allowed disabled:opacity-60"
       >
         <span className="flex min-w-0 flex-1 flex-wrap gap-1">
-          {value.length === 0 && <span className="px-1 text-muted">{placeholder}</span>}
+          {value.length === 0 && <span className="px-1 text-muted">{placeholder ?? `No ${noun}`}</span>}
           {chips.map((d) => (
             <span key={d} className="truncate rounded-full border border-goms-navy/25 bg-goms-navy/[0.07] px-1.5 py-px text-[11px] font-medium text-goms-navy">{d}</span>
           ))}
@@ -76,8 +78,8 @@ export function DepartmentMultiSelect({
           <div style={{ maxHeight }} className="flex w-60 flex-col overflow-hidden rounded-xl border border-line bg-paper shadow-pop">
             <div className="border-b border-line p-1.5">
               <input
-                autoFocus type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search or name a new department…"
-                aria-label="Search departments"
+                autoFocus type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={onCreate ? `Search or name a new ${noun}…` : `Search ${noun}s…`}
+                aria-label={`Search ${noun}s`}
                 onKeyDown={(e) => { if (e.key === 'Enter' && !exact && onCreate) { e.preventDefault(); void create() } }}
                 className="h-8 w-full rounded-lg border border-line bg-white px-2 text-[12.5px] outline-none focus-visible:focus-ring"
               />
@@ -91,7 +93,7 @@ export function DepartmentMultiSelect({
                   </label>
                 </li>
               ))}
-              {shown.length === 0 && <li className="px-2 py-3 text-center text-[12px] text-muted">No department matches.</li>}
+              {shown.length === 0 && <li className="px-2 py-3 text-center text-[12px] text-muted">No {noun} matches.</li>}
             </ul>
             {error && <p role="alert" className="px-2.5 pb-1 text-[11.5px] text-crimson">{error}</p>}
             {onCreate && (
@@ -101,7 +103,7 @@ export function DepartmentMultiSelect({
                   'disabled:cursor-not-allowed disabled:text-muted disabled:hover:bg-transparent')}
               >
                 <Icon name="Plus" size={13} />
-                {query.trim() && !exact ? `Create department “${query.trim()}”` : 'Create department (type a name above)'}
+                {query.trim() && !exact ? `Create ${noun} “${query.trim()}”` : `Create ${noun} (type a name above)`}
               </button>
             )}
           </div>

@@ -9,8 +9,8 @@ function renderBid(bidId: string) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={[`/bid-tracker/bid/${bidId}`]}>
-        <Routes><Route path="/bid-tracker/bid/:bidId" element={<BidDetailWorkspace />} /></Routes>
+      <MemoryRouter initialEntries={[`/live-bids/bid/${bidId}`]}>
+        <Routes><Route path="/live-bids/bid/:bidId" element={<BidDetailWorkspace />} /></Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   )

@@ -187,7 +187,7 @@ export function buildBidTimeline(input: BidTimelineInput): OpportunityTimeline {
   const bidStart = calendarDay(input.bid.createdAt) ?? input.today
   const startDate = calendarDay(input.opportunity?.createdAt) ?? bidStart
   const lifecycleStages = opportunityLifecycle({ createdAt: startDate, bidCreatedAt: bidStart, sheet: input.bid.sheet, sheetChanges: input.sheetChanges })
-  const presalesStart = lifecycleStages.find(stage => stage.name === 'Bid Tracker')?.actualStart
+  const presalesStart = lifecycleStages.find(stage => stage.name === 'Live Bids')?.actualStart
   const planStart = presalesStart ?? bidStart
   const { endDate: plannedEnd, estimated } = resolveEndDate(planStart, input.submissionDate)
   const plan = generatePlannedPlan(planStart, plannedEnd, rules)
@@ -213,7 +213,7 @@ export function buildBidTimeline(input: BidTimelineInput): OpportunityTimeline {
     }
     const due = calendarDay(marker?.dueAt ?? null)
     const completed = marker?.status === 'completed'
-    const completedAt = completed ? calendarDay(marker.updatedAt) : null
+    const completedAt = completed ? calendarDay(phase.planned === false && marker.dueAt ? marker.dueAt : marker.updatedAt) : null
     return {
       ...milestone,
       ...(due && phase.planned !== false ? { plannedStart: due, plannedEnd: due } : {}),

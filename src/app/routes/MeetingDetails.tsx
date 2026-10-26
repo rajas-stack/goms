@@ -7,6 +7,7 @@ import { attendeeName } from '@/lib/attendees'
 import { Button } from '@/components/ui/Button'
 import { Icon } from '@/components/ui/Icon'
 import { TimelineEventDialog } from '@/features/employees/TimelineEventDialog'
+import { EmailQuickPanel } from '@/features/email-center/EmailQuickPanel'
 
 export function MeetingDetails() {
   const { meetingId } = useParams()
@@ -23,6 +24,7 @@ export function MeetingDetails() {
   if (!meeting) return <div className="p-6">{back}<h1 className="text-xl font-semibold">Meeting not found</h1><p className="mt-2 text-sm text-muted">It may have been removed or be unavailable to your account.</p></div>
   return <div className="h-full overflow-y-auto scrollbar-thin"><div className="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6">
     {back}
+    <EmailQuickPanel entity={{ type: 'meeting', id: meeting.id }} title={meeting.title} />
     <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="eyebrow">Meeting details</p><h1 className="font-display text-2xl font-bold text-ink-900">{meeting.title}</h1><p className="mt-1 text-sm text-muted">{timelineEventLabel(meeting)}</p></div>{meeting.source === 'manual' && allowed && <Button onClick={() => setEditing(true)}><Icon name="Pencil" size={14} />Edit Meeting</Button>}</div>
     <dl className="grid gap-3 rounded-xl border border-line bg-white p-4 sm:grid-cols-2 lg:grid-cols-4">
       <Detail label="Person" value={employee?.name ?? 'Contact unavailable'} />

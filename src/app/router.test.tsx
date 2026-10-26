@@ -59,20 +59,20 @@ describe('admin data import routes', () => {
     expect(paths).toContain('/admin/data-import/session')
   })
 
-  it('registers /bid-tracker routes only when VITE_BID_TRACKER_ENABLED is true', async () => {
+  it('registers /live-bids routes only when VITE_BID_TRACKER_ENABLED is true', async () => {
     vi.stubEnv('VITE_BID_TRACKER_ENABLED', 'true')
     const on = await import('./router')
     const onPaths = on.router.routes[0].children?.map((c) => c.path) ?? []
-    expect(onPaths).toContain('/bid-tracker')
-    expect(onPaths).toContain('/bid-tracker/:section')
-    expect(onPaths).toContain('/bid-tracker/bid/:bidId')
+    expect(onPaths).toContain('/live-bids')
+    expect(onPaths).toContain('/live-bids/:section')
+    expect(onPaths).toContain('/live-bids/bid/:bidId')
 
     vi.resetModules()
     vi.stubEnv('VITE_BID_TRACKER_ENABLED', '')
     const off = await import('./router')
     const offPaths = off.router.routes[0].children?.map((c) => c.path) ?? []
-    expect(offPaths).not.toContain('/bid-tracker')
-    expect(offPaths).not.toContain('/bid-tracker/:section')
+    expect(offPaths).not.toContain('/live-bids')
+    expect(offPaths).not.toContain('/live-bids/:section')
   })
 
   it('keeps the catch-all NotFound route last regardless of the flag', async () => {

@@ -12,9 +12,12 @@ import { consumePendingWorkspaceAction, registerWorkspaceDialogHandle } from './
  *  deep links, and the Android back-button chain all address AMNEX
  *  salespeople through the same mechanism as government records. The panel
  *  gains its rendering branch with the Roster phase. */
-export type Selection = { kind: 'node' | 'employee' | 'salesPerson'; id: string } | null
+export type Selection = { kind: SelectionKind; id: string } | null
 
-type SelectionKind = NonNullable<Selection>['kind']
+/** `orgPerson` / `teamMember` / `contact` are the Directory's Amnex employees and address-book contacts. */
+const SELECTION_KINDS = ['node', 'employee', 'salesPerson', 'orgPerson', 'teamMember', 'contact'] as const
+
+type SelectionKind = typeof SELECTION_KINDS[number]
 
 type Dialog =
   | { type: 'none' }
@@ -47,6 +50,13 @@ export const useWorkspace = () => {
   const v = useContext(Ctx)
   if (!v) throw new Error('useWorkspace outside provider')
   return v
+}
+
+/** Renders children against a fixed selection, so a closing panel keeps its last content while it animates out. */
+export function FrozenSelection({ selection, children }: { selection: WorkspaceApi['selection']; children: ReactNode }) {
+  const ws = useWorkspace()
+  const value = useMemo(() => ({ ...ws, selection }), [ws, selection])
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
 export function WorkspaceProvider({ stateCode, children }: { stateCode: number; children: ReactNode }) {
@@ -99,7 +109,7 @@ export function WorkspaceProvider({ stateCode, children }: { stateCode: number; 
     // Whitelisted rather than cast: a hand-edited `?kind=` must not reach the
     // details panel as a kind it has no branch for. `salesPerson` joins the
     // list now that SalesPersonDetails renders it.
-    if (id && (kind === 'node' || kind === 'employee' || kind === 'salesPerson')) return { kind, id }
+    if (id && (SELECTION_KINDS as readonly (string | null)[]).includes(kind)) return { kind: kind as SelectionKind, id }
     return null
   }, [params])
   selectionRef.current = selection

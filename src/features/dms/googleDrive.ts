@@ -225,3 +225,9 @@ export function copyFile(source: DriveFile, parentId: string, connectionId: stri
     body: JSON.stringify({ name: source.name, parents: [parentId], appProperties: { ...source.appProperties, ...appProperties } }),
   }, connectionId)
 }
+
+/** A Drive file's bytes (the signed-in user's own access applies). */
+export async function downloadFile(fileId: string, connectionId = 'default'): Promise<Blob> {
+  const response = await authenticatedFetch(`${API}/files/${encodeURIComponent(fileId)}?alt=media&supportsAllDrives=true`, {}, connectionId)
+  return response.blob()
+}

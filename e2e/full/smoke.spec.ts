@@ -39,7 +39,7 @@ test.describe('smoke: desktop left rail', () => {
     { name: 'Insights', url: /\/insights$/ },
     { name: 'Account Mapping', url: /\/map$/ },
     { name: 'Commercial Calculator', url: /\/commercial-calculator$/ },
-    { name: 'Opportunity', url: /\/bid-tracker$/ },
+    { name: 'Opportunity', url: /\/live-bids$/ },
     { name: 'Document maker', url: /\/document-maker$/ },
     { name: 'Teams', url: /\/teams$/ },
   ];
@@ -51,15 +51,23 @@ test.describe('smoke: desktop left rail', () => {
     });
   }
 
+  test('@regression old /directory links open the sidebar Directory on the same person', async ({ page }) => {
+    await gotoApp(page, '/directory?sel=x&kind=employee');
+    await expect(page).toHaveURL(/\/teams\/directory\?sel=x&kind=employee$/);
+    await expect(page.getByRole('heading', { name: 'Directory' })).toBeVisible();
+  });
+
   test('@smoke Amnex home logo returns to Home', async ({ page }) => {
     await gotoApp(page, '/directory');
     await page.getByRole('link', { name: 'Amnex home' }).click();
     await expect(page).toHaveURL(new URL('/', page.url()).href);
   });
 
-  test('@regression Account Mapping secondary nav links (Map, Directory, Insights, Meetings)', async ({ page }) => {
+  test('@regression Account Mapping secondary nav links (Map, Insights, Meetings)', async ({ page }) => {
     await gotoApp(page, '/map');
-    for (const [name, url] of [['Directory', /\/directory$/], ['Insights', /\/insights$/], ['Meetings', /\/meetings$/], ['Map', /\/map$/]] as const) {
+    // Directory moved to the sidebar; Account Mapping no longer lists it.
+    await expect(page.getByRole('link', { name: 'Directory', exact: true })).toHaveCount(0);
+    for (const [name, url] of [['Insights', /\/insights$/], ['Meetings', /\/meetings$/], ['Map', /\/map$/]] as const) {
       // Insights now has its own module navigation; return to Account Mapping for its other sections.
       if (name === 'Meetings') await page.getByRole('navigation').getByRole('button', { name: 'Account Mapping', exact: true }).click();
       await page.getByRole('link', { name, exact: true }).click();
@@ -67,9 +75,9 @@ test.describe('smoke: desktop left rail', () => {
     }
   });
 
-  test('@regression Opportunity tab links (Bid Tracker, Pipeline, Campaign, Master, Dashboard)', async ({ page }) => {
-    await gotoApp(page, '/bid-tracker');
-    for (const [name, url] of [['Pipeline', /\/pipeline\/funnel$/], ['Campaign', /\/campaign$/], ['Master', /\/master$/], ['Dashboard', /\/dashboard$/], ['Bid Tracker', /\/bid-tracker$/]] as const) {
+  test('@regression Opportunity tab links (Live Bids, Pipeline, Campaign, Master, Dashboard)', async ({ page }) => {
+    await gotoApp(page, '/live-bids');
+    for (const [name, url] of [['Pipeline', /\/pipeline\/funnel$/], ['Campaign', /\/campaign$/], ['Master', /\/master$/], ['Dashboard', /\/dashboard$/], ['Live Bids', /\/live-bids$/]] as const) {
       await page.getByRole('link', { name, exact: true }).click();
       await expect(page).toHaveURL(url);
     }

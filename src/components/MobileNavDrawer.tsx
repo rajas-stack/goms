@@ -8,6 +8,8 @@ import { isBidTrackerEnabled } from '@/modules/bid-tracker/enabled'
 import { useCanReadAny } from '@/lib/permissions'
 import { useNodeFilter } from '@/lib/rbacTree/access'
 import { NAV_MODULES } from '@/lib/routeModules'
+import { ROUTE_NODES } from '@/app/routeNodes'
+import { SPRING_OVERLAY } from '@/lib/motion'
 
 interface Props {
   open: boolean
@@ -25,16 +27,20 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const navigate = useNavigate()
   const location = useLocation()
   const commercialActive = location.pathname.startsWith('/commercial-calculator')
-  const bidTrackerActive = location.pathname.startsWith('/bid-tracker')
+  const bidTrackerActive = location.pathname.startsWith('/live-bids')
   const teamsActive = location.pathname.startsWith('/teams')
   const documentMakerActive = location.pathname.startsWith('/document-maker')
+  const emailActive = location.pathname.startsWith('/email')
   // Same rule as the desktop rail: the server policy (A) AND the permission tree. Roles & Access lives in Settings.
   const tree = useNodeFilter()
   const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping) && tree('accountMapping')
   const canCommercial = useCanReadAny(NAV_MODULES.commercial) && tree('commercial')
   const canOpportunity = useCanReadAny(NAV_MODULES.opportunity) && tree('opportunity')
   const canTeams = useCanReadAny(NAV_MODULES.teams) && tree('teams')
+  const canDirectory = useCanReadAny(NAV_MODULES.directory) && tree(ROUTE_NODES.directory)
+  const directoryPath = canDirectory ? '/teams/directory' : '/teams'
   const canDocumentMaker = tree('documentMaker')
+  const canEmail = tree('email')
   const canInsights = useCanReadAny(NAV_MODULES.insights) && tree('accountMapping.insights')
 
   useEffect(() => {
@@ -69,7 +75,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
               initial={{ x: '-100%' }}
               animate={{ x: 0 }}
               exit={{ x: '-100%' }}
-              transition={{ type: 'spring', stiffness: 340, damping: 32 }}
+              transition={SPRING_OVERLAY}
             >
               <div className="mb-2 flex items-center justify-between px-1">
                 <span className="font-display text-sm font-semibold text-ink-900">Menu</span>
@@ -115,7 +121,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                 <button
                   onClick={() => {
                     onClose()
-                    navigate('/bid-tracker')
+                    navigate('/live-bids')
                   }}
                   className={cn(
                     'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
@@ -143,13 +149,27 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                 <Icon name="FilePenLine" size={17} />
                 Document maker
               </button>}
+              {canEmail && <button
+                onClick={() => {
+                  onClose()
+                  navigate('/email')
+                }}
+                aria-current={emailActive ? 'page' : undefined}
+                className={cn(
+                  'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
+                  emailActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink hover:bg-ink-900/[0.05]',
+                )}
+              >
+                <Icon name="Mail" size={17} />
+                E-mail
+              </button>}
               {canInsights && <button onClick={() => { onClose(); navigate('/insights') }} aria-current={/^\/(insights|analytics)/.test(location.pathname) ? 'page' : undefined} className="flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-ink hover:bg-ink-900/[0.05]">
                 <Icon name="BarChart3" size={17}/>Insights
               </button>}
-              {canTeams && <button
+              {(canTeams || canDirectory) && <button
                 onClick={() => {
                   onClose()
-                  navigate('/teams')
+                  navigate(directoryPath)
                 }}
                 className={cn(
                   'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
@@ -159,7 +179,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
                 )}
               >
                 <Icon name="Users" size={17} />
-                Teams
+                Directory
               </button>}
             </motion.div>
           </>

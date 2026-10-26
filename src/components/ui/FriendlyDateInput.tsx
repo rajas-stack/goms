@@ -1,10 +1,10 @@
-import { useEffect, useId, useRef, useState, type InputHTMLAttributes } from 'react'
+import { useEffect, useId, useRef, useState, type InputHTMLAttributes, type Ref } from 'react'
 import { Input } from './Field'
 import { Icon } from './Icon'
 import { cn } from '@/lib/utils'
 import {
   formatFriendlyPreview, formatFriendlyValue, friendlyValueToDate, parseFriendlyDate,
-  toFriendlyValue, type FriendlyDateFormat,
+  toFriendlyValue, parseFriendlyValue, type FriendlyDateFormat,
 } from '@/lib/friendlyDate'
 
 export interface FriendlyDateChange {
@@ -33,16 +33,20 @@ export interface FriendlyDateInputProps
   invalidMessage?: string
   /** Classes for the outer wrapper (width / layout); `className` styles the text box. */
   wrapperClassName?: string
+  textInputRef?: Ref<HTMLInputElement>
+  calendarLabel?: string
 }
 
 const PLACEHOLDER: Record<FriendlyDateFormat, string> = {
   date: 'e.g. 13 May 2026 or 13/5/26',
+  'optional-time': 'e.g. 13 May 2026, optionally 15:00',
   'datetime-local': 'e.g. 13th May 2026 3pm or 13/5/26 15:00',
   iso: 'e.g. 13th May 2026 3pm or 13/5/26 15:00',
 }
 
 const INVALID: Record<FriendlyDateFormat, string> = {
   date: 'Enter a valid date, or clear the field.',
+  'optional-time': 'Enter a valid date and optional time, or clear the field.',
   'datetime-local': 'Enter a valid date and time, or clear the field.',
   iso: 'Enter a valid date and time, or clear the field.',
 }
@@ -73,14 +77,16 @@ function pickerValue(value: string, format: FriendlyDateFormat): string {
  *  "13/5/26", "24thsept261500", "2026-05-13"…), shows what it captured, and stores the
  *  same value the native date input did. */
 export function FriendlyDateInput({
-  value, onChange, format = 'date', min, max, showPicker = true, floatingFeedback = false,
-  invalidMessage, wrapperClassName, className, placeholder, disabled, readOnly,
+  value, onChange, format = 'optional-time', min, max, showPicker = true, floatingFeedback = false,
+  invalidMessage, wrapperClassName, className, placeholder, disabled, readOnly, textInputRef, calendarLabel,
   'aria-describedby': describedBy, ...inputProps
 }: FriendlyDateInputProps) {
   const feedbackId = useId()
   const pickerRef = useRef<HTMLInputElement>(null)
   const [text, setText] = useState(() => formatFriendlyValue(value, format))
   const [isTyped, setIsTyped] = useState(false)
+  const [timeOpen, setTimeOpen] = useState(false)
+  const optionalTime = format === 'optional-time'
   // The value this field last reported; any other incoming value came from outside (reset, load).
   const lastEmitted = useRef(value)
 
@@ -99,13 +105,11 @@ export function FriendlyDateInput({
   const handleText = (nextText: string) => {
     setText(nextText)
     setIsTyped(true)
-    const parsed = parseFriendlyDate(nextText)
-    emit(nextText, parsed ? toFriendlyValue(parsed, format) : '')
+    emit(nextText, parseFriendlyValue(nextText, format))
   }
 
   const handlePicked = (picked: string) => {
-    const parsed = parseFriendlyDate(picked)
-    const nextValue = parsed ? toFriendlyValue(parsed, format) : ''
+    const nextValue = parseFriendlyValue(picked, format)
     const nextText = formatFriendlyValue(nextValue, format)
     setText(nextText)
     setIsTyped(false)
@@ -131,12 +135,19 @@ export function FriendlyDateInput({
   const hasFeedback = !!preview || !!errorText
   const describedByIds = [describedBy, hasFeedback ? feedbackId : null].filter(Boolean).join(' ') || undefined
   const pickerEnabled = showPicker && !disabled && !readOnly
+  const timed = optionalTime && value.includes('T')
+  const changeTime = (clock: string) => {
+    const date = value.slice(0, 10)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return
+    handlePicked(clock ? `${date}T${clock}` : date)
+  }
 
   return (
     <div className={cn('relative flex flex-col gap-1', wrapperClassName)}>
       <div className="relative">
         <Input
           {...inputProps}
+          ref={textInputRef}
           type="text"
           inputMode="text"
           autoComplete="off"
@@ -155,7 +166,7 @@ export function FriendlyDateInput({
           <>
             <button
               type="button"
-              aria-label="Open calendar"
+              aria-label={calendarLabel ?? 'Open calendar'}
               title="Pick from a calendar"
               disabled={!pickerEnabled}
               onClick={openPicker}
@@ -165,19 +176,30 @@ export function FriendlyDateInput({
             </button>
             <input
               ref={pickerRef}
-              type={format === 'date' ? 'date' : 'datetime-local'}
+              type={format === 'date' || optionalTime ? 'date' : 'datetime-local'}
               tabIndex={-1}
               aria-hidden="true"
               className="pointer-events-none absolute bottom-0 right-0 h-px w-px opacity-0"
-              value={pickerValue(value, format)}
-              min={min ? pickerValue(min, format) : undefined}
-              max={max ? pickerValue(max, format) : undefined}
+              value={optionalTime ? value.slice(0, 10) : pickerValue(value, format)}
+              min={min ? optionalTime ? min.slice(0, 10) : pickerValue(min, format) : undefined}
+              max={max ? optionalTime ? max.slice(0, 10) : pickerValue(max, format) : undefined}
               disabled={!pickerEnabled}
-              onChange={(event) => handlePicked(event.target.value)}
+              onChange={(event) => handlePicked(optionalTime && timed && event.target.value ? `${event.target.value}${value.slice(10)}` : event.target.value)}
             />
           </>
         )}
       </div>
+      {optionalTime && <div className="flex flex-wrap items-center gap-2 text-xs">
+        {timeOpen || timed ? <>
+          <input type="time" aria-label={`Time for ${inputProps['aria-label'] ?? 'date'}`} value={timed ? value.slice(11, 16) : ''}
+            disabled={disabled || readOnly || !value} onChange={event => changeTime(event.target.value)}
+            className="h-7 rounded border border-line bg-white px-2 text-ink focus-visible:focus-ring" />
+          <button type="button" disabled={disabled || readOnly} className="text-muted underline" onClick={() => { changeTime(''); setTimeOpen(false) }}>Remove time</button>
+          {!value && <span className="text-muted">Choose a date first.</span>}
+        </> : <button type="button" disabled={disabled || readOnly} className="inline-flex items-center gap-1 text-goms-navy hover:underline disabled:opacity-40" onClick={() => setTimeOpen(true)}>
+          <Icon name="Clock" size={12} /> Add time
+        </button>}
+      </div>}
       {hasFeedback && (
         <div id={feedbackId} className={cn(floatingFeedback && 'absolute left-0 top-full z-20 mt-1 min-w-full whitespace-nowrap')}>
           {preview && (

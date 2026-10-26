@@ -80,7 +80,7 @@ describe('runQuery', () => {
   })
 
   it('refuses a field that belongs to another source (lineage)', () => {
-    expect(() => run({ datasetId: 'opportunities.bidTracker', dimensions: [{ field: 'sheet' }] })).toThrow(/not a field of Bid Tracker/)
+    expect(() => run({ datasetId: 'opportunities.bidTracker', dimensions: [{ field: 'sheet' }] })).toThrow(/not a field of Live Bids/)
     expect(() => run({ datasetId: 'employees', dimensions: [{ field: 'vertical' }] })).toThrow(/not a field of Employees/)
     expect(() => run({ datasetId: 'nope' })).toThrow(/Unknown data source/)
   })

@@ -136,6 +136,15 @@ const bookOfBusinessTransfer: Requirement = async (raw) => ({
 })
 
 export const opportunityPolicy: Record<string, PolicyEntry> = {
+  // Personal mailbox links require the bid's own sheet and row scope, including for reads.
+  ...same(['bidCommunications.ignore'], bidRow('update', r => r?.bidId)),
+  'bidCommunications.contacts': { requirements: [read('am.contacts')] },
+  'bidCommunications.createContact': { requirements: [create('am.contacts')] },
+  'bidCommunications.updateContact': { requirements: [write('am.contacts')] },
+  'bidCommunications.deleteContact': { requirements: [remove('am.contacts')] },
+  'bidCommunications.addInternal': { requirements: [create('team.org')] },
+  'bidCommunications.bindInternalEmail': { requirements: [write('team.org')] },
+  'bidCommunications.addClient': { requirements: [create('am.contacts')] },
   'insights.dashboard': { requirements: [read('an.operational'), readRows] },
   // reads: any role that can read at least one of the three sheet modules
   ...same([
@@ -148,6 +157,8 @@ export const opportunityPolicy: Record<string, PolicyEntry> = {
   'bids.listForGrid': { requirements: [readRows], mask: maskGridRows },
 
   'bids.create': { requirements: [sheetCreate, departmentCreate] },
+  'bids.previewImport': { requirements: [create('opp.bidTracker')] },
+  'bids.importNew': { requirements: [create('opp.bidTracker')] },
   'bids.update': { requirements: [bidRow('update', (r) => r?.id, bidPatch), sheetMove] },
   ...same(['bids.archive', 'bids.unarchive'], bidRow('update', (r) => r?.id, () => ['bid.archive'])),
   'bids.markVerified': { requirements: [bidRow('update', (r) => r?.id, () => ['bid.verify'])] },
@@ -175,6 +186,9 @@ export const opportunityPolicy: Record<string, PolicyEntry> = {
   ...same(['bidCustomFields.update', 'bidCustomFields.reorder', 'bidCustomFields.archive', 'bidCustomFields.unarchive'], write('bid.columns')),
   'bidCustomFields.delete': { requirements: [remove('bid.columns')] },
   'bidCustomFields.setValue': { requirements: [bidRow('update', (r) => r?.bidId, () => ['bid.custom'])] },
+  // People columns: every grid editor reads which people a person column offers; changing that is column setup.
+  'bidCustomFields.peopleColumns': { requirements: [readRows] },
+  'bidCustomFields.setPeopleColumn': { requirements: [write('bid.columns')] },
 
   // Synopsis sections are free-form bid content with no field atom of their own, so saving needs full write access to
   // the bid's row (no atom list = `access.all`), the strictest existing rule. Reads follow the bid detail view.

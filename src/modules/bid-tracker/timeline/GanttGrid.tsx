@@ -143,7 +143,7 @@ export const GanttLayer = memo(function GanttLayer(p: LayerProps) {
     return { m, left: l + i, right: r - i }
   })
 
-  const journeyMilestones: Milestone[] = (p.lifecycleStages ?? []).filter(stage => stage.name !== 'Bid Tracker' && stage.actualStart).map(stage => ({
+  const journeyMilestones: Milestone[] = (p.lifecycleStages ?? []).filter(stage => stage.name !== 'Live Bids' && stage.actualStart).map(stage => ({
     ...stage, sequence: 0, planned: false, plannedStart: p.startDate, plannedEnd: p.startDate, track: 'sales',
   }))
   const actual = [...journeyMilestones, ...p.milestones].sort((a, b) => (a.actualStart ?? '').localeCompare(b.actualStart ?? '')).flatMap((m) => {

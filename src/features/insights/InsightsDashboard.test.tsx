@@ -40,12 +40,12 @@ describe('Insights screenshot coverage', () => {
     await userEvent.type(screen.getByLabelText('Search insights'), 'AI Sangrah')
     expect(within(screen.getByRole('region', { name: 'Recent Opportunities' })).getByRole('link', { name: 'AI Sangrah' })).toBeVisible()
   })
-  it('links recent opportunities and status to the exact Bid Tracker Overview', () => {
+  it('links recent opportunities and status to the exact Live Bids Overview', () => {
     boot(); const recent = within(screen.getByRole('region', { name: 'Recent Opportunities' }))
-    expect(recent.getByRole('link', { name: 'AI Sangrah' })).toHaveAttribute('href', '/bid-tracker/bid/bid-a?tab=overview')
-    expect(recent.getByRole('link', { name: 'Overdue' })).toHaveAttribute('href', '/bid-tracker/bid/bid-a?tab=overview')
+    expect(recent.getByRole('link', { name: 'AI Sangrah' })).toHaveAttribute('href', '/live-bids/bid/bid-a?tab=overview')
+    expect(recent.getByRole('link', { name: 'Overdue' })).toHaveAttribute('href', '/live-bids/bid/bid-a?tab=overview')
   })
-  it('takes recent opportunities from Bid Tracker, not Pipeline or Campaign', () => {
+  it('takes recent opportunities from Live Bids, not Pipeline or Campaign', () => {
     records.push({ ...records[0], id: 'campaign-row', opportunityId: 'campaign-opp', name: 'Campaign only', sheet: 'campaign' })
     records.push({ ...records[0], id: 'pipeline-row', opportunityId: 'pipeline-opp', name: 'Pipeline only', sheet: 'pipeline-funnel' })
     boot(); const recent = within(screen.getByRole('region', { name: 'Recent Opportunities' }))
@@ -59,7 +59,7 @@ describe('Insights screenshot coverage', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await userEvent.click(screen.getByRole('button', { name: 'View All' })); await waitFor(() => expect(screen.getByRole('dialog', { name: 'All opportunities' })).toBeVisible())
     await userEvent.keyboard('{Escape}'); await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: 'Actions for AI Sangrah' })); expect(screen.getByRole('link', { name: 'Open Competition' })).toHaveAttribute('href', '/bid-tracker/bid/bid-a?tab=competition')
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for AI Sangrah' })); expect(screen.getByRole('link', { name: 'Open Competition' })).toHaveAttribute('href', '/live-bids/bid/bid-a?tab=competition')
   })
   it('changes monthly/quarterly and value/count modes, and exports filtered safe CSV', async () => {
     boot(); await userEvent.click(screen.getByRole('button', { name: 'Quarterly' }))

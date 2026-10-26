@@ -1,3 +1,5 @@
+import { useVerticalNames } from '@/features/masters/useMasterOptions'
+import { useBidStageOptions } from '@/features/masters/useBidStages'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
@@ -10,6 +12,8 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import {
   OPERATORS_BY_TYPE, flattenRules, parseMultiValue, pruneFilterNodes,
   type FilterNode,
+  QUARTER_DATE_COLUMNS, formatDateWithQuarter,
+  lifecycleMoveTargets, lifecycleIndex, lifecycleLabel, furthestLifecycleSheet, sheetModule, bidSystemField,
 } from '@goms/domain'
 import { motion } from 'framer-motion'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
@@ -19,6 +23,7 @@ import { Combobox } from '@/components/ui/Combobox'
 import { Dialog } from '@/components/ui/Dialog'
 import { Icon } from '@/components/ui/Icon'
 import { LockSwitch } from '@/components/ui/LockSwitch'
+import { useToast } from '@/components/ui/Toast'
 import { PersonName } from '@/components/ui/PersonName'
 import { PopoverPanel } from '@/components/ui/popover/PopoverPanel'
 import {
@@ -26,12 +31,13 @@ import {
 } from '@/lib/api'
 import { repository } from '@/data/repository'
 import { cn } from '@/lib/utils'
-import { useMyAccess } from '@/lib/api'
-import { usePermissions } from '@/lib/permissions'
-import type { BidGridRow } from '@/lib/types'
+import { useBidCustomFieldMutations, useMyAccess } from '@/lib/api'
+import { applyHeaderLabels, useHeaderLabels } from '../headerLabels'
+import { usePermissions, useAllowed } from '@/lib/permissions'
+import type { BidGridRow, BidCustomField } from '@/lib/types'
 import {
   ATTENTION_OPTIONS, CUSTOM_GROUP, GRID_GROUPS, cellValue, editValue, columnIdFromOrderToken, columnWidth, compareTyped, defaultVisibleColumnIds, formatCurrency, formatValueText,
-  ignoredRules, isEmptyCell, isRuleComplete, personOf, orderedColumnIds, resolveColumns, resolveVisibleColumns, rowMatchesSearch, setColumnVisibility, sortKeyOf,
+  ignoredRules, isEmptyCell, isRuleComplete, personOf, orderedColumnIds, resolveColumns, resolveVisibleColumns, rowMatchesSearch, setColumnVisibility, sortKeyOf, columnsForLifecycle, columnOrigin, columnOriginLabel,
   type GridColumnMeta,
 } from '../gridColumns'
 import { fromRoot, toRoot } from '../filterTree'
@@ -39,11 +45,12 @@ import {
   OWNED_SHEETS, OWNED_SHEET_LABELS, SHEET_NODE, columnInScope, columnOwner, createLabelFor, rowInSheet,
   type MasterScope, type OwnedSheet, type SheetId,
 } from '../sheets'
-import { useNodeAccess } from '@/lib/rbacTree/access'
+import { useNodeAccess, useNodeFilter } from '@/lib/rbacTree/access'
 import { useEntityLookups } from '../useEntityLookups'
 import { useBidColumnMutation } from '../useBidColumnMutation'
-import { canEditCell as roleAllowsCell } from '../gridPermissions'
+import { canEditCell as roleAllowsCell, rowScopeFacts } from '../gridPermissions'
 import { AddCustomColumnDialog } from './AddCustomColumnDialog'
+import { ChangeColumnTypeDialog } from './ChangeColumnTypeDialog'
 import { ColumnHeaderMenu } from './ColumnHeaderMenu'
 import { CreateBidDialog } from './CreateBidDialog'
 import { FilterBar } from './FilterBar'
@@ -51,6 +58,12 @@ import { GridContextMenu, type MenuEntry } from './GridContextMenu'
 import { ManageColumnsPanel } from './ManageColumnsPanel'
 import { EditableCell, type CellDraft, type PendingEdits } from './EditableCell'
 import { FilterBuilder } from './FilterBuilder'
+import { BidImportDialog } from '../transfer/BidImportDialog'
+import { TenderFolderCell } from './TenderFolderCell'
+import { CellBullets, isMultiline, linesOf } from './CellBullets'
+import { formatCellDate } from '../dateInput'
+import { exportGridWorkbook, WORKBOOK_MIME } from '../transfer/workbooks'
+import { downloadBinaryFile } from '@/lib/file-export'
 
 const ATTENTION_TONE: Record<BidGridRow['attentionFlag'], BadgeTone> = {
   dueSoon: 'amber', overdue: 'crimson', corrigendumPending: 'blue', onTrack: 'emerald',
@@ -171,6 +184,8 @@ export interface MasterGridProps {
 export function MasterGrid(props: MasterGridProps) {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const toast = useToast()
+  const allowedNode = useNodeFilter()
 
   // --- controlled-or-internal state -----------------------------------------
   const [innerRules, setInnerRules] = useState<FilterNode[]>(props.filterRules ?? [])
@@ -182,7 +197,12 @@ export function MasterGrid(props: MasterGridProps) {
   const setVisibleIds = (next: string[]) => (props.onVisibleColumnsChange ?? setInnerVisible)(next)
 
   const [addColumnOpen, setAddColumnOpen] = useState(false)
+  const [changingType, setChangingType] = useState<BidCustomField | null>(null)
+  const canManageColumnTypes = useAllowed('bid.columns', 'update')
   const [createBidOpen, setCreateBidOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [exportBusy, setExportBusy] = useState(false)
+  const lastMissing = useRef<Record<string, string>>({})
   const [search, setSearch] = useState('')
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnWidths, setColumnWidths] = useState<Record<string, number>>({})
@@ -211,7 +231,7 @@ export function MasterGrid(props: MasterGridProps) {
   // Archived bids leave every normal view; the Archived button switches to a view of only them.
   const [showArchived, setShowArchived] = useState(false)
   const [favourites, setFavourites] = useState<Set<string>>(loadFavourites)
-  const [menu, setMenu] = useState<{ x: number; y: number; title: string; groups: MenuEntry[][] } | null>(null)
+  const [menu, setMenu] = useState<{ x: number; y: number; title: string; description?: string; groups: MenuEntry[][] } | null>(null)
   const pendingEdits: PendingEdits = useRef(new Map())
   const unlockedRef = useRef(unlocked)
   unlockedRef.current = unlocked
@@ -246,7 +266,24 @@ export function MasterGrid(props: MasterGridProps) {
   const { assign } = useOwnershipMutations()
   const { data: salesPersons = [] } = useSalesPersons()
 
-  const allColumns = useMemo(() => resolveColumns(customFields), [customFields])
+  const verticalNames = useVerticalNames()
+  const stageOptions = useBidStageOptions()
+  const resolvedColumns = useMemo(() => columnsForLifecycle(resolveColumns(customFields, verticalNames, stageOptions),
+    sheetId === 'master' && props.columnScope && props.columnScope !== 'all' ? props.columnScope === 'pipeline' ? 'pipeline-commits' : props.columnScope : sheetId),
+    [customFields, verticalNames, stageOptions, sheetId, props.columnScope])
+  // Renamed headers apply everywhere the grid names a column (headers, menus, Manage columns, filters).
+  const headerLabels = useHeaderLabels()
+  const allColumns = useMemo(() => applyHeaderLabels(resolvedColumns, headerLabels.labels), [resolvedColumns, headerLabels.labels])
+  const customFieldMutations = useBidCustomFieldMutations()
+  const [renamingId, setRenamingId] = useState<string | null>(null)
+  /** Custom columns are truly renamed (for everyone); built-in ones get a display name in this browser. */
+  const renameColumn = (meta: GridColumnMeta, name: string) => {
+    setRenamingId(null)
+    const next = name.trim()
+    if (next === meta.header) return
+    if (meta.custom) { if (next) customFieldMutations.update.mutate({ id: meta.custom.id, patch: { name: next } }); return }
+    headerLabels.setLabel(meta.id, next)
+  }
   const visibleIds = useMemo(
     () => (chosenVisibleIds?.length ? chosenVisibleIds : defaultVisibleColumnIds(allColumns, sheetId)),
     [chosenVisibleIds, allColumns, sheetId],
@@ -256,18 +293,16 @@ export function MasterGrid(props: MasterGridProps) {
   const filterable = useMemo(() => allColumns.filter((c) => c.type !== null), [allColumns])
   const columnById = useMemo(() => new Map(allColumns.map((c) => [c.id, c])), [allColumns])
 
-  // Frozen columns lead the sheet (in their normal relative order), the rest follow —
-  // that is what keeps stacked sticky offsets correct however the freezes were
-  // chosen. Unfreezing puts a column straight back where the saved view has it.
+  // Frozen columns stay where the view puts them and stick once scrolled to: each sticks
+  // right after the frozen columns before it, and the columns between slide under them.
   const frozenSet = useMemo(() => new Set(frozenIds), [frozenIds])
-  const displayCols = useMemo(
-    () => [...visible.filter((c) => frozenSet.has(c.id)), ...visible.filter((c) => !frozenSet.has(c.id))],
-    [visible, frozenSet],
-  )
+  const displayCols = visible
+  // One favourite star per row: on Tender ID, or on Opportunity / Mission where Tender ID isn't shown.
+  const starColumnId = displayCols.some((c) => c.id === 'gemTenderId') ? 'gemTenderId' : 'opportunityName'
 
   // Every row lives in ONE sheet; a sheet shows only its own (Master shows them all).
   // Archived count, archived view, search and empty states all work within these.
-  const sheetRows = useMemo(() => (fetched ?? []).filter((r) => rowInSheet(r.sheet, sheetId)), [fetched, sheetId])
+  const sheetRows = useMemo(() => (fetched ?? []).filter((r) => rowInSheet(r.sheet, sheetId, r.lifecycleReachedSheet)), [fetched, sheetId])
   const archivedCount = useMemo(() => sheetRows.filter((r) => r.status === 'archived').length, [sheetRows])
   const modeRows = useMemo(
     () => sheetRows.filter((r) => (showArchived ? r.status === 'archived' : r.status !== 'archived')),
@@ -302,13 +337,16 @@ export function MasterGrid(props: MasterGridProps) {
     return failed.length === 0
   }
   // --- move between sheets: optimistic, rolled back (with an error) on failure ----
-  const moveTargets = (from: OwnedSheet | null) => OWNED_SHEETS.filter((s) => s !== from)
+  const bulkMoveTargets = OWNED_SHEETS.filter(to => selectedIds.every(id => {
+    const row = sheetRows.find(candidate => candidate.id === id)
+    return row && lifecycleMoveTargets(row.sheet).includes(to)
+  }))
   const moveRows = async (ids: string[], to: OwnedSheet) => {
     if (!ids.length) return
     setBulkError(null)
     const snapshot = qc.getQueriesData<BidGridRow[]>({ queryKey: ['bidsForGrid'] })
     const moving = new Set(ids)
-    qc.setQueriesData<BidGridRow[]>({ queryKey: ['bidsForGrid'] }, (old) => old?.map((r) => (moving.has(r.id) ? { ...r, sheet: to } : r)))
+    qc.setQueriesData<BidGridRow[]>({ queryKey: ['bidsForGrid'] }, (old) => old?.map((r) => (moving.has(r.id) ? { ...r, sheet: to, lifecycleReachedSheet: furthestLifecycleSheet(r.sheet, r.lifecycleReachedSheet, to) } : r)))
     const failed: string[] = []
     let reason = ''
     for (const id of ids) {
@@ -413,12 +451,13 @@ export function MasterGrid(props: MasterGridProps) {
   const renderCell = (row: BidGridRow, col: GridColumnMeta, links = true): ReactNode => {
     const v = cellValue(row, col)
     const dash = <span className="text-muted">—</span>
+    if (!columnsForLifecycle([col], row.sheet).length) return dash
     const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
     if (col.id === 'bidCode') {
       return (
         <button
           type="button" title="Open details" aria-label={`Open ${String(v)}`}
-          onClick={(e) => { e.stopPropagation(); navigate(`/bid-tracker/bid/${row.id}`) }}
+          onClick={(e) => { e.stopPropagation(); navigate(`/live-bids/bid/${row.id}${sheetId === 'master' ? '' : `?stage=${sheetId}`}`) }}
           className="max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded px-0.5 text-left font-medium text-goms-navy underline decoration-goms-sky/70 underline-offset-2 hover:bg-goms-sky/[0.14] focus-visible:focus-ring"
         >
           {String(v)}
@@ -443,8 +482,14 @@ export function MasterGrid(props: MasterGridProps) {
     if (col.id === 'updatedAt' && typeof v === 'string') return <span className="tabular-nums">{v.slice(0, 16).replace('T', ' ')}</span>
     if (col.id === 'decision') return <span className="capitalize">{String(v).replace('_', ' ')}</span>
     if (isEmptyCell(v)) return dash
+    // A custom person column set to "Multiple" (Manage columns › People columns) stores a JSON list of people.
+    if (col.type === 'person' && typeof v === 'string' && v.startsWith('[')) return <span className="flex flex-wrap gap-x-2 gap-y-1">{parseMultiValue(v).map((id) => <PersonName key={id} person={personOf(col, id, lookups)!} className="max-w-full" />)}</span>
     const person = personOf(col, v, lookups)
     if (person) return <PersonName person={person} className="max-w-full" nameClassName="whitespace-pre-wrap overflow-visible [overflow-wrap:anywhere]" />
+    // Tender Publishing / Receiving and Actual Submission dates show their financial quarter, e.g. 15/10/2026 (Q3).
+    // Tender Folder Link: the Drive folder's files, compact (TenderFolderCell).
+    if (col.id === 'custom:tender_folder' && typeof v === 'string' && links) return <TenderFolderCell url={v} />
+    if (QUARTER_DATE_COLUMNS.has(col.id) && typeof v === 'string') return <span className="tabular-nums">{formatDateWithQuarter(v)}</span>
     switch (col.type) {
       case 'boolean': return v ? <Icon name="Check" size={14} className="text-emerald-600" /> : <span className="text-muted">No</span>
       case 'select': {
@@ -470,16 +515,13 @@ export function MasterGrid(props: MasterGridProps) {
         if (!links) return String(v)
         return <a href={`tel:${String(v)}`} onClick={stop} className="tabular-nums text-goms-navy underline decoration-goms-sky underline-offset-2">{String(v)}</a>
       case 'person': case 'department': case 'state': return formatValueText(col, v, lookups)
-      case 'multiselect': {
-        const labels = parseMultiValue(v)
-        return (
-          <span className="flex flex-wrap items-center gap-1" title={labels.join(', ')}>
-            {labels.map((l) => <span key={l} className="max-w-full rounded bg-goms-sky/[0.18] px-1.5 text-[11.5px] text-goms-navy">{l}</span>)}
-          </span>
-        )
-      }
+      case 'multiselect': return <CellBullets items={parseMultiValue(v)} />
+      case 'date': return <span className="tabular-nums">{formatCellDate(String(v))}</span>
       default:
-        if (col.id === 'opportunityName') return <span className="font-medium text-goms-navy">{String(v)}</span>
+        if (col.id === 'opportunityName') return links
+          ? <button type="button" className="text-left font-medium text-goms-navy underline decoration-goms-sky/70 underline-offset-2 focus-visible:focus-ring" onClick={event => { event.stopPropagation(); navigate(`/live-bids/bid/${row.id}${sheetId === 'master' ? '' : `?stage=${sheetId}`}`) }}>{String(v)}</button>
+          : <span className="font-medium text-goms-navy">{String(v)}</span>
+        if (isMultiline(col)) return <CellBullets items={linesOf(String(v))} />
         return String(v)
     }
   }
@@ -608,43 +650,90 @@ export function MasterGrid(props: MasterGridProps) {
       : null
   // Editable only while unlocked; locked, every cell is read/navigate-only. With RBAC enforced the role must also
   // allow this field on this row (the server stays the authority).
-  const canEditCell = (row: BidGridRow, meta: GridColumnMeta) => treeEdit && unlocked && isColumnOpen(meta) && roleAllowsCell(perms, row, meta.id, me)
+  const canEditCell = (row: BidGridRow, meta: GridColumnMeta) => treeEdit && unlocked && isColumnOpen(meta)
+    && columnsForLifecycle([meta], row.sheet).length > 0 && roleAllowsCell(perms, row, meta.id, me)
   // --- right-click menus ----------------------------------------------------------
+  const typeAction = (meta: GridColumnMeta): MenuEntry[] => canManageColumnTypes && treeEdit && meta.custom && !bidSystemField(meta.custom.key)
+    ? [{ label: 'Change data type…', icon: 'Type', onSelect: () => setChangingType(meta.custom!) }] : []
   const openCellMenu = (e: React.MouseEvent, row: BidGridRow, meta: GridColumnMeta) => {
     e.preventDefault()
     const v = cellValue(row, meta)
-    const text = meta.type === 'select'
-      ? (meta.options?.find((o) => o.value === v)?.label ?? String(v ?? ''))
-      : formatValueText(meta, v, lookups)
+    const text = formatValueText(meta, v, lookups)
     const archived = row.status === 'archived'
-    const editable = canEditCell(row, meta)
+    const busy = updateBid.isPending || archive.isPending || unarchive.isPending || removeBid.isPending
+    const facts = rowScopeFacts(row, me.email, me.salesPersonId)
+    const sourceEditable = treeEdit && allowedNode(SHEET_NODE[row.sheet], 'edit')
+    const canEditAtom = (atom: string) => sourceEditable && (!perms.enforced || perms.canEdit(sheetModule(row.sheet), atom, facts))
+    const editable = !archived && sourceEditable && canEditCell(row, meta)
+    const editableOnceUnlocked = !archived && !unlocked && sourceEditable && !!meta.editable && columnsForLifecycle([meta], row.sheet).length > 0 && roleAllowsCell(perms, row, meta.id, me)
     const root = toRoot(rules)
+    const multiple = meta.type === 'multiselect' || meta.type === 'person'
+    const filterValues = multiple ? parseMultiValue(v) : []
+    const detailPath = `/live-bids/bid/${row.id}`
+    const canOpen = allowedNode('opportunity.bid') && allowedNode(SHEET_NODE[row.sheet])
+      && (!perms.enforced || perms.can(sheetModule(row.sheet), 'read', facts))
+    const copy = async (value: string, message: string) => {
+      setBulkError(null)
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error('Clipboard access is unavailable in this browser.')
+        await navigator.clipboard.writeText(value)
+        toast(message)
+      } catch (cause) { setBulkError(cause instanceof Error ? cause.message : 'Could not copy. Check browser clipboard permissions.') }
+    }
     const groups: MenuEntry[][] = [
       [
-        { label: 'Open details', icon: 'ExternalLink', onSelect: () => navigate(`/bid-tracker/bid/${row.id}`) },
-        {
-          label: editable ? 'Edit cell' : (unlocked ? (isColumnOpen(meta) ? 'Edit cell (not allowed for your role)' : 'Edit cell (read-only column)') : 'Edit cell (unlock first)'), icon: 'Pencil', disabled: !editable,
-          onSelect: () => document.querySelector<HTMLElement>(`[data-cell="${row.id}:${meta.id}"] [data-editable-cell]`)?.click(),
-        },
-        { label: 'Copy value', icon: 'Copy', disabled: !text, onSelect: () => { void navigator.clipboard?.writeText(text) } },
+        ...(canOpen ? [{ label: 'Open details', icon: 'ExternalLink', onSelect: () => navigate(`${detailPath}${sheetId === 'master' ? '' : `?stage=${sheetId}`}`) }] : []),
+        ...(canOpen && row.sheet === 'bidTracker' ? [
+          { label: 'Open bid synopsis', tab: 'general', icon: 'FileText' },
+          { label: 'View RFP timeline', tab: 'rfpTimeline', icon: 'CalendarDays' },
+          { label: 'Open communications', tab: 'communication', icon: 'MessageSquareText' },
+        ].filter(item => allowedNode(`opportunity.bid.${item.tab}`)).map(item => ({
+          label: item.label, icon: item.icon, onSelect: () => navigate(`${detailPath}?tab=${item.tab}`),
+        })) : []),
       ],
       [
-        {
-          label: `Filter: ${meta.header} is this value`, icon: 'SlidersHorizontal', disabled: meta.type === null || isEmptyCell(v),
-          onSelect: () => setRules(fromRoot({ ...root, items: [...root.items, { field: meta.id, operator: 'eq', value: String(v) }] })),
-        },
+        ...(editable || editableOnceUnlocked ? [{
+          // Locked, Edit cell still works: it unlocks the grid, then opens the cell once it has re-rendered as editable.
+          label: editable ? 'Edit cell' : 'Edit cell (unlocks editing)',
+          icon: 'Pencil', disabled: busy,
+          onSelect: () => {
+            const startEdit = () => parentRef.current?.querySelector<HTMLElement>(`[data-cell="${CSS.escape(`${row.id}:${meta.id}`)}"] [data-editable-cell]`)?.click()
+            if (editable) { startEdit(); return }
+            setUnlocked(true)
+            requestAnimationFrame(() => requestAnimationFrame(startEdit))
+          },
+        }] : []),
+        ...(text ? [{ label: 'Copy value', icon: 'Copy', onSelect: () => { void copy(text, 'Value copied.') } }] : []),
+        { label: 'Copy bid link', icon: 'Link2', onSelect: () => { void copy(new URL(detailPath, window.location.href).href, 'Bid link copied.') } },
+        ...(meta.type !== null && !isEmptyCell(v) ? [{
+          label: `Filter: ${meta.header} ${filterValues.length > 1 ? 'matches these values' : 'is this value'}`, icon: 'SlidersHorizontal',
+          onSelect: () => setRules(fromRoot({ ...root, items: [...root.items, filterValues.length > 1
+            ? { field: meta.id, operator: 'in', value: '', values: filterValues }
+            : { field: meta.id, operator: 'eq', value: multiple ? filterValues[0] ?? '' : String(v) }] })),
+        }] : []),
       ],
-      // Move to…: every sheet this row does not already live in.
-      moveTargets(row.sheet ?? null).map((to) => ({
-        label: `Move to ${OWNED_SHEET_LABELS[to]}`, icon: 'MoveRight', onSelect: () => { void moveRows([row.id], to) },
-      })),
+      // A retained row can be at an earlier stage than this list. Its actual stage is authoritative.
+      archived ? [] : lifecycleMoveTargets(row.sheet).filter(to => canEditAtom('bid.move') && allowedNode(SHEET_NODE[to], 'edit')
+        && (!perms.enforced || perms.canEdit(sheetModule(to), 'bid.move', facts))).map(to => {
+        const forward = lifecycleIndex(to) > lifecycleIndex(row.sheet)
+        return { label: `${forward ? 'Advance to' : 'Move back to'} ${lifecycleLabel(to)}`, icon: forward ? 'ArrowRight' : 'ArrowLeft', disabled: busy, onSelect: () => { void moveRows([row.id], to) } }
+      }),
       [
         { label: favourites.has(row.id) ? 'Remove from favourites' : 'Add to favourites', icon: 'Star', onSelect: () => toggleFavourite(row.id) },
-        { label: archived ? 'Unarchive' : 'Archive', icon: archived ? 'ArchiveRestore' : 'Archive', onSelect: () => (archived ? unarchive : archive).mutate(row.id) },
-        ...(treeDelete ? [{ label: 'Delete bid…', icon: 'Trash2', danger: true, onSelect: () => deleteBid(row) }] : []),
+        ...(canEditAtom('bid.archive') ? [{ label: archived ? 'Unarchive' : 'Archive', icon: archived ? 'ArchiveRestore' : 'Archive', disabled: busy, onSelect: () => {
+          setBulkError(null)
+          const mutation = archived ? unarchive : archive
+          mutation.mutate(row.id, {
+            onSuccess: () => toast(archived ? 'Bid restored.' : 'Bid archived.'),
+            onError: cause => setBulkError(cause instanceof Error ? cause.message : 'Could not update the bid.'),
+          })
+        } }] : []),
       ],
+      typeAction(meta),
+      treeDelete && allowedNode(SHEET_NODE[row.sheet], 'delete') && (!perms.enforced || perms.can(sheetModule(row.sheet), 'delete', facts))
+        ? [{ label: 'Delete bid…', icon: 'Trash2', danger: true, disabled: busy, onSelect: () => deleteBid(row) }] : [],
     ]
-    setMenu({ x: e.clientX, y: e.clientY, title: `${row.opportunityName} · ${meta.header}`, groups })
+    setMenu({ x: e.clientX, y: e.clientY, title: row.opportunityName, description: `${row.bidCode} · Current stage: ${lifecycleLabel(row.sheet)}${archived ? ' · Archived' : ''}\n${meta.header}: ${columnOriginLabel(meta)}`, groups })
   }
   const openHeaderMenu = (e: React.MouseEvent, column: { getIsSorted: () => false | 'asc' | 'desc'; getCanSort: () => boolean; toggleSorting: (desc?: boolean, multi?: boolean) => void; clearSorting: () => void }, meta: GridColumnMeta) => {
     e.preventDefault()
@@ -660,24 +749,54 @@ export function MasterGrid(props: MasterGridProps) {
         { label: 'Filter by this column', icon: 'SlidersHorizontal', disabled: meta.type === null, onSelect: () => addRule(meta.id) },
         { label: frozenNow ? 'Unfreeze column' : 'Freeze column', icon: frozenNow ? 'PinOff' : 'Pin', disabled: !frozenNow && !!freezeBlockedReason(meta), onSelect: () => toggleFreeze(meta.id) },
         { label: 'Hide column', icon: 'EyeOff', disabled: visible.length <= 1, onSelect: () => setVisibleIds(setColumnVisibility(allColumns, visibleIds, meta.id, false)) },
+        { label: 'Rename column', icon: 'Pencil', onSelect: () => setRenamingId(meta.id) },
+        ...typeAction(meta),
       ],
     ]
     setMenu({ x: e.clientX, y: e.clientY, title: `${meta.header} column`, groups })
   }
-  const cellBg = (row: BidGridRow, meta: GridColumnMeta) => (!unlocked || (isColumnOpen(meta) && roleAllowsCell(perms, row, meta.id, me)) ? EDITABLE_BG : READONLY_BG)
+  const cellBg = (row: BidGridRow, meta: GridColumnMeta) => columnOrigin(meta) === 'system' ? READONLY_BG
+    : (!unlocked || (isColumnOpen(meta) && roleAllowsCell(perms, row, meta.id, me)) ? EDITABLE_BG : READONLY_BG)
 
   // --- spreadsheet keyboard: arrows / Tab / Shift+Tab move the active cell -------
   /** Focus a cell's editor-box (or its read-only box), scrolling it into the virtual window first. */
   const focusCell = (rowIndex: number, colId: string) => {
     const rowId = tableRows[rowIndex]?.original.id
     if (!rowId) return
-    const find = () => parentRef.current?.querySelector<HTMLElement>(
-      `[data-cell="${CSS.escape(`${rowId}:${colId}`)}"] :is([data-editable-cell], [data-readonly-cell])`,
-    )
+    const find = () => {
+      const cell = parentRef.current?.querySelector<HTMLElement>(`[data-cell="${CSS.escape(`${rowId}:${colId}`)}"]`)
+      if (!cell) return undefined
+      const editor = cell.querySelector<HTMLElement>(':is([data-editable-cell], [data-readonly-cell])')
+      if (editor) return editor
+      // Missing-field navigation also works while editing is locked.
+      cell.tabIndex = -1
+      return cell
+    }
     const el = find()
     if (el) { el.focus(); el.scrollIntoView({ block: 'nearest', inline: 'nearest' }); return }
     virtualizer.scrollToIndex(rowIndex, { align: 'auto' })
     requestAnimationFrame(() => { const later = find(); later?.focus(); later?.scrollIntoView({ block: 'nearest', inline: 'nearest' }) })
+  }
+  const missingFields = (row: BidGridRow) => allColumns.filter(c => c.required && isEmptyCell(cellValue(row, c)))
+  const visitMissingField = (row: BidGridRow) => {
+    const missing = missingFields(row)
+    if (!missing.length) return
+    const previous = allColumns.findIndex(c => c.id === lastMissing.current[row.id])
+    const next = missing.find(c => allColumns.indexOf(c) > previous) ?? missing[0]
+    lastMissing.current[row.id] = next.id
+    if (!visible.some(c => c.id === next.id)) setVisibleIds(setColumnVisibility(allColumns, visibleIds, next.id, true))
+    scrollToId.current = next.id
+    setFlashId(next.id)
+    requestAnimationFrame(() => focusCell(tableRows.findIndex(r => r.original.id === row.id), next.id))
+  }
+  const exportAllBids = async () => {
+    if (exportBusy) return
+    setExportBusy(true); setSaveError(null)
+    try {
+      const rows = (await repository.listBidsForGrid()).filter(row => row.sheet === 'bidTracker')
+      await downloadBinaryFile('bid-tracker-export.xlsx', exportGridWorkbook(rows, allColumns, new Set(visible.map(c => c.id)), lookups), WORKBOOK_MIME)
+    } catch (e) { setSaveError(e instanceof Error ? e.message : 'Export failed. Please retry.') }
+    finally { setExportBusy(false) }
   }
   const onGridKeyDown = (e: React.KeyboardEvent) => {
     if (!unlocked) return
@@ -703,10 +822,14 @@ export function MasterGrid(props: MasterGridProps) {
     <div className="flex h-full min-h-0 flex-col" data-testid="bid-master-grid">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-line px-3 py-1.5">
         {props.toolbarLead}
+        <div aria-label="Field origins" className="mr-1 flex items-center gap-2 text-[10px] text-muted">
+          <span className="inline-flex items-center gap-1" title="User-entered values can be edited when unlocked and permitted"><Icon name="Pencil" size={11} className="text-goms-navy" /> User input</span>
+          <span className="inline-flex items-center gap-1" title="Generated IDs, calculated values and audit details stay read-only"><Icon name="Lock" size={11} /> System generated</span>
+        </div>
         <div className="relative">
           <Icon name="Search" size={14} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted" />
           <input
-            type="search" aria-label="Search bids" placeholder="Search bids…" value={search}
+            type="search" aria-label={sheetId === 'bidTracker' ? 'Search bids' : 'Search opportunities'} placeholder={sheetId === 'bidTracker' ? 'Search bids…' : 'Search opportunities…'} value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="h-7 w-52 rounded-lg border border-line bg-white pl-7 pr-2 text-[13px] text-ink focus-visible:focus-ring"
           />
@@ -728,7 +851,7 @@ export function MasterGrid(props: MasterGridProps) {
               className="h-6 rounded-md border border-line bg-white px-1.5 text-[12.5px] text-goms-navy focus-visible:focus-ring"
             >
               <option value="">Move to…</option>
-              {moveTargets(sheetId === 'master' ? null : sheetId).map((to) => <option key={to} value={to}>{OWNED_SHEET_LABELS[to]}</option>)}
+              {bulkMoveTargets.map((to) => <option key={to} value={to}>{OWNED_SHEET_LABELS[to]}</option>)}
             </select>
           </div>
         )}
@@ -740,8 +863,16 @@ export function MasterGrid(props: MasterGridProps) {
           </span>
         )}
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {sheetId === 'bidTracker' && <>
+            <Button variant="secondary" size="sm" className="h-7 px-2.5" disabled={exportBusy} onClick={() => void exportAllBids()}>
+              <Icon name="Download" size={14} /> {exportBusy ? 'Exporting...' : 'Export'}
+            </Button>
+            {treeCreate && perms.can('opp.bidTracker', 'create') && <Button variant="secondary" size="sm" className="h-7 px-2.5" onClick={() => setImportOpen(true)}>
+              <Icon name="Upload" size={14} /> Import
+            </Button>}
+          </>}
           <LockSwitch
-            size="toolbar" unlocked={unlocked} onToggle={requestToggleLock}
+            unlocked={unlocked} onToggle={requestToggleLock}
             lockedLabel="Master grid editing locked — tap to unlock"
             unlockedLabel="Master grid editing unlocked — tap to lock"
           />
@@ -763,7 +894,7 @@ export function MasterGrid(props: MasterGridProps) {
             >
               <Icon name="Plus" size={14} /> Add column
             </Button>
-            <ManageColumnsPanel all={allColumns} visible={visible} columnOrder={visibleIds} onVisibleChange={setVisibleIds} focusId={manageColumnId} inScope={(f) => columnInScope(f.sheet, sheetId, props.columnScope)} />
+            <ManageColumnsPanel all={allColumns} visible={visible} columnOrder={visibleIds} onVisibleChange={setVisibleIds} focusId={manageColumnId} inScope={(f) => columnInScope(f.sheet, sheetId, props.columnScope)} freeze={{ ids: frozenIds, toggle: toggleFreeze, blockedReason: freezeBlockedReason }} />
           </ToolbarPopover>
           {treeCreate && <Button variant="primary" size="sm" className="h-7 px-2.5" onClick={() => setCreateBidOpen(true)}>
             <Icon name="Plus" size={14} /> {createLabel}
@@ -852,6 +983,20 @@ export function MasterGrid(props: MasterGridProps) {
                       )}
                     >
                       <div className="flex items-center gap-1">
+                        {renamingId === meta.id ? (
+                          <input
+                            autoFocus aria-label={`Rename ${meta.header}`} defaultValue={meta.header}
+                            onFocus={(e) => e.currentTarget.select()}
+                            onBlur={(e) => renameColumn(meta, e.currentTarget.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() }
+                              if (e.key === 'Escape') { e.preventDefault(); setRenamingId(null) }
+                            }}
+                            onClick={(e) => e.stopPropagation()} draggable={false} onDragStart={(e) => e.preventDefault()}
+                            placeholder={meta.custom ? meta.header : 'Blank restores the default name'}
+                            className="h-7 min-w-0 flex-1 rounded border border-goms-sky bg-white px-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink outline-none"
+                          />
+                        ) : (
                         <button
                           type="button" disabled={!h.column.getCanSort()}
                           onClick={h.column.getToggleSortingHandler()}
@@ -862,8 +1007,20 @@ export function MasterGrid(props: MasterGridProps) {
                           aria-label={h.column.getCanSort() ? `Sort by ${meta.header}` : meta.header}
                         >
                           <span className="whitespace-normal [overflow-wrap:anywhere]" title={meta.header}>{flexRender(h.column.columnDef.header, h.getContext())}</span>
-                          {unlocked && isColumnOpen(meta) && <span title="Editable column" className="shrink-0 text-goms-green"><Icon name="Pencil" size={10} /></span>}
                         </button>
+                        )}
+                        {/* The green pencil marks an editable column; clicking it renames the column. */}
+                        {(!unlocked || !meta.editable) && <span className={cn('shrink-0', columnOrigin(meta) === 'human' ? 'text-goms-navy/70' : 'text-muted')}
+                          aria-label={columnOriginLabel(meta)} title={columnOriginLabel(meta)}><Icon name={columnOrigin(meta) === 'human' ? 'Pencil' : 'Lock'} size={11} /></span>}
+                        {unlocked && isColumnOpen(meta) && renamingId !== meta.id && (
+                          <button
+                            type="button" aria-label={`Rename ${meta.header}`} title="User-entered · Editable · Rename column"
+                            onClick={(e) => { e.stopPropagation(); setRenamingId(meta.id) }}
+                            className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-goms-green hover:bg-goms-green/15 focus-visible:focus-ring"
+                          >
+                            <Icon name="Pencil" size={10} />
+                          </button>
+                        )}
                         {isFrozen && <span title="Frozen column" className="inline-flex shrink-0 text-goms-navy/60"><Icon name="Pin" size={11} /><span className="sr-only">Frozen</span></span>}
                         {filteredCount > 0 && (
                           <span title="Filtered" className="inline-flex shrink-0 text-goms-sky">
@@ -882,6 +1039,7 @@ export function MasterGrid(props: MasterGridProps) {
                           frozen={isFrozen} freezeBlockedReason={freezeBlockedReason(meta)}
                           onToggleFreeze={() => toggleFreeze(meta.id)}
                           onAutoFit={() => autoFitColumns([meta.id])}
+                          onChangeType={typeAction(meta)[0]?.onSelect}
                         />
                       </div>
                       <div
@@ -954,9 +1112,9 @@ export function MasterGrid(props: MasterGridProps) {
                           ...frozenStyle(meta.id), height: ROW_HEIGHT,
                           boxShadow: frozen.lastId === meta.id ? `${CELL_BEVEL}, ${FROZEN_SHADOW}` : CELL_BEVEL,
                         }}
-                        title={unlocked && !isColumnOpen(meta)
-                          ? meta.readOnlyReason
-                          : unlocked && !canEditCell(row.original, meta) ? 'Your role cannot edit this field on this row' : undefined}
+                        data-origin={columnOrigin(meta)}
+                        title={columnOrigin(meta) === 'system' ? columnOriginLabel(meta)
+                          : unlocked && !canEditCell(row.original, meta) ? 'Your role cannot edit this field on this row' : columnOriginLabel(meta)}
                         className={cn(
                           'relative whitespace-pre-wrap [overflow-wrap:anywhere] border-b border-r border-line/70 p-0 transition-colors duration-150',
                           cellBg(row.original, meta),
@@ -968,8 +1126,8 @@ export function MasterGrid(props: MasterGridProps) {
                           flashId === meta.id && 'bg-goms-green/20',
                         )}
                       >
-                        <div className={cn('min-w-0', meta.id === 'opportunityName' && 'flex items-center')}>
-                          {meta.id === 'opportunityName' && (
+                        <div className={cn('min-w-0', (meta.id === 'opportunityName' || meta.id === 'gemTenderId') && 'flex items-center')}>
+                          {meta.id === starColumnId && (
                             <button
                               type="button" aria-label={favourites.has(row.original.id) ? 'Remove from favourites' : 'Add to favourites'}
                               aria-pressed={favourites.has(row.original.id)} title={favourites.has(row.original.id) ? 'Remove from favourites' : 'Add to favourites'}
@@ -979,10 +1137,18 @@ export function MasterGrid(props: MasterGridProps) {
                               <Icon name="Star" size={14} className={favourites.has(row.original.id) ? 'fill-amber-400' : undefined} />
                             </button>
                           )}
+                          {meta.id === 'opportunityName' && (<>
+      {sheetId === 'bidTracker' && missingFields(row.original).length > 0 && <button
+                              type="button" aria-label={`Visit next missing field for ${row.original.opportunityName}`}
+                              title={`${missingFields(row.original).map(c => c.header).join(', ')} missing. Click to visit the next field.`}
+                              onClick={e => { e.stopPropagation(); visitMissingField(row.original) }}
+                              className="flex h-6 w-6 shrink-0 items-center justify-center rounded font-bold text-red-600 hover:bg-red-50 focus-visible:focus-ring"
+                            >!</button>}
+                          </>)}
                           <div className="min-w-0 flex-1">
                             {canEditCell(row.original, meta) ? (
                               <EditableCell
-                                col={meta} value={editValue(row.original, meta)} display={display} lookups={lookups}
+                                col={meta} value={editValue(row.original, meta)} display={display} lookups={lookups} row={row.original}
                                 externalError={cellErrors[`${row.original.id}:${meta.id}`]}
                                 pending={pendingEdits} cellKey={`${row.original.id}:${meta.id}`}
                                 onCommit={(value) => commitCell(row.original, meta, value)}
@@ -1034,7 +1200,7 @@ export function MasterGrid(props: MasterGridProps) {
           </div>
         )}
       </div>
-      {menu && <GridContextMenu x={menu.x} y={menu.y} title={menu.title} groups={menu.groups} onClose={() => setMenu(null)} />}
+      {menu && <GridContextMenu x={menu.x} y={menu.y} title={menu.title} description={menu.description} groups={menu.groups} onClose={() => setMenu(null)} />}
       <AddCustomColumnDialog
         open={addColumnOpen} onClose={() => setAddColumnOpen(false)} sheet={newColumnOwner}
         // With an explicit column list (a saved view), absence means hidden — so a
@@ -1051,6 +1217,9 @@ export function MasterGrid(props: MasterGridProps) {
         }}
       />
       <CreateBidDialog open={createBidOpen} onClose={() => setCreateBidOpen(false)} sheet={sheetId} />
+      {changingType && <ChangeColumnTypeDialog key={changingType.id} field={changingType} onClose={() => setChangingType(null)}
+        onChanged={() => setRules(pruneFilterNodes(rules, rule => rule.field !== `custom:${changingType.key}`))} />}
+      {sheetId === 'bidTracker' && <BidImportDialog open={importOpen} onClose={() => setImportOpen(false)} customFields={customFields} />}
       <Dialog
         open={reassignOpen} onClose={() => setReassignOpen(false)}
         title={`Reassign owner for ${selectedIds.length} bid${selectedIds.length === 1 ? '' : 's'}`}

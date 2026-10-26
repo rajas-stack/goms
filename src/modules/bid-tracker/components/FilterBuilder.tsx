@@ -255,7 +255,7 @@ function RuleValue({ rule, col, lookups, onChange }: {
   if (type === 'date') {
     // Same free-format date capture as every other date field ("21092026", "21.09.2026").
     const dateBox = (label: string, value: string, set: (v: string) => void) => (
-      <FriendlyDateInput aria-label={label} value={value} onChange={set} floatingFeedback className={`${control} w-36`} placeholder="Date" />
+      <FriendlyDateInput aria-label={label} format="optional-time" value={value} onChange={set} floatingFeedback className={`${control} w-40`} placeholder="Date" />
     )
     return (
       <>

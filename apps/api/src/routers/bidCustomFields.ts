@@ -1,12 +1,20 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { CUSTOM_FIELD_TYPES, coerceCustomValue, hasOptions, normalizeOptions, slugifyFieldKey, type CustomFieldType, type CustomValue } from '@goms/domain'
+import { CUSTOM_FIELD_TYPES, bidSystemField, coerceCustomValue, hasOptions, normalizeOptions, slugifyFieldKey, customTypesCompatible, convertCustomFieldValue, type CustomFieldType, type CustomValue } from '@goms/domain'
+import { PEOPLE_COLUMN_ID_MAX, assertPeopleColumnId, isEmptyPeopleColumnConfig, normalizePeopleColumnConfig, type PeopleColumnConfig } from '@goms/domain'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 import { isForeignKeyViolation, isUniqueViolation } from '../db-errors.js'
 import { writeAuditLog } from '../lib/auditLog.js'
 import { customValueColumns, customValueFromRow, CUSTOM_VALUE_COLUMNS } from '../lib/customFieldValues.js'
 import { assertEntityExists, auditDisplay } from '../lib/customFieldEntities.js'
+import { liveOptionsFor, withLiveOptions } from '../lib/bidOptionLookups.js'
+import { syncFieldToMilestone } from '../lib/bidTimelineSync.js'
+
+/** Built-in Live Bids fields: name and options come from code and Settings > Masters > Live Bids. */
+function assertNotSystemField(row: any, what: string): void {
+  if (bidSystemField(row.key)) throw new TRPCError({ code: 'BAD_REQUEST', message: `"${row.name}" is a built-in Live Bids field; ${what}` })
+}
 
 function toBidCustomField(row: any) {
   return {
@@ -62,7 +70,7 @@ export const bidCustomFieldsRouter = router({
       const result = await pool.query(
         `SELECT * FROM bid_custom_fields ${input?.includeArchived ? '' : `WHERE status='active'`} ORDER BY position, created_at, insert_seq`,
       )
-      return result.rows.map(toBidCustomField)
+      return withLiveOptions(pool, result.rows.map(toBidCustomField))
     }),
 
   create: protectedProcedure
@@ -99,29 +107,53 @@ export const bidCustomFieldsRouter = router({
   update: protectedProcedure
     .input(z.object({
       id: z.string().guid('Invalid UUID'),
-      // `key` and `dataType` are deliberately not patchable (spec §8.1).
-      patch: z.object({ name: fieldName.optional(), options: z.array(z.string()).optional() }),
+      // Keys stay fixed; type changes are transactional across the column and all its values.
+      patch: z.object({ name: fieldName.optional(), options: z.array(z.string()).optional(), dataType: fieldType.optional(), expectedDataType: fieldType.optional(), resetValues: z.boolean().optional() }),
     }))
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
       await lockDefinitions(client)
       const current = await loadField(client, input.id, true)
+      assertNotSystemField(current, 'edit its options in Settings > Masters > Live Bids.')
+      if (input.patch.expectedDataType && input.patch.expectedDataType !== current.data_type) throw new TRPCError({ code: 'CONFLICT', message: 'This column changed in another session. Reopen Change data type and try again.' })
+      const nextType = input.patch.dataType ?? current.data_type as CustomFieldType
+      const typeChanged = nextType !== current.data_type
+      const kept = customTypesCompatible(current.data_type, nextType)
       const sets: string[] = []
       const values: unknown[] = []
       const audits: Parameters<typeof writeAuditLog>[1][] = []
       const base = { entityType: 'bidCustomField', entityId: current.id, changedBy: ctx.user?.email }
 
+      if (typeChanged) {
+        const held = (await client.query(`SELECT bid_id, ${CUSTOM_VALUE_COLUMNS} FROM bid_custom_field_values WHERE field_id=$1 FOR UPDATE`, [input.id])).rows
+        if (!kept && held.length && !input.patch.resetValues) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Changing to an unrelated data type requires resetting its values.' })
+        for (const entry of held) {
+          const previous = customValueFromRow(current.data_type, entry)
+          let next: CustomValue
+          try { next = convertCustomFieldValue(current.data_type, nextType, previous) } catch (cause) { badRequest(cause) }
+          if (next === null) await client.query('DELETE FROM bid_custom_field_values WHERE field_id=$1 AND bid_id=$2', [input.id, entry.bid_id])
+          else {
+            const columns = customValueColumns(nextType, next)
+            await client.query(`UPDATE bid_custom_field_values SET value_text=$1, value_number=$2, value_date=$3, value_bool=$4, updated_by=$5, updated_at=now() WHERE field_id=$6 AND bid_id=$7`, [columns.text, columns.number, columns.date, columns.bool, ctx.user?.email ?? null, input.id, entry.bid_id])
+          }
+          if (previous !== next) await writeAuditLog(client, { entityType: 'bidCustomFieldValue', entityId: entry.bid_id, field: current.key, oldValue: String(previous ?? ''), newValue: String(next ?? ''), reason: `Column data type changed to ${nextType}`, action: next === null ? 'custom_value_cleared' : 'custom_value_set', changedBy: ctx.user?.email })
+          await client.query('UPDATE bids SET updated_at=now() WHERE id=$1', [entry.bid_id])
+        }
+        values.push(nextType); sets.push(`data_type=$${values.length}`)
+        audits.push({ ...base, field: 'dataType', oldValue: current.data_type, newValue: nextType, reason: kept ? 'Compatible values retained' : `${held.length} values reset`, action: 'custom_field_type_changed' })
+      }
+
       if (input.patch.name !== undefined && input.patch.name !== current.name) {
         values.push(input.patch.name); sets.push(`name=$${values.length}`)
         audits.push({ ...base, field: 'name', oldValue: current.name, newValue: input.patch.name, reason: '', action: 'custom_field_renamed' })
       }
-      if (input.patch.options !== undefined) {
-        if (!hasOptions(current.data_type)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only a select or multi-select column has options.' })
-        let next: string[]
-        try { next = normalizeOptions(input.patch.options) } catch (e) { badRequest(e) }
+      if (typeChanged || input.patch.options !== undefined) {
+        if (input.patch.options !== undefined && !hasOptions(nextType)) throw new TRPCError({ code: 'BAD_REQUEST', message: 'Only a select or multi-select column has options.' })
+        let next: string[] | null
+        try { next = hasOptions(nextType) ? normalizeOptions(input.patch.options ?? (hasOptions(current.data_type) ? current.options ?? [] : [])) : null } catch (e) { badRequest(e) }
         const prev: string[] = current.options ?? []
         if (JSON.stringify(prev) !== JSON.stringify(next)) {
-          const removed = prev.filter((o) => !next.includes(o))
-          values.push(JSON.stringify(next)); sets.push(`options=$${values.length}`)
+          const removed = prev.filter((o) => !next?.includes(o))
+          values.push(next === null ? null : JSON.stringify(next)); sets.push(`options=$${values.length}`)
           audits.push({
             ...base, field: 'options', oldValue: JSON.stringify(prev), newValue: JSON.stringify(next),
             reason: removed.length ? `Removed: ${removed.join(', ')} (existing values kept)` : '', action: 'custom_field_options_changed',
@@ -212,6 +244,7 @@ export const bidCustomFieldsRouter = router({
     .input(z.object({ id: z.string().guid('Invalid UUID'), withValues: z.boolean().optional() }))
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
       const current = await loadField(client, input.id, true)
+      assertNotSystemField(current, 'it cannot be deleted. Hide it from Manage columns instead.')
       const valueCount = (await client.query('SELECT count(*)::int AS n FROM bid_custom_field_values WHERE field_id=$1', [input.id])).rows[0].n as number
       const used = valueCount > 0
       const blocked = () => new TRPCError({ code: 'CONFLICT', message: 'This column has values — archive it instead, or delete it together with its values.' })
@@ -235,14 +268,16 @@ export const bidCustomFieldsRouter = router({
   setValue: protectedProcedure
     .input(z.object({ bidId: z.string().guid('Invalid UUID'), fieldId: z.string().guid('Invalid UUID'), value: z.union([z.string(), z.number(), z.boolean(), z.null()]) }))
     .mutation(({ input, ctx }) => withTransaction(async (client) => {
-      const field = await loadField(client, input.fieldId)
+      // Serialize cell writes with type changes, so a value cannot be written using a stale type.
+      const field = await loadField(client, input.fieldId, true)
       if (field.status === 'archived') throw new TRPCError({ code: 'BAD_REQUEST', message: 'This column is archived.' })
       const bid = (await client.query('SELECT id FROM bids WHERE id=$1 FOR UPDATE', [input.bidId])).rows[0]
       if (!bid) throw new TRPCError({ code: 'NOT_FOUND', message: 'No such bid.' })
 
       const dataType = field.data_type as CustomFieldType
       let value: CustomValue
-      try { value = coerceCustomValue(dataType, input.value, field.options) } catch (e) { badRequest(e) }
+      const options = await liveOptionsFor(client, field.key, field.options)
+      try { value = coerceCustomValue(dataType, input.value, options) } catch (e) { badRequest(e) }
       await assertEntityExists(client, dataType, value)
 
       const existing = (await client.query(
@@ -262,6 +297,7 @@ export const bidCustomFieldsRouter = router({
           await client.query('DELETE FROM bid_custom_field_values WHERE bid_id=$1 AND field_id=$2', [input.bidId, input.fieldId])
           await audit('custom_value_cleared')
           await client.query('UPDATE bids SET updated_at=now() WHERE id=$1', [input.bidId])
+          await syncFieldToMilestone(client, input.bidId, field.key, null, ctx.user?.email)
         }
         return { bidId: input.bidId, fieldId: input.fieldId, key: field.key as string, value: null as CustomValue }
       }
@@ -280,6 +316,8 @@ export const bidCustomFieldsRouter = router({
       if (oldValue !== value) {
         await audit('custom_value_set')
         await client.query('UPDATE bids SET updated_at=now() WHERE id=$1', [input.bidId])
+        // Pre-CXO / Final CXO / LOA date move their Timeline phase (BID_TIMELINE_SYNC).
+        await syncFieldToMilestone(client, input.bidId, field.key, value, ctx.user?.email)
       }
       return { bidId: input.bidId, fieldId: input.fieldId, key: field.key as string, value }
     })),
@@ -296,5 +334,37 @@ export const bidCustomFieldsRouter = router({
       const out: Record<string, CustomValue> = {}
       for (const r of result.rows) out[r.key] = customValueFromRow(r.data_type, r)
       return out
+    }),
+
+  /** Manage columns › People columns: who each person column's dropdown offers, by column id. */
+  peopleColumns: protectedReadProcedure.query(async () => {
+    const result = await pool.query('SELECT column_id, settings FROM bid_people_column_settings')
+    const out: Record<string, PeopleColumnConfig> = {}
+    for (const r of result.rows) out[r.column_id] = normalizePeopleColumnConfig(r.settings ?? {})
+    return out
+  }),
+
+  /** Saves one column's setup; `null` or an empty setup removes it (the column offers its default list again). */
+  setPeopleColumn: protectedProcedure
+    .input(z.object({
+      columnId: z.string().max(PEOPLE_COLUMN_ID_MAX),
+      config: z.object({ verticals: z.array(z.string()).default([]), departments: z.array(z.string()), people: z.array(z.string()), multiple: z.boolean() }).nullable(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      let columnId: string
+      let config: PeopleColumnConfig | null
+      try {
+        columnId = assertPeopleColumnId(input.columnId)
+        config = input.config ? normalizePeopleColumnConfig(input.config) : null
+      } catch (e) { badRequest(e) }
+      if (!config || isEmptyPeopleColumnConfig(config)) {
+        await pool.query('DELETE FROM bid_people_column_settings WHERE column_id=$1', [columnId])
+        return
+      }
+      await pool.query(
+        `INSERT INTO bid_people_column_settings (column_id, settings, updated_by) VALUES ($1, $2, $3)
+         ON CONFLICT (column_id) DO UPDATE SET settings=EXCLUDED.settings, updated_by=EXCLUDED.updated_by, updated_at=now()`,
+        [columnId, JSON.stringify(config), ctx.user?.email ?? null],
+      )
     }),
 })

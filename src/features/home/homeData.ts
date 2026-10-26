@@ -46,7 +46,7 @@ export function attentionRows(
         : tone === 'overdue' && late > 0
           ? `${entry.opportunityName}: ${what}, ${plural(late, 'day')} overdue`
           : `${entry.opportunityName}: ${what}`
-      rows.push({ key: `fu-${entry.followUpId}`, tone, module: 'Opportunity', text, dueDate: entry.dueDate, assigneeId: entry.assigneeId, href: `/bid-tracker/bid/${entry.bidId}` })
+      rows.push({ key: `fu-${entry.followUpId}`, tone, module: 'Opportunity', text, dueDate: entry.dueDate, assigneeId: entry.assigneeId, href: `/live-bids/bid/${entry.bidId}` })
     }
   }
   if (allow.commercial) {

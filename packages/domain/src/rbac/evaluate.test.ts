@@ -43,7 +43,7 @@ describe('accessFor — write scopes', () => {
     expect(other.level).toBe('R')
     expect(allows(other, 'opp.value')).toBe(false)
   })
-  it('Sales on Bid Tracker is Partial (S1) on own rows only', () => {
+  it('Sales on Live Bids is Partial (S1) on own rows only', () => {
     const own = accessFor(sales, 'opp.bidTracker', row({ salesOwnerIds: ['sp1'] }))
     expect(own.level).toBe('P')
     expect([...own.atoms].sort()).toEqual(['bid.custom', 'bid.nextAction', 'opp.client', 'opp.emd', 'opp.teamSales', 'opp.value'])

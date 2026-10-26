@@ -1,4 +1,4 @@
-// Bid Tracker's Activity History, as people read it. The audit log stores
+// Live Bids' Activity History, as people read it. The audit log stores
 // database facts (`emdAmount`, `custom_value_set`, `frozen`); this turns each row
 // — and each ownership assignment — into "what happened, who, when, which bid,
 // which field, old → new". It is a view over the audit data: nothing here writes
@@ -41,7 +41,7 @@ export interface FeedContext {
   corrigendumBid: Map<string, string>
 }
 
-/** Audit entity types Bid Tracker writes; `bid` and `bidCustomFieldValue` rows are keyed to a bid id. */
+/** Audit entity types Live Bids writes; `bid` and `bidCustomFieldValue` rows are keyed to a bid id. */
 export const BID_ENTITY_TYPES = ['bid', 'bidMilestone', 'bidCorrigendum', 'bidSavedView', 'bidCustomField', 'bidCustomFieldValue']
 
 const FIELD_LABEL: Record<string, string> = {
@@ -245,8 +245,8 @@ export function filterActivity(
     if (f.bidId && i.bidId !== f.bidId) return false
     if (f.by && (i.by ?? '') !== f.by) return false
     if (f.kind && i.kind !== f.kind) return false
-    if (f.from && localDay(i.at) < f.from) return false
-    if (f.to && localDay(i.at) > f.to) return false
+    if (f.from && (f.from.includes('T') ? new Date(i.at).getTime() < new Date(f.from).getTime() : localDay(i.at) < f.from)) return false
+    if (f.to && (f.to.includes('T') ? new Date(i.at).getTime() > new Date(f.to).getTime() : localDay(i.at) > f.to)) return false
     if (!q) return true
     const hay = [i.title, i.byName, i.note ?? '', i.bidId ? bidLabel(i.bidId) : '', ...i.changes.flatMap((c) => [c.label, c.from ?? '', c.to ?? ''])]
     return hay.join(' ').toLowerCase().includes(q)

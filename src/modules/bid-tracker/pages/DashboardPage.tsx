@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Icon } from '@/components/ui/Icon'
 import { useBidsForGrid } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { WORK_VERTICALS } from '@/features/nodes/department-meta'
+import { useVerticalNames } from '@/features/masters/useMasterOptions'
 import {
   computeDashboard, verticalLabel, verticalOptions,
   type DashboardCounts, type DashboardMeasure, type VerticalBreakdown,
@@ -19,9 +19,9 @@ export const MEASURE_COLORS: Record<DashboardMeasure, string> = {
 }
 
 const MEASURES: { key: DashboardMeasure; label: string; noun: string; sheet: string; path: string; icon: string }[] = [
-  { key: 'live', label: 'Live bids', noun: 'live bids', sheet: 'Bid Tracker', path: '/bid-tracker', icon: 'Flag' },
-  { key: 'pipeline', label: 'Pipeline', noun: 'pipeline opportunities', sheet: 'Pipeline', path: '/bid-tracker/pipeline/funnel', icon: 'TrendingUp' },
-  { key: 'campaign', label: 'Campaign', noun: 'campaign rows', sheet: 'Campaign', path: '/bid-tracker/campaign', icon: 'Send' },
+  { key: 'live', label: 'Live bids', noun: 'live bids', sheet: 'Live Bids', path: '/live-bids', icon: 'Flag' },
+  { key: 'pipeline', label: 'Pipeline', noun: 'pipeline opportunities', sheet: 'Pipeline', path: '/live-bids/pipeline/funnel', icon: 'TrendingUp' },
+  { key: 'campaign', label: 'Campaign', noun: 'campaign rows', sheet: 'Campaign', path: '/live-bids/campaign', icon: 'Send' },
 ]
 
 /** The Opportunity Dashboard: a header, ONE filter row, then a responsive grid of
@@ -37,7 +37,8 @@ export function DashboardPage() {
     return next
   }, { replace: true })
 
-  const options = useMemo(() => verticalOptions(rows ?? [], WORK_VERTICALS), [rows])
+  const verticalNames = useVerticalNames()
+  const options = useMemo(() => verticalOptions(rows ?? [], verticalNames), [rows, verticalNames])
   const data = useMemo(() => computeDashboard(rows ?? [], vertical), [rows, vertical])
 
   return (

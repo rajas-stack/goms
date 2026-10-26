@@ -20,20 +20,20 @@ function renderRail(path = '/map') {
   )
 }
 
-describe('AccountMappingRail — Bid Tracker entry', () => {
+describe('AccountMappingRail — Live Bids entry', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
   })
 
-  it('hides the Bid Tracker button while the build flag is off', () => {
+  it('hides the Live Bids button while the build flag is off', () => {
     vi.stubEnv('VITE_BID_TRACKER_ENABLED', '')
     renderRail()
     expect(screen.queryByTitle('Opportunity')).not.toBeInTheDocument()
   })
 
-  it('shows the Bid Tracker button when the flag is on, and marks it active on its routes', () => {
+  it('shows the Live Bids button when the flag is on, and marks it active on its routes', () => {
     vi.stubEnv('VITE_BID_TRACKER_ENABLED', 'true')
-    renderRail('/bid-tracker/actions')
+    renderRail('/live-bids/actions')
     const button = screen.getByTitle('Opportunity')
     expect(button.className).toContain('shadow-sm')
     expect(screen.getByTitle('Account Mapping').className).not.toContain('shadow-sm')

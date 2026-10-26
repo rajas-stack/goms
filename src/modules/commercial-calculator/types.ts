@@ -3,6 +3,8 @@
 // This file is the ONLY place these types are defined — nothing is appended
 // to src/lib/types.ts (spec §4.1's module-folder convention).
 
+import type { BidTrackerMasterKey } from '@goms/domain'
+
 export interface MasterBase {
   id: string
   code: string
@@ -59,9 +61,14 @@ export interface ProductEditionFeature {
 export type MasterEntityKey =
   | 'verticals' | 'products' | 'modules' | 'features'
   | 'skuCategories' | 'unitsOfMeasure' | 'productEditions' | 'billingTypes'
-  | 'taxClasses' | 'approvalMatrix' | 'currencies' | 'preSales'
+  | 'taxClasses' | 'approvalMatrix' | 'currencies' | 'preSales' | 'directoryTypes' | 'oemCompanies' | 'consortiumPartners'
+  /** Settings > Masters > Live Bids dropdowns (packages/domain/src/bidTrackerFields.ts). */
+  | BidTrackerMasterKey
 
-export interface MasterRowMap {
+/** A Live Bids dropdown value: `name` is stored on bids, `description` is its full form. */
+export interface BidTrackerMasterRow extends MasterBase {}
+
+export interface MasterRowMap extends Record<BidTrackerMasterKey, BidTrackerMasterRow> {
   verticals: Vertical
   products: CommercialProduct
   modules: ProductModule
@@ -74,6 +81,9 @@ export interface MasterRowMap {
   approvalMatrix: ApprovalMatrixRule
   currencies: Currency
   preSales: PreSales
+  directoryTypes: BidTrackerMasterRow
+  oemCompanies: BidTrackerMasterRow
+  consortiumPartners: BidTrackerMasterRow
 }
 
 export type MastersState = { [K in MasterEntityKey]: MasterRowMap[K][] }

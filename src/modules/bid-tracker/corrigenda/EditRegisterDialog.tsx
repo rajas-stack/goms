@@ -13,6 +13,7 @@ export function EditRegisterDialog({ bidId, corrigendum, onClose }: { bidId: str
   const { updateRegister } = useBidCorrigendaMutations(bidId)
   const [draft, setDraft] = useState<CorrigendumRegister>(() => normalizeRegister(corrigendum))
   const [error, setError] = useState<string | null>(null)
+  const [invalidDates, setInvalidDates] = useState(false)
 
   async function save() {
     setError(null)
@@ -30,10 +31,10 @@ export function EditRegisterDialog({ bidId, corrigendum, onClose }: { bidId: str
       description="Number of changes and open actions are counted automatically."
       footer={<>
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
-        <Button variant="primary" disabled={updateRegister.isPending} onClick={save}>Save register</Button>
+        <Button variant="primary" disabled={updateRegister.isPending || invalidDates} onClick={save}>Save register</Button>
       </>}
     >
-      <RegisterFields value={draft} onChange={setDraft} />
+      <RegisterFields value={draft} onChange={setDraft} onValidityChange={setInvalidDates} />
       {error && <p role="alert" className="mt-3 text-[13px] text-crimson">{error}</p>}
     </Dialog>
   )

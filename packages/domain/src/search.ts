@@ -23,7 +23,7 @@ export interface SearchResult {
    *  HierNode id its `path()` should navigate to instead (e.g. a Work's
    *  owning department). Omitted for results that don't need it. */
   containerId?: string
-  /** Set once a Bid Tracker bid exists for this opportunity — lets the Works
+  /** Set once a Live Bids bid exists for this opportunity — lets the Works
    *  category route to the bid detail page instead of the department view. */
   bidId?: string | null
 }
@@ -381,7 +381,7 @@ const worksCategory: SearchCategoryDef = {
     return node ? [toNodeResult(node, 'department')] : []
   },
   path: (result) => (result.bidId
-    ? `/bid-tracker/bid/${result.bidId}`
+    ? `/live-bids/bid/${result.bidId}`
     : (result.containerId && result.stateCode != null ? `/state/${result.stateCode}?sel=${result.containerId}&kind=node` : '/')),
 }
 

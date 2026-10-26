@@ -20,9 +20,10 @@ interface LockSwitchProps {
 /** The caller controls the state, including any passphrase or permission checks. */
 export function LockSwitch({
   unlocked, onToggle, lockedLabel, unlockedLabel, className,
-  disabled = false, size = 'md', text,
+  disabled = false, size: sizeProp, text,
 }: LockSwitchProps) {
   const [keyboardAction, setKeyboardAction] = useState(false)
+  const size = sizeProp ?? (text ? 'md' : 'toolbar')
   const label = unlocked ? unlockedLabel : lockedLabel
   const iconOnly = size !== 'md'
 

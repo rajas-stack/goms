@@ -19,6 +19,28 @@ function Harness({ initial = '', format, min, onValue }: {
 }
 
 describe('FriendlyDateInput', () => {
+  it('adds and removes an optional time without inventing midnight for a date alone', async () => {
+    render(<Harness initial="2026-10-09" format="optional-time" />)
+    expect(screen.getByTestId('stored')).toHaveTextContent('2026-10-09')
+    await userEvent.click(screen.getByRole('button', { name: 'Add time' }))
+    expect(screen.getByTestId('stored')).toHaveTextContent('2026-10-09')
+    fireEvent.change(screen.getByLabelText('Time for When'), { target: { value: '00:00' } })
+    expect(screen.getByTestId('stored')).toHaveTextContent('2026-10-09T00:00')
+    await userEvent.click(screen.getByRole('button', { name: 'Remove time' }))
+    expect(screen.getByTestId('stored').textContent).toBe('2026-10-09')
+  })
+
+  it('preserves an optional clock when a different day is picked', () => {
+    render(<Harness initial="2026-10-09T15:45" format="optional-time" />)
+    fireEvent.change(document.querySelector('input[type="date"]')!, { target: { value: '2026-10-10' } })
+    expect(screen.getByTestId('stored')).toHaveTextContent('2026-10-10T15:45')
+  })
+
+  it('captures typed time, including midnight, in optional mode', () => {
+    render(<Harness format="optional-time" />)
+    fireEvent.change(screen.getByRole('textbox', { name: 'When' }), { target: { value: '9 Oct 2026 00:00' } })
+    expect(screen.getByTestId('stored')).toHaveTextContent('2026-10-09T00:00')
+  })
   it('stores a typed free-form date as yyyy-mm-dd and previews what it captured', async () => {
     render(<Harness />)
     await userEvent.type(screen.getByRole('textbox', { name: 'When' }), '13th may 2026')

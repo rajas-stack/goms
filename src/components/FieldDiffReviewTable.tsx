@@ -1,6 +1,6 @@
 // Generic current-vs-proposed review UI (design spec §12) — one checkbox per
 // row, an explicit "Save N Changes" commit, and a "Keep Existing Values"
-// reset. Used today by Bid Tracker's corrigendum review; the existing
+// reset. Used today by Live Bids' corrigendum review; the existing
 // SessionImportWizard diff table is a candidate to adopt it later (not done
 // in this pass — see Task 34's scope note).
 import { useState } from 'react'

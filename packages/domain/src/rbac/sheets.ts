@@ -9,5 +9,5 @@ export const SHEET_MODULE: Record<OwnedSheet, RowModule> = {
   'pipeline-funnel': 'opp.pipeline', 'pipeline-backup': 'opp.pipeline', 'pipeline-commits': 'opp.pipeline',
   campaign: 'opp.campaign',
 }
-/** Unknown or absent sheet (a bid-less opportunity) is authorised as Bid Tracker. */
+/** Unknown or absent sheet (a bid-less opportunity) is authorised as Live Bids. */
 export const sheetModule = (sheet: unknown): RowModule => SHEET_MODULE[isOwnedSheet(sheet) ? sheet : DEFAULT_OWNED_SHEET]

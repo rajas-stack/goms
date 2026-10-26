@@ -81,6 +81,18 @@ export const TERRITORY_BY_HEAD_EMAIL: Record<string, string> = {
   'sunilkumar@amnex.com': 'West',
 }
 
+/** Which territory (a `TERRITORY_BY_HEAD_EMAIL` value) covers each state, by state name as the States master spells it.
+ *  Used to show only that territory's sales people in a Live Bids person dropdown (plus everyone with no territory).
+ *  shortcut: inferred from Sales Team.xlsx's per-head state COUNTS (North 20, South 8, East 3, West 2) and the roster —
+ *  the sheet's state list is not in the repo; confirm against it. A state missing here filters nobody out. */
+export const TERRITORY_BY_STATE: Record<string, string> = Object.fromEntries(Object.entries({
+  North: ['Jammu and Kashmir', 'Ladakh', 'Himachal Pradesh', 'Punjab', 'Chandigarh', 'Haryana', 'Delhi', 'Uttarakhand', 'Uttar Pradesh',
+    'Madhya Pradesh', 'Chhattisgarh', 'Bihar', 'Assam', 'Arunachal Pradesh', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Sikkim', 'Tripura'],
+  South: ['Maharashtra', 'Goa', 'Karnataka', 'Kerala', 'Tamil Nadu', 'Puducherry', 'Andhra Pradesh', 'Telangana'],
+  East: ['West Bengal', 'Odisha', 'Jharkhand'],
+  West: ['Gujarat', 'Rajasthan'],
+}).flatMap(([territory, states]) => states.map((state) => [state, territory])))
+
 /** Designation-derived default tier(s) for a member with no explicit `tiers`
  *  override. Substring-matched (not exact-equality) so a compound title like
  *  "Regional Manager & Head" resolves to BOTH `gm` and `rm` on its own —

@@ -11,7 +11,7 @@ beforeEach(cleanupRbacFixtures)
 afterEach(cleanupRbacFixtures)
 
 describe('sheet → module', () => {
-  it('maps every owned sheet, defaulting an unknown or missing one to Bid Tracker', () => {
+  it('maps every owned sheet, defaulting an unknown or missing one to Live Bids', () => {
     expect(sheetModule('bidTracker')).toBe('opp.bidTracker')
     for (const s of ['pipeline-funnel', 'pipeline-backup', 'pipeline-commits']) expect(sheetModule(s)).toBe('opp.pipeline')
     expect(sheetModule('campaign')).toBe('opp.campaign')
@@ -60,7 +60,7 @@ describe('rowForBid', () => {
 })
 
 describe('rowForOpportunity', () => {
-  it('treats a bid-less opportunity as the Bid Tracker sheet', async () => {
+  it('treats a bid-less opportunity as the Live Bids sheet', async () => {
     const { opportunityId } = await makeBid({ withBid: false })
     expect(await rowForOpportunity(opportunityId)).toMatchObject({ module: 'opp.bidTracker', bidId: null })
   })

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, Loader2, Pencil, Plus, RotateCcw } from 'lucide-react'
 import type { BidCustomField, BidGridRow } from '@/lib/types'
 import type { BidSynopsis, PolicyModuleKey } from '@goms/domain'
@@ -9,6 +10,7 @@ import { useAllowed, usePermissions } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
 import { EditableCell, type CellDraft, type PendingEdits } from '../components/EditableCell'
 import { AddCustomColumnDialog } from '../components/AddCustomColumnDialog'
+import { useBidStageOptions } from '@/features/masters/useBidStages'
 import { CUSTOM_GROUP, GRID_GROUPS, cellValue, editValue, formatValueText, personOf, resolveColumns, type GridColumnMeta } from '../gridColumns'
 import { canEditCell } from '../gridPermissions'
 import { columnInScope, columnOwner } from '../sheets'
@@ -18,7 +20,7 @@ import { useSynopsis } from './api'
 import { GeneralFieldControl } from './GeneralFieldControl'
 import { GeneralFieldValue } from './GeneralFieldValue'
 
-export function GeneralTab({ bidId, module = 'opp.bidTracker' }: { bidId: string; module?: PolicyModuleKey }) {
+export function GeneralTab({ bidId, module = 'opp.bidTracker', actionsTarget }: { bidId: string; module?: PolicyModuleKey; actionsTarget?: HTMLDivElement | null }) {
   const canEdit = useAllowed(module, 'update')
   const synopsis = useSynopsis(bidId, 'general')
   const rows = useBidsForGrid()
@@ -28,11 +30,11 @@ export function GeneralTab({ bidId, module = 'opp.bidTracker' }: { bidId: string
   if (error) return <div role="alert" className="space-y-2 p-6 text-sm text-crimson"><p>{error.message}</p><Button size="sm" onClick={() => { void synopsis.refetch(); void rows.refetch(); void fields.refetch() }}>Retry</Button></div>
   const row = rows.data?.find(candidate => candidate.id === bidId)
   if (!row) return <p role="alert" className="p-6 text-sm text-crimson">Bid not found.</p>
-  return <GeneralForm key={bidId} row={row} fields={fields.data ?? []} saved={synopsis.data ?? null} canEdit={canEdit} onReload={() => { void synopsis.refetch(); void rows.refetch(); void fields.refetch() }} />
+  return <GeneralForm key={bidId} row={row} fields={fields.data ?? []} saved={synopsis.data ?? null} canEdit={canEdit} actionsTarget={actionsTarget} onReload={() => { void synopsis.refetch(); void rows.refetch(); void fields.refetch() }} />
 }
 
-function GeneralForm({ row, fields, saved, canEdit, onReload }: {
-  row: BidGridRow; fields: BidCustomField[]; saved: BidSynopsis | null; canEdit: boolean; onReload: () => void
+function GeneralForm({ row, fields, saved, canEdit, actionsTarget, onReload }: {
+  row: BidGridRow; fields: BidCustomField[]; saved: BidSynopsis | null; canEdit: boolean; actionsTarget?: HTMLDivElement | null; onReload: () => void
 }) {
   const [editingRequested, setEditing] = useState(() => !saved)
   const [addFieldOpen, setAddFieldOpen] = useState(false)
@@ -54,7 +56,8 @@ function GeneralForm({ row, fields, saved, canEdit, onReload }: {
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
   }, [mutation.isPending])
-  const columns = useMemo(() => resolveColumns(fields.filter(field => columnInScope(field.sheet, row.sheet))).filter(column => column.type !== null), [fields, row.sheet])
+  const stageOptions = useBidStageOptions()
+  const columns = useMemo(() => resolveColumns(fields.filter(field => columnInScope(field.sheet, row.sheet)), undefined, stageOptions).filter(column => column.type !== null), [fields, row.sheet, stageOptions])
   const groups = [...GRID_GROUPS, CUSTOM_GROUP].map(group => ({ ...group, columns: columns.filter(column => column.group === group.id) })).filter(group => group.columns.length)
 
   const commit = async (col: GridColumnMeta, value: CellDraft) => {
@@ -67,6 +70,14 @@ function GeneralForm({ row, fields, saved, canEdit, onReload }: {
     setDoneRequested(true)
   }
 
+  const actions = <>
+    {canAddField && <Button size="sm" onClick={() => setAddFieldOpen(true)}><Plus size={14} /> Add field</Button>}
+    <Button size="sm" disabled={mutation.isPending} onClick={onReload} aria-label="Reload saved values" title="Reload saved values"><RotateCcw size={14} /></Button>
+    {canEdit && <Button size="sm" variant="primary" disabled={mutation.isPending && !editing} onClick={() => editing ? done() : setEditing(true)}>
+      {editing ? <><Check size={14} /> Done</> : <><Pencil size={14} /> Edit</>}
+    </Button>}
+  </>
+
   return (
     <section aria-label="General" className="min-w-0" data-testid="bid-general-form">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-4 py-4">
@@ -76,13 +87,7 @@ function GeneralForm({ row, fields, saved, canEdit, onReload }: {
             {mutation.isPending ? <><Loader2 size={14} className="animate-spin" /> Saving...</> : Object.keys(errors).length ? 'Save failed' : <><Check size={14} className="text-emerald" /> Saved</>}
           </span>
         </div>
-        <div className="flex items-center gap-1.5">
-          {canAddField && <Button size="sm" onClick={() => setAddFieldOpen(true)}><Plus size={14} /> Add field</Button>}
-          <Button size="sm" disabled={mutation.isPending} onClick={onReload} aria-label="Reload saved values" title="Reload saved values"><RotateCcw size={14} /></Button>
-          {canEdit && <Button size="sm" variant="primary" disabled={mutation.isPending && !editing} onClick={() => editing ? done() : setEditing(true)}>
-            {editing ? <><Check size={14} /> Done</> : <><Pencil size={14} /> Edit</>}
-          </Button>}
-        </div>
+        {actionsTarget ? createPortal(actions, actionsTarget) : <div className="flex items-center gap-1.5">{actions}</div>}
       </div>
       <div className="px-4 pb-6">
         {groups.map(group => (
@@ -99,8 +104,8 @@ function GeneralForm({ row, fields, saved, canEdit, onReload }: {
                   <div key={col.id} className="grid gap-2 py-2 md:grid-cols-[minmax(180px,280px)_1fr] md:gap-4" data-column-id={col.id}>
                     <dt className="text-sm font-medium text-ink-700">{col.header}</dt>
                     <dd className="relative min-w-0 whitespace-pre-wrap [overflow-wrap:anywhere] text-sm text-ink-900" data-field={col.generalField?.key ?? col.id} title={!col.editable ? col.readOnlyReason : undefined}>
-                      {editable ? col.generalField ? <GeneralControl key={col.id} col={col} value={String(value ?? '')} onCommit={next => commit(col, next)} pending={pending} />
-                        : <EditableCell col={col} value={editValue(row, col)} display={display} lookups={lookups} pending={pending} cellKey={row.id + ':' + col.id} onCommit={next => void commit(col, next)} externalError={errors[col.id]} />
+                      {editable ? col.generalField && col.type !== 'multiselect' ? <GeneralControl key={col.id} col={col} value={String(value ?? '')} onCommit={next => commit(col, next)} pending={pending} />
+                        : <EditableCell col={col} value={editValue(row, col)} display={display} lookups={lookups} row={row} pending={pending} cellKey={row.id + ':' + col.id} onCommit={next => void commit(col, next)} externalError={errors[col.id]} />
                         : display}
                       {errors[col.id] && <p role="alert" className="mt-1 text-xs text-crimson">{errors[col.id]}</p>}
                     </dd>

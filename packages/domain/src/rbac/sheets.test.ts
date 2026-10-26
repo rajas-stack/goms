@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { SHEET_MODULE, sheetModule } from './sheets.js'
 
 describe('sheet → module', () => {
-  it('maps every owned sheet, defaulting an unknown or missing one to Bid Tracker', () => {
+  it('maps every owned sheet, defaulting an unknown or missing one to Live Bids', () => {
     expect(sheetModule('bidTracker')).toBe('opp.bidTracker')
     for (const s of ['pipeline-funnel', 'pipeline-backup', 'pipeline-commits']) expect(sheetModule(s)).toBe('opp.pipeline')
     expect(sheetModule('campaign')).toBe('opp.campaign')

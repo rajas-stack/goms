@@ -56,11 +56,12 @@ export function AppLayout() {
   const navExpanded =
     location.pathname !== '/'
     && !location.pathname.startsWith('/commercial-calculator')
-    && !location.pathname.startsWith('/bid-tracker')
+    && !location.pathname.startsWith('/live-bids')
     && !location.pathname.startsWith('/teams')
     && !location.pathname.startsWith('/settings')
     && !location.pathname.startsWith('/documents')
     && !location.pathname.startsWith('/document-maker')
+    && !location.pathname.startsWith('/email')
     && !location.pathname.startsWith('/insights')
     && !location.pathname.startsWith('/analytics')
   // `MobileDetailsSheet` only renders as an overlay below `lg` (it's

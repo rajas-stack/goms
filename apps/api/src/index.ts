@@ -12,6 +12,8 @@ import { followUpsRouter } from './routers/follow-ups.js'
 import { searchRouter } from './routers/search.js'
 import { adminImportRouter } from './routers/adminImport.js'
 import { bidsRouter } from './routers/bids.js'
+import { bidCommunicationsRouter } from './routers/bidCommunications.js'
+import { emailCenterRouter } from './routers/emailCenter.js'
 import { bidMilestonesRouter } from './routers/bidMilestones.js'
 import { protectedValuesRouter } from './routers/protectedValues.js'
 import { bidCorrigendaRouter } from './routers/bidCorrigenda.js'
@@ -32,6 +34,7 @@ import { googleIntegrationsRouter } from './routers/googleIntegrations.js'
 import { makerDocumentsRouter } from './routers/makerDocuments.js'
 import { rbacTreeRouter } from './routers/rbacTree.js'
 import { insightsStudioRouter } from './routers/insightsStudio.js'
+import { profileImagesRouter } from './routers/profileImages.js'
 
 export const appRouter = router({
   insights: insightsRouter,
@@ -39,6 +42,8 @@ export const appRouter = router({
   employees: employeesRouter, sales: salesRouter, commercial: commercialRouter,
   ownership: ownershipRouter, opportunities: opportunitiesRouter, followUps: followUpsRouter, search: searchRouter,
   adminImport: adminImportRouter, bids: bidsRouter, bidMilestones: bidMilestonesRouter,
+  bidCommunications: bidCommunicationsRouter,
+  emailCenter: emailCenterRouter,
   protectedValues: protectedValuesRouter, bidCorrigenda: bidCorrigendaRouter,
   documents: documentsRouter, bidSavedViews: bidSavedViewsRouter, auditLogs: auditLogsRouter,
   bidCustomFields: bidCustomFieldsRouter,
@@ -54,5 +59,6 @@ export const appRouter = router({
   makerDocuments: makerDocumentsRouter,
   rbacTree: rbacTreeRouter,
   insightsStudio: insightsStudioRouter,
+  profileImages: profileImagesRouter,
 })
 export type AppRouter = typeof appRouter

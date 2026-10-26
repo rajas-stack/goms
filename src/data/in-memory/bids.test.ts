@@ -9,7 +9,7 @@ async function newBid(submissionDate = '2099-01-15') {
   return { opp, bid }
 }
 
-describe('InMemoryRepository Bid Tracker', () => {
+describe('InMemoryRepository Live Bids', () => {
   beforeEach(async () => {
     await resetLocalData()
   })

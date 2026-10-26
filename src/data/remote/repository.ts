@@ -12,7 +12,7 @@ import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/router
 import { createTRPCClient, httpBatchLink } from '@trpc/client'
 import type { BidSynopsis, BidSynopsisSection, SaveBidSynopsisInput } from '@goms/domain'
 import type { TenderWebsite, TenderWebsiteInput, TenderWebsiteKind } from '@goms/domain'
-import type { AmnexDepartment, Competitor, CompetitorInput } from '@goms/domain'
+import type { AmnexDepartment, Competitor, CompetitorInput, PeopleColumnConfig } from '@goms/domain'
 import type { InsightCorrigendumRow, InsightReport, InsightReportInput, InsightVisual, InsightVisualInput } from '@goms/domain'
 import type {
   ApplyTemplateInput, RbacCustomRole, RbacGrantChange, RbacMyAccess, RbacNode, RbacRoleInput, RbacSubjectConfig, RbacSubjectRef, RbacSubjects,
@@ -341,7 +341,9 @@ export class RemoteRepository implements Partial<Repository> {
   relatedRecords = (result: SearchResult): Promise<SearchResult[]> => this.client.search.relatedRecords.query(result)
   relationshipAnalytics = (): Promise<RelationshipAnalytics> => this.client.search.relationshipAnalytics.query()
 
-  // --- Bid Tracker ---
+  // --- Live Bids ---
+  previewBidImport = (input: { table: import('@goms/domain').BidImportTable }) => this.client.bids.previewImport.mutate(input)
+  importBids = (input: { table: import('@goms/domain').BidImportTable }) => this.client.bids.importNew.mutate(input)
   listBidsForGrid = (filterRules?: BidSavedView['filterRules']): Promise<BidGridRow[]> =>
     this.client.bids.listForGrid.query({ filterRules }) as unknown as Promise<BidGridRow[]>
   getBid = (id: string): Promise<Bid | null> => this.client.bids.get.query({ id }) as unknown as Promise<Bid | null>
@@ -351,7 +353,7 @@ export class RemoteRepository implements Partial<Repository> {
     this.client.bids.create.mutate({ opportunityId, department, sheet }) as unknown as Promise<Bid>
   createBidForNewOpportunity = (opportunity: NewBidOpportunity, department: DepartmentChoice, sheet?: OwnedSheet): Promise<Bid> =>
     this.client.bids.create.mutate({ newOpportunity: opportunity, department, sheet }) as unknown as Promise<Bid>
-  updateBid = (id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink' | 'sheet'>>): Promise<Bid> =>
+  updateBid = (id: string, patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink' | 'sheet' | 'lifecycleData'>>): Promise<Bid> =>
     this.client.bids.update.mutate({ id, patch }) as unknown as Promise<Bid>
   archiveBid = (id: string): Promise<Bid> => this.client.bids.archive.mutate({ id }) as unknown as Promise<Bid>
   markBidVerified = (id: string): Promise<Bid> => this.client.bids.markVerified.mutate({ id }) as unknown as Promise<Bid>
@@ -430,12 +432,12 @@ export class RemoteRepository implements Partial<Repository> {
   deleteBidSavedView = (id: string): Promise<void> =>
     this.client.bidSavedViews.delete.mutate({ id }) as unknown as Promise<void>
 
-  // --- Bid Tracker: custom columns (spec §8.1) ---
+  // --- Live Bids: custom columns (spec §8.1) ---
   listBidCustomFields = (includeArchived?: boolean): Promise<BidCustomField[]> =>
     this.client.bidCustomFields.list.query({ includeArchived }) as unknown as Promise<BidCustomField[]>
   createBidCustomField = (input: { name: string; dataType: CustomFieldType; options?: string[]; sheet?: BidCustomField['sheet'] }): Promise<BidCustomField> =>
     this.client.bidCustomFields.create.mutate(input) as unknown as Promise<BidCustomField>
-  updateBidCustomField = (id: string, patch: { name?: string; options?: string[] }): Promise<BidCustomField> =>
+  updateBidCustomField = (id: string, patch: import('@goms/domain').UpdateBidCustomFieldPatch): Promise<BidCustomField> =>
     this.client.bidCustomFields.update.mutate({ id, patch }) as unknown as Promise<BidCustomField>
   reorderBidCustomFields = (ids: string[]): Promise<BidCustomField[]> =>
     this.client.bidCustomFields.reorder.mutate({ ids }) as unknown as Promise<BidCustomField[]>
@@ -451,4 +453,8 @@ export class RemoteRepository implements Partial<Repository> {
     this.client.bidCustomFields.setValue.mutate({ bidId, fieldId, value }) as unknown as Promise<{ bidId: string; fieldId: string; key: string; value: CustomValue }>
   listBidCustomValues = (bidId: string): Promise<Record<string, CustomValue>> =>
     this.client.bidCustomFields.valuesForBid.query({ bidId }) as unknown as Promise<Record<string, CustomValue>>
+  listPeopleColumnConfigs = (): Promise<Record<string, PeopleColumnConfig>> => this.client.bidCustomFields.peopleColumns.query()
+  setPeopleColumnConfig = async (columnId: string, config: PeopleColumnConfig | null): Promise<void> => {
+    await this.client.bidCustomFields.setPeopleColumn.mutate({ columnId, config })
+  }
 }

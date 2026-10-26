@@ -83,6 +83,11 @@ describe('production security', () => {
     const result = formatError({ shape: { message: 'raw secret', data: { stack: 'raw secret stack' } }, error: { code: 'INTERNAL_SERVER_ERROR' } as any })
     expect(JSON.stringify(result)).not.toContain('secret')
   })
+  it.each(['UNAUTHORIZED', 'FORBIDDEN', 'BAD_REQUEST', 'NOT_FOUND'] as const)('never returns a stack for %s, including local deployments', code => {
+    const result = formatError({ shape: { message: 'Request rejected', data: { stack: 'private-server-path', httpStatus: 401 } }, error: { code } as any })
+    expect(JSON.stringify(result)).not.toContain('private-server-path')
+    expect(result.message).toBe('Request rejected')
+  })
 })
 describe('operation budgets', () => {
   it('counts batched work, separates callers, resets expired windows and bounds memory', () => {

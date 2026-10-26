@@ -12,7 +12,7 @@ export type OpportunityWorkflowKind = 'reactiveBid' | 'curatedOpportunity'
 
 export interface OpportunityLifecycleStage {
   id: string
-  name: 'Campaign' | 'Pipeline' | 'Bid Tracker'
+  name: 'Campaign' | 'Pipeline' | 'Live Bids'
   actualStart?: IsoDate
   actualEnd?: IsoDate
   status: MilestoneStatus

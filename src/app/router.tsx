@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter, Navigate, useLocation } from 'react-router-dom'
 import { AppLayout } from './AppLayout'
 import { RequireSignIn } from './RequireSignIn'
 import { GlobalErrorScreen } from './routes/GlobalErrorScreen'
@@ -9,12 +9,12 @@ import { RouteFallback } from '@/components/RouteFallback'
 import { NAV_MODULES } from '@/lib/routeModules'
 import { RequireNode } from '@/lib/rbacTree/RequireNode'
 import { ROUTE_NODES, rbacHandle } from './routeNodes'
+import { MASTER_PAGE_LIST } from '@/features/masters/mastersList'
 import type { ReactNode } from 'react'
 
 const Home = lazy(() => import('./routes/Home').then((m) => ({ default: m.Home })))
 const Landing = lazy(() => import('./routes/Landing').then((m) => ({ default: m.Landing })))
 const StateWorkspace = lazy(() => import('./routes/StateWorkspace').then((m) => ({ default: m.StateWorkspace })))
-const Directory = lazy(() => import('./routes/Directory').then((m) => ({ default: m.Directory })))
 const Insights = lazy(() => import('./routes/Insights').then((m) => ({ default: m.Insights })))
 const VisualLibraryPage = lazy(() => import('@/features/insights-studio/pages/VisualLibraryPage').then((m) => ({ default: m.VisualLibraryPage })))
 const VisualBuilderPage = lazy(() => import('@/features/insights-studio/pages/VisualBuilderPage').then((m) => ({ default: m.VisualBuilderPage })))
@@ -38,6 +38,7 @@ const DocumentVerificationsSettingsPage = lazy(() =>
 const CompetitorsSettingsPage = lazy(() =>
   import('./routes/CompetitorsSettingsPage').then((m) => ({ default: m.CompetitorsSettingsPage })),
 )
+const MasterSettingsPage = lazy(() => import('./routes/MasterSettingsPage').then((m) => ({ default: m.MasterSettingsPage })))
 const EmployeeMasterSettingsPage = lazy(() =>
   import('./routes/SettingsEmployeeMasterPage').then((m) => ({ default: m.SettingsEmployeeMasterPage })),
 )
@@ -71,6 +72,7 @@ const DocumentMakerHome = lazy(() =>
 const DocumentMakerEditor = lazy(() =>
   import('@/modules/document-maker/DocumentMakerEditor').then((m) => ({ default: m.DocumentMakerEditor })),
 )
+const EmailPage = lazy(() => import('./routes/EmailPage').then((m) => ({ default: m.EmailPage })))
 const Login = lazy(() => import('./routes/Login').then((m) => ({ default: m.Login })))
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
@@ -96,21 +98,33 @@ const adminImportRoutes =
       ]
     : []
 
+/** Old /bid-tracker/... links and bookmarks keep working: same page under the Live Bids address. */
+function LegacyLiveBidsRedirect() {
+  const { pathname, search, hash } = useLocation()
+  return <Navigate to={`${pathname.replace(/^\/bid-tracker/, '/live-bids')}${search}${hash}`} replace />
+}
+
+function DirectoryRedirect() {
+  const { search } = useLocation()
+  return <Navigate to={`/teams/directory${search}`} replace />
+}
+
 /** The Opportunity module opens for any role that can read at least one sheet (its tabs then follow their own sheet). */
 const Opp = ({ children }: { children: React.ReactNode }) => <RequireAccess anyOf={NAV_MODULES.opportunity}>{children}</RequireAccess>
 
-// Bid Tracker is dark-launched behind its own build flag, same convention as
+// Live Bids is dark-launched behind its own build flag, same convention as
 // the admin-import routes above: absent from the router entirely when off.
 const bidTrackerRoutes = isBidTrackerEnabled()
   ? [
-      routed('/bid-tracker', ROUTE_NODES.bidTracker, <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp>),
-      routed('/bid-tracker/bid/:bidId', ROUTE_NODES.bid, <Opp><BidDetailWorkspace /></Opp>),
-      routed('/bid-tracker/pipeline', ROUTE_NODES.pipeline, <Opp><OpportunityWorkspace tab="pipeline" /></Opp>),
-      routed('/bid-tracker/pipeline/:tab', ROUTE_NODES.pipeline, <Opp><OpportunityWorkspace tab="pipeline" /></Opp>),
-      routed('/bid-tracker/campaign', ROUTE_NODES.campaign, <Opp><OpportunityWorkspace tab="campaign" /></Opp>),
-      routed('/bid-tracker/master', ROUTE_NODES.master, <Opp><OpportunityWorkspace tab="master" /></Opp>),
-      routed('/bid-tracker/dashboard', ROUTE_NODES.dashboard, <Opp><OpportunityWorkspace tab="dashboard" /></Opp>),
-      routed('/bid-tracker/:section', ROUTE_NODES.bidTracker, <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp>),
+      routed('/live-bids', ROUTE_NODES.bidTracker, <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp>),
+      routed('/live-bids/bid/:bidId', ROUTE_NODES.bid, <Opp><BidDetailWorkspace /></Opp>),
+      routed('/live-bids/pipeline', ROUTE_NODES.pipeline, <Opp><OpportunityWorkspace tab="pipeline" /></Opp>),
+      routed('/live-bids/pipeline/:tab', ROUTE_NODES.pipeline, <Opp><OpportunityWorkspace tab="pipeline" /></Opp>),
+      routed('/live-bids/campaign', ROUTE_NODES.campaign, <Opp><OpportunityWorkspace tab="campaign" /></Opp>),
+      routed('/live-bids/master', ROUTE_NODES.master, <Opp><OpportunityWorkspace tab="master" /></Opp>),
+      routed('/live-bids/dashboard', ROUTE_NODES.dashboard, <Opp><OpportunityWorkspace tab="dashboard" /></Opp>),
+      routed('/live-bids/:section', ROUTE_NODES.bidTracker, <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp>),
+      { path: '/bid-tracker/*', handle: rbacHandle(ROUTE_NODES.bidTracker), element: <LegacyLiveBidsRedirect /> },
     ]
   : []
 
@@ -122,7 +136,8 @@ export const router = createBrowserRouter([
       routed('/', ROUTE_NODES.home, <Home />),
       routed('/map', ROUTE_NODES.map, <RequireAccess anyOf={NAV_MODULES.map}><Landing /></RequireAccess>),
       routed('/state/:code', ROUTE_NODES.state, <RequireAccess anyOf={NAV_MODULES.map}><StateWorkspace /></RequireAccess>),
-      routed('/directory', ROUTE_NODES.directory, <RequireAccess anyOf={NAV_MODULES.directory}><Directory /></RequireAccess>),
+      // Directory moved from Account Mapping to the sidebar Directory; old links (with ?sel=) still land on the same person.
+      { path: '/directory', handle: rbacHandle(ROUTE_NODES.directory), element: <DirectoryRedirect /> },
       routed('/analytics', ROUTE_NODES.insights, <RequireAccess anyOf={NAV_MODULES.insights}><Insights /></RequireAccess>),
       routed('/insights', ROUTE_NODES.insights, <RequireAccess anyOf={NAV_MODULES.insights}><Insights /></RequireAccess>),
       routed('/insights/studio/visuals', ROUTE_NODES.insightsStudioVisuals, <RequireAccess anyOf={NAV_MODULES.insights}><VisualLibraryPage /></RequireAccess>),
@@ -135,6 +150,7 @@ export const router = createBrowserRouter([
       routed('/meetings/:meetingId', ROUTE_NODES.meeting, <RequireAccess anyOf={NAV_MODULES.meetings}><MeetingDetails /></RequireAccess>),
       routed('/sales', ROUTE_NODES.sales, <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess>),
       routed('/sales/:section', ROUTE_NODES.sales, <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess>),
+      routed('/teams/directory', ROUTE_NODES.directory, <RequireAccess anyOf={NAV_MODULES.directory}><TeamsWorkspace /></RequireAccess>),
       routed('/teams', ROUTE_NODES.teams, <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess>),
       routed('/teams/:team', ROUTE_NODES.teams, <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess>),
       routed('/teams/:team/:section', ROUTE_NODES.teams, <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess>),
@@ -157,10 +173,14 @@ export const router = createBrowserRouter([
       // Personal Office files: every signed-in user; the API scopes each file to its owner.
       routed('/document-maker', ROUTE_NODES.documentMaker, <DocumentMakerHome />),
       routed('/document-maker/:id', ROUTE_NODES.documentEditor, <DocumentMakerEditor />),
+      routed('/email', ROUTE_NODES.email, <EmailPage />),
       routed('/settings/tender-websites', ROUTE_NODES.tenderWebsites, <TenderWebsitesSettingsPage />),
       routed('/settings/document-verifications', ROUTE_NODES.verifications, <DocumentVerificationsSettingsPage />),
       routed('/settings/competitors', ROUTE_NODES.competitors, <CompetitorsSettingsPage />),
       routed('/settings/masters/employees', ROUTE_NODES.employeeMaster, <EmployeeMasterSettingsPage />),
+      // Every other master: Settings > Masters > <title> (src/features/masters/mastersList.ts).
+      ...MASTER_PAGE_LIST.filter((m) => m.kind !== 'employees')
+        .map((m) => routed(`/settings/masters/${m.kind}`, `settings.masters.${m.kind}`, <MasterSettingsPage kind={m.kind} />)),
       ...bidTrackerRoutes,
       ...adminImportRoutes,
       { path: '*', element: <NotFound /> },

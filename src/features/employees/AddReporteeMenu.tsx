@@ -1,4 +1,4 @@
-import { Button } from '@/components/ui/Button'
+import { IconButton } from '@/components/ui/IconButton'
 import { Icon } from '@/components/ui/Icon'
 import { Menu, MenuItem } from '@/components/ui/Menu'
 
@@ -10,9 +10,7 @@ export function AddReporteeMenu({ onChoose }: { onChoose: (mode: 'junior' | 'man
   return (
     <Menu
       trigger={({ toggle }) => (
-        <Button variant="primary" size="sm" onClick={toggle}>
-          <Icon name="Plus" size={14} /> Add Reportee
-        </Button>
+        <IconButton icon="UserPlus" label="Add reportee" variant="primary" onClick={toggle} />
       )}
     >
       {(close) => (

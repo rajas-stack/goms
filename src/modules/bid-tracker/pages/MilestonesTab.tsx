@@ -33,7 +33,7 @@ function MilestoneForm({ draft, onChange, labelEditable }: { draft: Draft; onCha
         </label>
       )}
       <label className="text-[12px] text-muted">Date &amp; time
-        <FriendlyDateInput format="datetime-local" aria-label="Date and time" className={field} value={draft.dueAt} onChange={(v) => onChange({ ...draft, dueAt: v })} />
+        <FriendlyDateInput format="optional-time" aria-label="Date and time" className={field} value={draft.dueAt} onChange={(v) => onChange({ ...draft, dueAt: v })} />
       </label>
       <label className="text-[12px] text-muted">Venue
         <input aria-label="Venue" className={field} value={draft.venue} onChange={(e) => onChange({ ...draft, venue: e.target.value })} />

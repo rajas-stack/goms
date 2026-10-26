@@ -13,8 +13,8 @@ function renderAt(path: string) {
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route path="/bid-tracker/bid/:bidId" element={<BidDetailWorkspace />} />
-          <Route path="/bid-tracker" element={<div>grid page</div>} />
+          <Route path="/live-bids/bid/:bidId" element={<BidDetailWorkspace />} />
+          <Route path="/live-bids" element={<div>grid page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -27,13 +27,21 @@ async function makeBid() {
 }
 
 describe('BidDetailWorkspace', () => {
+  it('keeps attachments out of Communication and available on Overview', async () => {
+    const bid = await makeBid()
+    renderAt(`/live-bids/bid/${bid.id}?tab=communication`)
+    expect(await screen.findByRole('tab', { name: 'Communication' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByText('Attachments', { exact: true })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Overview' }))
+    expect(await screen.findByText('Attachments', { exact: true })).toBeInTheDocument()
+  })
   beforeEach(async () => {
     await resetLocalData()
   })
 
   it('renders the header, ten synopsis tabs and the Overview by default', async () => {
     const bid = await makeBid()
-    renderAt(`/bid-tracker/bid/${bid.id}`)
+    renderAt(`/live-bids/bid/${bid.id}`)
     expect(await screen.findByRole('heading', { name: 'Smart Bus' })).toBeInTheDocument()
     // The internal bid code is noise here; the opportunity ID identifies the bid.
     expect(screen.queryByText(bid.bidCode)).not.toBeInTheDocument()
@@ -54,14 +62,14 @@ describe('BidDetailWorkspace', () => {
     const bid = await makeBid()
     const person = await repository.createSalesPerson({ name: 'Asha Rao', officialEmail: 'asha@amnex.com', designation: 'RM', tierKey: 'rm' })
     await repository.assignOwner({ entityType: 'opportunity', entityId: bid.opportunityId, salesPersonId: person.id, startDate: '2020-01-01' })
-    renderAt(`/bid-tracker/bid/${bid.id}`)
+    renderAt(`/live-bids/bid/${bid.id}`)
     expect(await screen.findByText('Asha Rao')).toBeInTheDocument()
     expect(screen.getByText('(inherited)')).toBeInTheDocument()
   })
 
   it('archives, restores and deletes the bid from its header, returning to the grid', async () => {
     const bid = await makeBid()
-    renderAt(`/bid-tracker/bid/${bid.id}`)
+    renderAt(`/live-bids/bid/${bid.id}`)
     await userEvent.click(await screen.findByRole('button', { name: /Archive/ }))
     expect(await screen.findByText('Archived')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /Restore/ }))
@@ -73,7 +81,7 @@ describe('BidDetailWorkspace', () => {
   })
 
   it('links back to the Master Grid, and says so for a bid that no longer exists', async () => {
-    renderAt('/bid-tracker/bid/nope')
+    renderAt('/live-bids/bid/nope')
     expect(await screen.findByText(/no longer exists/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('link', { name: 'Back to the Master Grid' }))
     expect(await screen.findByText('grid page')).toBeInTheDocument()
@@ -81,7 +89,7 @@ describe('BidDetailWorkspace', () => {
 
   it('edits and saves General tender information as typed fields', async () => {
     const bid = await makeBid()
-    renderAt(`/bid-tracker/bid/${bid.id}?tab=general`)
+    renderAt(`/live-bids/bid/${bid.id}?tab=general`)
     const tenderId = await screen.findByLabelText('Tender ID')
     await userEvent.type(tenderId, '2026_PPAC_927042_1')
     // Dates accept free-format text ("13th May 2026") and are stored as yyyy-mm-dd.
@@ -105,7 +113,7 @@ describe('BidDetailWorkspace', () => {
   it('opens saved General read-only, then automatically saves a changed Tender ID', async () => {
     const bid = await makeBid()
     await repository.saveBidSynopsis({ bidId: bid.id, section: 'general', document: generalToDocument({ tenderId: 'T-1' }), expectedRevision: 0 })
-    renderAt(`/bid-tracker/bid/${bid.id}?tab=general`)
+    renderAt(`/live-bids/bid/${bid.id}?tab=general`)
     expect(await screen.findByText('T-1')).toBeInTheDocument()
     expect(screen.queryByLabelText('Tender ID')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /^Edit$/ }))
@@ -122,7 +130,7 @@ describe('BidDetailWorkspace', () => {
     await repository.createTenderWebsite({ name: 'E-Proc', url: 'https://eproc.example.gov.in' })
     const bid = await makeBid()
     await repository.saveBidSynopsis({ bidId: bid.id, section: 'general', expectedRevision: 0, document: generalToDocument({ procuringAuthority: 'Old free text authority' }) })
-    renderAt(`/bid-tracker/bid/${bid.id}?tab=general`)
+    renderAt(`/live-bids/bid/${bid.id}?tab=general`)
     expect(await screen.findByText('Old free text authority')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /Edit/ }))
     // The legacy value is kept and shown until a department is picked.
@@ -153,7 +161,7 @@ describe('BidDetailWorkspace', () => {
       bidId: bid.id, section: 'general', expectedRevision: 0,
       document: generalToDocument({ publishingDate: '2099-01-01', bidDeadline: '2099-01-31T15:00', queriesDeadline: '2099-01-10T17:00' }),
     })
-    renderAt(`/bid-tracker/bid/${bid.id}?tab=rfpTimeline`)
+    renderAt(`/live-bids/bid/${bid.id}?tab=rfpTimeline`)
     const list = await screen.findByRole('list', { name: 'RFP dates in order' })
     const text = list.textContent ?? ''
     expect(text.indexOf('Tender Publishing Date')).toBeLessThan(text.indexOf('Last Date & Time of Submission of Queries'))
@@ -164,7 +172,7 @@ describe('BidDetailWorkspace', () => {
 
   it('RFP Timeline empty state sends the user to General', async () => {
     const bid = await makeBid()
-    renderAt(`/bid-tracker/bid/${bid.id}?tab=rfpTimeline`)
+    renderAt(`/live-bids/bid/${bid.id}?tab=rfpTimeline`)
     await userEvent.click(await screen.findByRole('button', { name: 'Fill in General' }))
     expect(await screen.findByLabelText('Tender ID')).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true')
@@ -175,14 +183,14 @@ describe('BidDetailWorkspace', () => {
     await repository.updateNode(dept.id, { metadata: { ...dept.metadata, logoUrl: 'data:image/png;base64,AAAA' } })
     const opp = await repository.createOpportunity({ departmentId: dept.id, opportunityName: 'Smart Bus', city: 'Pune', submissionDate: '2099-01-15' })
     const bid = await repository.createBid(opp.id)
-    const { container } = renderAt(`/bid-tracker/bid/${bid.id}`)
+    const { container } = renderAt(`/live-bids/bid/${bid.id}`)
     await screen.findByRole('heading', { name: 'Smart Bus' })
     await waitFor(() => expect(container.querySelector('img[src="data:image/png;base64,AAAA"]')).not.toBeNull())
   })
 
   it('edits a table section as a grid and saves it', async () => {
     const bid = await makeBid()
-    renderAt(`/bid-tracker/bid/${bid.id}?tab=pq`)
+    renderAt(`/live-bids/bid/${bid.id}?tab=pq`)
     const grid = await screen.findByRole('grid', { name: 'PQ grid' })
     expect(grid).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Column 1 column menu' }))

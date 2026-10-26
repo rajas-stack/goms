@@ -74,7 +74,7 @@ const assignMutateAsync = vi.fn().mockResolvedValue(undefined)
 
 function stubApiHooks(opts: {
   resolvedOwners?: Record<string, { salesPersonId: string; source: 'direct' | 'inherited' }>
-  /** Whether the opportunity being edited has a bid in Bid Tracker. */
+  /** Whether the opportunity being edited has a bid in Live Bids. */
   bid?: { id: string; opportunityId: string } | null
 } = {}) {
   vi.spyOn(api, 'useBidForOpportunity').mockReturnValue(
@@ -169,7 +169,7 @@ describe('WorksEditor — auto-reflecting Edit Opportunity\'s Sales Person pick 
   })
 })
 
-describe('WorksEditor — Bid Tracker guard', () => {
+describe('WorksEditor — Live Bids guard', () => {
   it('locks stage and submission date, and never sends them, once the opportunity has a bid', async () => {
     stubApiHooks({ bid: { id: 'bid-1', opportunityId: 'opp-1' } })
     const opp = makeOpportunity({ stageKey: 'qualified', submissionDate: '2026-10-10' })
@@ -216,7 +216,7 @@ describe('WorksEditor — Create Bid entry point', () => {
     render(<WorksEditor departmentId="dept-1" opportunities={[makeOpportunity()]} />)
     await userEvent.click(screen.getByRole('button', { name: 'Create Bid' }))
     expect(create).toHaveBeenCalledWith({ opportunityId: 'opp-1' })
-    expect(navigateMock).toHaveBeenCalledWith('/bid-tracker/bid/new-bid-1')
+    expect(navigateMock).toHaveBeenCalledWith('/live-bids/bid/new-bid-1')
   })
 
   it('hides the button once the opportunity has a bid', () => {
@@ -226,7 +226,7 @@ describe('WorksEditor — Create Bid entry point', () => {
     expect(screen.queryByRole('button', { name: 'Create Bid' })).not.toBeInTheDocument()
   })
 
-  it('hides the button entirely when Bid Tracker is not enabled', () => {
+  it('hides the button entirely when Live Bids is not enabled', () => {
     vi.stubEnv('VITE_BID_TRACKER_ENABLED', 'false')
     stubApiHooks()
     bidMutations(vi.fn())

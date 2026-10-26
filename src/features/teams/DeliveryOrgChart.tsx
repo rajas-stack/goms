@@ -70,7 +70,7 @@ const OrgCard = forwardRef<HTMLDivElement, {
     {member.level !== undefined && (
       <span className="absolute left-2 top-2 rounded-md bg-goms-navy/[0.08] px-1.5 py-0.5 text-[10px] font-semibold text-goms-navy">L{member.level}</span>
     )}
-    <Avatar person={{ name: member.name, photoUrl: member.photoUrl }} size="md" />
+    <Avatar person={member} size="md" />
     <div className="w-full min-w-0">
       <div className="truncate text-[15px] font-semibold text-ink-900">{member.name}</div>
       <div className="truncate text-[12.5px] text-muted">{member.designation || '—'}</div>

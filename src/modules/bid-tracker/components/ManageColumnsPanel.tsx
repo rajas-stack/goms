@@ -8,14 +8,14 @@ import { cn } from '@/lib/utils'
 import type { BidCustomField } from '@/lib/types'
 import { hasOptions } from '@goms/domain'
 import { CUSTOM_TYPE_LABEL, setColumnVisibility, type GridColumnMeta } from '../gridColumns'
-import { ColumnsPanel } from './ColumnsPanel'
+import { ColumnsPanel, type ColumnFreeze } from './ColumnsPanel'
 import { OptionsEditor } from './OptionsEditor'
 
 const box = 'h-8 min-w-0 flex-1 rounded-lg border border-line bg-white px-2 text-[13px] text-ink focus-visible:focus-ring'
 
 /** Remove columns from the current view and restore them with values intact.
  * Custom definitions also support renaming, options, default order and archiving. */
-export function ManageColumnsPanel({ all, visible, columnOrder, onVisibleChange, focusId, inScope }: {
+export function ManageColumnsPanel({ all, visible, columnOrder, onVisibleChange, focusId, inScope, freeze }: {
   all: GridColumnMeta[]
   visible: GridColumnMeta[]
   columnOrder?: string[]
@@ -24,6 +24,7 @@ export function ManageColumnsPanel({ all, visible, columnOrder, onVisibleChange,
   focusId?: string | null
   /** Which custom columns this panel manages (the sheet's own; Master: all or the switcher's pick). */
   inScope?: (field: BidCustomField) => boolean
+  freeze?: ColumnFreeze
 }) {
   const { data: fields = [] } = useBidCustomFields(true)
   const { update, reorder, archive, unarchive } = useBidCustomFieldMutations()
@@ -80,7 +81,7 @@ export function ManageColumnsPanel({ all, visible, columnOrder, onVisibleChange,
   return (
     <Gate allowed={allowed}>
     <div className="flex flex-col divide-y divide-line" data-testid="manage-columns-panel">
-      <ColumnsPanel all={all} visible={visible} columnOrder={columnOrder} onChange={onVisibleChange} focusId={focusId} />
+      <ColumnsPanel all={all} visible={visible} columnOrder={columnOrder} onChange={onVisibleChange} focusId={focusId} freeze={freeze} />
 
       {/* Nothing to manage yet → no section at all (no empty heading or hint);
           creating the first custom column is the Add column button above this panel. */}

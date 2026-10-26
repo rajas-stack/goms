@@ -4,15 +4,28 @@
  *  `apps/api`'s commercial router so the Vertical→Product→Module→Feature
  *  parent/child rules and the code-uniqueness check reflect one
  *  authoritative definition. */
+import { BID_TRACKER_MASTER_KEYS, type BidTrackerMasterKey } from './bidTrackerFields.js'
+
 export type CommercialMasterKey =
   | 'verticals' | 'products' | 'modules' | 'features'
   | 'skuCategories' | 'unitsOfMeasure' | 'productEditions' | 'billingTypes'
   | 'taxClasses' | 'approvalMatrix' | 'currencies' | 'preSales'
+  /** Settings > Masters > Directory Types: the Directory module's dropdown (Amnex Employee, Departmental, OEMs, ...). */
+  | 'directoryTypes'
+  /** Settings > Masters > OEM Companies / Consortium Partners: the companies a Directory contact of that category works for. */
+  | 'oemCompanies' | 'consortiumPartners'
+  /** Settings > Masters > Live Bids dropdowns (bidTrackerFields.ts). */
+  | BidTrackerMasterKey
 
 export const COMMERCIAL_MASTER_KEYS: CommercialMasterKey[] = [
   'verticals', 'products', 'modules', 'features', 'skuCategories', 'unitsOfMeasure',
-  'productEditions', 'billingTypes', 'taxClasses', 'approvalMatrix', 'currencies', 'preSales',
+  'productEditions', 'billingTypes', 'taxClasses', 'approvalMatrix', 'currencies', 'preSales', 'directoryTypes', 'oemCompanies', 'consortiumPartners',
+  ...BID_TRACKER_MASTER_KEYS,
 ]
+
+/** The Directory's company lists: kept by whoever maintains contacts (am.contacts), not the commercial team. */
+export const DIRECTORY_COMPANY_MASTERS: readonly CommercialMasterKey[] = ['oemCompanies', 'consortiumPartners']
+export const isDirectoryCompanyMaster = (key: unknown): boolean => DIRECTORY_COMPANY_MASTERS.includes(key as CommercialMasterKey)
 
 /** Parent-FK field name for each hierarchy master, keyed by child. */
 export const MASTER_PARENT_FIELD: Partial<Record<CommercialMasterKey, { parentKey: CommercialMasterKey; field: string }>> = {
@@ -41,7 +54,8 @@ export const MASTER_EXTRA_FIELDS: Record<CommercialMasterKey, string[]> = {
   taxClasses: ['ratePct'],
   approvalMatrix: ['minDiscountPct', 'maxDiscountPct', 'approvalLevelLabel', 'allowAutoApproval'],
   currencies: ['symbol', 'decimalPlaces', 'exchangeRate', 'isBaseCurrency'],
-  preSales: [],
+  preSales: [], directoryTypes: [], oemCompanies: [], consortiumPartners: [],
+  ...Object.fromEntries(BID_TRACKER_MASTER_KEYS.map(k => [k, []])) as unknown as Record<BidTrackerMasterKey, string[]>,
 }
 
 /** Finds a case-insensitive, trimmed code clash among sibling rows (same

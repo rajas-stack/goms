@@ -11,7 +11,7 @@
 // - Karan Shah, Chetana Vora and Laveena Vangani were listed at L2 reporting
 //   to Denish (also L2); they are seeded at L3 (and Sharon Itagi, under Karan,
 //   at L4) so every reports-to is a higher level.
-import type { DeliveryTeamKey, DeliveryTeamMember } from '@/lib/types'
+import type { DeliveryTeamKey, DeliveryTeamMember, Opportunity } from '@/lib/types'
 
 export interface OrgPerson {
   id: string
@@ -21,11 +21,15 @@ export interface OrgPerson {
   level: number
   /** Departments this person belongs to — e.g. ['Pre-Sales', 'Bid Management']. */
   departments: string[]
+  /** Business verticals (Verticals master names) this person works in; missing = []. */
+  verticals?: string[]
   managerId: string | null
   email: string
   status: 'active' | 'inactive'
   /** Profile picture as a data URL (resized in the browser); null/absent shows initials. */
   photoUrl?: string | null
+  /** Amnex employee number, digits as typed (leading zeros kept); shown as AIPL_<number>. Unique. */
+  employeeNumber?: string | null
   createdAt: string
 }
 
@@ -37,6 +41,13 @@ export const TEAM_DEPARTMENT: Record<DeliveryTeamKey, string> = {
   preSales: 'Pre-Sales',
   bid: 'Bid Management',
   legal: 'Legal',
+}
+
+/** The opportunity field that assigns a member of each delivery team. */
+export const TEAM_ASSIGNMENT_FIELD: Record<DeliveryTeamKey, keyof Opportunity> = {
+  preSales: 'preSalesPersonId',
+  legal: 'legalPersonId',
+  bid: 'bidTeamMemberId',
 }
 
 export const ORG_DEPARTMENTS = [

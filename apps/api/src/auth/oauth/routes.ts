@@ -8,6 +8,9 @@ import { consumeFlow, createFlow } from './flows.js'
 import { GoogleAuthError, buildAuthUrl, type GoogleGateway } from './googleClient.js'
 import { parseClient, safeReturnTo, webRedirectUrl, type ClientKind } from './redirect.js'
 import { SessionError, revokeFamilyByRefreshToken, rotateRefreshToken, startSession } from './sessions.js'
+import { completeMailConnection } from '../../email/oauth.js'
+import { completeProfileConnection } from '../../profileImages/oauth.js'
+import { browserBindingCookie, hasBrowserBinding } from './browserBinding.js'
 
 export interface OAuthDeps { google: GoogleGateway }
 
@@ -79,10 +82,16 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
     if (!client) return reply.code(400).send({ error: 'invalid_request' })
     oauthConfig() // fail fast with a 503 before any state is stored
     const flow = await createFlow(client, safeReturnTo(req.query?.return_to))
+    reply.header('Set-Cookie', browserBindingCookie('login', flow.state))
     return reply.code(302).header('Location', buildAuthUrl(flow)).send()
   }))
 
   app.get('/api/oauth/google/callback', limited, guarded('callback', async (req, reply) => {
+    if (typeof req.query?.state === 'string' && req.query.state.startsWith('profile.')) return completeProfileConnection(req, reply)
+    if (typeof req.query?.state === 'string' && req.query.state.startsWith('mail.')) return completeMailConnection(req, reply)
+    if (!hasBrowserBinding('login', req.query?.state, req.headers.cookie)) return fail(reply, 'web', 'state')
+    const clearBinding = browserBindingCookie('login', req.query.state, true)
+    reply.header('Set-Cookie', clearBinding)
     const flow = await consumeFlow(req.query?.state)
     if (!flow) return fail(reply, 'web', 'state') // unknown, replayed or expired; we cannot know which client it was
     if (flow.client === 'app') appScheme() // validate the deployment's scheme BEFORE anything is issued (throws -> generic 503)
@@ -100,6 +109,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
     // Only now, after every Google check, does anything exist: a one-time code. No session or token yet.
     const exchange = await createExchangeCode({ uid: `g:${claims.sub}`, email: claims.email, familyId: randomUUID(), client: flow.client })
     if (flow.client === 'app') return reply.code(200).type('text/html; charset=utf-8').send(appPage(appScheme(), `code=${exchange}`))
+    reply.header('Set-Cookie', [clearBinding, browserBindingCookie('exchange', exchange)])
     return reply.code(302).header('Location', webRedirectUrl(oauthConfig().webOrigin, flow.returnTo, { auth_code: exchange })).send()
   }))
 
@@ -107,8 +117,10 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
     sessionKey() // a misconfigured signing key must answer 503 BEFORE the code is burned or a session row is written
     const { code, client } = (req.body ?? {}) as { code?: unknown; client?: unknown }
     if (typeof code !== 'string' || !parseClient(client)) return reply.code(400).send({ error: 'invalid_request' })
+    if (client === 'web' && !hasBrowserBinding('exchange', code, req.headers.cookie)) return reply.code(401).send({ error: 'invalid_code' })
     const identity = await redeemExchangeCode(code, client)
     if (!identity) return reply.code(401).send({ error: 'invalid_code' })
+    if (client === 'web') reply.header('Set-Cookie', browserBindingCookie('exchange', code, true))
     const { refreshToken } = await startSession({ ...identity, userAgent: req.headers['user-agent'] })
     const { token, expiresIn } = await signAccessToken(identity)
     return reply.code(200).send({ accessToken: token, refreshToken, expiresIn })

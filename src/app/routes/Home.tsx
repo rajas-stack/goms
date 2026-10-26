@@ -127,7 +127,7 @@ export function Home() {
                   </ModuleCard>
                 )}
                 {canOpportunity && (
-                  <ModuleCard to="/bid-tracker" name="Opportunity" desc="Tender and bid tracking, through to award" tone="blue" icon="Briefcase" foot={`${insight?.metrics.active ?? 0} open bids`}>
+                  <ModuleCard to="/live-bids" name="Opportunity" desc="Tender and bid tracking, through to award" tone="blue" icon="Briefcase" foot={`${insight?.metrics.active ?? 0} open bids`}>
                     {openStages.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                         <div className="hm-stages" aria-hidden="true">{openStages.map((g, i) => <i key={g.key} style={{ flex: g.count, opacity: 0.35 + (0.65 * i) / Math.max(1, openStages.length - 1) }} />)}</div>

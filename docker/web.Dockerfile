@@ -1,7 +1,12 @@
 FROM node:26-slim AS build
 WORKDIR /app
+COPY package.json package-lock.json ./
+COPY apps/api/package.json ./apps/api/package.json
+COPY packages/domain/package.json ./packages/domain/package.json
+# Reuse downloads and the dependency layer across source edits; network failures must fail promptly.
+RUN --mount=type=cache,id=goms-npm,target=/root/.npm npm ci --ignore-scripts --prefer-offline --fetch-timeout=30000 --fetch-retries=2 --maxsockets=8
 COPY . .
-RUN npm ci --ignore-scripts && npm --workspace packages/domain run build
+RUN npm --workspace packages/domain run build
 # Only public frontend configuration belongs in build arguments.
 ARG VITE_API_BASE_URL=http://localhost:8088
 ARG VITE_AUTH_PROVIDER=firebase

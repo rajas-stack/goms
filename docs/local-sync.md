@@ -1,5 +1,20 @@
 # Shared Local Builds
 
+The built local preview on **5173** is kept running separately from the Docker stack on 8088.
+Install its Windows startup task with `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-dev-server.ps1`.
+It starts at sign-in, checks the preview every 15 seconds and restarts it after an exit or six failed health checks.
+Run `npm run build:preview` to build all saved frontend changes into a new directory outside the source tree.
+Only successful builds replace the preview; a failed build leaves the previous release online.
+The preview serves compiled assets, avoiding dependency-cache failures during development.
+It also retains hashed assets from preceding preview releases (and the preceding `dist` build),
+so an already-open tab can still load its older route chunks after a new build.
+Unknown `/assets/` requests return 404 instead of the SPA's HTML page.
+A repeating one-minute trigger also recovers the supervisor itself if its process disappears.
+Both `http://localhost:5173` and `http://127.0.0.1:5173` use the IPv4 loopback listener.
+Status and logs live in `../.goms-dev-server/`. Windows must be running and the user signed in.
+To remove automatic startup, run the installer with `-Uninstall`.
+For optional hot reload use `npm run dev -- --port 5174`; keep 5173 reserved for the supervised preview.
+
 Claude, Codex/ChatGPT, and Gemini currently use one Git worktree. The sync captures
 all Git-tracked files and all non-ignored untracked files, including saved edits
 from each tool. Unsaved editor buffers and chat-only proposals are not source.

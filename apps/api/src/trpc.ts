@@ -8,8 +8,10 @@ import { productionSecurity } from './security/config.js'
 import { userOperationBudget } from './security/operationLimit.js'
 import { beginSecurityAudit, finishSecurityAudit } from './security/audit.js'
 import { requireSystemAdmin } from './auth/rbac/systemAdminOnly.js'
+import { announceChange } from './live/changeFeed.js'
 
 export interface Context {
+  setCookie?: (value: string) => void
   authHeader?: string
   user?: AuthenticatedUser
   verifiedIdentity?: Promise<AuthenticatedUser>
@@ -18,18 +20,29 @@ export interface Context {
 /** Exported for testing. An RBAC denial is flagged (`data.rbacDenied`) so the client can show a normal "no
  *  permission" message instead of the "sign in with your @amnex.com account" dialog every FORBIDDEN used to trigger. */
 export function formatError({ shape, error }: { shape: any; error: TRPCError }) {
+  // Real records can also be served by a local development deployment. Never expose server stacks.
+  const safeShape = { ...shape, data: { ...shape.data, stack: undefined } }
   if (error.code === 'INTERNAL_SERVER_ERROR') {
-    return { ...shape, message: 'Internal server error', data: { ...shape.data, stack: undefined } }
+    return { ...safeShape, message: 'Internal server error' }
   }
   if (error.cause instanceof RbacDenial) {
-    return { ...shape, data: { ...shape.data, rbacDenied: true } }
+    return { ...safeShape, data: { ...safeShape.data, rbacDenied: true } }
   }
-  return shape
+  return safeShape
 }
 
 export const t = initTRPC.context<Context>().create({ errorFormatter: formatError })
 export const router = t.router
-export const publicProcedure = t.procedure.use(async ({ ctx, path, type, next }) => {
+
+/** Outermost on every procedure (all tiers build on publicProcedure): once a mutation has fully succeeded, tell every
+ *  signed-in browser to refetch (live/changeFeed.ts). */
+const announceMutations = t.middleware(async ({ path, type, next }) => {
+  const result = await next()
+  if (type === 'mutation' && result.ok) announceChange(path)
+  return result
+})
+
+export const publicProcedure = t.procedure.use(announceMutations).use(async ({ ctx, path, type, next }) => {
   if (!productionSecurity() || path === 'health.check') return next()
   // tRPC shares this request context across its batch: verify revocation once per HTTP request.
   const user = await (ctx.verifiedIdentity ??= verifyIdentity(ctx.authHeader))

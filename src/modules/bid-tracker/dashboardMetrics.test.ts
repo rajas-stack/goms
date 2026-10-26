@@ -18,7 +18,7 @@ describe('dashboard metrics', () => {
     expect(counts).toMatchObject({ live: 2, pipeline: 4, funnel: 2, backup: 1, commits: 1, campaign: 1 })
   })
 
-  it('does not count a Bid Tracker row in a closed stage as a live bid', () => {
+  it('does not count a Live Bids row in a closed stage as a live bid', () => {
     expect(isLiveBid(row({ stageKey: 'goApproved' }))).toBe(false)
     expect(isLiveBid(row({ stageKey: 'dropped' }))).toBe(false)
     expect(isLiveBid(row({ stageKey: 'submitted' }))).toBe(true)

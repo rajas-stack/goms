@@ -14,26 +14,28 @@ import { normalizeEmail } from '@/lib/inputNormalization'
 import { EMAIL_BINDING_HELP, EMAIL_FORMAT_MESSAGE, clearEmailConfirmText, useCanEditEmailBinding } from '@/modules/admin-access/useIsSystemAdmin'
 import { PIPELINE_STAGE_MAP } from '@/data/pipeline-stages'
 import type { DeliveryTeamKey, DeliveryTeamMember, Opportunity } from '@/lib/types'
+import { TEAM_ASSIGNMENT_FIELD } from '@/data/org-structure'
 import { cn } from '@/lib/utils'
 import { DeliveryOrgChart } from '@/features/teams/DeliveryOrgChart'
 import { OrgStructureChart } from '@/features/org/OrgStructureChart'
 import { SalesWorkspace } from './SalesWorkspace'
+import { Directory } from './Directory'
+import { useCanReadAny } from '@/lib/permissions'
+import { useNodeFilter } from '@/lib/rbacTree/access'
+import { NAV_MODULES } from '@/lib/routeModules'
+import { ROUTE_NODES } from '../routeNodes'
 
-type TeamKey = 'org' | 'sales' | DeliveryTeamKey
+type TeamKey = 'directory' | 'org' | 'sales' | DeliveryTeamKey
 
+/** Directory (every person, internal and external) comes first; the team views follow. */
 const TABS: { value: TeamKey; label: string }[] = [
+  { value: 'directory', label: 'Directory' },
   { value: 'org', label: 'Org Structure' },
   { value: 'sales', label: 'Sales' },
   { value: 'preSales', label: 'Pre-sales' },
   { value: 'legal', label: 'Legal' },
   { value: 'bid', label: 'Bid' },
 ]
-
-const ASSIGNMENT_FIELD: Record<DeliveryTeamKey, keyof Opportunity> = {
-  preSales: 'preSalesPersonId',
-  legal: 'legalPersonId',
-  bid: 'bidTeamMemberId',
-}
 
 const SECTIONS = [
   { key: 'roster', label: 'Roster' },
@@ -258,7 +260,7 @@ function DeliveryTeam({ team, label, section }: { team: DeliveryTeamKey; label: 
           ? <TeamRoster team={team} />
           : active.key === 'orgchart'
             ? <DeliveryOrgChart team={team} />
-            : <TeamOwnership team={team} assignmentField={ASSIGNMENT_FIELD[team]} />}
+            : <TeamOwnership team={team} assignmentField={TEAM_ASSIGNMENT_FIELD[team]} />}
       </motion.div>
     </div>
   )
@@ -268,17 +270,25 @@ export function TeamsWorkspace() {
   const { team: teamParam, section } = useParams()
   const navigate = useNavigate()
   const perms = usePermissions()
+  const tree = useNodeFilter()
+  const canDirectory = useCanReadAny(NAV_MODULES.directory) && tree(ROUTE_NODES.directory)
   // Org Structure and the delivery teams follow Company Org Structure; the Sales tab follows the Sales Team.
-  const tabs = TABS.filter((t) => !perms.enforced || perms.level(t.value === 'sales' ? 'team.sales' : 'team.org') !== 'N')
+  const tabs = TABS.filter((t) => t.value === 'directory'
+    ? canDirectory
+    : !perms.enforced || perms.level(t.value === 'sales' ? 'team.sales' : 'team.org') !== 'N')
   const tab = tabs.find((t) => t.value === teamParam) ?? tabs[0] ?? TABS[0]
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null)
 
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 bg-paper/70 px-3 pt-2 sm:px-6">
-        <Tabs tabs={tabs} value={tab.value} onChange={(value) => navigate(`/teams/${value}`)} />
+      <div className="flex shrink-0 items-center gap-2 bg-paper/70 px-3 pt-2 sm:px-6">
+        <div className="min-w-0 flex-1"><Tabs tabs={tabs} value={tab.value} onChange={(value) => navigate(`/teams/${value}`)} /></div>
+        {/* The active tab's page actions (Directory's New contact) render here, in line with the tabs. */}
+        <div ref={setActionsSlot} className="flex shrink-0 items-center gap-1" />
       </div>
       <div className="min-h-0 flex-1">
-        {tab.value === 'org' ? <OrgStructureChart />
+        {tab.value === 'directory' ? <Directory actionsSlot={actionsSlot} />
+          : tab.value === 'org' ? <OrgStructureChart />
           : tab.value === 'sales' ? <SalesWorkspace basePath="/teams/sales" />
           : <DeliveryTeam key={tab.value} team={tab.value} label={tab.label} section={section} />}
       </div>

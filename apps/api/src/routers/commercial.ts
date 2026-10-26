@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
 import { rbacReadProcedure, protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
+import { bidMasterUsage, cascadeBidMasterRename } from '../lib/bidMasterUsage.js'
 import { isForeignKeyViolation, isUniqueViolation } from '../db-errors.js'
 import { writeAuditLog, listAuditLogs } from '../lib/auditLog.js'
 import {
@@ -9,12 +10,13 @@ import {
   SKU_SENSITIVE_FIELDS, type CommercialMasterKey,
   BOQ_TRANSITIONS, LINE_STATES_CLEARED_FOR_APPROVAL, DELETABLE_BOQ_STATUSES, formatBoqNumber, type BoqStatus,
   computeLineTotal, validateLineQuantity, validateLineDiscountPct, resolveApprovalBand, freshLineApprovalState,
-  effectiveUnitPrice, isAbsoluteLinePrice, discountPctForSellingPrice, conversionFactorFromRates,
-} from '@goms/domain'
+  effectiveUnitPrice, isAbsoluteLinePrice, discountPctForSellingPrice, conversionFactorFromRates, isBidTrackerMasterKey, bidStageChangeError } from '@goms/domain'
 
 const masterKeySchema = z.enum([
   'verticals', 'products', 'modules', 'features', 'skuCategories', 'unitsOfMeasure',
-  'productEditions', 'billingTypes', 'taxClasses', 'approvalMatrix', 'currencies', 'preSales',
+  'productEditions', 'billingTypes', 'taxClasses', 'approvalMatrix', 'currencies', 'preSales', 'directoryTypes', 'oemCompanies', 'consortiumPartners',
+  // Settings > Masters > Live Bids dropdowns (packages/domain/src/bidTrackerFields.ts).
+  'bidPriorities', 'tenderFeeModes', 'emdInstruments', 'rtmTypes', 'zones', 'tenderStatuses', 'buOwners', 'bidStages', 'requirements', 'bidProducts',
 ])
 
 // Returns `any` deliberately — a master row's real shape varies by `key`
@@ -51,6 +53,16 @@ async function assertCodeAvailable(client: any, key: string, code: string, exclu
     : await client.query('SELECT id, code FROM commercial_masters WHERE master_key=$1', [key])
   const clash = findMasterCodeClash(result.rows, code, excludeId)
   if (clash) throw new TRPCError({ code: 'CONFLICT', message: `Code "${code.trim()}" is already used by another ${key} row.` })
+}
+
+/** Settings > Masters > Live Bids > Bid Stages: codes are stored on bids, built-in stages stay (bids.ts). */
+async function assertBidStageChange(client: any, key: string, id: string, change: { code?: string; active?: boolean; remove?: boolean }) {
+  if (key !== 'bidStages') return
+  const stage = (await client.query('SELECT code, name FROM commercial_masters WHERE master_key=$1 AND id=$2', [key, id])).rows[0]
+  if (!stage) return
+  const inUse = change.remove ? Number((await client.query('SELECT count(*) FROM bids WHERE stage_key=$1', [stage.code])).rows[0].count) : 0
+  const error = bidStageChangeError(stage, { ...change, inUse })
+  if (error) throw new TRPCError({ code: 'CONFLICT', message: error })
 }
 
 async function assertParentExists(client: any, key: CommercialMasterKey, parentId: unknown) {
@@ -150,6 +162,7 @@ const commercialMastersRouter = router({
         const current = toMaster(currentRow) as Record<string, any>
 
         if (patch.code !== undefined) await assertCodeAvailable(client, key, patch.code, id)
+        await assertBidStageChange(client, key, id, { code: patch.code, active: patch.active })
 
         const merged = { ...current, ...patch }
         const parentRule = MASTER_PARENT_FIELD[key]
@@ -183,6 +196,15 @@ const commercialMastersRouter = router({
           ],
         )
 
+        // Live Bids dropdown values are stored on bids by NAME: a rename follows onto every bid.
+        if (isBidTrackerMasterKey(key) && patch.name !== undefined && String(patch.name).trim() && patch.name !== current.name) {
+          await cascadeBidMasterRename(client, key, current.name, String(patch.name).trim())
+        }
+        // Verticals master drives opportunities.vertical by NAME: a rename follows onto every opportunity.
+        if (key === 'verticals' && patch.name !== undefined && String(patch.name).trim() && patch.name !== current.name) {
+          await client.query('UPDATE opportunities SET vertical=$2 WHERE lower(btrim(vertical)) = lower(btrim($1))', [current.name, String(patch.name).trim()])
+        }
+
         if (key === 'currencies' && extraPatch.isBaseCurrency === true) {
           await client.query(
             `UPDATE commercial_masters SET extra = extra || '{"isBaseCurrency": false}'::jsonb
@@ -204,10 +226,10 @@ const commercialMastersRouter = router({
 
   setActive: protectedProcedure
     .input(z.object({ key: masterKeySchema, id: z.string().guid('Invalid UUID'), active: z.boolean() }))
-    .mutation(({ input }) =>
-      pool.query('UPDATE commercial_masters SET active=$1, updated_at=now() WHERE master_key=$2 AND id=$3', [input.active, input.key, input.id])
-        .then(() => undefined),
-    ),
+    .mutation(async ({ input }) => {
+      await assertBidStageChange(pool, input.key, input.id, { active: input.active })
+      await pool.query('UPDATE commercial_masters SET active=$1, updated_at=now() WHERE master_key=$2 AND id=$3', [input.active, input.key, input.id])
+    }),
 
   delete: protectedProcedure
     .input(z.object({ key: masterKeySchema, id: z.string().guid('Invalid UUID') }))
@@ -236,6 +258,13 @@ const commercialMastersRouter = router({
         if (inUse.rows.length) {
           throw new TRPCError({ code: 'CONFLICT', message: `Cannot delete this ${input.key} row — it is still referenced by at least one SKU.` })
         }
+      }
+      await assertBidStageChange(pool, input.key, input.id, { remove: true })
+      // A Live Bids value held by any bid is never deleted — deactivate it instead (it stays on those bids).
+      if (isBidTrackerMasterKey(input.key)) {
+        const name = (await pool.query('SELECT name FROM commercial_masters WHERE master_key=$1 AND id=$2', [input.key, input.id])).rows[0]?.name
+        const used = name ? await bidMasterUsage(pool, input.key, name) : 0
+        if (used) throw new TRPCError({ code: 'CONFLICT', message: `"${name}" is used by ${used} bid${used === 1 ? '' : 's'} — deactivate it instead of deleting.` })
       }
       if (input.key === 'verticals') {
         const inUse = await pool.query('SELECT 1 FROM commercial_boqs WHERE vertical_id=$1 LIMIT 1', [input.id])

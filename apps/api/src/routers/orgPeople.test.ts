@@ -117,6 +117,15 @@ describe('orgPeople router', () => {
     expect(await nameOf(member.manager_id)).toBe('Denish')
   })
 
+  it('stores verticals (trimmed, de-duplicated), keeps them when a patch omits them, and lists [] for seeded people', async () => {
+    expect((await asUser().orgPeople.list()).every((p: any) => Array.isArray(p.verticals) && p.verticals.length === 0)).toBe(true)
+    const created = await asUser().orgPeople.create({ name: 'Vertical Person', level: 4, departments: [], verticals: [' Traffic ', 'Traffic', 'Data Fabric & AI'] })
+    expect(created.verticals).toEqual(['Traffic', 'Data Fabric & AI'])
+    expect((await asUser().orgPeople.update({ id: created.id, patch: { designation: 'Lead' } })).verticals).toEqual(['Traffic', 'Data Fabric & AI'])
+    expect((await asUser().orgPeople.update({ id: created.id, patch: { verticals: ['Transit (Mobility)'] } })).verticals).toEqual(['Transit (Mobility)'])
+    await expect(asUser().orgPeople.update({ id: created.id, patch: { verticals: ['  '] } })).rejects.toThrow()
+  })
+
   it('create rejects a duplicate name (any case), an unknown manager, and a manager at the same or a lower level', async () => {
     const denish = await person('Denish') // L2
     await expect(asUser().orgPeople.create({ name: 'denish', level: 3, departments: [] })).rejects.toThrow(/already in the org/i)

@@ -15,7 +15,7 @@ async function makeIn(name: string, sheet: OwnedSheet, vertical = '') {
 
 const Search = () => <div data-testid="search">{useLocation().search}</div>
 
-function renderPage(path = '/bid-tracker/dashboard') {
+function renderPage(path = '/live-bids/dashboard') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
@@ -44,9 +44,9 @@ describe('DashboardPage', () => {
     expect(tile('pipeline')).toBe('3')
     expect(tile('campaign')).toBe('1')
     expect(screen.getByText('Funnel 2 · Backup 0 · Commits 1')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Live bids: 1. Open Bid Tracker' })).toHaveAttribute('href', '/bid-tracker')
-    expect(screen.getByRole('link', { name: 'Pipeline: 3. Open Pipeline' })).toHaveAttribute('href', '/bid-tracker/pipeline/funnel')
-    expect(screen.getByRole('link', { name: 'Campaign: 1. Open Campaign' })).toHaveAttribute('href', '/bid-tracker/campaign')
+    expect(screen.getByRole('link', { name: 'Live bids: 1. Open Live Bids' })).toHaveAttribute('href', '/live-bids')
+    expect(screen.getByRole('link', { name: 'Pipeline: 3. Open Pipeline' })).toHaveAttribute('href', '/live-bids/pipeline/funnel')
+    expect(screen.getByRole('link', { name: 'Campaign: 1. Open Campaign' })).toHaveAttribute('href', '/live-bids/campaign')
 
     // The by-vertical breakdown has an accessible table with exact counts.
     const table = screen.getByRole('table', { name: 'Counts by vertical' })
@@ -77,7 +77,7 @@ describe('DashboardPage', () => {
   })
 
   it('reads the vertical from the URL and shows an empty state with nothing at all', async () => {
-    renderPage('/bid-tracker/dashboard?vertical=GIS')
+    renderPage('/live-bids/dashboard?vertical=GIS')
     expect(await screen.findByTestId('dashboard-empty')).toHaveTextContent('Nothing in GIS')
   })
 })

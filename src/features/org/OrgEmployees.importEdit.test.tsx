@@ -11,7 +11,7 @@ const { people } = vi.hoisted(() => ({ people: [
 vi.mock('@/data/repository', () => ({
   repository: {
     listOrgPeople: vi.fn(), createOrgPerson: vi.fn(), updateOrgPerson: vi.fn(), deleteOrgPerson: vi.fn(), getMyAccess: vi.fn(),
-    listDeliveryTeamMembers: vi.fn(), listSalesPersons: vi.fn(), listAmnexDepartments: vi.fn(), createAmnexDepartment: vi.fn(),
+    listDeliveryTeamMembers: vi.fn(), listSalesPersons: vi.fn(), listAmnexDepartments: vi.fn(), createAmnexDepartment: vi.fn(), listMaster: vi.fn(),
   },
 }))
 import { repository } from '@/data/repository'
@@ -26,6 +26,11 @@ const renderAs = (access: ReturnType<typeof as>) => render(
   </QueryClientProvider>,
 )
 const DEPARTMENTS = ['Leadership', 'Pre-Sales', 'Legal'].map((name, i) => ({ id: `d${i}`, name, systemKey: null, sortOrder: i, employeeCount: 0, createdAt: '', updatedAt: '' }))
+const VERTICALS = [
+  { id: 'v1', name: 'Traffic', active: true, displayOrder: 1 },
+  { id: 'v2', name: 'Data Fabric & AI', active: true, displayOrder: 2 },
+  { id: 'v3', name: 'Retired Vertical', active: false, displayOrder: 3 },
+]
 const HELPER = /Used to derive this person's role\. Only System Admins can change it\./
 const SERVER_REFUSAL = 'Only a System Admin can set or change an email address.'
 
@@ -36,6 +41,7 @@ beforeEach(() => {
   vi.mocked(repository.listDeliveryTeamMembers).mockReset().mockResolvedValue([])
   vi.mocked(repository.listSalesPersons).mockReset().mockResolvedValue([])
   vi.mocked(repository.listAmnexDepartments).mockReset().mockResolvedValue(DEPARTMENTS as never)
+  vi.mocked(repository.listMaster).mockReset().mockResolvedValue(VERTICALS as never)
 })
 
 describe('OrgEmployees — edit dialog and bulk import', () => {
@@ -58,6 +64,17 @@ describe('OrgEmployees — edit dialog and bulk import', () => {
     await userEvent.upload(input, new File([Uint8Array.from([137, 80, 78, 71])], 'me.png', { type: 'image/png' }))
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
     expect(repository.updateOrgPerson).toHaveBeenCalledWith('p2', { photoUrl: expect.stringMatching(/^data:image\/png;base64,/) })
+  })
+
+  it('picks verticals from the active Verticals master in the Edit dialog and sends only them', async () => {
+    renderAs(as('enforce', 'system_admin'))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit Bala Iyer' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Edit Bala Iyer' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Verticals' }))
+    await userEvent.click(await screen.findByRole('checkbox', { name: 'Traffic' }))
+    expect(screen.queryByRole('checkbox', { name: 'Retired Vertical' })).not.toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
+    expect(repository.updateOrgPerson).toHaveBeenCalledWith('p2', { verticals: ['Traffic'] })
   })
 
   it('imports a CSV: previews every row, then creates the valid ones top-down with the manager resolved', async () => {

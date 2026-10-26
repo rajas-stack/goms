@@ -84,9 +84,9 @@ export function validateContiguity(rows: Interval[]): string[] {
  *  2025-06-30. Rendering only — never write this back. */
 export function displayEndDate(endDate: string | null): string | null {
   if (endDate === null) return null
-  const [y, m, d] = endDate.split('-').map(Number)
+  const [y, m, d] = endDate.slice(0, 10).split('-').map(Number)
   // Day 0 of the following month is the last day of the current one, so
   // this is correct across month and year boundaries and in leap years.
   const prev = new Date(y, m - 1, d - 1)
-  return toLocalIsoDate(prev)
+  return toLocalIsoDate(prev) + endDate.slice(10)
 }

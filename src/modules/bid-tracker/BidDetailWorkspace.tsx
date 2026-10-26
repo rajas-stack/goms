@@ -21,6 +21,8 @@ import { BidTimelineSection } from './timeline/BidTimelineSection'
 import { BidAttachmentsSection } from './attachments/BidAttachmentsSection'
 import { definePermissionNodes } from '@/lib/rbacTree/registry'
 import { useNodeFilter } from '@/lib/rbacTree/access'
+import { CommunicationTab } from './communication/CommunicationTab'
+import { LifecycleWorkspace, LifecycleStageActions, lifecycleViewingSheet } from './lifecycle/LifecycleWorkspace'
 
 /** Permission-tree node of the Individual Opportunity page (declared with the route, src/app/routeNodes.ts). */
 const BID_NODE = 'opportunity.bid'
@@ -37,6 +39,7 @@ const TABS = definePermissionNodes(BID_NODE, [
   { value: 'queries', label: 'Queries' },
   { value: 'competition', label: 'Competition' },
   { value: 'rfpTimeline', label: 'RFP Timeline' },
+  { value: 'communication', label: 'Communication' },
 ] as const)
 type Tab = (typeof TABS)[number]['value']
 const isSynopsisSection = (value: Tab): value is BidSynopsisSection => (BID_SYNOPSIS_SECTIONS as readonly string[]).includes(value)
@@ -70,20 +73,25 @@ export function BidDetailWorkspace() {
   const { archive, unarchive, remove } = useBidMutations()
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [generalActionsTarget, setGeneralActionsTarget] = useState<HTMLDivElement | null>(null)
 
   if (isLoading) return <div className="p-4 text-sm text-muted">Loading bid…</div>
   if (!bid) {
     return (
       <div className="p-4 text-sm text-muted">
-        This bid no longer exists. <Link to="/bid-tracker" className="underline">Back to the Master Grid</Link>
+        This bid no longer exists. <Link to="/live-bids" className="underline">Back to the Master Grid</Link>
       </div>
     )
   }
 
+  const viewingSheet = lifecycleViewingSheet(bid.sheet, params.get('stage'))
+  if (viewingSheet !== 'bidTracker') return <div className="h-full overflow-auto"><LifecycleWorkspace key={`${bid.id}:${viewingSheet}`} bid={bid} row={row} viewingSheet={viewingSheet} /></div>
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-line px-4 py-3">
-        <Link to="/bid-tracker" className="inline-flex items-center gap-1 text-[12px] text-muted hover:text-ink">
+        <div className="mb-3"><LifecycleStageActions bid={bid} row={row} /></div>
+        <Link to="/live-bids" className="inline-flex items-center gap-1 text-[12px] text-muted hover:text-ink">
           <Icon name="ArrowLeft" size={12} /> Master Grid
         </Link>
         <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
@@ -103,6 +111,7 @@ export function BidDetailWorkspace() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <div ref={setGeneralActionsTarget} className={tab === 'general' ? 'contents' : 'hidden'} />
             <Can module={sheetModule(bid.sheet)} action="update" atom="bid.archive" node={BID_NODE}>
             <Button
               size="sm" disabled={archive.isPending || unarchive.isPending}
@@ -140,6 +149,9 @@ export function BidDetailWorkspace() {
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         {tab === 'overview' && <div role="tabpanel" id="synopsis-panel-overview" aria-labelledby="synopsis-tab-overview">
+          <details className="border-b border-line"><summary className="cursor-pointer px-4 py-3 text-sm font-medium">Campaign, Funnel, Backup &amp; Commit details</summary>
+            <LifecycleWorkspace key={`${bid.id}:history`} bid={bid} row={row} viewingSheet="bidTracker" compact />
+          </details>
           <BidTimelineSection bidId={bid.id} />
           <OverviewTab bid={bid} milestones={milestones} />
           <details className="border-t border-line"><summary className="cursor-pointer px-4 py-3 text-sm font-medium">Commercial Details &amp; Files</summary>
@@ -148,14 +160,17 @@ export function BidDetailWorkspace() {
         </div>}
         {BID_SYNOPSIS_SECTIONS.filter(section => visited.includes(section) || tab === section).map(section => (
           <div key={`${bid.id}:${section}`} role="tabpanel" id={`synopsis-panel-${section}`} aria-labelledby={`synopsis-tab-${section}`} hidden={tab !== section}>
-            {section === 'general' ? <GeneralTab bidId={bid.id} module={sheetModule(bid.sheet)} /> : section === 'scope' ? <SynopsisTab bidId={bid.id} section={section} module={sheetModule(bid.sheet)} /> : <GridTab bidId={bid.id} section={section} module={sheetModule(bid.sheet)} />}
+            {section === 'general' ? <GeneralTab bidId={bid.id} module={sheetModule(bid.sheet)} actionsTarget={generalActionsTarget} /> : section === 'scope' ? <SynopsisTab bidId={bid.id} section={section} module={sheetModule(bid.sheet)} /> : <GridTab bidId={bid.id} section={section} module={sheetModule(bid.sheet)} />}
             {section === 'milestone' && <details className="border-t border-line"><summary className="cursor-pointer px-4 py-3 text-sm font-medium">Tracked Dates &amp; Corrigenda</summary><MilestonesTab bidId={bid.id} /></details>}
           </div>
         ))}
         {tab === 'rfpTimeline' && <div role="tabpanel" id="synopsis-panel-rfpTimeline" aria-labelledby="synopsis-tab-rfpTimeline">
           <RfpTimelineTab bidId={bid.id} onOpenGeneral={() => setParams(current => { const next = new URLSearchParams(current); next.set('tab', 'general'); return next })} />
         </div>}
-        <BidAttachmentsSection bidId={bid.id} />
+        {tab === 'communication' && <div role="tabpanel" id="synopsis-panel-communication" aria-labelledby="synopsis-tab-communication">
+          <CommunicationTab bidId={bid.id} opportunityId={bid.opportunityId} opportunityName={row?.opportunityName ?? ''} bidCode={bid.bidCode} tenderId={row?.gemTenderId} referenceNo={row?.referenceNo} module={sheetModule(bid.sheet)} />
+        </div>}
+        {tab !== 'communication' && <BidAttachmentsSection bidId={bid.id} />}
       </div>
       <ConfirmDeleteDialog
         open={confirmDelete}
@@ -164,7 +179,7 @@ export function BidDetailWorkspace() {
         onConfirm={async () => {
           await remove.mutateAsync(bid.id)
           toast(`Deleted bid for ${row?.opportunityName ?? 'this opportunity'}`)
-          navigate('/bid-tracker')
+          navigate('/live-bids')
         }}
       />
     </div>

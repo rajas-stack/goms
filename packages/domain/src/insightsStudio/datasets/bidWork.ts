@@ -11,7 +11,7 @@ const milestoneOpen = (row: { readonly [key: string]: unknown }) => row.status =
 export const BID_MILESTONES: DatasetDef = {
   id: 'bidMilestones',
   label: 'Bid milestones',
-  module: 'Opportunity › Bid Tracker › Milestones',
+  module: 'Opportunity › Live Bids › Milestones',
   description: 'Every dated milestone of every bid (pre-bid meeting, submission, opening …) with its status.',
   rbacModules: ['bid.milestones'],
   rowNoun: 'milestone',
@@ -38,7 +38,7 @@ export const BID_MILESTONES: DatasetDef = {
 export const BID_CORRIGENDA: DatasetDef = {
   id: 'bidCorrigenda',
   label: 'Corrigenda',
-  module: 'Opportunity › Bid Tracker › Corrigenda',
+  module: 'Opportunity › Live Bids › Corrigenda',
   description: 'Tender corrigenda detected on bids, their impact and review progress.',
   rbacModules: ['bid.corrigenda'],
   rowNoun: 'corrigendum',

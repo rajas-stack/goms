@@ -63,12 +63,12 @@ export function extractDate(text: string): { date: Date; hasTime: boolean } | nu
 
 function readDate(field: GeneralField, raw: string): { date: Date; hasTime: boolean } | null {
   if (field.kind === 'date') {
-    const date = friendlyValueToDate(raw, 'date')
-    if (date) return { date, hasTime: false }
+    const date = friendlyValueToDate(raw, 'optional-time')
+    if (date) return { date, hasTime: raw.includes('T') }
   }
   if (field.kind === 'datetime') {
-    const date = friendlyValueToDate(raw, 'datetime-local')
-    if (date) return { date, hasTime: true }
+    const date = friendlyValueToDate(raw, 'optional-time')
+    if (date) return { date, hasTime: raw.includes('T') }
   }
   return extractDate(raw)
 }

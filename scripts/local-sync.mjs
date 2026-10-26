@@ -1,6 +1,6 @@
 import { spawn, execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, appendFileSync, renameSync, createWriteStream } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync, appendFileSync, renameSync, createWriteStream, readdirSync, rmSync } from 'node:fs'
 import { mkdir, open, writeFile } from 'node:fs/promises'
 import { dirname, resolve, relative, isAbsolute, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -47,6 +47,16 @@ const runId = new Date().toISOString().replace(/[^0-9]/g, '')
 const runDir = resolve(stateDir, 'runs', runId)
 mkdirSync(runDir, { recursive: true })
 const logFile = resolve(runDir, 'run.log')
+// Each run keeps a full source snapshot (0.4-0.8 GB). Keep only the newest KEEP_SOURCE_RUNS snapshots so the
+// drive holding Docker's data disk never fills up; every run's database backup and log are always kept.
+const KEEP_SOURCE_RUNS = 5
+for (const old of readdirSync(resolve(stateDir, 'runs')).filter(name => /^\d+$/.test(name)).sort().slice(0, -KEEP_SOURCE_RUNS)) {
+  for (const entry of readdirSync(resolve(stateDir, 'runs', old))) {
+    if (!entry.startsWith('source-')) continue
+    // Best effort: a locked snapshot is retried on the next run; cleanup never blocks a deployment.
+    try { rmSync(resolve(stateDir, 'runs', old, entry), { recursive: true, force: true, maxRetries: 2 }) } catch { /* retried next run */ }
+  }
+}
 const previousStatus = readJsonIfPresent(statusFile, {})
 const runStatus = { startedAt: new Date().toISOString(), runId, port: 8088, state: 'starting', previousPublished: previousStatus.previousPublished ?? null }
 function log(message) {

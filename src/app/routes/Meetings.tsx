@@ -2,8 +2,12 @@ import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import {
-  useAllEmployees, useAllTimelineEvents, useCurrentPostings, useDepartments, useEmployeeDepartments, useSalesPersons, useStates,
+  useAllEmployees, useAllTimelineEvents, useCurrentPostings, useDepartments, useEmployeeDepartments, useEmployeeMutations, useSalesPersons, useStates,
 } from '@/lib/api'
+import { buildSampleMeetings, isSampleMeeting } from '@/features/meetings/sampleMeetings'
+import { Checkbox } from '@/components/ui/Checkbox'
+import { useToast } from '@/components/ui/Toast'
+import { useAllowed } from '@/lib/permissions'
 import { useHighlightOnArrival } from '@/lib/useHighlightOnArrival'
 import { Icon } from '@/components/ui/Icon'
 import { Badge } from '@/components/ui/Badge'
@@ -56,6 +60,34 @@ export function Meetings() {
   // Defensive: only show rows whose employee still resolves (deletion already
   // cascades to timeline rows in the repository, so this should be a no-op).
   const allRows = useMemo(() => entries.filter((e) => employeeById.has(e.employeeId)), [entries, employeeById])
+
+  const { addTimelineEvent, deleteTimelineEvent, setTimelineEventAttended } = useEmployeeMutations()
+  const toast = useToast()
+  // Adding samples creates real meetings and removing them deletes them, so both rights are required.
+  const canManageSamples = useAllowed('am.meetings', 'create') && useAllowed('am.meetings', 'delete')
+  const sampleRows = useMemo(() => allRows.filter(isSampleMeeting), [allRows])
+  const [samplesBusy, setSamplesBusy] = useState(false)
+  async function toggleSamples(show: boolean) {
+    setSamplesBusy(true)
+    try {
+      if (!show) {
+        for (const e of sampleRows) await deleteTimelineEvent.mutateAsync(e.id)
+        return
+      }
+      // One employee per department where possible, so the Department/State filters have spread.
+      const ids = [...new Map(employees.filter((e) => !e.vacant && deptById[e.id]).map((e) => [deptById[e.id].id, e.id])).values()]
+      const samples = buildSampleMeetings(ids.length ? ids : employees.map((e) => e.id), salesPersons, currentPostings)
+      if (samples.length === 0) { toast('Add an employee first — sample meetings attach to one', undefined, 'error'); return }
+      for (const s of samples) {
+        const evt = await addTimelineEvent.mutateAsync(s.input)
+        if (s.attended !== undefined) await setTimelineEventAttended.mutateAsync({ id: evt.id, attended: s.attended })
+      }
+    } catch {
+      toast(show ? 'Could not add sample meetings' : 'Could not remove sample meetings', undefined, 'error')
+    } finally {
+      setSamplesBusy(false)
+    }
+  }
 
   const [filters, setFilters] = useState<MeetingFilters>(EMPTY_MEETING_FILTERS)
   const [date, setDate] = useState('')
@@ -151,9 +183,15 @@ export function Meetings() {
             <h1 className="font-display text-xl font-bold leading-tight text-ink-900">Meetings</h1>
             <p className="text-[12px] text-muted">Every logged meeting and interaction, across every employee</p>
           </div>
-          <Button variant="primary" onClick={() => setCreateOpen(true)} className="shrink-0">
-            <Icon name="Plus" size={15} /> Add New Meeting
-          </Button>
+          <div className="flex shrink-0 items-center gap-3">
+            {canManageSamples && <label className="flex cursor-pointer items-center gap-2 text-[13px] text-ink-700">
+              <Checkbox checked={sampleRows.length > 0} disabled={samplesBusy} onChange={(show) => void toggleSamples(show)} aria-label="Show sample meetings" />
+              {samplesBusy ? 'Updating samples…' : 'Sample meetings'}
+            </label>}
+            <Button variant="primary" onClick={() => setCreateOpen(true)} className="shrink-0">
+              <Icon name="Plus" size={15} /> Add New Meeting
+            </Button>
+          </div>
         </div>
 
         {/* Search plus eight filters is a desktop-width toolbar — below `sm`
@@ -213,7 +251,7 @@ export function Meetings() {
                 aria-label="Filter by region"
                 className="min-w-[12rem] flex-1"
               />
-              <FriendlyDateInput value={date} onChange={setDate} aria-label="Date" placeholder="Any date" floatingFeedback wrapperClassName="w-full sm:w-[10rem]" className="h-9 text-[13px]" />
+              <FriendlyDateInput value={date && timeFrom ? `${date}T${timeFrom}` : date} onChange={next => { setDate(next.slice(0, 10)); setTimeFrom(next.includes('T') ? next.slice(11, 16) : '') }} aria-label="Date" placeholder="Any date" floatingFeedback wrapperClassName="w-full sm:w-[12rem]" className="h-9 text-[13px]" />
               <div className="flex items-center gap-1.5">
                 <Input type="time" value={timeFrom} onChange={(e) => setTimeFrom(e.target.value)} aria-label="Time from" className="h-9 w-full text-[13px] sm:w-[7rem]" />
                 <span className="text-[12px] text-muted">to</span>

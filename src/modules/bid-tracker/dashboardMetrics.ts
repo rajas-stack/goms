@@ -1,6 +1,6 @@
 // The Opportunity Dashboard's numbers — pure, so every count is unit-tested and
 // the page only lays them out. Definitions (over NON-archived grid rows):
-//   Live bids = rows in Bid Tracker whose bid stage is not a closed one.
+//   Live bids = rows in Live Bids whose bid stage is not a closed one.
 //   Pipeline  = rows in Pipeline · Funnel / Backup / Commits (with the three sub-counts).
 //   Campaign  = rows in Campaign.
 import { BID_STAGE_MAP, type OwnedSheet } from '@goms/domain'

@@ -33,7 +33,7 @@ function CreateBidButton({ opportunityId, onError }: { opportunityId: string; on
     onError(null)
     try {
       const created = await create.mutateAsync({ opportunityId })
-      navigate(`/bid-tracker/bid/${created.id}`)
+      navigate(`/live-bids/bid/${created.id}`)
     } catch (err) {
       onError(err instanceof Error ? err.message : 'Could not create the bid.')
     }
@@ -41,7 +41,7 @@ function CreateBidButton({ opportunityId, onError }: { opportunityId: string; on
 
   return (
     <button
-      type="button" aria-label="Create Bid" title="Create Bid in Bid Tracker" disabled={create.isPending}
+      type="button" aria-label="Create Bid" title="Create Bid in Live Bids" disabled={create.isPending}
       onClick={handleCreate}
       className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-ink-900/[0.06] hover:text-ink disabled:opacity-50"
     >
@@ -64,7 +64,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
   const { create, update, remove } = useOpportunityMutations()
   const { assign } = useOwnershipMutations()
   const perms = usePermissions()
-  // Opportunities from Account Mapping are authorised as Bid Tracker rows; the server decides per row.
+  // Opportunities from Account Mapping are authorised as Live Bids rows; the server decides per row.
   const canEditWork = perms.mayWrite('opp.bidTracker')
   const canCreateWork = perms.can('opp.bidTracker', 'create')
   const canDeleteWork = perms.can('opp.bidTracker', 'delete')
@@ -79,7 +79,7 @@ export function WorksEditor({ departmentId, opportunities, draftKeyPrefix }: {
   const [assignFor, setAssignFor] = useState<Opportunity | null>(null)
   const [removing, setRemoving] = useState<Opportunity | null>(null)
   // One lookup, for the opportunity being edited — not one per card, and not the
-  // whole Bid Tracker grid. Once a bid exists, stage and submission date belong
+  // whole Live Bids grid. Once a bid exists, stage and submission date belong
   // to it: the dialog locks them and save() leaves them out of the patch.
   const { data: editingBid } = useBidForOpportunity(editing?.id ?? null)
   const managedInBidTracker = !!editingBid

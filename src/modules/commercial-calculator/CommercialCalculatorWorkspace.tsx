@@ -8,14 +8,9 @@ import '@/lib/rbacTree/appModules'
 import { cn } from '@/lib/utils'
 import { Dashboard } from './pages/Dashboard'
 import { CreateBoq } from './pages/CreateBoq'
-import { HierarchyView } from './pages/HierarchyView'
-import { SkuCatalog } from './pages/SkuCatalog'
 import { BoqManagement } from './pages/BoqManagement'
 import { ProposalDetail } from './pages/ProposalDetail'
 import { AuditLog } from './pages/AuditLog'
-import { MasterCrudScreen } from './components/MasterCrudScreen'
-import { MASTER_DEFS } from './master-defs'
-import type { MasterEntityKey } from './types'
 
 /** Commercial Calculator's tab shell — mirrors SalesWorkspace's structure
  *  (header tab strip + content area) minus the shared DetailsPanel, which is
@@ -35,27 +30,13 @@ const SECTIONS = definePermissionNodes('commercial', [
   { key: 'dashboard', label: 'Dashboard' },
   { key: 'create-boq', label: 'Create BOQ' },
   { key: 'boq-management', label: 'BOQ Management' },
-  { key: 'catalog', label: 'Catalog' },
   { key: 'settings', label: 'Settings' },
 ] as const)
 
-/** Flat reference lookups — no rule attached, unlike Catalog's items or
- *  Approval Matrix. Pre-Sales lives here too: a short list of names with
- *  nothing computed from it. */
-const REFERENCE_MASTERS: MasterEntityKey[] = [
-  'skuCategories', 'unitsOfMeasure', 'billingTypes', 'taxClasses', 'currencies', 'preSales',
-]
-
-/** Every key selectable across Catalog or Settings. `hierarchy`/
- *  `sku-catalog`/`audit` aren't `MasterEntityKey`s — they're full pages —
- *  so this key type adds exactly those three rather than inventing
- *  separate string keys for the masters, which already have perfectly
- *  good `MasterEntityKey` values reused as-is (matching how every
- *  Reference Data item already reuses its own). One shared key space and
- *  one shared content map (below) serve both tabs — only the *nav*
- *  structure (which keys are exposed as clickable items, and under which
- *  tab) differs between them. */
-type CommercialItemKey = 'hierarchy' | 'sku-catalog' | 'audit' | MasterEntityKey
+/** Masters (Hierarchy, SKU Catalog, Approval Matrix, reference data) live in
+ *  Settings > Masters (src/features/masters/mastersList.ts); only the Audit
+ *  Log is a Commercial Calculator settings screen. */
+type CommercialItemKey = 'audit'
 
 interface SidebarNavGroup {
   /** Omitted when a tab has exactly one group — a header naming the one
@@ -64,40 +45,9 @@ interface SidebarNavGroup {
   items: { key: CommercialItemKey; label: string }[]
 }
 
-/** One content renderer per key — adding a future Catalog or Settings
- *  screen is one entry here plus one entry in whichever `_NAV` array
- *  exposes it, never new tab-strip code. `hierarchy`/`sku-catalog`/`audit`
- *  map straight to their page components (all three already take no
- *  props); every `MasterEntityKey` value wraps the generic
- *  `MasterCrudScreen`. `verticals`/`products`/`modules`/`features` aren't
- *  in either tab's sidebar directly (they're reached through the single
- *  "Hierarchy" row's tree view) but still need entries here purely so
- *  `Record<CommercialItemKey, …>` type-checks as total. */
 const ITEM_CONTENT: Record<CommercialItemKey, () => ReactElement> = {
-  hierarchy: HierarchyView,
-  'sku-catalog': SkuCatalog,
-  verticals: () => <MasterCrudScreen masterKey="verticals" />,
-  products: () => <MasterCrudScreen masterKey="products" />,
-  modules: () => <MasterCrudScreen masterKey="modules" />,
-  features: () => <MasterCrudScreen masterKey="features" />,
-  skuCategories: () => <MasterCrudScreen masterKey="skuCategories" />,
-  unitsOfMeasure: () => <MasterCrudScreen masterKey="unitsOfMeasure" />,
-  productEditions: () => <MasterCrudScreen masterKey="productEditions" />,
-  billingTypes: () => <MasterCrudScreen masterKey="billingTypes" />,
-  taxClasses: () => <MasterCrudScreen masterKey="taxClasses" />,
-  approvalMatrix: () => <MasterCrudScreen masterKey="approvalMatrix" />,
-  currencies: () => <MasterCrudScreen masterKey="currencies" />,
-  preSales: () => <MasterCrudScreen masterKey="preSales" />,
   audit: AuditLog,
 }
-
-/** Just Hierarchy now (2026-08-13: SKU Catalog and Product Editions moved
- *  into Settings, below) — kept as its own tab rather than folded away too,
- *  since nothing about the sidebar/content-map architecture requires moving
- *  it, and no such move was requested. */
-const CATALOG_NAV: SidebarNavGroup[] = [
-  { items: [{ key: 'hierarchy', label: 'Hierarchy' }] },
-]
 
 /** Settings — Approval Matrix/Reference Data/Audit stay exactly as IA
  *  review round 2 placed them. SKU Catalog and Product Editions join here
@@ -106,13 +56,9 @@ const CATALOG_NAV: SidebarNavGroup[] = [
  *  neither a flat lookup nor a discount rule, so they keep the same
  *  "distinct kind of screen gets its own group" principle the other three
  *  groups already follow. */
+// Catalog, Approval Matrix and Reference Data are masters: they moved to Settings > Masters
+// (src/features/masters/mastersList.ts). Only the Audit Log remains here.
 const SETTINGS_NAV: SidebarNavGroup[] = [
-  { label: 'Catalog', items: [
-    { key: 'sku-catalog', label: 'SKU Catalog' },
-    { key: 'productEditions', label: MASTER_DEFS.productEditions.label },
-  ] },
-  { label: 'Approval Matrix', items: [{ key: 'approvalMatrix', label: MASTER_DEFS.approvalMatrix.label }] },
-  { label: 'Reference Data', items: REFERENCE_MASTERS.map((key) => ({ key, label: MASTER_DEFS[key].label })) },
   { label: 'Audit', items: [{ key: 'audit', label: 'Audit Log' }] },
 ]
 
@@ -170,7 +116,7 @@ function CommercialCalculatorWorkspaceBody() {
   const sections = SECTIONS.filter((s) => canOpen(SECTION_MODULES[s.key] ?? []) && treeAllows(`commercial.${s.key}`))
   // The Approval Matrix and the Audit Log are their own modules inside Settings.
   const settingsNav = SETTINGS_NAV
-    .map((g) => ({ ...g, items: g.items.filter((i) => (i.key === 'approvalMatrix' ? canOpen(['com.approvalMatrix']) : i.key === 'audit' ? canOpen(['admin.audit']) : true)) }))
+    .map((g) => ({ ...g, items: g.items.filter((i) => (i.key === 'audit' ? canOpen(['admin.audit']) : true)) }))
     .filter((g) => g.items.length > 0)
   // No tab is "active" while viewing a specific BOQ — the current route
   // genuinely isn't Dashboard/Create BOQ/BOQ Management/Governance, it's the
@@ -204,8 +150,7 @@ function CommercialCalculatorWorkspaceBody() {
             {activeKey === 'dashboard' && <Dashboard onCreateBoq={() => goTo('create-boq')} onNavigate={goTo} />}
             {activeKey === 'create-boq' && <CreateBoq onCancel={() => goTo('boq-management')} onCreated={(id) => goTo('boq/' + id)} />}
             {activeKey === 'boq-management' && <BoqManagement />}
-            {activeKey === 'catalog' && <SidebarTabPage groups={CATALOG_NAV} defaultKey="hierarchy" />}
-            {activeKey === 'settings' && <SidebarTabPage groups={settingsNav} defaultKey={settingsNav[0]?.items[0]?.key ?? 'approvalMatrix'} />}
+            {activeKey === 'settings' && <SidebarTabPage groups={settingsNav} defaultKey={settingsNav[0]?.items[0]?.key ?? 'audit'} />}
           </>
         )}
       </div>

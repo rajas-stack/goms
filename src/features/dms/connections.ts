@@ -6,7 +6,7 @@ export const DMS_MODULES = [
   { id: 'sales', label: 'Sales' },
   { id: 'teams', label: 'Teams' },
   { id: 'commercial', label: 'Commercial calculator' },
-  { id: 'opportunity', label: 'Opportunity / Bid tracker' },
+  { id: 'opportunity', label: 'Opportunity / Live Bids' },
 ] as const
 export type DmsModule = typeof DMS_MODULES[number]['id']
 export interface DmsConnection {
@@ -83,6 +83,6 @@ export function moduleForPath(path: string): DmsModule | null {
   if (/^\/sales(\/|$)/.test(path)) return 'sales'
   if (/^\/teams(\/|$)/.test(path)) return 'teams'
   if (/^\/commercial-calculator(\/|$)/.test(path)) return 'commercial'
-  if (/^\/bid-tracker(\/|$)/.test(path)) return 'opportunity'
+  if (/^\/live-bids(\/|$)/.test(path)) return 'opportunity'
   return null
 }

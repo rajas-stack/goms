@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Dialog } from './Dialog'
 import { Button } from './Button'
 
@@ -11,12 +11,14 @@ import { Button } from './Button'
  *  (e.g. node deletion, which offers Archive as a non-destructive
  *  alternative) keep their own dedicated dialog — this is for every other
  *  delete that previously had no confirmation at all. */
-export function ConfirmDeleteDialog({ open, onClose, itemLabel, onConfirm }: {
+export function ConfirmDeleteDialog({ open, onClose, itemLabel, onConfirm, children }: {
   open: boolean
   onClose: () => void
   /** The name of the thing being deleted, e.g. a person's name — shown in the title. */
   itemLabel: string
   onConfirm: () => Promise<void>
+  /** What else the delete touches (linked records), shown under the question. */
+  children?: ReactNode
 }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -50,6 +52,7 @@ export function ConfirmDeleteDialog({ open, onClose, itemLabel, onConfirm }: {
       }
     >
       <p className="text-sm text-muted">Are you sure you want to delete {itemLabel}? This action can't be reverted.</p>
+      {children}
       {error && (
         <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-[13px] text-rose-700">{error}</p>
       )}

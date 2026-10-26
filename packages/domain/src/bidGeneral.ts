@@ -1,17 +1,29 @@
+import type { CustomFieldType } from './bidCustomFields.js'
 import type { SynopsisNode } from './bidSynopsis.js'
+import type { BidTrackerMasterKey } from './bidTrackerFields.js'
 
 /** How a General field is edited. Values are always stored as plain text so the
- *  section stays a regular two-column synopsis table (Excel export, audit). */
-export type GeneralFieldKind = 'text' | 'textarea' | 'date' | 'datetime' | 'url' | 'select' | 'department' | 'websites' | 'address'
+ *  section stays a regular two-column synopsis table (Excel export, audit).
+ *  `multiselect` stores one chosen value per line. */
+export type GeneralFieldKind = 'text' | 'textarea' | 'date' | 'datetime' | 'url' | 'select' | 'multiselect' | 'department' | 'websites' | 'address'
 
 export interface GeneralField {
   key: string
   label: string
   kind: GeneralFieldKind
   options?: readonly string[]
+  /** Settings > Masters > Live Bids list a `multiselect` field picks from (and adds to). */
+  master?: BidTrackerMasterKey
   placeholder?: string
   /** A free-text field that usually holds a date (shown on the RFP Timeline when one can be read). */
   timeline?: boolean
+}
+
+/** The grid / filter data type of a General field. */
+export function generalFieldType(field: GeneralField): CustomFieldType {
+  if (field.kind === 'date' || field.kind === 'datetime') return 'date'
+  if (field.kind === 'select' || field.kind === 'multiselect' || field.kind === 'url') return field.kind
+  return 'text'
 }
 
 export interface GeneralGroup { title: string; fields: readonly GeneralField[] }
@@ -25,7 +37,9 @@ export const GENERAL_GROUPS: readonly GeneralGroup[] = [
       { key: 'referenceNo', label: 'Reference/Bid No.', kind: 'text', placeholder: 'e.g. PPAC/IT/DIP/2026/001' },
       { key: 'tenderId', label: 'Tender ID', kind: 'text', placeholder: 'e.g. 2026_PPAC_927042_1' },
       { key: 'assignmentName', label: 'Name of Assignment', kind: 'textarea' },
-      { key: 'scopeOfWork', label: 'Scope of Work', kind: 'text', placeholder: 'e.g. as per Scope of Work tab' },
+      // Key kept from its Scope of Work days so saved values carry over (one requirement per line).
+      { key: 'scopeOfWork', label: 'Requirement', kind: 'multiselect', master: 'requirements' },
+      { key: 'products', label: 'Products', kind: 'multiselect', master: 'bidProducts' },
       { key: 'submissionMode', label: 'Mode of Bid Submission (Online or Offline)', kind: 'select', options: ['online', 'offline'] },
       { key: 'procuringAuthority', label: 'Procuring Authority', kind: 'department' },
       { key: 'tenderWebsite', label: "Websites for downloading Bidding Document, Corrigendum's, Addendums etc.", kind: 'websites' },
@@ -78,6 +92,9 @@ export const GENERAL_GROUPS: readonly GeneralGroup[] = [
 
 export const GENERAL_FIELDS: readonly GeneralField[] = GENERAL_GROUPS.flatMap(group => group.fields)
 
+/** Labels a field was saved under before it was renamed, so older documents still map. */
+const LEGACY_LABELS: Readonly<Record<string, string>> = { 'scope of work': 'scopeOfWork' }
+
 export type GeneralValues = Readonly<Record<string, string>>
 
 function paragraph(text: string): SynopsisNode {
@@ -113,7 +130,7 @@ export function generalToDocument(values: GeneralValues): SynopsisNode {
 /** Read values back by matching each row's first cell to a field label, so row
  *  order and unknown extra rows do not matter. */
 export function documentToGeneral(document: SynopsisNode | null | undefined): Record<string, string> {
-  const byLabel = new Map(GENERAL_FIELDS.map(field => [field.label.toLowerCase(), field.key]))
+  const byLabel = new Map([...Object.entries(LEGACY_LABELS), ...GENERAL_FIELDS.map(field => [field.label.toLowerCase(), field.key] as const)])
   const values: Record<string, string> = {}
   let legacyMeeting: string | undefined
   for (const block of document?.content ?? []) {
@@ -142,8 +159,10 @@ export function updateGeneralDocument(document: SynopsisNode | null | undefined,
   const next = document ? structuredClone(document) : generalToDocument({})
   let table = next.content?.find(block => block.type === 'table')
   if (!table) { table = generalToDocument({}).content![0]; next.content = [...(next.content ?? []), table] }
-  const row = table.content?.find(candidate => candidate.attrs?.fieldKey === key || cellText(candidate.content?.[0]).trim().toLowerCase() === field.label.toLowerCase())
-  if (row) { row.attrs = { ...row.attrs, fieldKey: key }; row.content = [row.content![0], cell('tableCell', value)] }
+  const labels = [field.label.toLowerCase(), ...Object.keys(LEGACY_LABELS).filter(label => LEGACY_LABELS[label] === key)]
+  const row = table.content?.find(candidate => candidate.attrs?.fieldKey === key || labels.includes(cellText(candidate.content?.[0]).trim().toLowerCase()))
+  // The label cell is rewritten too, so a renamed field reads its current label in the document.
+  if (row) { row.attrs = { ...row.attrs, fieldKey: key }; row.content = [cell('tableCell', field.label), cell('tableCell', value)] }
   else table.content = [...(table.content ?? []), { type: 'tableRow', attrs: { fieldKey: key }, content: [cell('tableCell', field.label), cell('tableCell', value)] }]
   return next
 }

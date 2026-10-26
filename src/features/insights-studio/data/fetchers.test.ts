@@ -40,7 +40,7 @@ describe('Insights Studio data adapters', () => {
     expect(() => runQuery(rows, { datasetId: id, dimensions: [], measures: [{ field: COUNT_FIELD, agg: 'count' }], filters: [] }, { today: '2026-10-15' })).not.toThrow()
   })
 
-  it('keeps sheet lineage: Bid Tracker never includes Campaign rows even with same-named attributes', () => {
+  it('keeps sheet lineage: Live Bids never includes Campaign rows even with same-named attributes', () => {
     const names = (id: string) => rowsOf[id].map((r) => r.name)
     expect(names('opportunities.bidTracker')).toContain('Smart Bus')
     expect(names('opportunities.bidTracker')).not.toContain('City GIS')

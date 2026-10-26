@@ -23,13 +23,13 @@ function renderAt(path: string) {
       <MemoryRouter initialEntries={[path]}>
         <Where />
         <Routes>
-          <Route path="/bid-tracker" element={<OpportunityWorkspace tab="bid-tracker" />} />
-          <Route path="/bid-tracker/pipeline" element={<OpportunityWorkspace tab="pipeline" />} />
-          <Route path="/bid-tracker/pipeline/:tab" element={<OpportunityWorkspace tab="pipeline" />} />
-          <Route path="/bid-tracker/campaign" element={<OpportunityWorkspace tab="campaign" />} />
-          <Route path="/bid-tracker/master" element={<OpportunityWorkspace tab="master" />} />
-          <Route path="/bid-tracker/dashboard" element={<OpportunityWorkspace tab="dashboard" />} />
-          <Route path="/bid-tracker/:section" element={<OpportunityWorkspace tab="bid-tracker" />} />
+          <Route path="/live-bids" element={<OpportunityWorkspace tab="bid-tracker" />} />
+          <Route path="/live-bids/pipeline" element={<OpportunityWorkspace tab="pipeline" />} />
+          <Route path="/live-bids/pipeline/:tab" element={<OpportunityWorkspace tab="pipeline" />} />
+          <Route path="/live-bids/campaign" element={<OpportunityWorkspace tab="campaign" />} />
+          <Route path="/live-bids/master" element={<OpportunityWorkspace tab="master" />} />
+          <Route path="/live-bids/dashboard" element={<OpportunityWorkspace tab="dashboard" />} />
+          <Route path="/live-bids/:section" element={<OpportunityWorkspace tab="bid-tracker" />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -41,8 +41,8 @@ async function makeBid(name: string, sheet?: OwnedSheet) {
   return repository.createBid(opp.id, undefined, sheet)
 }
 const SHEET_AT: Record<string, OwnedSheet> = {
-  '/bid-tracker/pipeline/funnel': 'pipeline-funnel', '/bid-tracker/pipeline/backup': 'pipeline-backup',
-  '/bid-tracker/pipeline/commits': 'pipeline-commits', '/bid-tracker/campaign': 'campaign', '/bid-tracker/master': 'campaign',
+  '/live-bids/pipeline/funnel': 'pipeline-funnel', '/live-bids/pipeline/backup': 'pipeline-backup',
+  '/live-bids/pipeline/commits': 'pipeline-commits', '/live-bids/campaign': 'campaign', '/live-bids/master': 'campaign',
 }
 const nav = () => within(screen.getByRole('navigation', { name: 'Opportunity sheets' }))
 const where = () => screen.getByTestId('where').textContent
@@ -54,10 +54,10 @@ describe('Opportunity workspace', () => {
     await resetLocalData()
   })
 
-  it('offers Bid Tracker, Pipeline, Campaign, Master and Dashboard, with Bid Tracker keeping its own sections', async () => {
+  it('offers Live Bids, Pipeline, Campaign, Master and Dashboard, with Live Bids keeping its own sections', async () => {
     await makeBid('Alpha')
-    renderAt('/bid-tracker')
-    expect(nav().getAllByRole('link').map((l) => l.textContent)).toEqual(['Bid Tracker', 'Pipeline', 'Campaign', 'Master', 'Dashboard'])
+    renderAt('/live-bids')
+    expect(nav().getAllByRole('link').map((l) => l.textContent)).toEqual(['Campaign', 'Pipeline', 'Live Bids', 'Master', 'Dashboard'])
     expect(await screen.findByText('Alpha')).toBeInTheDocument()
     for (const section of ['Master Grid', 'Milestones & Dates', 'Action Queue', 'Activity History']) {
       expect(screen.getByRole('button', { name: section })).toBeInTheDocument()
@@ -66,49 +66,48 @@ describe('Opportunity workspace', () => {
 
   it('Pipeline opens on Funnel and has Funnel / Backup / Commits sub-tabs', async () => {
     await makeBid('Alpha', 'pipeline-funnel')
-    renderAt('/bid-tracker/pipeline')
-    await waitFor(() => expect(where()).toBe('/bid-tracker/pipeline/funnel'))
+    renderAt('/live-bids/pipeline')
+    await waitFor(() => expect(where()).toBe('/live-bids/pipeline/funnel'))
     for (const label of ['Funnel', 'Backup', 'Commits']) expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
     expect(await screen.findByText('Alpha')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Backup' }))
-    await waitFor(() => expect(where()).toBe('/bid-tracker/pipeline/backup'))
+    await waitFor(() => expect(where()).toBe('/live-bids/pipeline/backup'))
     await userEvent.click(screen.getByRole('button', { name: 'Commits' }))
-    await waitFor(() => expect(where()).toBe('/bid-tracker/pipeline/commits'))
+    await waitFor(() => expect(where()).toBe('/live-bids/pipeline/commits'))
   })
 
   it('moves between the top tabs', async () => {
     await makeBid('Alpha')
-    renderAt('/bid-tracker')
+    renderAt('/live-bids')
     await userEvent.click(nav().getByRole('link', { name: 'Campaign' }))
-    await waitFor(() => expect(where()).toBe('/bid-tracker/campaign'))
+    await waitFor(() => expect(where()).toBe('/live-bids/campaign'))
     await userEvent.click(nav().getByRole('link', { name: 'Master' }))
-    await waitFor(() => expect(where()).toBe('/bid-tracker/master'))
+    await waitFor(() => expect(where()).toBe('/live-bids/master'))
     await userEvent.click(nav().getByRole('link', { name: 'Pipeline' }))
-    await waitFor(() => expect(where()).toBe('/bid-tracker/pipeline/funnel'))
+    await waitFor(() => expect(where()).toBe('/live-bids/pipeline/funnel'))
     await userEvent.click(nav().getByRole('link', { name: 'Dashboard' }))
-    await waitFor(() => expect(where()).toBe('/bid-tracker/dashboard'))
+    await waitFor(() => expect(where()).toBe('/live-bids/dashboard'))
     expect(await screen.findByRole('heading', { name: 'Opportunity dashboard' })).toBeInTheDocument()
   })
 
-  it.each([['/bid-tracker/pipeline/funnel'], ['/bid-tracker/pipeline/backup'], ['/bid-tracker/pipeline/commits'], ['/bid-tracker/campaign'], ['/bid-tracker/master']])(
+  it.each([['/live-bids/pipeline/funnel'], ['/live-bids/pipeline/backup'], ['/live-bids/pipeline/commits'], ['/live-bids/campaign'], ['/live-bids/master']])(
     '%s is the same Excel-style grid over its own rows, with lock, freeze, filters and Manage columns',
     async (path) => {
       await makeBid('Alpha', SHEET_AT[path])
       await makeBid('Beta', SHEET_AT[path])
-      await makeBid('Elsewhere', path === '/bid-tracker/master' ? 'bidTracker' : undefined)
+      await makeBid('Elsewhere', path === '/live-bids/master' ? 'bidTracker' : undefined)
       renderAt(path)
       await screen.findByText('Alpha')
       expect(screen.getByText('Beta')).toBeInTheDocument()
-      // A Bid Tracker row shows on Master only.
-      if (path === '/bid-tracker/master') expect(screen.getByText('Elsewhere')).toBeInTheDocument()
-      else expect(screen.queryByText('Elsewhere')).not.toBeInTheDocument()
+      // Advanced opportunities remain in every earlier-stage list and in Master.
+      expect(screen.getByText('Elsewhere')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Master grid editing locked/ })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /^Filters/ })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Manage columns/ })).toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: /Manage columns/ }))
       expect(await screen.findByRole('button', { name: /Add column/ })).toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: /Manage columns/ }))
-      await userEvent.click(screen.getByRole('button', { name: 'Tender ID column menu' }))
+      await userEvent.click(screen.getByRole('button', { name: 'City column menu' }))
       expect(screen.getByRole('menuitem', { name: 'Freeze column' })).toBeEnabled()
     },
   )
@@ -117,22 +116,22 @@ describe('Opportunity workspace', () => {
     await makeBid('Alpha', 'pipeline-funnel')
     await repository.createBidSavedView({ name: 'Funnel only', scope: 'global', sheet: 'pipeline-funnel' })
     await repository.createBidSavedView({ name: 'Campaign only', scope: 'global', sheet: 'campaign' })
-    await repository.createBidSavedView({ name: 'Old tracker view', scope: 'global' }) // no sheet = Bid Tracker
-    const first = renderAt('/bid-tracker/pipeline/funnel')
+    await repository.createBidSavedView({ name: 'Old tracker view', scope: 'global' }) // no sheet = Live Bids
+    const first = renderAt('/live-bids/pipeline/funnel')
     await screen.findByText('Alpha')
     expect(await screen.findByRole('button', { name: /^Funnel only/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Campaign only/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Old tracker view/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'All Bids' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'All Opportunities' })).toBeInTheDocument()
     first.unmount()
-    renderAt('/bid-tracker/campaign')
+    renderAt('/live-bids/campaign')
     expect(await screen.findByRole('button', { name: /^Campaign only/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Funnel only/ })).not.toBeInTheDocument()
   })
 
   it('a view created on a sheet belongs to that sheet', async () => {
     await makeBid('Alpha')
-    renderAt('/bid-tracker/master')
+    renderAt('/live-bids/master')
     await screen.findByText('Alpha')
     await userEvent.click(screen.getByRole('button', { name: /Create Saved View/ }))
     const dialog = await screen.findByRole('dialog')
@@ -146,14 +145,14 @@ describe('Opportunity workspace', () => {
   it('frozen columns are remembered per sheet', async () => {
     await makeBid('Alpha', 'campaign')
     localStorage.clear()
-    const first = renderAt('/bid-tracker/campaign')
+    const first = renderAt('/live-bids/campaign')
     await screen.findByText('Alpha')
     await userEvent.click(screen.getByRole('button', { name: 'City column menu' }))
     await userEvent.click(screen.getByRole('menuitem', { name: 'Freeze column' }))
     expect(JSON.parse(localStorage.getItem('goms:bidGrid:frozenColumns:campaign')!)).toEqual(['city'])
     expect(localStorage.getItem('goms:bidGrid:frozenColumns')).toBeNull()
     first.unmount()
-    renderAt('/bid-tracker/master')
+    renderAt('/live-bids/master')
     await screen.findByText('Alpha')
     expect(screen.queryByTitle('Frozen column')).not.toBeInTheDocument()
   })

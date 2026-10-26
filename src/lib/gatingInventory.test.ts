@@ -3,12 +3,13 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 const GATED = new Set([
-  'features/competitors/CompetitorsSection.tsx', 'features/departments/AmnexDepartmentsSection.tsx',
+  'app/routes/Meetings.tsx', 'features/competitors/CompetitorsSection.tsx', 'features/departments/AmnexDepartmentsSection.tsx',
   'features/employees/MeetingDepartmentDialog.tsx', 'features/employees/MeetingPersonDialog.tsx',
   'features/tender-websites/TenderWebsitesSection.tsx',
-  'modules/bid-tracker/attachments/BidAttachmentsSection.tsx',
+  'modules/bid-tracker/attachments/BidAttachmentsSection.tsx', 'modules/bid-tracker/transfer/BidImportDialog.tsx', 'features/masters/BidTrackerMasters.tsx', 'features/employees/SalesPhotosFromDrive.tsx',
   'modules/bid-tracker/corrigenda/CorrigendaSection.tsx', 'modules/bid-tracker/synopsis/GeneralTab.tsx',
   'modules/rbac-tree/RolesAccessPage.tsx',
+  'features/details/DirectoryProfiles.tsx', 'features/directory/DirectoryActions.tsx', 'features/communication/ContactFields.tsx',
   'features/insights-studio/pages/ReportPage.tsx', 'features/insights-studio/pages/ReportsPage.tsx',
   'features/insights-studio/pages/VisualBuilderPage.tsx', 'features/insights-studio/pages/VisualLibraryPage.tsx',
   'app/routes/TeamsWorkspace.tsx', 'features/canvas/CanvasBranch.tsx', 'features/canvas/HierarchyCanvas.tsx',
@@ -33,6 +34,12 @@ const GATED = new Set([
 
 // These mutation controls inherit the permission decision from their owning screen.
 const INHERITED_GATES = {
+  'features/directory/TransferDialogs.tsx': {
+    parent: 'features/directory/DirectoryActions.tsx', gate: /if \(blocked\(entry, action\)\) return/, state: /pending && <PendingDialog/,
+  },
+  'features/directory/NewContactDialog.tsx': {
+    parent: 'app/routes/Directory.tsx', gate: /\(canCreateInternal \|\| canCreateExternal\) &&/, state: /creating && \(/,
+  },
   'modules/bid-tracker/attachments/AttachmentUploadForm.tsx': {
     parent: 'modules/bid-tracker/attachments/BidAttachmentsSection.tsx', gate: /open && canUpload && <AttachmentUploadForm/,
   },

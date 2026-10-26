@@ -59,7 +59,7 @@ describe('Home', () => {
     expect(rows).toHaveLength(3)
     expect(rows[0]).toHaveTextContent('Overdue')
     expect(rows[0]).toHaveTextContent('Bihar CCTV: EMD payment, 2 days overdue')
-    expect(rows[0]).toHaveAttribute('href', '/bid-tracker/bid/b1')
+    expect(rows[0]).toHaveAttribute('href', '/live-bids/bid/b1')
     expect(rows[1]).toHaveTextContent('Due soon')
     expect(within(rows[1]).getByText('AK')).toBeInTheDocument()
     expect(rows[2]).toHaveTextContent('Waiting')

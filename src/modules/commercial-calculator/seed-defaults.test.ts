@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { WORK_VERTICALS } from '@/features/nodes/department-meta'
-import { buildDefaultCommercialCalculatorData } from './seed-defaults'
+import { buildDefaultCommercialCalculatorData, requirementsFromGeneral } from './seed-defaults'
+
+describe('requirementsFromGeneral', () => {
+  it('turns every distinct saved Scope of Work line into a Requirements entry', () => {
+    const rows = requirementsFromGeneral([{ scopeOfWork: 'Smart transit\n ITMS \n' }, { scopeOfWork: 'smart TRANSIT\nCCTV' }, { tenderId: 'X' }])
+    expect(rows.map((r) => [r.code, r.name, r.displayOrder, r.active])).toEqual([
+      ['CCTV', 'CCTV', 0, true], ['ITMS', 'ITMS', 1, true], ['Smart transit', 'Smart transit', 2, true],
+    ])
+    expect(new Set(rows.map((r) => r.id)).size).toBe(3)
+  })
+})
 
 describe('buildDefaultCommercialCalculatorData', () => {
   it('seeds the 12 PCS-016 SKU categories with unique codes', () => {

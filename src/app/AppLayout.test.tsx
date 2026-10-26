@@ -28,8 +28,8 @@ function renderAppLayoutAt(initialPath: string) {
         <Routes>
           <Route element={<AppLayout />}>
             <Route path="/directory" element={<div>Directory page</div>} />
-            <Route path="/bid-tracker" element={<div>Bid Tracker page</div>} />
-            <Route path="/bid-tracker/bid/:bidId" element={<div>Selected bid page</div>} />
+            <Route path="/live-bids" element={<div>Live Bids page</div>} />
+            <Route path="/live-bids/bid/:bidId" element={<div>Selected bid page</div>} />
             <Route path="*" element={<div>Current page</div>} />
           </Route>
         </Routes>
@@ -74,15 +74,15 @@ describe('TopBar Import button', () => {
     expect(screen.getByText('Directory page')).toBeInTheDocument()
   })
 
-  it('opens global search from Bid Tracker while keeping its page mounted', () => {
-    renderAppLayoutAt('/bid-tracker')
+  it('opens global search from Live Bids while keeping its page mounted', () => {
+    renderAppLayoutAt('/live-bids')
 
-    expect(screen.getByText('Bid Tracker page')).toBeInTheDocument()
+    expect(screen.getByText('Live Bids page')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Import records' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Export records' })).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Search everything' }))
     expect(screen.getByPlaceholderText(/Search or ask/)).toBeInTheDocument()
-    expect(screen.getByText('Bid Tracker page')).toBeInTheDocument()
+    expect(screen.getByText('Live Bids page')).toBeInTheDocument()
   })
 
   it.each(['/commercial-calculator', '/teams/org', '/settings/dms', '/documents/opportunity', '/admin/access', '/missing-page'])('opens global search with the keyboard on %s', (path) => {
@@ -96,7 +96,7 @@ describe('TopBar Import button', () => {
   })
 
   it('leaves Ctrl+F to the browser (find in page) and opens global search on Ctrl+Shift+F', () => {
-    renderAppLayoutAt('/bid-tracker')
+    renderAppLayoutAt('/live-bids')
     const plainFind = fireEvent.keyDown(window, { key: 'f', ctrlKey: true })
     expect(plainFind).toBe(true) // not prevented, so the browser's own find bar opens
     expect(screen.queryByPlaceholderText(/Search or ask/)).not.toBeInTheDocument()

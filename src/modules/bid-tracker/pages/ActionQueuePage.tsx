@@ -35,7 +35,7 @@ export function ActionQueuePage() {
         </thead>
         <tbody>
           {entries.map((e) => (
-            <tr key={e.followUpId} data-testid="action-row" className="cursor-pointer hover:bg-ink-900/[0.03]" onClick={() => navigate(`/bid-tracker/bid/${e.bidId}`)}>
+            <tr key={e.followUpId} data-testid="action-row" className="cursor-pointer hover:bg-ink-900/[0.03]" onClick={() => navigate(`/live-bids/bid/${e.bidId}`)}>
               <td className="border-b border-line px-3 py-2">{e.opportunityName}</td>
               <td className="border-b border-line px-3 py-2">{stageLabel(e.stageKey)}</td>
               <td className="border-b border-line px-3 py-2">{e.note || '—'}</td>

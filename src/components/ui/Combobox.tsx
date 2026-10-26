@@ -26,6 +26,9 @@ interface ComboboxProps {
   /** Renders a read-only display of the current selection instead of the
    *  editable control — for fields auto-filled from another selection. */
   disabled?: boolean
+  /** Offers "Add “typed text”" when no option has that label; resolves to the new option's value. The caller reports
+   *  a failure (a rejected promise just leaves the list open). */
+  onCreate?: (label: string) => Promise<string>
 }
 
 /**
@@ -42,6 +45,7 @@ export function Combobox({
   placeholder = 'Select…',
   className,
   disabled = false,
+  onCreate,
   ...aria
 }: ComboboxProps) {
   const [open, setOpen] = useState(false)
@@ -76,6 +80,13 @@ export function Combobox({
     inputRef.current?.blur()
   }
 
+  const typed = query.trim()
+  const canCreate = !!onCreate && !!typed && !options.some((o) => o.label.toLowerCase() === typed.toLowerCase())
+  async function create() {
+    if (!canCreate) return
+    try { commit({ value: await onCreate!(typed), label: typed }) } catch { /* the caller shows why */ }
+  }
+
   function clear() {
     onChange('')
     setOpen(false)
@@ -89,6 +100,11 @@ export function Combobox({
   })
 
   function onKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter' && canCreate && matches.length === 0) {
+      e.preventDefault()
+      void create()
+      return
+    }
     if (e.key === 'ArrowDown' && !open) {
       e.preventDefault()
       setOpen(true)
@@ -163,8 +179,15 @@ export function Combobox({
             style={{ maxHeight }}
             className="w-full overflow-y-auto scrollbar-thin rounded-xl border border-line bg-paper p-1 shadow-pop"
           >
+            {canCreate && (
+              <li>
+                <button type="button" onClick={() => void create()} className="flex min-h-11 w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] font-medium text-ink-900 hover:bg-ink-900/[0.06] lg:min-h-0">
+                  <Icon name="Plus" size={13} /> Add “{typed}”
+                </button>
+              </li>
+            )}
             {matches.length === 0 ? (
-              <li className="px-2.5 py-2 text-[13px] text-muted">No matches</li>
+              !canCreate && <li className="px-2.5 py-2 text-[13px] text-muted">No matches</li>
             ) : (
               matches.map((o, i) => (
                 <li key={o.value} data-roving-index={i}>

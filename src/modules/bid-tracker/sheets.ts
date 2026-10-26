@@ -2,6 +2,7 @@
 // with its OWN saved views (system views appear on every sheet). Every bid lives in
 // exactly ONE sheet (`Bid.sheet`); Master is the collective list of all of them.
 import { OWNED_SHEETS, OWNED_SHEET_LABELS, type OwnedSheet } from '@goms/domain'
+import { lifecycleIndex, lifecycleRowInSheet } from '@goms/domain'
 import { definePermissionNodes, defineSection } from '@/lib/rbacTree/registry'
 import '@/lib/rbacTree/appModules'
 
@@ -9,8 +10,8 @@ export type SheetId = OwnedSheet | 'master'
 export { OWNED_SHEETS, OWNED_SHEET_LABELS, type OwnedSheet }
 
 /** Does a row living in `rowSheet` show on `sheet`? Master shows every row. */
-export function rowInSheet(rowSheet: OwnedSheet | undefined, sheet: SheetId): boolean {
-  return sheet === 'master' || (rowSheet ?? 'bidTracker') === sheet
+export function rowInSheet(rowSheet: OwnedSheet | undefined, sheet: SheetId, reached?: OwnedSheet): boolean {
+  return lifecycleRowInSheet({ sheet: rowSheet, lifecycleReachedSheet: reached }, sheet)
 }
 
 /** The toolbar's create button, worded for the sheet it files into. */
@@ -23,11 +24,11 @@ export function createLabelFor(sheet: SheetId): string {
 
 /** Top-level Opportunity tabs, in order. Each is a permission-tree node `opportunity.<value>`. */
 export const OPPORTUNITY_TABS = definePermissionNodes('opportunity', [
-  { value: 'bid-tracker', label: 'Bid Tracker', icon: 'Flag', path: '/bid-tracker' },
-  { value: 'pipeline', label: 'Pipeline', icon: 'TrendingUp', path: '/bid-tracker/pipeline/funnel' },
-  { value: 'campaign', label: 'Campaign', icon: 'Send', path: '/bid-tracker/campaign' },
-  { value: 'master', label: 'Master', icon: 'Database', path: '/bid-tracker/master' },
-  { value: 'dashboard', label: 'Dashboard', icon: 'BarChart3', path: '/bid-tracker/dashboard' },
+  { value: 'campaign', label: 'Campaign', icon: 'Send', path: '/live-bids/campaign' },
+  { value: 'pipeline', label: 'Pipeline', icon: 'TrendingUp', path: '/live-bids/pipeline/funnel' },
+  { value: 'bid-tracker', label: 'Live Bids', icon: 'Flag', path: '/live-bids' },
+  { value: 'master', label: 'Master', icon: 'Database', path: '/live-bids/master' },
+  { value: 'dashboard', label: 'Dashboard', icon: 'BarChart3', path: '/live-bids/dashboard' },
 ] as const)
 export type OpportunityTab = (typeof OPPORTUNITY_TABS)[number]['value']
 export const opportunityTabNode = (tab: OpportunityTab): string => `opportunity.${tab}`
@@ -66,7 +67,7 @@ export function columnOwner(sheet: SheetId): ColumnOwner {
 export type MasterScope = 'all' | 'bidTracker' | 'pipeline' | 'campaign'
 export const MASTER_SCOPES: { value: MasterScope; label: string }[] = [
   { value: 'all', label: 'All sheets' },
-  { value: 'bidTracker', label: 'Bid Tracker' },
+  { value: 'bidTracker', label: 'Live Bids' },
   { value: 'pipeline', label: 'Pipeline' },
   { value: 'campaign', label: 'Campaign' },
 ]
@@ -74,6 +75,10 @@ export const MASTER_SCOPES: { value: MasterScope; label: string }[] = [
 /** Does a custom column of owner `owner` show on `sheet` (Master, narrowed to `scope`)? */
 export function columnInScope(owner: ColumnOwner | undefined, sheet: SheetId, scope: MasterScope = 'all'): boolean {
   const o = owner ?? 'bidTracker'
-  if (sheet !== 'master') return o === columnOwner(sheet)
-  return scope === 'all' || o === scope
+  if (sheet !== 'master') {
+    if (o === 'master') return false
+    const firstSheet = o === 'pipeline' ? 'pipeline-funnel' : o
+    return lifecycleIndex(firstSheet) <= lifecycleIndex(sheet)
+  }
+  return scope === 'all' || columnInScope(o, scope === 'pipeline' ? 'pipeline-commits' : scope)
 }

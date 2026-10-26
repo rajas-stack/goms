@@ -1,5 +1,5 @@
 /** Every static route of the GOMS router (src/app/router.tsx), with an expectation about what proves it rendered.
- *  Dynamic routes (/meetings/:id, /bid-tracker/bid/:id, /commercial-calculator/boq/:id, /document-maker/:id) are
+ *  Dynamic routes (/meetings/:id, /live-bids/bid/:id, /commercial-calculator/boq/:id, /document-maker/:id) are
  *  covered in their own area specs because they need seeded data. */
 export interface RouteSpec {
   path: string;
@@ -37,14 +37,14 @@ export const STATIC_ROUTES: RouteSpec[] = [
   { path: '/commercial-calculator/boq-management', expect: /Commercial Calculator/ },
   { path: '/commercial-calculator/catalog', expect: /Commercial Calculator/ },
   { path: '/commercial-calculator/settings', expect: /Commercial Calculator/ },
-  { path: '/bid-tracker', expect: /Master Grid/ },
-  { path: '/bid-tracker/pipeline', expect: /Funnel/, finalPath: '/bid-tracker/pipeline/funnel' },
-  { path: '/bid-tracker/pipeline/funnel', expect: /Funnel/ },
-  { path: '/bid-tracker/pipeline/backup', expect: /Backup/ },
-  { path: '/bid-tracker/pipeline/commits', expect: /Commits/ },
-  { path: '/bid-tracker/campaign', expect: /Add to Campaign/ },
-  { path: '/bid-tracker/master', expect: /Manage columns/ },
-  { path: '/bid-tracker/dashboard', expect: /Opportunity dashboard/ },
+  { path: '/live-bids', expect: /Master Grid/ },
+  { path: '/live-bids/pipeline', expect: /Funnel/, finalPath: '/live-bids/pipeline/funnel' },
+  { path: '/live-bids/pipeline/funnel', expect: /Funnel/ },
+  { path: '/live-bids/pipeline/backup', expect: /Backup/ },
+  { path: '/live-bids/pipeline/commits', expect: /Commits/ },
+  { path: '/live-bids/campaign', expect: /Add to Campaign/ },
+  { path: '/live-bids/master', expect: /Manage columns/ },
+  { path: '/live-bids/dashboard', expect: /Opportunity dashboard/ },
   { path: '/settings', expect: /System settings/ },
   { path: '/settings/access', expect: /Roles/i },
   { path: '/settings/credentials', expect: /Credentials/ },

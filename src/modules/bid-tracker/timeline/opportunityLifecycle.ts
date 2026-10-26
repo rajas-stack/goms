@@ -12,7 +12,7 @@ export interface LifecycleInput {
 
 function lifecycleGroup(sheet: string): OpportunityLifecycleStage['name'] | null {
   if (!isOwnedSheet(sheet)) return null
-  return sheet === 'campaign' ? 'Campaign' : sheet === 'bidTracker' ? 'Bid Tracker' : 'Pipeline'
+  return sheet === 'campaign' ? 'Campaign' : sheet === 'bidTracker' ? 'Live Bids' : 'Pipeline'
 }
 
 /** Replays sheet moves on the original record, including moves back to an earlier sheet. */
@@ -21,7 +21,7 @@ export function opportunityLifecycle(input: LifecycleInput): OpportunityLifecycl
   const firstSheet = [...changes].sort((a, b) => a.changedAt.localeCompare(b.changedAt))[0]?.oldValue ?? input.sheet ?? 'bidTracker'
   const start = calendarDay(firstSheet === 'campaign' ? input.createdAt : input.bidCreatedAt) ?? input.createdAt
   const visits = stageIntervals(firstSheet, start, changes)
-  return (['Campaign', 'Pipeline', 'Bid Tracker'] as const).map((name) => {
+  return (['Campaign', 'Pipeline', 'Live Bids'] as const).map((name) => {
     const intervals = [...visits].filter(([sheet]) => lifecycleGroup(sheet) === name).flatMap(([, dates]) => dates)
       .sort((a, b) => a.enter.localeCompare(b.enter))
     const first = intervals[0]

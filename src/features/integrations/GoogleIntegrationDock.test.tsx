@@ -8,7 +8,7 @@ import { getGoogleAccount, setGoogleAccount } from './session'
 import { loadGoogleSettings, saveGoogleSettings } from './settings'
 import { runWorkspaceAction } from './workspaceClient'
 vi.mock('@/features/dms/googleDrive', () => ({ loadGoogleIdentity: vi.fn(async () => ({})) }))
-vi.mock('./workspaceClient', async importOriginal => ({ ...await importOriginal<typeof import('./workspaceClient')>(), runWorkspaceAction: vi.fn(async () => ({ message: 'Email sent.' })) }))
+vi.mock('./workspaceClient', async importOriginal => ({ ...await importOriginal<typeof import('./workspaceClient')>(), runWorkspaceAction: vi.fn(async () => ({ message: 'Folder created.' })) }))
 let sequence = 0
 beforeEach(async () => {
   vi.clearAllMocks(); setGoogleAccount({ uid: `dock-${++sequence}`, email: 'a@amnex.com', googleId: 'google-a' })
@@ -17,17 +17,16 @@ beforeEach(async () => {
 })
 afterEach(() => { cleanup(); setGoogleAccount(null) })
 describe('deployed Google widgets', () => {
-  it('embeds a working Gmail action on the accounts page with its real page ID', async () => {
+  // Gmail opens the Email Center (one email implementation), so a generic Workspace action stands in here.
+  it('embeds a working Drive action on the accounts page with its real page ID', async () => {
     render(<MemoryRouter initialEntries={['/map']}><GoogleIntegrationDock /></MemoryRouter>)
     await userEvent.click(screen.getByRole('button', { name: 'Open Google tools' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Gmail' }))
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Gmail action' }), 'create')
-    await userEvent.type(screen.getByLabelText('To'), 'user@amnex.com')
-    await userEvent.type(screen.getByLabelText('Subject'), 'Bid update')
-    await userEvent.type(screen.getByLabelText('Message'), 'New deadline')
-    await userEvent.click(screen.getByRole('button', { name: 'Send email' }))
-    expect(runWorkspaceAction).toHaveBeenCalledWith('gmail', 'create', expect.objectContaining({ title: 'Bid update' }), undefined, 'accounts', false)
-    expect(await screen.findByText('Email sent.')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Drive' }))
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Drive action' }), 'create')
+    await userEvent.type(screen.getByLabelText('Title'), 'Bid update')
+    await userEvent.click(screen.getByRole('button', { name: 'Create folder' }))
+    expect(runWorkspaceAction).toHaveBeenCalledWith('drive', 'create', expect.objectContaining({ title: 'Bid update' }), undefined, 'accounts', false)
+    expect(await screen.findByText('Folder created.')).toBeInTheDocument()
   })
   it('removes master-disabled and page-disabled services immediately', async () => {
     render(<MemoryRouter initialEntries={['/sales/team']}><GoogleIntegrationDock /></MemoryRouter>)

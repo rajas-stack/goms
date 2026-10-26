@@ -9,6 +9,7 @@ import { Badge, CodeChip } from './ui/Badge'
 import { Avatar, type AvatarPerson } from './ui/Avatar'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import { cn } from '@/lib/utils'
+import { SPRING_OVERLAY } from '@/lib/motion'
 
 const EXAMPLES = [
   'Connected officers', 'Vacant positions', 'Follow-ups due today',
@@ -118,7 +119,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
             initial={isMobile ? { opacity: 0, y: 24 } : { opacity: 0, y: 12, scale: 0.98 }}
             animate={isMobile ? { opacity: 1, y: 0 } : { opacity: 1, y: 0, scale: 1 }}
             exit={isMobile ? { opacity: 0, y: 24 } : { opacity: 0, y: 8, scale: 0.98 }}
-            transition={isMobile ? { type: 'spring', stiffness: 340, damping: 32 } : { type: 'spring', stiffness: 340, damping: 30 }}
+            transition={SPRING_OVERLAY}
           >
             <div className="flex shrink-0 items-center gap-3 border-b border-line px-4">
               <Icon name="Search" className="text-muted" />

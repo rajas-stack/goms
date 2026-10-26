@@ -1,3 +1,4 @@
+import { BID_TRACKER_MASTER_KEYS, bidTrackerMasterSeed, parseMultiValue, type BidTrackerMasterKey } from '@goms/domain'
 import { WORK_VERTICALS } from '@/features/nodes/department-meta'
 import type {
   ApprovalMatrixRule, BillingType, CommercialCalculatorData, CommercialProduct, CommercialSku, Currency,
@@ -176,7 +177,27 @@ function buildDefaultMasters(): MastersState {
     approvalMatrix: APPROVAL_MATRIX.map((r) => ({ ...r })),
     currencies: CURRENCIES.map((r) => ({ ...r })),
     preSales: PRE_SALES.map((r) => ({ ...r })),
+    directoryTypes: DIRECTORY_TYPES.map((r) => ({ ...r })),
+    oemCompanies: [],
+    consortiumPartners: [],
+    ...buildBidTrackerMasters(),
   }
+}
+
+/** Initial Settings > Masters > Live Bids values (packages/domain/src/bidTrackerFields.ts). */
+export function buildBidTrackerMasters(): Pick<MastersState, BidTrackerMasterKey> {
+  return Object.fromEntries(BID_TRACKER_MASTER_KEYS.map(key => [key, bidTrackerMasterSeed(key).map(([code, name, description], i) => ({
+    id: `btm_${key}_${i}`, code, name, description, active: true, displayOrder: i,
+  }))])) as Pick<MastersState, BidTrackerMasterKey>
+}
+
+/** Requirements master rows for every distinct line already saved in bids' Requirement (formerly
+ *  Scope of Work) General field — case-insensitive, A–Z. Mirrors API migration 1791765870000. */
+export function requirementsFromGeneral(values: readonly Readonly<Record<string, string>>[]): MastersState['requirements'] {
+  const byLower = new Map<string, string>()
+  for (const v of values) for (const line of parseMultiValue(v.scopeOfWork)) if (!byLower.has(line.toLowerCase())) byLower.set(line.toLowerCase(), line)
+  return [...byLower.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+    .map((name, i) => ({ id: `btm_requirements_${i}`, code: name, name, description: '', active: true, displayOrder: i }))
 }
 
 /** One active, sellable SKU per seeded `FEATURES` row, generated the same
@@ -207,3 +228,13 @@ export function buildDefaultCommercialCalculatorData(): CommercialCalculatorData
     boqSequenceByYear: {},
   }
 }
+
+/** Initial Settings > Masters > Directory Types. `internal` drives the Amnex Employee tabs; the others list E-mail contacts of that kind. */
+export const DIRECTORY_TYPES = [
+  { id: 'dir_internal', code: 'internal', name: 'Amnex Employee', description: 'Amnex employees, org structure and internal teams', active: true, displayOrder: 0 },
+  { id: 'dir_department', code: 'department', name: 'Departmental', description: 'Client and government department mailboxes', active: true, displayOrder: 1 },
+  { id: 'dir_oem', code: 'oem', name: 'OEMs', description: 'OEM and partner contacts', active: true, displayOrder: 2 },
+  { id: 'dir_competitor', code: 'competitor', name: 'Competitors', description: 'Competitor company contacts', active: true, displayOrder: 3 },
+  { id: 'dir_consortium', code: 'consortium', name: 'Consortium Partners', description: 'Consortium and JV partner contacts', active: true, displayOrder: 4 },
+  { id: 'dir_external', code: 'external', name: 'Others', description: 'Any other external contact', active: true, displayOrder: 5 },
+]

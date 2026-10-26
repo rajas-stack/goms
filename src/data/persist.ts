@@ -1,4 +1,5 @@
 import { SCHEMA_VERSION, migrateSnapshot } from './migrations'
+import { notifyOtherTabs, onOtherTabChange } from './crossTabSync'
 import type { GormsData } from './seed'
 
 /** Local persistence for the in-memory store, so a reload — or the Android
@@ -35,7 +36,14 @@ interface Envelope {
   version: number
   savedAt: string
   data: GormsData
+  /** Unique per write; absent on snapshots saved before cross-tab sync. */
+  rev?: string
 }
+
+/** `rev` of the stored snapshot this tab's in-memory store was loaded from or last
+ *  wrote. A write only lands while the stored `rev` still equals it — otherwise
+ *  another tab saved in between and this tab's copy is stale (see writeSnapshot). */
+let baseRev: string | undefined
 
 /** Resolves to `null` — never rejects — whenever IDB is unavailable: private
  *  browsing, a blocked upgrade, or a WebView with storage disabled. Persistence
@@ -79,6 +87,7 @@ async function readEnvelope(): Promise<Envelope | null> {
 export async function loadSnapshot(): Promise<GormsData | null> {
   const envelope = await readEnvelope()
   if (!envelope) return null
+  baseRev = envelope.rev
   // A version mismatch is now an upgrade, not a discard — see migrations.ts.
   // `null` here means genuinely unmigratable, and the caller falls back to
   // seed data exactly as before.
@@ -109,6 +118,10 @@ export const PERSIST_RETRY_EXHAUSTED_EVENT = 'gorms:persist-retry-exhausted'
  *  unresolved message. */
 export const PERSIST_RECOVERED_EVENT = 'gorms:persist-recovered'
 
+/** Fired when this tab's unsaved edit was dropped because another tab saved
+ *  first (see writeSnapshot) — the user has to redo it, so it can't be silent. */
+export const PERSIST_CONFLICT_EVENT = 'gorms:persist-conflict'
+
 /** No-ops outside a browser (Node test environments) rather than crashing on
  *  a missing global. Real browsers always have `window`, so production
  *  behavior is unchanged. */
@@ -122,29 +135,48 @@ function reportPersistFailure(reason: string): void {
   dispatchWindowEvent(new CustomEvent(PERSIST_FAILED_EVENT, { detail: { reason } }))
 }
 
-/** Resolves `true` on a successful write, `false` on any failure — never
- *  rejects, matching every other function in this module. */
-async function writeSnapshot(data: GormsData): Promise<boolean> {
+type WriteResult = 'saved' | 'conflict' | 'failed'
+
+/** Never rejects, matching every other function in this module. 'conflict'
+ *  means another tab saved since this tab last loaded or saved: nothing is
+ *  written, because this tab's copy lacks that tab's change and would erase it.
+ *  The check and the write share one readwrite transaction, which IndexedDB
+ *  runs exclusively per store, so no other tab can slip a write in between. */
+async function writeSnapshot(data: GormsData): Promise<WriteResult> {
   const db = await openDb()
   if (!db) {
     reportPersistFailure('IndexedDB unavailable')
-    return false
+    return 'failed'
   }
   try {
-    const envelope: Envelope = { version: SCHEMA_VERSION, savedAt: new Date().toISOString(), data }
-    return await new Promise<boolean>((resolve) => {
+    const rev = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+    return await new Promise<WriteResult>((resolve) => {
       const tx = db.transaction(STORE, 'readwrite')
-      tx.objectStore(STORE).put(envelope, KEY)
-      tx.oncomplete = () => resolve(true)
+      const store = tx.objectStore(STORE)
+      let result: WriteResult = 'saved'
+      const current = store.get(KEY)
+      current.onsuccess = () => {
+        const stored = current.result as Envelope | undefined
+        if (stored && stored.rev !== baseRev) { result = 'conflict'; return }
+        const envelope: Envelope = { version: SCHEMA_VERSION, savedAt: new Date().toISOString(), data, rev }
+        store.put(envelope, KEY)
+      }
+      tx.oncomplete = () => {
+        if (result === 'saved') {
+          baseRev = rev
+          notifyOtherTabs()
+        }
+        resolve(result)
+      }
       // The edit itself already succeeded in memory either way — this only
       // means it isn't on disk yet — but that has to be visible somewhere,
       // or it silently keeps not-saving until data is lost on reload.
-      tx.onerror = () => { reportPersistFailure(tx.error?.message ?? 'transaction error'); resolve(false) }
-      tx.onabort = () => { reportPersistFailure(tx.error?.message ?? 'transaction aborted'); resolve(false) }
+      tx.onerror = () => { reportPersistFailure(tx.error?.message ?? 'transaction error'); resolve('failed') }
+      tx.onabort = () => { reportPersistFailure(tx.error?.message ?? 'transaction aborted'); resolve('failed') }
     })
   } catch (e) {
     reportPersistFailure(e instanceof Error ? e.message : String(e))
-    return false
+    return 'failed'
   } finally {
     db.close()
   }
@@ -173,7 +205,7 @@ export function nextRetryDelay(attempt: number): number | null {
 let retryTimer: ReturnType<typeof setTimeout> | undefined
 let retryAttempt = 0
 let hasEverFailed = false
-let inFlightWrite: Promise<boolean> | null = null
+let inFlightWrite: Promise<WriteResult> | null = null
 
 function clearRetryTimer() {
   if (retryTimer !== undefined) {
@@ -186,7 +218,7 @@ function clearRetryTimer() {
  *  "Retry" click landing while an automatic retry is already in flight
  *  reuses that same attempt instead of racing a second transaction against
  *  it (the "no duplicate writes" requirement). */
-function writeOnce(data: GormsData): Promise<boolean> {
+function writeOnce(data: GormsData): Promise<WriteResult> {
   if (inFlightWrite) return inFlightWrite
   inFlightWrite = writeSnapshot(data).finally(() => { inFlightWrite = null })
   return inFlightWrite
@@ -199,8 +231,9 @@ function writeOnce(data: GormsData): Promise<boolean> {
  *  `MAX_AUTO_RETRIES` attempts and fires `PERSIST_RETRY_EXHAUSTED_EVENT`
  *  with a `retry` callback instead of retrying forever. */
 async function attempt(getData: () => GormsData): Promise<void> {
-  const ok = await writeOnce(getData())
-  if (ok) {
+  const result = await writeOnce(getData())
+  if (result === 'conflict') return discardForNewerSnapshot()
+  if (result === 'saved') {
     clearRetryTimer()
     if (hasEverFailed) dispatchWindowEvent(new CustomEvent(PERSIST_RECOVERED_EVENT))
     hasEverFailed = false
@@ -258,6 +291,56 @@ export function scheduleSave(getData: () => GormsData): void {
     if (document.visibilityState === 'hidden') flush()
   })
   window.addEventListener('pagehide', flush)
+}
+
+let applySnapshot: ((data: GormsData) => void) | undefined
+
+/** Edits this tab hasn't got onto disk yet: queued, mid-write, or failed. */
+function hasUnsavedEdits(): boolean {
+  return pending !== undefined || inFlightWrite !== null || hasEverFailed
+}
+
+/** Adopts the stored snapshot when another tab has saved a newer one. Skipped
+ *  while this tab has unsaved edits — replacing the store would silently drop
+ *  them; their own write then hits the rev check and lands in
+ *  `discardForNewerSnapshot`, which comes back here. */
+async function adoptNewerSnapshot(): Promise<void> {
+  if (!applySnapshot || hasUnsavedEdits()) return
+  const envelope = await readEnvelope()
+  // Re-checked after the await: an edit made during the read is unsaved too.
+  if (!envelope || envelope.rev === baseRev || hasUnsavedEdits()) return
+  const data = migrateSnapshot(envelope.data, envelope.version)
+  if (!data) return
+  baseRev = envelope.rev
+  applySnapshot(data)
+}
+
+/** First save wins: this tab's edit was made on a stale copy, so it is dropped
+ *  (and the user told) and the newer snapshot adopted, rather than letting it
+ *  overwrite the other tab's change. */
+async function discardForNewerSnapshot(): Promise<void> {
+  if (timer !== undefined) clearTimeout(timer)
+  timer = undefined
+  pending = undefined
+  clearRetryTimer()
+  retryAttempt = 0
+  hasEverFailed = false
+  dispatchWindowEvent(new CustomEvent(PERSIST_CONFLICT_EVENT))
+  await adoptNewerSnapshot()
+}
+
+/** Keeps this tab's store in step with snapshots other tabs save. `apply` gets
+ *  the newer data and must swap it in WITHOUT scheduling a save — a save would
+ *  re-broadcast it to every tab, forever. */
+export function syncWithOtherTabs(apply: (data: GormsData) => void): void {
+  applySnapshot = apply
+  onOtherTabChange(() => void adoptNewerSnapshot())
+  // A frozen or back/forward-cached tab can miss a message; catch up when it's shown again.
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') void adoptNewerSnapshot()
+    })
+  }
 }
 
 /** Drops the stored snapshot — the escape hatch for a corrupt or unwanted

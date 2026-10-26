@@ -1,11 +1,12 @@
-import { DEFAULT_OWNED_SHEET, isOwnedSheet } from '@goms/domain'
+import { DEFAULT_OWNED_SHEET, isOwnedSheet, type DirectoryRange } from '@goms/domain'
 import { uid } from '@/lib/utils'
 import { buildOwnershipFixture } from './ownership-fixture'
 import { buildSalesRoster, mergeMissingSalesRoster } from './sales-roster-seed'
 import { SALES_TEAM } from './sales-team'
 import { mergeTeamRosters } from './pre-sales-team'
 import { mergeOrgSeed, syncAllTeamsFromOrg, type OrgPerson } from './org-structure'
-import type { DeliveryTeamMember, HierNode, Opportunity } from '@/lib/types'
+import type { DeliveryTeamMember, Employee, HierNode, Opportunity } from '@/lib/types'
+import { backfillDirectoryIds } from './directoryNumbers'
 import { assignMissingOpportunityCodes } from './opportunityCodes'
 import type { GormsData } from './seed'
 import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calculator/seed-defaults'
@@ -46,11 +47,11 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *      had `pricingLevels` missing entirely, crashing `SellingPriceSection`
  *      (`pricingLevels.some(...)`) and `withLiveDraftPricing` on any draft
  *      BOQ containing one.
- *  v13 Bid Tracker's eight new collections (bids, bidMilestones,
+ *  v13 Live Bids' eight new collections (bids, bidMilestones,
  *      bidCorrigenda, bidCorrigendumChanges, protectedValues, bidDocuments,
  *      documentCitations, bidSavedViews) — same "new entity, no prior data,
  *      starts empty" pattern as v10's `customers`.
- *  v14 Bid Tracker custom columns (spec §8.1): `bidCustomFields` and
+ *  v14 Live Bids custom columns (spec §8.1): `bidCustomFields` and
  *      `bidCustomFieldValues`, both starting empty.
  *  v15 `bidCustomFields[].hasHeldValue` — the durable "has ever held a value"
  *      flag that gates hard deletion (spec §8.1). Backfilled from whether the
@@ -75,13 +76,14 @@ import { buildDefaultCommercialCalculatorData } from '@/modules/commercial-calcu
  *      then the Pre-sales / Bid / Legal rosters re-derived from it (existing
  *      member ids kept, so opportunity assignments still resolve).
  *  v22 Sheet ownership: `bids[].sheet` — which Opportunity sheet a bid lives
- *      in. Every existing bid was a Bid Tracker row, so it is backfilled to
+ *      in. Every existing bid was a Live Bids row, so it is backfilled to
  *      'bidTracker'; a bid that already carries a known sheet keeps it.
  *  v23 Per-bid editable synopsis documents, initially empty.
  *  v24 Tender websites saved in Settings (tenderWebsites), initially empty.
  *  v25 Shared credential passphrases, initially empty.
+ *  v26 Directory ID ranges (directoryIdRanges) and a Client Departments number on every filled Account Mapping person.
  */
-export const SCHEMA_VERSION = 25
+export const SCHEMA_VERSION = 26
 
 /** Migrations run over loosely-typed data: an old snapshot by definition
  *  does not match today's `GormsData`, so typing the input as `GormsData`
@@ -444,6 +446,15 @@ export const MIGRATIONS: Record<number, (data: SnapshotShape) => SnapshotShape> 
   23: data => ({ ...data, bidSynopsis: Array.isArray(data.bidSynopsis) ? data.bidSynopsis : [] }),
   24: data => ({ ...data, tenderWebsites: Array.isArray(data.tenderWebsites) ? data.tenderWebsites : [] }),
   25: data => ({ ...data, credentialPassphrases: Array.isArray(data.credentialPassphrases) ? data.credentialPassphrases : [] }),
+  26: toV26,
+}
+
+/** v25 → v26: Directory ID ranges, plus a Client Departments number for every filled Account Mapping person. */
+function toV26(data: SnapshotShape): SnapshotShape {
+  const masters = (data.commercialCalculator as { masters?: { directoryTypes?: { code?: unknown }[] } } | undefined)?.masters
+  const codes = (masters?.directoryTypes ?? []).map(t => (typeof t.code === 'string' ? t.code : '')).filter(Boolean)
+  const { employees, ranges } = backfillDirectoryIds(asArray(data.employees) as unknown as Employee[], asArray(data.directoryIdRanges) as unknown as DirectoryRange[], codes)
+  return { ...data, employees, directoryIdRanges: ranges }
 }
 
 /** Upgrades a stored snapshot to `SCHEMA_VERSION`.

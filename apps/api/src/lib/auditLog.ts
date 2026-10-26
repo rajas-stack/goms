@@ -1,5 +1,5 @@
 // Shared sink for every module's field-level change history — extracted
-// from commercial.ts (spec §16) so Bid Tracker can log into the same
+// from commercial.ts (spec §16) so Live Bids can log into the same
 // generic commercial_audit_logs table (entity_type/entity_id/field/old/new/
 // reason/action/changed_at/changed_by — already generic despite its name)
 // without a second, duplicate table. commercial.ts's own `commercial.

@@ -21,12 +21,12 @@ function renderDialog(managedInBidTracker?: boolean) {
   )
 }
 
-describe('WorkFormDialog — Bid Tracker lock', () => {
+describe('WorkFormDialog — Live Bids lock', () => {
   it('locks Stage and Submission date and explains why when the opportunity has a bid', () => {
     renderDialog(true)
     expect(screen.getByLabelText('Stage')).toBeDisabled()
     expect(screen.getByLabelText('Submission date')).toBeDisabled()
-    expect(screen.getByRole('note')).toHaveTextContent(/Managed in Bid Tracker/)
+    expect(screen.getByRole('note')).toHaveTextContent(/Managed in Live Bids/)
     expect(screen.getByLabelText('Publish date')).toBeEnabled() // everything else stays editable
   })
 
@@ -48,10 +48,11 @@ describe('WorkFormDialog — Opportunity ID', () => {
   it('previews the code live while creating, with # for the number assigned on save', async () => {
     renderWith({})
     const preview = screen.getByTestId('opportunity-code-preview')
-    expect(preview.textContent).toMatch(/^FY\d{2}-Q[1-4]-TRF-NA-NA-NA-NA-NA-#$/)
+    // Vertical starts "Not set" (no default since verticals moved to Settings > Masters).
+    expect(preview.textContent).toMatch(/^FY\d{2}-Q[1-4]-NA-NA-NA-NA-NA-NA-#$/)
     await userEvent.selectOptions(screen.getByLabelText('Opportunity type'), 'GeM')
     await userEvent.type(screen.getByLabelText('Submission date'), '2026-08-15')
-    expect(preview).toHaveTextContent('FY27-Q2-TRF-NA-NA-NA-GEM-NA-#')
+    expect(preview).toHaveTextContent('FY27-Q2-NA-NA-NA-NA-GEM-NA-#')
     expect(screen.getByText(/Number assigned on save/)).toBeInTheDocument()
   })
 

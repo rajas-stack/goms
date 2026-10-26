@@ -93,7 +93,7 @@ const columnFor: Record<string, string> = {
 }
 
 /** Wire shape of a new opportunity. `departmentId` is required here (Account Mapping creates an
- *  opportunity inside a department); the Bid Tracker's Create Bid creates one WITHOUT a department and
+ *  opportunity inside a department); the Live Bids' Create Bid creates one WITHOUT a department and
  *  resolves it in the same transaction (see bids.create / resolveBidDepartment). */
 export const createOpportunitySchema = z.object({
   departmentId: z.string().guid('Invalid UUID'), opportunityName: z.string().min(1),
@@ -132,7 +132,7 @@ async function validateTeamAssignments(client: any, input: Record<string, unknow
 }
 
 /** THE insert path for an opportunity (+ its opening stage-change row) — `opportunities.create` and the
- *  Bid Tracker's create-opportunity-with-bid both go through it. Runs on the caller's transaction client.
+ *  Live Bids' create-opportunity-with-bid both go through it. Runs on the caller's transaction client.
  *  `departmentId` may be null only for the latter, which assigns one before the transaction commits.
  *
  *  The Opportunity ID is assigned here, from the finished row — except with `deferCode`, which the
@@ -235,7 +235,7 @@ export const opportunitiesRouter = router({
             if (input.patch.submissionDate !== undefined) {
               throw new TRPCError({
                 code: 'BAD_REQUEST',
-                message: 'This opportunity has a bid in Bid Tracker — edit its Submission Deadline milestone there instead.',
+                message: 'This opportunity has a bid in Live Bids — edit its Submission Deadline milestone there instead.',
               })
             }
             // Global Constraint: opportunities.stage_key has exactly one
@@ -245,7 +245,7 @@ export const opportunitiesRouter = router({
             // never this procedure — so this guard can never block that sync.
             throw new TRPCError({
               code: 'BAD_REQUEST',
-              message: 'This opportunity has a bid in Bid Tracker — its stage is managed there instead.',
+              message: 'This opportunity has a bid in Live Bids — its stage is managed there instead.',
             })
           }
         }
@@ -270,7 +270,7 @@ export const opportunitiesRouter = router({
           values.push(input.id)
           await client.query(`UPDATE opportunities SET ${setClauses.join(', ')} WHERE id=$${values.length}`, values)
 
-          // The fields the Bid Tracker grid edits inline are part of the BID's history:
+          // The fields the Live Bids grid edits inline are part of the BID's history:
           // log each real change against the bid, and mark the bid as updated.
           const bid = (await client.query('SELECT id FROM bids WHERE opportunity_id=$1', [input.id])).rows[0]
           if (bid && ['gemTenderId', 'referenceNo', 'assignmentName'].some(property => property in input.patch)) {
@@ -320,7 +320,7 @@ export const opportunitiesRouter = router({
       await pool.query('DELETE FROM opportunities WHERE id=$1', [input.id])
     } catch (e) {
       if (isForeignKeyViolation(e)) {
-        throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete this opportunity — it has a bid in Bid Tracker (active or archived). Delete the bid first.' })
+        throw new TRPCError({ code: 'CONFLICT', message: 'Cannot delete this opportunity — it has a bid in Live Bids (active or archived). Delete the bid first.' })
       }
       throw e
     }

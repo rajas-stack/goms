@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Icon } from './Icon'
-import { PERSIST_FAILED_EVENT, PERSIST_RECOVERED_EVENT, PERSIST_RETRY_EXHAUSTED_EVENT } from '@/data/persist'
+import { PERSIST_CONFLICT_EVENT, PERSIST_FAILED_EVENT, PERSIST_RECOVERED_EVENT, PERSIST_RETRY_EXHAUSTED_EVENT } from '@/data/persist'
 
 interface ToastAction {
   label: string
@@ -52,13 +52,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     function onRecovered() {
       push('Changes are saving again.')
     }
+    function onConflict() {
+      push('Another tab saved first, so your last change here was not saved. Please redo it.', undefined, 'error')
+    }
     window.addEventListener(PERSIST_FAILED_EVENT, onPersistFailed)
     window.addEventListener(PERSIST_RETRY_EXHAUSTED_EVENT, onRetryExhausted)
     window.addEventListener(PERSIST_RECOVERED_EVENT, onRecovered)
+    window.addEventListener(PERSIST_CONFLICT_EVENT, onConflict)
     return () => {
       window.removeEventListener(PERSIST_FAILED_EVENT, onPersistFailed)
       window.removeEventListener(PERSIST_RETRY_EXHAUSTED_EVENT, onRetryExhausted)
       window.removeEventListener(PERSIST_RECOVERED_EVENT, onRecovered)
+      window.removeEventListener(PERSIST_CONFLICT_EVENT, onConflict)
     }
   }, [push])
 

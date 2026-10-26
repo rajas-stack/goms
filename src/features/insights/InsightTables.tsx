@@ -6,7 +6,7 @@ import { Icon } from '@/components/ui/Icon'
 import { EmptyChart, money } from './InsightCharts'
 
 export const STATUS: Record<string, string> = { onTrack: 'On Track', overdue: 'Overdue', dueSoon: 'Due Soon', corrigendumPending: 'Review Pending' }
-export const bidUrl = (id: string, tab = 'overview') => `/bid-tracker/bid/${encodeURIComponent(id)}?tab=${tab}`
+export const bidUrl = (id: string, tab = 'overview') => `/live-bids/bid/${encodeURIComponent(id)}?tab=${tab}`
 export function Segment({ options, value, onChange, label }: { options: string[]; value: string; onChange: (v: string) => void; label: string }) {
   return <div className="insight-segment" role="group" aria-label={label}>{options.map(option => <button key={option} type="button" aria-pressed={option === value} onClick={() => onChange(option)}>{option}</button>)}</div>
 }

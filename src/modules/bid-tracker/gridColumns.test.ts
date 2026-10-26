@@ -4,7 +4,7 @@ import type { BidCustomField, BidGridRow } from '@/lib/types'
 import {
   CUSTOM_GROUP, GRID_GROUPS, STANDARD_COLUMNS, buildLookups, compareTyped, customColumnMeta, formatValueText, ignoredRules,
   isRuleComplete, operatorLabel, optionsOf, resolveColumns, resolveVisibleColumns, rowMatchesSearch, sortKeyOf,
-  orderedColumnIds, setColumnVisibility, showAllColumnIds, defaultVisibleColumnIds,
+  orderedColumnIds, setColumnVisibility, showAllColumnIds, defaultVisibleColumnIds, columnsForLifecycle,
 } from './gridColumns'
 
 const field = (over: Partial<BidCustomField> & Pick<BidCustomField, 'key' | 'name' | 'dataType'>): BidCustomField => ({
@@ -14,22 +14,22 @@ const field = (over: Partial<BidCustomField> & Pick<BidCustomField, 'key' | 'nam
 
 // The guard against a future edit silently dropping a required column (spec §8).
 describe('grid column registry — completeness', () => {
-  it('has exactly the seven required groups, in spec order', () => {
-    expect(GRID_GROUPS.map((g) => g.label)).toEqual(['Identity', 'Client', 'Ownership', 'Decision', 'Dates', 'Documents', 'System', 'General'])
+  it('keeps lifecycle sections in order before bid-specific details', () => {
+    expect(GRID_GROUPS.map((g) => g.label)).toEqual(['Identity', 'Scope of Work', 'Client', 'Ownership', 'Campaign', 'Funnel', 'Backup', 'Commit', 'Decision', 'Dates', 'Documents', 'System', 'General'])
     // The Custom group is separate: it follows the seven and only exists with custom columns.
     expect(GRID_GROUPS.some((g) => g.id === CUSTOM_GROUP.id)).toBe(false)
   })
 
   it('names every required leaf column under its own group', () => {
     const byGroup = (id: string) => STANDARD_COLUMNS.filter((c) => c.group === id).map((c) => c.header)
-    expect(byGroup('identity')).toEqual(['Opportunity / Mission', 'Opportunity Type', 'Bid ID', 'Tender ID', 'Reference/Bid No.', 'Name of Assignment', 'Tender Link', 'Sheet'])
-    expect(byGroup('client')).toEqual(['Department / Client', 'State', 'City', 'Sector'])
+    expect(byGroup('identity')).toEqual(['Opportunity / Mission', 'Opportunity Type', 'Bid ID', 'Tender ID', 'Reference/Bid No.', 'Name of Assignment', 'Tender Link'])
+    expect(byGroup('client')).toEqual(['Department / Client', 'State', 'City', 'Vertical'])
     expect(byGroup('ownership')).toEqual(['Geo-sales', 'BU-sales', 'Pre-sales', 'Legal', 'Bid', 'Bid Owner', 'Sales Lead / Solution Lead'])
     expect(byGroup('decision')).toEqual(['Bid Stage', 'Next Action', 'Action Owner', 'Action Due', 'Attention', 'Decision'])
     expect(byGroup('dates')).toEqual(['Next Milestone', 'Days Remaining', 'Submission Deadline'])
     expect(byGroup('documents')).toEqual(['Tender Files', 'Latest Corrigendum'])
     expect(byGroup('system')).toEqual(['Last Updated', 'Updated By', 'Data Confidence'])
-    expect(STANDARD_COLUMNS).toHaveLength(33)
+    expect(STANDARD_COLUMNS).toHaveLength(32)
     expect(STANDARD_COLUMNS.some(column => column.id === 'manage')).toBe(false)
   })
 
@@ -43,7 +43,8 @@ describe('grid column registry — completeness', () => {
   it('every column has a data type whose operators exist', () => {
     for (const c of STANDARD_COLUMNS) {
       expect(OPERATORS_BY_TYPE[c.type!]).toBeDefined()
-      if (c.type === 'select') expect(c.options?.length).toBeGreaterThan(0)
+      // Vertical's options come from Settings > Masters > Verticals at runtime.
+      if (c.type === 'select' && c.id !== 'vertical') expect(c.options?.length).toBeGreaterThan(0)
     }
   })
 
@@ -52,7 +53,7 @@ describe('grid column registry — completeness', () => {
       'opportunityName', 'opportunityType', 'gemTenderId', 'referenceNo', 'assignmentName', 'tenderLink', 'departmentName', 'stateCode', 'city', 'vertical',
       'geoSalesPersonId', 'buSalesPersonId', 'preSalesPersonId', 'legalPersonId', 'bidTeamMemberId',
       'ownerEmail', 'solutionLeadEmail', 'stageKey', 'nextActionNote', 'nextActionAssigneeEmail', 'nextActionDueDate',
-      'decision', 'dataConfidence',
+      'decision', 'submissionDate', 'dataConfidence',
     ])
   })
 
@@ -64,27 +65,27 @@ describe('grid column registry — completeness', () => {
     }
   })
 
-  it('keeps ids, protected deadline, derived and system columns read-only', () => {
+  it('keeps ids, derived and system columns read-only', () => {
     const readOnly = (id: string) => !STANDARD_COLUMNS.find((c) => c.id === id)!.editable
     for (const id of [
-      'bidCode', 'submissionDate',
+      'bidCode',
       'nextMilestoneLabel', 'daysRemaining',
-      'documentCount', 'latestCorrigendumStatus', 'updatedAt', 'updatedBy', 'attentionFlag', 'sheet',
+      'documentCount', 'latestCorrigendumStatus', 'updatedAt', 'updatedBy', 'attentionFlag',
     ]) expect(readOnly(id), id).toBe(true)
   })
 
-  it('the Sheet column names every sheet a row can live in, and is changed only through Move to…', () => {
-    const sheet = STANDARD_COLUMNS.find((c) => c.id === 'sheet')!
-    expect(sheet).toMatchObject({ header: 'Sheet', group: 'identity', type: 'select', readOnlyReason: 'Use Move to… to change the sheet' })
-    expect(sheet.options?.map((o) => o.label)).toEqual(['Bid Tracker', 'Pipeline · Funnel', 'Pipeline · Backup', 'Pipeline · Commits', 'Campaign'])
-  })
-
-  it('shows the Sheet column by default on Master only', () => {
+  it('shows the current stage and restricts earlier grids even when a saved view requests future fields', () => {
     const all = resolveColumns([])
-    expect(resolveVisibleColumns(all, defaultVisibleColumnIds(all, 'master')).map(column => column.id)).toContain('sheet')
-    const ids = resolveVisibleColumns(all, defaultVisibleColumnIds(all, 'campaign')).map((c) => c.id)
-    expect(ids).not.toContain('sheet')
-    expect(ids).toHaveLength(STANDARD_COLUMNS.length - 1)
+    const campaign = columnsForLifecycle(all, 'campaign')
+    expect(campaign.map(column => column.id)).toContain('sheet')
+    expect(campaign.map(column => column.id)).toContain('lifecycle:clientNeed')
+    expect(campaign.map(column => column.id)).not.toContain('gemTenderId')
+    expect(resolveVisibleColumns(campaign, ['opportunityName', 'gemTenderId', 'lifecycle:resourcePlan']).map(column => column.id)).toEqual(['opportunityName'])
+    const funnel = columnsForLifecycle(all, 'pipeline-funnel')
+    expect(funnel.map(column => column.id)).toContain('lifecycle:clientNeed')
+    expect(funnel.map(column => column.id)).toContain('lifecycle:expectedRfpDate')
+    expect(funnel.map(column => column.id)).not.toContain('lifecycle:resourcePlan')
+    expect(columnsForLifecycle(all, 'bidTracker').map(column => column.id)).toContain('gemTenderId')
   })
 
   it('makes the Opportunity / Mission name required when edited', () => {
@@ -99,7 +100,9 @@ describe('custom columns', () => {
       field({ key: 'a', name: 'A', dataType: 'number', position: 0 }),
       field({ key: 'gone', name: 'Gone', dataType: 'text', position: 2, status: 'archived' }),
     ])
-    expect(cols.slice(0, STANDARD_COLUMNS.length)).toEqual(STANDARD_COLUMNS)
+    // Columns are ordered by group (Scope of Work sits after Identity); standard columns keep their own order.
+    expect(cols.filter((c) => STANDARD_COLUMNS.some((s) => s.id === c.id))).toEqual(STANDARD_COLUMNS)
+    expect(cols.slice(cols.findIndex((c) => c.group === 'custom')).every((c) => c.group === 'custom')).toBe(true)
     const custom = cols.filter(column => column.group === 'custom')
     expect(custom.map((c) => c.id)).toEqual(['custom:a', 'custom:b'])
     expect(custom.every((c) => c.group === 'custom' && c.editable === 'custom')).toBe(true)
@@ -190,6 +193,8 @@ describe('typed columns — entity lookups, display, sort, search', () => {
     expect(formatValueText(col('person'), 'p-1', lookups)).toBe('Shubham')
     expect(formatValueText(col('state'), 27, lookups)).toBe('Maharashtra')
     expect(formatValueText(col('department'), 'd-9', lookups)).toBe('d-9') // unknown record: id, not blank
+    expect(formatValueText(col('person'), '["p-2","p-1"]', lookups)).toBe('Asha Rao, Shubham') // people column set to Multiple
+    expect(formatValueText({ type: 'select', options: [{ value: 'won', label: 'Won' }] }, 'won')).toBe('Won')
   })
 
   it('formats amounts in rupees and multi-selects as a list', () => {

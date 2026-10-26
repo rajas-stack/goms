@@ -8,6 +8,9 @@ import type { Employee } from '@/lib/types'
 
 vi.mock('@/features/workspace/context', () => ({ useWorkspace: () => ({ selection: null, select: vi.fn() }) }))
 vi.mock('@/lib/useMediaQuery', () => ({ useMediaQuery: () => false }))
+const profiles = vi.hoisted(() => ({ data: undefined as any, isError: false }))
+vi.mock('@/features/dms/ProfileImagesContext', () => ({ useProfileImagesIndex: () => profiles.data }))
+vi.mock('@/lib/useProfileImage', () => ({ useProfileImage: (image: any) => ({ ref: { current: null }, url: image ? `blob:${image.version}` : null }) }))
 // jsdom's 0-height scroll container makes @tanstack/react-virtual's real
 // windowing report zero visible rows — this test cares about the filter
 // logic feeding the list, not the virtualization itself, so it's replaced
@@ -47,6 +50,19 @@ function renderDirectory(employees: Employee[]) {
   )
 }
 
+it('refreshes People avatars on a Drive version/folder change and uses initials for unmatched people', () => {
+  stub()
+  profiles.data = { configured: true, versions: { 'emp-1': 'folder-a-version' } }
+  const people = [makeEmployee({ name: 'Jane Doe', photoUrl: 'https://old.example/photo.jpg' }), makeEmployee({ id: 'emp-2', name: 'Unmatched Person', photoUrl: 'https://old.example/other.jpg' })]
+  const view = renderDirectory(people)
+  expect(screen.getByRole('img', { name: 'Jane Doe' })).toHaveAttribute('src', 'blob:folder-a-version')
+  expect(screen.getByText('UP')).toBeInTheDocument()
+  profiles.data = { configured: true, versions: { 'emp-1': 'folder-b-version' } }
+  view.rerender(<QueryClientProvider client={new QueryClient()}><PeopleDirectory employees={people} /></QueryClientProvider>)
+  expect(screen.getByRole('img', { name: 'Jane Doe' })).toHaveAttribute('src', 'blob:folder-b-version')
+  profiles.data = undefined
+})
+
 describe('PeopleDirectory — List view search (item 7)', () => {
   it('filters people by a partial, case-insensitive match on name', async () => {
     stub()
@@ -56,7 +72,7 @@ describe('PeopleDirectory — List view search (item 7)', () => {
       makeEmployee({ id: 'e2', name: 'Bilal Khan' }),
     ])
 
-    await user.type(screen.getByPlaceholderText(/search by name/i), 'asha')
+    await user.type(screen.getByPlaceholderText(/search name/i), 'asha')
 
     expect(screen.getByTestId('person-row-e1')).toBeInTheDocument()
     expect(screen.queryByTestId('person-row-e2')).not.toBeInTheDocument()
@@ -70,7 +86,7 @@ describe('PeopleDirectory — List view search (item 7)', () => {
       makeEmployee({ id: 'e2', name: 'Bilal Khan', phone: '9111100000' }),
     ])
 
-    await user.type(screen.getByPlaceholderText(/search by name/i), '98765')
+    await user.type(screen.getByPlaceholderText(/search name/i), '98765')
 
     expect(screen.getByTestId('person-row-e1')).toBeInTheDocument()
     expect(screen.queryByTestId('person-row-e2')).not.toBeInTheDocument()

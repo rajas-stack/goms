@@ -1,4 +1,4 @@
-import type { CredentialPassphrase } from '@goms/domain'
+import type { CredentialPassphrase, PeopleColumnConfig } from '@goms/domain'
 import type {
   Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue, BidDocument, BidMilestone, BidSavedView,
   Customer, DeliveryTeamMember, DocumentCitation, Employee, ExternalId, FollowUp, HierNode, MergeAuditRecord, Opportunity, OpportunityStageChange,
@@ -18,6 +18,8 @@ import type { InsightReport, InsightVisual } from '@goms/domain'
 import type { StoredDepartment } from './in-memory/amnexDepartments'
 import type { LocalMakerDocument } from './in-memory/makerDocuments'
 import type { RbacLocalState } from './in-memory/rbacTree'
+import type { DirectoryRange } from '@goms/domain'
+import { backfillDirectoryIds } from './directoryNumbers'
 
 interface AdminState {
   st_code: number
@@ -77,6 +79,8 @@ export interface GormsData {
   makerDocuments?: LocalMakerDocument[]
   nodes: HierNode[]
   employees: Employee[]
+  /** Directory ID ranges per external category; rows are never removed, so ranges are never reissued. */
+  directoryIdRanges: DirectoryRange[]
   externalIds: ExternalId[]
   timeline: TimelineEvent[]
   transfers: Transfer[]
@@ -104,7 +108,7 @@ export interface GormsData {
   /** Company Org Structure — levels and reports-to (src/data/org-structure.ts). */
   orgPeople: OrgPerson[]
 
-  /** Added in v13 (Bid Tracker). All start empty — no demo/sample bid data
+  /** Added in v13 (Live Bids). All start empty — no demo/sample bid data
    *  is ever seeded (design spec, explicit non-goal). */
   bids: Bid[]
   bidMilestones: BidMilestone[]
@@ -117,7 +121,7 @@ export interface GormsData {
   bidDocuments: BidDocument[]
   documentCitations: DocumentCitation[]
   bidSavedViews: BidSavedView[]
-  /** Added in v14 (Bid Tracker custom columns, spec §8.1). Start empty. */
+  /** Added in v14 (Live Bids custom columns, spec §8.1). Start empty. */
   bidCustomFields: BidCustomField[]
   bidCustomFieldValues: BidCustomFieldValue[]
   /** Added in v25: encrypted verification envelopes for shared passphrases. */
@@ -133,6 +137,8 @@ export interface GormsData {
   /** Insights Studio saved visuals and reports. Optional: older snapshots lack them. */
   insightVisuals?: InsightVisual[]
   insightReports?: InsightReport[]
+  /** Live Bids › Manage columns › People columns, by column id. Optional: older snapshots lack it. */
+  peopleColumnConfigs?: Record<string, PeopleColumnConfig>
 }
 
 export function buildSeed(): GormsData {
@@ -342,8 +348,9 @@ export function buildSeed(): GormsData {
     },
   )
 
+  const directory = backfillDirectoryIds(employees, [], commercialCalculator.masters.directoryTypes.map(t => t.code))
   return {
-    nodes, employees, externalIds, timeline, transfers,
+    nodes, employees: directory.employees, directoryIdRanges: directory.ranges, externalIds, timeline, transfers,
     opportunities, opportunityStageChanges, opportunityCodeSequences: {}, followUps, salesPersons, salesPostings,
     ownershipAssignments, mergeAudit, commercialCalculator,
     customers: [],
