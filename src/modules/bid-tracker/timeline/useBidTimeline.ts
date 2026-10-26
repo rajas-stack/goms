@@ -2,6 +2,8 @@
 // audit trail, corrigenda, follow-ups, milestones) and maps them to an
 // OpportunityTimeline. The visual component knows nothing about bids.
 import { useMemo } from 'react'
+import { builtInBidStageFor } from '@goms/domain'
+import { useBidStages } from '@/features/masters/useBidStages'
 import { useBid, useBidCorrigenda, useBidMilestones, useBidsForGrid, useFollowUps, useSalesPersons } from '@/lib/api'
 import { isoToday } from '@/lib/dates'
 import { useAuditLogs } from '@/modules/commercial-calculator/api'
@@ -26,13 +28,17 @@ export function useBidTimeline(bidId: string | null): BidTimelineResult {
   const submissionDate = gridRow?.submissionDate ?? null
   const today = isoToday()
 
+  const stages = useBidStages()
+
   const timeline = useMemo(() => {
     if (!bid) return null
+    // The phases are the built-in stages: a user-added stage reads as the built-in stage before it.
+    const phase = (key: string) => (key ? builtInBidStageFor(key, stages) : key)
     const stageChanges: StageChange[] = logs
       .filter((l) => l.entityType === 'bid' && l.entityId === bid.id && l.field === 'stageKey')
-      .map((l) => ({ changedAt: l.changedAt, oldValue: l.oldValue, newValue: l.newValue }))
-    return buildBidTimeline({ bid, submissionDate, opportunityType: gridRow?.opportunityType ?? null, stageChanges, corrigenda, followUps, milestones, people, today })
-  }, [bid, logs, submissionDate, gridRow?.opportunityType, corrigenda, followUps, milestones, people, today])
+      .map((l) => ({ changedAt: l.changedAt, oldValue: phase(l.oldValue), newValue: phase(l.newValue) }))
+    return buildBidTimeline({ bid: { ...bid, stageKey: phase(bid.stageKey) }, submissionDate, opportunityType: gridRow?.opportunityType ?? null, stageChanges, corrigenda, followUps, milestones, people, today })
+  }, [bid, logs, stages, submissionDate, gridRow?.opportunityType, corrigenda, followUps, milestones, people, today])
 
   return { timeline, isLoading: bidLoading || logsLoading, isClosed: !!timeline?.outcome }
 }

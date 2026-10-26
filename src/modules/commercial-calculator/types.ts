@@ -61,11 +61,11 @@ export interface ProductEditionFeature {
 export type MasterEntityKey =
   | 'verticals' | 'products' | 'modules' | 'features'
   | 'skuCategories' | 'unitsOfMeasure' | 'productEditions' | 'billingTypes'
-  | 'taxClasses' | 'approvalMatrix' | 'currencies' | 'preSales' | 'directoryTypes'
-  /** Settings > Masters > Bid Tracker dropdowns (packages/domain/src/bidTrackerFields.ts). */
+  | 'taxClasses' | 'approvalMatrix' | 'currencies' | 'preSales' | 'directoryTypes' | 'oemCompanies' | 'consortiumPartners'
+  /** Settings > Masters > Live Bids dropdowns (packages/domain/src/bidTrackerFields.ts). */
   | BidTrackerMasterKey
 
-/** A Bid Tracker dropdown value: `name` is stored on bids, `description` is its full form. */
+/** A Live Bids dropdown value: `name` is stored on bids, `description` is its full form. */
 export interface BidTrackerMasterRow extends MasterBase {}
 
 export interface MasterRowMap extends Record<BidTrackerMasterKey, BidTrackerMasterRow> {
@@ -82,6 +82,8 @@ export interface MasterRowMap extends Record<BidTrackerMasterKey, BidTrackerMast
   currencies: Currency
   preSales: PreSales
   directoryTypes: BidTrackerMasterRow
+  oemCompanies: BidTrackerMasterRow
+  consortiumPartners: BidTrackerMasterRow
 }
 
 export type MastersState = { [K in MasterEntityKey]: MasterRowMap[K][] }

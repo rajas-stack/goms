@@ -21,7 +21,7 @@ export const MASTER_PAGE_LIST: readonly MasterPageMeta[] = [
   { kind: 'email-contacts', title: 'Email Contacts', hint: 'Reviewed OEM, external and client department email participants.', modules: ['am.contacts'], wide: true },
   { kind: 'employees', title: 'Employee Master', hint: 'Amnex departments employees belong to.', modules: [] },
   { kind: 'sales-photos', title: 'Sales Team Photos', hint: 'Match profile photos from a Google Drive folder to sales people by name.', modules: ['team.sales'], wide: true },
-  { kind: 'bid-tracker', title: 'Bid Tracker', hint: 'Bid Tracker dropdowns: priority, payment modes, EMD instruments, RTM, zones, tender statuses, BU owners.', modules: ['com.masters'], wide: true },
+  { kind: 'bid-tracker', title: 'Live Bids', hint: 'Live Bids dropdowns: priority, payment modes, EMD instruments, RTM, zones, tender statuses, BU owners, requirements, products.', modules: ['com.masters'], wide: true },
   { kind: 'verticals', title: 'Verticals', hint: 'Verticals used by opportunities, bids, SKUs and imports.', modules: ['com.masters'], wide: true },
   { kind: 'product-hierarchy', title: 'Product Hierarchy', hint: 'Vertical → Product → Module → Feature.', modules: ['com.masters'], wide: true },
   { kind: 'sku-catalog', title: 'SKU Catalog', hint: 'Sellable SKUs and their bills of material.', modules: ['com.skus'], wide: true },
@@ -33,5 +33,7 @@ export const MASTER_PAGE_LIST: readonly MasterPageMeta[] = [
   { kind: 'approval-matrix', title: 'Approval Matrix', hint: 'Discount bands and who approves them.', modules: ['com.approvalMatrix'], wide: true },
   { kind: 'currencies', title: 'Currencies', hint: 'Currencies and exchange rates.', modules: ['com.masters'], wide: true },
   { kind: 'pre-sales', title: 'Pre-Sales', hint: 'Pre-sales reference entries for the Commercial Calculator.', modules: ['com.masters'], wide: true },
+  { kind: 'oem-companies', title: 'OEM Companies', hint: 'Companies a Directory OEM contact works for.', modules: ['com.masters', 'am.contacts'], wide: true },
+  { kind: 'consortium-partners', title: 'Consortium Partners', hint: 'Consortium and JV partner companies for Directory contacts.', modules: ['com.masters', 'am.contacts'], wide: true },
   { kind: 'directory-types', title: 'Directory Types', hint: 'Directory dropdown: Amnex Employee, Departmental, OEMs and more.', modules: ['com.masters'], wide: true },
 ]

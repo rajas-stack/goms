@@ -7,7 +7,6 @@ const mocks = vi.hoisted(() => ({ refetch: vi.fn(), import: vi.fn(), export: vi.
 vi.mock('@/app/AppLayout', () => ({ useShell: () => ({ openImport: mocks.import }) }))
 vi.mock('@/lib/csv', async original => ({ ...await original<typeof import('@/lib/csv')>(), downloadCsv: mocks.export }))
 vi.mock('@/lib/rbacTree/access', () => ({ useNodeFilter: () => (id: string) => id !== mocks.deny }))
-vi.mock('@/app/routes/SalesTeamInsights', () => ({ SalesTeamInsights: () => <div>Original sales team analytics</div> }))
 vi.mock('@/app/routes/RelationshipAnalytics', () => ({ RelationshipAnalytics: () => <div>Original relationship analytics</div> }))
 vi.mock('@/lib/api', () => ({ useInsights: (filters: InsightsFilters, enabled: boolean) => { mocks.query(filters, enabled); return { data: computeInsights(mocks.state === 'empty' ? [] : records, filters, '2026-10-15'), isLoading: mocks.state === 'loading', isError: mocks.state === 'error', isFetching: false, refetch: mocks.refetch } } }))
 import { Insights } from './InsightsDashboard'
@@ -29,9 +28,8 @@ describe('Insights screenshot coverage', () => {
   it.each([['Sales', 'Opportunities by Sales Owner'], ['Presales', 'Presales Opportunity Load'], ['Bids', 'Bid Attention'], ['Revenue', 'Won Opportunity Value'], ['Competitors', 'Recorded Competitor Exposure'], ['Team', 'Bid Team Workload'], ['Forecast', 'Weighted Forecast by Due Quarter']])('opens the working %s view', async (tab, title) => {
     boot(); await userEvent.click(within(screen.getByRole('navigation', { name: 'Insights views' })).getByRole('button', { name: tab })); expect(screen.getByRole('region', { name: title })).toBeVisible()
   })
-  it('preserves both existing analytics views', async () => {
-    boot(); await userEvent.click(screen.getByRole('button', { name: 'Sales Team Insights' })); expect(screen.getByText('Original sales team analytics')).toBeVisible()
-    await userEvent.click(screen.getByRole('button', { name: 'Relationship Analytics' })); expect(screen.getByText('Original relationship analytics')).toBeVisible()
+  it('preserves the existing relationship analytics view', async () => {
+    boot(); await userEvent.click(screen.getByRole('button', { name: 'Relationship Analytics' })); expect(screen.getByText('Original relationship analytics')).toBeVisible()
   })
   it('filters actual statistics by vertical, state, search and clear', async () => {
     boot(); await userEvent.selectOptions(screen.getByLabelText('Insights vertical'), 'GIS')
@@ -42,12 +40,12 @@ describe('Insights screenshot coverage', () => {
     await userEvent.type(screen.getByLabelText('Search insights'), 'AI Sangrah')
     expect(within(screen.getByRole('region', { name: 'Recent Opportunities' })).getByRole('link', { name: 'AI Sangrah' })).toBeVisible()
   })
-  it('links recent opportunities and status to the exact Bid Tracker Overview', () => {
+  it('links recent opportunities and status to the exact Live Bids Overview', () => {
     boot(); const recent = within(screen.getByRole('region', { name: 'Recent Opportunities' }))
-    expect(recent.getByRole('link', { name: 'AI Sangrah' })).toHaveAttribute('href', '/bid-tracker/bid/bid-a?tab=overview')
-    expect(recent.getByRole('link', { name: 'Overdue' })).toHaveAttribute('href', '/bid-tracker/bid/bid-a?tab=overview')
+    expect(recent.getByRole('link', { name: 'AI Sangrah' })).toHaveAttribute('href', '/live-bids/bid/bid-a?tab=overview')
+    expect(recent.getByRole('link', { name: 'Overdue' })).toHaveAttribute('href', '/live-bids/bid/bid-a?tab=overview')
   })
-  it('takes recent opportunities from Bid Tracker, not Pipeline or Campaign', () => {
+  it('takes recent opportunities from Live Bids, not Pipeline or Campaign', () => {
     records.push({ ...records[0], id: 'campaign-row', opportunityId: 'campaign-opp', name: 'Campaign only', sheet: 'campaign' })
     records.push({ ...records[0], id: 'pipeline-row', opportunityId: 'pipeline-opp', name: 'Pipeline only', sheet: 'pipeline-funnel' })
     boot(); const recent = within(screen.getByRole('region', { name: 'Recent Opportunities' }))
@@ -61,7 +59,7 @@ describe('Insights screenshot coverage', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await userEvent.click(screen.getByRole('button', { name: 'View All' })); await waitFor(() => expect(screen.getByRole('dialog', { name: 'All opportunities' })).toBeVisible())
     await userEvent.keyboard('{Escape}'); await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    await userEvent.click(screen.getByRole('button', { name: 'Actions for AI Sangrah' })); expect(screen.getByRole('link', { name: 'Open Competition' })).toHaveAttribute('href', '/bid-tracker/bid/bid-a?tab=competition')
+    await userEvent.click(screen.getByRole('button', { name: 'Actions for AI Sangrah' })); expect(screen.getByRole('link', { name: 'Open Competition' })).toHaveAttribute('href', '/live-bids/bid/bid-a?tab=competition')
   })
   it('changes monthly/quarterly and value/count modes, and exports filtered safe CSV', async () => {
     boot(); await userEvent.click(screen.getByRole('button', { name: 'Quarterly' }))

@@ -75,7 +75,7 @@ test('All chart interactions open the correct source records', async ({ page }) 
 })
 test('Recent status and row actions navigate to the exact bid screens', async ({ page }) => {
   await open(page); await page.getByRole('button', { name: 'Actions for AI Sangrah - 2nd call' }).click()
-  for (const [name, tab] of [['Open Overview', 'overview'], ['Open General', 'general'], ['Open Competition', 'competition']]) await expect(page.getByRole('link', { name })).toHaveAttribute('href', `/bid-tracker/bid/insights-bid-0?tab=${tab}`)
+  for (const [name, tab] of [['Open Overview', 'overview'], ['Open General', 'general'], ['Open Competition', 'competition']]) await expect(page.getByRole('link', { name })).toHaveAttribute('href', `/live-bids/bid/insights-bid-0?tab=${tab}`)
   await page.getByRole('link', { name: 'Open Overview' }).click(); await expect(page).toHaveURL(/insights-bid-0\?tab=overview/)
   await expect(page.getByRole('heading', { name: 'AI Sangrah - 2nd call', exact: true })).toBeVisible(); await expect(page.getByText('Overdue', { exact: true }).first()).toBeVisible()
 })
@@ -87,7 +87,6 @@ test('Filtered export, refresh and import work', async ({ page }) => {
 test('Sidebar, legacy URL and both original analytics views remain available', async ({ page }) => {
   await open(page); await page.getByRole('navigation').getByRole('button', { name: 'Insights', exact: true }).click(); await expect(page).toHaveURL(/\/insights$/)
   await page.goto('/analytics', { waitUntil: 'domcontentloaded' }); await expect(page.getByRole('heading', { name: 'Insights', exact: true })).toBeVisible()
-  await page.getByRole('navigation', { name: 'Insights views' }).getByRole('button', { name: 'Sales Team Insights', exact: true }).click(); await expect(page.getByRole('heading', { name: 'Sales Team Insights', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Relationship Analytics', exact: true }).click(); await expect(page.getByRole('heading', { name: 'Relationship Analytics', exact: true })).toBeVisible()
 })
 test('Mobile layout, map filtering and menu navigation work without page overflow', async ({ page }, info) => {
@@ -106,7 +105,7 @@ test('Every headline and key insight opens its source records', async ({ page })
   const keys = page.getByRole('region', { name: 'Key Insights' }).getByRole('button')
   expect(await keys.count()).toBe(3)
   for (let i = 0; i < 3; i++) { await keys.nth(i).click(); await expect(page.getByRole('dialog')).toBeVisible(); await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0) }
-  await expect(page.getByRole('region', { name: 'Key Insights' }).getByRole('link')).toHaveAttribute('href', /\/bid-tracker\/bid\/insights-bid-\d+\?tab=overview/)
+  await expect(page.getByRole('region', { name: 'Key Insights' }).getByRole('link')).toHaveAttribute('href', /\/live-bids\/bid\/insights-bid-\d+\?tab=overview/)
 })
 test('Night theme preserves chart data and readable surfaces', async ({ page }, info) => {
   await page.emulateMedia({ colorScheme: 'dark' }); await open(page)
@@ -237,13 +236,7 @@ test.describe('Accessible mobile chart motion', () => {
 })
 
 test('Retained analytics chart primitives support the shared focus previews', async ({ page }) => {
-  await page.goto('/insights?tab=salesTeam', { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { name: 'Sales Team Insights', exact: true })).toBeVisible()
-  const bar = page.locator('.insight-legacy-bar').first()
-  await bar.focus(); await expect(page.getByRole('tooltip')).toBeVisible()
-  await expect(page.getByRole('tooltip')).toContainText('Value')
-  await page.keyboard.press('Escape'); await expect(page.getByRole('tooltip')).toHaveCount(0)
-  await page.getByRole('button', { name: 'Relationship Analytics', exact: true }).click()
+  await page.goto('/insights?tab=relationships', { waitUntil: 'domcontentloaded' })
   await page.getByRole('img', { name: /^Connected: / }).focus()
   await expect(page.getByRole('tooltip')).toContainText('Contacts')
 })

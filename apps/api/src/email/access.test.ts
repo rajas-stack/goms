@@ -15,7 +15,7 @@ beforeEach(() => { vi.clearAllMocks(); m.row.mockResolvedValue(structuredClone(r
 describe('fresh business-record involvement', () => {
   it('rechecks assignments and revokes contextual access as soon as an assignment is removed', async () => {
     m.query.mockResolvedValue({ rows: [{ opportunity_name: 'Allowed' }] })
-    expect(await assertEmailEntity(actor, ref)).toMatchObject({ path: '/bid-tracker/bid/bid?tab=communication' })
+    expect(await assertEmailEntity(actor, ref)).toMatchObject({ path: '/live-bids/bid/bid?tab=communication' })
     m.row.mockResolvedValue({ ...row, facts: { ...row.facts, assigned: { presales: null, legal: null, bid: null } } })
     m.query.mockResolvedValue({ rows: [] })
     expect(await visibleEmailEntity(actor, ref)).toBeNull()

@@ -3,6 +3,7 @@
 // (sales_persons) and the Pre-sales / Bid / Legal rosters (delivery_team_members; members mirrored from the org are
 // folded into their org person). People are matched by lower-cased email, falling back to a normalized name when one side
 // has no email.
+import { formatAmnexId, parseEmployeeNumber } from '@goms/domain'
 import { SALES_ROLE_STATUSES } from '@goms/domain'
 import type { DeliveryTeamKey, DeliveryTeamMember, SalesPerson } from '@/lib/types'
 import { TEAM_DEPARTMENT, type OrgPerson } from '@/data/org-structure'
@@ -27,6 +28,8 @@ export interface MasterEmployee {
   sources: EmployeeSource[]
   /** Set when the person is in Teams > Employees (org_people); null means "only in another roster". */
   orgPersonId: string | null
+  /** Amnex employee number (shown as AIPL_<number>): the org record's, else the Sales roster's. */
+  employeeNumber?: string | null
   status: 'active' | 'inactive'
 }
 
@@ -43,25 +46,26 @@ interface Candidate {
   departments: string[]
   source: EmployeeSource
   orgPersonId: string | null
+  employeeNumber: string | null
   active: boolean
 }
 
 const fromOrg = (p: OrgPerson): Candidate => ({
   id: p.id, key: p.id, name: p.name, email: p.email ?? '', designation: p.designation, level: p.level, departments: p.departments,
-  source: 'org', orgPersonId: p.id, active: p.status === 'active',
+  source: 'org', orgPersonId: p.id, employeeNumber: p.employeeNumber ?? null, active: p.status === 'active',
 })
 const fromMember = (m: DeliveryTeamMember): Candidate => ({
   id: m.id, key: `${m.team}:${m.id}`, name: m.name, email: m.email ?? '', designation: m.designation ?? '', level: null,
-  departments: [TEAM_DEPARTMENT[m.team]], source: m.team, orgPersonId: m.orgPersonId ?? null, active: m.status === 'active',
+  departments: [TEAM_DEPARTMENT[m.team]], source: m.team, orgPersonId: m.orgPersonId ?? null, employeeNumber: null, active: m.status === 'active',
 })
 const fromSales = (s: SalesPerson): Candidate => ({
   id: s.id, key: `sales:${s.id}`, name: s.name, email: s.officialEmail ?? '', designation: s.metadata?.designation ?? '', level: null,
-  departments: ['Sales'], source: 'sales', orgPersonId: null, active: (SALES_ROLE_STATUSES as readonly string[]).includes(s.status),
+  departments: ['Sales'], source: 'sales', orgPersonId: null, employeeNumber: parseEmployeeNumber(s.employeeCode ?? ''), active: (SALES_ROLE_STATUSES as readonly string[]).includes(s.status),
 })
 
 const toEmployee = (c: Candidate): MasterEmployee => ({
   id: c.id, key: c.key, name: c.name, email: c.email.trim(), designation: c.designation, level: c.level, departments: [...c.departments],
-  sources: [c.source], orgPersonId: c.orgPersonId, status: c.active ? 'active' : 'inactive',
+  sources: [c.source], orgPersonId: c.orgPersonId, employeeNumber: c.employeeNumber, status: c.active ? 'active' : 'inactive',
 })
 
 const union = (a: readonly string[], b: readonly string[]) =>
@@ -73,6 +77,7 @@ function merge(e: MasterEmployee, c: Candidate): MasterEmployee {
     ...e,
     email: e.email || c.email.trim(),
     designation: e.designation || c.designation,
+    employeeNumber: e.employeeNumber ?? c.employeeNumber ?? null,
     departments: e.orgPersonId ? e.departments : union(e.departments, c.departments),
     sources: e.sources.includes(c.source) ? e.sources : [...e.sources, c.source],
     status: e.status === 'active' || c.active ? 'active' : 'inactive',
@@ -111,5 +116,6 @@ export function buildMasterEmployees(
 export function matchesEmployee(e: MasterEmployee, query: string): boolean {
   const q = query.trim().toLowerCase()
   if (!q) return true
-  return `${e.name} ${e.email} ${e.designation} ${e.departments.join(' ')}`.toLowerCase().includes(q)
+  const id = e.employeeNumber ? `${e.employeeNumber} ${formatAmnexId(e.employeeNumber)}` : ''
+  return `${e.name} ${e.email} ${e.designation} ${e.departments.join(' ')} ${id}`.toLowerCase().includes(q)
 }

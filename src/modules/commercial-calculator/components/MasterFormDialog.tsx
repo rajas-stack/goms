@@ -66,6 +66,15 @@ function FieldInput({ field, value, onChange, options }: {
   )
 }
 
+/** A unique, readable code from a name: "Data Fabric" → "data-fabric", then "data-fabric-2" if taken. */
+export function codeFromName(name: string, taken: readonly string[]): string {
+  const base = name.trim().toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'item'
+  const used = new Set(taken.map((c) => c.trim().toLowerCase()))
+  let code = base
+  for (let n = 2; used.has(code); n++) code = `${base}-${n}`
+  return code
+}
+
 /** Generic create/edit form for any of the 12 master tables, driven entirely
  *  by `MASTER_DEFS[masterKey]` — spec §4.4. `code`/`name`/`description` are
  *  always present (every master extends `MasterBase`); `def.fields` supplies
@@ -93,6 +102,7 @@ export function MasterFormDialog({ masterKey, def, open, onClose, editing, onSub
     }
   }, [open, def, editing])
 
+  const { data: siblings = [] } = useMasters(masterKey)
   const parentField = def.fields.find((f) => f.parentMasterKey)
   const { data: parentRows = [] } = useMasters(parentField?.parentMasterKey ?? 'verticals')
 
@@ -112,7 +122,9 @@ export function MasterFormDialog({ masterKey, def, open, onClose, editing, onSub
     setPending(true)
     setError(null)
     try {
-      await onSubmit(values, statusChanging ? changeReason : undefined)
+      // Codes aren't typed: a new row's comes from its name; an existing row keeps its own.
+      const code = isEditingRow ? values.code : codeFromName(String(values.name ?? ''), siblings.map((r) => String(r.code)))
+      await onSubmit({ ...values, code }, statusChanging ? changeReason : undefined)
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save.')
@@ -121,7 +133,7 @@ export function MasterFormDialog({ masterKey, def, open, onClose, editing, onSub
     }
   }
 
-  const canSubmit = String(values.code ?? '').trim().length > 0 && String(values.name ?? '').trim().length > 0
+  const canSubmit = String(values.name ?? '').trim().length > 0
     && (!statusChanging || changeReason.trim().length > 0)
 
   return (
@@ -139,7 +151,6 @@ export function MasterFormDialog({ masterKey, def, open, onClose, editing, onSub
       }
     >
       <div className="flex flex-col gap-4">
-        <Field label="Code" required><Input value={String(values.code ?? '')} onChange={(e) => set('code', e.target.value)} /></Field>
         <Field label="Name" required><Input value={String(values.name ?? '')} onChange={(e) => set('name', e.target.value)} /></Field>
         <Field label="Description">
           <Textarea value={String(values.description ?? '')} onChange={(e) => set('description', e.target.value)} />

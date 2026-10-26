@@ -52,7 +52,7 @@ export const isBuSalesDesignation = (designation: string) =>
  *  person reached before the Sales Head (or the end of the chain). A person
  *  who reports straight to the Sales Head is therefore their own head. The
  *  walk is cycle-safe; chains that don't end at a listed head give null. */
-function territoryOf(email: string, byEmail: Map<string, SalesTeamMember>): string | null {
+export function territoryOf(email: string, byEmail: Map<string, SalesTeamMember>): string | null {
   let top = byEmail.get(email)
   if (!top) return null
   const seen = new Set([top.email])

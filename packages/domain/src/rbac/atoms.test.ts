@@ -27,7 +27,7 @@ describe('atomsForPatch', () => {
 
 describe('atom maps', () => {
   it('bid patch keys', () => {
-    expect(BID_PATCH_ATOMS).toEqual({ stageKey: 'bid.stage', decision: 'bid.decision', tenderLink: 'opp.identity', sheet: 'bid.move' })
+    expect(BID_PATCH_ATOMS).toEqual({ stageKey: 'bid.stage', decision: 'bid.decision', tenderLink: 'opp.identity', sheet: 'bid.move', lifecycleData: 'opp.identity' })
   })
   it('classifies SKU patch keys into costs / floor / tax / other', () => {
     expect(skuPatchAtom('hardwareCost')).toBe('sku.costs')

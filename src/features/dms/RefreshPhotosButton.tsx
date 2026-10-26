@@ -20,6 +20,7 @@ export function refreshMessage(result: RefreshResult): string {
  *  re-matches them against every Employee, Sales and team roster, then updates all avatars. */
 export function RefreshPhotosButton() {
   const profiles = useProfileImagesIndex()
+  // Browser-only mode connects and syncs from Settings › DMS › Profile Images instead.
   return import.meta.env.VITE_API_BASE_URL && profiles?.configured ? <RefreshPhotos /> : null
 }
 

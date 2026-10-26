@@ -1,4 +1,4 @@
-import { masterKeyAtom } from '@goms/domain'
+import { isDirectoryCompanyMaster, masterKeyAtom } from '@goms/domain'
 import { Gate, useAllowed } from '@/lib/permissions'
 import { useMemo, useState } from 'react'
 import { Icon } from '@/components/ui/Icon'
@@ -25,7 +25,10 @@ export function MasterCrudScreen({ masterKey }: { masterKey: MasterEntityKey }) 
   const { data: rows = [], isLoading } = useMasters(masterKey)
   const { create, update, setActive, remove } = useMasterMutations(masterKey)
   // Reference masters: Pre-sales; tax classes and currencies: Finance; the approval matrix: CXO (per master key).
-  const allowed = useAllowed(masterKey === 'approvalMatrix' ? 'com.approvalMatrix' : 'com.masters', 'update', masterKeyAtom(masterKey))
+  const allowed = useAllowed(
+    isDirectoryCompanyMaster(masterKey) ? 'am.contacts' : masterKey === 'approvalMatrix' ? 'com.approvalMatrix' : 'com.masters',
+    'update', isDirectoryCompanyMaster(masterKey) ? undefined : masterKeyAtom(masterKey),
+  )
   const toast = useToast()
 
   const [query, setQuery] = useState('')

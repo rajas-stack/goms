@@ -42,7 +42,7 @@ describe('Multiple DMS connections', () => {
   })
   it('resolves the configured places from actual application routes', () => {
     expect(moduleForPath('/sales/opportunities')).toBe('sales')
-    expect(moduleForPath('/bid-tracker/bid/123')).toBe('opportunity')
+    expect(moduleForPath('/live-bids/bid/123')).toBe('opportunity')
     expect(moduleForPath('/commercial-calculator/boq/123')).toBe('commercial')
     expect(moduleForPath('/settings/dms')).toBeNull()
   })

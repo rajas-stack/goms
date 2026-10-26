@@ -44,7 +44,7 @@ describe('catalog integrity', () => {
 
   it('declares one opportunity source per sheet and never exposes tender website addresses or credentials', () => {
     expect(DATASETS.filter((d) => d.id.startsWith('opportunities.')).map((d) => d.label)).toEqual([
-      'Bid Tracker', 'Pipeline · Funnel', 'Pipeline · Backup', 'Pipeline · Commits', 'Campaign', 'Master (all sheets)',
+      'Live Bids', 'Pipeline · Funnel', 'Pipeline · Backup', 'Pipeline · Commits', 'Campaign', 'Master (all sheets)',
     ])
     const keys = getDataset('tenderWebsites')!.fields.map((f) => f.key)
     expect(keys.some((k) => /url|credential|password|ciphertext/i.test(k) && k !== 'hasCredentials')).toBe(false)

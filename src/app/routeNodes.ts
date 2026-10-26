@@ -5,7 +5,7 @@ const page = (parent: string, key: string, label: string) => defineNode(parent, 
 
 /** The permission-tree node of every route (router.tsx `handle.rbac`). Pages that are also a tab elsewhere reference that
  *  tab's node (declared where the tab bar is); the rest are declared here. Unconditional on purpose: the manifest must not
- *  depend on build flags (Bid Tracker, Admin Data Import). manifest.test.tsx checks every id exists. */
+ *  depend on build flags (Live Bids, Admin Data Import). manifest.test.tsx checks every id exists. */
 export const ROUTE_NODES = {
   home: 'home',
   map: page('accountMapping', 'map', 'Map'),

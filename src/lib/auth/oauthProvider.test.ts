@@ -27,14 +27,14 @@ describe('oauthProvider (plain browser)', () => {
     const loc = (window as unknown as { location: { pathname: string; search: string } }).location
     const saved = { pathname: loc.pathname, search: loc.search }
     try {
-      loc.pathname = '/bid-tracker'
+      loc.pathname = '/live-bids'
       loc.search = '?auth_code=LEAK&sheet=x&auth_error=state'
       await oauthProvider.signIn()
-      expect(new URL(env.assign.mock.calls[0][0]).searchParams.get('return_to')).toBe('/bid-tracker?sheet=x')
+      expect(new URL(env.assign.mock.calls[0][0]).searchParams.get('return_to')).toBe('/live-bids?sheet=x')
       env.assign.mockReset()
       loc.search = '?auth_code=LEAK'
       await oauthProvider.signIn()
-      expect(new URL(env.assign.mock.calls[0][0]).searchParams.get('return_to')).toBe('/bid-tracker')
+      expect(new URL(env.assign.mock.calls[0][0]).searchParams.get('return_to')).toBe('/live-bids')
     } finally { Object.assign(loc, saved) }
   })
   it('with no stored session, headers are {} and the user is signed out', async () => {

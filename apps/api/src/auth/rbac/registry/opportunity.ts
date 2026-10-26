@@ -141,6 +141,7 @@ export const opportunityPolicy: Record<string, PolicyEntry> = {
   'bidCommunications.contacts': { requirements: [read('am.contacts')] },
   'bidCommunications.createContact': { requirements: [create('am.contacts')] },
   'bidCommunications.updateContact': { requirements: [write('am.contacts')] },
+  'bidCommunications.deleteContact': { requirements: [remove('am.contacts')] },
   'bidCommunications.addInternal': { requirements: [create('team.org')] },
   'bidCommunications.bindInternalEmail': { requirements: [write('team.org')] },
   'bidCommunications.addClient': { requirements: [create('am.contacts')] },
@@ -185,6 +186,9 @@ export const opportunityPolicy: Record<string, PolicyEntry> = {
   ...same(['bidCustomFields.update', 'bidCustomFields.reorder', 'bidCustomFields.archive', 'bidCustomFields.unarchive'], write('bid.columns')),
   'bidCustomFields.delete': { requirements: [remove('bid.columns')] },
   'bidCustomFields.setValue': { requirements: [bidRow('update', (r) => r?.bidId, () => ['bid.custom'])] },
+  // People columns: every grid editor reads which people a person column offers; changing that is column setup.
+  'bidCustomFields.peopleColumns': { requirements: [readRows] },
+  'bidCustomFields.setPeopleColumn': { requirements: [write('bid.columns')] },
 
   // Synopsis sections are free-form bid content with no field atom of their own, so saving needs full write access to
   // the bid's row (no atom list = `access.all`), the strictest existing rule. Reads follow the bid detail view.

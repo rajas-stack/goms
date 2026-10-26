@@ -1,4 +1,4 @@
-import { lineItemPatchAtom, masterKeyAtom, skuPatchAtom, type PolicyModuleKey } from '@goms/domain'
+import { isDirectoryCompanyMaster, lineItemPatchAtom, masterKeyAtom, skuPatchAtom, type PolicyModuleKey } from '@goms/domain'
 import { patchAtoms } from './builders.js'
 import { create, read, remove, write } from './helpers.js'
 import { auditReadRequirement, maskAuditList, maskSkuResponse } from './masks.js'
@@ -8,7 +8,8 @@ const same = (paths: string[], ...requirements: Requirement[]): Record<string, P
   Object.fromEntries(paths.map((p) => [p, { requirements }]))
 
 /** The approval matrix is its own module; every other master is a reference master. */
-const masterModule = (key: unknown): PolicyModuleKey => (key === 'approvalMatrix' ? 'com.approvalMatrix' : 'com.masters')
+const masterModule = (key: unknown): PolicyModuleKey =>
+  isDirectoryCompanyMaster(key) ? 'am.contacts' : key === 'approvalMatrix' ? 'com.approvalMatrix' : 'com.masters'
 
 const masterRead: Requirement = (raw) => ({ module: masterModule(raw?.key), action: 'read' })
 const masterCreate: Requirement = (raw) => ({ module: masterModule(raw?.key), action: 'create' })
@@ -20,7 +21,9 @@ const masterDelete: Requirement = (raw) => {
     ? { module: 'com.masters', action: 'update', atoms: [atom] }
     : { module: masterModule(raw?.key), action: 'delete' }
 }
-const masterWrite: Requirement = (raw) => ({ module: masterModule(raw?.key), action: 'update', atoms: [masterKeyAtom(String(raw?.key))] })
+const masterWrite: Requirement = (raw) => isDirectoryCompanyMaster(raw?.key)
+  ? { module: 'am.contacts', action: 'update' }
+  : { module: masterModule(raw?.key), action: 'update', atoms: [masterKeyAtom(String(raw?.key))] }
 
 const skuUpdate: Requirement = (raw) => ({ module: 'com.skus', action: 'update', atoms: patchAtoms(raw?.patch, skuPatchAtom) })
 const lineItemUpdate: Requirement = (raw) => ({ module: 'com.boqs', action: 'update', atoms: patchAtoms(raw?.patch, lineItemPatchAtom) })

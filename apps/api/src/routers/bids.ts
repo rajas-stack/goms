@@ -15,12 +15,15 @@ import { departmentChoiceSchema, newBidOpportunitySchema, resolveBidDepartment }
 import { filterNodeSchema } from '../lib/filterRuleSchema.js'
 import { CUSTOM_VALUE_COLUMNS, customValueFromRow } from '../lib/customFieldValues.js'
 import { bidTransferSchema, previewBidTransfer, commitBidTransfer } from '../lib/bidTransfer.js'
+import { assertLifecycleMove, furthestLifecycleSheet, validateLifecycleData } from '@goms/domain'
 
 export function toBid(row: any) {
   return {
     id: row.id, opportunityId: row.opportunity_id, bidCode: row.bid_code, stageKey: row.stage_key,
     decision: row.decision, status: row.status, dataConfidence: row.data_confidence,
     tenderLink: row.tender_link, sheet: (row.sheet ?? DEFAULT_OWNED_SHEET) as OwnedSheet,
+    lifecycleReachedSheet: furthestLifecycleSheet(row.sheet ?? DEFAULT_OWNED_SHEET, row.lifecycle_reached_sheet ?? undefined),
+    lifecycleData: row.lifecycle_data ?? {},
     archivedAt: row.archived_at, createdAt: row.created_at, updatedAt: row.updated_at,
   }
 }
@@ -56,6 +59,7 @@ function parseSubmissionDate(raw: string | null | undefined): string | null {
 
 const bidColumnFor: Record<string, string> = {
   stageKey: 'stage_key', decision: 'decision', tenderLink: 'tender_link', sheet: 'sheet',
+  lifecycleData: 'lifecycle_data', lifecycleReachedSheet: 'lifecycle_reached_sheet',
 }
 
 const bidActionQueueRouter = router({
@@ -220,7 +224,7 @@ export const bidsRouter = router({
           nextMilestoneDueAt,
           daysRemaining: nextMilestoneDueAt ? Math.ceil((new Date(nextMilestoneDueAt).getTime() - Date.now()) / 86_400_000) : null,
           nextActionNote: r.next_action_note ?? null,
-          nextActionDueDate: r.next_action_due_date ? (r.next_action_due_date instanceof Date ? r.next_action_due_date.toISOString().slice(0, 10) : String(r.next_action_due_date).slice(0, 10)) : null,
+          nextActionDueDate: r.next_action_due_date ? (r.next_action_due_date instanceof Date ? r.next_action_due_date.toISOString().slice(0, 10) : String(r.next_action_due_date)) : null,
           nextActionAssigneeEmail: r.next_action_assignee_id ? (emailById.get(r.next_action_assignee_id) ?? null) : null,
           updatedBy: r.updated_by ?? null,
           attentionFlag: computeAttentionFlag({ dueAt, hasPendingCorrigendum: pendingCorrigendumBidIds.has(r.id), today }),
@@ -231,7 +235,7 @@ export const bidsRouter = router({
       return applyFilterRules(rows, input?.filterRules ?? [], ctx.user?.email ?? null, customFieldTypes)
     }),
 
-  // The ONE way to create a bid (Bid Tracker's Create Bid dialog and the
+  // The ONE way to create a bid (Live Bids' Create Bid dialog and the
   // opportunity card both call it). A bid needs its opportunity to belong to a
   // department: resolveBidDepartment uses the opportunity's own, or — only when it
   // has none — applies the caller's choice (existing, or a new hierarchy created
@@ -243,7 +247,7 @@ export const bidsRouter = router({
       // Create the opportunity as part of the same transaction (department is then mandatory).
       newOpportunity: newBidOpportunitySchema.optional(),
       department: departmentChoiceSchema.optional(),
-      // The Opportunity sheet the new row is filed into (default Bid Tracker).
+      // The Opportunity sheet the new row is filed into (default Live Bids).
       sheet: sheetSchema.optional(),
     }).refine((v) => !!v.opportunityId !== !!v.newOpportunity, { message: 'Choose an existing opportunity or describe a new one.' }))
     .mutation(async ({ input, ctx }) => {
@@ -309,6 +313,7 @@ export const bidsRouter = router({
         tenderLink: z.string().nullable().optional(),
         // Moves the row to another Opportunity sheet.
         sheet: sheetSchema.optional(),
+        lifecycleData: z.record(z.string(), z.string().max(10000)).optional(),
       }),
     }))
     .mutation(async ({ input, ctx }) => {
@@ -319,8 +324,24 @@ export const bidsRouter = router({
         if (!current) throw new TRPCError({ code: 'NOT_FOUND' })
 
         const patch: Record<string, unknown> = { ...input.patch }
+        try {
+          const from: OwnedSheet = current.sheet ?? DEFAULT_OWNED_SHEET
+          if (input.patch.sheet) {
+            assertLifecycleMove(from, input.patch.sheet)
+            patch.lifecycleReachedSheet = furthestLifecycleSheet(from, current.lifecycle_reached_sheet, input.patch.sheet)
+          }
+          if (input.patch.lifecycleData) {
+            validateLifecycleData(input.patch.lifecycleData, from)
+            patch.lifecycleData = { ...current.lifecycle_data, ...input.patch.lifecycleData }
+          }
+        } catch (error) {
+          throw new TRPCError({ code: 'BAD_REQUEST', message: (error as Error).message })
+        }
         const effectiveStageKey = (patch.stageKey as string | undefined) ?? current.stage_key
-        if (patch.decision === 'go' && !isAtOrAfterSubmitted(effectiveStageKey)) {
+        // The user's stage order (Settings > Masters > Live Bids > Bid Stages) places user-added stages for the gate.
+        const stageOrder = patch.decision === 'go'
+          ? (await client.query(`SELECT code AS key FROM commercial_masters WHERE master_key='bidStages' ORDER BY display_order`)).rows : undefined
+        if (patch.decision === 'go' && !isAtOrAfterSubmitted(effectiveStageKey, stageOrder)) {
           throw new TRPCError({ code: 'BAD_REQUEST', message: 'Cannot mark Go before the bid reaches Submitted.' })
         }
         // Auto-derive the terminal stage from a final decision (spec §4.4) —
@@ -332,7 +353,7 @@ export const bidsRouter = router({
         const fields = Object.keys(patch)
         if (fields.length) {
           await assertFieldsNotProtected(client, 'bid', input.id, fields)
-          const values = fields.map((f) => patch[f])
+          const values: unknown[] = fields.map((f) => f === 'lifecycleData' ? JSON.stringify(patch[f]) : patch[f])
           const setClauses = fields.map((f, i) => `${bidColumnFor[f]}=$${i + 1}`)
           values.push(input.id)
           await client.query(`UPDATE bids SET ${setClauses.join(', ')}, updated_at=now() WHERE id=$${values.length}`, values)
@@ -345,7 +366,8 @@ export const bidsRouter = router({
             const newValue = (patch as any)[field]
             await writeAuditLog(client, {
               entityType: 'bid', entityId: input.id, field,
-              oldValue: oldValue == null ? '' : String(oldValue), newValue: newValue == null ? '' : String(newValue),
+              oldValue: oldValue == null ? '' : typeof oldValue === 'object' ? JSON.stringify(oldValue) : String(oldValue),
+              newValue: newValue == null ? '' : typeof newValue === 'object' ? JSON.stringify(newValue) : String(newValue),
               reason: '', action: 'update', changedBy: ctx.user?.email,
             })
           }
@@ -357,14 +379,14 @@ export const bidsRouter = router({
         if (newStageKey === 'submitted' && current.stage_key !== 'submitted') {
           const opp = (await client.query('SELECT stage_key FROM opportunities WHERE id=$1', [current.opportunity_id])).rows[0]
           if (opp && (PIPELINE_STAGE_MAP[opp.stage_key]?.order ?? 0) < (PIPELINE_STAGE_MAP['submitted']?.order ?? 0)) {
-            await applyStageChange(client, current.opportunity_id, 'submitted', 'Bid submitted (synced from Bid Tracker)')
+            await applyStageChange(client, current.opportunity_id, 'submitted', 'Bid submitted (synced from Live Bids)')
           }
         }
         if (patch.decision === 'go' || patch.decision === 'no_go') {
           const opp = (await client.query('SELECT stage_key FROM opportunities WHERE id=$1', [current.opportunity_id])).rows[0]
           if (opp && !(PIPELINE_STAGE_MAP[opp.stage_key]?.isClosed ?? false)) {
             const target = patch.decision === 'go' ? 'won' : 'dropped'
-            await applyStageChange(client, current.opportunity_id, target, `Bid decision recorded: ${patch.decision} (synced from Bid Tracker)`)
+            await applyStageChange(client, current.opportunity_id, target, `Bid decision recorded: ${patch.decision} (synced from Live Bids)`)
           }
         }
 

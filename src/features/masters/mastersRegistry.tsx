@@ -25,4 +25,6 @@ export const MASTER_RENDERERS: Readonly<Record<string, () => ReactElement>> = {
   currencies: () => <MasterCrudScreen masterKey="currencies" />,
   'pre-sales': () => <MasterCrudScreen masterKey="preSales" />,
   'directory-types': () => <MasterCrudScreen masterKey="directoryTypes" />,
+  'oem-companies': () => <MasterCrudScreen masterKey="oemCompanies" />,
+  'consortium-partners': () => <MasterCrudScreen masterKey="consortiumPartners" />,
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { authApi } from '@/lib/auth'
 import { getAuthHeaders } from '@/data/remote/authHeaders'
+import { driveProfileBlob } from '@/features/dms/driveProfileImages'
 
 export interface ProfileImageRef { userId: string; version: string }
 /** Only visible avatars fetch bytes. The browser's private HTTP cache handles repeat requests and ETags. */
@@ -14,6 +15,13 @@ export function useProfileImage(image?: ProfileImageRef) {
     const load = async () => {
       if (started) return; started = true
       try {
+        if (!import.meta.env.VITE_API_BASE_URL) {
+          // No GOMS server: the index already holds Drive file ids, so read the bytes from Drive directly.
+          const blob = await driveProfileBlob(image.userId, image.version)
+          if (cancelled) return
+          objectUrl = URL.createObjectURL(blob); setPhoto({ key, url: objectUrl })
+          return
+        }
         const headers = await getAuthHeaders()
         if (!headers.Authorization || cancelled) return
         const response = await authApi.fetch(`${import.meta.env.VITE_API_BASE_URL ?? ''}/api/profile-images/${encodeURIComponent(image.userId)}?v=${encodeURIComponent(image.version)}`, { headers, signal: controller.signal, cache: 'no-cache' })

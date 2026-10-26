@@ -7,7 +7,7 @@ import { storageKind, type CustomFieldType, type CustomValue } from '@goms/domai
  *  both are converted in SQL to the shapes the API promises: a `YYYY-MM-DD`
  *  string and a JS number. Prefix with a table alias if needed. */
 export const CUSTOM_VALUE_COLUMNS =
-  `value_text, value_number::float8 AS value_number, to_char(value_date, 'YYYY-MM-DD') AS value_date, value_bool`
+  `value_text, value_number::float8 AS value_number, value_date, value_bool`
 
 export function customValueFromRow(dataType: CustomFieldType, row: any): CustomValue {
   switch (storageKind(dataType)) {

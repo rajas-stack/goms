@@ -30,8 +30,8 @@ const amnex = { email: 'a@amnex.com', emailVerified: true }
 describe('RequireSignIn', () => {
   it('sends a signed-out visitor to /login, remembering the page they asked for', () => {
     Object.assign(auth, { configured: true, user: null, loading: false })
-    renderAt('/bid-tracker?tab=x')
-    expect(screen.getByText('login page /login?next=%2Fbid-tracker%3Ftab%3Dx')).toBeInTheDocument()
+    renderAt('/live-bids?tab=x')
+    expect(screen.getByText('login page /login?next=%2Flive-bids%3Ftab%3Dx')).toBeInTheDocument()
     expect(screen.queryByText('internal page')).toBeNull()
   })
   it('sends the bare home URL to a plain /login', () => {

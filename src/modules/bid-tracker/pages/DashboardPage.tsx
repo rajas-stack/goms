@@ -19,9 +19,9 @@ export const MEASURE_COLORS: Record<DashboardMeasure, string> = {
 }
 
 const MEASURES: { key: DashboardMeasure; label: string; noun: string; sheet: string; path: string; icon: string }[] = [
-  { key: 'live', label: 'Live bids', noun: 'live bids', sheet: 'Bid Tracker', path: '/bid-tracker', icon: 'Flag' },
-  { key: 'pipeline', label: 'Pipeline', noun: 'pipeline opportunities', sheet: 'Pipeline', path: '/bid-tracker/pipeline/funnel', icon: 'TrendingUp' },
-  { key: 'campaign', label: 'Campaign', noun: 'campaign rows', sheet: 'Campaign', path: '/bid-tracker/campaign', icon: 'Send' },
+  { key: 'live', label: 'Live bids', noun: 'live bids', sheet: 'Live Bids', path: '/live-bids', icon: 'Flag' },
+  { key: 'pipeline', label: 'Pipeline', noun: 'pipeline opportunities', sheet: 'Pipeline', path: '/live-bids/pipeline/funnel', icon: 'TrendingUp' },
+  { key: 'campaign', label: 'Campaign', noun: 'campaign rows', sheet: 'Campaign', path: '/live-bids/campaign', icon: 'Send' },
 ]
 
 /** The Opportunity Dashboard: a header, ONE filter row, then a responsive grid of

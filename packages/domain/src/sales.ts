@@ -1,3 +1,5 @@
+import { isIsoDateOrTime } from './bidCustomFields.js'
+
 export interface SalesTierDef {
   key: string
   label: string
@@ -71,9 +73,9 @@ export function isValidIsoDate(s: string): boolean {
 
 /** Calendar arithmetic in UTC so it is immune to the machine's timezone/DST. */
 export function addDays(iso: string, days: number): string {
-  const m = ISO_DATE.exec(iso)!
+  const m = ISO_DATE.exec(iso.slice(0, 10))!
   const t = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + days))
-  return t.toISOString().slice(0, 10)
+  return t.toISOString().slice(0, 10) + iso.slice(10)
 }
 
 export function planPostingDatesEdit(postings: PostingInterval[], postingId: string, edit: PostingDatesEdit): PostingDatesPlan {
@@ -81,13 +83,13 @@ export function planPostingDatesEdit(postings: PostingInterval[], postingId: str
   if (!row) throw new PostingDatesError('That posting no longer exists.')
 
   const startDate = edit.startDate ?? row.startDate
-  if (!isValidIsoDate(startDate)) throw new PostingDatesError('Effective from is not a valid date.')
+  if (!isIsoDateOrTime(startDate)) throw new PostingDatesError('Effective from is not a valid date.')
 
   let endDate: string | null
   if (edit.lastDayHeld === undefined) endDate = row.endDate
   else if (edit.lastDayHeld === null) endDate = null
   else {
-    if (!isValidIsoDate(edit.lastDayHeld)) throw new PostingDatesError('Effective to is not a valid date.')
+    if (!isIsoDateOrTime(edit.lastDayHeld)) throw new PostingDatesError('Effective to is not a valid date.')
     endDate = addDays(edit.lastDayHeld, 1)
   }
 

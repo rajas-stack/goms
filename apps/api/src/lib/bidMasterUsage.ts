@@ -3,7 +3,7 @@ import { fieldsUsingMaster } from '@goms/domain'
 type Client = { query: (sql: string, params?: any[]) => Promise<{ rows: any[] }> }
 const keysOf = (masterKey: string) => fieldsUsingMaster(masterKey).map(f => f.key)
 
-/** Number of bids holding this Bid Tracker master value (select value, or an item of a multi-select). */
+/** Number of bids holding this Live Bids master value (select value, or an item of a multi-select). */
 export async function bidMasterUsage(client: Client, masterKey: string, name: string): Promise<number> {
   const keys = keysOf(masterKey)
   if (!keys.length) return 0

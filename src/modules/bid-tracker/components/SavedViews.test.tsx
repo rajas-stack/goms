@@ -23,8 +23,8 @@ function renderWorkspace() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/bid-tracker']}>
-        <Routes><Route path="/bid-tracker" element={<BidTrackerWorkspace />} /></Routes>
+      <MemoryRouter initialEntries={['/live-bids']}>
+        <Routes><Route path="/live-bids" element={<BidTrackerWorkspace />} /></Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   )

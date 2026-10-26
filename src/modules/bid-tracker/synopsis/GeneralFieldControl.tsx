@@ -16,7 +16,7 @@ export const COMPLIANCE_TONE: Record<string, string> = {
 
 /** The stored format of a date / date-time field (null for other kinds). */
 export function dateFormatOf(field: GeneralField): FriendlyDateFormat | null {
-  return field.kind === 'date' ? 'date' : field.kind === 'datetime' ? 'datetime-local' : null
+  return field.kind === 'date' || field.kind === 'datetime' ? 'optional-time' : null
 }
 
 interface Props {

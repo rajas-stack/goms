@@ -195,7 +195,7 @@ export const hierarchyRouter = router({
         `SELECT b.bid_code FROM bids b JOIN opportunities o ON o.id = b.opportunity_id
           WHERE o.department_id = ANY($1) ORDER BY b.bid_code LIMIT 5`, [ids])).rows
       if (blocking.length) {
-        throw new TRPCError({ code: 'CONFLICT', message: `Cannot delete this node — its opportunities have bids in Bid Tracker (${blocking.map((r) => r.bid_code).join(', ')}). Delete those bids first, or archive the node instead.` })
+        throw new TRPCError({ code: 'CONFLICT', message: `Cannot delete this node — its opportunities have bids in Live Bids (${blocking.map((r) => r.bid_code).join(', ')}). Delete those bids first, or archive the node instead.` })
       }
       await client.query(`DELETE FROM employees WHERE org_node_id = ANY($1)`, [ids])
       // Opportunities used to live inside the node's own metadata, so they

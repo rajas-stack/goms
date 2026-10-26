@@ -1,7 +1,7 @@
 import { NO_PERMISSION_TITLE, usePermissions } from '@/lib/permissions'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { DEFAULT_OWNED_SHEET, OPPORTUNITY_TYPES, OWNED_SHEETS, OWNED_SHEET_LABELS, type DepartmentChoice, type OwnedSheet } from '@goms/domain'
+import { OPPORTUNITY_TYPES, OWNED_SHEETS, OWNED_SHEET_LABELS, type DepartmentChoice, type OwnedSheet } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { Combobox } from '@/components/ui/Combobox'
 import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
@@ -25,13 +25,13 @@ const segment = (active: boolean) => cn(
 /** Create Bid: pick an existing opportunity OR create a new one, resolve its department, create the bid.
  *  The department lives on the OPPORTUNITY. One that already has it is used as is
  *  (shown, never re-asked); one that has none must be given one here — an existing
- *  department, or a new hierarchy created without leaving Bid Tracker — and the
+ *  department, or a new hierarchy created without leaving Live Bids — and the
  *  server assigns it and creates the bid in one transaction (bids.create, the same
  *  mutation the opportunity card uses). A new opportunity is created in that same server transaction, so the
  *  opportunity, its department and the bid all exist or none of them do. Cancelling changes nothing. */
 export function CreateBidDialog({ open, onClose, opportunityId, sheet = 'bidTracker' }: {
   open: boolean; onClose: () => void; opportunityId?: string
-  /** The sheet the new row is filed into. On Master the user picks it (default Bid Tracker). */
+  /** The sheet the new row is filed into. On Master the user picks it (default Live Bids). */
   sheet?: SheetId
 }) {
   const [departmentDialogOpen, setDepartmentDialogOpen] = useState(false)
@@ -49,7 +49,7 @@ export function CreateBidDialog({ open, onClose, opportunityId, sheet = 'bidTrac
 
   return (
     <>
-      <Dialog open={open} onClose={close} title="Create Bid" description="Pick the opportunity this bid is for. Each opportunity can have one bid." size="lg">
+      <Dialog open={open} onClose={close} title={sheet === 'bidTracker' ? 'Create Bid' : 'Create Opportunity'} description="Create or select an opportunity. Its information stays together as it moves through the lifecycle." size="lg">
         {/* Mounts (and fetches its lists) only while open; state resets on every open. */}
         <CreateBidFlow
           onClose={close}
@@ -87,14 +87,14 @@ function CreateBidFlow({ onClose, presetId, sheet, newDepartmentId, onRequestCre
   onRequestCreateDepartment: () => void
 }) {
   // Master has no rows of its own: the user picks which sheet the new row lives in.
-  const [targetSheet, setTargetSheet] = useState<OwnedSheet>(sheet === 'master' ? DEFAULT_OWNED_SHEET : sheet)
+  const [targetSheet, setTargetSheet] = useState<OwnedSheet>(sheet === 'master' ? 'campaign' : sheet)
   const navigate = useNavigate()
   const { data: opportunities = [], isLoading } = useOpportunities()
   const { data: bids = [] } = useBidsForGrid()
   const { data: departments = [] } = useDepartments()
   const { create, createWithNewOpportunity } = useBidMutations()
   const perms = usePermissions()
-  // A bid is created onto one sheet (Bid Tracker unless told otherwise); the server decides which.
+  // A bid is created onto one sheet (Live Bids unless told otherwise); the server decides which.
   const allowed = perms.can('opp.bidTracker', 'create') || perms.can('opp.pipeline', 'create') || perms.can('opp.campaign', 'create')
   const [query, setQuery] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(presetId ?? null)
@@ -169,7 +169,8 @@ function CreateBidFlow({ onClose, presetId, sheet, newDepartmentId, onRequestCre
       const bid = isNew
         ? await createWithNewOpportunity.mutateAsync({
           opportunity: {
-            opportunityName: newName.trim(), gemTenderId: newTender.trim() || undefined, submissionDate: newDue.trim() || undefined,
+            opportunityName: newName.trim(), gemTenderId: newTender.trim() || undefined,
+            submissionDate: newDue.trim() ? new Date(newDue.length === 10 ? `${newDue}T00:00:00` : newDue).toISOString() : undefined,
             referenceNo: newReference.trim() || null, assignmentName: newAssignment.trim() || null,
             opportunityType: newType || undefined,
           },
@@ -178,7 +179,7 @@ function CreateBidFlow({ onClose, presetId, sheet, newDepartmentId, onRequestCre
         })
         : await create.mutateAsync({ opportunityId: selected!.id, department: hasDepartment ? undefined : choice ?? undefined, sheet: targetSheet })
       onClose()
-      navigate(`/bid-tracker/bid/${bid.id}`)
+      navigate(`/live-bids/bid/${bid.id}`)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not create the bid.')
       setBusy(false)
@@ -196,7 +197,7 @@ function CreateBidFlow({ onClose, presetId, sheet, newDepartmentId, onRequestCre
               <span className="text-[12px] text-muted">New opportunity</span>
               <button type="button" className="text-[12px] text-goms-navy underline" onClick={() => { setIsNew(false); setError(null) }}>Pick an existing one instead</button>
             </div>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {targetSheet === 'bidTracker' && <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <label className="flex flex-col gap-1">
                 <span className="text-[12px] font-medium text-muted">Tender / GeM ID</span>
                 <Input aria-label="Tender ID" placeholder="Optional" value={newTender} maxLength={200} onChange={(e) => setNewTender(e.target.value)} />
@@ -208,7 +209,7 @@ function CreateBidFlow({ onClose, presetId, sheet, newDepartmentId, onRequestCre
               <label className="flex flex-col gap-1">
                 <span className="text-[12px] font-medium text-muted">Bid submission deadline</span>
                 <FriendlyDateInput
-                  format="iso"
+                  format="optional-time"
                   aria-label="Submission date and time"
                   aria-describedby="new-opp-due-hint"
                   showPicker={false}
@@ -219,10 +220,10 @@ function CreateBidFlow({ onClose, presetId, sheet, newDepartmentId, onRequestCre
                   }}
                 />
               </label>
-            </div>
-            <p id="new-opp-due-hint" className="-mt-1 text-[11px] text-muted">Paste any common format. It will be captured instantly and can be edited again before you create the opportunity and bid.</p>
+            </div>}
+            {targetSheet === 'bidTracker' && <p id="new-opp-due-hint" className="-mt-1 text-[11px] text-muted">Paste any common format. It will be captured instantly and can be edited again before you create the opportunity and bid.</p>}
             <Input aria-label="Opportunity name" placeholder="Opportunity name, e.g. AI Solution" value={newName} maxLength={300} autoFocus onChange={(e) => setNewName(e.target.value)} />
-            <Input aria-label="Name of assignment" placeholder="Name of assignment, as written in the tender (optional)" value={newAssignment} maxLength={300} onChange={(e) => setNewAssignment(e.target.value)} />
+            {targetSheet === 'bidTracker' && <Input aria-label="Name of assignment" placeholder="Name of assignment, as written in the tender (optional)" value={newAssignment} maxLength={300} onChange={(e) => setNewAssignment(e.target.value)} />}
             <label className="flex flex-col gap-1 sm:w-1/3">
               <span className="text-[12px] font-medium text-muted">Opportunity type</span>
               <Select aria-label="Opportunity type" value={newType} onChange={(e) => setNewType(e.target.value)}>
@@ -284,7 +285,7 @@ function CreateBidFlow({ onClose, presetId, sheet, newDepartmentId, onRequestCre
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button variant="primary" disabled={busy || (!hasDepartment && !choice) || (isNew && (!newName.trim() || invalidDue)) || !allowed} title={allowed ? undefined : NO_PERMISSION_TITLE} onClick={() => void submit()}>
-            {busy ? 'Creating…' : isNew ? 'Create opportunity and bid' : 'Create bid'}
+            {busy ? 'Creating…' : targetSheet === 'bidTracker' ? isNew ? 'Create opportunity and bid' : 'Create bid' : 'Create opportunity'}
           </Button>
         </div>
       </div>

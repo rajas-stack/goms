@@ -24,18 +24,21 @@ export { BOQ_TRANSITIONS, isBoqPendingApproval, LINE_STATES_CLEARED_FOR_APPROVAL
 
 // --- Generic Masters CRUD (Phase 0/1) --------------------------------------
 
+/** A master list missing from an older saved store reads as empty and is created on first write. */
+const masterRows = <K extends MasterEntityKey>(data: CommercialCalculatorData, key: K) => (data.masters[key] ??= [] as never)
+
 export function listMasterLogic<K extends MasterEntityKey>(data: CommercialCalculatorData, key: K): MasterRowMap[K][] {
-  return [...data.masters[key]].sort((a, b) => a.displayOrder - b.displayOrder) as MasterRowMap[K][]
+  return [...masterRows(data, key)].sort((a, b) => a.displayOrder - b.displayOrder) as MasterRowMap[K][]
 }
 
 export function getMasterLogic<K extends MasterEntityKey>(data: CommercialCalculatorData, key: K, id: string): MasterRowMap[K] | null {
-  return (data.masters[key].find((r) => r.id === id) ?? null) as MasterRowMap[K] | null
+  return (masterRows(data, key).find((r) => r.id === id) ?? null) as MasterRowMap[K] | null
 }
 
 export function createMasterLogic<K extends MasterEntityKey>(
   data: CommercialCalculatorData, key: K, input: CreateMasterInput<K>,
 ): MasterRowMap[K] {
-  const rows = data.masters[key]
+  const rows = masterRows(data, key)
   const codeError = validateMasterCode(data.masters, key, (input as unknown as { code: string }).code, null)
   if (codeError) throw new Error(codeError)
   const parentError = validateParentExists(data.masters, key, input as unknown as Record<string, unknown>)
@@ -61,7 +64,7 @@ export function createMasterLogic<K extends MasterEntityKey>(
 export function updateMasterLogic<K extends MasterEntityKey>(
   data: CommercialCalculatorData, key: K, id: string, patch: Partial<MasterRowMap[K]>, changeReason?: string,
 ): MasterRowMap[K] {
-  const rows = data.masters[key]
+  const rows = masterRows(data, key)
   const row = rows.find((r) => r.id === id)
   if (!row) throw new Error(`No such ${key} row: ${id}`)
 
@@ -91,7 +94,7 @@ export function updateMasterLogic<K extends MasterEntityKey>(
 }
 
 export function setMasterActiveLogic(data: CommercialCalculatorData, key: MasterEntityKey, id: string, active: boolean): void {
-  const row = data.masters[key].find((r) => r.id === id)
+  const row = masterRows(data, key).find((r) => r.id === id)
   if (row) row.active = active
 }
 

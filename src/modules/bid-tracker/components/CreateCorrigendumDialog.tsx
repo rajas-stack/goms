@@ -105,7 +105,7 @@ export function CreateCorrigendumDialog({ open = true, bidId, onClose }: { open?
                   </div>
                   <Field label="Proposed value">
                     {field.kind === 'date'
-                      ? <FriendlyDateInput format="datetime-local" aria-label={`Proposed value ${i + 1}`} value={row.proposed} onChange={(v) => setRow(i, { proposed: v })} />
+                      ? <FriendlyDateInput format="optional-time" aria-label={`Proposed value ${i + 1}`} value={row.proposed} onChange={(v) => setRow(i, { proposed: v })} />
                       : <Input aria-label={`Proposed value ${i + 1}`} placeholder="https://…" value={row.proposed} onChange={(e) => setRow(i, { proposed: e.target.value })} />}
                   </Field>
                 </div>

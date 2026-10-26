@@ -1,5 +1,6 @@
 import { Gate, usePermissions } from '@/lib/permissions'
-import { BID_STAGE_MAP, BID_STAGE_REQUIREMENTS } from '@goms/domain'
+import { BID_STAGE_REQUIREMENTS } from '@goms/domain'
+import { useBidStages } from '@/features/masters/useBidStages'
 import { useState } from 'react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -27,7 +28,7 @@ function Stat({ label, children }: { label: string; children: React.ReactNode })
  *  ownership lookup exists for bids. */
 export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMilestone[] }) {
   const requirements = BID_STAGE_REQUIREMENTS[bid.stageKey] ?? []
-  const stage = BID_STAGE_MAP[bid.stageKey]
+  const stage = useBidStages().find((s) => s.key === bid.stageKey)
   const nextMilestone = milestones
     .filter((m) => m.status === 'open' && m.dueAt)
     .sort((a, b) => (a.dueAt! < b.dueAt! ? -1 : 1))[0]
@@ -123,7 +124,7 @@ export function OverviewTab({ bid, milestones }: { bid: Bid; milestones: BidMile
           <label className="flex items-center gap-1 text-[13px] text-muted">
             Due Date
             <FriendlyDateInput
-              aria-label="Due Date" value={dueDate} onChange={setDueDate} floatingFeedback wrapperClassName="w-[11rem]" placeholder="e.g. 21.09.2026"
+              aria-label="Due Date" format="optional-time" value={dueDate} onChange={setDueDate} floatingFeedback wrapperClassName="w-[13rem]" placeholder="e.g. 21.09.2026"
               className="h-8 rounded-lg border border-line bg-white px-2 text-[13px] text-ink focus-visible:focus-ring"
             />
           </label>

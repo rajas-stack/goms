@@ -2,7 +2,7 @@
 // reference, not a name. These helpers check the reference exists and resolve
 // its current display name — for validating a write and for readable audit text.
 import { TRPCError } from '@trpc/server'
-import type { CustomFieldType, CustomValue } from '@goms/domain'
+import { parseMultiValue, type CustomFieldType, type CustomValue } from '@goms/domain'
 
 type Client = { query: (sql: string, params?: unknown[]) => Promise<any> }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -14,12 +14,20 @@ export async function entityLabel(client: Client, type: CustomFieldType, value: 
     const r = await client.query(`SELECT name FROM hierarchy_nodes WHERE type_key='state' AND state_code=$1 LIMIT 1`, [Number(value)])
     return r.rows[0]?.name ?? null
   }
-  if (type !== 'person' && type !== 'department') return null
+  if (type === 'person') {
+    // One id, or several (a "Multiple" person column stores a JSON list): every one must exist.
+    // An Amnex employee (org_people) or, for older values and Sales-only people, the Sales roster.
+    const ids = parseMultiValue(value).map((id) => id.toLowerCase())
+    if (!ids.length || !ids.every((id) => UUID.test(id))) return null
+    const r = await client.query(
+      `SELECT id, name FROM org_people WHERE id = ANY($1::uuid[]) UNION ALL SELECT id, name FROM sales_persons WHERE id = ANY($1::uuid[])`, [ids])
+    const names = new Map<string, string>(r.rows.map((row: { id: string; name: string }) => [String(row.id).toLowerCase(), row.name]))
+    return ids.every((id) => names.has(id)) ? ids.map((id) => names.get(id)).join(', ') : null
+  }
+  if (type !== 'department') return null
   const id = String(value)
   if (!UUID.test(id)) return null
-  const r = type === 'person'
-    ? await client.query(`SELECT name FROM sales_persons WHERE id=$1`, [id])
-    : await client.query(`SELECT name FROM hierarchy_nodes WHERE domain='org' AND type_key='department' AND id=$1`, [id])
+  const r = await client.query(`SELECT name FROM hierarchy_nodes WHERE domain='org' AND type_key='department' AND id=$1`, [id])
   return r.rows[0]?.name ?? null
 }
 
@@ -61,8 +69,15 @@ export async function loadEntityIndex(client: Client): Promise<EntityIndex> {
   const idx: EntityIndex = {
     person: new Map(), department: new Map(), state: new Map(), personIds: new Map(), departmentIds: new Map(), stateNames: new Map(),
   }
+  // People columns pick Amnex employees; a Sales-roster entry only fills names/emails no employee already has.
+  for (const r of (await client.query(`SELECT id, name, email FROM org_people WHERE status='active'`)).rows) {
+    put(idx.person, r.name, r.id); put(idx.person, r.email, r.id); idx.personIds.set(r.id, r.name)
+  }
+  const known = (key: string) => idx.person.has(key.trim().toLowerCase())
   for (const r of (await client.query(`SELECT id, name, official_email FROM sales_persons`)).rows) {
-    put(idx.person, r.name, r.id); put(idx.person, r.official_email, r.id); idx.personIds.set(r.id, r.name)
+    if (!known(r.name)) put(idx.person, r.name, r.id)
+    if (!known(r.official_email ?? '')) put(idx.person, r.official_email, r.id)
+    idx.personIds.set(r.id, r.name)
   }
   for (const r of (await client.query(`SELECT id, name FROM hierarchy_nodes WHERE domain='org' AND type_key='department' AND status='active'`)).rows) {
     put(idx.department, r.name, r.id); idx.departmentIds.set(r.id, r.name)

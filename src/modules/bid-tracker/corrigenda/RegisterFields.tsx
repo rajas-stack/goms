@@ -2,6 +2,7 @@ import {
   CORRIGENDUM_AFFECTED_MODULES, CORRIGENDUM_IMPACT_LABELS, CORRIGENDUM_IMPACT_LEVELS, CORRIGENDUM_MODULE_LABELS,
   CORRIGENDUM_REVIEW_STATUSES, CORRIGENDUM_REVIEW_STATUS_LABELS, type CorrigendumImpactLevel, type CorrigendumReviewStatus,
 } from '@goms/domain'
+import { useEffect, useRef } from 'react'
 import { Field, Select, Textarea } from '@/components/ui/Field'
 import { FriendlyDateInput } from '@/components/ui/FriendlyDateInput'
 import { PersonName } from '@/components/ui/PersonName'
@@ -36,7 +37,9 @@ function YesNo({ label, value, onChange }: { label: string; value: boolean; onCh
 
 /** The corrigendum register form (everything except the number, which is
  *  automatic, and the derived counts). Controlled; never mutates `value`. */
-export function RegisterFields({ value, onChange }: { value: CorrigendumRegister; onChange: (next: CorrigendumRegister) => void }) {
+export function RegisterFields({ value, onChange, onValidityChange }: { value: CorrigendumRegister; onChange: (next: CorrigendumRegister) => void; onValidityChange?: (invalid: boolean) => void }) {
+  const invalidDates = useRef(new Set<string>())
+  useEffect(() => { onValidityChange?.(false) }, [])
   const { data: members = [] } = useDeliveryTeamMembers()
   const set = <K extends keyof CorrigendumRegister>(key: K, v: CorrigendumRegister[K]) => onChange({ ...value, [key]: v })
   const owner = members.find((m) => m.id === value.reviewOwnerId)
@@ -48,7 +51,11 @@ export function RegisterFields({ value, onChange }: { value: CorrigendumRegister
       <div className="grid gap-3 sm:grid-cols-3">
         {DATES.map(([key, label]) => (
           <Field key={key} label={label}>
-            <FriendlyDateInput aria-label={label} format="date" value={value[key] ?? ''} onChange={(v) => set(key, v || null)} />
+            <FriendlyDateInput aria-label={label} format="optional-time" value={value[key] ?? ''} onChange={(next, change) => {
+              if (change.invalid) invalidDates.current.add(key); else invalidDates.current.delete(key)
+              onValidityChange?.(invalidDates.current.size > 0)
+              set(key, next || null)
+            }} />
           </Field>
         ))}
       </div>

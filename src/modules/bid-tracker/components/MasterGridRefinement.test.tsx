@@ -184,7 +184,7 @@ describe('Master Grid refinement', () => {
       expect(lockSwitch()).toHaveAttribute('aria-pressed', 'true')
       expect(lockSwitch()).toHaveAttribute('title', lockSwitch().getAttribute('aria-label'))
       const editable = [
-        'Opportunity / Mission', 'Opportunity Type', 'Tender ID', 'Reference/Bid No.', 'Name of Assignment', 'Tender Link', 'Department / Client', 'State', 'City', 'Sector',
+        'Opportunity / Mission', 'Opportunity Type', 'Tender ID', 'Reference/Bid No.', 'Name of Assignment', 'Tender Link', 'Requirement', 'Products', 'Department / Client', 'State', 'City', 'Vertical',
         'Geo-sales', 'BU-sales', 'Pre-sales', 'Legal', 'Bid', 'Bid Owner', 'Sales Lead / Solution Lead',
         'Bid Stage', 'Next Action', 'Action Owner', 'Action Due', 'Decision', 'Data Confidence', 'Note',
       ]
@@ -224,22 +224,22 @@ describe('Master Grid refinement', () => {
       renderGrid()
       await screen.findByText('Alpha')
       await unlock()
-      const cell = within(screen.getByTestId('bid-row')).getAllByRole('cell').find((c) => /Protected deadline/.test(c.getAttribute('title') ?? ''))
+      const cell = within(screen.getByTestId('bid-row')).getAllByRole('cell').find((c) => /System-generated.*System field/.test(c.getAttribute('title') ?? ''))
       expect(cell).toBeTruthy()
     })
 
-    it('edits City, Sector and the name inline, and logs them against the bid', async () => {
+    it('edits Vertical and the name inline, and logs them against the bid', async () => {
       const bid = await makeBid('Alpha')
       renderGrid()
       await screen.findByText('Alpha')
       await unlock()
-      await userEvent.click(screen.getByRole('button', { name: 'Edit Sector' }))
-      await userEvent.type(screen.getByRole('textbox', { name: 'Sector' }), 'Smart City{Enter}')
-      await waitFor(async () => expect((await repository.getOpportunity(bid.opportunityId))?.vertical).toBe('Smart City'))
-      // Clearing Sector stores an empty string (the API's Sector is not nullable).
-      await userEvent.click(screen.getByRole('button', { name: 'Edit Sector' }))
-      await userEvent.clear(screen.getByRole('textbox', { name: 'Sector' }))
-      await userEvent.type(screen.getByRole('textbox', { name: 'Sector' }), '{Enter}')
+      // Vertical picks from the Verticals master; Enter takes the top match.
+      await userEvent.click(screen.getByRole('button', { name: 'Edit Vertical' }))
+      await userEvent.type(screen.getByRole('textbox', { name: 'Search Vertical' }), 'Traffic{Enter}')
+      await waitFor(async () => expect((await repository.getOpportunity(bid.opportunityId))?.vertical).toBe('Traffic'))
+      // Clearing Vertical stores an empty string (the API's Vertical is not nullable).
+      await userEvent.click(screen.getByRole('button', { name: 'Edit Vertical' }))
+      await userEvent.click(await screen.findByRole('option', { name: '— Clear' }))
       await waitFor(async () => expect((await repository.getOpportunity(bid.opportunityId))?.vertical).toBe(''))
       await userEvent.click(screen.getByRole('button', { name: 'Edit Opportunity / Mission' }))
       await userEvent.clear(screen.getByRole('textbox', { name: 'Opportunity / Mission' }))
@@ -342,7 +342,7 @@ describe('Master Grid refinement', () => {
       await bidWithColumn('text', 'Note')
       renderGrid()
       await screen.findByText('Alpha')
-      for (const header of ['Opportunity / Mission', 'Tender ID', 'Sector', 'Note']) {
+      for (const header of ['Opportunity / Mission', 'Tender ID', 'Vertical', 'Note']) {
         await userEvent.click(screen.getByRole('button', { name: `${header} column menu` }))
         expect(screen.getByRole('menuitem', { name: 'Freeze column' })).toBeEnabled()
         await userEvent.click(screen.getByRole('button', { name: `${header} column menu` })) // toggles it closed
@@ -350,7 +350,7 @@ describe('Master Grid refinement', () => {
       }
     })
 
-    it('freezes and unfreezes a column; frozen columns lead the sheet and stack in order', async () => {
+    it('freezes and unfreezes a column in its position; frozen columns stack in order', async () => {
       await makeBid('Alpha')
       renderGrid()
       await screen.findByText('Alpha')
@@ -360,15 +360,15 @@ describe('Master Grid refinement', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Tender ID column menu' }))
       await userEvent.click(screen.getByRole('menuitem', { name: 'Freeze column' }))
       await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Freeze column' })).not.toBeInTheDocument())
-      expect(leafHeaders()[0]).toBe('Tender ID') // pinned to the left edge
+      expect(leafHeaders()).toEqual(before) // stays where it is; it sticks once scrolled to
       expect(leafTh('gemTenderId').className).toContain('sticky')
       expect(leafTh('gemTenderId').style.left).toBe('40px') // right after the 40px selection column
 
       await userEvent.click(screen.getByRole('button', { name: 'Opportunity / Mission column menu' }))
       await userEvent.click(screen.getByRole('menuitem', { name: 'Freeze column' }))
       await waitFor(() => expect(screen.queryByRole('menuitem', { name: 'Freeze column' })).not.toBeInTheDocument())
-      // Two frozen columns, in their normal relative order, each offset by the widths before it.
-      expect(leafHeaders().slice(0, 2)).toEqual(['Opportunity / Mission', 'Tender ID'])
+      // Two frozen columns, each sticking after the frozen widths before it.
+      expect(leafHeaders()).toEqual(before)
       const first = leafTh('opportunityName'); const second = leafTh('gemTenderId')
       expect(first.style.left).toBe('40px')
       expect(second.style.left).toBe('320px') // 40 + the 280px name column
@@ -385,8 +385,7 @@ describe('Master Grid refinement', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Tender ID column menu' }))
       await userEvent.click(screen.getByRole('menuitem', { name: 'Unfreeze column' }))
       expect(leafTh('gemTenderId').className).not.toContain('sticky')
-      // Back in its original place in the sheet.
-      expect(leafHeaders().indexOf('Tender ID')).toBe(before.indexOf('Tender ID') - 0)
+      expect(leafHeaders()).toEqual(before)
       expect(screen.getAllByTitle('Frozen column')).toHaveLength(1)
     })
 
@@ -403,7 +402,24 @@ describe('Master Grid refinement', () => {
       first.unmount()
       renderGrid()
       await screen.findByText('Alpha')
-      expect(leafHeaders()[0]).toBe('City')
+      expect(leafTh('city').className).toContain('sticky')
+    })
+
+    it('Manage columns freezes and unfreezes a column in place, beside Hide and Delete', async () => {
+      await makeBid('Alpha')
+      renderGrid()
+      await screen.findByText('Alpha')
+      const before = leafHeaders()
+      await userEvent.click(screen.getByRole('button', { name: /^Manage columns/ }))
+      const panel = await screen.findByTestId('columns-panel')
+      await userEvent.click(within(panel).getByRole('button', { name: 'Freeze City' }))
+      expect(leafTh('city').className).toContain('sticky')
+      expect(leafTh('city').style.left).toBe('40px')
+      expect(leafHeaders()).toEqual(before)
+      const unfreeze = within(panel).getByRole('button', { name: 'Unfreeze City' })
+      expect(unfreeze).toHaveAttribute('aria-pressed', 'true')
+      await userEvent.click(unfreeze)
+      expect(leafTh('city').className).not.toContain('sticky')
     })
 
     it('the group header over a frozen column stays with it', async () => {
@@ -412,21 +428,20 @@ describe('Master Grid refinement', () => {
       await screen.findByText('Alpha')
       await userEvent.click(screen.getByRole('button', { name: 'City column menu' }))
       await userEvent.click(screen.getByRole('menuitem', { name: 'Freeze column' }))
-      const groups = Array.from(document.querySelectorAll('th[scope=colgroup]'))
-      expect(groups[0].textContent).toBe('Client')
-      expect(groups[0].className).toContain('sticky')
-      expect((groups[0] as HTMLElement).style.left).toBe('40px')
+      const stuck = Array.from(document.querySelectorAll<HTMLElement>('th[scope=colgroup]')).filter((th) => th.className.includes('sticky'))
+      expect(stuck.map((th) => th.textContent)).toEqual(['Client'])
+      expect(stuck[0].style.left).toBe('40px')
     })
 
     it('freezing survives sorting, and freezing a hidden column set does not break the sheet', async () => {
       await makeBid('Alpha'); await makeBid('Beta')
       renderGrid()
       await screen.findByText('Alpha')
-      await userEvent.click(screen.getByRole('button', { name: 'Sector column menu' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Vertical column menu' }))
       await userEvent.click(screen.getByRole('menuitem', { name: 'Freeze column' }))
       await userEvent.click(screen.getByRole('button', { name: 'Sort by Opportunity / Mission' }))
       expect(rowNames()).toEqual(['Alpha', 'Beta'])
-      expect(leafHeaders()[0]).toBe('Sector')
+      expect(leafTh('vertical').className).toContain('sticky')
     })
   })
 
@@ -551,11 +566,11 @@ describe('Master Grid refinement', () => {
       const dialog = await screen.findByRole('dialog')
       const select = within(dialog).getByRole('combobox')
       const options = within(select).getAllByRole('option').map((o) => o.textContent)
-      for (const label of ['Text', 'Number', 'Date', 'Yes / No', 'Select (dropdown)', 'Multi-select', 'Amount (₹)', 'URL', 'Email', 'Phone', 'Sales person', 'Department', 'State']) {
+      for (const label of ['Text', 'Number', 'Date', 'Yes / No', 'Dropdown (single)', 'Dropdown (multiple)', 'Amount (₹)', 'URL', 'Email', 'Phone', 'Sales person', 'Department', 'State']) {
         expect(options).toContain(label)
       }
       await userEvent.type(within(dialog).getByRole('textbox', { name: /Column name/ }), 'Regions')
-      await userEvent.selectOptions(select, 'Multi-select')
+      await userEvent.selectOptions(select, 'Dropdown (multiple)')
       const boxes = within(dialog).getAllByRole('textbox').filter((b) => !/Column name/.test(b.getAttribute('aria-label') ?? ''))
       await userEvent.type(boxes[boxes.length - 2], 'West')
       await userEvent.type(boxes[boxes.length - 1], 'North')

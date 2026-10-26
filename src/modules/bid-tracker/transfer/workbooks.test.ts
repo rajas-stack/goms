@@ -24,7 +24,7 @@ describe('bid transfer workbooks', () => {
   it('finds the bid sheet and header row in a historical workbook with title rows and extra sheets', () => {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Summary'], ['Total', 3]]), 'Summary')
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Bid Tracker FY25'], [], ['#', 'Opportunity Name', 'SBU'], [1, 'A', 'NGIS'], ['', '', '']]), 'Tracker')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Live Bids FY25'], [], ['#', 'Opportunity Name', 'SBU'], [1, 'A', 'NGIS'], ['', '', '']]), 'Tracker')
     const p = parseBidWorkbook(XLSX.write(wb, { type: 'array', bookType: 'xlsx' }))
     expect(p.headers).toEqual(['#', 'Opportunity Name', 'SBU'])
     expect(p.rows[0]).toEqual([1, 'A', 'NGIS'])

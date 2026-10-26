@@ -4,18 +4,27 @@ import { StrictMode } from 'react'
 import { MotionConfig } from 'framer-motion'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MutationCache, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { router } from './app/router'
 import { bootstrapRepository } from './data/repository'
+import { notifyOtherTabs, onOtherTabChange } from './data/crossTabSync'
+import { watchServerChanges } from './data/remote/liveUpdates'
 import { AuthPromptDialog } from './components/AuthPromptDialog'
 import { authApi } from './lib/auth'
 import { installStaleChunkRecovery } from './lib/staleChunkRecovery'
 import { ProfileImagesProvider } from './features/dms/ProfileImagesProvider'
 import './index.css'
 
+const remoteMode = Boolean(import.meta.env.VITE_API_BASE_URL)
+
 const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 60_000, refetchOnWindowFocus: false } },
+  // Server mode: the write is already in Postgres, so this browser's other tabs
+  // just refetch. Browser-only mode notifies from persist.ts instead, once the
+  // snapshot is on disk — a tab told any earlier would re-read its stale copy.
+  mutationCache: new MutationCache({ onSuccess: () => { if (remoteMode) notifyOtherTabs() } }),
 })
+const refreshEveryScreen = () => void queryClient.invalidateQueries()
 
 installStaleChunkRecovery()
 
@@ -48,8 +57,11 @@ void authApi.bootstrap()
 // cache to hydrate, so bootstrapping the in-memory store would just be a
 // wasted IndexedDB open/read on every load. See the 2026-08-26 cutover
 // readiness report §2.
-if (import.meta.env.VITE_API_BASE_URL) {
+if (remoteMode) {
+  onOtherTabChange(refreshEveryScreen)
+  // Other people's saves (and this browser's other tabs', again) arrive from the API.
+  watchServerChanges(refreshEveryScreen)
   render()
 } else {
-  void bootstrapRepository().then(render)
+  void bootstrapRepository(refreshEveryScreen).then(render)
 }

@@ -13,7 +13,7 @@ export const COLUMN_ATOM: Record<string, string | null> = {
   nextActionNote: 'bid.nextAction', nextActionAssigneeEmail: 'bid.nextAction', nextActionDueDate: 'bid.nextAction',
   dataConfidence: 'bid.verify',
 }
-export const atomOf = (columnId: string): string | null => (columnId.startsWith('custom:') ? 'bid.custom' : COLUMN_ATOM[columnId] ?? null)
+export const atomOf = (columnId: string): string | null => (columnId.startsWith('lifecycle:') ? 'opp.identity' : columnId.startsWith('custom:') ? 'bid.custom' : COLUMN_ATOM[columnId] ?? null)
 
 /** Mirrors the server's row facts from what a grid row already carries (the server stays authoritative). */
 export function rowScopeFacts(row: BidGridRow, myEmail: string, mySalesPersonId: string | null): ScopeFacts {
@@ -30,6 +30,8 @@ export function rowScopeFacts(row: BidGridRow, myEmail: string, mySalesPersonId:
 
 export function canEditCell(perms: Permissions, row: BidGridRow, columnId: string, me: { email: string; salesPersonId: string | null }): boolean {
   if (!perms.enforced) return true
+  if (columnId === 'submissionDate') return perms.level('bid.milestones') === 'W'
+    && perms.canEdit(sheetModule(row.sheet), 'opp.dates', rowScopeFacts(row, me.email, me.salesPersonId))
   if (columnId.startsWith('general:')) return perms.level(sheetModule(row.sheet)) === 'W'
   const atom = atomOf(columnId)
   if (!atom) return false

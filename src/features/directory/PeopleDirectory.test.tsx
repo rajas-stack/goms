@@ -9,7 +9,7 @@ import type { Employee } from '@/lib/types'
 vi.mock('@/features/workspace/context', () => ({ useWorkspace: () => ({ selection: null, select: vi.fn() }) }))
 vi.mock('@/lib/useMediaQuery', () => ({ useMediaQuery: () => false }))
 const profiles = vi.hoisted(() => ({ data: undefined as any, isError: false }))
-vi.mock('@/features/dms/profileImagesClient', () => ({ useProfileImages: () => profiles }))
+vi.mock('@/features/dms/ProfileImagesContext', () => ({ useProfileImagesIndex: () => profiles.data }))
 vi.mock('@/lib/useProfileImage', () => ({ useProfileImage: (image: any) => ({ ref: { current: null }, url: image ? `blob:${image.version}` : null }) }))
 // jsdom's 0-height scroll container makes @tanstack/react-virtual's real
 // windowing report zero visible rows — this test cares about the filter
@@ -72,7 +72,7 @@ describe('PeopleDirectory — List view search (item 7)', () => {
       makeEmployee({ id: 'e2', name: 'Bilal Khan' }),
     ])
 
-    await user.type(screen.getByPlaceholderText(/search by name/i), 'asha')
+    await user.type(screen.getByPlaceholderText(/search name/i), 'asha')
 
     expect(screen.getByTestId('person-row-e1')).toBeInTheDocument()
     expect(screen.queryByTestId('person-row-e2')).not.toBeInTheDocument()
@@ -86,7 +86,7 @@ describe('PeopleDirectory — List view search (item 7)', () => {
       makeEmployee({ id: 'e2', name: 'Bilal Khan', phone: '9111100000' }),
     ])
 
-    await user.type(screen.getByPlaceholderText(/search by name/i), '98765')
+    await user.type(screen.getByPlaceholderText(/search name/i), '98765')
 
     expect(screen.getByTestId('person-row-e1')).toBeInTheDocument()
     expect(screen.queryByTestId('person-row-e2')).not.toBeInTheDocument()

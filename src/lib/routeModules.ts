@@ -6,11 +6,13 @@ export const ROW_MODULES: PolicyModuleKey[] = ['opp.bidTracker', 'opp.pipeline',
 
 export const NAV_MODULES = {
   map: ['am.geography'],
-  directory: ['am.contacts', 'am.departments'],
+  /** Sidebar › Directory: Account Mapping people and address-book contacts, plus Amnex employees. */
+  directory: ['am.contacts', 'am.departments', 'team.org', 'team.sales'],
   insights: ['an.operational'],
   meetings: ['am.meetings'],
   sales: ['team.sales'],
   teams: ['team.org', 'team.sales'],
+  employeeMaster: ['team.org'],
   commercial: ['com.boqs', 'com.skus', 'com.masters'],
   opportunity: ROW_MODULES,
   adminAccess: ['admin.access'],

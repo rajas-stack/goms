@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { TRPCError } from '@trpc/server'
-import { validMailAddress, type CommunicationContact } from '@goms/domain'
+import { CONTACT_PARTIES, validMailAddress, type CommunicationContact } from '@goms/domain'
 import { protectedProcedure, protectedReadProcedure, router, type Context } from '../trpc.js'
 import { verifyIdentity, isAmnexAccount } from '../auth/identity.js'
 import { requireSystemAdmin, EMAIL_BINDING_MESSAGE } from '../auth/rbac/systemAdminOnly.js'
@@ -13,7 +13,7 @@ const email = z.string().trim().toLowerCase().max(254).refine(validMailAddress, 
 const uuid = z.string().uuid()
 const scope = z.object({ bidId: uuid }).strict()
 const contactInput = z.object({
-  email, name: z.string().trim().min(1).max(200), party: z.enum(['delivery', 'oem', 'clientDepartment', 'external']),
+  email, name: z.string().trim().min(1).max(200), party: z.enum(CONTACT_PARTIES),
   organization: z.string().trim().min(1).max(200), departmentId: uuid.nullable(),
 }).strict()
 
@@ -57,6 +57,12 @@ export const bidCommunicationsRouter = router({
     const result = await pool.query('UPDATE communication_contacts SET name=$2,party=$3,organization=$4,department_id=$5,updated_at=now() WHERE id=$1 RETURNING *', [input.id, input.name, input.party, input.organization, input.departmentId])
     if (!result.rows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Contact no longer exists.' })
     return contact(result.rows[0])
+  }),
+  // Removes the address-book entry only: linked mail threads keep their own copy of each participant and category.
+  deleteContact: protectedProcedure.input(z.object({ id: uuid }).strict()).mutation(async ({ input, ctx }) => {
+    await identity(ctx)
+    const result = await pool.query('DELETE FROM communication_contacts WHERE id=$1 RETURNING id', [input.id])
+    if (!result.rows.length) throw new TRPCError({ code: 'NOT_FOUND', message: 'Contact no longer exists.' })
   }),
   // Existing native mutations retain their permission, email-binding and org-roster rules.
   addInternal: protectedProcedure.input(z.object({

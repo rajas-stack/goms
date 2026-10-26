@@ -77,7 +77,7 @@ describe('readable activity items', () => {
     expect(col).toMatchObject({ kind: 'column', title: 'Column “Budget” added', bidId: null })
   })
 
-  it('ignores audit rows that are not Bid Tracker history', () => {
+  it('ignores audit rows that are not Live Bids history', () => {
     expect(buildActivityItems([log({ entityType: 'commercialSku' })], [], ctx())).toEqual([])
   })
 

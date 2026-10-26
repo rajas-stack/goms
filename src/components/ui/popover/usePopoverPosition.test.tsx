@@ -5,7 +5,7 @@ import { usePopoverPosition } from './usePopoverPosition'
 // Regression: the hook tracks its anchor with a requestAnimationFrame loop for as long as the
 // panel is open. It used to call setPosition with a NEW object every frame, re-rendering the
 // popover subtree at ~60 Hz even when nothing had moved — with two popovers open over the
-// Bid Tracker grid that froze the page for seconds on real data.
+// Live Bids grid that froze the page for seconds on real data.
 describe('usePopoverPosition', () => {
   let frame: FrameRequestCallback | null = null
   beforeEach(() => {

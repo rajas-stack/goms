@@ -73,6 +73,8 @@ export const MASTER_DEFS: Record<MasterEntityKey, MasterDef> = {
   },
   preSales: { label: 'Pre-Sales', singularLabel: 'Pre-Sales Executive', fields: [] },
   directoryTypes: { label: 'Directory Types', singularLabel: 'Directory Type', fields: [] },
+  oemCompanies: { label: 'OEM Companies', singularLabel: 'OEM Company', fields: [] },
+  consortiumPartners: { label: 'Consortium Partners', singularLabel: 'Consortium Partner', fields: [] },
   ...(Object.fromEntries(BID_TRACKER_MASTERS.map(m => [m.key, { label: m.label, singularLabel: m.singular, fields: [] }])) as unknown as Record<BidTrackerMasterKey, MasterDef>),
 }
 

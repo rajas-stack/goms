@@ -2,7 +2,7 @@
 // apps/api's hierarchy router) — re-imported and re-exported here so every
 // existing import path (`@/lib/types`) keeps working unchanged, including
 // this file's own later use of Domain/Status below.
-import type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue, FilterNode, OwnedSheet } from '@goms/domain'
+import type { Domain, Status, NodeType, HierNode, CustomFieldType, CustomValue, FilterNode, OwnedSheet, LifecycleData } from '@goms/domain'
 import type {
   CorrigendumAffectedModule, CorrigendumChangeClassification, CorrigendumChangeKind, CorrigendumImpactLevel, CorrigendumReviewStatus,
   DocumentBatch, DocumentCategory,
@@ -92,6 +92,8 @@ export interface Charge {
 
 export interface Employee {
   id: string
+  /** Read-only Directory ID from the Client Departments range (1001–6000). Vacant seats have none until filled. */
+  directoryNumber?: number | null
   code: string
   name: string
   designation: string
@@ -160,7 +162,7 @@ export interface Opportunity {
   opportunityName: string
   /** GEM bid number or tender ID, whichever applies. */
   gemTenderId: string
-  /** Client city — free text, feeds the Bid Tracker Master Grid's "City"
+  /** Client city — free text, feeds the Live Bids Master Grid's "City"
    *  column. `null`/absent for opportunities that predate it. */
   city?: string | null
   /** Reference / Bid No — a bid or reference number distinct from `gemTenderId`.
@@ -412,7 +414,7 @@ export interface OwnershipAssignment {
   createdBy: string | null
 }
 
-// --- Bid Tracker ---
+// --- Live Bids ---
 
 export interface Bid {
   id: string
@@ -425,6 +427,9 @@ export interface Bid {
   tenderLink: string | null
   /** The Opportunity sheet this row lives in (Master shows every sheet's rows). */
   sheet: OwnedSheet
+  /** Furthest lifecycle stage reached; retained when an opportunity moves backward. */
+  lifecycleReachedSheet?: OwnedSheet
+  lifecycleData?: LifecycleData
   archivedAt: string | null
   createdAt: string
   updatedAt: string
@@ -550,7 +555,7 @@ export interface BidCustomField {
   sheet: ColumnOwner
   /** Non-null exactly for `select`. */
   options: string[] | null
-  /** Built-in Bid Tracker fields: option → full form (tooltip), from Settings > Masters > Bid Tracker. */
+  /** Built-in Live Bids fields: option → full form (tooltip), from Settings > Masters > Live Bids. */
   optionHints?: Record<string, string>
   /** True once any non-null value has EVER been written (never reset, even if
    *  every value is later cleared). Only a column where this is false can be

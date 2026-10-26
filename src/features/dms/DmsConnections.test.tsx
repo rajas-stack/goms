@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { DmsSettingsPage } from '@/app/routes/DmsSettingsPage'
 import { DmsConnectionPage } from '@/app/routes/DmsConnectionPage'
 import { loadConnections, saveConnection } from './connections'
@@ -12,7 +13,7 @@ vi.mock('./googleDrive', () => ({ ...drive, FOLDER_MIME: 'application/vnd.google
 beforeEach(() => { localStorage.clear(); vi.clearAllMocks(); drive.loadGoogleIdentity.mockResolvedValue({}); drive.getDriveSession.mockReturnValue(null) })
 afterEach(cleanup)
 function show() {
-  return render(<MemoryRouter initialEntries={['/settings/dms']}><Routes><Route path="/settings/dms" element={<DmsSettingsPage />} /><Route path="/settings/dms/new" element={<DmsConnectionPage />} /><Route path="/settings/dms/:connectionId" element={<DmsConnectionPage />} /></Routes></MemoryRouter>)
+  return render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={['/settings/dms']}><Routes><Route path="/settings/dms" element={<DmsSettingsPage />} /><Route path="/settings/dms/new" element={<DmsConnectionPage />} /><Route path="/settings/dms/:connectionId" element={<DmsConnectionPage />} /></Routes></MemoryRouter></QueryClientProvider>)
 }
 describe('DMS list and creation', () => {
   it('shows connections first and only loads OAuth setup after Create new', async () => {

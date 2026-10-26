@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { createBrowserRouter, Navigate, useLocation } from 'react-router-dom'
 import { AppLayout } from './AppLayout'
 import { RequireSignIn } from './RequireSignIn'
 import { GlobalErrorScreen } from './routes/GlobalErrorScreen'
@@ -15,7 +15,6 @@ import type { ReactNode } from 'react'
 const Home = lazy(() => import('./routes/Home').then((m) => ({ default: m.Home })))
 const Landing = lazy(() => import('./routes/Landing').then((m) => ({ default: m.Landing })))
 const StateWorkspace = lazy(() => import('./routes/StateWorkspace').then((m) => ({ default: m.StateWorkspace })))
-const Directory = lazy(() => import('./routes/Directory').then((m) => ({ default: m.Directory })))
 const Insights = lazy(() => import('./routes/Insights').then((m) => ({ default: m.Insights })))
 const VisualLibraryPage = lazy(() => import('@/features/insights-studio/pages/VisualLibraryPage').then((m) => ({ default: m.VisualLibraryPage })))
 const VisualBuilderPage = lazy(() => import('@/features/insights-studio/pages/VisualBuilderPage').then((m) => ({ default: m.VisualBuilderPage })))
@@ -41,7 +40,7 @@ const CompetitorsSettingsPage = lazy(() =>
 )
 const MasterSettingsPage = lazy(() => import('./routes/MasterSettingsPage').then((m) => ({ default: m.MasterSettingsPage })))
 const EmployeeMasterSettingsPage = lazy(() =>
-  import('./routes/EmployeeMasterSettingsPage').then((m) => ({ default: m.EmployeeMasterSettingsPage })),
+  import('./routes/SettingsEmployeeMasterPage').then((m) => ({ default: m.SettingsEmployeeMasterPage })),
 )
 const SalesWorkspace = lazy(() => import('./routes/SalesWorkspace').then((m) => ({ default: m.SalesWorkspace })))
 const TeamsWorkspace = lazy(() => import('./routes/TeamsWorkspace').then((m) => ({ default: m.TeamsWorkspace })))
@@ -99,21 +98,33 @@ const adminImportRoutes =
       ]
     : []
 
+/** Old /bid-tracker/... links and bookmarks keep working: same page under the Live Bids address. */
+function LegacyLiveBidsRedirect() {
+  const { pathname, search, hash } = useLocation()
+  return <Navigate to={`${pathname.replace(/^\/bid-tracker/, '/live-bids')}${search}${hash}`} replace />
+}
+
+function DirectoryRedirect() {
+  const { search } = useLocation()
+  return <Navigate to={`/teams/directory${search}`} replace />
+}
+
 /** The Opportunity module opens for any role that can read at least one sheet (its tabs then follow their own sheet). */
 const Opp = ({ children }: { children: React.ReactNode }) => <RequireAccess anyOf={NAV_MODULES.opportunity}>{children}</RequireAccess>
 
-// Bid Tracker is dark-launched behind its own build flag, same convention as
+// Live Bids is dark-launched behind its own build flag, same convention as
 // the admin-import routes above: absent from the router entirely when off.
 const bidTrackerRoutes = isBidTrackerEnabled()
   ? [
-      routed('/bid-tracker', ROUTE_NODES.bidTracker, <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp>),
-      routed('/bid-tracker/bid/:bidId', ROUTE_NODES.bid, <Opp><BidDetailWorkspace /></Opp>),
-      routed('/bid-tracker/pipeline', ROUTE_NODES.pipeline, <Opp><OpportunityWorkspace tab="pipeline" /></Opp>),
-      routed('/bid-tracker/pipeline/:tab', ROUTE_NODES.pipeline, <Opp><OpportunityWorkspace tab="pipeline" /></Opp>),
-      routed('/bid-tracker/campaign', ROUTE_NODES.campaign, <Opp><OpportunityWorkspace tab="campaign" /></Opp>),
-      routed('/bid-tracker/master', ROUTE_NODES.master, <Opp><OpportunityWorkspace tab="master" /></Opp>),
-      routed('/bid-tracker/dashboard', ROUTE_NODES.dashboard, <Opp><OpportunityWorkspace tab="dashboard" /></Opp>),
-      routed('/bid-tracker/:section', ROUTE_NODES.bidTracker, <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp>),
+      routed('/live-bids', ROUTE_NODES.bidTracker, <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp>),
+      routed('/live-bids/bid/:bidId', ROUTE_NODES.bid, <Opp><BidDetailWorkspace /></Opp>),
+      routed('/live-bids/pipeline', ROUTE_NODES.pipeline, <Opp><OpportunityWorkspace tab="pipeline" /></Opp>),
+      routed('/live-bids/pipeline/:tab', ROUTE_NODES.pipeline, <Opp><OpportunityWorkspace tab="pipeline" /></Opp>),
+      routed('/live-bids/campaign', ROUTE_NODES.campaign, <Opp><OpportunityWorkspace tab="campaign" /></Opp>),
+      routed('/live-bids/master', ROUTE_NODES.master, <Opp><OpportunityWorkspace tab="master" /></Opp>),
+      routed('/live-bids/dashboard', ROUTE_NODES.dashboard, <Opp><OpportunityWorkspace tab="dashboard" /></Opp>),
+      routed('/live-bids/:section', ROUTE_NODES.bidTracker, <Opp><OpportunityWorkspace tab="bid-tracker" /></Opp>),
+      { path: '/bid-tracker/*', handle: rbacHandle(ROUTE_NODES.bidTracker), element: <LegacyLiveBidsRedirect /> },
     ]
   : []
 
@@ -125,7 +136,8 @@ export const router = createBrowserRouter([
       routed('/', ROUTE_NODES.home, <Home />),
       routed('/map', ROUTE_NODES.map, <RequireAccess anyOf={NAV_MODULES.map}><Landing /></RequireAccess>),
       routed('/state/:code', ROUTE_NODES.state, <RequireAccess anyOf={NAV_MODULES.map}><StateWorkspace /></RequireAccess>),
-      routed('/directory', ROUTE_NODES.directory, <RequireAccess anyOf={NAV_MODULES.directory}><Directory /></RequireAccess>),
+      // Directory moved from Account Mapping to the sidebar Directory; old links (with ?sel=) still land on the same person.
+      { path: '/directory', handle: rbacHandle(ROUTE_NODES.directory), element: <DirectoryRedirect /> },
       routed('/analytics', ROUTE_NODES.insights, <RequireAccess anyOf={NAV_MODULES.insights}><Insights /></RequireAccess>),
       routed('/insights', ROUTE_NODES.insights, <RequireAccess anyOf={NAV_MODULES.insights}><Insights /></RequireAccess>),
       routed('/insights/studio/visuals', ROUTE_NODES.insightsStudioVisuals, <RequireAccess anyOf={NAV_MODULES.insights}><VisualLibraryPage /></RequireAccess>),
@@ -138,6 +150,7 @@ export const router = createBrowserRouter([
       routed('/meetings/:meetingId', ROUTE_NODES.meeting, <RequireAccess anyOf={NAV_MODULES.meetings}><MeetingDetails /></RequireAccess>),
       routed('/sales', ROUTE_NODES.sales, <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess>),
       routed('/sales/:section', ROUTE_NODES.sales, <RequireAccess anyOf={NAV_MODULES.sales}><SalesWorkspace /></RequireAccess>),
+      routed('/teams/directory', ROUTE_NODES.directory, <RequireAccess anyOf={NAV_MODULES.directory}><TeamsWorkspace /></RequireAccess>),
       routed('/teams', ROUTE_NODES.teams, <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess>),
       routed('/teams/:team', ROUTE_NODES.teams, <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess>),
       routed('/teams/:team/:section', ROUTE_NODES.teams, <RequireAccess anyOf={NAV_MODULES.teams}><TeamsWorkspace /></RequireAccess>),
@@ -145,6 +158,8 @@ export const router = createBrowserRouter([
       routed('/commercial-calculator/:section', ROUTE_NODES.commercial, <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess>),
       routed('/commercial-calculator/boq/:boqId', ROUTE_NODES.boq, <RequireAccess anyOf={NAV_MODULES.commercial}><CommercialCalculatorWorkspace /></RequireAccess>),
       // Roles & Access lives in Settings → System settings; the old /admin/access screens (bookmarks) forward there.
+      // Employees used to be a Teams tab; keep old bookmarks working now that the screen is Settings → Masters → Employee Master.
+      { path: '/teams/employees', element: <Navigate to="/settings/masters/employees" replace /> },
       { path: '/admin/access', element: <Navigate to="/settings/access" replace /> },
       { path: '/admin/access/*', element: <Navigate to="/settings/access" replace /> },
       { path: '/settings/access', handle: rbacHandle(ROUTE_NODES.access), element: <RequireAccess anyOf={NAV_MODULES.adminAccess}><RequireNode node={ROUTE_NODES.access}><RolesAccessPage /></RequireNode></RequireAccess> },

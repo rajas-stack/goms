@@ -63,7 +63,7 @@ describe('migrateSnapshot', () => {
     expect(migrateSnapshot({ employees: [] }, 1)).toBeNull()
   })
 
-  it('v22 files every existing bid into the Bid Tracker sheet, keeping a known sheet', () => {
+  it('v22 files every existing bid into the Live Bids sheet, keeping a known sheet', () => {
     const out = MIGRATIONS[22]({ bids: [{ id: 'b1' }, { id: 'b2', sheet: 'campaign' }, { id: 'b3', sheet: 'master' }] })
     expect((out.bids as { sheet: string }[]).map((b) => b.sheet)).toEqual(['bidTracker', 'campaign', 'bidTracker'])
     expect(MIGRATIONS[22]({ nodes: [] })).toEqual({ nodes: [] })
@@ -144,7 +144,7 @@ describe('migrateSnapshot', () => {
     expect(out!.customers).toEqual([{ id: 'cust_1', name: 'Acme' }])
   })
 
-  it('adds empty Bid Tracker collections when migrating an old snapshot', () => {
+  it('adds empty Live Bids collections when migrating an old snapshot', () => {
     const out = migrateSnapshot(v1Snapshot(), 1)
     expect(out).not.toBeNull()
     expect(out!.bids).toEqual([])
@@ -183,11 +183,11 @@ describe('migrateSnapshot', () => {
     expect(out!.bidCustomFieldValues).toHaveLength(1)
   })
 
-  it('does not clobber existing Bid Tracker data if a snapshot already has it', () => {
+  it('does not clobber existing Live Bids data if a snapshot already has it', () => {
     const withBids = { ...v1Snapshot(), bids: [{ id: 'bid_1', bidCode: 'BID-2026-0001' }] }
     const out = migrateSnapshot(withBids, 12)
     expect(out).not.toBeNull()
-    // (v22 adds the bid's sheet — every pre-existing bid is a Bid Tracker row.)
+    // (v22 adds the bid's sheet — every pre-existing bid is a Live Bids row.)
     expect(out!.bids).toEqual([{ id: 'bid_1', bidCode: 'BID-2026-0001', sheet: 'bidTracker' }])
   })
 

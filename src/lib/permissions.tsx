@@ -72,7 +72,7 @@ export function useCanReadAny(modules: readonly PolicyModuleKey[]): boolean {
 export type PermissionAction = 'read' | 'create' | 'update' | 'delete'
 
 /** The one rule behind <Can> and useAllowed: an update with an atom needs that field; without one it needs full write. */
-function isAllowed(p: Permissions, module: PolicyModuleKey, action: PermissionAction, atom?: string, row?: ScopeFacts): boolean {
+export function isAllowed(p: Permissions, module: PolicyModuleKey, action: PermissionAction, atom?: string, row?: ScopeFacts): boolean {
   return action === 'update' ? (atom ? p.canEdit(module, atom, row) : p.level(module) === 'W') : p.can(module, action, row)
 }
 

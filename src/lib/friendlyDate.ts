@@ -5,7 +5,8 @@
  *  rather than rolled forward. */
 function parseTime(value?: string): { hours: number; minutes: number } | null {
   if (!value) return { hours: 0, minutes: 0 }
-  const match = value.match(/^(\d{1,2})(?::(\d{2})|(\d{2}))?\s*(am|pm)?$/i)
+  // Seconds ("00:00:00", as spreadsheets export) are accepted and dropped.
+  const match = value.match(/^(\d{1,2})(?::(\d{2})(?::\d{2})?|(\d{2}))?\s*(am|pm)?$/i)
   if (!match) return null
 
   let hours = Number(match[1])
@@ -112,7 +113,10 @@ export function formatCapturedDate(value: string): string {
 
 /** The value formats a date field can store — the same strings the native inputs produced:
  *  `yyyy-mm-dd` (date), `yyyy-mm-ddTHH:mm` (datetime-local), or a full ISO instant (iso). */
-export type FriendlyDateFormat = 'date' | 'datetime-local' | 'iso'
+export type FriendlyDateFormat = 'date' | 'datetime-local' | 'iso' | 'optional-time'
+
+/** Explicit midnight counts as a supplied time, just like any other hour. */
+export const hasFriendlyTime = (text: string): boolean => /(\d:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?|\d\s*[ap]m)$/i.test(text.trim())
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const localDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
@@ -121,14 +125,14 @@ const localTime = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
 /** A parsed date as the stored value for `format`. */
 export function toFriendlyValue(parsed: Date, format: FriendlyDateFormat): string {
   if (format === 'iso') return parsed.toISOString()
-  if (format === 'datetime-local') return `${localDate(parsed)}T${localTime(parsed)}`
+  if (format === 'datetime-local' || format === 'optional-time' && parsed.getHours() + parsed.getMinutes() > 0) return `${localDate(parsed)}T${localTime(parsed)}`
   return localDate(parsed)
 }
 
 /** Parse free text straight into a stored value ('' when empty or unrecognised). */
 export function parseFriendlyValue(text: string, format: FriendlyDateFormat): string {
   const parsed = parseFriendlyDate(text)
-  return parsed ? toFriendlyValue(parsed, format) : ''
+  return parsed ? toFriendlyValue(parsed, format === 'optional-time' && hasFriendlyTime(text) ? 'datetime-local' : format) : ''
 }
 
 const DATE_VALUE = /^(\d{4})-(\d{2})-(\d{2})$/
@@ -141,11 +145,11 @@ export function friendlyValueToDate(value: string, format: FriendlyDateFormat): 
     const instant = new Date(value)
     return Number.isNaN(instant.getTime()) ? null : instant
   }
-  const match = (format === 'datetime-local' ? DATETIME_VALUE : DATE_VALUE).exec(value)
+  const match = (format === 'datetime-local' || format === 'optional-time' && value.includes('T') ? DATETIME_VALUE : DATE_VALUE).exec(value)
   if (!match) return null
   const [, y, m, d, hh = '0', mm = '0'] = match
   const parsed = new Date(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm))
-  return parsed.getMonth() === Number(m) - 1 && parsed.getDate() === Number(d) ? parsed : null
+  return parsed.getMonth() === Number(m) - 1 && parsed.getDate() === Number(d) && parsed.getHours() === Number(hh) && parsed.getMinutes() === Number(mm) ? parsed : null
 }
 
 /** Readable text for a stored value, which the parser reads back to the same value —
@@ -154,12 +158,12 @@ export function formatFriendlyValue(value: string, format: FriendlyDateFormat): 
   const parsed = friendlyValueToDate(value, format)
   if (!parsed) return value
   const day = `${pad(parsed.getDate())} ${parsed.toLocaleString('en', { month: 'short' })} ${parsed.getFullYear()}`
-  return format === 'date' ? day : `${day} ${localTime(parsed)}`
+  return format === 'date' || format === 'optional-time' && !value.includes('T') ? day : `${day} ${localTime(parsed)}`
 }
 
 /** The "Captured: …" preview for typed text ('' when unrecognised). A date-only field never shows a time. */
 export function formatFriendlyPreview(text: string, format: FriendlyDateFormat): string {
-  if (format !== 'date') return formatCapturedDate(text)
+  if (format !== 'date' && (format !== 'optional-time' || hasFriendlyTime(text))) return formatCapturedDate(text)
   const parsed = parseFriendlyDate(text)
   return parsed ? `${pad(parsed.getDate())} ${parsed.toLocaleString('en', { month: 'long' })} ${parsed.getFullYear()}` : ''
 }

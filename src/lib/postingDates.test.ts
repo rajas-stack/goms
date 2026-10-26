@@ -8,6 +8,10 @@ const p2: PostingInterval = { id: 'p2', startDate: '2025-07-01', endDate: null }
 const solo: PostingInterval = { id: 's', startDate: '1970-01-01', endDate: null }
 
 describe('addDays / isValidIsoDate', () => {
+  it('retains an optional clock through inclusive-end calendar arithmetic', () => {
+    expect(addDays('2026-10-20T18:00', 1)).toBe('2026-10-21T18:00')
+    expect(planPostingDatesEdit([solo], 's', { startDate: '2026-10-01T09:30', lastDayHeld: '2026-10-20T18:00' })).toMatchObject({ startDate: '2026-10-01T09:30', endDate: '2026-10-21T18:00' })
+  })
   it('handles month, year and leap-year boundaries', () => {
     expect(addDays('2025-06-30', 1)).toBe('2025-07-01')
     expect(addDays('2025-12-31', 1)).toBe('2026-01-01')

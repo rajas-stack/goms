@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button'
 import { Field, Input } from '@/components/ui/Field'
 import { folderIdFromInput } from './settings'
 import { notifyProfileImages, PROFILE_IMAGES_QUERY, profileImagesApi } from './profileImagesClient'
+import { DriveProfileImagesSettings } from './DriveProfileImagesSettings'
 
 type FolderLocation = { id: string; name: string }
 const MY_DRIVE: FolderLocation = { id: 'root', name: 'My Drive' }
@@ -14,7 +15,7 @@ const MY_DRIVE: FolderLocation = { id: 'root', name: 'My Drive' }
 export function ProfileImagesSettings() {
   return <section className="mt-6 space-y-4 rounded-xl border border-line bg-white p-4 sm:p-6" aria-labelledby="profile-images-title">
     <div><h2 id="profile-images-title" className="text-base font-semibold text-ink-900">Profile Images</h2><p className="mt-1 text-[13px] text-muted">Employee photos from your private Google Drive folder. Choose a folder, then sync to update photos across Employees and Sales.</p></div>
-    {import.meta.env.VITE_API_BASE_URL ? <ConnectedProfileImagesSettings /> : <p className="text-sm text-muted">Profile Images requires the connected GOMS server.</p>}
+    {import.meta.env.VITE_API_BASE_URL ? <ConnectedProfileImagesSettings /> : <DriveProfileImagesSettings />}
   </section>
 }
 function ConnectedProfileImagesSettings() {

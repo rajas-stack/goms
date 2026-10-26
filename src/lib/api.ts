@@ -129,7 +129,7 @@ export function useOpportunityMutations() {
     qc.invalidateQueries({ queryKey: ['opportunitiesByDepartment'] })
     qc.invalidateQueries({ queryKey: ['opportunity'] })
     qc.invalidateQueries({ queryKey: ['opportunityStageChanges'] })
-    // The Bid Tracker Master Grid rows are joined from opportunity fields.
+    // The Live Bids Master Grid rows are joined from opportunity fields.
     qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
   }
   const create = useMutation({ mutationFn: (i: CreateOpportunityInput) => repository.createOpportunity(i), onSuccess: invalidate })
@@ -141,7 +141,7 @@ export function useOpportunityMutations() {
   return { create, update, remove }
 }
 
-// --- Bid Tracker ---
+// --- Live Bids ---
 export const useBidsForGrid = (filterRules?: BidSavedView['filterRules']) =>
   // keepPreviousData: changing a filter must not blank the grid to a loading
   // state while the new rows load — the old rows stay until the new ones land.
@@ -164,14 +164,14 @@ export function useBidMutations() {
     qc.invalidateQueries({ queryKey: ['opportunity'] })
     qc.invalidateQueries({ queryKey: ['opportunityStageChanges'] })
   }
-  // Both entry points (the Bid Tracker's Create Bid dialog and the opportunity card) go through
+  // Both entry points (the Live Bids' Create Bid dialog and the opportunity card) go through
   // this one mutation; `department` is only sent when the opportunity has none.
   const create = useMutation({
     mutationFn: (a: { opportunityId: string; department?: DepartmentChoice; sheet?: OwnedSheet }) =>
       repository.createBid(a.opportunityId, a.department, a.sheet),
     onSuccess: invalidate,
   })
-  // Create the opportunity, its department and the bid in one go (Bid Tracker's Create Bid → new opportunity).
+  // Create the opportunity, its department and the bid in one go (Live Bids' Create Bid → new opportunity).
   const createWithNewOpportunity = useMutation({
     mutationFn: (a: { opportunity: NewBidOpportunity; department: DepartmentChoice; sheet?: OwnedSheet }) =>
       repository.createBidForNewOpportunity(a.opportunity, a.department, a.sheet),
@@ -179,7 +179,7 @@ export function useBidMutations() {
   })
   // `sheet` in the patch moves the row to another Opportunity sheet.
   const update = useMutation({
-    mutationFn: (a: { id: string; patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink' | 'sheet'>> }) =>
+    mutationFn: (a: { id: string; patch: Partial<Pick<Bid, 'stageKey' | 'decision' | 'tenderLink' | 'sheet' | 'lifecycleData'>> }) =>
       repository.updateBid(a.id, a.patch),
     onSuccess: invalidate,
   })
@@ -331,7 +331,12 @@ export function useDocumentCitationMutations(documentId: string) {
 export const useBidSavedViews = (sheet = 'bidTracker') =>
   useQuery({
     queryKey: qk.bidSavedViews, queryFn: () => repository.listBidSavedViews(),
-    select: (views) => views.filter((v) => v.isSystem || (v.sheet ?? 'bidTracker') === sheet),
+    select: (views) => views.filter(v => {
+      if (!v.isSystem) return (v.sheet ?? 'bidTracker') === sheet
+      return sheet === 'bidTracker' || sheet === 'master' || ['allBids', 'myBids'].includes(v.id)
+    }).map(v => !v.isSystem || sheet === 'bidTracker' ? v : ({ ...v,
+      name: v.id === 'allBids' ? 'All Opportunities' : v.id === 'myBids' ? 'My Opportunities' : v.name,
+    })),
   })
 export function useBidSavedViewMutations() {
   const qc = useQueryClient()
@@ -349,7 +354,7 @@ export function useBidSavedViewMutations() {
   return { create, update, remove }
 }
 
-// --- Bid Tracker: custom columns (spec §8.1) ---
+// --- Live Bids: custom columns (spec §8.1) ---
 export const useBidCustomFields = (includeArchived = false) =>
   useQuery({ queryKey: qk.bidCustomFields(includeArchived), queryFn: () => repository.listBidCustomFields(includeArchived) })
 export const useBidCustomValues = (bidId: string | null) =>
@@ -368,7 +373,7 @@ export function useBidCustomFieldMutations() {
     onSuccess: invalidate,
   })
   const update = useMutation({
-    mutationFn: (a: { id: string; patch: { name?: string; options?: string[] } }) => repository.updateBidCustomField(a.id, a.patch),
+    mutationFn: (a: { id: string; patch: Parameters<typeof repository.updateBidCustomField>[1] }) => repository.updateBidCustomField(a.id, a.patch),
     onSuccess: invalidate,
   })
   const reorder = useMutation({ mutationFn: (ids: string[]) => repository.reorderBidCustomFields(ids), onSuccess: invalidate })
@@ -385,6 +390,7 @@ export function useSetBidCustomValue() {
     mutationFn: (a: { bidId: string; fieldId: string; value: string | number | boolean | null }) =>
       repository.setBidCustomValue(a.bidId, a.fieldId, a.value),
     onSuccess: (_result, a) => {
+      qc.invalidateQueries({ queryKey: ['bidCustomFields'] })
       qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
       qc.invalidateQueries({ queryKey: qk.bidCustomValues(a.bidId) })
       qc.invalidateQueries({ queryKey: ['bid', a.bidId] })
@@ -403,6 +409,8 @@ export function useDeliveryTeamMemberMutations() {
     qc.invalidateQueries({ queryKey: ['deliveryTeamMembers'] })
     qc.invalidateQueries({ queryKey: ['opportunities'] })
     qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+    // Live Bids' Pre-sales dropdown options are resolved from this roster.
+    qc.invalidateQueries({ queryKey: ['bidCustomFields'] })
   }
   const create = useMutation({ mutationFn: (input: CreateDeliveryTeamMemberInput) => repository.createDeliveryTeamMember(input), onSuccess: invalidate })
   const update = useMutation({
@@ -429,6 +437,7 @@ export function useOrgPersonMutations() {
     // Email Center people matching and the sales roster read the same people.
     qc.invalidateQueries({ queryKey: ['communicationDirectory'] })
     qc.invalidateQueries({ queryKey: qk.salesPersons })
+    qc.invalidateQueries({ queryKey: ['bidCustomFields'] }) // Pre-sales dropdown options
   }
   const create = useMutation({ mutationFn: (input: CreateOrgPersonInput) => repository.createOrgPerson(input), onSuccess: invalidate })
   const update = useMutation({
@@ -515,7 +524,7 @@ export function useOwnershipMutations() {
     qc.invalidateQueries({ queryKey: ['ownedBy'] })
     qc.invalidateQueries({ queryKey: ['resolvedOwners'] })
     qc.invalidateQueries({ queryKey: ['ownershipAssignments'] })
-    // The Bid Tracker grid's Bid Owner / Sales Lead columns resolve ownership server-side.
+    // The Live Bids grid's Bid Owner / Sales Lead columns resolve ownership server-side.
     qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
   }
   const assign = useMutation({ mutationFn: (i: AssignOwnerInput) => repository.assignOwner(i), onSuccess: invalidate })

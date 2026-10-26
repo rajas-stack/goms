@@ -184,7 +184,7 @@ describe('custom column types, grouped filters and inline-edit history', () => {
     expect(log.find((l: any) => l.action === 'custom_field_deleted')?.reason).toBe('Deleted with 1 value')
   })
 
-  it('a custom column belongs to the sheet it was added on (default Bid Tracker)', async () => {
+  it('a custom column belongs to the sheet it was added on (default Live Bids)', async () => {
     const a = await caller().bidCustomFields.create({ name: 'On tracker', dataType: 'text' })
     const b = await caller().bidCustomFields.create({ name: 'On pipeline', dataType: 'text', sheet: 'pipeline' })
     const c = await caller().bidCustomFields.create({ name: 'On campaign', dataType: 'text', sheet: 'campaign' })

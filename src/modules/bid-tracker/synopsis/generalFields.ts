@@ -5,6 +5,6 @@ export { GENERAL_FIELDS, GENERAL_GROUPS, generalToDocument, type GeneralField, t
 
 export function documentToGeneral(document: SynopsisNode | null | undefined): Record<string, string> {
   const values = readGeneral(document)
-  if (values.preBidMeeting) values.preBidMeeting = parseFriendlyValue(values.preBidMeeting, 'datetime-local') || values.preBidMeeting
+  if (values.preBidMeeting) values.preBidMeeting = parseFriendlyValue(values.preBidMeeting, 'optional-time') || values.preBidMeeting
   return values
 }

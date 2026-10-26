@@ -11,7 +11,7 @@ describe('filterRowsBySheet — the Master Grid shows the union of the sheets a 
   it('drops rows whose sheet module is not readable', () => {
     expect(filterRowsBySheet(rows, (m) => m !== 'opp.pipeline').map((r: any) => r.id)).toEqual([1, 3, 4])
   })
-  it('treats a row with no sheet as Bid Tracker', () => {
+  it('treats a row with no sheet as Live Bids', () => {
     expect(filterRowsBySheet(rows, (m) => m === 'opp.bidTracker').map((r: any) => r.id)).toEqual([1, 4])
   })
   it('passes non-arrays through untouched', () => {

@@ -6,6 +6,7 @@ import { OptionsMenu } from './OptionsMenu'
 import { DmsSettingsPage } from '@/app/routes/DmsSettingsPage'
 import { SettingsPage } from '@/app/routes/SettingsPage'
 import { DmsConnectionPage } from '@/app/routes/DmsConnectionPage'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 vi.mock('@/features/dms/DmsSetup', () => ({ DmsSetup: () => <div>DMS configuration form</div> }))
 afterEach(cleanup)
@@ -16,7 +17,7 @@ function CurrentPath() {
 
 describe('DMS settings navigation', () => {
   it('follows the blank user profile > Settings > System settings > DMS Settings to a dedicated page', async () => {
-    render(<MemoryRouter initialEntries={['/']}><OptionsMenu /><Routes><Route path="/" element={<p>Workspace</p>} /><Route path="/settings" element={<SettingsPage />} /><Route path="/settings/dms" element={<DmsSettingsPage />} /><Route path="/settings/dms/new" element={<DmsConnectionPage />} /></Routes></MemoryRouter>)
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={['/']}><OptionsMenu /><Routes><Route path="/" element={<p>Workspace</p>} /><Route path="/settings" element={<SettingsPage />} /><Route path="/settings/dms" element={<DmsSettingsPage />} /><Route path="/settings/dms/new" element={<DmsConnectionPage />} /></Routes></MemoryRouter></QueryClientProvider>)
     await userEvent.click(screen.getByRole('button', { name: 'Profile options' }))
     await userEvent.click(screen.getByRole('menuitem', { name: /Settings/ }))
     const dialog = screen.getByRole('dialog', { name: 'Settings' })

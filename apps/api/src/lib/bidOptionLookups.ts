@@ -2,8 +2,8 @@ import { BID_TRACKER_MASTER_KEYS, bidSystemField, resolveSystemOptions, withSyst
 
 type Client = { query: (sql: string, params?: any[]) => Promise<{ rows: any[] }> }
 
-/** Live option sources for the built-in Bid Tracker fields (packages/domain/src/bidTrackerFields.ts):
- *  active Bid Tracker masters, the Competitors list and the active Presales team. */
+/** Live option sources for the built-in Live Bids fields (packages/domain/src/bidTrackerFields.ts):
+ *  active Live Bids masters, the Competitors list and the active Presales team. */
 export async function loadBidOptionLookups(client: Client): Promise<BidOptionLookups> {
   const [masters, competitors, preSales] = await Promise.all([
     client.query('SELECT master_key, name, description FROM commercial_masters WHERE master_key = ANY($1) AND active ORDER BY display_order, name', [BID_TRACKER_MASTER_KEYS]),

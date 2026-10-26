@@ -10,8 +10,8 @@ beforeEach(() => { prompt.pending.mockReset(); prompt.raise.mockReset() })
 describe('takeAuthParams', () => {
   it('extracts auth_code and removes it from the address bar, keeping the rest of the URL', () => {
     const h = hist()
-    expect(takeAuthParams('https://goms.test/bid-tracker?sheet=x&auth_code=ABC#top', h)).toEqual({ code: 'ABC', error: undefined })
-    expect(h.replaceState).toHaveBeenCalledWith({ s: 1 }, '', '/bid-tracker?sheet=x#top')
+    expect(takeAuthParams('https://goms.test/live-bids?sheet=x&auth_code=ABC#top', h)).toEqual({ code: 'ABC', error: undefined })
+    expect(h.replaceState).toHaveBeenCalledWith({ s: 1 }, '', '/live-bids?sheet=x#top')
   })
   it('extracts auth_error and strips it the same way', () => {
     const h = hist()

@@ -274,10 +274,8 @@ export function TimelineEventDialog({ open, employeeId, initialType, typeFilter,
             </Field>
           )}
           <Field label="Date">
-            <FriendlyDateInput value={form.date} onChange={(v) => setForm((f) => ({ ...f, date: v }))} />
-          </Field>
-          <Field label="Time">
-            <Input type="time" value={form.time} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} />
+            <FriendlyDateInput value={form.time ? `${form.date}T${form.time}` : form.date}
+              onChange={next => setForm(current => ({ ...current, date: next.slice(0, 10), time: next.includes('T') ? next.slice(11, 16) : '' }))} />
           </Field>
         </div>
         <div className="grid gap-3 lg:grid-cols-2">

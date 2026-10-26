@@ -1,6 +1,6 @@
 import { usePermissions } from '@/lib/permissions'
 import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -9,38 +9,33 @@ import { Icon } from '@/components/ui/Icon'
 import { PersonName } from '@/components/ui/PersonName'
 import { Combobox, type ComboboxOption } from '@/components/ui/Combobox'
 import { Tabs } from '@/components/ui/Tabs'
-import { useDeliveryTeamMemberMutations, useDeliveryTeamMembers, useOpportunities } from '@/lib/api'
+import { useDeliveryTeamMemberMutations, useDeliveryTeamMembers, useOpportunities, useOrgPeople } from '@/lib/api'
 import { normalizeEmail } from '@/lib/inputNormalization'
 import { EMAIL_BINDING_HELP, EMAIL_FORMAT_MESSAGE, clearEmailConfirmText, useCanEditEmailBinding } from '@/modules/admin-access/useIsSystemAdmin'
 import { PIPELINE_STAGE_MAP } from '@/data/pipeline-stages'
 import type { DeliveryTeamKey, DeliveryTeamMember, Opportunity } from '@/lib/types'
+import { TEAM_ASSIGNMENT_FIELD } from '@/data/org-structure'
 import { cn } from '@/lib/utils'
 import { DeliveryOrgChart } from '@/features/teams/DeliveryOrgChart'
-import { OrgEmployees } from '@/features/org/OrgEmployees'
 import { OrgStructureChart } from '@/features/org/OrgStructureChart'
 import { SalesWorkspace } from './SalesWorkspace'
-import { useDirectoryTypes } from '@/features/masters/useMasterOptions'
-import { DirectoryContacts } from '@/features/directory/DirectoryContacts'
+import { Directory } from './Directory'
+import { useCanReadAny } from '@/lib/permissions'
+import { useNodeFilter } from '@/lib/rbacTree/access'
+import { NAV_MODULES } from '@/lib/routeModules'
+import { ROUTE_NODES } from '../routeNodes'
 
-/** Settings > Masters > Directory Types code whose view is the Amnex employee tabs below. */
-const INTERNAL_DIRECTORY = 'internal'
+type TeamKey = 'directory' | 'org' | 'sales' | DeliveryTeamKey
 
-type TeamKey = 'org' | 'employees' | 'sales' | DeliveryTeamKey
-
+/** Directory (every person, internal and external) comes first; the team views follow. */
 const TABS: { value: TeamKey; label: string }[] = [
+  { value: 'directory', label: 'Directory' },
   { value: 'org', label: 'Org Structure' },
-  { value: 'employees', label: 'Employees' },
   { value: 'sales', label: 'Sales' },
   { value: 'preSales', label: 'Pre-sales' },
   { value: 'legal', label: 'Legal' },
   { value: 'bid', label: 'Bid' },
 ]
-
-const ASSIGNMENT_FIELD: Record<DeliveryTeamKey, keyof Opportunity> = {
-  preSales: 'preSalesPersonId',
-  legal: 'legalPersonId',
-  bid: 'bidTeamMemberId',
-}
 
 const SECTIONS = [
   { key: 'roster', label: 'Roster' },
@@ -69,15 +64,17 @@ function reportsUnder(id: string, members: DeliveryTeamMember[]): Set<string> {
 
 /** A delivery team's roster. Members mirrored from Org Structure (most of them)
  *  are read-only here — their reports-to, designation and membership come from
- *  the org, edited in Teams → Employees. Anyone added by hand before the org
+ *  the org, edited in Settings → Masters → Employee Master.
  *  existed (no org link) keeps the old inline controls.
  *
  *  A hand-added member's email binds their login to their team assignments, so changing it is System Admin only: the server
  *  refuses it from anyone else in every RBAC mode. The field is editable for a System Admin (and while the browser cannot tell
  *  who is one) and plain text for everyone else; that is a convenience, not the boundary. Org-linked members take their email
- *  from the org person (Teams → Employees). */
+ *  from the org person (Settings → Masters → Employee Master). */
 export function TeamRoster({ team }: { team: DeliveryTeamKey }) {
   const { data: members = [], isLoading } = useDeliveryTeamMembers(team)
+  const { data: orgPeople = [] } = useOrgPeople()
+  const photoByOrgPerson = new Map(orgPeople.map((person) => [person.id, person.photoUrl ?? null]))
   const { update, setStatus, remove } = useDeliveryTeamMemberMutations()
   const emailEditable = useCanEditEmailBinding()
   const [error, setError] = useState<string | null>(null)
@@ -120,8 +117,8 @@ export function TeamRoster({ team }: { team: DeliveryTeamKey }) {
     <section aria-label={`${team} roster`} className="flex min-h-0 flex-1 flex-col gap-3 p-3">
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-goms-sky/40 bg-goms-sky/[0.08] px-3 py-2 text-[12px] text-goms-navy">
         <Icon name="Network" size={14} />
-        <span>This roster follows the company Org Structure. Add people, set levels and reports-to in Employees.</span>
-        <Link to="/teams/employees" className="ml-auto font-semibold underline underline-offset-2">Open Employees</Link>
+        <span>This roster follows the company Org Structure. Add people, set levels and reports-to in Employee Master.</span>
+        <Link to="/settings/masters/employees" className="ml-auto font-semibold underline underline-offset-2">Open Employee Master</Link>
       </div>
       {members.some((member) => !member.orgPersonId) && (
         <p className="text-[11px] text-muted"><span className="font-medium text-ink-700">Email.</span> <span>{EMAIL_BINDING_HELP}</span></p>
@@ -138,9 +135,9 @@ export function TeamRoster({ team }: { team: DeliveryTeamKey }) {
               return (
               <li key={member.id} className="flex min-h-12 flex-wrap items-center gap-3 px-3 py-2">
                 {/* A hand-added member's email has its own control below; an org-linked member's follows the org person. */}
-                <PersonName person={member} size="sm" subtitle={[member.designation, member.orgPersonId ? member.email : ''].filter(Boolean).join(' · ') || undefined} className="flex-1" nameClassName="text-sm font-medium text-ink-900" />
+                <PersonName person={{ ...member, photoUrl: member.orgPersonId ? photoByOrgPerson.get(member.orgPersonId) ?? null : null }} size="sm" subtitle={[member.designation, member.orgPersonId ? member.email : ''].filter(Boolean).join(' · ') || undefined} className="flex-1" nameClassName="text-sm font-medium text-ink-900" />
                 {member.orgPersonId ? (
-                  <span className="flex w-56 items-center gap-1.5 text-[12px] text-muted" title="Set in Teams → Employees">
+                  <span className="flex w-56 items-center gap-1.5 text-[12px] text-muted" title="Set in Settings → Masters → Employee Master">
                     {member.managerId && nameOf.get(member.managerId)
                       ? <>Reports to <PersonName person={nameOf.get(member.managerId)!} size="2xs" className="min-w-0" nameClassName="text-ink-700" /></>
                       : 'Heads this team'}
@@ -263,7 +260,7 @@ function DeliveryTeam({ team, label, section }: { team: DeliveryTeamKey; label: 
           ? <TeamRoster team={team} />
           : active.key === 'orgchart'
             ? <DeliveryOrgChart team={team} />
-            : <TeamOwnership team={team} assignmentField={ASSIGNMENT_FIELD[team]} />}
+            : <TeamOwnership team={team} assignmentField={TEAM_ASSIGNMENT_FIELD[team]} />}
       </motion.div>
     </div>
   )
@@ -273,30 +270,25 @@ export function TeamsWorkspace() {
   const { team: teamParam, section } = useParams()
   const navigate = useNavigate()
   const perms = usePermissions()
+  const tree = useNodeFilter()
+  const canDirectory = useCanReadAny(NAV_MODULES.directory) && tree(ROUTE_NODES.directory)
   // Org Structure and the delivery teams follow Company Org Structure; the Sales tab follows the Sales Team.
-  const tabs = TABS.filter((t) => !perms.enforced || perms.level(t.value === 'sales' ? 'team.sales' : 'team.org') !== 'N')
+  const tabs = TABS.filter((t) => t.value === 'directory'
+    ? canDirectory
+    : !perms.enforced || perms.level(t.value === 'sales' ? 'team.sales' : 'team.org') !== 'N')
   const tab = tabs.find((t) => t.value === teamParam) ?? tabs[0] ?? TABS[0]
-  // Directory type comes from Settings > Masters > Directory Types; `?type=` keeps a non-employee view linkable.
-  const directoryTypes = useDirectoryTypes()
-  const [search, setSearch] = useSearchParams()
-  const typeCode = search.get('type') ?? INTERNAL_DIRECTORY
-  const selectedType = directoryTypes.find((d) => d.code === typeCode)
-  const isInternal = typeCode === INTERNAL_DIRECTORY || !selectedType
-  const chooseType = (code: string) => setSearch(code === INTERNAL_DIRECTORY ? {} : { type: code })
+  const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null)
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-end gap-3 bg-paper/70 px-3 pt-2 sm:px-6">
-        <Select aria-label="Directory type" value={isInternal ? INTERNAL_DIRECTORY : typeCode} onChange={(event) => chooseType(event.target.value)} className="mb-1.5 h-8 w-auto shrink-0 text-[13px] font-semibold">
-          {directoryTypes.length === 0 && <option value={INTERNAL_DIRECTORY}>Amnex Employee</option>}
-          {directoryTypes.map((d) => <option key={d.code} value={d.code}>{d.name}</option>)}
-        </Select>
-        {isInternal && <div className="min-w-0 flex-1"><Tabs tabs={tabs} value={tab.value} onChange={(value) => navigate(`/teams/${value}`)} /></div>}
+      <div className="flex shrink-0 items-center gap-2 bg-paper/70 px-3 pt-2 sm:px-6">
+        <div className="min-w-0 flex-1"><Tabs tabs={tabs} value={tab.value} onChange={(value) => navigate(`/teams/${value}`)} /></div>
+        {/* The active tab's page actions (Directory's New contact) render here, in line with the tabs. */}
+        <div ref={setActionsSlot} className="flex shrink-0 items-center gap-1" />
       </div>
       <div className="min-h-0 flex-1">
-        {!isInternal ? <DirectoryContacts code={typeCode} name={selectedType!.name} />
+        {tab.value === 'directory' ? <Directory actionsSlot={actionsSlot} />
           : tab.value === 'org' ? <OrgStructureChart />
-          : tab.value === 'employees' ? <OrgEmployees />
           : tab.value === 'sales' ? <SalesWorkspace basePath="/teams/sales" />
           : <DeliveryTeam key={tab.value} team={tab.value} label={tab.label} section={section} />}
       </div>

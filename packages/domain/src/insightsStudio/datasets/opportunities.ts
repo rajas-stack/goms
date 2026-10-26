@@ -6,7 +6,7 @@ import { ageDays, boolDim, breakdown, dateDim, daysUntil, dim, enumDim, money, n
 import type { DataRow, DatasetDef, FieldDef, VisualSuggestion } from '../types.js'
 import { COUNT_FIELD } from '../types.js'
 
-/** Opportunities, one data source PER SHEET so lineage is explicit: a Bid Tracker visual only ever reads Bid Tracker
+/** Opportunities, one data source PER SHEET so lineage is explicit: a Live Bids visual only ever reads Live Bids
  *  rows, even though Campaign rows carry same-named attributes. Master is the collective view over every sheet.
  *  Row contract (built by the web adapter from bids.listForGrid joined with opportunities.list): every field key below
  *  that is not derived, plus `valueAmount`, `valueUnit` and `currency`. */
@@ -72,7 +72,7 @@ function suggestions(id: string, noun: string): VisualSuggestion[] {
 interface SheetSource { id: string; label: string; sheet: OwnedSheet | null; rbac: PolicyModuleKey[]; description: string; noun: string }
 
 const SOURCES: SheetSource[] = [
-  { id: 'opportunities.bidTracker', label: 'Bid Tracker', sheet: 'bidTracker', rbac: ['opp.bidTracker'], noun: 'Bid Tracker', description: 'Live bids being prepared and submitted, with their bid stage, decision, attention flag and due dates.' },
+  { id: 'opportunities.bidTracker', label: 'Live Bids', sheet: 'bidTracker', rbac: ['opp.bidTracker'], noun: 'Live Bids', description: 'Live bids being prepared and submitted, with their bid stage, decision, attention flag and due dates.' },
   { id: 'opportunities.pipelineFunnel', label: 'Pipeline · Funnel', sheet: 'pipeline-funnel', rbac: ['opp.pipeline'], noun: 'Funnel', description: 'Early pipeline opportunities in the Funnel sheet.' },
   { id: 'opportunities.pipelineBackup', label: 'Pipeline · Backup', sheet: 'pipeline-backup', rbac: ['opp.pipeline'], noun: 'Backup', description: 'Backup pipeline opportunities.' },
   { id: 'opportunities.pipelineCommits', label: 'Pipeline · Commits', sheet: 'pipeline-commits', rbac: ['opp.pipeline'], noun: 'Commits', description: 'Committed pipeline opportunities expected to convert.' },

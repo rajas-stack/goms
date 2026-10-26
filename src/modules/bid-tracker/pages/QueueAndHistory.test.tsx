@@ -18,7 +18,7 @@ function wrap(ui: React.ReactNode) {
       <MemoryRouter initialEntries={['/x']}>
         <Routes>
           <Route path="/x" element={ui} />
-          <Route path="/bid-tracker/bid/:bidId" element={<div>bid detail page</div>} />
+          <Route path="/live-bids/bid/:bidId" element={<div>bid detail page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -76,7 +76,7 @@ describe('ActivityHistoryPage', () => {
     await repository.updateBid(bid.id, { stageKey: 'qualification' })
     const person = await repository.createSalesPerson({ name: 'Asha Rao', officialEmail: 'asha@amnex.com', designation: 'RM', tierKey: 'rm' })
     await repository.assignOwner({ entityType: 'bid', entityId: bid.id, salesPersonId: person.id, startDate: '2026-09-03' })
-    // An opportunity-level assignment is not Bid Tracker history.
+    // An opportunity-level assignment is not Live Bids history.
     await repository.assignOwner({ entityType: 'opportunity', entityId: bid.opportunityId, salesPersonId: person.id, startDate: '2026-09-01' })
     wrap(<ActivityHistoryPage />)
     await screen.findAllByTestId('activity-entry')

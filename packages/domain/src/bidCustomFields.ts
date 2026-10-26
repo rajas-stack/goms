@@ -45,6 +45,38 @@ export const ENTITY_FIELD_TYPES: CustomFieldType[] = ['person', 'department', 's
 /** Types whose column needs a fixed option list. */
 export const hasOptions = (type: CustomFieldType) => type === 'select' || type === 'multiselect'
 
+export interface UpdateBidCustomFieldPatch {
+  name?: string
+  options?: string[]
+  dataType?: CustomFieldType
+  expectedDataType?: CustomFieldType
+  /** Explicitly permits clearing existing values when changing to an unrelated type. */
+  resetValues?: boolean
+}
+
+/** Storage alone is insufficient: a State code and an Amount are unrelated, despite both being numbers. */
+export function customTypesCompatible(from: CustomFieldType, to: CustomFieldType): boolean {
+  return from === to || [
+    ['text', 'url', 'email', 'phone'], ['number', 'currency'], ['select', 'multiselect'],
+  ].some(group => group.includes(from) && group.includes(to))
+}
+
+/** Compatible changes never silently discard a value. Invalid structured text or multiple choices
+ *  going into a single dropdown reject the whole change, allowing the user to correct them first. */
+export function convertCustomFieldValue(from: CustomFieldType, to: CustomFieldType, value: CustomValue): CustomValue {
+  if (value === null || from === to) return value
+  if (!customTypesCompatible(from, to)) return null
+  if (hasOptions(from) && hasOptions(to)) {
+    const choices = from === 'select' ? [String(value)] : parseMultiValue(value)
+    if (to === 'select') {
+      if (choices.length > 1) throw new Error('Reduce each cell to one selection before changing to a single dropdown.')
+      return choices[0] ?? null
+    }
+    return choices.length ? JSON.stringify(choices) : null
+  }
+  return coerceCustomValue(to, value)
+}
+
 /** Which of the four typed storage columns a type lives in. */
 export type StorageKind = 'text' | 'number' | 'date' | 'boolean'
 export function storageKind(type: CustomFieldType): StorageKind {
@@ -56,14 +88,16 @@ export function storageKind(type: CustomFieldType): StorageKind {
   }
 }
 
-/** Multi-select values are stored as a JSON array string; tolerant of junk. */
+/** Multi-select values are stored as a JSON array string. Any other text reads as
+ *  one value per line — how a General multi-select field (plain-text synopsis) stores them. */
 export function parseMultiValue(v: unknown): string[] {
   if (Array.isArray(v)) return v.map(String)
   if (typeof v !== 'string' || !v.trim()) return []
   try {
     const parsed = JSON.parse(v)
-    return Array.isArray(parsed) ? parsed.map(String) : []
-  } catch { return [] }
+    if (Array.isArray(parsed)) return parsed.map(String)
+  } catch { /* not JSON */ }
+  return v.split(/\r?\n/).map(line => line.trim()).filter(Boolean)
 }
 
 /** Operators offered per type. `eq` is "equals" for text/number/select and
@@ -121,6 +155,8 @@ export const STANDARD_BID_FIELD_TYPES: Record<string, CustomFieldType> = {
 export const CUSTOM_FIELD_PREFIX = 'custom:'
 const MAX_KEY_LENGTH = 48
 const MAX_TEXT_LENGTH = 2000
+/** People in one multi-person cell. */
+const MAX_PEOPLE_PER_CELL = 20
 const MAX_OPTION_LENGTH = 80
 const MAX_OPTIONS = 100
 
@@ -160,6 +196,12 @@ function isRealIsoDate(s: string): boolean {
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s
 }
 
+/** A calendar date, optionally with a local clock time. No implicit midnight or timezone shift. */
+export function isIsoDateOrTime(value: string): boolean {
+  const match = /^(\d{4}-\d{2}-\d{2})(?:T([01]\d|2[0-3]):([0-5]\d))?$/.exec(value)
+  return !!match && isRealIsoDate(match[1])
+}
+
 const NUMBER_PATTERN = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/
 
 /** Validates and normalizes one cell value for a field of `type`. Empty
@@ -180,7 +222,7 @@ export function coerceCustomValue(type: CustomFieldType, raw: unknown, options?:
       return n
     }
     case 'date': {
-      if (typeof raw !== 'string' || !isRealIsoDate(raw.trim())) throw new Error('Enter a valid date (YYYY-MM-DD).')
+      if (typeof raw !== 'string' || !isIsoDateOrTime(raw.trim())) throw new Error('Enter a valid date (YYYY-MM-DD), optionally followed by THH:mm.')
       return raw.trim()
     }
     case 'boolean': {
@@ -222,7 +264,12 @@ export function coerceCustomValue(type: CustomFieldType, raw: unknown, options?:
       if (!/^\+?\d{7,15}$/.test(text)) throw new Error('Enter a valid phone number (7–15 digits, optional +).')
       return text
     }
-    case 'person':
+    case 'person': {
+      // A column set to "Multiple" (Manage columns › People columns) stores a JSON list; one person stays a plain id.
+      const ids = [...new Set((typeof raw === 'string' || Array.isArray(raw) ? parseMultiValue(raw) : [String(raw)]).map((id) => id.trim()).filter(Boolean))]
+      if (ids.length > MAX_PEOPLE_PER_CELL || ids.some((id) => id.length > 64)) throw new Error('Choose a value from the list.')
+      return ids.length > 1 ? JSON.stringify(ids) : ids[0] ?? null
+    }
     case 'department': {
       const id = String(raw).trim()
       if (id.length > 64) throw new Error('Choose a value from the list.')
@@ -244,8 +291,9 @@ export function coerceCustomValue(type: CustomFieldType, raw: unknown, options?:
 }
 
 function isoDatePart(v: unknown): string | null {
-  const s = String(v).slice(0, 10)
-  return isRealIsoDate(s) ? s : null
+  const s = String(v)
+  if (!isRealIsoDate(s.slice(0, 10))) return null
+  return /^\d{4}-\d{2}-\d{2}T[0-2]\d:[0-5]\d/.test(s) ? s.slice(0, 16) : s.slice(0, 10)
 }
 
 /** One typed rule against one cell value. An empty cell never matches; an
@@ -260,13 +308,13 @@ export function matchesTypedRule(
   if (rule.operator !== 'eq' && !OPERATORS_BY_TYPE[type].includes(rule.operator)) return false
 
   switch (type) {
-    case 'multiselect': {
+    case 'multiselect':
+    case 'person': { // a person cell may hold several ids (JSON list); one id parses to itself
       const have = parseMultiValue(cell)
       if (rule.operator === 'eq') return have.includes(target)
       if (rule.operator === 'in') return !!rule.values?.some((v) => have.includes(v))
       return false
     }
-    case 'person':
     case 'department':
     case 'state': {
       const s = String(cell)
@@ -309,14 +357,14 @@ export function matchesTypedRule(
       const d = isoDatePart(cell)
       const a = isoDatePart(target)
       if (!d || !a) return false
-      if (rule.operator === 'eq') return d === a
-      if (rule.operator === 'before') return d < a
-      if (rule.operator === 'after') return d > a
+      if (rule.operator === 'eq') return a.length === 10 ? d.slice(0, 10) === a : d === a
+      if (rule.operator === 'before') return (a.length === 10 ? d.slice(0, 10) : d) < a
+      if (rule.operator === 'after') return (a.length === 10 ? d.slice(0, 10) : d) > a
       if (rule.operator === 'between') {
         const b = rule.value2 === undefined ? null : isoDatePart(rule.value2)
         if (!b) return false
         const [lo, hi] = a <= b ? [a, b] : [b, a]
-        return d >= lo && d <= hi
+        return d >= lo && d <= (hi.length === 10 ? `${hi}T23:59` : hi)
       }
       return false
     }

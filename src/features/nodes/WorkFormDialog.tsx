@@ -38,7 +38,7 @@ export function WorkFormDialog({ open, work, departmentId = null, draftKey, mana
   open: boolean
   /** The department the opportunity is created in — feeds the live Opportunity ID preview. */
   departmentId?: string | null
-  /** The opportunity has a bid: Stage and Submission date are owned by Bid Tracker
+  /** The opportunity has a bid: Stage and Submission date are owned by Live Bids
    *  (the API rejects direct writes to them), so they are shown read-only here. */
   managedInBidTracker?: boolean
   /** Existing opportunity to edit, or null when creating. */
@@ -113,7 +113,7 @@ export function WorkFormDialog({ open, work, departmentId = null, draftKey, mana
         )}
         {managedInBidTracker && (
           <p role="note" className="rounded-lg bg-panel px-3 py-2 text-[13px] text-ink-700">
-            Managed in Bid Tracker — open the bid to change its stage or submission deadline.
+            Managed in Live Bids — open the bid to change its stage or submission deadline.
           </p>
         )}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

@@ -16,7 +16,7 @@ vi.mock('@/lib/useProfileImage', () => ({ useProfileImage: (image: any) => ({ re
 const org: OrgPerson = { id: 'org-one', name: 'Org Person', email: 'org@amnex.com', designation: 'Director', level: 1, departments: ['Leadership'], managerId: null, status: 'active', createdAt: '' }
 const sales: SalesPerson = { id: 'sales-one', name: 'Sales Person', officialEmail: 'sales@amnex.com', employeeCode: '', personalEmail: '', mobile: '', altMobile: '', joinedOn: null, leftOn: null, status: 'active', photoUrl: 'data:image/png;base64,legacy', notes: '', metadata: {}, createdAt: '', createdBy: null }
 const other = buildMasterEmployees([], [], [sales])[0]
-const actions = { changeEmail: vi.fn(), changeLevel: vi.fn(), changeManager: vi.fn(), changeDesignation: vi.fn(), changeDepartments: vi.fn(), toggleStatus: vi.fn(), remove: vi.fn() }
+const actions = { edit: vi.fn(), changeEmail: vi.fn(), changeLevel: vi.fn(), changeManager: vi.fn(), changeDesignation: vi.fn(), changeDepartments: vi.fn(), toggleStatus: vi.fn(), remove: vi.fn() }
 const card = { person: sales, posting: undefined, flagged: false, selected: false, expanded: false, canExpand: false, directReportCount: 0, onSelect: vi.fn(), onToggle: vi.fn() }
 
 describe('Drive binding in Employees and Sales', () => {

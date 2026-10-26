@@ -4,7 +4,7 @@ import { validateBidTransfer, type BidTransferContext } from './bidTransfer.js'
 
 const lookups = { masters: { emdInstruments: [{ name: 'BG', description: 'Bank Guarantee' }, { name: 'DD', description: 'Demand Draft' }], zones: [{ name: 'West' }] }, competitors: ['TCS'], preSales: ['Asha'] }
 
-describe('built-in Bid Tracker fields', () => {
+describe('built-in Live Bids fields', () => {
   it('every master-backed field points at a known master, and keys are unique', () => {
     const keys = BID_SYSTEM_FIELDS.map(f => f.key)
     expect(new Set(keys).size).toBe(keys.length)

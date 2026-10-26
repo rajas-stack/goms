@@ -13,6 +13,7 @@ import { useCurrentPostings, useSalesPersonMutations, useSalesPersons } from '@/
 import { SALES_TIERS } from '@/data/sales-tiers'
 import { salesPersonOption } from './salesPersonOption'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
+import { EmployeeNumberField } from '@/features/org/EmployeeNumberField'
 import { liveSalesRoster, resolveSalesChain } from '@/data/sales-hierarchy'
 
 /** Create/edit form for a salesperson. Editing a designation/tier/manager
@@ -45,6 +46,7 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
   const [tierKey, setTierKey] = useState(SALES_TIERS[SALES_TIERS.length - 1].key)
   const [managerId, setManagerId] = useState('')
   const [notes, setNotes] = useState('')
+  const [employeeCode, setEmployeeCode] = useState('')
   /** Editable RM email for the "quick edit" path (editing only) — bound to
    *  the current posting's managerId, resolved to an email since
    *  SalesTeamPicker's candidates are keyed by email, not id. Compared
@@ -67,6 +69,7 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
     setMobile(editing?.mobile ?? '')
     setPhotoUrl(editing?.photoUrl ?? null)
     setNotes(editing?.notes ?? '')
+    setEmployeeCode(editing?.employeeCode ?? '')
     setDesignation('')
     setTierKey(SALES_TIERS[SALES_TIERS.length - 1].key)
     setManagerId('')
@@ -86,6 +89,10 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
   const gmEmail = gmOverrideEmail || derivedGmEmail
 
   async function submit() {
+    try { await save() } catch (cause) { toast(cause instanceof Error ? cause.message : 'Could not save this salesperson.', undefined, 'error') }
+  }
+
+  async function save() {
     if (editing) {
       // photoUrl rides along only when the photo actually changed. It's an
       // inline data URL, so re-submitting the untouched old value is pointless
@@ -95,7 +102,7 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
       const photoChanged = photoUrl !== (editing.photoUrl ?? null)
       await update.mutateAsync({
         id: editing.id,
-        patch: { name, officialEmail: email, mobile, notes, ...(photoChanged ? { photoUrl } : {}) },
+        patch: { name, officialEmail: email, mobile, notes, ...(photoChanged ? { photoUrl } : {}), ...(employeeCode !== editing.employeeCode ? { employeeCode } : {}) },
       })
       const postingPatch: { managerId?: string | null; gmOverrideId?: string | null } = {}
       if (rmEmail !== initialRmEmail) {
@@ -154,6 +161,7 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
           {!mobileValid && <span className="mt-1 block text-xs text-crimson">Enter a valid 10-digit number.</span>}
         </Field>
         <PhotoUploadField photoUrl={photoUrl} onChange={setPhotoUrl} />
+        {editing && <EmployeeNumberField value={employeeCode} onChange={setEmployeeCode} />}
 
         {!editing && (
           <>

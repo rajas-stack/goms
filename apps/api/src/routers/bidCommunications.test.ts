@@ -23,6 +23,20 @@ describe('private bid communication', () => {
     expect(mocks.query).toHaveBeenCalledWith('ROLLBACK')
     expect(mocks.query.mock.calls.every(([sql]) => !sql.startsWith('INSERT'))).toBe(true)
   })
+  it('deletes only the address-book entry, and says so when it is already gone', async () => {
+    const id = '00000000-0000-4000-8000-000000000003'
+    mocks.query.mockResolvedValue({ rows: [{ id }] })
+    await caller().deleteContact({ id })
+    expect(mocks.query.mock.calls.map(([sql]) => sql)).toEqual(['DELETE FROM communication_contacts WHERE id=$1 RETURNING id'])
+    mocks.query.mockResolvedValue({ rows: [] })
+    await expect(caller().deleteContact({ id })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+  })
+  it('accepts the Competitor and Consortium partner categories and nothing unknown', async () => {
+    mocks.query.mockResolvedValue({ rows: [{ id: personId, email: 'c@rival.com', name: 'Rival', party: 'competitor', organization: 'Rival Ltd', department_id: null }] })
+    await expect(caller().updateContact({ id: personId, name: 'Rival', party: 'competitor', organization: 'Rival Ltd', departmentId: null })).resolves.toMatchObject({ party: 'competitor' })
+    await expect(caller().updateContact({ id: personId, name: 'JV', party: 'consortium', organization: 'JV Ltd', departmentId: null })).resolves.toBeTruthy()
+    await expect(caller().updateContact({ id: personId, name: 'X', party: 'partner' as never, organization: 'X', departmentId: null })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+  })
   it('requires a real client department for a shared client mailbox', async () => {
     await expect(caller().createContact({ email: 'dept@client.com', name: 'Department', party: 'clientDepartment', organization: 'Client', departmentId: null })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
     expect(mocks.query).not.toHaveBeenCalled()

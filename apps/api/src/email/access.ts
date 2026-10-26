@@ -67,7 +67,7 @@ async function opportunityEntity(actor: EmailActor, id: string): Promise<EmailEn
   if (!involved) throw deniedEmailRecord()
   const opportunity = (await pool.query('SELECT opportunity_name FROM opportunities WHERE id=$1', [id])).rows[0]
   if (!opportunity) throw deniedEmailRecord()
-  return { type: 'opportunity', id, title: opportunity.opportunity_name, path: row.bidId ? `/bid-tracker/bid/${row.bidId}?tab=communication` : '/bid-tracker' }
+  return { type: 'opportunity', id, title: opportunity.opportunity_name, path: row.bidId ? `/live-bids/bid/${row.bidId}?tab=communication` : '/live-bids' }
 }
 /** Extensible record adapters. Every new entity must supply existence, access and a real navigation target. */
 export const emailEntityAdapters: Record<string, (actor: EmailActor, id: string) => Promise<EmailEntity>> = {

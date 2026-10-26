@@ -26,7 +26,7 @@ describe('canEditCell', () => {
   it('is always true when RBAC is not enforced', () => {
     expect(canEditCell({ enforced: false } as Permissions, row(), 'stageKey', me)).toBe(true)
   })
-  it('Sales (S1) edits client/value-type cells on an own Bid Tracker row, not stage or decision', () => {
+  it('Sales (S1) edits client/value-type cells on an own Live Bids row, not stage or decision', () => {
     const p = perms(['sales'], 'sp1')
     const own = row({ geoSalesPersonId: 'sp1' })
     expect(canEditCell(p, own, 'city', me)).toBe(true)

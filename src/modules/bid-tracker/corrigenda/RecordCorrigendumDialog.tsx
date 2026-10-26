@@ -57,6 +57,7 @@ export function RecordCorrigendumDialog({ bidId, nextNumber, clauses, onClose, o
   const { requestUploadUrl, confirmUpload } = useDocumentMutations('bid', bidId)
   const fileRef = useRef<HTMLInputElement>(null)
   const [register, setRegister] = useState<CorrigendumRegister>(DEFAULT_REGISTER)
+  const [invalidDates, setInvalidDates] = useState(false)
   const [documentId, setDocumentId] = useState('')
   const [drafts, setDrafts] = useState<ClauseDraft[]>([initialDraft ?? emptyClauseDraft()])
   const targets = appendTargets(corrigenda, drafts)
@@ -66,7 +67,7 @@ export function RecordCorrigendumDialog({ bidId, nextNumber, clauses, onClose, o
   const [error, setError] = useState<string | null>(null)
   const tracked = clauses.filter((c) => c.kind === 'clause')
   const usedKeys = new Set(drafts.map((d) => d.existingKey).filter(Boolean))
-  const valid = drafts.every((d) => d.title.trim() && (d.original.trim() || d.modified.trim()) && d.original.trim() !== d.modified.trim())
+  const valid = (!!appendTo || !invalidDates) && drafts.every((d) => d.title.trim() && (d.original.trim() || d.modified.trim()) && d.original.trim() !== d.modified.trim())
 
   async function upload(file: File) {
     setError(null)
@@ -133,7 +134,7 @@ export function RecordCorrigendumDialog({ bidId, nextNumber, clauses, onClose, o
             </Select>
           </Field>
         )}
-        {!appendTo && <RegisterFields value={register} onChange={setRegister} />}
+        {!appendTo && <RegisterFields value={register} onChange={setRegister} onValidityChange={setInvalidDates} />}
         {!appendTo && <Field label="Corrigendum document">
           <div className="flex flex-wrap items-center gap-2">
             <Select aria-label="Corrigendum document" className="min-w-0 flex-1" value={documentId} onChange={(e) => setDocumentId(e.target.value)}>

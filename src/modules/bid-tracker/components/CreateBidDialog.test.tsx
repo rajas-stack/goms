@@ -10,10 +10,10 @@ function renderDialog(onClose = () => {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/bid-tracker']}>
+      <MemoryRouter initialEntries={['/live-bids']}>
         <Routes>
-          <Route path="/bid-tracker" element={<CreateBidDialog open onClose={onClose} />} />
-          <Route path="/bid-tracker/bid/:bidId" element={<div>Bid detail page</div>} />
+          <Route path="/live-bids" element={<CreateBidDialog open onClose={onClose} />} />
+          <Route path="/live-bids/bid/:bidId" element={<div>Bid detail page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

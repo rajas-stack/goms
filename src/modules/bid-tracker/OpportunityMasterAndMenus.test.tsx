@@ -23,7 +23,7 @@ function renderSheet(sheet: SheetId) {
         <Where />
         <Routes>
           <Route path="/sheet" element={<GridSheet sheet={sheet} />} />
-          <Route path="/bid-tracker/bid/:id" element={<div>details page</div>} />
+          <Route path="/live-bids/bid/:id" element={<div>details page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -54,18 +54,19 @@ describe('Master aggregates every sheet\'s columns', () => {
     return { a, b, c1, c4, c7 }
   }
 
-  it('each sheet shows only its own custom columns', async () => {
+  it('each sheet inherits earlier custom columns while hiding future ones', async () => {
     await seed()
     const first = renderSheet('bidTracker')
     await screen.findByText('Alpha')
     expect(leafHeaders()).toContain('Contact 1')
-    expect(leafHeaders()).not.toContain('Contact 4')
-    expect(leafHeaders()).not.toContain('Contact 7')
+    expect(leafHeaders()).toContain('Contact 4')
+    expect(leafHeaders()).toContain('Contact 7')
     first.unmount()
-    // Alpha / Beta live in Bid Tracker, so these sheets have no rows: wait for the columns instead.
+    // Advanced opportunities and their earlier custom fields remain in Pipeline.
     const second = renderSheet('pipeline-backup')
     await waitFor(() => expect(leafHeaders()).toContain('Contact 4'))
     expect(leafHeaders()).not.toContain('Contact 1')
+    expect(leafHeaders()).toContain('Contact 7')
     second.unmount()
     renderSheet('campaign')
     await waitFor(() => expect(leafHeaders()).toContain('Contact 7'))
@@ -105,11 +106,11 @@ describe('Master aggregates every sheet\'s columns', () => {
     renderSheet('master')
     await screen.findByText('Alpha')
     const switcher = screen.getByRole('combobox', { name: 'Sheet' })
-    expect(within(switcher).getAllByRole('option').map((o) => o.textContent)).toEqual(['All sheets', 'Bid Tracker', 'Pipeline', 'Campaign'])
-    await userEvent.selectOptions(switcher, 'Bid Tracker')
+    expect(within(switcher).getAllByRole('option').map((o) => o.textContent)).toEqual(['All sheets', 'Live Bids', 'Pipeline', 'Campaign'])
+    await userEvent.selectOptions(switcher, 'Live Bids')
     expect(leafHeaders()).toContain('Contact 1')
-    expect(leafHeaders()).not.toContain('Contact 4')
-    expect(leafHeaders()).not.toContain('Contact 7')
+    expect(leafHeaders()).toContain('Contact 4')
+    expect(leafHeaders()).toContain('Contact 7')
     await userEvent.selectOptions(switcher, 'Pipeline')
     expect(leafHeaders()).toContain('Contact 4')
     expect(leafHeaders()).not.toContain('Contact 1')
@@ -140,7 +141,7 @@ describe('Master aggregates every sheet\'s columns', () => {
     await waitFor(() => expect(leafHeaders()).toContain('Contact 4'))
     await userEvent.click(screen.getByRole('button', { name: /^Manage columns/ }))
     const rows = await screen.findAllByTestId('custom-column-row')
-    expect(rows.map((r) => r.textContent)).toEqual([expect.stringContaining('Contact 4')])
+    expect(rows.map((r) => r.textContent)).toEqual([expect.stringContaining('Contact 4'), expect.stringContaining('Contact 7')])
   })
 })
 
@@ -207,6 +208,14 @@ describe('Manage cell, archive button, right-click menus, drag to reorder', () =
     await waitFor(async () => expect((await repository.getBid(bid.id))!.status).toBe('active'))
   })
 
+  it('Edit cell from the right-click menu works while locked: it unlocks the grid in one step', async () => {
+    await makeBid('Alpha')
+    renderSheet('bidTracker')
+    fireEvent.contextMenu((await screen.findByText('Alpha')).closest('td')!)
+    await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Edit cell (unlocks editing)' }))
+    expect(await screen.findByRole('button', { name: /editing unlocked/ })).toBeInTheDocument()
+  })
+
   it('right-click on a cell offers open, edit, copy, filter, move, favourite, archive and delete', async () => {
     const bid = await makeBid('Alpha')
     const writeText = vi.fn().mockResolvedValue(undefined)
@@ -217,11 +226,12 @@ describe('Manage cell, archive button, right-click menus, drag to reorder', () =
     fireEvent.contextMenu(cell)
     const menu = await screen.findByRole('menu')
     expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual([
-      'Open details', 'Edit cell (unlock first)', 'Copy value', 'Filter: Opportunity / Mission is this value',
-      'Move to Pipeline · Funnel', 'Move to Pipeline · Backup', 'Move to Pipeline · Commits', 'Move to Campaign',
+      'Open details', 'Open bid synopsis', 'View RFP timeline', 'Open communications',
+      'Edit cell (unlocks editing)', 'Copy value', 'Copy bid link', 'Filter: Opportunity / Mission is this value',
+      'Move back to Commit',
       'Add to favourites', 'Archive', 'Delete bid…',
     ])
-    expect(within(menu).getByRole('menuitem', { name: /Edit cell/ })).toBeDisabled()
+    expect(within(menu).getByRole('menuitem', { name: /Edit cell/ })).toBeEnabled()
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Copy value' }))
     expect(writeText).toHaveBeenCalledWith('Alpha')
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
@@ -250,7 +260,7 @@ describe('Manage cell, archive button, right-click menus, drag to reorder', () =
     const edit = within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Edit cell' })
     expect(edit).toBeEnabled()
     await userEvent.click(edit)
-    expect(await screen.findByRole('textbox', { name: 'City' })).toBeInTheDocument()
+    expect(await screen.findByRole('textbox', { name: 'Search City' })).toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
     fireEvent.contextMenu(screen.getByText('Alpha').closest('td')!)
     await screen.findByRole('menu')
@@ -258,7 +268,7 @@ describe('Manage cell, archive button, right-click menus, drag to reorder', () =
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument())
   })
 
-  it('right-click on a header offers sort, filter, freeze and hide', async () => {
+  it('right-click on a header offers sort, filter, freeze, hide and rename', async () => {
     await makeBid('Alpha')
     renderSheet('bidTracker')
     await screen.findByText('Alpha')
@@ -266,7 +276,7 @@ describe('Manage cell, archive button, right-click menus, drag to reorder', () =
     fireEvent.contextMenu(th)
     const menu = await screen.findByRole('menu')
     expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual([
-      'Sort ascending', 'Sort descending', 'Clear sort', 'Filter by this column', 'Freeze column', 'Hide column',
+      'Sort ascending', 'Sort descending', 'Clear sort', 'Filter by this column', 'Freeze column', 'Hide column', 'Rename column',
     ])
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Freeze column' }))
     expect(screen.getByTitle('Frozen column')).toBeInTheDocument()
@@ -286,13 +296,13 @@ describe('Manage cell, archive button, right-click menus, drag to reorder', () =
     const rowOf = (name: string) => rows.find((li) => li.textContent?.startsWith(name))!
     const dataTransfer = { setData: vi.fn(), getData: vi.fn(), effectAllowed: '', dropEffect: '' }
     const before = leafHeaders()
-    expect(before.indexOf('Sector')).toBeGreaterThan(before.indexOf('City'))
+    expect(before.indexOf('Vertical')).toBeGreaterThan(before.indexOf('City'))
     // Drag Sector up past City (not just one step).
-    fireEvent.dragStart(rowOf('Sector'), { dataTransfer })
+    fireEvent.dragStart(rowOf('Vertical'), { dataTransfer })
     fireEvent.dragOver(rowOf('State'), { dataTransfer })
     fireEvent.drop(rowOf('State'), { dataTransfer })
     const after = leafHeaders()
-    expect(after.indexOf('Sector')).toBe(before.indexOf('State'))
-    expect(after.indexOf('Sector')).toBeLessThan(after.indexOf('City'))
+    expect(after.indexOf('Vertical')).toBe(before.indexOf('State'))
+    expect(after.indexOf('Vertical')).toBeLessThan(after.indexOf('City'))
   })
 })

@@ -30,16 +30,19 @@ export function Avatar({
   person,
   size = 'md',
   className,
+  cutout = false,
 }: {
   person: AvatarPerson
   size?: AvatarSize
   className?: string
+  /** Show a photo as-is (Drive cutouts have no background) with a soft 3D drop shadow, instead of a cropped circle. */
+  cutout?: boolean
 }): ReactElement {
   // A broken/expired photo URL falls back to initials instead of a broken-image glyph.
   const [photoFailed, setPhotoFailed] = useState(false)
   const profiles = useProfileImagesIndex()
   // Many screens pass only a name (or a non-person id), so fall back to the unique-name lookup.
-  const userId = person.id && profiles?.versions[person.id] ? person.id : profiles?.names?.[profileNameKey(person.name)] ?? person.id
+  const userId = (person.id && profiles?.people?.[person.id]) || (person.id && profiles?.versions[person.id] ? person.id : profiles?.names?.[profileNameKey(person.name)] ?? person.id)
   const version = userId ? profiles?.versions[userId] : undefined
   const managed = profiles?.configured && !!userId
   const image = managed ? (version && userId ? { userId, version } : undefined) : person.profileImage
@@ -77,7 +80,9 @@ export function Avatar({
         decoding="async"
         referrerPolicy="no-referrer"
         onError={() => setPhotoFailed(true)}
-        className={cn(baseClasses, 'bg-ink-100 object-cover ring-1 ring-line')}
+        className={cutout
+          ? cn(baseClasses, 'rounded-none object-contain [filter:drop-shadow(0_6px_6px_rgb(15_23_42/0.28))_drop-shadow(0_1px_1px_rgb(15_23_42/0.2))]')
+          : cn(baseClasses, 'bg-ink-100 object-cover ring-1 ring-line')}
       />
     )
   }

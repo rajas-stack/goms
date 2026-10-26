@@ -8,7 +8,6 @@ import { useShell } from '@/app/AppLayout'
 import { definePermissionNodes } from '@/lib/rbacTree/registry'
 import { useNodeFilter } from '@/lib/rbacTree/access'
 import { downloadCsv, toCsv } from '@/lib/csv'
-import { SalesTeamInsights } from '@/app/routes/SalesTeamInsights'
 import { RelationshipAnalytics } from '@/app/routes/RelationshipAnalytics'
 import { Bars, DonutChart, Frame, IndiaMap, money, Sparkline, StageChart, stateName, TrendChart } from './InsightCharts'
 import { bidUrl, DetailList, RecentTable, Segment, STATUS } from './InsightTables'
@@ -23,7 +22,7 @@ export const INSIGHT_TABS = definePermissionNodes('accountMapping.insights', [
   { value: 'overview', label: 'Overview' }, { value: 'sales', label: 'Sales' }, { value: 'presales', label: 'Presales' },
   { value: 'bids', label: 'Bids' }, { value: 'revenue', label: 'Revenue' }, { value: 'competitors', label: 'Competitors' },
   { value: 'team', label: 'Team' }, { value: 'forecast', label: 'Forecast' },
-  { value: 'salesTeam', label: 'Sales Team Insights' }, { value: 'relationships', label: 'Relationship Analytics' },
+  { value: 'relationships', label: 'Relationship Analytics' },
 ] as const)
 function quarterlyTrend(data: InsightTrend[]) {
   const groups = new Map<string, InsightTrend>()
@@ -44,7 +43,7 @@ export function Insights() {
   const [params, setParams] = useSearchParams(), tree = useNodeFilter(), shell = useShell()
   const tabs = INSIGHT_TABS.filter(t => tree(`accountMapping.insights.${t.value}`))
   const requested = params.get('tab'), tab = tabs.find(t => t.value === requested)?.value ?? tabs[0]?.value ?? 'overview'
-  const legacy = tab === 'salesTeam' || tab === 'relationships'
+  const legacy = tab === 'relationships'
   const [savedDemo, setSavedDemo] = useState(() => { try { return localStorage.getItem('goms.insights.sampleData') !== '0' } catch { return true } })
   const demoParam = params.get('demo'), demo = demoParam === null ? savedDemo : demoParam === '1'
   useEffect(() => { setSavedDemo(demo); try { localStorage.setItem('goms.insights.sampleData', demo ? '1' : '0') } catch { /* Storage may be disabled. */ } }, [demo])
@@ -104,7 +103,7 @@ export function Insights() {
   if (!tabs.length) return <div role="alert" className="insight-error">You do not have access to any Insights view.</div>
   return <div className="insights-page" data-testid="insights-page">
     <nav className="insight-tabs" aria-label="Insights views">{tabs.map(t => <button key={t.value} aria-current={tab === t.value ? 'page' : undefined} onClick={() => update('tab', t.value)}>{t.label}</button>)}</nav>
-    {legacy ? <div className="insight-legacy">{tab === 'salesTeam' ? <SalesTeamInsights/> : <RelationshipAnalytics/>}</div> : <>
+    {legacy ? <div className="insight-legacy"><RelationshipAnalytics/></div> : <>
       <header className="insight-toolbar"><div className="insight-heading"><h1>Insights</h1><span className={demo ? 'insight-demo-badge' : 'insight-live-badge'}>{demo ? 'Sample data' : 'Live data'}</span></div><label className="insight-demo-toggle"><input type="checkbox" role="switch" aria-label="Use sample data" checked={demo} onChange={e => changeData(e.target.checked)}/>Sample data</label><div className="insight-filters">
         <select aria-label="Insights period" value={months} onChange={e => update('months', e.target.value)}>{[[3, 'Last 3 months'], [6, 'Last 6 months'], [12, 'Last 12 months'], [24, 'Last 24 months'], [0, 'All time']].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
         <select aria-label="Insights vertical" value={filters.vertical ?? ''} onChange={e => update('vertical', e.target.value)}><option value="">All Verticals</option>{data?.options.verticals.map(v => <option key={v}>{v}</option>)}{filters.vertical && !data?.options.verticals.includes(filters.vertical) && <option>{filters.vertical}</option>}</select>

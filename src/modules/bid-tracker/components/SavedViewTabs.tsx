@@ -6,7 +6,7 @@ import { savedViewNodeId } from '@goms/domain'
 import { useNodeFilter } from '@/lib/rbacTree/access'
 import { SHEET_VIEWS_NODE } from '../sheets'
 
-/** A sheet's Views node (unknown sheets file under Bid Tracker's, like the API's default). */
+/** A sheet's Views node (unknown sheets file under Live Bids', like the API's default). */
 export const viewsNodeFor = (sheet = 'bidTracker'): string => SHEET_VIEWS_NODE[sheet as keyof typeof SHEET_VIEWS_NODE] ?? SHEET_VIEWS_NODE.bidTracker
 
 /** The saved-view strip. System views always come first (they are a code
@@ -16,7 +16,7 @@ export const viewsNodeFor = (sheet = 'bidTracker'): string => SHEET_VIEWS_NODE[s
  *  Changes made on a system view can't be saved into it, so the strip says so
  *  (`modifiedViewId`) and offers to keep them as a new view. */
 export function SavedViewTabs({ sheet, activeViewId, onChange, onCreateNew, onDelete, modifiedViewId, canDelete, deleting }: {
-  /** The Opportunity sheet whose views are listed (default: Bid Tracker). */
+  /** The Opportunity sheet whose views are listed (default: Live Bids). */
   sheet?: string
   activeViewId: string
   onChange: (id: string) => void

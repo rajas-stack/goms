@@ -18,9 +18,9 @@ async function why(label: string, path: string, raw?: unknown): Promise<string |
 }
 
 let salesId: string, rivalId: string
-let own: { bidId: string | null; opportunityId: string }      // Bid Tracker, owned by `sales`, assigned to `pre` and `legal`
+let own: { bidId: string | null; opportunityId: string }      // Live Bids, owned by `sales`, assigned to `pre` and `legal`
 let pipe: { bidId: string | null; opportunityId: string }     // Pipeline, owned by `sales`
-let other: { bidId: string | null; opportunityId: string }    // Bid Tracker, owned by someone else
+let other: { bidId: string | null; opportunityId: string }    // Live Bids, owned by someone else
 
 beforeEach(async () => {
   await cleanupRbacFixtures()
@@ -40,7 +40,7 @@ describe('registry coverage for this area', () => {
   it('registers the opportunity / bid procedures', () => {
     expect(Object.keys(opportunityPolicy).sort()).toEqual([
       'bidCommunications.ignore',
-      'bidCommunications.contacts', 'bidCommunications.createContact', 'bidCommunications.updateContact',
+      'bidCommunications.contacts', 'bidCommunications.createContact', 'bidCommunications.deleteContact', 'bidCommunications.updateContact',
       'bidCommunications.addInternal', 'bidCommunications.bindInternalEmail', 'bidCommunications.addClient',
       'bidCorrigenda.addChanges', 'bidCorrigenda.create', 'bidCorrigenda.listForBid', 'bidCorrigenda.reviewChange', 'bidCorrigenda.updateRegister',
       'bidCustomFields.archive', 'bidCustomFields.create', 'bidCustomFields.delete', 'bidCustomFields.list', 'bidCustomFields.reorder',
@@ -89,15 +89,15 @@ describe('bids.update — field level, scope and sheet moves', () => {
     expect(await why('bid', 'bids.update', { id: own.bidId, patch: { typo: 1 } })).toMatch(/cannot be edited/)
     expect(await denied('bid', 'bids.update', { id: own.bidId, patch: 'nonsense' })).toBe(true)
   })
-  it('moving a row needs write on BOTH sheets, so a single role cannot move between Bid Tracker and Pipeline', async () => {
+  it('moving a row needs write on BOTH sheets, so a single role cannot move between Live Bids and Pipeline', async () => {
     // Sales: W·own on Pipeline and Campaign (own row) — a Pipeline → Campaign move is fine
     expect(await denied('sales', 'bids.update', { id: pipe.bidId, patch: { sheet: 'campaign' } })).toBe(false)
-    // …but Bid Tracker is only Partial for Sales, so the source side refuses a move out of it
+    // …but Live Bids is only Partial for Sales, so the source side refuses a move out of it
     expect(await denied('sales', 'bids.update', { id: own.bidId, patch: { sheet: 'pipeline-funnel' } })).toBe(true)
-    // Bid is W on Bid Tracker only; the destination refuses
+    // Bid is W on Live Bids only; the destination refuses
     expect(await denied('bid', 'bids.update', { id: own.bidId, patch: { sheet: 'campaign' } })).toBe(true)
   })
-  it('a user holding BOTH Sales and Bid roles can move their own Pipeline row into Bid Tracker', async () => {
+  it('a user holding BOTH Sales and Bid roles can move their own Pipeline row into Live Bids', async () => {
     const dual = await addSalesPerson('dual'); await setRole('dual', 'bid')
     const row = await makeBid({ sheet: 'pipeline-funnel', geoSalesPersonId: dual })
     expect(await denied('dual', 'bids.update', { id: row.bidId, patch: { sheet: 'bidTracker' } })).toBe(false)
@@ -110,7 +110,7 @@ describe('opportunities.update — scope', () => {
     const rivalPipe = await makeBid({ sheet: 'pipeline-funnel', geoSalesPersonId: rivalId })
     expect(await denied('sales', 'opportunities.update', { id: rivalPipe.opportunityId, patch: { valueAmount: '5' } })).toBe(true)
   })
-  it('on Bid Tracker rows Sales gets S1 only: client/value yes, identity and Tender ID no', async () => {
+  it('on Live Bids rows Sales gets S1 only: client/value yes, identity and Tender ID no', async () => {
     expect(await denied('sales', 'opportunities.update', { id: own.opportunityId, patch: { city: 'Pune', valueAmount: '9' } })).toBe(false)
     expect(await denied('sales', 'opportunities.update', { id: own.opportunityId, patch: { opportunityName: 'x' } })).toBe(true)
     expect(await denied('sales', 'opportunities.update', { id: own.opportunityId, patch: { gemTenderId: 'x' } })).toBe(true)

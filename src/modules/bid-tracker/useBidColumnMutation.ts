@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { updateGeneralDocument, type CustomValue } from '@goms/domain'
+import { parseMultiValue, updateGeneralDocument, type CustomValue } from '@goms/domain'
 import { repository } from '@/data/repository'
 import { isoToday } from '@/lib/dates'
 import { useBidMutations, useDepartments, useFollowUpMutations, useOpportunityMutations, useOwnershipMutations, useSetBidCustomValue } from '@/lib/api'
@@ -77,9 +77,12 @@ export function useBidColumnMutation(lookups: EntityLookups) {
       : value === null && col.id !== 'city' ? '' : value
     const snapshot = qc.getQueriesData<BidGridRow[]>({ queryKey: ['bidsForGrid'] })
     const department = col.editable === 'department' ? departments.find((d) => d.id === value) : undefined
+    // General values are plain text: a multi-select keeps one value per line.
+    const generalText = col.type === 'multiselect' ? parseMultiValue(value).join('\n') : String(value ?? '')
     const patchRow = (r: BidGridRow): BidGridRow => {
+      if (col.lifecycleField) return { ...r, lifecycleData: { ...r.lifecycleData, [col.lifecycleField.key]: String(value ?? '') } }
       if (department) return { ...r, departmentId: department.id, departmentName: department.name, stateCode: department.stateCode ?? r.stateCode }
-      if (col.editable === 'general' && col.generalField) return { ...r, generalValues: { ...r.generalValues, [col.generalField.key]: String(value ?? '') } }
+      if (col.editable === 'general' && col.generalField) return { ...r, generalValues: { ...r.generalValues, [col.generalField.key]: generalText } }
       if (col.custom) {
         const customValues = { ...r.customValues }
         if (value === null) delete customValues[col.custom.key]
@@ -90,9 +93,11 @@ export function useBidColumnMutation(lookups: EntityLookups) {
     }
     qc.setQueriesData<BidGridRow[]>({ queryKey: ['bidsForGrid'] }, (old) => old?.map((r) => (r.id === row.id ? patchRow(r) : r)))
     try {
-      if (col.editable === 'general' && col.generalField) {
+      if (col.lifecycleField) {
+        await updateBid.mutateAsync({ id: row.id, patch: { lifecycleData: { [col.lifecycleField.key]: String(value ?? '') } } })
+      } else if (col.editable === 'general' && col.generalField) {
         const saved = await repository.getBidSynopsis(row.id, 'general')
-        let document = updateGeneralDocument(saved?.document, col.generalField.key, String(value ?? ''))
+        let document = updateGeneralDocument(saved?.document, col.generalField.key, generalText)
         const latest = snapshot.flatMap(([, data]) => data ?? []).find(candidate => candidate.id === row.id) ?? row
         for (const [key, linked] of [['tenderId', latest.gemTenderId], ['referenceNo', latest.referenceNo], ['assignmentName', latest.assignmentName]] as const) {
           document = updateGeneralDocument(document, key, String(linked ?? ''))
@@ -100,6 +105,16 @@ export function useBidColumnMutation(lookups: EntityLookups) {
         await saveSynopsis.mutateAsync({ bidId: row.id, section: 'general', document, expectedRevision: saved?.revision ?? 0 })
       }
       else if (col.custom) await setCustomValue.mutateAsync({ bidId: row.id, fieldId: col.custom.id, value })
+      else if (col.editable === 'milestone') {
+        const dueAt = value === null || value === '' ? null : new Date(String(value).length === 10 ? `${value}T00:00:00` : String(value)).toISOString()
+        const milestones = await repository.listBidMilestones(row.id)
+        const deadline = milestones.find(milestone => milestone.key === 'submissionDeadline')
+        if (deadline) await repository.updateBidMilestone(deadline.id, { dueAt })
+        else await repository.createBidMilestone({ bidId: row.id, milestoneType: 'system', key: 'submissionDeadline', label: 'Submission Deadline', dueAt })
+        await qc.invalidateQueries({ queryKey: ['bidMilestones'] })
+        await qc.invalidateQueries({ queryKey: ['bidsForGrid'] })
+        await qc.invalidateQueries({ queryKey: ['opportunities'] })
+      }
       else if (col.editable === 'owner') {
         // Picking a person records a new ownership assignment from today (the history is kept).
         const person = lookups.persons.find((p) => p.email === value)

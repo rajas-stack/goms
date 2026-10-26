@@ -7,15 +7,16 @@ import { Combobox } from '@/components/ui/Combobox'
 import { Button } from '@/components/ui/Button'
 import { useAllowed } from '@/lib/permissions'
 import { cn } from '@/lib/utils'
+import { BidStagesMaster } from './BidStagesMaster'
 
-/** Settings > Masters > Bid Tracker: one tab per configurable Bid Tracker dropdown. Values here feed the
+/** Settings > Masters > Live Bids: one tab per configurable Live Bids dropdown. Values here feed the
  *  grid, Opportunity details and the Import Wizard (packages/domain/src/bidTrackerFields.ts). A value used
  *  by bids cannot be deleted — deactivate it; a rename follows onto every bid. */
 export function BidTrackerMasters() {
   const [active, setActive] = useState<BidTrackerMasterKey>(BID_TRACKER_MASTERS[0].key)
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div role="tablist" aria-label="Bid Tracker masters" className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-4 py-2 sm:px-6">
+      <div role="tablist" aria-label="Live Bids masters" className="flex shrink-0 gap-1 overflow-x-auto border-b border-line px-4 py-2 sm:px-6">
         {BID_TRACKER_MASTERS.map(m => (
           <button key={m.key} role="tab" aria-selected={m.key === active} onClick={() => setActive(m.key)}
             className={cn('shrink-0 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors',
@@ -25,7 +26,7 @@ export function BidTrackerMasters() {
         ))}
       </div>
       <div className="min-h-0 flex-1">
-        {active === 'buOwners' ? <BuOwnersMaster /> : <MasterCrudScreen key={active} masterKey={active} />}
+        {active === 'buOwners' ? <BuOwnersMaster /> : active === 'bidStages' ? <BidStagesMaster /> : <MasterCrudScreen key={active} masterKey={active} />}
       </div>
     </div>
   )

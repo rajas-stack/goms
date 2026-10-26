@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isIsoDateOrTime } from '@goms/domain'
 import { protectedProcedure, protectedReadProcedure, router } from '../trpc.js'
 import { pool } from '../db.js'
 
@@ -25,7 +26,7 @@ export const followUpsRouter = router({
   }),
   create: protectedProcedure
     .input(z.object({
-      entityType: z.string(), entityId: z.string().guid('Invalid UUID'), dueDate: z.string(),
+      entityType: z.string(), entityId: z.string().guid('Invalid UUID'), dueDate: z.string().refine(isIsoDateOrTime, 'Enter a valid date and optional time.'),
       note: z.string().optional(), assigneeId: z.string().guid('Invalid UUID').nullable().optional(),
     }))
     .mutation(async ({ input, ctx }) => {

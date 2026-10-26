@@ -1,14 +1,14 @@
 import { z } from 'zod'
 import {
   CORRIGENDUM_AFFECTED_MODULES, CORRIGENDUM_CHANGE_CLASSIFICATIONS, CORRIGENDUM_CHANGE_KINDS,
-  CORRIGENDUM_IMPACT_LEVELS, CORRIGENDUM_REVIEW_STATUSES,
+  CORRIGENDUM_IMPACT_LEVELS, CORRIGENDUM_REVIEW_STATUSES, isIsoDateOrTime,
 } from '@goms/domain'
 
 /** Zod input schemas + row mappers for the corrigendum register (Corrigendum
  *  Part 1). Enum lists come from @goms/domain, the same lists the migration's
  *  CHECK constraints mirror. */
 
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD.')
+const isoDate = z.string().refine(isIsoDateOrTime, 'Use YYYY-MM-DD with optional THH:mm.')
 const CLAUSE_TEXT_MAX = 20_000
 
 export const registerSchema = z.object({

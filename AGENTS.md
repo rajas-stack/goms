@@ -6,6 +6,13 @@ all three tools in builds. Do not overwrite another tool's work, change the acti
 branch, reset the index, or create a separate implementation without reconciling it.
 
 - Local hosting uses **http://localhost:8088**, through the existing Docker stack.
+- The user also requires **http://localhost:5173** to stay available for the built local preview.
+  It is supervised by the Windows task `GOMS-Dev-Server-5173` and
+  `scripts/dev-server-watchdog.mjs`. Run `npm run build:preview` after source changes;
+  a failed build keeps the last successful release online. Use 5174 for an optional
+  manual Vite dev server. Preserve the 5173 task and its preview process;
+  do not stop the preview while running tests or updating the Docker stack.
+  Startup/recovery setup is in `scripts/install-dev-server.ps1`.
 - Complete the domain, API, and production frontend builds before hosting.
 - Use `npm run sync:local` to capture and build an isolated source snapshot. Build
   outputs, logs, and locks live outside the shared source folder.

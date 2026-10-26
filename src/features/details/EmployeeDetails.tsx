@@ -8,6 +8,7 @@ import {
 } from '@/lib/api'
 import { useWorkspace } from '@/features/workspace/context'
 import { Button } from '@/components/ui/Button'
+import { IconButton } from '@/components/ui/IconButton'
 import { Icon } from '@/components/ui/Icon'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Dialog } from '@/components/ui/Dialog'
@@ -186,6 +187,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
               {vacant ? emp.designation || 'Vacant position' : emp.name}
             </h2>
             {!vacant && <p className="text-sm text-muted">{emp.designation}</p>}
+            {!vacant && emp.directoryNumber != null && <p className="font-mono text-xs tabular-nums text-muted" title="Directory ID (read-only)">ID {emp.directoryNumber}</p>}
             <div className="mt-2 flex flex-wrap items-center gap-1.5">
               {vacant ? (
                 <VacantBadge />
@@ -204,18 +206,16 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           {vacant ? (
-            <Button variant="primary" size="sm" onClick={() => ws.editEmployee(emp)}>
-              <Icon name="UserCheck" size={14} /> Assign person
-            </Button>
+            <IconButton icon="UserCheck" label="Assign person" variant="primary" onClick={() => ws.editEmployee(emp)} />
           ) : (
             <AddReporteeMenu onChoose={setReporteeMode} />
           )}
           <Can module="am.contacts" action="update">
-            <Button size="sm" onClick={() => ws.editEmployee(emp)}><Icon name="Pencil" size={14} /> Edit</Button>
+            <IconButton icon="Pencil" label="Edit" variant="secondary" onClick={() => ws.editEmployee(emp)} />
           </Can>
           {!vacant && (
             <Can module="am.meetings" action="create">
-              <Button size="sm" onClick={() => setActive('event')}><Icon name="Calendar" size={14} /> Add meeting</Button>
+              <IconButton icon="CalendarPlus" label="Add meeting" variant="secondary" onClick={() => setActive('event')} />
             </Can>
           )}
 

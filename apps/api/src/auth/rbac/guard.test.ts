@@ -66,10 +66,10 @@ describe('mode enforce', () => {
     const err = await as('lawyer').open().catch((e) => e)
     expect(err.code).toBe('FORBIDDEN')
     expect(err.cause).toBeInstanceOf(RbacDenial)
-    expect(err.message).toMatch(/permission to edit Bid Tracker rows/)
+    expect(err.message).toMatch(/permission to edit Live Bids rows/)
   })
   it('a cross-module procedure needs EVERY requirement (never just one module)', async () => {
-    await setRole('bidder', 'bid')              // W on Bid Tracker rows, but only R on Customer Departments
+    await setRole('bidder', 'bid')              // W on Live Bids rows, but only R on Customer Departments
     await setRole('both', 'bid'); await setRole('both', 'sales'); await addSalesPerson('both')
     await expect(as('bidder').both()).rejects.toMatchObject({ code: 'FORBIDDEN' })
     await expect(as('both').both()).resolves.toBe('both') // Bid W on rows + Sales W on departments

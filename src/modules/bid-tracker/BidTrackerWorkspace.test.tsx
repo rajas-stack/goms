@@ -15,8 +15,8 @@ function renderAt(path: string) {
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route path="/bid-tracker" element={<BidTrackerWorkspace />} />
-          <Route path="/bid-tracker/:section" element={<BidTrackerWorkspace />} />
+          <Route path="/live-bids" element={<BidTrackerWorkspace />} />
+          <Route path="/live-bids/:section" element={<BidTrackerWorkspace />} />
         </Routes>
         <Path />
       </MemoryRouter>
@@ -26,16 +26,16 @@ function renderAt(path: string) {
 
 describe('BidTrackerWorkspace', () => {
   it('renders the Master Grid tab by default, with the grid mounted', async () => {
-    renderAt('/bid-tracker')
+    renderAt('/live-bids')
     expect(screen.getByRole('button', { name: 'Master Grid' })).toBeInTheDocument()
     expect(await screen.findByTestId('bid-master-grid')).toBeInTheDocument()
   })
 
   it('navigates between sections through the URL', async () => {
-    renderAt('/bid-tracker')
+    renderAt('/live-bids')
     await userEvent.click(screen.getByRole('button', { name: 'Action Queue' }))
-    expect(screen.getByTestId('path')).toHaveTextContent('/bid-tracker/actions')
+    expect(screen.getByTestId('path')).toHaveTextContent('/live-bids/actions')
     await userEvent.click(screen.getByRole('button', { name: 'Master Grid' }))
-    expect(screen.getByTestId('path')).toHaveTextContent(/^\/bid-tracker$/)
+    expect(screen.getByTestId('path')).toHaveTextContent(/^\/live-bids$/)
   })
 })

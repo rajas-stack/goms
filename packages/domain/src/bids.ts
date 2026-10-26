@@ -2,9 +2,10 @@ import {
   CUSTOM_FIELD_PREFIX, STANDARD_BID_FIELD_TYPES, matchesTypedRule,
   isFilterGroup, type CustomFieldType, type FilterNode,
 } from './bidCustomFields.js'
-import { GENERAL_FIELDS } from './bidGeneral.js'
+import { GENERAL_FIELDS, generalFieldType } from './bidGeneral.js'
+import { LIFECYCLE_FIELDS, lifecycleIndex } from './opportunityLifecycle.js'
 
-// Bid Tracker's own stage machine — deliberately separate from
+// Live Bids' own stage machine — deliberately separate from
 // opportunities.ts's PIPELINE_STAGES (spec §4.4). Data, not a TypeScript
 // union, same reasoning as PIPELINE_STAGES: a retired stage must keep
 // rendering on historical rows.
@@ -34,7 +35,7 @@ export const OWNED_SHEETS = ['bidTracker', 'pipeline-funnel', 'pipeline-backup',
 export type OwnedSheet = (typeof OWNED_SHEETS)[number]
 export const DEFAULT_OWNED_SHEET: OwnedSheet = 'bidTracker'
 export const OWNED_SHEET_LABELS: Record<OwnedSheet, string> = {
-  bidTracker: 'Bid Tracker',
+  bidTracker: 'Live Bids',
   'pipeline-funnel': 'Pipeline · Funnel',
   'pipeline-backup': 'Pipeline · Backup',
   'pipeline-commits': 'Pipeline · Commits',
@@ -50,10 +51,57 @@ export function bidStageOrder(key: string): number {
   return BID_STAGE_MAP[key]?.order ?? -1
 }
 
+export const isBuiltInBidStage = (key: string): boolean => BID_STAGES.some((s) => s.key === key)
+
+/** The built-in stage a stage counts as for the stage rules (Go gate, timeline): a built-in stage is itself; a
+ *  user-added one is the nearest open built-in stage before it in `stages` (the user's order), else Solutioning. */
+export function builtInBidStageFor(key: string, stages: readonly { key: string }[] = BID_STAGES): string {
+  if (isBuiltInBidStage(key)) return key
+  for (let i = stages.findIndex((s) => s.key === key) - 1; i >= 0; i--) {
+    const builtIn = BID_STAGES.find((s) => s.key === stages[i].key)
+    if (builtIn && !builtIn.closed) return builtIn.key
+  }
+  return DEFAULT_BID_STAGE_KEY
+}
+
 /** Gate for `decision='go'` (spec §4.4's tightening) — a Go decision cannot
- *  be recorded before the bid has actually reached Submitted. */
-export function isAtOrAfterSubmitted(key: string): boolean {
-  return bidStageOrder(key) >= bidStageOrder('submitted')
+ *  be recorded before the bid has actually reached Submitted. `stages` (the
+ *  user's order) lets a user-added stage placed after Submitted pass. */
+export function isAtOrAfterSubmitted(key: string, stages: readonly { key: string }[] = BID_STAGES): boolean {
+  return bidStageOrder(builtInBidStageFor(key, stages)) >= bidStageOrder('submitted')
+}
+
+/** A Settings › Masters › Live Bids › Bid Stages row: `code` is the stage key stored on bids, `name` its label. */
+export interface BidStageMasterRow { code: string; name: string; active: boolean; displayOrder: number }
+export interface ResolvedBidStage extends BidStageDef { active: boolean; builtIn: boolean }
+
+/** The Bid Stage list in the user's order (`order` = position). Built-in stages keep their key and `closed`, are
+ *  always active and always present (one missing from the master keeps its built-in place); user-added stages are
+ *  plain open stages. No rows (master not loaded yet) gives BID_STAGES. */
+export function resolveBidStages(rows: readonly BidStageMasterRow[]): ResolvedBidStage[] {
+  const listed = new Set(rows.map((r) => r.code))
+  return [
+    ...rows.map((r) => ({ key: r.code, label: r.name, rank: r.displayOrder, active: r.active })),
+    ...BID_STAGES.filter((s) => !listed.has(s.key)).map((s) => ({ key: s.key, label: s.label, rank: s.order, active: true })),
+  ].sort((a, b) => a.rank - b.rank).map(({ key, label, active }, order) => {
+    const builtIn = BID_STAGES.find((s) => s.key === key)
+    return { key, label, order, closed: builtIn?.closed ?? false, active: active || !!builtIn, builtIn: !!builtIn }
+  })
+}
+
+/** Why a Bid Stages master change is refused, or null. Bids store a stage's code, so it never changes. Built-in
+ *  stages carry the stage rules (default stage, Go gate, decision-set closed stages, timeline phases, system
+ *  views), so they can be renamed and reordered but never deactivated or deleted. `inUse` = bids at the stage. */
+export function bidStageChangeError(
+  stage: { code: string; name: string },
+  change: { code?: string; active?: boolean; remove?: boolean; inUse?: number },
+): string | null {
+  if (change.code !== undefined && change.code.trim() !== stage.code.trim()) return `A stage's code can't change — bids store it. Rename "${stage.name}" instead.`
+  if (isBuiltInBidStage(stage.code) && (change.remove || change.active === false)) {
+    return `"${stage.name}" is a built-in stage the bid workflow relies on — it can't be ${change.remove ? 'deleted' : 'deactivated'}.`
+  }
+  if (change.remove && change.inUse) return `"${stage.name}" is the stage of ${change.inUse} bid${change.inUse === 1 ? '' : 's'} — move them to another stage or deactivate it instead.`
+  return null
 }
 
 /** "Next Stage Requirements" banner — derived, not persisted (spec §10).
@@ -83,7 +131,7 @@ export interface SystemBidView {
   filterRules: SystemBidViewFilterRule[]
 }
 
-// Permanent system views (spec §9.1) — generic to any Bid Tracker
+// Permanent system views (spec §9.1) — generic to any Live Bids
 // deployment. "$currentUser" is resolved server-side to ctx.user.email at
 // query time (Task 19); it is never a literal stored email. These are the
 // ONLY seeded/initial views — "Smart Transport Bids" and "High Value Deals
@@ -150,8 +198,9 @@ export function applyFilterRules<T extends Record<string, unknown>>(
   currentUserEmail: string | null,
   fieldTypes: Record<string, CustomFieldType> = {},
 ): T[] {
-  const generalTypes: Record<string, CustomFieldType> = Object.fromEntries(GENERAL_FIELDS.map(field => [`general:${field.key}`, field.kind === 'date' || field.kind === 'datetime' ? 'date' : field.kind === 'select' ? 'select' : 'text']))
-  const types = { ...STANDARD_BID_FIELD_TYPES, ...generalTypes, ...fieldTypes }
+  const generalTypes: Record<string, CustomFieldType> = Object.fromEntries(GENERAL_FIELDS.map(field => [`general:${field.key}`, generalFieldType(field)]))
+  const lifecycleTypes = Object.fromEntries(LIFECYCLE_FIELDS.map(field => [`lifecycle:${field.key}`, field.type])) as Record<string, CustomFieldType>
+  const types = { ...STANDARD_BID_FIELD_TYPES, ...generalTypes, ...lifecycleTypes, ...fieldTypes }
   const applicable = (n: FilterNode): boolean =>
     isFilterGroup(n) ? n.rules.some(applicable) : n.field !== 'opportunityId' && (!n.field.startsWith(CUSTOM_FIELD_PREFIX) || n.field in types)
   const live = rules.filter(applicable)
@@ -165,10 +214,15 @@ export function applyFilterRules<T extends Record<string, unknown>>(
     // wrongly surface every bid that happens to have no owner assigned.
     if (target === null) return false
     const isCustom = rule.field.startsWith(CUSTOM_FIELD_PREFIX)
+    const lifecycleField = rule.field.startsWith('lifecycle:') ? LIFECYCLE_FIELDS.find(field => rule.field === `lifecycle:${field.key}`) : undefined
+    const lifecycleVisible = !lifecycleField || !isOwnedSheet(row.sheet) || lifecycleIndex(row.sheet) >= lifecycleIndex(lifecycleField.sheet)
     const cell = isCustom
       ? (row.customValues as Record<string, unknown> | undefined)?.[rule.field.slice(CUSTOM_FIELD_PREFIX.length)]
-      : rule.field.startsWith('general:') ? (row.generalValues as Record<string, unknown> | undefined)?.[rule.field.slice('general:'.length)] : row[rule.field]
-    return matchesTypedRule(types[rule.field] ?? 'text', cell, rule, target)
+      : rule.field.startsWith('general:') ? (row.generalValues as Record<string, unknown> | undefined)?.[rule.field.slice('general:'.length)]
+        : rule.field.startsWith('lifecycle:') ? lifecycleVisible ? (row.lifecycleData as Record<string, unknown> | undefined)?.[rule.field.slice('lifecycle:'.length)] : undefined : row[rule.field]
+    const type = types[rule.field] ?? 'text'
+    // A saved "contains" rule on a field that became a multi-select (Scope of Work → Requirement) still reads its text.
+    return matchesTypedRule(type === 'multiselect' && rule.operator === 'contains' ? 'text' : type, cell, rule, target)
   }
   const matchNode = (row: T, node: FilterNode): boolean => {
     if (!isFilterGroup(node)) return matchRule(row, node)

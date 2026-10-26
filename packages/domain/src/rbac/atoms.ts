@@ -46,6 +46,7 @@ export const OPPORTUNITY_PATCH_ATOMS: Record<string, string> = {
 /** `bids.update` patch keys → atoms. */
 export const BID_PATCH_ATOMS: Record<string, string> = {
   stageKey: 'bid.stage', decision: 'bid.decision', tenderLink: 'opp.identity', sheet: 'bid.move',
+  lifecycleData: 'opp.identity',
 }
 
 /** `sales.update` patch keys: Sales may edit only photo, mobile and personal email on their own row. */

@@ -69,8 +69,8 @@ export function exportGridWorkbook(rows: BidGridRow[], columns: GridColumnMeta[]
   append(wb, 'Bids', [[...columns.map(c => c.header), ...extra.map(key => `Record: ${key}`)], ...rows.map(row => [
     ...columns.map(c => c.type === 'currency' ? text(cellValue(row, c)) : formatValueText(c, cellValue(row, c), lookups)), ...extra.map(key => text((row as unknown as Record<string, unknown>)[key])),
   ])])
-  append(wb, 'Fields', [['Field ID', 'Field', 'Visible on Bid Tracker', 'Type'], ...columns.map(c => [c.id, c.header, visible.has(c.id) ? 'Yes' : 'No', c.type ?? 'Read only']), ...extra.map(key => [`record:${key}`, key, 'No', 'Record metadata'])])
-  append(wb, 'Instructions', [['Instructions'], ['All Bid Tracker rows and fields are exported, including archived rows and hidden columns. Search and saved-view filters do not limit this export.'], ['Fields lists the current column visibility as Yes or No. Use the import template for NEW bids; existing rows and generated/read-only fields are not overwritten by import.']])
+  append(wb, 'Fields', [['Field ID', 'Field', 'Visible on Live Bids', 'Type'], ...columns.map(c => [c.id, c.header, visible.has(c.id) ? 'Yes' : 'No', c.type ?? 'Read only']), ...extra.map(key => [`record:${key}`, key, 'No', 'Record metadata'])])
+  append(wb, 'Instructions', [['Instructions'], ['All Live Bids rows and fields are exported, including archived rows and hidden columns. Search and saved-view filters do not limit this export.'], ['Fields lists the current column visibility as Yes or No. Use the import template for NEW bids; existing rows and generated/read-only fields are not overwritten by import.']])
   return write(wb)
 }
 

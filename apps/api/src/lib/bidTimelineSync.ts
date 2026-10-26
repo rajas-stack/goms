@@ -5,7 +5,7 @@ import { writeAuditLog } from './auditLog.js'
 type Client = { query: (sql: string, params?: any[]) => Promise<{ rows: any[] }> }
 const today = () => new Date().toISOString().slice(0, 10)
 
-/** A Bid Tracker field linked to a Timeline phase (BID_TIMELINE_SYNC) changed: move the phase's milestone. */
+/** A Live Bids field linked to a Timeline phase (BID_TIMELINE_SYNC) changed: move the phase's milestone. */
 export async function syncFieldToMilestone(client: Client, bidId: string, fieldKey: string, value: unknown, actor: string | null | undefined) {
   const sync = timelineSyncForField(fieldKey)
   if (!sync) return
@@ -21,7 +21,7 @@ export async function syncFieldToMilestone(client: Client, bidId: string, fieldK
   await writeAuditLog(client, { entityType: 'bid', entityId: bidId, field: `timeline:${sync.milestoneKey}`, oldValue: current?.status ?? '', newValue: next.status, reason: `Synced from ${fieldKey}`, action: 'timeline_synced', changedBy: actor ?? null })
 }
 
-/** A Timeline milestone linked to a Bid Tracker field changed: update the field's value on that bid. */
+/** A Timeline milestone linked to a Live Bids field changed: update the field's value on that bid. */
 export async function syncMilestoneToField(client: Client, bidId: string, milestoneKey: string, status: string, dueAt: string | null, actor: string | null | undefined) {
   const sync = timelineSyncForMilestone(milestoneKey)
   if (!sync) return

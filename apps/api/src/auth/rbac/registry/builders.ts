@@ -19,7 +19,7 @@ export const bidRow = (action: RowAction, pick: (raw: any) => unknown, atoms?: (
     return { module: row?.module ?? 'opp.bidTracker', action, atoms: atoms?.(raw), row: row?.facts }
   }
 
-/** Same, addressed by opportunity id (a bid-less opportunity is authorised as Bid Tracker). */
+/** Same, addressed by opportunity id (a bid-less opportunity is authorised as Live Bids). */
 export const oppRow = (action: RowAction, pick: (raw: any) => unknown, atoms?: (raw: any) => string[]): Requirement =>
   async (raw) => {
     const row = await rowForOpportunity(pick(raw))

@@ -52,7 +52,7 @@ describe('bidSavedViews router', () => {
     expect(bobGet).toBeNull()
   })
 
-  it('a view belongs to one Opportunity sheet (default Bid Tracker); system views are on every sheet', async () => {
+  it('a view belongs to one Opportunity sheet (default Live Bids); system views are on every sheet', async () => {
     const caller = appRouter.createCaller({ user: { email: 'alice@amnex.com' } } as any)
     const tracker = await caller.bidSavedViews.create({ name: 'Tracker view', scope: 'personal' })
     const funnel = await caller.bidSavedViews.create({ name: 'Funnel view', scope: 'personal', sheet: 'pipeline-funnel' })

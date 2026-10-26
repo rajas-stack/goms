@@ -82,7 +82,7 @@ export async function validateBidMilestoneRows(client: Client, rawRows: unknown[
           candidates: suggestions,
         }
       }
-      return { errors: [`No bid found for GeM Tender ID "${key}" — the opportunity must have a bid in Bid Tracker before its milestones can be imported.`] }
+      return { errors: [`No bid found for GeM Tender ID "${key}" — the opportunity must have a bid in Live Bids before its milestones can be imported.`] }
     },
   })
 }

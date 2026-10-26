@@ -8,6 +8,7 @@ import { productionSecurity } from './security/config.js'
 import { userOperationBudget } from './security/operationLimit.js'
 import { beginSecurityAudit, finishSecurityAudit } from './security/audit.js'
 import { requireSystemAdmin } from './auth/rbac/systemAdminOnly.js'
+import { announceChange } from './live/changeFeed.js'
 
 export interface Context {
   setCookie?: (value: string) => void
@@ -32,7 +33,16 @@ export function formatError({ shape, error }: { shape: any; error: TRPCError }) 
 
 export const t = initTRPC.context<Context>().create({ errorFormatter: formatError })
 export const router = t.router
-export const publicProcedure = t.procedure.use(async ({ ctx, path, type, next }) => {
+
+/** Outermost on every procedure (all tiers build on publicProcedure): once a mutation has fully succeeded, tell every
+ *  signed-in browser to refetch (live/changeFeed.ts). */
+const announceMutations = t.middleware(async ({ path, type, next }) => {
+  const result = await next()
+  if (type === 'mutation' && result.ok) announceChange(path)
+  return result
+})
+
+export const publicProcedure = t.procedure.use(announceMutations).use(async ({ ctx, path, type, next }) => {
   if (!productionSecurity() || path === 'health.check') return next()
   // tRPC shares this request context across its batch: verify revocation once per HTTP request.
   const user = await (ctx.verifiedIdentity ??= verifyIdentity(ctx.authHeader))

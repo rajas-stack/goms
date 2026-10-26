@@ -118,14 +118,14 @@ function Entry({ group, bidLabel, bidExists, photoOf }: {
           {bid && <span className="hidden max-w-[14rem] truncate text-[12px] text-muted sm:block">{bid.name}</span>}
           {deleted
             ? <span className="text-[12px] italic text-muted">(this bid was deleted)</span>
-            : <Link to={`/bid-tracker/bid/${group.bidId}`} className="text-[12px] font-medium text-goms-navy underline decoration-goms-sky underline-offset-2">Open bid</Link>}
+            : <Link to={`/live-bids/bid/${group.bidId}`} className="text-[12px] font-medium text-goms-navy underline decoration-goms-sky underline-offset-2">Open bid</Link>}
         </div>
       )}
     </li>
   )
 }
 
-/** Bid Tracker history as a readable feed: what happened, who did it, when, to
+/** Live Bids history as a readable feed: what happened, who did it, when, to
  *  which bid, and old → new values — built from the audit log and the ownership
  *  history, which stay exactly as they are. Entries for a hard-deleted bid keep
  *  showing, labelled, because audit rows outlive their bid. */

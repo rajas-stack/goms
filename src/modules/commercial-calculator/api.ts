@@ -31,7 +31,7 @@ export function useMasterMutations<K extends MasterEntityKey>(key: K) {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: qk.masters(key) })
     qc.invalidateQueries({ queryKey: ['commercialCalculator', 'master', key] })
-    // Bid Tracker dropdown options are resolved from these masters.
+    // Live Bids dropdown options are resolved from these masters.
     qc.invalidateQueries({ queryKey: ['bidCustomFields'] })
   }
   const create = useMutation({
@@ -41,7 +41,8 @@ export function useMasterMutations<K extends MasterEntityKey>(key: K) {
   const update = useMutation({
     mutationFn: (a: { id: string; patch: Partial<MasterRowMap[K]>; changeReason?: string }) =>
       repository.updateMaster(key, a.id, a.patch, a.changeReason),
-    onSuccess: invalidate,
+    // A rename is cascaded onto every bid and opportunity holding the old name, so refresh everything.
+    onSuccess: () => { void qc.invalidateQueries() },
   })
   const setActive = useMutation({
     mutationFn: (a: { id: string; active: boolean }) => repository.setMasterActive(key, a.id, a.active),

@@ -1,6 +1,7 @@
 import type { CustomFieldType } from './bidCustomFields.js'
+import { BID_STAGES } from './bids.js'
 
-/** Bid Tracker dropdown masters (Settings → Masters → Bid Tracker). Stored in `commercial_masters`
+/** Live Bids dropdown masters (Settings → Masters → Live Bids). Stored in `commercial_masters`
  *  under these master keys; `name` is the value stored on a bid, `description` its full form
  *  (shown as a tooltip). The seed values below are only the initial list — users maintain them. */
 export const BID_TRACKER_MASTERS = [
@@ -26,6 +27,11 @@ export const BID_TRACKER_MASTERS = [
   ] },
   /** Picked from the global employees list (code = employee id, name = employee name). */
   { key: 'buOwners', label: 'BU Owners', singular: 'BU Owner', values: [] },
+  /** The Bid Stage dropdown (bids.ts): code = stage key stored on bids, name = its label. Seeded with BID_STAGES. */
+  { key: 'bidStages', label: 'Bid Stages', singular: 'Bid Stage', values: [] },
+  /** The bid's Requirement (formerly Scope of Work) and Products General fields (bidGeneral.ts `master`). */
+  { key: 'requirements', label: 'Requirements', singular: 'Requirement', values: [] },
+  { key: 'bidProducts', label: 'Products', singular: 'Product', values: [] },
 ] as const satisfies readonly { key: string; label: string; singular: string; values: readonly (string | readonly [string, string])[] }[]
 
 export type BidTrackerMasterKey = (typeof BID_TRACKER_MASTERS)[number]['key']
@@ -33,6 +39,7 @@ export const BID_TRACKER_MASTER_KEYS: readonly BidTrackerMasterKey[] = BID_TRACK
 export const isBidTrackerMasterKey = (key: string): key is BidTrackerMasterKey => (BID_TRACKER_MASTER_KEYS as readonly string[]).includes(key)
 /** [code, name, description] seed rows for a master. */
 export function bidTrackerMasterSeed(key: BidTrackerMasterKey): [string, string, string][] {
+  if (key === 'bidStages') return BID_STAGES.map(s => [s.key, s.label, ''])
   const def = BID_TRACKER_MASTERS.find(m => m.key === key)!
   return def.values.map(v => (typeof v === 'string' ? [v, v, ''] : [v[0], v[0], v[1]]))
 }
@@ -52,7 +59,7 @@ export interface BidSystemField {
 }
 const YES_NO = { kind: 'fixed', options: ['Yes', 'No'] } as const
 
-/** Built-in Bid Tracker fields, stored as custom fields with these fixed keys (seeded; name, type and
+/** Built-in Live Bids fields, stored as custom fields with these fixed keys (seeded; name, type and
  *  options are not user-editable — options come from `source`). */
 export const BID_SYSTEM_FIELDS: readonly BidSystemField[] = [
   { key: 'bid_priority', name: 'Bid Priority', dataType: 'select', source: { kind: 'master', masterKey: 'bidPriorities' }, importKeys: ['temperature'] },
@@ -124,12 +131,12 @@ export function financialQuarter(iso: string): 'Q1' | 'Q2' | 'Q3' | 'Q4' | null 
 export function formatDateWithQuarter(iso: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
   const q = financialQuarter(iso)
-  return m && q ? `${m[3]}/${m[2]}/${m[1]} (${q})` : iso
+  return m && q ? `${m[3]}/${m[2]}/${m[1]}${/T\d{2}:\d{2}/.test(iso) ? `, ${iso.slice(11, 16)}` : ''} (${q})` : iso
 }
 /** Grid columns whose date also shows its financial quarter (no separate quarter columns). */
 export const QUARTER_DATE_COLUMNS: ReadonlySet<string> = new Set(['general:publishingDate', 'general:receivingDate', 'custom:actual_submission_date'])
 
-/** Bid Tracker fields kept in step with a Timeline phase's milestone (bid_milestones.key = phase key).
+/** Live Bids fields kept in step with a Timeline phase's milestone (bid_milestones.key = phase key).
  *  flag: Yes ⇄ phase done (setting Yes marks it done today); No/blank reopens it.
  *  date: a date ⇄ phase done on that date; clearing the date reopens it. */
 export const BID_TIMELINE_SYNC = [

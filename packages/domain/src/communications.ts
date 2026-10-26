@@ -1,9 +1,10 @@
 /** Communication classifications are workflow states, not editable organisation masters. */
-export const COMMUNICATION_PARTIES = ['internal', 'delivery', 'oem', 'client', 'clientDepartment', 'external', 'unknown'] as const
+export const COMMUNICATION_PARTIES = ['internal', 'delivery', 'oem', 'client', 'clientDepartment', 'external', 'unknown', 'competitor', 'consortium'] as const
 export type CommunicationParty = typeof COMMUNICATION_PARTIES[number]
 export const COMMUNICATION_PARTY_LABELS: Record<CommunicationParty, string> = {
   internal: 'Internal team', delivery: 'Delivery team', oem: 'OEM', client: 'Client contact',
   clientDepartment: 'Client department mailbox', external: 'Other external', unknown: 'Needs classification',
+  competitor: 'Competitor', consortium: 'Consortium partner',
 }
 export interface MailParticipant { email: string; name: string }
 export interface CommunicationMessage {
@@ -15,6 +16,9 @@ export interface CommunicationThread {
 export interface CommunicationContact extends MailParticipant {
   id: string; party: CommunicationParty; organization: string; departmentId: string | null
 }
+/** The categories an address-book contact (communication_contacts.party) may carry. */
+export const CONTACT_PARTIES = ['delivery', 'oem', 'clientDepartment', 'external', 'competitor', 'consortium'] as const
+export type ContactParty = typeof CONTACT_PARTIES[number]
 export interface CommunicationPerson extends MailParticipant {
   id: string; source: 'org' | 'delivery' | 'sales' | 'client' | 'contact'; party: CommunicationParty
 }

@@ -21,7 +21,7 @@ beforeEach(() => {
   vi.mocked(gateway.verify).mockResolvedValue({ email: actor.email, sub: 'google-subject' }); vi.mocked(gateway.profile).mockResolvedValue(actor.email)
 })
 afterEach(() => vi.unstubAllEnvs())
-async function connect() { let cookie = ''; const result = await beginMailConnection(actor, '/bid-tracker/bid/123?tab=communication&view=all', value => { cookie = value }); return { result, cookie: cookie.split(';')[0], state: new URL(result.url).searchParams.get('state')! } }
+async function connect() { let cookie = ''; const result = await beginMailConnection(actor, '/live-bids/bid/123?tab=communication&view=all', value => { cookie = value }); return { result, cookie: cookie.split(';')[0], state: new URL(result.url).searchParams.get('state')! } }
 describe('server Gmail OAuth', () => {
   it('binds PKCE and one-use state to an HttpOnly browser cookie, without returning credentials', async () => {
     const { result, cookie, state } = await connect(); const reply = response()

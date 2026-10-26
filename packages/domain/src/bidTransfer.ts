@@ -92,7 +92,7 @@ const IMPORT_TARGETS: Record<string, string> = {
   salesPersonEmail: 'geoSalesPersonId', state: 'stateCode', verticalOwner: 'buSalesPersonId', presalesOwner: 'preSalesPersonId',
   bidTeamOwner: 'ownerEmail', bidTeamLead: 'bidTeamMemberId', stageKey: 'stageKey', goNoGo: 'decision', tenderWebsite: 'tenderLink',
 }
-/** Historical column → built-in Bid Tracker field (bidTrackerFields.ts importKeys). */
+/** Historical column → built-in Live Bids field (bidTrackerFields.ts importKeys). */
 const SYSTEM_IMPORT_TARGETS: Record<string, string> = Object.fromEntries(
   BID_SYSTEM_FIELDS.flatMap(f => (f.importKeys ?? []).map(k => [k, `custom:${f.key}`])))
 export function bidTransferFields(context: BidTransferContext): BidTransferField[] {

@@ -123,12 +123,12 @@ describe('start', () => {
 describe('full WEB flow', () => {
   beforeEach(() => boot())
   it('start -> callback -> exchange -> refresh -> logout, with tokens never in a URL', async () => {
-    const s = await start('web', '/bid-tracker?sheet=pipeline#top')
+    const s = await start('web', '/live-bids?sheet=pipeline#top')
     const cb = await callback(s.state)
     expect(cb.statusCode).toBe(302)
     const back = new URL(loc(cb))
     expect(back.origin).toBe(ORIGIN)
-    expect(back.pathname + back.search.replace(/auth_code=[^&]+/, 'auth_code=X')).toBe('/bid-tracker?sheet=pipeline&auth_code=X')
+    expect(back.pathname + back.search.replace(/auth_code=[^&]+/, 'auth_code=X')).toBe('/live-bids?sheet=pipeline&auth_code=X')
     expect(back.hash).toBe('#top')
     expect(loc(cb)).not.toMatch(/access|refresh|token/i)
     const code = back.searchParams.get('auth_code')!

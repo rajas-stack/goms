@@ -60,7 +60,7 @@ export function usePopoverPosition({
       const next: PopoverPosition = { top, left, width: matchAnchorWidth ? a.width : undefined, maxHeight }
       // The rAF loop below runs for as long as the panel is open. Setting state with a
       // fresh object every frame re-rendered the whole popover subtree at 60 Hz even when
-      // nothing had moved — with two popovers open over a large grid (the Bid Tracker
+      // nothing had moved — with two popovers open over a large grid (the Live Bids
       // filter bar) that saturated the main thread for seconds. Only update on a real change
       // (sub-pixel jitter ignored).
       setPosition((prev) => (samePosition(prev, next) ? prev : next))

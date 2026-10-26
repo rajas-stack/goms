@@ -7,6 +7,7 @@ import { Field, Input } from '@/components/ui/Field'
 import { useBidCustomFields, useBidSavedViewMutations } from '@/lib/api'
 import type { BidSavedView } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { useBidStageOptions } from '@/features/masters/useBidStages'
 import { isRuleComplete, resolveColumns } from '../gridColumns'
 import { useEntityLookups } from '../useEntityLookups'
 import { FilterBuilder } from './FilterBuilder'
@@ -21,7 +22,7 @@ const SCOPES: { value: 'personal' | 'global'; title: string; hint: string }[] = 
 export function CreateSavedViewDialog({ open, onClose, sheet, initialFilterRules, visibleColumns, onCreated }: {
   open: boolean
   onClose: () => void
-  /** The Opportunity sheet the new view belongs to (default: Bid Tracker). */
+  /** The Opportunity sheet the new view belongs to (default: Live Bids). */
   sheet?: string
   initialFilterRules: FilterNode[]
   /** Ordered visible column ids; empty/undefined = default (all). */
@@ -38,7 +39,8 @@ export function CreateSavedViewDialog({ open, onClose, sheet, initialFilterRules
   const allowed = scope === 'personal' || canGlobal
   const { data: customFields = [] } = useBidCustomFields()
   const lookups = useEntityLookups()
-  const filterable = useMemo(() => resolveColumns(customFields).filter((c) => c.type !== null), [customFields])
+  const stageOptions = useBidStageOptions()
+  const filterable = useMemo(() => resolveColumns(customFields, undefined, stageOptions).filter((c) => c.type !== null), [customFields, stageOptions])
 
   // Each time the dialog opens it starts from whatever the grid is showing now.
   useEffect(() => {
