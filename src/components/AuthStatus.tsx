@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { authApi, useAuthUser } from '@/lib/auth'
 import { Dialog } from '@/components/ui/Dialog'
 import { Button } from '@/components/ui/Button'
+import { Icon } from '@/components/ui/Icon'
 import { OptionsMenu } from '@/components/theme/OptionsMenu'
 
 /** Persistent sign-in indicator, visible on every screen (TopBar). Signing in
@@ -13,20 +14,46 @@ import { OptionsMenu } from '@/components/theme/OptionsMenu'
 export function AuthStatus() {
   const { user } = useAuthUser()
   const [confirmSignOut, setConfirmSignOut] = useState(false)
+  const [signIn, setSignIn] = useState<{ open: boolean; error?: string }>({ open: false })
   const navigate = useNavigate()
   const location = useLocation()
+  /** Opens Google's popup within the click, with a blocking dialog over the page until it finishes. */
+  const startSignIn = () => {
+    setSignIn({ open: true })
+    authApi.signIn().then(
+      () => setSignIn({ open: false }),
+      (error: unknown) => setSignIn({ open: true, error: error instanceof Error ? error.message : 'Google sign-in failed.' }),
+    )
+  }
 
-  // Settings remain accessible when sign-in is not configured for this build.
-  if (!authApi.configured) return <OptionsMenu />
+  // Settings remain accessible when this build cannot sign anyone in.
+  if (!authApi.configured && authApi.kind !== 'google-local') return <OptionsMenu />
 
   if (!user) {
     return (
-      <OptionsMenu
-        onSignIn={() => {
-          const here = location.pathname + location.search + location.hash
-          navigate(`/login?next=${encodeURIComponent(here)}`)
-        }}
-      />
+      <>
+        <OptionsMenu
+          onSignIn={() => {
+            // The GOMS OAuth flow is a full-page redirect by design; the Google popup flows sign in right here.
+            if (authApi.kind === 'oauth') {
+              const here = location.pathname + location.search + location.hash
+              navigate(`/login?next=${encodeURIComponent(here)}`)
+              return
+            }
+            startSignIn()
+          }}
+        />
+        <Dialog open={signIn.open} onClose={() => setSignIn({ open: false })} title="Sign in to GOMS"
+          description="Choose your Google account in the window that opened. You stay on this page."
+          footer={<>
+            <Button onClick={() => setSignIn({ open: false })}>Cancel</Button>
+            {signIn.error && <Button variant="primary" onClick={startSignIn}>Try again</Button>}
+          </>}>
+          {signIn.error
+            ? <p role="alert" className="text-sm text-crimson">{signIn.error}</p>
+            : <p className="flex items-center gap-2 text-sm text-muted"><Icon name="Loader" className="animate-spin" />Finish signing in in the Google window…</p>}
+        </Dialog>
+      </>
     )
   }
 
@@ -53,7 +80,8 @@ export function AuthStatus() {
                 // while still signed in would bounce straight back to home.
                 // A failed sign-out leaves the user signed in and on the page —
                 // the profile menu still shows them, so nothing more to report.
-                authApi.signOut().then(() => navigate('/login', { replace: true }), () => {})
+                // Local mode has no sign-in page to go to: signing out just leaves you here, as before signing in.
+                authApi.signOut().then(() => { if (authApi.configured) navigate('/login', { replace: true }) }, () => {})
               }}
             >
               Sign out

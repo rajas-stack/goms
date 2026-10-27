@@ -79,9 +79,12 @@ export default {
       },
       keyframes: {
         'fade-in': { from: { opacity: '0' }, to: { opacity: '1' } },
+        // Two soft pulses, then rest for the remainder of the cycle.
+        'unread-pulse': { '0%, 6%, 12%, 100%': { opacity: '0' }, '3%, 9%': { opacity: '1' } },
       },
       animation: {
         'fade-in': 'fade-in 0.3s ease both',
+        'unread-pulse': 'unread-pulse 15s ease-in-out infinite',
       },
       // Black custom cursors for the handful of shapes this app actually
       // uses (grepped every `cursor-*` class site — pointer/grab/grabbing/

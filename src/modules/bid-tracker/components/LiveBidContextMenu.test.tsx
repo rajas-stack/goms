@@ -50,16 +50,14 @@ describe('Live Bids context actions', () => {
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
   })
 
-  it('shows the actual stage and only its adjacent moves after reversal', async () => {
+  it('shows the actual stage but no stage moves (those are bulk-only)', async () => {
     const bid = await seed()
     await repository.updateBid(bid.id, { sheet: 'pipeline-commits' })
     mount()
     const menu = await openMenu(bid.id)
     expect(menu).toHaveTextContent('Current stage: Commit')
-    expect(within(menu).getByRole('menuitem', { name: 'Move back to Backup' })).toBeEnabled()
+    expect(within(menu).queryByRole('menuitem', { name: /Move back|Advance to/ })).not.toBeInTheDocument()
     expect(within(menu).queryByRole('menuitem', { name: 'Open bid synopsis' })).not.toBeInTheDocument()
-    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Advance to Live Bid' }))
-    await waitFor(async () => expect((await repository.getBid(bid.id))?.sheet).toBe('bidTracker'))
   })
 
   it('unlocks, opens the selected editor and saves its new value', async () => {
@@ -100,11 +98,10 @@ describe('Live Bids context actions', () => {
     expect(within(menu).getByRole('menuitem', { name: 'Add to favourites' })).toBeEnabled()
   })
 
-  it('checks the destination permission before offering a move and hides restricted shortcuts', async () => {
+  it('hides restricted shortcuts', async () => {
     const bid = await seed()
     mount({ access: { configured: true, allowed: { opportunity: 63, 'opportunity.pipeline.commits': 1, 'opportunity.bid.communication': 0 } } })
     const menu = await openMenu(bid.id)
-    expect(within(menu).queryByRole('menuitem', { name: 'Move back to Commit' })).not.toBeInTheDocument()
     expect(within(menu).queryByRole('menuitem', { name: 'Open communications' })).not.toBeInTheDocument()
   })
 

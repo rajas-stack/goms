@@ -82,7 +82,7 @@ export function Avatar({
         onError={() => setPhotoFailed(true)}
         className={cutout
           ? cn(baseClasses, 'rounded-none object-contain [filter:drop-shadow(0_6px_6px_rgb(15_23_42/0.28))_drop-shadow(0_1px_1px_rgb(15_23_42/0.2))]')
-          : cn(baseClasses, 'bg-ink-100 object-cover ring-1 ring-line')}
+          : cn(baseClasses, 'bg-ink-900/10 object-cover ring-1 ring-line')}
       />
     )
   }
@@ -91,7 +91,7 @@ export function Avatar({
   return (
     <span
       ref={drivePhoto.ref}
-      className={cn(baseClasses, 'bg-ink-100 font-semibold leading-none text-ink-700')}
+      className={cn(baseClasses, 'bg-ink-900/10 font-semibold leading-none text-ink-700')}
       data-testid="avatar"
       aria-hidden="true"
     >

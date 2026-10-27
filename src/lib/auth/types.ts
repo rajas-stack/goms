@@ -9,7 +9,8 @@ export interface AuthUser {
 /** What the rest of the app may know about "who is signed in". Firebase and the GOMS OAuth session both implement it,
  *  and `VITE_AUTH_PROVIDER` picks one at build time. */
 export interface AuthProviderApi {
-  readonly kind: 'firebase' | 'oauth'
+  /** 'google-local': optional browser-only Google sign-in for builds without Firebase (localGoogleProvider). */
+  readonly kind: 'firebase' | 'oauth' | 'google-local'
   /** False when this build cannot sign anyone in (no Firebase config / no API base URL). */
   readonly configured: boolean
   /** `loading` is true until the provider knows whether anyone is signed in. Returns an unsubscribe function. */

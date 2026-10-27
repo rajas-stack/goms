@@ -67,8 +67,17 @@ describe('buildAuthUrl', () => {
     expect(`${u.origin}${u.pathname}`).toBe('https://accounts.google.com/o/oauth2/v2/auth')
     expect(Object.fromEntries(u.searchParams)).toEqual({
       client_id: 'test-client.apps.googleusercontent.com', redirect_uri: 'https://goms.test/api/oauth/google/callback', response_type: 'code',
-      scope: 'openid email profile', state: 'S', nonce: 'N', code_challenge: 'C', code_challenge_method: 'S256', hd: 'amnex.com', prompt: 'select_account',
+      scope: 'openid email profile https://www.googleapis.com/auth/gmail.modify', state: 'S', nonce: 'N', code_challenge: 'C', code_challenge_method: 'S256',
+      hd: 'amnex.com', prompt: 'select_account', access_type: 'offline', include_granted_scopes: 'true',
     })
+  })
+  it('asks for sign-in only when Email Center uses a different Google client', () => {
+    process.env.EMAIL_GOOGLE_CLIENT_ID = 'mail-client.apps.googleusercontent.com'
+    try {
+      const params = new URL(buildAuthUrl({ state: 'S', nonce: 'N', challenge: 'C' })).searchParams
+      expect(params.get('scope')).toBe('openid email profile')
+      expect(params.has('access_type')).toBe(false)
+    } finally { delete process.env.EMAIL_GOOGLE_CLIENT_ID }
   })
 })
 
@@ -78,7 +87,7 @@ describe('googleGateway.exchangeCode (fetch stubbed; no network)', () => {
   it('posts the code, PKCE verifier, secret and exact redirect URI to the token endpoint and returns the id_token', async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({ id_token: 'IDT', access_token: 'x' }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
-    await expect(googleGateway.exchangeCode({ code: 'C1', verifier: 'V1' })).resolves.toBe('IDT')
+    await expect(googleGateway.exchangeCode({ code: 'C1', verifier: 'V1' })).resolves.toEqual({ idToken: 'IDT', accessToken: 'x' })
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe('https://oauth2.googleapis.com/token')
     expect(Object.fromEntries(init.body as URLSearchParams)).toEqual({

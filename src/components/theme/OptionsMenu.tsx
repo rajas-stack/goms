@@ -63,7 +63,7 @@ export function OptionsMenu({ profile, onSignIn, onSignOut }: {
           )}
         >
           {profile ? <Avatar person={profile} size="sm" className="h-7 w-7" /> : (
-            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink-100 text-muted">
+            <span aria-hidden="true" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink-900/10 text-muted">
               <Icon name="User" size={16} />
             </span>
           )}

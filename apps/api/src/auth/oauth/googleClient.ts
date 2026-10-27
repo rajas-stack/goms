@@ -2,6 +2,7 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose'
 import { isAmnexAccount } from '../identity.js'
 import { oauthConfig } from './config.js'
+import { GMAIL_SCOPE, emailConfiguration } from '../../email/config.js'
 
 export class GoogleAuthError extends Error {
   readonly reason: 'exchange' | 'token' | 'nonce' | 'unverified' | 'domain'
@@ -9,9 +10,11 @@ export class GoogleAuthError extends Error {
 }
 
 export interface GoogleClaims { sub: string; email: string }
+/** The token endpoint's answer. The access/refresh tokens matter only when Gmail was granted at sign-in (see mailAtSignIn). */
+export interface GoogleTokens { idToken: string; accessToken?: string; refreshToken?: string; expiresIn?: number; scope?: string }
 export interface GoogleGateway {
-  /** Authorization code -> raw ID token (server-side, with the client secret and PKCE verifier). */
-  exchangeCode(i: { code: string; verifier: string }): Promise<string>
+  /** Authorization code -> tokens (server-side, with the client secret and PKCE verifier). */
+  exchangeCode(i: { code: string; verifier: string }): Promise<GoogleTokens>
   verifyIdToken(idToken: string, nonce: string): Promise<GoogleClaims>
 }
 
@@ -20,14 +23,23 @@ const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 const JWKS_URL = new URL('https://www.googleapis.com/oauth2/v3/certs')
 const ISSUERS = ['https://accounts.google.com', 'accounts.google.com']
 
+/** Sign-in also connects the user's Gmail to Email Center (one consent, not two) when Email Center is set up on this same Google client. */
+export function mailAtSignIn(): boolean {
+  const mail = emailConfiguration()
+  return mail.ready && mail.clientId === oauthConfig().clientId
+}
+
 export function buildAuthUrl(f: { state: string; nonce: string; challenge: string }): string {
   const cfg = oauthConfig()
   const url = new URL(AUTH_ENDPOINT)
   url.search = new URLSearchParams({
-    client_id: cfg.clientId, redirect_uri: cfg.redirectUri, response_type: 'code', scope: 'openid email profile',
+    client_id: cfg.clientId, redirect_uri: cfg.redirectUri, response_type: 'code',
+    scope: mailAtSignIn() ? `openid email profile ${GMAIL_SCOPE}` : 'openid email profile',
     state: f.state, nonce: f.nonce, code_challenge: f.challenge, code_challenge_method: 'S256',
     hd: 'amnex.com', // a hint only: the @amnex.com check below is what enforces the domain
     prompt: 'select_account',
+    // Offline access gives Email Center a refresh token so it keeps syncing after the sign-in session's Google token expires.
+    ...(mailAtSignIn() && { access_type: 'offline', include_granted_scopes: 'true' }),
   }).toString()
   return url.toString()
 }
@@ -71,9 +83,11 @@ export const googleGateway: GoogleGateway = {
       throw new GoogleAuthError('exchange')
     }
     if (!res.ok) throw new GoogleAuthError('exchange')
-    const body = (await res.json().catch(() => null)) as { id_token?: unknown } | null
+    const body = (await res.json().catch(() => null)) as { id_token?: unknown; access_token?: unknown; refresh_token?: unknown; expires_in?: unknown; scope?: unknown } | null
     if (typeof body?.id_token !== 'string') throw new GoogleAuthError('exchange')
-    return body.id_token
+    const text = (value: unknown) => (typeof value === 'string' ? value : undefined)
+    return { idToken: body.id_token, accessToken: text(body.access_token), refreshToken: text(body.refresh_token), scope: text(body.scope),
+      expiresIn: typeof body.expires_in === 'number' ? body.expires_in : undefined }
   },
   verifyIdToken: (idToken, nonce) => verifyGoogleIdToken(idToken, nonce, { clientId: oauthConfig().clientId, keys: googleKeys }),
 }

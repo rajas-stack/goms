@@ -2,7 +2,7 @@ import type { CredentialPassphrase, PeopleColumnConfig } from '@goms/domain'
 import type {
   Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue, BidDocument, BidMilestone, BidSavedView,
   Customer, DeliveryTeamMember, DocumentCitation, Employee, ExternalId, FollowUp, HierNode, MergeAuditRecord, Opportunity, OpportunityStageChange,
-  OwnershipAssignment, ProtectedValue, SalesPerson, SalesPosting, TimelineEvent, Transfer,
+  OwnershipAssignment, ProtectedValue, SalesPerson, SalesPosting, TimelineEvent, Transfer, WhatsAppLink, WhatsAppTag,
 } from '@/lib/types'
 import adminRaw from './india-admin.json'
 import subdistrictsRaw from './subdistricts.json'
@@ -130,6 +130,10 @@ export interface GormsData {
   tenderWebsites: TenderWebsite[]
   /** Rival companies saved in Settings > Competitors. Optional: older snapshots simply lack it. */
   competitors?: Competitor[]
+  /** WhatsApp messages filed to opportunities (Communication tab). Optional: older snapshots simply lack it. */
+  whatsappLinks?: WhatsAppLink[]
+  /** Tags on WhatsApp chats. Unset until first used, which is when the phone's own lists are imported. */
+  whatsappTags?: WhatsAppTag[]
   /** Settings > Masters > Amnex Departments. Optional: older snapshots lack it (seeded from the org on load). */
   amnexDepartments?: StoredDepartment[]
   /** Settings > Roles & Access: the UI permission tree (nodes, grants, roles, templates). Optional: older snapshots lack it. */

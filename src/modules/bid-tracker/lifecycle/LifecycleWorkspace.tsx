@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import {
-  LIFECYCLE_FIELDS, OPPORTUNITY_LIFECYCLE, isOwnedSheet, lifecycleIndex, lifecycleLabel, lifecycleMoveTargets,
+  LIFECYCLE_FIELDS, OPPORTUNITY_LIFECYCLE, isOwnedSheet, lifecycleIndex, lifecycleLabel,
   lifecycleSections, sheetModule, type LifecycleData, type OwnedSheet,
 } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
@@ -24,32 +24,10 @@ export function lifecycleViewingSheet(current: OwnedSheet, requested: string | n
   return requested && isOwnedSheet(requested) && lifecycleIndex(requested) < lifecycleIndex(current) ? requested : current
 }
 
-export function LifecycleStageActions({ bid, row, disabled = false }: { bid: Bid; row?: BidGridRow; disabled?: boolean }) {
-  const { update } = useBidMutations()
-  const [, setParams] = useSearchParams()
-  const perms = usePermissions()
-  const allowedNode = useNodeFilter()
-  const { data: myAccess } = useMyAccess()
-  const [error, setError] = useState<string | null>(null)
-  const facts = row ? rowScopeFacts(row, myAccess?.email ?? '', myAccess?.facts?.salesPersonId ?? null) : undefined
-  const canMove = (to: OwnedSheet) => allowedNode(SHEET_NODE[bid.sheet], 'edit') && allowedNode(SHEET_NODE[to], 'edit')
-    && (!perms.enforced || perms.canEdit(sheetModule(bid.sheet), 'bid.move', facts) && perms.canEdit(sheetModule(to), 'bid.move', facts))
-  const move = async (to: OwnedSheet) => {
-    setError(null)
-    try {
-      await update.mutateAsync({ id: bid.id, patch: { sheet: to } })
-      setParams(params => { const next = new URLSearchParams(params); next.set('stage', to); next.delete('tab'); return next })
-    } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not change the lifecycle stage.') }
-  }
+/** Stage moves happen only from the Live Bids grid's selection toolbar; here the stage is shown, not changed. */
+export function LifecycleStageActions({ bid }: { bid: Bid }) {
   return <div className="flex flex-wrap items-center gap-2">
     <span className="mr-1 text-xs text-muted">Current stage: <strong className="text-ink">{lifecycleLabel(bid.sheet)}</strong></span>
-    {bid.status !== 'archived' && lifecycleMoveTargets(bid.sheet).filter(canMove).map(to => {
-      const forward = lifecycleIndex(to) > lifecycleIndex(bid.sheet)
-      return <Button key={to} size="sm" variant={forward ? 'primary' : 'secondary'} disabled={disabled || update.isPending} onClick={() => void move(to)}>
-        <Icon name={forward ? 'ArrowRight' : 'ArrowLeft'} size={13} /> {forward ? 'Advance to' : 'Move back to'} {lifecycleLabel(to)}
-      </Button>
-    })}
-    {error && <p role="alert" className="w-full text-xs text-crimson">{error}</p>}
   </div>
 }
 
@@ -89,7 +67,7 @@ export function LifecycleWorkspace({ bid, row, viewingSheet, compact = false }: 
         {lifecycleSections(viewingSheet).map((stage, index) => <li key={stage.sheet} className="text-xs text-ink"><span className="mr-1.5 font-mono text-muted">0{index + 1}</span>{stage.label}</li>)}
       </ol>
     </>}
-    <LifecycleStageActions bid={bid} row={row} disabled={dirty || update.isPending} />
+    <LifecycleStageActions bid={bid} />
     {viewingSheet !== bid.sheet && <p className="mt-2 text-xs text-muted">Showing information through {lifecycleLabel(viewingSheet)}. <Link className="text-goms-navy underline" to={`/live-bids/bid/${bid.id}`}>Open the current {lifecycleLabel(bid.sheet)} workspace</Link></p>}
     <form key={formRevision} onSubmit={event => { event.preventDefault(); void save() }}>
       {sections.map(stage => <section key={stage.sheet} aria-label={`${stage.label} details`} className="border-b border-line py-5">

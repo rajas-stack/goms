@@ -216,7 +216,7 @@ describe('Manage cell, archive button, right-click menus, drag to reorder', () =
     expect(await screen.findByRole('button', { name: /editing unlocked/ })).toBeInTheDocument()
   })
 
-  it('right-click on a cell offers open, edit, copy, filter, move, favourite, archive and delete', async () => {
+  it('right-click on a cell offers open, edit, copy, filter, favourite, archive and delete (stage moves are bulk-only)', async () => {
     const bid = await makeBid('Alpha')
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, { clipboard: { writeText } })
@@ -228,7 +228,6 @@ describe('Manage cell, archive button, right-click menus, drag to reorder', () =
     expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual([
       'Open details', 'Open bid synopsis', 'View RFP timeline', 'Open communications',
       'Edit cell (unlocks editing)', 'Copy value', 'Copy bid link', 'Filter: Opportunity / Mission is this value',
-      'Move back to Commit',
       'Add to favourites', 'Archive', 'Delete bid…',
     ])
     expect(within(menu).getByRole('menuitem', { name: /Edit cell/ })).toBeEnabled()

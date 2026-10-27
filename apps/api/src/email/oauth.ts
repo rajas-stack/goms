@@ -33,6 +33,22 @@ export const mailOAuthGateway: MailOAuthGateway = {
     return profile.emailAddress.toLowerCase()
   },
 }
+/** Stores (or refreshes) the user's own Gmail as their Email Center mailbox. Google sends a refresh token only on a fresh consent,
+ *  so a later grant without one keeps the stored token. Shared by "Connect Gmail" and GOMS sign-in. */
+export async function saveMailbox(grant: { uid: string; email: string; sub: string; accessToken: string; refreshToken?: string; expiresIn: number; scope: string }) {
+  await inTransaction(async db => {
+    await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`email-connect:${grant.email}`])
+    const current = (await db.query('SELECT * FROM email_mailboxes WHERE owner_email=$1 AND provider_email=$1 FOR UPDATE', [grant.email])).rows[0]
+    const id = current?.id ?? randomUUID()
+    const previous = !grant.refreshToken && current?.credentials ? openEmailCredentials(current.credentials, `${id}:${grant.email}`) : null
+    const refreshToken = grant.refreshToken || previous?.refreshToken
+    if (!refreshToken) throw new Error('Reconnect with offline access.')
+    const sealed = sealEmailCredentials({ accessToken: grant.accessToken, refreshToken, expiresAt: Date.now() + Math.min(Math.max(grant.expiresIn, 0), 3600) * 1000 }, `${id}:${grant.email}`)
+    await db.query(`INSERT INTO email_mailboxes(id,owner_uid,owner_email,provider_email,provider_subject,credentials,scopes,status) VALUES ($1,$2,$3,$3,$4,$5,$6,'connected')
+      ON CONFLICT(owner_email,provider_email) DO UPDATE SET owner_uid=EXCLUDED.owner_uid,provider_subject=EXCLUDED.provider_subject,credentials=EXCLUDED.credentials,scopes=EXCLUDED.scopes,status='connected',credential_revision=gen_random_uuid(),last_error=NULL,next_sync_at=now(),sync_failures=0,updated_at=now()`, [id, grant.uid, grant.email, grant.sub, JSON.stringify(sealed), grant.scope.split(' ')])
+    await emailEvent({ email: grant.email }, 'mailbox_connected', { mailboxId: id }, db)
+  })
+}
 function cookieName(state: string) { return `goms_mail_${digest(state).slice(0, 16)}` }
 function cookie(state: string, value: string, secure: boolean, expired = false) {
   return `${cookieName(state)}=${value}; HttpOnly; SameSite=Lax; Path=/api/oauth/google/callback; Max-Age=${expired ? 0 : 600}${secure ? '; Secure' : ''}`
@@ -67,18 +83,7 @@ export async function completeMailConnection(req: { query?: any; headers: { cook
       console.warn(JSON.stringify({ event: 'email.connection_rejected', reason: claims.email !== flow.email ? 'different_account' : !credentials.scope.split(' ').includes(GMAIL_SCOPE) ? 'gmail_scope_not_granted' : 'profile_mismatch' }))
       return redirect('wrong_account_or_permission')
     }
-    await inTransaction(async db => {
-      await db.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`email-connect:${flow.email}`])
-      const current = (await db.query('SELECT * FROM email_mailboxes WHERE owner_email=$1 AND provider_email=$1 FOR UPDATE', [flow.email])).rows[0]
-      const id = current?.id ?? randomUUID()
-      const previous = !credentials.refresh_token && current?.credentials ? openEmailCredentials(current.credentials, `${id}:${flow.email}`) : null
-      const refreshToken = credentials.refresh_token || previous?.refreshToken
-      if (!refreshToken) throw new Error('Reconnect with offline access.')
-      const sealed = sealEmailCredentials({ accessToken: credentials.access_token, refreshToken, expiresAt: Date.now() + Math.min(Math.max(credentials.expires_in, 0), 3600) * 1000 }, `${id}:${flow.email}`)
-      await db.query(`INSERT INTO email_mailboxes(id,owner_uid,owner_email,provider_email,provider_subject,credentials,scopes,status) VALUES ($1,$2,$3,$3,$4,$5,$6,'connected')
-        ON CONFLICT(owner_email,provider_email) DO UPDATE SET owner_uid=EXCLUDED.owner_uid,provider_subject=EXCLUDED.provider_subject,credentials=EXCLUDED.credentials,scopes=EXCLUDED.scopes,status='connected',credential_revision=gen_random_uuid(),last_error=NULL,next_sync_at=now(),sync_failures=0,updated_at=now()`, [id, flow.user_uid, flow.email, claims.sub, JSON.stringify(sealed), credentials.scope.split(' ')])
-      await emailEvent({ email: flow.email }, 'mailbox_connected', { mailboxId: id }, db)
-    })
+    await saveMailbox({ uid: flow.user_uid, email: flow.email, sub: claims.sub, accessToken: credentials.access_token, refreshToken: credentials.refresh_token, expiresIn: credentials.expires_in, scope: credentials.scope })
     return redirect('connected')
   } catch (e) {
     // Keep known setup diagnostics; never log arbitrary provider, parser or database error content.
