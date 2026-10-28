@@ -90,7 +90,7 @@ export function BidDetailWorkspace() {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-line px-4 py-3">
-        <div className="mb-3"><LifecycleStageActions bid={bid} row={row} /></div>
+        <div className="mb-3"><LifecycleStageActions bid={bid} /></div>
         <Link to="/live-bids" className="inline-flex items-center gap-1 text-[12px] text-muted hover:text-ink">
           <Icon name="ArrowLeft" size={12} /> Master Grid
         </Link>

@@ -23,10 +23,12 @@ export function TopBar({ onOpenDrawer }: Props) {
   const isDocuments = location.pathname.startsWith('/documents')
   const isDocumentMaker = location.pathname.startsWith('/document-maker')
   const isEmail = location.pathname.startsWith('/email')
+  const isWhatsApp = location.pathname.startsWith('/whatsapp')
+  const isMarketing = location.pathname.startsWith('/marketing')
   const isInsights = location.pathname.startsWith('/insights') || location.pathname.startsWith('/analytics')
   // Import and Export work with Account Mapping's hierarchy data.
-  const hidesImportExport = isCommercialCalculator || isBidTracker || isTeams || isSettings || isDocuments || isDocumentMaker || isInsights || isEmail
-  const moduleLabel = isEmail ? 'E-mail' : isInsights ? 'GOMS Analytics' : isDocumentMaker ? 'Document maker' : isDocuments ? 'Documents' : isSettings ? 'Settings' : isCommercialCalculator ? 'Commercial Calculator' : isBidTracker ? 'Opportunity' : isTeams ? 'Directory' : 'Accounts Mapping'
+  const hidesImportExport = isCommercialCalculator || isBidTracker || isTeams || isSettings || isDocuments || isDocumentMaker || isInsights || isEmail || isWhatsApp || isMarketing
+  const moduleLabel = isMarketing ? 'Marketing' : isWhatsApp ? 'WhatsApp' : isEmail ? 'E-mail' : isInsights ? 'GOMS Analytics' : isDocumentMaker ? 'Document maker' : isDocuments ? 'Documents' : isSettings ? 'Settings' : isCommercialCalculator ? 'Commercial Calculator' : isBidTracker ? 'Opportunity' : isTeams ? 'Directory' : 'Accounts Mapping'
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-line bg-paper/90 px-3 sm:gap-3 sm:px-5">
       <button

@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from '@/components/ui/Icon'
 import { cn } from '@/lib/utils'
@@ -14,12 +14,14 @@ export interface MenuEntry {
 
 /** A right-click menu at the pointer: groups of actions separated by a rule. Closes
  *  on Escape, an outside click, scroll or resize. Keyboard: ↑/↓ and Enter. */
-export function GridContextMenu({ x, y, title, description, groups, onClose }: {
+export function GridContextMenu({ x, y, title, description, header, groups, onClose }: {
   x: number
   y: number
   /** What was clicked (read by screen readers). */
   title: string
   description?: string
+  /** Extra content above the actions (e.g. WhatsApp's quick-reaction row). */
+  header?: ReactNode
   groups: MenuEntry[][]
   onClose: () => void
 }) {
@@ -117,6 +119,7 @@ export function GridContextMenu({ x, y, title, description, groups, onClose }: {
         <div className="truncate text-[13px] font-semibold text-ink" title={title}>{title}</div>
         <div id={`${menuId}-description`} className="mt-0.5 text-[11px] text-muted">{description}</div>
       </div>}
+      {header}
       {groups.filter((g) => g.length).map((group, gi) => (
         <div key={gi} className={cn(gi > 0 && 'mt-1 border-t border-line pt-1')}>
           {group.map((entry) => {

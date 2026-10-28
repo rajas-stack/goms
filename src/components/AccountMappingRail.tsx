@@ -25,6 +25,8 @@ export function AccountMappingRail() {
   const teamsActive = location.pathname.startsWith('/teams')
   const documentMakerActive = location.pathname.startsWith('/document-maker')
   const emailActive = location.pathname.startsWith('/email')
+  const whatsappActive = location.pathname.startsWith('/whatsapp')
+  const marketingActive = location.pathname.startsWith('/marketing')
   // Each entry needs the server policy (A) AND the permission tree. Roles & Access lives in Settings → System settings.
   const tree = useNodeFilter()
   const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping) && tree('accountMapping')
@@ -35,6 +37,8 @@ export function AccountMappingRail() {
   const directoryPath = canDirectory ? '/teams/directory' : '/teams'
   const canDocumentMaker = tree('documentMaker')
   const canEmail = tree('email')
+  const canWhatsApp = tree(ROUTE_NODES.whatsapp)
+  const canMarketing = tree(ROUTE_NODES.marketing)
   const canInsights = useCanReadAny(NAV_MODULES.insights) && tree('accountMapping.insights')
 
   return (
@@ -102,6 +106,30 @@ export function AccountMappingRail() {
       >
         <Icon name="Mail" size={18} />
         <span className="text-center text-[9px] font-medium leading-tight tracking-tight">E-mail</span>
+      </button>}
+      {canWhatsApp && <button
+        onClick={() => navigate('/whatsapp')}
+        title="WhatsApp"
+        aria-current={whatsappActive ? 'page' : undefined}
+        className={cn(
+          'flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors lg:w-14',
+          whatsappActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600/70 hover:bg-white hover:text-ink-900',
+        )}
+      >
+        <Icon name="MessageCircle" size={18} />
+        <span className="text-center text-[9px] font-medium leading-tight tracking-tight">WhatsApp</span>
+      </button>}
+      {canMarketing && <button
+        onClick={() => navigate('/marketing')}
+        title="Marketing"
+        aria-current={marketingActive ? 'page' : undefined}
+        className={cn(
+          'flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors lg:w-14',
+          marketingActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600/70 hover:bg-white hover:text-ink-900',
+        )}
+      >
+        <Icon name="Megaphone" size={18} />
+        <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Marketing</span>
       </button>}
       {/* `mt-auto` pins Teams to the bottom of the rail, apart from the work modules above. */}
       {(canTeams || canDirectory) && <button

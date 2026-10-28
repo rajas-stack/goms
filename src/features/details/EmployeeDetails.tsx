@@ -38,6 +38,7 @@ import { OwnershipBlock } from '@/features/sales/OwnershipBlock'
 import { isoToday } from '@/lib/dates'
 import { Avatar } from '@/components/ui/Avatar'
 import { PersonName } from '@/components/ui/PersonName'
+import { PersonEvents } from '@/features/marketing/PersonEvents'
 import type { Charge, Employee, TimelineEvent, Transfer } from '@/lib/types'
 
 const COMM_LABEL: Record<string, string> = {
@@ -450,6 +451,8 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
             </div>
           </Section>
         )}
+
+        {!vacant && <PersonEvents person={emp} />}
 
         {!vacant && (
           <section>

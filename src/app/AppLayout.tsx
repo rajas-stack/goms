@@ -62,6 +62,8 @@ export function AppLayout() {
     && !location.pathname.startsWith('/documents')
     && !location.pathname.startsWith('/document-maker')
     && !location.pathname.startsWith('/email')
+    && !location.pathname.startsWith('/whatsapp')
+    && !location.pathname.startsWith('/marketing')
     && !location.pathname.startsWith('/insights')
     && !location.pathname.startsWith('/analytics')
   // `MobileDetailsSheet` only renders as an overlay below `lg` (it's

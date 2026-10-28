@@ -12,14 +12,14 @@ import {
   RotateCcw, Loader2, GitMerge, Calculator, Lock, Unlock, Printer, Settings, TriangleAlert, Database,
   LogIn, LogOut, ChevronsUpDown, ArrowRight, Brackets, Pin, PinOff, ShieldCheck, History, Sun, Moon, Monitor, Palette,
   Lightbulb, ClipboardCheck, MessageSquareText, CalendarDays, EllipsisVertical, CircleCheck, Diamond,
-  FilePenLine, Presentation, FileUp, ArrowDownUp, LayoutGrid, Rows3, ServerOff, ShieldAlert, Bookmark, Maximize2, Minimize2, FilterX, Save, CalendarPlus,
+  FilePenLine, Presentation, FileUp, ArrowDownUp, LayoutGrid, Rows3, ServerOff, ShieldAlert, Bookmark, Maximize2, Minimize2, FilterX, Save, CalendarPlus, Tag, Megaphone,
   type LucideIcon,
 } from 'lucide-react'
 
 const REGISTRY: Record<string, LucideIcon> = {
   Paperclip, Reply, ReplyAll, Forward, Inbox, MailOpen, RefreshCw, FileImage, FileArchive,
   Target, Trophy, BriefcaseBusiness,
-  FilePenLine, Presentation, FileUp, ArrowDownUp, LayoutGrid, Rows3, ServerOff, ShieldAlert, Bookmark, Maximize2, Minimize2, FilterX, Save, CalendarPlus,
+  FilePenLine, Presentation, FileUp, ArrowDownUp, LayoutGrid, Rows3, ServerOff, ShieldAlert, Bookmark, Maximize2, Minimize2, FilterX, Save, CalendarPlus, Tag, Megaphone,
   Lightbulb, ClipboardCheck, MessageSquareText, CalendarDays, EllipsisVertical, CircleCheck, Diamond,
   Folder, Video, Languages, PanelsTopLeft, BookOpen, KeyRound, Globe, Landmark, MapPin, Map, Home, Building2, GitBranch, Layers, DoorOpen, Boxes,
   Search, Plus, Pencil, Trash2, Archive, ArchiveRestore, Copy, ChevronRight, ChevronLeft, ChevronDown, ChevronUp,

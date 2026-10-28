@@ -1,5 +1,5 @@
 /// <reference types="vitest" />
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'node:path'
 import { compression, defineAlgorithm } from 'vite-plugin-compression2'
@@ -38,7 +38,7 @@ export default defineConfig(({ mode }) => ({
     noDiscovery: true,
     include: ['react', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime', 'react-router-dom',
       '@tanstack/react-query', '@tanstack/react-table', '@tanstack/react-table/legacy', '@tanstack/react-virtual', 'framer-motion',
-      'firebase/app', 'firebase/auth', 'firebase/storage', 'xlsx', 'd3-geo', '@tiptap/react', 'tesseract.js'],
+      'firebase/app', 'firebase/auth', 'firebase/storage', 'xlsx', 'd3-geo', '@tiptap/react', 'tesseract.js', 'docx-preview'],
   },
   // The Android platform folder holds ~50k+ Gradle-generated files (merged
   // asset copies of dist, per debug/release variant). Chokidar trying to set
@@ -48,6 +48,26 @@ export default defineConfig(({ mode }) => ({
     host: '127.0.0.1',
     port: 5173,
     strictPort: true,
+    // WhatsApp (self-hosted OpenWA gateway, ../OpenWA). The key is added here in Node: OPENWA_* (no VITE_ prefix) never reaches the bundle.
+    proxy: {
+      '/openwa': {
+        target: 'http://127.0.0.1:2785',
+        changeOrigin: true,
+        ws: true, // live message events (socket.io); the key header below is added to the WebSocket handshake too
+        rewrite: (url: string) => url.replace(/^\/openwa/, ''),
+        headers: { 'X-API-Key': loadEnv(mode, import.meta.dirname, 'OPENWA_').OPENWA_API_KEY ?? '' },
+        // Only GOMS's own pages (another site in the browser must not drive the linked WhatsApp), and only the session API and the
+        // event stream — never OpenWA's key, plugin or infrastructure admin endpoints.
+        bypass: (req) => ((req.headers['sec-fetch-site'] ?? 'same-origin') === 'same-origin' && /^\/openwa\/(?:api\/sessions(?:[/?]|$)|socket\.io\/)/.test(req.url ?? '') ? undefined : false),
+      },
+      // WhatsApp document previews: the local LibreOffice converter (Gotenberg, ../OpenWA override), Office file -> PDF only.
+      '/doc-preview': {
+        target: 'http://127.0.0.1:2786',
+        rewrite: (url: string) => url.replace(/^\/doc-preview/, ''),
+        bypass: (req) => ((req.headers['sec-fetch-site'] ?? 'same-origin') === 'same-origin' && req.method === 'POST'
+          && req.url === '/doc-preview/forms/libreoffice/convert' && Number(req.headers['content-length'] ?? 0) <= 110 * 1024 * 1024 ? undefined : false),
+      },
+    },
     watch: {
       ignored: [
         '**/android/**', '**/ios/**', '**/.worktrees/**', '**/.claude/**', '**/test-results/**', '**/playwright-report/**',

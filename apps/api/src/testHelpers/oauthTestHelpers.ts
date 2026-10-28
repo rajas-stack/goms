@@ -37,7 +37,7 @@ export function fakeGoogle(over: { email?: string; sub?: string; fail?: GoogleAu
     async exchangeCode(i) {
       calls.exchange.push(i)
       if (over.fail === 'exchange') throw new GoogleAuthError('exchange')
-      return `fake-id-token:${i.code}`
+      return { idToken: `fake-id-token:${i.code}` }
     },
     async verifyIdToken(idToken, nonce): Promise<GoogleClaims> {
       calls.verify.push({ idToken, nonce })

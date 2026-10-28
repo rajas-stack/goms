@@ -52,6 +52,7 @@
     "@trpc/client": "^11.19.0",
     "clsx": "^2.1.1",
     "d3-geo": "^3.1.1",
+    "docx-preview": "0.4.1",
     "firebase": "^13.0.0",
     "framer-motion": "^14.2.0",
     "lucide-react": "^1.57.0",

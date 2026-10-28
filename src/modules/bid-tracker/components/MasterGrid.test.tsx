@@ -794,24 +794,21 @@ describe('MasterGrid', () => {
       expect(screen.getByRole('button', { name: /^Archived/ })).toHaveTextContent('1')
     })
 
-    it('Move to… from the row menu moves the row to another sheet', async () => {
-      const bid = await makeIn('Alpha', 'bidTracker')
+    it('the row menu offers no stage moves; they are only in the selection toolbar', async () => {
+      await makeIn('Alpha', 'bidTracker')
       renderGrid({ sheet: 'bidTracker' })
       fireEvent.contextMenu((await screen.findByText('Alpha')).closest('td')!)
       const menu = await screen.findByRole('menu')
-      expect(within(menu).queryByRole('menuitem', { name: 'Move to Live Bids' })).not.toBeInTheDocument()
-      expect(within(menu).queryByRole('menuitem', { name: 'Move to Campaign' })).not.toBeInTheDocument()
-      await userEvent.click(within(menu).getByRole('menuitem', { name: 'Move back to Commit' }))
-      await waitFor(async () => expect((await repository.getBid(bid.id))!.sheet).toBe('pipeline-commits'))
-      expect(screen.getByText('Alpha')).toBeInTheDocument()
+      expect(within(menu).queryByRole('menuitem', { name: /Move back|Advance to|Move to/ })).not.toBeInTheDocument()
     })
 
     it('a failed move is rolled back with an error', async () => {
       await makeIn('Alpha', 'bidTracker')
       vi.spyOn(repository, 'updateBid').mockRejectedValueOnce(new Error('Server says no'))
       renderGrid({ sheet: 'bidTracker' })
-      fireEvent.contextMenu((await screen.findByText('Alpha')).closest('td')!)
-      await userEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Move back to Commit' }))
+      await screen.findByText('Alpha')
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows' }))
+      await userEvent.selectOptions(within(screen.getByTestId('bulk-toolbar')).getByRole('combobox', { name: 'Move selected to' }), 'pipeline-commits')
       expect(await screen.findByRole('alert')).toHaveTextContent('could not be moved to Pipeline · Commits: Server says no')
       expect(await screen.findByText('Alpha')).toBeInTheDocument()
     })

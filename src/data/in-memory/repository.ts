@@ -7,7 +7,7 @@ import type { ReadinessRow, RoleOverrideRow } from '../../../apps/api/src/router
 import type {
   ActionQueueEntry, AttendeeRef, Bid, BidCorrigendum, BidCorrigendumChange, BidCustomField, BidCustomFieldValue,
   BidDocument, BidGridRow, BidMilestone, BidMilestoneWithBid, CustomFieldType, CustomValue,
-  BidSavedView, Charge, Customer, DeliveryTeamKey, DeliveryTeamMember, Domain, DocumentCitation, Employee, FollowUp, HierNode, MergeAuditRecord,
+  BidSavedView, Charge, Customer, DeliveryTeamKey, DeliveryTeamMember, Domain, DocumentCitation, Employee, FollowUp, HierNode, MergeAuditRecord, WhatsAppLink, AddWhatsAppLinkInput, WhatsAppTag,
   MergeFieldResolution, Opportunity, OpportunityStageChange, OwnershipAssignment, PreferredComm, ProtectedValue,
   RelationshipQuality, RelationshipStatus,
   SalesPerson, SalesPosting, SearchResult, Status, TimelineEvent, TimelineEventType, Transfer, VisitingCardItem,
@@ -484,6 +484,21 @@ export interface Repository {
   createFollowUp(input: CreateFollowUpInput): Promise<FollowUp>
   setFollowUpStatus(id: string, status: FollowUp['status']): Promise<void>
   deleteFollowUp(id: string): Promise<void>
+
+  /** WhatsApp messages filed to an opportunity, newest message first. */
+  listWhatsAppLinks(opportunityId?: string): Promise<WhatsAppLink[]>
+  /** Files a message to an opportunity; filing the same message there again returns the existing entry (`created: false`). */
+  addWhatsAppLink(input: AddWhatsAppLinkInput): Promise<{ link: WhatsAppLink; created: boolean }>
+  removeWhatsAppLink(id: string): Promise<void>
+  /** Corrects a filed message (sender resolved later, a file copy kept on first open, who filed it). */
+  updateWhatsAppLink(id: string, patch: Partial<Pick<WhatsAppLink, 'senderName' | 'senderPhone' | 'body' | 'addedBy' | 'file'>>): Promise<void>
+  /** Tags on WhatsApp chats, by name. */
+  listWhatsAppTags(): Promise<WhatsAppTag[]>
+  /** The first time only (no tags were ever saved): starts the tags from the phone's own WhatsApp lists. Later calls do nothing. */
+  importWhatsAppTags(lists: Omit<WhatsAppTag, 'id'>[]): Promise<void>
+  /** A new tag; a name that already exists (any case) returns that tag. */
+  createWhatsAppTag(name: string): Promise<WhatsAppTag>
+  setWhatsAppTagChat(tagId: string, chatId: string, tagged: boolean): Promise<void>
 
   addCharge(employeeId: string, charge: Omit<Charge, 'id'>): Promise<Charge>
   removeCharge(employeeId: string, chargeId: string): Promise<void>
@@ -3655,6 +3670,52 @@ class InMemoryRepository implements Repository {
     this.data.followUps = this.data.followUps.filter((f) => f.id !== id)
   }
 
+  async listWhatsAppLinks(opportunityId?: string) {
+    return (this.data.whatsappLinks ?? []).filter((link) => opportunityId === undefined || link.opportunityId === opportunityId).sort((a, b) => b.sentAt.localeCompare(a.sentAt))
+  }
+
+  async addWhatsAppLink(input: AddWhatsAppLinkInput) {
+    const links = (this.data.whatsappLinks ??= [])
+    const existing = links.find((link) => link.opportunityId === input.opportunityId && link.messageId === input.messageId)
+    if (existing) return { link: existing, created: false }
+    const link: WhatsAppLink = { ...input, id: uid('wal'), addedAt: new Date().toISOString() }
+    links.push(link)
+    return { link, created: true }
+  }
+
+  async removeWhatsAppLink(id: string) {
+    this.data.whatsappLinks = (this.data.whatsappLinks ?? []).filter((link) => link.id !== id)
+  }
+
+  async updateWhatsAppLink(id: string, patch: Partial<Pick<WhatsAppLink, 'senderName' | 'senderPhone' | 'body' | 'addedBy' | 'file'>>) {
+    this.data.whatsappLinks = (this.data.whatsappLinks ?? []).map((link) => (link.id === id ? { ...link, ...patch } : link))
+  }
+
+  async listWhatsAppTags() {
+    return [...(this.data.whatsappTags ?? [])].sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  async importWhatsAppTags(lists: Omit<WhatsAppTag, 'id'>[]) {
+    if (this.data.whatsappTags) return
+    this.data.whatsappTags = lists.map((list) => ({ id: uid('wat'), name: list.name, chatIds: [...new Set(list.chatIds)] }))
+  }
+
+  async createWhatsAppTag(name: string) {
+    const trimmed = name.trim()
+    if (!trimmed) throw new Error('A tag needs a name.')
+    const tags = (this.data.whatsappTags ??= [])
+    const existing = tags.find((tag) => tag.name.toLowerCase() === trimmed.toLowerCase())
+    if (existing) return existing
+    const tag: WhatsAppTag = { id: uid('wat'), name: trimmed, chatIds: [] }
+    tags.push(tag)
+    return tag
+  }
+
+  async setWhatsAppTagChat(tagId: string, chatId: string, tagged: boolean) {
+    this.data.whatsappTags = (this.data.whatsappTags ?? []).map((tag) => (tag.id !== tagId ? tag
+      : { ...tag, chatIds: tagged ? [...new Set([...tag.chatIds, chatId])] : tag.chatIds.filter((id) => id !== chatId) }))
+  }
+
   async addCharge(employeeId: string, charge: Omit<Charge, 'id'>) {
     const emp = this.data.employees.find((e) => e.id === employeeId)!
     const full: Charge = { ...charge, id: uid('chg') }
@@ -3864,6 +3925,7 @@ const MUTATOR_KEYS = [
   'transferEmployee', 'addCharge', 'removeCharge',
   'createOpportunity', 'updateOpportunity', 'deleteOpportunity',
   'createFollowUp', 'setFollowUpStatus', 'deleteFollowUp',
+  'addWhatsAppLink', 'removeWhatsAppLink', 'updateWhatsAppLink', 'importWhatsAppTags', 'createWhatsAppTag', 'setWhatsAppTagChat',
   'assignOwner', 'endOwnership', 'transferBookOfBusiness',
   'createSalesPerson', 'updateSalesPerson', 'setSalesPersonStatus', 'deleteSalesPerson', 'transferSalesPerson', 'updatePostingManager', 'updatePostingDates',
   'createMaster', 'updateMaster', 'setMasterActive', 'deleteMaster', 'setEditionFeatures',
@@ -3895,7 +3957,7 @@ const READER_KEYS = [
   'listEmployeeDepartments', 'getEmployee', 'directReports', 'reportingChain',
   'listTimeline', 'listAllTimelineEvents', 'listTransfers', 'listMergeAudit',
   'listOpportunities', 'listOpportunitiesByDepartment', 'getOpportunity', 'listOpportunityStageChanges',
-  'listFollowUps', 'listOpenFollowUps',
+  'listFollowUps', 'listOpenFollowUps', 'listWhatsAppLinks', 'listWhatsAppTags',
   'listSalesPersons', 'getSalesPerson', 'listSalesPostings', 'currentPostings',
   'listOwnershipAssignments', 'listOwnershipFor', 'listOwnedBy', 'resolveOwner', 'resolveOwners',
   'search', 'relatedRecords', 'moveTargets', 'relationshipAnalytics', 'getInsights',

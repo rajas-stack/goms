@@ -13,7 +13,7 @@ import {
   OPERATORS_BY_TYPE, flattenRules, parseMultiValue, pruneFilterNodes,
   type FilterNode,
   QUARTER_DATE_COLUMNS, formatDateWithQuarter,
-  lifecycleMoveTargets, lifecycleIndex, lifecycleLabel, furthestLifecycleSheet, sheetModule, bidSystemField,
+  lifecycleMoveTargets, lifecycleLabel, furthestLifecycleSheet, sheetModule, bidSystemField,
 } from '@goms/domain'
 import { motion } from 'framer-motion'
 import { Badge, type BadgeTone } from '@/components/ui/Badge'
@@ -712,12 +712,6 @@ export function MasterGrid(props: MasterGridProps) {
             : { field: meta.id, operator: 'eq', value: multiple ? filterValues[0] ?? '' : String(v) }] })),
         }] : []),
       ],
-      // A retained row can be at an earlier stage than this list. Its actual stage is authoritative.
-      archived ? [] : lifecycleMoveTargets(row.sheet).filter(to => canEditAtom('bid.move') && allowedNode(SHEET_NODE[to], 'edit')
-        && (!perms.enforced || perms.canEdit(sheetModule(to), 'bid.move', facts))).map(to => {
-        const forward = lifecycleIndex(to) > lifecycleIndex(row.sheet)
-        return { label: `${forward ? 'Advance to' : 'Move back to'} ${lifecycleLabel(to)}`, icon: forward ? 'ArrowRight' : 'ArrowLeft', disabled: busy, onSelect: () => { void moveRows([row.id], to) } }
-      }),
       [
         { label: favourites.has(row.id) ? 'Remove from favourites' : 'Add to favourites', icon: 'Star', onSelect: () => toggleFavourite(row.id) },
         ...(canEditAtom('bid.archive') ? [{ label: archived ? 'Unarchive' : 'Archive', icon: archived ? 'ArchiveRestore' : 'Archive', disabled: busy, onSelect: () => {

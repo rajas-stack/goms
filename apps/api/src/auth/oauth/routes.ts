@@ -8,7 +8,8 @@ import { consumeFlow, createFlow } from './flows.js'
 import { GoogleAuthError, buildAuthUrl, type GoogleGateway } from './googleClient.js'
 import { parseClient, safeReturnTo, webRedirectUrl, type ClientKind } from './redirect.js'
 import { SessionError, revokeFamilyByRefreshToken, rotateRefreshToken, startSession } from './sessions.js'
-import { completeMailConnection } from '../../email/oauth.js'
+import { completeMailConnection, saveMailbox } from '../../email/oauth.js'
+import { GMAIL_SCOPE } from '../../email/config.js'
 import { completeProfileConnection } from '../../profileImages/oauth.js'
 import { browserBindingCookie, hasBrowserBinding } from './browserBinding.js'
 
@@ -99,12 +100,17 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
     const code = req.query?.code
     if (typeof code !== 'string' || code.length === 0 || code.length > 2048) return fail(reply, flow.client, 'google')
 
-    let claims
+    let claims, tokens
     try {
-      const idToken = await deps.google.exchangeCode({ code, verifier: flow.verifier })
-      claims = await deps.google.verifyIdToken(idToken, flow.nonce)
+      tokens = await deps.google.exchangeCode({ code, verifier: flow.verifier })
+      claims = await deps.google.verifyIdToken(tokens.idToken, flow.nonce)
     } catch (e) {
       return fail(reply, flow.client, reasonFor(e))
+    }
+    // Gmail granted with sign-in: connect it to Email Center now. Best effort: sign-in never fails because of the mailbox.
+    if (tokens.accessToken && tokens.scope?.split(' ').includes(GMAIL_SCOPE) && Number.isFinite(tokens.expiresIn)) {
+      await saveMailbox({ uid: `g:${claims.sub}`, email: claims.email, sub: claims.sub, accessToken: tokens.accessToken, refreshToken: tokens.refreshToken, expiresIn: tokens.expiresIn!, scope: tokens.scope })
+        .catch((e) => console.warn(JSON.stringify({ event: 'email.signin_connect_failed', reason: e instanceof Error && e.message === 'Reconnect with offline access.' ? 'no_refresh_token' : 'unexpected_failure' })))
     }
     // Only now, after every Google check, does anything exist: a one-time code. No session or token yet.
     const exchange = await createExchangeCode({ uid: `g:${claims.sub}`, email: claims.email, familyId: randomUUID(), client: flow.client })

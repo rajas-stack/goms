@@ -3,11 +3,12 @@ import { render, screen, act, within, waitFor, fireEvent } from '@testing-librar
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { AuthStatus } from './AuthStatus'
 
-const { onAuthStateChanged, signOut } = vi.hoisted(() => ({
+const { onAuthStateChanged, signOut, signInWithPopup } = vi.hoisted(() => ({
   onAuthStateChanged: vi.fn(),
   signOut: vi.fn().mockResolvedValue(undefined),
+  signInWithPopup: vi.fn(),
 }))
-vi.mock('firebase/auth', () => ({ onAuthStateChanged, signOut }))
+vi.mock('firebase/auth', () => ({ onAuthStateChanged, signOut, signInWithPopup }))
 
 function authStateCallback(): (user: { email: string } | null) => void {
   return onAuthStateChanged.mock.calls[0][1]
@@ -45,13 +46,28 @@ describe('AuthStatus', () => {
     expect(screen.getByRole('menuitem', { name: /sign in/i })).toBeInTheDocument()
   })
 
-  it('sends the user to /login, returning to the current page, when "Sign in" is clicked', () => {
+  it('signs in on the same page: "Sign in" opens Google\'s popup behind a blocking dialog, with no redirect', async () => {
+    let finish: () => void = () => {}
+    signInWithPopup.mockReturnValue(new Promise<void>((resolve) => { finish = resolve }))
     renderStatus('/sales/roster?tab=a#x')
     fireEvent.click(screen.getByRole('button', { name: 'Profile options' }))
     fireEvent.click(screen.getByRole('menuitem', { name: /sign in/i }))
-    expect(screen.getByTestId('where')).toHaveTextContent(
-      `/login?next=${encodeURIComponent('/sales/roster?tab=a#x')}`,
-    )
+    expect(signInWithPopup).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('dialog', { name: 'Sign in to GOMS' })).toHaveTextContent('Finish signing in in the Google window')
+    expect(screen.getByTestId('where')).toHaveTextContent('/sales/roster?tab=a#x')
+    await act(async () => finish())
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Sign in to GOMS' })).not.toBeInTheDocument())
+  })
+
+  it('shows a failed sign-in in the dialog, with Try again', async () => {
+    signInWithPopup.mockRejectedValueOnce(new Error('Sign-in was cancelled.'))
+    renderStatus()
+    fireEvent.click(screen.getByRole('button', { name: 'Profile options' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /sign in/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sign-in was cancelled.')
+    signInWithPopup.mockResolvedValueOnce(undefined)
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(signInWithPopup).toHaveBeenCalledTimes(2)
   })
 
   it('shows the signed-in account\'s email once Firebase reports a user', () => {

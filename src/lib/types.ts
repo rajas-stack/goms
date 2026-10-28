@@ -242,6 +242,38 @@ export interface FollowUp {
   createdBy: string | null
 }
 
+/** A WhatsApp message filed to an opportunity's Communication tab, kept as it was when filed. */
+export interface WhatsAppLink {
+  id: string
+  opportunityId: string
+  /** The Opportunity sheet row it was filed from. */
+  bidId: string
+  chatId: string
+  chatName: string
+  messageId: string
+  fromMe: boolean
+  senderName: string
+  senderPhone: string | null
+  /** WhatsApp message type: text, image, document, … */
+  type: string
+  body: string
+  filename: string | null
+  /** When the message was sent (ISO). */
+  sentAt: string
+  addedAt: string
+  addedBy: string
+  /** A copy of the attachment, kept so it opens after WhatsApp no longer serves it (as Document maker keeps its files). */
+  file?: { mimetype: string; base64: string } | null
+}
+export type AddWhatsAppLinkInput = Omit<WhatsAppLink, 'id' | 'addedAt'>
+
+/** A tag on WhatsApp chats (like WhatsApp's own lists), kept in GOMS: personal WhatsApp accounts refuse list edits from outside the phone. */
+export interface WhatsAppTag {
+  id: string
+  name: string
+  chatIds: string[]
+}
+
 /** One visiting card: a required front and an optional back, each an image or
  *  PDF stored as a data URL with its original filename. */
 export interface VisitingCardItem {
