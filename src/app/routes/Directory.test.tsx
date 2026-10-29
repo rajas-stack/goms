@@ -40,6 +40,7 @@ vi.mock('@/features/communication/api', () => ({
 vi.mock('@/features/masters/useMasterOptions', () => ({
   useDirectoryTypes: () => [{ code: 'internal', name: 'Amnex Employee' }, { code: 'department', name: 'Departmental' }, { code: 'oem', name: 'OEMs' }, { code: 'competitor', name: 'Competitors' }, { code: 'consortium', name: 'Consortium Partners' }],
   useClientDepartmentOptions: () => ({ data: [] }),
+  useVerticalNames: () => [],
 }))
 vi.mock('@/features/dms/profileImagesClient', () => ({ useProfileImages: () => ({ data: undefined, isError: false }) }))
 vi.mock('@/lib/useMediaQuery', () => ({ useMediaQuery: (q: string) => q.includes('min-width') }))
@@ -64,6 +65,9 @@ function renderDirectory(access: unknown = { mode: 'off', email: null, roles: []
   return router
 }
 const rows = () => screen.queryAllByTestId(/^person-row-/).map((r) => r.textContent)
+/** Edit, transfer and delete start locked, like the Opportunity master grid. */
+const unlock = async (user: ReturnType<typeof userEvent.setup>) =>
+  user.click(await screen.findByRole('button', { name: 'Directory editing locked — tap to unlock' }))
 
 beforeEach(() => { vi.mocked(repository.deleteOrgPerson).mockClear(); vi.mocked(repository.updateOrgPerson).mockClear() })
 
@@ -101,6 +105,7 @@ describe('Directory — every person in one list', () => {
   it('names linked records before deleting an Amnex employee', async () => {
     const user = userEvent.setup()
     renderDirectory()
+    await unlock(user)
     await user.click(await screen.findByRole('button', { name: 'Delete Asha Lead' }))
     expect(screen.getByText('1 direct report moves up to the top of the company.')).toBeInTheDocument()
     expect(screen.getByText(/Pre-Sales roster entries turn inactive; opportunity assignments are kept/)).toBeInTheDocument()
@@ -111,6 +116,7 @@ describe('Directory — every person in one list', () => {
   it('keeps an unsaved edit when the profile is expanded to full screen and back', async () => {
     const user = userEvent.setup()
     renderDirectory()
+    await unlock(user)
     await user.click(await screen.findByRole('button', { name: 'Edit Bina Analyst' }))
     const name = await screen.findByLabelText('Full name')
     await user.clear(name)
@@ -130,6 +136,7 @@ describe('Directory — every person in one list', () => {
     const user = userEvent.setup()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     renderDirectory()
+    await unlock(user)
     await user.click(await screen.findByRole('button', { name: 'Edit Bina Analyst' }))
     await user.type(await screen.findByLabelText('Designation'), ' II')
     await act(async () => { await user.click(screen.getByTestId('person-row-orgPerson-p1')) })
@@ -142,6 +149,7 @@ describe('Directory — every person in one list', () => {
     const user = userEvent.setup()
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
     renderDirectory()
+    await unlock(user)
     await user.click(await screen.findByRole('button', { name: 'Edit Bina Analyst' }))
     await user.type(await screen.findByLabelText('Designation'), ' II')
     await act(async () => { await user.click(screen.getByRole('button', { name: 'Edit Asha Lead' })) })
@@ -185,6 +193,7 @@ describe('Directory — every person in one list', () => {
   it('shows what a transfer changes before it is confirmed', async () => {
     const user = userEvent.setup()
     renderDirectory()
+    await unlock(user)
     await user.click(await screen.findByRole('button', { name: 'Transfer Asha Lead' }))
     const dialog = screen.getByRole('dialog')
     await user.click(within(dialog).getByLabelText('Destination departments'))
@@ -197,8 +206,21 @@ describe('Directory — every person in one list', () => {
     expect(changes).toHaveTextContent('Pre-Sales derives a sign-in role')
   })
 
+  it('keeps edit, transfer and delete locked until the Directory is unlocked', async () => {
+    const user = userEvent.setup()
+    renderDirectory()
+    for (const action of ['Edit', 'Transfer', 'Delete']) expect(await screen.findByRole('button', { name: `${action} Asha Lead` })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'New contact' })).toBeEnabled() // adding is not behind the lock
+    await unlock(user)
+    for (const action of ['Edit', 'Transfer', 'Delete']) expect(screen.getByRole('button', { name: `${action} Asha Lead` })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Directory editing unlocked — tap to lock' }))
+    expect(screen.getByRole('button', { name: 'Delete Asha Lead' })).toBeDisabled()
+  })
+
   it('disables an action the role may not use, saying why', async () => {
+    const user = userEvent.setup()
     renderDirectory({ mode: 'enforce', email: 'me@amnex.com', roles: ['sales'], facts })
+    await unlock(user)
     const edit = await screen.findByRole('button', { name: 'Edit Asha Lead' })
     expect(edit).toBeDisabled()
   })
