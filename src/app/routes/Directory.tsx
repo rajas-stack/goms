@@ -5,7 +5,7 @@ import { useAllEmployees, useSalesPersons } from '@/lib/api'
 import { FrozenSelection, WorkspaceProvider, useWorkspace } from '@/features/workspace/context'
 import { PeopleDirectory, type TypeFilter } from '@/features/directory/PeopleDirectory'
 import { DetailsPanel } from '@/features/details/DetailsPanel'
-import { DirectoryActionsProvider, EntryActions } from '@/features/directory/DirectoryActions'
+import { DirectoryActionsProvider, DirectoryLockSwitch, EntryActions } from '@/features/directory/DirectoryActions'
 import { NewContactDialog } from '@/features/directory/NewContactDialog'
 import {
   externalCategories, fromContact, fromMasterEmployee, internalCategories, readTypeFilter, type ContactType,
@@ -23,7 +23,7 @@ import { MobileDetailsSheet } from './StateWorkspace'
 /** The one Directory of people (sidebar › Directory): Amnex employees and external contacts, each still stored in its own
  *  master. Reuses the workspace context, details panel and phonebook list the state workspace's People tab uses. */
 export function Directory({ actionsSlot }: {
-  /** Where the New contact button goes (the Teams tab row); without one it sits above the list. */
+  /** Where the lock and New contact button go (the Teams tab row); without one they sit above the list. */
   actionsSlot?: HTMLElement | null
 }) {
   return (
@@ -47,9 +47,13 @@ function DirectoryPage({ actionsSlot }: { actionsSlot?: HTMLElement | null }) {
   const canCreateInternal = useAllowed('team.org', 'create')
   const canCreateExternal = useAllowed('am.contacts', 'create')
 
-  const newContact = (canCreateInternal || canCreateExternal)
-    ? <IconButton icon="UserPlus" label="New contact" variant="primary" side="left" onClick={() => setCreating(true)} />
-    : null
+  // The lock guards edit / transfer / delete only; adding a contact stays a separate permission.
+  const actions = (
+    <div className="flex items-center gap-2">
+      <DirectoryLockSwitch />
+      {(canCreateInternal || canCreateExternal) && <IconButton icon="UserPlus" label="New contact" variant="primary" side="left" onClick={() => setCreating(true)} />}
+    </div>
+  )
 
   const employees = canExternal ? amPeople : []
   const others = useMemo(() => {
@@ -78,7 +82,7 @@ function DirectoryPage({ actionsSlot }: { actionsSlot?: HTMLElement | null }) {
     <DirectoryActionsProvider records={{ employees: amPeople, orgPeople, salesPersons, contacts }}>
       <div className="flex h-full flex-col lg:flex-row">
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-b border-line lg:border-b-0 lg:border-r">
-          {newContact && (actionsSlot ? createPortal(newContact, actionsSlot) : <div className="flex justify-end px-4 pt-2">{newContact}</div>)}
+          {actionsSlot ? createPortal(actions, actionsSlot) : <div className="flex justify-end px-4 pt-2">{actions}</div>}
           <div className="relative min-h-0 flex-1">
             <PeopleDirectory
               employees={employees} others={others} typeFilter={typeFilter}
