@@ -111,4 +111,6 @@ export const RBAC_NODE_MANIFEST: readonly RbacNodeDef[] = [
   {"id":"email.manageMailbox","parentId":"email","label":"Manage Gmail labels and read status","kind":"section","actions":["view","create","edit","delete","download","manage"],"order":9},
   {"id":"whatsapp","parentId":null,"label":"WhatsApp","kind":"module","actions":["view","create","edit","delete","download","manage"],"order":9},
   {"id":"marketing","parentId":null,"label":"Marketing","kind":"module","actions":["view","create","edit","delete","download","manage"],"order":10},
+  {"id":"finance","parentId":null,"label":"Finance","kind":"module","actions":["view","create","edit","delete","download","manage"],"order":11},
+  {"id":"finance.reimbursements","parentId":"finance","label":"Reimbursements","kind":"tab","actions":["view","create","edit","delete","download","manage"],"order":0},
 ]

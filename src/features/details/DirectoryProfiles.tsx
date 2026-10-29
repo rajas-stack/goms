@@ -2,11 +2,12 @@
 // (avatar header, actions, detail sections). Edit mode edits in place with Save / Cancel; the draft lives in this
 // component, so expanding the panel to full screen (same instance) keeps it, and UnsavedChangesGuard asks before leaving.
 import { useState, type ReactNode } from 'react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { Link } from 'react-router-dom'
 import { Avatar, type AvatarPerson } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
+import { Icon } from '@/components/ui/Icon'
 import { IconButton } from '@/components/ui/IconButton'
-import { PersonName } from '@/components/ui/PersonName'
 import { useToast } from '@/components/ui/Toast'
 import { DISCARD_CHANGES_MESSAGE, UnsavedChangesGuard } from '@/components/UnsavedChangesGuard'
 import { levelLabel } from '@/data/org-structure'
@@ -25,43 +26,125 @@ import { useAllowed } from '@/lib/permissions'
 import { useCanEditEmailBinding } from '@/modules/admin-access/useIsSystemAdmin'
 import type { DeliveryTeamKey } from '@/lib/types'
 import type { CommunicationContact } from '@goms/domain'
+import { cn } from '@/lib/utils'
 
 const message = (cause: unknown, fallback: string) => (cause instanceof Error ? cause.message : fallback)
 
-function Header({ person, eyebrow, title, subtitle, badges, actions }: {
-  person: AvatarPerson; eyebrow: string; title: string; subtitle?: string; badges?: ReactNode; actions?: ReactNode
-}) {
+const EASE = [0.16, 1, 0.3, 1] as const
+
+/** Fades and lifts its children in, staggered by `order`; instant under reduced motion. */
+function Rise({ order = 0, className, children }: { order?: number; className?: string; children: ReactNode }) {
+  const reduce = useReducedMotion()
   return (
-    <div className="border-b border-line px-6 py-5 pr-20">
-      <div className="flex items-start gap-4">
-        <Avatar person={person} size="lg" className="font-display" />
-        <div className="min-w-0 flex-1">
+    <motion.div className={className} initial={reduce ? false : { opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, ease: EASE, delay: reduce ? 0 : 0.06 * order }}>
+      {children}
+    </motion.div>
+  )
+}
+
+interface Stat { label: string; value: number; icon: string }
+
+function Header({ person, eyebrow, title, subtitle, badges, actions, stats }: {
+  person: AvatarPerson; eyebrow: string; title: string; subtitle?: string; badges?: ReactNode; actions?: ReactNode; stats?: Stat[]
+}) {
+  const reduce = useReducedMotion()
+  return (
+    <div className="relative overflow-hidden border-b border-line px-6 pb-5 pt-6">
+      {/* Atmosphere: a soft navy-to-sky wash with two light orbs behind the hero. */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-gradient-to-br from-goms-navy/[0.08] via-goms-sky/[0.07] to-transparent" />
+      <div aria-hidden className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-goms-sky/20 blur-3xl motion-safe:animate-[pulse_6s_ease-in-out_infinite]" />
+      <div aria-hidden className="pointer-events-none absolute -bottom-16 -left-10 h-40 w-40 rounded-full bg-goms-navy/10 blur-3xl" />
+      <div className="relative flex flex-wrap items-center gap-5 pr-16">
+        <motion.div initial={reduce ? false : { scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 20 }}
+          whileHover={reduce ? undefined : { scale: 1.06, rotate: -2 }} className="rounded-full ring-4 ring-paper">
+          <Avatar person={person} size="lg" className="h-20 w-20 font-display text-2xl" />
+        </motion.div>
+        <Rise className="min-w-0 flex-1">
           <span className="eyebrow">{eyebrow}</span>
-          <h2 className="mt-0.5 break-words font-display text-2xl font-bold text-ink-900">{title}</h2>
-          {subtitle && <p className="text-sm text-muted">{subtitle}</p>}
+          <h2 className="mt-0.5 break-words font-display text-[28px] font-bold leading-tight tracking-tight text-ink-900">{title}</h2>
+          {subtitle && <p className="text-[15px] text-ink-700">{subtitle}</p>}
           {badges && <div className="mt-2 flex flex-wrap items-center gap-1.5">{badges}</div>}
-        </div>
+        </Rise>
       </div>
-      {actions && <div className="mt-4 flex flex-wrap items-center gap-2">{actions}</div>}
+      {(stats?.length || actions) && (
+        <Rise order={1} className="relative mt-5 flex flex-wrap items-center gap-2">
+          {!!stats?.length && <div className="grid min-w-[min(100%,300px)] max-w-xl flex-1 grid-cols-3 gap-2">{stats.map((s) => (
+            <div key={s.label} className="group min-w-0 rounded-xl border border-line bg-white/70 px-3 py-2 backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-goms-sky/50 hover:shadow-md">
+              <span className="flex items-center gap-1.5">
+                <Icon name={s.icon} size={14} className="shrink-0 text-goms-navy transition-transform duration-300 group-hover:scale-110" />
+                <span className="font-display text-lg font-bold leading-none tabular-nums text-ink-900">{s.value}</span>
+              </span>
+              <span className="mt-0.5 block truncate text-[11px] text-muted">{s.label}</span>
+            </div>
+          ))}</div>}
+          {actions && <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>}
+        </Rise>
+      )}
     </div>
   )
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/** A card per section; cards flow into as many columns as the panel's width allows. */
+function Section({ title, icon, order = 0, wide, children }: { title: string; icon: string; order?: number; wide?: boolean; children: ReactNode }) {
   return (
-    <section className="border-b border-line px-6 py-4">
-      <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted">{title}</h3>
-      {children}
-    </section>
+    <Rise order={order + 2} className={wide ? 'col-span-full' : undefined}>
+      <section className="h-full rounded-2xl border border-line bg-white/80 p-4 shadow-sm transition-shadow duration-300 hover:shadow-md">
+        <h3 className="mb-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+          <span className="grid h-6 w-6 place-items-center rounded-md bg-goms-navy/[0.07] text-goms-navy"><Icon name={icon} size={13} /></span>{title}
+        </h3>
+        {children}
+      </section>
+    </Rise>
   )
 }
+
+const Sections = ({ children }: { children: ReactNode }) => (
+  <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-3 p-4">{children}</div>
+)
 
 function Detail({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex gap-3 py-1 text-[13px]">
+    <div className="-mx-2 flex gap-3 rounded-lg px-2 py-1.5 text-[13px] transition-colors hover:bg-ink-900/[0.03]">
       <span className="w-28 shrink-0 text-muted">{label}</span>
       <span className="min-w-0 flex-1 break-words text-ink-900">{children || '—'}</span>
     </div>
+  )
+}
+
+/** mailto link plus a one-click copy that confirms with a check. */
+function EmailValue({ email }: { email?: string | null }) {
+  const toast = useToast()
+  const [copied, setCopied] = useState(false)
+  if (!email) return null
+  const copy = () => navigator.clipboard.writeText(email).then(
+    () => { setCopied(true); window.setTimeout(() => setCopied(false), 1500) },
+    () => toast('Could not copy the email.', undefined, 'error'),
+  )
+  return (
+    <span className="group inline-flex items-center gap-1.5">
+      <a className="font-medium text-goms-navy underline-offset-2 hover:underline" href={`mailto:${email}`}>{email}</a>
+      <button type="button" aria-label={copied ? 'Copied' : 'Copy email'} onClick={() => void copy()}
+        className="grid h-6 w-6 place-items-center rounded-md text-muted opacity-0 transition-all hover:bg-ink-900/[0.06] hover:text-ink-900 focus-visible:opacity-100 group-hover:opacity-100">
+        <Icon name={copied ? 'Check' : 'Copy'} size={13} />
+      </button>
+    </span>
+  )
+}
+
+/** A clickable person tile used in the reporting chain. */
+function PersonCard({ person, subtitle, onClick, tone = 'plain' }: { person: AvatarPerson; subtitle?: string; onClick: () => void; tone?: 'plain' | 'up' }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={cn('group flex w-full min-w-0 items-center gap-3 rounded-xl border px-3 py-2 text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98]',
+        tone === 'up' ? 'border-goms-sky/40 bg-goms-sky/[0.07] hover:border-goms-sky' : 'border-line bg-white hover:border-goms-navy/40')}>
+      <Avatar person={person} size="md" />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13px] font-semibold text-ink-900">{person.name}</span>
+        {subtitle && <span className="block truncate text-[11.5px] text-muted">{subtitle}</span>}
+      </span>
+      <Icon name="ChevronRight" size={14} className="shrink-0 text-muted transition-transform duration-300 group-hover:translate-x-0.5 group-hover:text-goms-navy" />
+    </button>
   )
 }
 
@@ -105,28 +188,49 @@ export function OrgPersonDetails({ personId }: { personId: string }) {
       <Header
         person={avatar} eyebrow={`Amnex · ${levelLabel(person.level)}`} title={person.name} subtitle={person.designation}
         badges={<><Badge tone={person.status === 'active' ? 'emerald' : 'gray'}>{person.status === 'active' ? 'Active' : 'Inactive'}</Badge>{person.departments.map((d) => <Badge key={d} tone="gray">{d}</Badge>)}</>}
+        stats={[{ label: 'Reportees', value: reports.length, icon: 'Users' }, { label: 'Teams', value: rosters.length, icon: 'Layers' }, { label: 'Departments', value: person.departments.length, icon: 'Building2' }]}
         actions={dir && entry && <EntryActions entry={entry} />}
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <Section title="Contact">
-          <Detail label="Email">{person.email && <a className="hover:underline" href={`mailto:${person.email}`}>{person.email}</a>}</Detail>
-          <Detail label="Organisation">Amnex</Detail>
-          <Detail label="Departments">{person.departments.join(', ')}</Detail>
-        </Section>
-        <Section title="Reporting">
-          <Detail label="Reports to">{manager && <button onClick={() => ws.select('orgPerson', manager.id)}><PersonName person={manager} size="2xs" nameClassName="hover:underline" /></button>}</Detail>
-          <Detail label="Reportees">
-            {reports.length ? <span className="flex flex-col gap-1">{reports.map((r) => <button key={r.id} className="text-left" onClick={() => ws.select('orgPerson', r.id)}><PersonName person={r} size="2xs" nameClassName="hover:underline" subtitle={r.designation} /></button>)}</span> : null}
-          </Detail>
-        </Section>
-        <Section title="Teams">
-          {rosters.length ? rosters.map((m) => (
-            <Detail key={m.id} label={SOURCE_LABEL[m.team]}>
-              <Link to={`/teams/${m.team}/roster`} className="hover:underline">{m.status === 'active' ? 'Active member' : 'Inactive member'}</Link>
-            </Detail>
-          )) : <p className="text-[13px] text-muted">Not on a Pre-sales, Bid or Legal roster.</p>}
-          {master && master.sources.length > 1 && <Detail label="Also in">{master.sources.filter((s) => s !== 'org').map((s) => SOURCE_LABEL[s]).join(', ')}</Detail>}
-        </Section>
+        <Sections>
+          <Section title="Contact" icon="Mail">
+            <Detail label="Email"><EmailValue email={person.email} /></Detail>
+            <Detail label="Organisation">Amnex</Detail>
+            <Detail label="Departments">{person.departments.join(', ')}</Detail>
+          </Section>
+          <Section title="Teams" icon="Layers" order={1}>
+            {rosters.length ? (
+              <div className="flex flex-wrap gap-2">
+                {rosters.map((m) => (
+                  <Link key={m.id} to={`/teams/${m.team}/roster`}
+                    className="group inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5 text-[12.5px] font-medium text-ink-900 transition-all duration-300 hover:-translate-y-0.5 hover:border-goms-navy/40 hover:shadow-sm">
+                    <span className={cn('h-2 w-2 rounded-full', m.status === 'active' ? 'bg-emerald shadow-[0_0_0_3px_rgb(16_185_129/0.18)]' : 'bg-ink-600/40')} />
+                    {SOURCE_LABEL[m.team]}
+                    <span className="text-[11px] font-normal text-muted">{m.status === 'active' ? 'Active' : 'Inactive'}</span>
+                    <Icon name="ArrowRight" size={12} className="-ml-0.5 text-muted transition-transform group-hover:translate-x-0.5" />
+                  </Link>
+                ))}
+              </div>
+            ) : <p className="text-[13px] text-muted">Not on a Pre-sales, Bid or Legal roster.</p>}
+            {master && master.sources.length > 1 && <p className="mt-3 text-[12px] text-muted">Also in {master.sources.filter((s) => s !== 'org').map((s) => SOURCE_LABEL[s]).join(', ')}</p>}
+          </Section>
+          <Section title="Reporting" icon="Network" order={2} wide>
+            <div className="flex flex-col items-stretch gap-2">
+              {manager
+                ? <div className="max-w-sm"><p className="mb-1 text-[11px] text-muted">Reports to</p><PersonCard person={manager} subtitle={manager.designation} tone="up" onClick={() => ws.select('orgPerson', manager.id)} /></div>
+                : <p className="text-[12px] text-muted">Top of the reporting line — reports to no one.</p>}
+              <div className="ml-6 h-4 w-px bg-gradient-to-b from-line to-transparent" aria-hidden />
+              <p className="text-[11px] text-muted">{reports.length ? `${reports.length} direct ${reports.length === 1 ? 'report' : 'reports'}` : 'No direct reports'}</p>
+              {reports.length > 0 && (
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,220px),1fr))] gap-2">
+                  {reports.map((r, i) => (
+                    <Rise key={r.id} order={3 + i * 0.5}><PersonCard person={r} subtitle={r.designation} onClick={() => ws.select('orgPerson', r.id)} /></Rise>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Section>
+        </Sections>
       </div>
     </div>
   )
@@ -183,15 +287,17 @@ export function ContactDetails({ contactId }: { contactId: string }) {
         actions={dir && <EntryActions entry={fromContact(contact)} />}
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <Section title="Contact">
-          <Detail label="Email"><a className="hover:underline" href={`mailto:${contact.email}`}>{contact.email}</a></Detail>
+        <Sections>
+        <Section title="Contact" icon="Mail">
+          <Detail label="Email"><EmailValue email={contact.email} /></Detail>
           <Detail label="Category">{category}</Detail>
           <Detail label="Organisation">{contact.organization}</Detail>
           {contact.party === 'clientDepartment' && <Detail label="Client department">{departments.find((d) => d.id === contact.departmentId)?.name}</Detail>}
         </Section>
-        <Section title="Communication">
+        <Section title="Communication" icon="MessageCircle" order={1}>
           <p className="text-[13px] text-muted">Mail with this contact is linked from each opportunity’s Communication tab and the <Link to="/email" className="underline">E-mail</Link> module.</p>
         </Section>
+        </Sections>
       </div>
     </div>
   )
@@ -246,7 +352,7 @@ export function TeamMemberDetails({ memberId }: { memberId: string }) {
         badges={<Badge tone={member.status === 'active' ? 'emerald' : 'gray'}>{member.status === 'active' ? 'Active' : 'Inactive'}</Badge>}
         actions={<Link to={`/teams/${team}/roster`} className="text-[13px] font-semibold text-ink-900 underline underline-offset-2">Manage in the {SOURCE_LABEL[team]} roster</Link>}
       />
-      <Section title="Contact"><Detail label="Email">{member.email}</Detail><Detail label="Team">{SOURCE_LABEL[team]}</Detail></Section>
+      <Sections><Section title="Contact" icon="Mail"><Detail label="Email"><EmailValue email={member.email} /></Detail><Detail label="Team">{SOURCE_LABEL[team]}</Detail></Section></Sections>
     </div>
   )
 }

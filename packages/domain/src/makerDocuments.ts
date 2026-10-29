@@ -51,6 +51,51 @@ export interface MakerDocument {
   ownerName: string
   createdAt: string
   updatedAt: string
+  /** The caller's rights on a file shared with them; absent on the caller's own files (full access). */
+  permissions?: MakerPermission[]
+}
+
+/** Independent rights a file owner grants (any combination). Every share may open the file; `read` adds
+ *  download/print/copy, `comment` adds comments, `write` adds editing. */
+export const MAKER_PERMISSIONS = ['read', 'comment', 'write'] as const
+export type MakerPermission = (typeof MAKER_PERMISSIONS)[number]
+
+export interface MakerShare {
+  email: string
+  name: string
+  permissions: MakerPermission[]
+  sharedBy: string
+  updatedAt: string
+}
+
+export interface MakerVersion {
+  version: number
+  size: number
+  savedBy: string | null
+  reason: string
+  createdAt: string
+}
+
+/** Upload of an employee's own files to their Google Drive. */
+export interface MakerDriveStatus { configured: boolean; connected: boolean; lastSyncAt: string | null; lastError: string | null; folderUrl: string | null }
+
+/** The caller's rights on a file: everything for the owner, otherwise what was shared. */
+export function makerRights(doc: Pick<MakerDocument, 'permissions'>): Record<MakerPermission, boolean> & { owner: boolean } {
+  const granted = doc.permissions
+  if (!granted) return { owner: true, read: true, comment: true, write: true }
+  return { owner: false, read: granted.includes('read'), comment: granted.includes('comment'), write: granted.includes('write') }
+}
+
+/** Sorted, de-duplicated, non-empty permission list, or an error message. */
+export function normalizeMakerPermissions(raw: readonly unknown[]): MakerPermission[] {
+  const set = MAKER_PERMISSIONS.filter((p) => raw.includes(p))
+  if (!set.length) throw new Error('Choose at least one permission.')
+  return set
+}
+
+/** Files are shared only with Amnex employees. */
+export function isAmnexEmail(email: unknown): email is string {
+  return typeof email === 'string' && /^[^@\s]+@amnex\.com$/i.test(email.trim())
 }
 
 /** Unique per document and version, within ONLYOFFICE's key alphabet (`[0-9A-Za-z._=-]`, at most 128 characters). */
@@ -112,4 +157,13 @@ export function assertOfficeFile(name: string, bytes: Uint8Array, maxBytes: numb
   if (bytes.length > maxBytes) throw new Error(`Files must be smaller than ${Math.round(maxBytes / 1024 / 1024)} MB.`)
   if (!hasZipMagic(bytes)) throw new Error('This is not a valid Office file.')
   return fileType
+}
+
+const OFFICE_SCHEME: Record<MakerFileType, string> = { docx: 'ms-word', xlsx: 'ms-excel', pptx: 'ms-powerpoint' }
+
+/** Links that open a WebDAV file in an installed app: Microsoft Office's URI scheme and LibreOffice's equivalent.
+ *  `ofe` opens for editing, `ofv` read-only. */
+export function officeAppLinks(fileType: MakerFileType, write: boolean, davUrl: string): { office: string; libreOffice: string } {
+  const mode = write ? 'ofe' : 'ofv'
+  return { office: `${OFFICE_SCHEME[fileType]}:${mode}|u|${davUrl}`, libreOffice: `vnd.libreoffice.command:${mode}|u|${davUrl}` }
 }

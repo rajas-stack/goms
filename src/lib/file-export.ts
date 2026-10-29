@@ -1,6 +1,9 @@
-import { Capacitor } from '@capacitor/core'
+import { Capacitor, registerPlugin } from '@capacitor/core'
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
+
+/** android/app/src/main/java/com/gorms/app/FileOpenerPlugin.java — Android "Open with", filtered by MIME type. */
+const FileOpener = registerPlugin<{ open(options: { path: string; mimeType: string }): Promise<void> }>('FileOpener')
 
 /** Saves `content` as `fileName`, on whichever platform this is running on.
  *  Extracted from csv.ts so other export formats can reuse the exact same
@@ -46,13 +49,23 @@ export async function downloadFile(fileName: string, content: string, mimeType: 
   URL.revokeObjectURL(url)
 }
 
+async function writeBinary(fileName: string, bytes: Uint8Array): Promise<string> {
+  let binary = ''
+  for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192))
+  const { uri } = await Filesystem.writeFile({ path: fileName, data: btoa(binary), directory: Directory.External })
+  return uri
+}
+
+/** Android only: saves the file on the phone, then lets the user pick an installed app that edits that type (Word, Excel, PowerPoint…). */
+export async function openFileInApp(fileName: string, bytes: Uint8Array, mimeType: string): Promise<void> {
+  await FileOpener.open({ path: await writeBinary(fileName, bytes), mimeType })
+}
+
 /** Binary workbook export, including the native share flow used by text exports. */
 export async function downloadBinaryFile(fileName: string, bytes: Uint8Array, mimeType: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
-    let binary = ''
-    for (let offset = 0; offset < bytes.length; offset += 8192) binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192))
-    const { uri } = await Filesystem.writeFile({ path: fileName, data: btoa(binary), directory: Directory.External })
-    try { await Share.share({ files: [uri], dialogTitle: 'Open exported workbook' }) } catch { /* dismissed */ }
+    const uri = await writeBinary(fileName, bytes)
+    try { await Share.share({ files: [uri], dialogTitle: 'Open exported file' }) } catch { /* dismissed */ }
     return
   }
   const url = URL.createObjectURL(new Blob([bytes.slice().buffer as ArrayBuffer], { type: mimeType }))

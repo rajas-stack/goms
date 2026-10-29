@@ -17,6 +17,7 @@ function makeStore(version = 1) {
   }
   const store = {
     readContent: vi.fn(async (wanted: string) => (wanted === id ? { doc, bytes: docx } : null)),
+    readVersionContent: vi.fn(async () => null as Uint8Array | null),
     saveVersion: vi.fn(async (_id: string, bytes: Uint8Array) => {
       doc = { ...doc, version: doc.version + 1, documentKey: makerDocumentKey(id, doc.version + 1), size: bytes.length }
       return doc

@@ -83,3 +83,7 @@ export interface MakerDownload { url: string; name: string }
 export class MakerEditorUnavailable extends Error {
   constructor() { super('Editing needs the GOMS API and an ONLYOFFICE Document Server. This build runs offline (no VITE_API_BASE_URL).') }
 }
+
+export class MakerSharingUnavailable extends Error {
+  constructor() { super('Sharing, version history, Google Drive upload and opening in an installed app need the GOMS server. Files on this device stay on this device.') }
+}

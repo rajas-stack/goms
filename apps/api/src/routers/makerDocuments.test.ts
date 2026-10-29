@@ -35,7 +35,8 @@ describe('makerDocuments router', () => {
   it('lists only the caller\'s files, without their bytes', async () => {
     await caller().list()
     const [text, params] = db.query.mock.calls[0]
-    expect(text).toContain('WHERE owner_email=$1')
+    expect(text).toContain('d.owner_email=$1 OR s.grantee_email IS NOT NULL')
+    expect(text).toContain('s.grantee_email=$1')
     expect(text).not.toMatch(/\bcontent\b/)
     expect(params).toEqual(['writer@amnex.com'])
   })
@@ -69,9 +70,65 @@ describe('makerDocuments router', () => {
     await expect(caller().duplicate({ id })).rejects.toMatchObject({ code: 'NOT_FOUND' })
     await expect(caller().delete({ id })).rejects.toMatchObject({ code: 'NOT_FOUND' })
     for (const call of db.query.mock.calls.filter((c) => /maker_documents/.test(String(c[0])))) {
-      expect(String(call[0])).toContain('owner_email=$2')
+      expect(String(call[0])).toMatch(/owner_email=\$2|d\.owner_email=\$1 OR s\.grantee_email IS NOT NULL/)
       expect(call[1]).toEqual(expect.arrayContaining([id, 'writer@amnex.com']))
     }
+  })
+
+  describe('sharing', () => {
+    const shared = (flags: Record<string, boolean>) => row({ owner_email: 'boss@amnex.com', shared: true, can_read: false, can_comment: false, can_write: false, ...flags })
+    const serve = (doc: Record<string, unknown>, employee: Record<string, unknown> | null = { name: 'Asha', email: 'asha@amnex.com' }) =>
+      db.query.mockImplementation(async (text: string) => {
+        if (text.includes('FROM employees')) return { rows: employee ? [employee] : [] }
+        if (text.includes('FROM maker_document_shares WHERE')) return { rows: [] }
+        if (text.includes('FROM maker_documents')) return { rows: [{ ...doc, content: Buffer.from(blankOfficeFile('docx')) }] }
+        return { rows: [], rowCount: 0 }
+      })
+
+    it('grants any combination of permissions to an Amnex employee from the directory', async () => {
+      serve(row())
+      await caller().share({ id, email: ' Asha@AMNEX.com ', permissions: ['write', 'read', 'write'] })
+      const insert = db.query.mock.calls.find((c) => String(c[0]).includes('INSERT INTO maker_document_shares'))!
+      expect(insert[1]).toEqual([id, 'asha@amnex.com', 'Asha', true, false, true, 'writer@amnex.com'])
+    })
+
+    it('refuses outsiders, people missing from the directory and non-owners', async () => {
+      serve(row())
+      await expect(caller().share({ id, email: 'x@gmail.com', permissions: ['read'] })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      await expect(caller().share({ id, email: 'writer@amnex.com', permissions: ['read'] })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      await expect(caller().share({ id, email: 'asha@amnex.com', permissions: [] })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      serve(row(), null)
+      await expect(caller().share({ id, email: 'ghost@amnex.com', permissions: ['read'] })).rejects.toMatchObject({ code: 'BAD_REQUEST' })
+      db.query.mockImplementation(async () => ({ rows: [] }))
+      await expect(caller().share({ id, email: 'asha@amnex.com', permissions: ['read'] })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      expect(db.query.mock.calls.some((c) => String(c[0]).includes('INSERT INTO maker_document_shares'))).toBe(false)
+    })
+
+    it('enforces each shared permission', async () => {
+      serve(shared({ can_comment: true }))
+      await expect(caller().downloadUrl({ id })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      await expect(caller().duplicate({ id })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      const data = Buffer.from(blankOfficeFile('docx')).toString('base64')
+      await expect(caller().replace({ id, name: 'Plan.docx', data })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+      const { config } = await caller().editorConfig({ id, theme: 'light' })
+      expect(config.document.permissions).toMatchObject({ edit: false, download: false, comment: true })
+      expect(config.editorConfig.mode).toBe('edit')
+
+      serve(shared({ can_read: true }))
+      expect((await caller().downloadUrl({ id })).path).toContain(id)
+      const view = await caller().editorConfig({ id, theme: 'light' })
+      expect(view.config.editorConfig.mode).toBe('view')
+
+      serve(shared({ can_write: true }))
+      expect((await caller().editorConfig({ id, theme: 'light' })).config.document.permissions.edit).toBe(true)
+    })
+
+    it('lets only the owner rename, delete or manage shares', async () => {
+      db.query.mockImplementation(async (text: string) => ({ rows: text.includes('owner_email=$2') ? [] : [shared({ can_write: true })] }))
+      await expect(caller().rename({ id, title: 'X' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      await expect(caller().shares({ id })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+      await expect(caller().unshare({ id, email: 'asha@amnex.com' })).rejects.toMatchObject({ code: 'NOT_FOUND' })
+    })
   })
 
   it('duplicates the bytes under a "Copy of" title', async () => {

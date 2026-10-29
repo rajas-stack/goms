@@ -6,10 +6,9 @@ import { useAuthUser } from '@/lib/auth'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select } from '@/components/ui/Field'
 import { Icon } from '@/components/ui/Icon'
-import { emailApi, emailQueryDefaults, useEmailStatus } from './api'
+import { emailApi, emailQueryDefaults, ownMailCache, useEmailStatus } from './api'
 import { ComposeDialog, type ComposeStart } from './ComposeDialog'
 import { ConversationView } from './ConversationView'
-import { EmailAccessDialog } from './AccessDialog'
 import { EmailRecordPicker } from './RecordPicker'
 import { EmailCategoryBadges } from './ParticipantPanel'
 import { IconAction } from './IconAction'
@@ -18,6 +17,8 @@ import { Tooltip } from '@/components/ui/Tooltip'
 import { Avatar } from '@/components/ui/Avatar'
 
 const VIEW_ICON = { mailbox: 'User', context: 'Briefcase', team: 'Users', supervisor: 'ShieldCheck' } as const
+// Gmail is read live per query, so polling the list every 30 s is the auto-refresh.
+const MAIL_REFRESH_MS = 30_000
 const FOLDERS = [['INBOX', 'Inbox', 'Inbox'], ['SENT', 'Sent', 'Send'], ['DRAFT', 'Drafts', 'FilePenLine'], ['STARRED', 'Starred', 'Star'], ['ALL', 'All mail', 'Layers']] as const
 
 export interface EmailWorkspaceProps { entity?: EmailEntityRef; title?: string; searchHint?: string; compact?: boolean }
@@ -31,7 +32,7 @@ function AuthenticatedEmailWorkspace({ email, entity: originEntity, title = 'E-m
   const pickedEntity = params.get('mailEntity') && params.get('mailEntityId') ? { type: params.get('mailEntity')!, id: params.get('mailEntityId')! } : null
   const scope = originEntity ?? pickedEntity ?? undefined
   const recordKey = scope ? `${scope.type}:${scope.id}` : 'mailbox'
-  const [picking, setPicking] = useState(false); const [access, setAccess] = useState(false); const [compose, setCompose] = useState<ComposeStart | null>(null)
+  const [picking, setPicking] = useState(false); const [compose, setCompose] = useState<ComposeStart | null>(null)
   const [busy, setBusy] = useState(false); const [error, setError] = useState(''); const [notice, setNotice] = useState('')
   const [searchText, setSearchText] = useState(params.get('mailSearch') ?? searchHint)
   const [sender, setSender] = useState(''); const [recipient, setRecipient] = useState(''); const [after, setAfter] = useState(''); const [before, setBefore] = useState(''); const [sort, setSort] = useState('newest')
@@ -45,18 +46,22 @@ function AuthenticatedEmailWorkspace({ email, entity: originEntity, title = 'E-m
   const supervisory = view === 'supervisor'; const contextual = !!scope && view !== 'mailbox' && !unlinked
   function patch(values: Record<string, string | null>) { setParams(current => { const next = new URLSearchParams(current); for (const [key, value] of Object.entries(values)) value === null ? next.delete(key) : next.set(key, value); return next }, { replace: true }) }
   function resetList() { setCursor(0); setPageToken(undefined); setExtra([]); setMoreContext([]); patch({ mailItem: null, mailKind: null }) }
-  const ownQuery = useQuery({ ...emailQueryDefaults, queryKey: ['emailCenter', email, 'mailboxes'], enabled: status.isSuccess, queryFn: () => emailApi(email).mailboxes.query({ mode: 'mine', supervisor: false }), refetchInterval: 30000 })
+  // Fetched alongside status (not after it): one less round trip before the inbox shows.
+  const ownQuery = useQuery({ ...ownMailCache, queryKey: ['emailCenter', email, 'mailboxes'], enabled: !!email, queryFn: () => emailApi(email).mailboxes.query({ mode: 'mine', supervisor: false }), refetchInterval: MAIL_REFRESH_MS })
   const supervisors = useQuery({ ...emailQueryDefaults, queryKey: ['emailCenter', email, 'supervisorMailboxes', scope], enabled: supervisory && cap('supervisor'), queryFn: () => emailApi(email).mailboxes.query({ mode: 'supervisor', entity: scope, supervisor: true }), refetchInterval: 15000 })
   const ownMailboxes = ownQuery.isError ? [] : ownQuery.data ?? []; const mailboxes = supervisory ? supervisors.isError ? [] : supervisors.data ?? [] : ownMailboxes
   const mailbox = mailboxes.find(mailbox => mailbox.id === params.get('mailbox')) ?? mailboxes[0]
   const folder = params.get('mailFolder') ?? (searchHint ? 'ALL' : 'INBOX')
   const search = params.get('mailSearch') ?? ''
-  const labels = useQuery({ ...emailQueryDefaults, queryKey: ['emailCenter', email, 'labels', mailbox?.id], enabled: !!mailbox?.own && mailbox.status === 'connected', queryFn: () => emailApi(email).labels.query({ mailboxId: mailbox!.id }) })
+  const labels = useQuery({ ...ownMailCache, queryKey: ['emailCenter', email, 'labels', mailbox?.id], enabled: !!mailbox?.own && mailbox.status === 'connected', queryFn: () => emailApi(email).labels.query({ mailboxId: mailbox!.id }) })
   const userLabels = labels.data?.filter(label => label.type === 'user') ?? []
   const pickedLabel = userLabels.find(label => label.id === folder)
   const labelClause = pickedLabel ? `{${[pickedLabel, ...userLabels.filter(label => label.name.startsWith(`${pickedLabel.name}/`))].map(label => `label:"${label.name.replace(/["\\\r\n]/g, '')}"`).join(' ')}}` : ''
   const clauses = [search, labelClause, subject ? `subject:("${subject.replace(/["\\\r\n]/g, '')}")` : '', words ? `"${words.replace(/["\\\r\n]/g, '')}"` : '', without ? `-{"${without.replace(/["\\\r\n]/g, '')}"}` : '', hasFile ? 'has:attachment' : '', unreadOnly ? 'is:unread' : '', size, sender ? `from:"${sender.replace(/["\\\r\n]/g, '')}"` : '', recipient ? `{to:"${recipient.replace(/["\\\r\n]/g, '')}" cc:"${recipient.replace(/["\\\r\n]/g, '')}"}` : '', after ? `after:${Math.floor(new Date(`${after}T00:00:00`).getTime() / 1000)}` : '', before ? `before:${Math.floor(new Date(`${before}T00:00:00`).getTime() / 1000) + 86400}` : ''].filter(Boolean).join(' ')
-  const list = useQuery({ ...emailQueryDefaults, queryKey: ['emailCenter', email, 'list', mailbox?.id, folder, clauses, pageToken, supervisory, scope, unlinked], enabled: !!mailbox && mailbox.status === 'connected' && !contextual && status.isSuccess, queryFn: () => emailApi(email).list.query({ mailboxId: mailbox!.id, folder: pickedLabel ? 'ALL' : folder, q: clauses, pageToken, supervisor: supervisory, entity: supervisory ? scope : undefined, unlinkedOnly: supervisory && (unlinked || !scope) }), refetchInterval: 30000 })
+  const list = useQuery({ ...(supervisory ? emailQueryDefaults : ownMailCache), queryKey: ['emailCenter', email, 'list', mailbox?.id, folder, clauses, pageToken, supervisory, scope, unlinked],
+    // Changing folder, search or page keeps your current list on screen (same mailbox only) until the new one arrives.
+    placeholderData: (previous, previousQuery) => !supervisory && previousQuery?.queryKey[3] === mailbox?.id ? previous : undefined,
+    enabled: !!mailbox && mailbox.status === 'connected' && !contextual && (!supervisory || status.isSuccess), queryFn: () => emailApi(email).list.query({ mailboxId: mailbox!.id, folder: pickedLabel ? 'ALL' : folder, q: clauses, pageToken, supervisor: supervisory, entity: supervisory ? scope : undefined, unlinkedOnly: supervisory && (unlinked || !scope) }), refetchInterval: MAIL_REFRESH_MS })
   const contextQuery = useQuery({ ...emailQueryDefaults, queryKey: ['emailCenter', email, 'context', scope, view, mailbox?.id, cursor], enabled: contextual && !!scope && status.isSuccess, queryFn: () => emailApi(email).context.query({ entity: scope!, mode: view === 'team' ? 'team' : supervisory ? 'supervisor' : 'mine', mailboxId: mailbox?.id, cursor }), refetchInterval: 15000 })
   type ContextRow = NonNullable<typeof contextQuery.data>['items'][number]
   const selectedId = params.get('mailRecord') === recordKey ? params.get('mailItem') : null; const selectedKind = params.get('mailKind') === 'message' ? 'message' : 'thread'
@@ -88,11 +93,9 @@ function AuthenticatedEmailWorkspace({ email, entity: originEntity, title = 'E-m
   const searchForm = <form className="flex min-w-56 flex-1 items-center gap-1.5" onSubmit={event => { event.preventDefault(); resetList(); patch({ mailSearch: searchText || null }) }}><span className="relative flex-1"><Input aria-label="Search email" placeholder={contextual ? 'Search loaded correspondence…' : 'Search Gmail…'} value={searchText} onChange={event => setSearchText(event.target.value)} className="pr-9" />{searchText && <Tooltip label="Clear search" className="absolute right-1.5 top-1/2 -translate-y-1/2"><button type="button" aria-label="Clear search" onClick={() => setSearchText('')} className="grid h-6 w-6 place-items-center rounded-md text-muted hover:bg-ink-900/[0.06] hover:text-ink-900"><Icon name="X" size={14} /></button></Tooltip>}</span><IconAction icon="Search" label="Search" type="submit" />{originEntity && view !== 'mailbox' && <IconAction icon="Link2" label="Find mail to link" onClick={() => { resetList(); setSearchText(searchHint); patch({ mailView: 'mailbox', mailFolder: 'ALL', mailSearch: searchHint || null }) }} />}</form>
   return <section className={`flex min-h-0 flex-col ${compact ? '' : 'h-full'}`} aria-label="Email Center">
     <header className="space-y-4 border-b border-line px-6 py-5">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h1 className="text-lg font-semibold">{title}</h1><p className="mt-0.5 truncate text-xs text-muted">{email}{mailbox?.lastSyncAt ? ` · Last sync ${new Date(mailbox.lastSyncAt).toLocaleString()}` : ''}</p></div>
+      <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h1 className="text-lg font-semibold">{title}</h1><p className="mt-0.5 truncate text-xs text-muted">{email}</p></div>
         <div className="flex items-center gap-1.5">
           {!ownMailboxes.some(m => m.status === 'connected') && <IconAction icon="Link2" label="Connect Gmail" disabled={busy || !status.data?.ready} onClick={() => void run(async () => { const connection = await emailApi(email).connect.mutate({ returnTo: `${location.pathname}${location.search}` }); window.location.assign(connection.url) })} />}
-          <IconAction icon="RefreshCw" label="Refresh" onClick={refresh} disabled={busy} />
-          {cap('manageAccess') && <IconAction icon="ShieldCheck" label="Manage access" onClick={() => setAccess(true)} />}
           {mailbox?.own && <IconAction icon="LogOut" label="Disconnect mailbox" disabled={busy} onClick={() => { if (window.confirm(`Disconnect ${mailbox.email}? Synchronization stops and supervisory grants are revoked.`)) void run(async () => { await emailApi(email).disconnect.mutate({ mailboxId: mailbox.id, confirmed: true }); refresh() }, 'Mailbox disconnected. Gmail messages and relationship history were retained.') }} />}
         </div>
       </div>
@@ -146,7 +149,6 @@ function AuthenticatedEmailWorkspace({ email, entity: originEntity, title = 'E-m
       <div className="min-w-0 overflow-y-auto">{selected && !(contextual && contextQuery.isError) && !(supervisory && supervisors.isError) ? <ConversationView key={`${selected.mailboxId}:${selected.kind}:${selected.id}:${view}`} email={email} item={selected} entity={contextual || supervisory ? scope : undefined} origin={scope} supervisor={supervisory} unlinked={supervisory && !contextual} capabilities={status.data?.capabilities ?? []} ownMailboxes={ownMailboxes.filter(mailbox => mailbox.status === 'connected')} onCompose={setCompose} onChanged={refresh} /> : <div className="flex h-full min-h-72 flex-col items-center justify-center gap-3 p-10 text-center text-muted"><span className="grid h-14 w-14 place-items-center rounded-2xl bg-ink-900/[0.04]"><Icon name="MailOpen" size={26} /></span><p className="text-[14px] font-medium text-ink-700">Select a conversation</p><p className="max-w-xs text-[12.5px]">Messages open here, read live from Gmail.</p></div>}</div>
     </div>
     {compose && <ComposeDialog key={`${compose.mode}:${compose.draftId ?? compose.message?.id ?? 'new'}`} email={email} mailboxes={ownMailboxes.filter(mailbox => mailbox.status === 'connected')} start={compose} onClose={() => setCompose(null)} onSaved={message => { setNotice(message); refresh() }} />}
-    {access && <EmailAccessDialog email={email} administrator={status.data?.administrator ?? false} mailboxes={ownMailboxes.filter(mailbox => mailbox.status === 'connected')} entity={scope} onClose={() => setAccess(false)} />}
     {picking && <EmailRecordPicker email={email} onChoose={record => { resetList(); patch({ mailView: 'context', mailEntity: record.type, mailEntityId: record.id }) }} onClose={() => setPicking(false)} />}
   </section>
 }

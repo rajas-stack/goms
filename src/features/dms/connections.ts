@@ -1,12 +1,14 @@
 import { DEFAULT_DMS_SETTINGS, DMS_SETTINGS_KEY, loadSettings, validateSettings, type DmsSettings } from './settings'
 
+/** Places a DMS can be assigned to; `path` is the page each place lives on (Google integration pages use it). */
 export const DMS_MODULES = [
-  { id: 'accounts', label: 'Accounts mapping' },
-  { id: 'meetings', label: 'Meetings' },
-  { id: 'sales', label: 'Sales' },
-  { id: 'teams', label: 'Teams' },
-  { id: 'commercial', label: 'Commercial calculator' },
-  { id: 'opportunity', label: 'Opportunity / Live Bids' },
+  { id: 'accounts', label: 'Accounts mapping', path: '/map' },
+  { id: 'meetings', label: 'Meetings', path: '/meetings' },
+  { id: 'sales', label: 'Sales', path: '/sales' },
+  { id: 'teams', label: 'Teams', path: '/teams' },
+  { id: 'commercial', label: 'Commercial calculator', path: '/commercial-calculator' },
+  { id: 'opportunity', label: 'Opportunity / Live Bids', path: '/live-bids' },
+  { id: 'finance', label: 'Finance', path: '/finance' },
 ] as const
 export type DmsModule = typeof DMS_MODULES[number]['id']
 export interface DmsConnection {
@@ -84,5 +86,6 @@ export function moduleForPath(path: string): DmsModule | null {
   if (/^\/teams(\/|$)/.test(path)) return 'teams'
   if (/^\/commercial-calculator(\/|$)/.test(path)) return 'commercial'
   if (/^\/live-bids(\/|$)/.test(path)) return 'opportunity'
+  if (/^\/finance(\/|$)/.test(path)) return 'finance'
   return null
 }

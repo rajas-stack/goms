@@ -30,9 +30,12 @@ describe('PROCEDURE_POLICY completeness', () => {
       'outside:adminImport.session.validate', 'public:health.check', 'self:auth.me',
       ...EMAIL_CENTER_PROCEDURES.map(name => `self:emailCenter.${name}`).sort(),
       'self:googleIntegrations.get', 'self:googleIntegrations.save',
-      'self:makerDocuments.create', 'self:makerDocuments.delete', 'self:makerDocuments.downloadUrl', 'self:makerDocuments.duplicate',
-      'self:makerDocuments.editorConfig', 'self:makerDocuments.list', 'self:makerDocuments.rename', 'self:makerDocuments.replace',
-      'self:makerDocuments.upload', 'self:rbacTree.myAccess',
+      'self:makerDocuments.create', 'self:makerDocuments.delete', 'self:makerDocuments.desktopSession', 'self:makerDocuments.directory',
+      'self:makerDocuments.downloadUrl', 'self:makerDocuments.driveConnect', 'self:makerDocuments.driveDisconnect',
+      'self:makerDocuments.driveStatus', 'self:makerDocuments.duplicate', 'self:makerDocuments.editorConfig',
+      'self:makerDocuments.list', 'self:makerDocuments.rename', 'self:makerDocuments.replace', 'self:makerDocuments.share',
+      'self:makerDocuments.shares', 'self:makerDocuments.unshare', 'self:makerDocuments.upload', 'self:makerDocuments.versionDownloadUrl',
+      'self:makerDocuments.versions', 'self:rbacTree.myAccess',
     ])
   })
   it('gives every non-exempt entry at least one requirement', () => {

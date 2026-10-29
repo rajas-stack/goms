@@ -16,10 +16,10 @@ import type { MyAccess } from '../../../apps/api/src/routers/auth'
 import type { EffectivePermissions, OverrideHistoryFilter, OverrideHistoryRow, PermissionMatrix, UnmatchedOverride } from '../accessTypes'
 import { uid } from '@/lib/utils'
 import { PROTECTED_VALUES_ENFORCED, documentToGeneral, updateGeneralDocument, validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type SaveBidSynopsisInput } from '@goms/domain'
-import { downloadName, MIME_FOR_FILE_TYPE, type MakerDocument, type MakerDocumentKind } from '@goms/domain'
+import { downloadName, MIME_FOR_FILE_TYPE, type MakerDocument, type MakerDocumentKind, type MakerDriveStatus, type MakerPermission, type MakerShare, type MakerVersion } from '@goms/domain'
 import {
   base64ToBytes, createLocal, duplicateLocal, LOCAL_OWNER, MakerEditorUnavailable, renameLocal, replaceLocal, requireLocal, toPublic, uploadLocal,
-  type LocalMakerDocument, type MakerDownload, type MakerEditorSession, type MakerOwner,
+  type LocalMakerDocument, type MakerDownload, type MakerEditorSession, type MakerOwner, MakerSharingUnavailable,
 } from './makerDocuments'
 import { assertUniqueTenderWebsiteName, normalizeTenderWebsiteInput, tenderWebsiteKind, type TenderWebsite, type TenderWebsiteInput, type TenderWebsiteKind, type TenderDscEmployee } from '@goms/domain'
 import type { Competitor, CompetitorInput } from '@goms/domain'
@@ -629,6 +629,19 @@ export interface Repository {
   deleteMakerDocument(id: string): Promise<void>
   getMakerEditorSession(id: string, theme: 'light' | 'dark'): Promise<MakerEditorSession>
   getMakerDownload(id: string): Promise<MakerDownload>
+  /** Sharing and version history need the server: one browser's local store has no other users. */
+  listMakerShareDirectory(): Promise<{ email: string; name: string }[]>
+  listMakerShares(id: string): Promise<MakerShare[]>
+  shareMakerDocument(id: string, email: string, permissions: MakerPermission[]): Promise<MakerShare[]>
+  unshareMakerDocument(id: string, email: string): Promise<MakerShare[]>
+  listMakerVersions(id: string): Promise<MakerVersion[]>
+  getMakerVersionDownload(id: string, version: number): Promise<MakerDownload>
+  /** A WebDAV session for an installed Office app; `url` is absolute. */
+  openMakerDesktopSession(id: string): Promise<{ url: string; write: boolean }>
+  /** Upload of the caller's own files to their Google Drive. */
+  getMakerDriveStatus(): Promise<MakerDriveStatus>
+  connectMakerDrive(): Promise<{ url: string }>
+  disconnectMakerDrive(): Promise<void>
 
   /** Tender portals managed in Settings, offered in a bid's General tab. */
   /** Websites on one Settings page; defaults to the tender portals. */
@@ -2366,6 +2379,16 @@ class InMemoryRepository implements Repository {
     const blob = new Blob([base64ToBytes(doc.contentBase64) as BlobPart], { type: MIME_FOR_FILE_TYPE[doc.fileType] })
     return { url: URL.createObjectURL(blob), name: downloadName(doc) }
   }
+  async listMakerShareDirectory(): Promise<{ email: string; name: string }[]> { throw new MakerSharingUnavailable() }
+  async listMakerShares(): Promise<MakerShare[]> { return [] }
+  async shareMakerDocument(): Promise<MakerShare[]> { throw new MakerSharingUnavailable() }
+  async unshareMakerDocument(): Promise<MakerShare[]> { throw new MakerSharingUnavailable() }
+  async listMakerVersions(): Promise<MakerVersion[]> { return [] }
+  async getMakerVersionDownload(): Promise<MakerDownload> { throw new MakerSharingUnavailable() }
+  async openMakerDesktopSession(): Promise<{ url: string; write: boolean }> { throw new MakerSharingUnavailable() }
+  async getMakerDriveStatus(): Promise<MakerDriveStatus> { return { configured: false, connected: false, lastSyncAt: null, lastError: null, folderUrl: null } }
+  async connectMakerDrive(): Promise<{ url: string }> { throw new MakerSharingUnavailable() }
+  async disconnectMakerDrive(): Promise<void> { throw new MakerSharingUnavailable() }
 
   async listCredentialPassphrases(): Promise<CredentialPassphrase[]> { return structuredClone(this.data.credentialPassphrases ?? []) }
   async createCredentialPassphrase(input: CredentialPassphraseInput): Promise<CredentialPassphrase> {
@@ -3910,6 +3933,7 @@ const MUTATOR_KEYS = [
   'createCredentialPassphrase', 'updateCredentialPassphrase', 'deleteCredentialPassphrase',
   'saveBidSynopsis',
   'createMakerDocument', 'uploadMakerDocument', 'replaceMakerDocument', 'renameMakerDocument', 'duplicateMakerDocument', 'deleteMakerDocument',
+  'shareMakerDocument', 'unshareMakerDocument', 'openMakerDesktopSession', 'connectMakerDrive', 'disconnectMakerDrive',
   'createTenderWebsite', 'updateTenderWebsite', 'deleteTenderWebsite', 'setTenderWebsiteEditingLock',
   'createCompetitor', 'updateCompetitor', 'deleteCompetitor',
   'createInsightVisual', 'updateInsightVisual', 'deleteInsightVisual', 'createInsightReport', 'updateInsightReport', 'deleteInsightReport',
@@ -3949,7 +3973,7 @@ const READER_KEYS = [
   'listCredentialPassphrases', 'getBidSynopsis', 'listTenderWebsites', 'listTenderDscEmployees', 'listCompetitors', 'listAmnexDepartments',
   'listInsightVisuals', 'listInsightReports', 'listInsightCorrigenda',
   'getRbacMyAccess', 'listRbacNodes', 'getRbacSubjects', 'getRbacConfig',
-  'listMakerDocuments', 'getMakerEditorSession', 'getMakerDownload',
+  'listMakerDocuments', 'getMakerEditorSession', 'getMakerDownload', 'listMakerShareDirectory', 'listMakerShares', 'listMakerVersions', 'getMakerVersionDownload', 'getMakerDriveStatus',
   'listDeliveryTeamMembers', 'listOrgPeople',
   'listStates', 'getState', 'getNode', 'listChildren', 'listOrgRoots', 'listDepartments', 'listPostingNodes',
   'breadcrumb', 'childCount', 'geoRoot', 'childCounts',

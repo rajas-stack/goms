@@ -4,6 +4,8 @@
 !index.html
 !tsconfig*.json
 !vite.config.ts
+!scripts/
+!scripts/preview-retained-assets.mjs
 !postcss.config.*
 !tailwind.config.*
 !src/

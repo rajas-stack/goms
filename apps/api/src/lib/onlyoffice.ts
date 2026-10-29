@@ -4,7 +4,7 @@
 // See docs/ONLYOFFICE_SETUP.md.
 import { SignJWT, jwtVerify, type JWTPayload } from 'jose'
 import {
-  DOCUMENT_TYPE_FOR_FILE_TYPE, type MakerDocument,
+  DOCUMENT_TYPE_FOR_FILE_TYPE, makerRights, type MakerDocument,
 } from '@goms/domain'
 
 export interface OnlyofficeSettings {
@@ -61,7 +61,7 @@ const TOKEN_LIFETIME: Record<UrlTokenPurpose, string> = {
   callback: '30d',
 }
 
-export function urlToken(purpose: UrlTokenPurpose, claims: { id: string; key?: string }, secret: Uint8Array): Promise<string> {
+export function urlToken(purpose: UrlTokenPurpose, claims: { id: string; key?: string; version?: number }, secret: Uint8Array): Promise<string> {
   return signToken({ purpose, ...claims }, secret, TOKEN_LIFETIME[purpose])
 }
 
@@ -69,7 +69,7 @@ export function urlToken(purpose: UrlTokenPurpose, claims: { id: string; key?: s
 export async function readUrlToken(token: unknown, purposes: UrlTokenPurpose[], id: string, secret: Uint8Array) {
   const payload = await verifyToken(token, secret)
   if (!payload || payload.id !== id || !purposes.includes(payload.purpose as UrlTokenPurpose)) return null
-  return payload as JWTPayload & { purpose: UrlTokenPurpose; id: string; key?: string }
+  return payload as JWTPayload & { purpose: UrlTokenPurpose; id: string; key?: string; version?: number }
 }
 
 export interface EditorUser { id: string; name: string }
@@ -78,6 +78,7 @@ export interface EditorUser { id: string; name: string }
 export async function buildEditorConfig(
   doc: MakerDocument, user: EditorUser, theme: 'light' | 'dark', settings: OnlyofficeSettings,
 ) {
+  const rights = makerRights(doc)
   const fileToken = await urlToken('file', { id: doc.id, key: doc.documentKey }, settings.secret)
   const callbackToken = await urlToken('callback', { id: doc.id }, settings.secret)
   const base = `${settings.internalApiUrl}/api/document-maker`
@@ -87,11 +88,12 @@ export async function buildEditorConfig(
       key: doc.documentKey,
       title: `${doc.title}.${doc.fileType}`,
       url: `${base}/files/${doc.id}?token=${encodeURIComponent(fileToken)}`,
-      permissions: { edit: true, download: true, print: true, comment: true, review: true },
+      // A share without write still opens in edit mode so comment-only works; ONLYOFFICE enforces these flags.
+      permissions: { edit: rights.write, download: rights.read, print: rights.read, copy: rights.read, comment: rights.comment || rights.write, review: rights.write },
     },
     documentType: DOCUMENT_TYPE_FOR_FILE_TYPE[doc.fileType],
     editorConfig: {
-      mode: 'edit',
+      mode: rights.write || rights.comment ? 'edit' : 'view',
       lang: 'en',
       callbackUrl: `${base}/callback/${doc.id}?token=${encodeURIComponent(callbackToken)}`,
       user: { id: user.id, name: user.name },

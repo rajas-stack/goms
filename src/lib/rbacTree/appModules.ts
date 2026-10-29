@@ -14,6 +14,7 @@ export const APP_MODULES = definePermissionNodes(null, [
   { value: 'email', label: 'E-mail' },
   { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'marketing', label: 'Marketing' },
+  { value: 'finance', label: 'Finance' },
 ] as const, { kind: 'module' })
 
 export type AppModuleId = (typeof APP_MODULES)[number]['value']

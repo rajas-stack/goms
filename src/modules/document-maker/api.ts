@@ -1,12 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import type { MakerDocument, MakerDocumentKind } from '@goms/domain'
+import { Capacitor } from '@capacitor/core'
+import { MIME_FOR_FILE_TYPE, officeAppLinks, type MakerDocument, type MakerDocumentKind } from '@goms/domain'
 import { repository } from '@/data/repository'
+import { downloadBinaryFile, openFileInApp } from '@/lib/file-export'
 import type { MakerOwner } from '@/data/in-memory/makerDocuments'
 
 const LIST_KEY = ['makerDocuments'] as const
 
 export function useMakerDocuments() {
-  return useQuery({ queryKey: LIST_KEY, queryFn: () => repository.listMakerDocuments() })
+  // Refetch on focus: coming back from a desktop app shows the version it just saved.
+  return useQuery({ queryKey: LIST_KEY, queryFn: () => repository.listMakerDocuments(), refetchOnWindowFocus: true })
 }
 
 /** Every file mutation refreshes the list (and the one file's cached copy). */
@@ -37,8 +40,33 @@ export function readFileBase64(file: File): Promise<string> {
   })
 }
 
-/** Starts a browser download of the current version. */
+/** In the Android app there is no in-app editor: files are kept here and edited in the phone's Word/Excel/PowerPoint app. */
+export const editsInPhoneApp = () => Capacitor.isNativePlatform()
+
+async function makerFile(doc: MakerDocument): Promise<{ name: string; bytes: Uint8Array; mimeType: string }> {
+  const { url, name } = await repository.getMakerDownload(doc.id)
+  try {
+    const response = await fetch(url)
+    if (!response.ok) throw new Error('Could not read the file.')
+    return { name: name || `${doc.title}.${doc.fileType}`, bytes: new Uint8Array(await response.arrayBuffer()), mimeType: MIME_FOR_FILE_TYPE[doc.fileType] }
+  } finally {
+    if (url.startsWith('blob:')) URL.revokeObjectURL(url)
+  }
+}
+
+/** Android: saves the file on the phone and opens the app picker for its type. */
+export async function openMakerDocumentInApp(doc: MakerDocument): Promise<void> {
+  const file = await makerFile(doc)
+  await openFileInApp(file.name, file.bytes, file.mimeType)
+}
+
+/** Starts a browser download of the current version (Android: save + share sheet, since WebView ignores <a download>). */
 export async function downloadMakerDocument(doc: MakerDocument): Promise<void> {
+  if (editsInPhoneApp()) {
+    const file = await makerFile(doc)
+    await downloadBinaryFile(file.name, file.bytes, file.mimeType)
+    return
+  }
   const { url, name } = await repository.getMakerDownload(doc.id)
   const link = document.createElement('a')
   link.href = url
@@ -48,4 +76,12 @@ export async function downloadMakerDocument(doc: MakerDocument): Promise<void> {
   link.click()
   link.remove()
   if (url.startsWith('blob:')) setTimeout(() => URL.revokeObjectURL(url), 10_000)
+}
+
+export type DesktopApp = 'office' | 'libreOffice'
+
+/** Hands the file to an installed Office app over WebDAV; every save there becomes a version here. */
+export async function openMakerDocumentInDesktopApp(doc: MakerDocument, app: DesktopApp): Promise<void> {
+  const { url, write } = await repository.openMakerDesktopSession(doc.id)
+  window.location.href = officeAppLinks(doc.fileType, write, url)[app]
 }

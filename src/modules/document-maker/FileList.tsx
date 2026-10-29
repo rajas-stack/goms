@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import type { MakerDocument } from '@goms/domain'
+import { makerRights, type MakerDocument } from '@goms/domain'
 import { Icon } from '@/components/ui/Icon'
 import { Menu, MenuDivider, MenuItem } from '@/components/ui/Menu'
 import { PersonName } from '@/components/ui/PersonName'
@@ -7,12 +7,22 @@ import { cn } from '@/lib/utils'
 import { editedLabel, formatBytes, KIND_META } from './kinds'
 import { useOwnerPerson } from './useOwner'
 
-export type FileAction = 'rename' | 'duplicate' | 'download' | 'delete'
+export type FileAction = 'rename' | 'duplicate' | 'download' | 'delete' | 'share' | 'versions' | 'office' | 'libreOffice'
+
+/** What the caller's own rights on a file allow, on top of the permission tree. */
+export function fileAllows(doc: MakerDocument, action: FileAction): boolean {
+  const rights = makerRights(doc)
+  if (action === 'rename' || action === 'delete' || action === 'share') return rights.owner
+  if (action === 'office' || action === 'libreOffice') return true
+  return rights.read
+}
 
 /** The user's files: a table on wide screens, stacked rows on a phone (same markup, grid columns collapse). */
-/** `can` hides menu actions the permission tree does not allow (default: all allowed). */
-export function FileList({ files, onAction, can = () => true }: {
-  files: MakerDocument[]; onAction: (action: FileAction, doc: MakerDocument) => void; can?: (action: FileAction) => boolean
+/** `can` hides menu actions the permission tree does not allow (default: all allowed).
+ *  `onOpen` replaces the editor link (Android app: the file opens in a phone app instead). */
+export function FileList({ files, onAction, onOpen, can = () => true }: {
+  files: MakerDocument[]; onAction: (action: FileAction, doc: MakerDocument) => void; onOpen?: (doc: MakerDocument) => void
+  can?: (action: FileAction) => boolean
 }) {
   const ownerOf = useOwnerPerson()
   return (
@@ -28,6 +38,7 @@ export function FileList({ files, onAction, can = () => true }: {
       <div role="rowgroup">
         {files.map((doc) => {
           const meta = KIND_META[doc.kind]
+          const allows = (action: FileAction) => can(action) && fileAllows(doc, action)
           return (
             <div
               key={doc.id}
@@ -39,13 +50,21 @@ export function FileList({ files, onAction, can = () => true }: {
                   <Icon name={meta.icon} size={17} />
                 </span>
                 <span className="min-w-0">
-                  <Link
-                    to={`/document-maker/${doc.id}`}
-                    className="block truncate text-[14px] font-medium text-ink-900 hover:underline focus-visible:focus-ring"
-                  >
-                    {doc.title}
-                  </Link>
+                  {onOpen ? (
+                    <button type="button" onClick={() => onOpen(doc)}
+                      className="block max-w-full truncate text-left text-[14px] font-medium text-ink-900 hover:underline focus-visible:focus-ring">
+                      {doc.title}
+                    </button>
+                  ) : (
+                    <Link
+                      to={`/document-maker/${doc.id}`}
+                      className="block truncate text-[14px] font-medium text-ink-900 hover:underline focus-visible:focus-ring"
+                    >
+                      {doc.title}
+                    </Link>
+                  )}
                   <span className="block truncate text-[12px] text-muted">
+                    {doc.permissions && <span className="mr-1 rounded bg-panel px-1.5 py-px text-[11px] font-medium text-ink-700">Shared · {doc.permissions.join(', ')}</span>}
                     {meta.label} · .{doc.fileType} · {formatBytes(doc.size)}
                     <span className="md:hidden"> · {editedLabel(doc.updatedAt)}</span>
                   </span>
@@ -71,11 +90,14 @@ export function FileList({ files, onAction, can = () => true }: {
                 )}>
                   {(close) => (
                     <>
-                      {can('rename') && <MenuItem icon={<Icon name="Pencil" size={15} />} onClick={() => { close(); onAction('rename', doc) }}>Rename</MenuItem>}
-                      {can('duplicate') && <MenuItem icon={<Icon name="Copy" size={15} />} onClick={() => { close(); onAction('duplicate', doc) }}>Duplicate</MenuItem>}
-                      {can('download') && <MenuItem icon={<Icon name="Download" size={15} />} onClick={() => { close(); onAction('download', doc) }}>Download .{doc.fileType}</MenuItem>}
-                      {can('delete') && <MenuDivider />}
-                      {can('delete') && <MenuItem danger icon={<Icon name="Trash2" size={15} />} onClick={() => { close(); onAction('delete', doc) }}>Delete</MenuItem>}
+                      {allows('libreOffice') && <MenuItem icon={<Icon name="ExternalLink" size={15} />} onClick={() => { close(); onAction('libreOffice', doc) }}>Open in LibreOffice</MenuItem>}
+                      {allows('share') && <MenuItem icon={<Icon name="UserPlus" size={15} />} onClick={() => { close(); onAction('share', doc) }}>Share</MenuItem>}
+                      {allows('versions') && <MenuItem icon={<Icon name="History" size={15} />} onClick={() => { close(); onAction('versions', doc) }}>Version history</MenuItem>}
+                      {allows('rename') && <MenuItem icon={<Icon name="Pencil" size={15} />} onClick={() => { close(); onAction('rename', doc) }}>Rename</MenuItem>}
+                      {allows('duplicate') && <MenuItem icon={<Icon name="Copy" size={15} />} onClick={() => { close(); onAction('duplicate', doc) }}>Duplicate</MenuItem>}
+                      {allows('download') && <MenuItem icon={<Icon name="Download" size={15} />} onClick={() => { close(); onAction('download', doc) }}>Download .{doc.fileType}</MenuItem>}
+                      {allows('delete') && <MenuDivider />}
+                      {allows('delete') && <MenuItem danger icon={<Icon name="Trash2" size={15} />} onClick={() => { close(); onAction('delete', doc) }}>Delete</MenuItem>}
                     </>
                   )}
                 </Menu>

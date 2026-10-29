@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CFB, read } from 'xlsx'
 import {
   assertOfficeFile, blankOfficeFile, crc32, DOCUMENT_TYPE_FOR_FILE_TYPE, downloadName, fileTypeForName, hasZipMagic,
-  keyBelongsTo, makerDocumentKey, MAKER_LIMITS, normalizeMakerTitle, titleFromFileName,
+  isAmnexEmail, keyBelongsTo, makerDocumentKey, makerRights, normalizeMakerPermissions, MAKER_LIMITS, normalizeMakerTitle, titleFromFileName,
 } from './index.js'
 
 const decoder = new TextDecoder()
@@ -92,5 +92,22 @@ describe('blank Office files', () => {
     expect([...unzip(blankOfficeFile('pptx')).keys()]).toEqual(expect.arrayContaining([
       'ppt/presentation.xml', 'ppt/slides/slide1.xml', 'ppt/slideMasters/slideMaster1.xml', 'ppt/theme/theme1.xml',
     ]))
+  })
+})
+
+describe('sharing rules', () => {
+  it('gives owners everything and share holders only what was granted', () => {
+    expect(makerRights({})).toEqual({ owner: true, read: true, comment: true, write: true })
+    expect(makerRights({ permissions: ['comment'] })).toEqual({ owner: false, read: false, comment: true, write: false })
+    expect(makerRights({ permissions: ['read', 'write'] })).toMatchObject({ owner: false, read: true, comment: false, write: true })
+  })
+  it('normalizes any combination and rejects an empty one', () => {
+    expect(normalizeMakerPermissions(['write', 'read', 'write', 'bogus'])).toEqual(['read', 'write'])
+    expect(() => normalizeMakerPermissions([])).toThrow('at least one')
+  })
+  it('accepts only amnex.com addresses', () => {
+    expect(isAmnexEmail('a.b@AMNEX.com')).toBe(true)
+    expect(isAmnexEmail('a@amnex.com.evil.io')).toBe(false)
+    expect(isAmnexEmail('a@gmail.com')).toBe(false)
   })
 })

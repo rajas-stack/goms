@@ -11,10 +11,12 @@ import { OperationBudget } from './security/operationLimit.js'
 import { googleGateway, type GoogleGateway } from './auth/oauth/googleClient.js'
 import { registerOAuthRoutes } from './auth/oauth/routes.js'
 import { registerDocumentMakerRoutes } from './routes/documentMakerRoutes.js'
+import { registerMakerDavRoutes } from './routes/makerDavRoutes.js'
 import { completeMailConnection } from './email/oauth.js'
 import { emailConfiguration } from './email/config.js'
 import { oauthEnabled } from './auth/oauth/config.js'
 import { completeProfileConnection } from './profileImages/oauth.js'
+import { completeDriveConnection, isMakerDriveState } from './lib/makerDrive.js'
 import { registerProfileImageRoutes } from './routes/profileImageRoutes.js'
 import { registerLiveEventsRoutes } from './routes/liveEventsRoutes.js'
 
@@ -151,11 +153,14 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   registerOAuthRoutes(app, { google: opts.oauth?.google ?? googleGateway })
   if (!oauthEnabled() && emailConfiguration().ready) app.get('/api/oauth/google/callback', async (req, reply) => {
     if (String((req.query as any)?.state ?? '').startsWith('profile.')) return completeProfileConnection(req, reply)
+    if (isMakerDriveState((req.query as any)?.state)) return completeDriveConnection(req, reply)
     try { return await completeMailConnection(req, reply) } catch { return reply.code(503).send({ error: 'Email connection is temporarily unavailable.' }) }
   })
 
   // Document maker: file + save-callback routes for the ONLYOFFICE Document Server (JWT-authorised, not tRPC).
   registerDocumentMakerRoutes(app)
+  // Desktop/phone Office apps open and save Document maker files over WebDAV (session-id URLs, not tRPC).
+  registerMakerDavRoutes(app)
   registerProfileImageRoutes(app)
   registerLiveEventsRoutes(app)
 

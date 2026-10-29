@@ -5,11 +5,12 @@ import { downloadName, hasZipMagic, keyBelongsTo, MAKER_LIMITS, MIME_FOR_FILE_TY
 import {
   assertAllowedDownload, downloadFile, internalFetchUrl, onlyofficeSettings, readUrlToken, verifyToken, type OnlyofficeSettings,
 } from '../lib/onlyoffice.js'
-import { readContent, saveVersion } from '../lib/makerStore.js'
+import { readContent, readVersionContent, saveVersion } from '../lib/makerStore.js'
 
 export interface MakerFileStore {
   readContent(id: string): Promise<{ doc: MakerDocument; bytes: Uint8Array } | null>
   saveVersion(id: string, bytes: Uint8Array, changedBy: string | null, reason: string): Promise<MakerDocument | null>
+  readVersionContent(id: string, version: number): Promise<Uint8Array | null>
 }
 
 export interface CallbackDeps {
@@ -67,7 +68,7 @@ function unavailable(reply: FastifyReply) {
   return reply.code(503).send({ error: 'The document editor is not configured.' })
 }
 
-export function registerDocumentMakerRoutes(app: FastifyInstance, store: MakerFileStore = { readContent, saveVersion }) {
+export function registerDocumentMakerRoutes(app: FastifyInstance, store: MakerFileStore = { readContent, saveVersion, readVersionContent }) {
   /** File bytes for the Document Server (`file` token: that exact version) or a browser download (`download` token). */
   app.get<{ Params: { id: string }; Querystring: { token?: string } }>('/api/document-maker/files/:id', async (request, reply) => {
     let settings: OnlyofficeSettings
@@ -82,11 +83,18 @@ export function registerDocumentMakerRoutes(app: FastifyInstance, store: MakerFi
     const found = await store.readContent(id)
     if (!found) return reply.code(404).send({ error: 'Not found' })
     if (token.purpose === 'file' && token.key !== found.doc.documentKey) return reply.code(409).send({ error: 'This version has been replaced.' })
-    const name = downloadName(found.doc)
+    let bytes: Uint8Array = found.bytes
+    let name = downloadName(found.doc)
+    if (token.purpose === 'download' && typeof token.version === 'number' && token.version !== found.doc.version) {
+      const old = await store.readVersionContent(id, token.version)
+      if (!old) return reply.code(404).send({ error: 'Not found' })
+      bytes = old
+      name = downloadName({ title: `${found.doc.title} (v${token.version})`, fileType: found.doc.fileType })
+    }
     return reply
       .header('Content-Type', MIME_FOR_FILE_TYPE[found.doc.fileType])
       .header('Content-Disposition', `attachment; filename="${name.replace(/[^\x20-\x7e]|"/g, '_')}"; filename*=UTF-8''${encodeURIComponent(name)}`)
-      .send(Buffer.from(found.bytes))
+      .send(Buffer.from(bytes))
   })
 
   /** Save notifications. ONLYOFFICE expects HTTP 200 with {"error":0} once the version is stored. */

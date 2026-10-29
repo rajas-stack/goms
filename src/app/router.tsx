@@ -75,6 +75,7 @@ const DocumentMakerEditor = lazy(() =>
 const EmailPage = lazy(() => import('./routes/EmailPage').then((m) => ({ default: m.EmailPage })))
 const WhatsAppWorkspace = lazy(() => import('@/features/whatsapp/WhatsAppWorkspace').then((m) => ({ default: m.WhatsAppWorkspace })))
 const MarketingPage = lazy(() => import('./routes/MarketingPage').then((m) => ({ default: m.MarketingPage })))
+const FinanceWorkspace = lazy(() => import('@/features/finance/FinanceWorkspace').then((m) => ({ default: m.FinanceWorkspace })))
 const Login = lazy(() => import('./routes/Login').then((m) => ({ default: m.Login })))
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
@@ -179,6 +180,8 @@ export const router = createBrowserRouter([
       // Each user's own WhatsApp, linked through the OpenWA gateway (features/whatsapp/api.ts).
       routed('/whatsapp', ROUTE_NODES.whatsapp, <WhatsAppWorkspace />),
       routed('/marketing', ROUTE_NODES.marketing, <MarketingPage />),
+      routed('/finance', ROUTE_NODES.finance, <FinanceWorkspace />),
+      routed('/finance/:tab', ROUTE_NODES.finance, <FinanceWorkspace />),
       routed('/settings/tender-websites', ROUTE_NODES.tenderWebsites, <TenderWebsitesSettingsPage />),
       routed('/settings/document-verifications', ROUTE_NODES.verifications, <DocumentVerificationsSettingsPage />),
       routed('/settings/competitors', ROUTE_NODES.competitors, <CompetitorsSettingsPage />),

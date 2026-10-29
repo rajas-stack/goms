@@ -30,13 +30,10 @@ export function Avatar({
   person,
   size = 'md',
   className,
-  cutout = false,
 }: {
   person: AvatarPerson
   size?: AvatarSize
   className?: string
-  /** Show a photo as-is (Drive cutouts have no background) with a soft 3D drop shadow, instead of a cropped circle. */
-  cutout?: boolean
 }): ReactElement {
   // A broken/expired photo URL falls back to initials instead of a broken-image glyph.
   const [photoFailed, setPhotoFailed] = useState(false)
@@ -69,21 +66,21 @@ export function Avatar({
     )
   }
 
-  // Photo variant
+  // Photo variant: a 3D round frame — the photo fills the circle, edges darken into a vignette, a top highlight and soft shadow lift it.
   if (photoUrl && !photoFailed) {
     return (
-      <img
-        ref={drivePhoto.ref}
-        src={photoUrl}
-        alt={person.name}
-        loading="lazy"
-        decoding="async"
-        referrerPolicy="no-referrer"
-        onError={() => setPhotoFailed(true)}
-        className={cutout
-          ? cn(baseClasses, 'rounded-none object-contain [filter:drop-shadow(0_6px_6px_rgb(15_23_42/0.28))_drop-shadow(0_1px_1px_rgb(15_23_42/0.2))]')
-          : cn(baseClasses, 'bg-ink-900/10 object-cover ring-1 ring-line')}
-      />
+      <span ref={drivePhoto.ref} className={cn(baseClasses, 'relative overflow-hidden bg-ink-900/10 shadow-[0_3px_6px_rgb(15_23_42/0.28),0_1px_2px_rgb(15_23_42/0.22)]')}>
+        <img
+          src={photoUrl}
+          alt={person.name}
+          loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
+          onError={() => setPhotoFailed(true)}
+          className="h-full w-full object-cover object-[center_20%]"
+        />
+        <span aria-hidden className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_50%_38%,transparent_60%,rgb(15_23_42/0.38)_100%)] shadow-[inset_0_1.5px_2px_rgb(255_255_255/0.55),inset_0_-2px_4px_rgb(15_23_42/0.3),inset_0_0_0_1px_rgb(255_255_255/0.35)]" />
+      </span>
     )
   }
 
