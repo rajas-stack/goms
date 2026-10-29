@@ -14,6 +14,7 @@ import { adminImportRouter } from './routers/adminImport.js'
 import { bidsRouter } from './routers/bids.js'
 import { bidCommunicationsRouter } from './routers/bidCommunications.js'
 import { emailCenterRouter } from './routers/emailCenter.js'
+import { calendarRouter } from './routers/calendar.js'
 import { bidMilestonesRouter } from './routers/bidMilestones.js'
 import { protectedValuesRouter } from './routers/protectedValues.js'
 import { bidCorrigendaRouter } from './routers/bidCorrigenda.js'
@@ -44,6 +45,7 @@ export const appRouter = router({
   adminImport: adminImportRouter, bids: bidsRouter, bidMilestones: bidMilestonesRouter,
   bidCommunications: bidCommunicationsRouter,
   emailCenter: emailCenterRouter,
+  calendar: calendarRouter,
   protectedValues: protectedValuesRouter, bidCorrigenda: bidCorrigendaRouter,
   documents: documentsRouter, bidSavedViews: bidSavedViewsRouter, auditLogs: auditLogsRouter,
   bidCustomFields: bidCustomFieldsRouter,

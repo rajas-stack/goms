@@ -4,7 +4,7 @@ import type { FastifyReply } from 'fastify'
 import { TRPCError } from '@trpc/server'
 import { safeReturnTo, webRedirectUrl } from '../auth/oauth/redirect.js'
 import { chosenWebOrigin } from '../auth/oauth/config.js'
-import { GMAIL_SCOPE, openEmailCredentials, requireEmailConfiguration, sealEmailCredentials } from './config.js'
+import { CALENDAR_SCOPE, GMAIL_SCOPE, openEmailCredentials, requireEmailConfiguration, sealEmailCredentials } from './config.js'
 import type { EmailActor } from './access.js'
 import { emailEvent, inTransaction } from './store.js'
 import { pool } from '../db.js'
@@ -62,7 +62,7 @@ export async function beginMailConnection(actor: EmailActor, returnTo: string, s
   await pool.query(`INSERT INTO email_oauth_flows(state_hash,cookie_hash,verifier,nonce,user_uid,email,return_to,web_origin,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now()+interval '10 minutes')`, [digest(state), digest(browserBinding), verifier, nonce, actor.uid, actor.email, safeReturnTo(returnTo), chosenWebOrigin(webOrigin, cfg.origin, cfg.origin)])
   setCookie(cookie(state, browserBinding, cfg.origin.startsWith('https:')))
   const url = new URL('https://accounts.google.com/o/oauth2/v2/auth')
-  url.search = new URLSearchParams({ client_id: cfg.clientId, redirect_uri: cfg.redirectUri, response_type: 'code', scope: `openid email ${GMAIL_SCOPE}`, state, nonce, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', access_type: 'offline', include_granted_scopes: 'true', prompt: 'consent', login_hint: actor.email, hd: 'amnex.com' }).toString()
+  url.search = new URLSearchParams({ client_id: cfg.clientId, redirect_uri: cfg.redirectUri, response_type: 'code', scope: `openid email ${GMAIL_SCOPE} ${CALENDAR_SCOPE}`, state, nonce, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', access_type: 'offline', include_granted_scopes: 'true', prompt: 'consent', login_hint: actor.email, hd: 'amnex.com' }).toString()
   return { url: url.toString() }
 }
 /** No Google token is ever returned to the frontend; state + a host-only HttpOnly cookie bind the callback. */

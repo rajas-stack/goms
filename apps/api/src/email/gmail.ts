@@ -8,7 +8,8 @@ import { inTransaction, type MailboxRow } from './store.js'
 export class GmailFailure extends Error {
   constructor(readonly status: number) { super(status === 404 ? 'This email is unavailable or was deleted in Gmail.' : status === 429 ? 'Gmail is temporarily rate limiting requests. Retry shortly.' : status === 401 || status === 403 ? 'Reconnect Gmail or check the granted Google Workspace permissions.' : 'Gmail is temporarily unavailable. Retry without resending an uncertain message.'); this.name = 'GmailFailure' }
 }
-async function accessToken(mailbox: MailboxRow, force = false): Promise<string> {
+/** A fresh Google access token for a stored mailbox, refreshing (and revoking on failure) as needed. Also used by Calendar. */
+export async function accessToken(mailbox: MailboxRow, force = false): Promise<string> {
   return inTransaction(async db => {
     const row = (await db.query('SELECT * FROM email_mailboxes WHERE id=$1 FOR UPDATE', [mailbox.id])).rows[0] as MailboxRow | undefined
     if (!row || row.status !== 'connected' || !row.credentials || row.credential_revision !== mailbox.credential_revision) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'This mailbox was disconnected or changed. Reconnect and retry.' })

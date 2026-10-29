@@ -1,4 +1,6 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { App as CapacitorApp } from '@capacitor/app'
+import { useQueryClient } from '@tanstack/react-query'
 import { KIND_LABELS, MAKER_LIMITS, type MakerDocument, type MakerDocumentKind } from '@goms/domain'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
@@ -6,7 +8,7 @@ import { Icon } from '@/components/ui/Icon'
 import { useToast } from '@/components/ui/Toast'
 import { cn } from '@/lib/utils'
 import {
-  downloadMakerDocument, editsInPhoneApp, openMakerDocumentInApp, openMakerDocumentInDesktopApp, type DesktopApp, readFileBase64, useCreateMakerDocument, useDeleteMakerDocument, useDuplicateMakerDocument,
+  collectPhoneAppEdits, downloadMakerDocument, editsInPhoneApp, openMakerDocumentInApp, openMakerDocumentInDesktopApp, type DesktopApp, readFileBase64, useCreateMakerDocument, useDeleteMakerDocument, useDuplicateMakerDocument,
   useMakerDocuments, useRenameMakerDocument, useUploadMakerDocument,
 } from './api'
 import { FileList, type FileAction } from './FileList'
@@ -49,6 +51,22 @@ export function DocumentMakerHome() {
   const remove = useDeleteMakerDocument()
   const tree = useNodeFilter()
   const inPhoneApp = editsInPhoneApp()
+  const queryClient = useQueryClient()
+  // Android: coming back from the phone's Word / Excel / PowerPoint uploads what it saved as a new version.
+  useEffect(() => {
+    if (!inPhoneApp) return
+    const listener = CapacitorApp.addListener('appStateChange', ({ isActive }) => {
+      if (!isActive) return
+      void collectPhoneAppEdits().then(({ saved, errors }) => {
+        if (saved.length) {
+          void queryClient.invalidateQueries({ queryKey: ['makerDocuments'] })
+          toast(saved.length === 1 ? `Saved your changes to "${saved[0].title}" as a new version.` : `Saved changes to ${saved.length} files as new versions.`)
+        }
+        if (errors.length) toast(`Could not save changes from the phone app. ${errors.join(' ')}`, undefined, 'error')
+      })
+    })
+    return () => { void listener.then((handle) => handle.remove()) }
+  }, [inPhoneApp, queryClient, toast])
   const canFile = (action: FileAction) => tree(DOCUMENT_MAKER_NODE, TREE_ACTION[action]) && !(inPhoneApp && (action === 'office' || action === 'libreOffice'))
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<Sort>('edited-desc')

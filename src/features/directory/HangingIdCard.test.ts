@@ -33,10 +33,10 @@ describe('stepRing', () => {
 
 describe('swing limits', () => {
   it('bounces off the rail instead of swinging past it', () => {
-    let t = 1.4, w = 8 // flung hard toward the rail
+    let t = 0.6, w = 8 // flung hard toward the rail
     let maxT = 0, bounced = false
     for (let i = 0; i < 30; i++) { [t, w] = stepSwing(t, w, 1 / 60, 'free'); maxT = Math.max(maxT, t); if (w < 0) bounced = true }
-    expect(maxT).toBeLessThanOrEqual(85 * Math.PI / 180 + 1e-9)
+    expect(maxT).toBeLessThanOrEqual(42.5 * Math.PI / 180 + 1e-9)
     expect(bounced).toBe(true)
   })
 })

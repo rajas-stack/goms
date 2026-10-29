@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Capacitor } from '@capacitor/core'
-import { MIME_FOR_FILE_TYPE, officeAppLinks, type MakerDocument, type MakerDocumentKind } from '@goms/domain'
+import { Filesystem } from '@capacitor/filesystem'
+import { makerRights, MIME_FOR_FILE_TYPE, officeAppLinks, type MakerDocument, type MakerDocumentKind } from '@goms/domain'
 import { repository } from '@/data/repository'
 import { downloadBinaryFile, openFileInApp } from '@/lib/file-export'
 import type { MakerOwner } from '@/data/in-memory/makerDocuments'
@@ -57,7 +58,34 @@ async function makerFile(doc: MakerDocument): Promise<{ name: string; bytes: Uin
 /** Android: saves the file on the phone and opens the app picker for its type. */
 export async function openMakerDocumentInApp(doc: MakerDocument): Promise<void> {
   const file = await makerFile(doc)
-  await openFileInApp(file.name, file.bytes, file.mimeType)
+  const uri = await openFileInApp(file.name, file.bytes, file.mimeType)
+  if (makerRights(doc).write) handedToPhoneApp.set(doc.id, { uri, name: file.name, mtime: (await Filesystem.stat({ path: uri })).mtime })
+}
+
+/** Files handed to the phone's Word / Excel / PowerPoint with edit rights, and when GOMS last saw each one change.
+ *  shortcut: kept in memory, so edits made after GOMS itself is closed by Android are not picked up; persist this when that matters. */
+const handedToPhoneApp = new Map<string, { uri: string; name: string; mtime: number }>()
+
+/** Android, when GOMS returns to the foreground: uploads each handed-off file the phone app has saved since, as a new
+ *  version (the server checks write permission again). One file failing (access revoked, too large) does not stop the
+ *  others; it is reported once and no longer watched. */
+export async function collectPhoneAppEdits(): Promise<{ saved: MakerDocument[]; errors: string[] }> {
+  const saved: MakerDocument[] = []
+  const errors: string[] = []
+  for (const [id, file] of handedToPhoneApp) {
+    try {
+      const stat = await Filesystem.stat({ path: file.uri }).catch(() => null)
+      if (!stat) { handedToPhoneApp.delete(id); continue }
+      if (stat.mtime <= file.mtime) continue
+      const { data } = await Filesystem.readFile({ path: file.uri })
+      saved.push(await repository.replaceMakerDocument(id, file.name, typeof data === 'string' ? data : await readFileBase64(new File([data], file.name))))
+      handedToPhoneApp.set(id, { ...file, mtime: stat.mtime })
+    } catch (error) {
+      handedToPhoneApp.delete(id)
+      errors.push(`${file.name}: ${error instanceof Error ? error.message : 'could not be saved'}`)
+    }
+  }
+  return { saved, errors }
 }
 
 /** Starts a browser download of the current version (Android: save + share sheet, since WebView ignores <a download>). */

@@ -56,9 +56,12 @@ async function writeBinary(fileName: string, bytes: Uint8Array): Promise<string>
   return uri
 }
 
-/** Android only: saves the file on the phone, then lets the user pick an installed app that edits that type (Word, Excel, PowerPoint…). */
-export async function openFileInApp(fileName: string, bytes: Uint8Array, mimeType: string): Promise<void> {
-  await FileOpener.open({ path: await writeBinary(fileName, bytes), mimeType })
+/** Android only: saves the file on the phone, then lets the user pick an installed app that edits that type (Word, Excel, PowerPoint…).
+ *  Returns the saved file's URI, so the caller can pick up the app's edits later. */
+export async function openFileInApp(fileName: string, bytes: Uint8Array, mimeType: string): Promise<string> {
+  const uri = await writeBinary(fileName, bytes)
+  await FileOpener.open({ path: uri, mimeType })
+  return uri
 }
 
 /** Binary workbook export, including the native share flow used by text exports. */

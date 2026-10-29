@@ -28,6 +28,29 @@ import { TransferBookOfBusinessDialog } from '@/features/sales/TransferBookOfBus
 import { TransferSalesPersonDialog } from '@/features/sales/TransferSalesPersonDialog'
 import type { SalesPerson } from '@/lib/types'
 import { claimantFromProfile } from '@/features/finance/reimbursements/claimantProfile'
+import { Tabs } from '@/components/ui/Tabs'
+import { useAllTimelineEvents } from '@/lib/api'
+import { attendeeSalesPersonId } from '@/lib/attendees'
+
+type ProfileTab = 'details' | 'communication' | 'engagements' | 'posting' | 'business' | 'attachments'
+type DetailsSub = 'contact' | 'role' | 'status' | 'reimbursement'
+const DETAILS_SUBS: { value: DetailsSub; label: string }[] = [
+  { value: 'contact', label: 'Contact' }, { value: 'role', label: 'Role' }, { value: 'status', label: 'Status' }, { value: 'reimbursement', label: 'Reimbursement' },
+]
+
+/** Small segmented control for a tab's sub-sections. */
+function SubTabs<T extends string>({ items, value, onChange }: { items: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+  return (
+    <div role="tablist" className="mb-3 inline-flex flex-wrap gap-1 rounded-lg bg-panel p-1">
+      {items.map((i) => (
+        <button key={i.value} type="button" role="tab" aria-selected={i.value === value} onClick={() => onChange(i.value)}
+          className={cn('rounded-md px-2.5 py-1 text-[12px] font-medium transition-colors', i.value === value ? 'bg-paper text-ink-900 shadow-sm' : 'text-muted hover:text-ink')}>
+          {i.label}
+        </button>
+      ))}
+    </div>
+  )
+}
 
 /** Statuses where a person typically stops actively working their book of
  *  business — marking one of these prompts the bulk hand-off dialog rather
@@ -84,6 +107,9 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   const [bobTransferOpen, setBobTransferOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const { unlocked } = useSalesEditLock()
+  const [tab, setTab] = useState<ProfileTab>('details')
+  const [sub, setSub] = useState<DetailsSub>('contact')
+  const { data: allEvents = [] } = useAllTimelineEvents()
 
   if (!person) {
     return <p className="p-4 text-sm text-muted">This salesperson no longer exists.</p>
@@ -111,6 +137,8 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   const empById = new Map(employees.map((e) => [e.id, e]))
   const oppById = new Map(opportunities.map((o) => [o.id, o]))
   const claimant = claimantFromProfile(person, current?.office)
+  // Meetings this person attended, newest first.
+  const engagements = allEvents.filter((e) => e.attendees?.some((a) => attendeeSalesPersonId(a) === person.id)).sort((a, b) => b.date.localeCompare(a.date))
 
   // Book of Business, split by entity kind (spec: departments / contacts /
   // opportunities as separate groups) rather than one flat list.
@@ -217,29 +245,35 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
         </div>
       </div>
 
-      <div className="px-4 py-3">
-        <h3 className="mb-2 text-[13px] font-semibold text-ink-900">Details</h3>
+      <div className="px-4">
+        <Tabs value={tab} onChange={setTab} underlineId="sales-person-tab" tabs={[
+          { value: 'details', label: 'Details' }, { value: 'communication', label: 'Communication' },
+          { value: 'engagements', label: `Engagements · ${engagements.length}` }, { value: 'posting', label: 'Posting' },
+          { value: 'business', label: `Book of Business · ${owned.length}` }, { value: 'attachments', label: 'Attachments' },
+        ]} />
+      </div>
+
+      {tab === 'details' && <div className="px-4 py-3">
+        <SubTabs items={DETAILS_SUBS} value={sub} onChange={setSub} />
         <div className="space-y-3.5">
-          <div>
-            <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Contact</p>
+          {sub === 'contact' && <div>
             <dl>
               <Row label="Official email" value={person.officialEmail || '—'} icon="Mail" />
               <Row label="Mobile" value={person.mobile || '—'} icon="Phone" />
+              {person.notes && <Row label="Notes" value={person.notes} icon="StickyNote" />}
             </dl>
-          </div>
+          </div>}
 
-          <div>
-            <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Role</p>
+          {sub === 'role' && <div>
             <dl>
               <Row label="Designation" value={current?.designation || '—'} icon="IdCard" />
               <Row label="Tier" value={current ? tierLabel(current.tierKey) : '—'} icon="Layers" />
               <Row label="Reporting manager" value={managerValue} icon="Network" />
               <Row label="GM / Higher Reporting Manager" value={gmValue} icon="Network" />
             </dl>
-          </div>
+          </div>}
 
-          <div>
-            <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Status</p>
+          {sub === 'status' && <div>
             <div className="flex items-start gap-2.5 py-1.5">
               <Icon name="CircleDot" size={14} className="mt-0.5 shrink-0 text-muted" />
               <div className="min-w-0 flex-1">
@@ -251,26 +285,52 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
               <Row label="Join date" value={person.joinedOn || '—'} icon="Calendar" />
               <Row label="Leave date" value={person.leftOn || '—'} icon="Calendar" />
             </dl>
-          </div>
+          </div>}
 
-          <div>
-            <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Reimbursement</p>
+          {sub === 'reimbursement' && <div>
             <dl>
               <Row label="Employee code" value={claimant.employeeCode || '—'} icon="Hash" />
               <Row label="Base location" value={claimant.baseLocation || '—'} icon="MapPin" />
               <Row label="BU" value={claimant.businessUnit || '—'} icon="Building2" />
               <Row label="Network / WBS / Project" value={claimant.project || '—'} icon="Briefcase" />
             </dl>
-          </div>
-
-          {person.notes && (
-            <div>
-              <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Notes</p>
-              <dl><Row label="Notes" value={person.notes} icon="StickyNote" /></dl>
-            </div>
-          )}
+          </div>}
         </div>
-      </div>
+      </div>}
+
+      {tab === 'communication' && <div className="px-4 py-3">
+        <div className="flex flex-wrap gap-2">
+          {person.officialEmail && <a href={`mailto:${person.officialEmail}`}><Button size="sm"><Icon name="Mail" size={14} /> Email</Button></a>}
+          {person.mobile && <a href={`tel:${person.mobile}`}><Button size="sm"><Icon name="Phone" size={14} /> Call</Button></a>}
+          {person.mobile && <a href={`https://wa.me/${person.mobile.replace(/\D/g, '')}`} target="_blank" rel="noreferrer"><Button size="sm"><Icon name="MessageCircle" size={14} /> WhatsApp</Button></a>}
+        </div>
+        <dl className="mt-3">
+          <Row label="Official email" value={person.officialEmail || '—'} icon="Mail" />
+          <Row label="Mobile" value={person.mobile || '—'} icon="Phone" />
+          {person.altMobile && <Row label="Alternate mobile" value={person.altMobile} icon="Phone" />}
+        </dl>
+      </div>}
+
+      {tab === 'engagements' && <div className="px-4 py-3">
+        {engagements.length === 0 ? <p className="text-sm text-muted">No meetings with this person as an attendee yet.</p> : (
+          <ul className="flex flex-col gap-1.5">
+            {engagements.map((e) => {
+              const contact = empById.get(e.employeeId)
+              return (
+                <li key={e.id}>
+                  <button type="button" onClick={() => ws.select('employee', e.employeeId)} className="flex w-full items-center justify-between gap-3 rounded-lg border border-line px-3 py-2 text-left hover:border-ink-900/20 hover:bg-panel/40">
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13px] font-medium text-ink-900">{e.title}</span>
+                      <span className="block truncate text-[12px] text-muted">{contact?.name ?? 'Contact'}{contact?.designation ? ` · ${contact.designation}` : ''}</span>
+                    </span>
+                    <span className="shrink-0 text-[12px] tabular-nums text-muted">{e.date}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </div>}
 
       {/* The blob store (blobs.ts) exists, but no upload flow is wired to
           SalesPerson yet — VisitingCard.tsx is the closest analog and is
@@ -278,8 +338,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
           without adding SalesPerson fields/repository methods, which is out
           of scope for this pass. Buttons stay visible (not hidden) so the
           intended shape reads as "coming soon", not broken. */}
-      <div className="border-t border-line px-4 py-3">
-        <h3 className="mb-1 text-[13px] font-semibold text-ink-900">Attachments</h3>
+      {tab === 'attachments' && <div className="px-4 py-3">
         <p className="mb-2 text-[12px] text-muted">No attachments uploaded.</p>
         <div className="flex flex-col gap-1.5">
           <Button size="sm" disabled className="justify-between">
@@ -295,9 +354,9 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
             <Badge tone="gray">Coming Soon</Badge>
           </Button>
         </div>
-      </div>
+      </div>}
 
-      <div className="border-t border-line px-4 py-3">
+      {tab === 'posting' && <div className="px-4 py-3">
         <div className="mb-2 flex items-center justify-between gap-2">
           <h3 className="text-[13px] font-semibold text-ink-900">Posting</h3>
           {editable && (
@@ -351,10 +410,9 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
             </ul>
           </div>
         )}
-      </div>
+      </div>}
 
-      <div className="border-t border-line px-4 py-3">
-        <h3 className="mb-2 text-[13px] font-semibold text-ink-900">Book of Business</h3>
+      {tab === 'business' && <div className="px-4 py-3">
         <div className="flex flex-col gap-3">
           <div className="grid grid-cols-3 gap-2">
             <BobCountCard label="Departments" count={byKind.orgNode.length} icon="Building2" />
@@ -392,7 +450,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
             </>
           )}
         </div>
-      </div>
+      </div>}
 
       <SalesPersonFormDialog open={editOpen} personId={person.id} onClose={() => setEditOpen(false)} />
       <EditPostingDatesDialog open={datesOpen} person={person} posting={editable ?? null} onClose={() => setDatesOpen(false)} />

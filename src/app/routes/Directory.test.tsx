@@ -125,7 +125,7 @@ describe('Directory — every person in one list', () => {
 
     await user.click(screen.getByRole('button', { name: 'Expand details to full screen' }))
     expect(screen.getByLabelText('Full name')).toHaveValue('Bina Rao')
-    await user.click(screen.getByRole('button', { name: 'Collapse details' }))
+    await user.click(screen.getByRole('button', { name: 'Back to Directory' }))
     expect(screen.getByLabelText('Full name')).toHaveValue('Bina Rao')
 
     await user.click(screen.getByRole('button', { name: 'Save' }))

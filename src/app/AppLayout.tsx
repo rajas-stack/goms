@@ -1,4 +1,5 @@
 import { GoogleAccountBinder } from '@/features/integrations/GoogleAccountBinder'
+import { WhatsAppLinkPrompt } from '@/features/whatsapp/LinkOnSignIn'
 import { EyeComfortOverlay } from '@/components/theme/EyeComfort'
 import { createContext, lazy, Suspense, useContext, useEffect, useRef, useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
@@ -65,6 +66,7 @@ export function AppLayout() {
     && !location.pathname.startsWith('/whatsapp')
     && !location.pathname.startsWith('/marketing')
     && !location.pathname.startsWith('/finance')
+    && !location.pathname.startsWith('/calendar')
     && !location.pathname.startsWith('/insights')
     && !location.pathname.startsWith('/analytics')
   // `MobileDetailsSheet` only renders as an overlay below `lg` (it's
@@ -190,6 +192,7 @@ export function AppLayout() {
       <ToastProvider>
         <EyeComfortOverlay />
         <GoogleAccountBinder />
+        <WhatsAppLinkPrompt />
         <Ctx.Provider value={{
           openSearch: () => setSearchOpen(true),
           // Root-caused 2026-09-03: ImportDialog (below) is a separate, older,

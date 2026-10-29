@@ -2,6 +2,8 @@ import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:cr
 import { TRPCError } from '@trpc/server'
 
 export const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.modify'
+/** Granted with the same GOMS sign-in so the Calendar page reads and adds events with the user's own login. */
+export const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar.events'
 export interface EmailCredentials { accessToken: string; refreshToken: string; expiresAt: number }
 export interface SealedEmailCredentials { version: 1; iv: string; tag: string; data: string }
 export function emailConfiguration(env = process.env) {

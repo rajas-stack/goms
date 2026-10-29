@@ -28,6 +28,7 @@ export function AccountMappingRail() {
   const whatsappActive = location.pathname.startsWith('/whatsapp')
   const marketingActive = location.pathname.startsWith('/marketing')
   const financeActive = location.pathname.startsWith('/finance')
+  const calendarActive = location.pathname.startsWith('/calendar')
   // Each entry needs the server policy (A) AND the permission tree. Roles & Access lives in Settings → System settings.
   const tree = useNodeFilter()
   const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping) && tree('accountMapping')
@@ -41,6 +42,7 @@ export function AccountMappingRail() {
   const canWhatsApp = tree(ROUTE_NODES.whatsapp)
   const canMarketing = tree(ROUTE_NODES.marketing)
   const canFinance = tree(ROUTE_NODES.finance)
+  const canCalendar = tree(ROUTE_NODES.calendar)
   const canInsights = useCanReadAny(NAV_MODULES.insights) && tree('accountMapping.insights')
 
   return (
@@ -144,6 +146,18 @@ export function AccountMappingRail() {
       >
         <Icon name="Wallet" size={18} />
         <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Finance</span>
+      </button>}
+      {canCalendar && <button
+        onClick={() => navigate('/calendar')}
+        title="Calendar"
+        aria-current={calendarActive ? 'page' : undefined}
+        className={cn(
+          'flex min-h-[44px] w-12 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 transition-colors lg:w-14',
+          calendarActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink-600/70 hover:bg-white hover:text-ink-900',
+        )}
+      >
+        <Icon name="CalendarDays" size={18} />
+        <span className="text-center text-[9px] font-medium leading-tight tracking-tight">Calendar</span>
       </button>}
       {/* `mt-auto` pins Teams to the bottom of the rail, apart from the work modules above. */}
       {(canTeams || canDirectory) && <button

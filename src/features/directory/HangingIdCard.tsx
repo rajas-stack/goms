@@ -9,12 +9,12 @@ const TILT = 8 // degrees of 3D lean toward the cursor
 /** Pendulum tuning: g/L sets the period (~2.8 s, slow enough to read the card), damping is per second. */
 const G_OVER_L = 5
 const DAMPING = { free: 0.06, hover: 1.2 }
-const DROP_ANGLE = 35 // degrees it is let go from on load
+const DROP_ANGLE = 17.5 // degrees it is let go from on load
 /** The card hangs from the strap's ring and chases the strap's angle on its own springy joint (a loose double pendulum). */
 const RING = { k: 20, c: 1.4 }
 const ZERO = { k: 70, c: 16.7 } // critically damped return to rest after a click
 /** It can't swing past the rail: at this angle it hits and bounces back, losing some speed. */
-const LIMIT = 85 * (Math.PI / 180)
+const LIMIT = 42.5 * (Math.PI / 180)
 const RESTITUTION = 0.45
 /** Pulling the card away from the clip stretches it off the strap, up to this many pixels. */
 const MAX_STRETCH = 140
@@ -59,7 +59,7 @@ function QrPattern({ seed }: { seed: string }) {
 
 function Barcode({ seed }: { seed: string }) {
   const bars = Array.from({ length: 42 }, (_, i) => 1 + ((seed.charCodeAt(i % Math.max(seed.length, 1)) || 3) + i * 7) % 3)
-  return <div className="flex h-7 items-stretch gap-[1.5px]" aria-hidden>{bars.map((w, i) => <span key={i} className="bg-white/85" style={{ width: w }} />)}</div>
+  return <div className="flex h-7 items-stretch gap-[1.5px]" aria-hidden>{bars.map((w, i) => <span key={i} className="bg-[#fff]/85" style={{ width: w }} />)}</div>
 }
 
 /** The signed-in user's badge details, from their Sales profile when they have one. */
@@ -185,7 +185,7 @@ export function HangingIdCard({ person }: { person: IdCardPerson }) {
         <motion.div style={{ rotateX, rotateY, transformOrigin: 'top center', transformStyle: 'preserve-3d' }} className="flex flex-col items-center will-change-transform">
           {/* Lanyard strap with printed text, then the metal clip. */}
           <div className="flex h-36 w-7 items-center justify-center rounded-t-sm bg-gradient-to-r from-[#0b0f14] via-[#1c232c] to-[#0b0f14] shadow-md" aria-hidden>
-            <span className="rotate-90 whitespace-nowrap font-mono text-[8px] tracking-[0.3em] text-white/50">AMNEX · GOMS · AMNEX</span>
+            <span className="rotate-90 whitespace-nowrap font-mono text-[8px] tracking-[0.3em] text-[#fff]/50">AMNEX · GOMS · AMNEX</span>
           </div>
           <div className="h-5 w-4 rounded-b-sm bg-gradient-to-b from-zinc-300 to-zinc-500 shadow" aria-hidden />
           <motion.div className="flex origin-top flex-col items-center will-change-transform" style={{ rotate: ringLag, y: stretch }}>
@@ -196,37 +196,35 @@ export function HangingIdCard({ person }: { person: IdCardPerson }) {
             onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}
             onDoubleClick={() => setFlipped((f) => !f)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFlipped((f) => !f) } }}
             animate={{ rotateY: flipped ? 180 : 0 }} transition={{ type: 'spring', damping: 18, stiffness: 140 }}
-            className="relative -mt-1 h-[22rem] w-60 cursor-grab rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-goms-sky active:cursor-grabbing"
+            className="relative -mt-1 h-[25rem] w-60 cursor-grab rounded-2xl text-left outline-none focus-visible:ring-2 focus-visible:ring-goms-sky active:cursor-grabbing"
             style={{ touchAction: 'none' }}>
-            <div className="absolute inset-0 flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#11161d] p-4 text-white shadow-[0_40px_70px_-25px_rgba(0,0,0,0.6)] [backface-visibility:hidden]">
-              <div className="mx-auto -mt-1 mb-3 h-2 w-10 rounded-full bg-black/60 ring-1 ring-white/10" aria-hidden />
+            <div className="absolute inset-0 flex flex-col overflow-hidden rounded-2xl border border-[#fff]/10 bg-[#11161d] p-4 text-[#fff] shadow-[0_40px_70px_-25px_rgba(0,0,0,0.6)] [backface-visibility:hidden]">
+              <div className="mx-auto -mt-1 mb-3 h-2 w-10 rounded-full bg-black/60 ring-1 ring-[#fff]/10" aria-hidden />
               <div className="flex items-center justify-between">
                 <span className="text-base font-bold tracking-tight">amnex<span className="text-crimson">.</span></span>
-                <span className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[8px] tracking-widest text-white/70">EMPLOYEE ID</span>
+                <span className="rounded bg-[#fff]/10 px-1.5 py-0.5 font-mono text-[8px] tracking-widest text-[#fff]/70">EMPLOYEE ID</span>
               </div>
-              <div className="mt-4 flex items-center gap-3">
-                <Avatar person={{ name, photoUrl: person.photoUrl }} size="lg" className="h-14 w-14 text-lg ring-2 ring-white/15" />
-                <div className="min-w-0">
-                  <p className="truncate text-[15px] font-semibold leading-tight">{name}</p>
-                  <p className="truncate text-[11px] text-white/60">{person.designation || 'Amnex employee'}</p>
-                </div>
+              <div className="mt-3 flex flex-col items-center text-center">
+                <Avatar person={{ name, photoUrl: person.photoUrl }} size="lg" className="h-28 w-28 text-3xl ring-[3px] ring-[#fff]/20" />
+                <p className="mt-2.5 max-w-full truncate text-[16px] font-semibold leading-tight">{name}</p>
+                <p className="max-w-full truncate text-[11px] text-[#fff]/60">{person.designation || 'Amnex employee'}</p>
               </div>
-              <dl className="mt-4 space-y-1.5 border-t border-white/10 pt-3 font-mono text-[10px]">
+              <dl className="mt-3 space-y-1.5 border-t border-[#fff]/10 pt-3 font-mono text-[10px]">
                 {[['EMP', code], ['BASE', person.base || '—'], ['MAIL', person.email || '—']].map(([k, v]) => (
-                  <div key={k} className="flex justify-between gap-3"><dt className="text-white/40">{k}</dt><dd className="truncate text-white/85">{v}</dd></div>
+                  <div key={k} className="flex justify-between gap-3"><dt className="text-[#fff]/40">{k}</dt><dd className="truncate text-[#fff]/85">{v}</dd></div>
                 ))}
               </dl>
               <div className="mt-auto flex flex-col items-center gap-1">
                 <Barcode seed={code + name} />
-                <span className="font-mono text-[8px] tracking-[0.25em] text-white/40">GOMS-{code}</span>
+                <span className="font-mono text-[8px] tracking-[0.25em] text-[#fff]/40">GOMS-{code}</span>
               </div>
               {/* Glare slides with the cursor; a transform, so it never repaints the card. */}
               <motion.div aria-hidden className="pointer-events-none absolute inset-y-0 -left-1/2 w-[200%] bg-[linear-gradient(115deg,transparent_40%,rgba(255,255,255,0.12)_50%,transparent_60%)] will-change-transform" style={{ x: glareX }} />
             </div>
-            <div className="absolute inset-0 flex flex-col items-center rounded-2xl border border-white/10 bg-[#11161d] p-5 text-white [backface-visibility:hidden] [transform:rotateY(180deg)]">
-              <span className="font-mono text-[9px] tracking-[0.3em] text-white/50">SCAN FOR ACCESS</span>
-              <div className="mt-4 h-36 w-36 rounded-lg bg-white p-2"><QrPattern seed={code + name} /></div>
-              <p className="mt-4 text-center text-[11px] leading-snug text-white/60">If found, please return to Amnex Infotechnologies front desk.</p>
+            <div className="absolute inset-0 flex flex-col items-center rounded-2xl border border-[#fff]/10 bg-[#11161d] p-5 text-[#fff] [backface-visibility:hidden] [transform:rotateY(180deg)]">
+              <span className="font-mono text-[9px] tracking-[0.3em] text-[#fff]/50">SCAN FOR ACCESS</span>
+              <div className="mt-4 h-36 w-36 rounded-lg bg-[#fff] p-2"><QrPattern seed={code + name} /></div>
+              <p className="mt-4 text-center text-[11px] leading-snug text-[#fff]/60">If found, please return to Amnex Infotechnologies front desk.</p>
               <div className="mt-auto h-1.5 w-full rounded-full bg-gradient-to-r from-goms-navy via-crimson to-goms-navy" aria-hidden />
             </div>
           </motion.button>

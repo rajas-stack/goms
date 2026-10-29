@@ -16,6 +16,9 @@ export const adminPolicy: Record<string, PolicyEntry> = {
   'health.check': { requirements: [], kind: 'public' },
   /** The caller's own identity: authenticates itself (see routers/auth.ts). */
   'auth.me': { requirements: [], kind: 'self' },
+  /** The caller's own Google Calendar, through their own GOMS sign-in (routers/calendar.ts). */
+  'calendar.events': { requirements: [], kind: 'self' },
+  'calendar.create': { requirements: [], kind: 'self' },
   'googleIntegrations.get': { requirements: [], kind: 'self' },
   'googleIntegrations.save': { requirements: [], kind: 'self' },
   'profileImages.status': { requirements: [read('admin.access')] },
