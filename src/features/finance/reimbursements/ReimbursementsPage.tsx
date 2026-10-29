@@ -11,13 +11,15 @@ import { useClaims } from './store'
 import { useGoogleAccount } from '@/features/integrations/session'
 import { useAuthUser } from '@/lib/auth/useAuthUser'
 import { connectFinanceDrive, financeDrive, isDriveConnected, renameAttachment } from './drive'
-import { downloadBytes, exportClaimsXlsx, mergeClaimPdf } from './exportFiles'
+import { downloadBytes, mergeClaimPdf } from './exportFiles'
 import { ExpenseForm, type ExpenseValues } from './ExpenseForm'
 import { ExpenseTable } from './ExpenseTable'
 import { AttachmentPane } from './AttachmentPane'
 import { ClaimTotalCard, StatusTracker } from './ClaimSummary'
 import { MasterView } from './MasterView'
-import { ConveyanceExportDialog } from './ConveyanceExportDialog'
+import { ConveyanceExportDialog, downloadConveyance, useProfileClaimant } from './ConveyanceExportDialog'
+import { isClaimantComplete } from './claimantProfile'
+import { claimProjects } from './conveyanceForm'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { trashFile } from '@/features/dms/googleDrive'
 import { DriveDeleteDialog } from './DriveDeleteDialog'
@@ -51,6 +53,16 @@ export function ReimbursementsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [busy, setBusy] = useState('')
   const [conveyance, setConveyance] = useState(false)
+  const [conveyanceBusy, setConveyanceBusy] = useState(false)
+  const profile = useProfileClaimant()
+  /** A complete Directory profile downloads straight away; otherwise ask for what's missing. */
+  async function exportConveyance() {
+    if (!profile || !isClaimantComplete(profile)) { setConveyance(true); return }
+    setConveyanceBusy(true)
+    try { await downloadConveyance(claim, { ...profile, project: claimProjects(claim) || profile.project }) }
+    catch (e) { toast(e instanceof Error ? e.message : 'Could not build the conveyance report.', undefined, 'error') }
+    finally { setConveyanceBusy(false) }
+  }
   useDriveSessionTick()
   const drive = financeDrive()
   const connected = isDriveConnected(drive)
@@ -177,8 +189,7 @@ export function ReimbursementsPage() {
 
       {view === 'master' ? <MasterView claims={Object.values(claims)} onOpen={(m, id) => { go({ month: m }); setSelectedId(id) }} /> : <>
         <div className="flex flex-wrap items-center gap-2">
-          <Button disabled={!claim.expenses.length} onClick={() => exportClaimsXlsx([claim], `Reimbursement-${month}.xlsx`)}><Icon name="FileSpreadsheet" size={15} />Export Excel</Button>
-          <Button disabled={!claim.expenses.length} onClick={() => setConveyance(true)}><Icon name="FileText" size={15} />Conveyance form</Button>
+          <Button disabled={!claim.expenses.length || conveyanceBusy} onClick={() => void exportConveyance()}><Icon name="FileSpreadsheet" size={15} />Export Conveyance report</Button>
           <Button disabled={!billCount || !!busy} onClick={() => void mergePdf()}><Icon name="Layers" size={15} />{busy || `Merge ${billCount} bills to one PDF`}</Button>
           <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-line bg-white px-3 py-1 text-[12px]">
             <span className={cn('h-2 w-2 rounded-full', drive && (connected || linked) ? 'bg-emerald' : drive ? 'bg-amber' : 'bg-crimson')} />
@@ -206,7 +217,7 @@ export function ReimbursementsPage() {
         {deleting?.expense && <p className="mt-2 text-sm text-ink-800">{deleting.expense.particulars} · {formatINR(deleting.expense.amount)}</p>}
         {deleting?.expense.attachments.some((a) => a.driveId) && <p className="mt-1 text-[13px] text-muted">Its bills in Google Drive are asked about next, separately.</p>}
       </ConfirmDeleteDialog>
-      <ConveyanceExportDialog open={conveyance} claim={claim} onClose={() => setConveyance(false)} />
+      <ConveyanceExportDialog open={conveyance} claim={claim} projects={projects} onClose={() => setConveyance(false)} />
       <DriveDeleteDialog open={deleting?.stage === 'drive'} files={deleting?.expense.attachments.filter((a) => a.driveId).map((a) => a.code) ?? []}
         onDelete={deleteDriveFiles} onKeep={() => { if (deleting) toast(`Deleted row ${deleting.code}; its bills stay in Drive`); setDeleting(null) }} />
     </div>

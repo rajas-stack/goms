@@ -6,7 +6,7 @@ const self: PolicyEntry = { requirements: [], kind: 'self' }
 
 export const documentMakerPolicy: Record<string, PolicyEntry> = Object.fromEntries([
   'makerDocuments.list', 'makerDocuments.create', 'makerDocuments.upload', 'makerDocuments.replace', 'makerDocuments.rename',
-  'makerDocuments.duplicate', 'makerDocuments.delete', 'makerDocuments.editorConfig', 'makerDocuments.downloadUrl',
+  'makerDocuments.duplicate', 'makerDocuments.delete', 'makerDocuments.downloadUrl',
   'makerDocuments.desktopSession', 'makerDocuments.directory', 'makerDocuments.shares', 'makerDocuments.share', 'makerDocuments.unshare',
   'makerDocuments.versions', 'makerDocuments.versionDownloadUrl', 'makerDocuments.driveStatus', 'makerDocuments.driveConnect',
   'makerDocuments.driveDisconnect',

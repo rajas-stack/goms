@@ -155,7 +155,7 @@ export async function deleteOwned(id: string, ownerEmail: string): Promise<boole
   } catch (error) { await client.query('ROLLBACK'); throw error } finally { client.release() }
 }
 
-/** Stores a new version (edited in ONLYOFFICE, or re-uploaded) and issues the next document key. */
+/** Stores a new version (saved from Office, or re-uploaded) and issues the next document key. */
 export async function saveVersion(id: string, bytes: Uint8Array, changedBy: string | null, reason: string): Promise<MakerDocument | null> {
   const client = await pool.connect()
   try {

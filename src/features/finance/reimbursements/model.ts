@@ -11,10 +11,13 @@ export const CLAIM_STATUSES = [
 ] as const
 export type ClaimStatus = (typeof CLAIM_STATUSES)[number]['value']
 
-export const MODES = ['Cab', 'Auto', 'Rickshaw', 'Bus', 'Train', 'Metro', 'Flight', 'Own vehicle', 'NA'] as const
+export const MODES = ['Cab', 'Auto', 'Rickshaw', 'Bus', 'Train', 'Metro', 'Flight', 'Own vehicle', 'Own two-wheeler', 'NA'] as const
 export type BillState = 'Yes' | 'No'
-/** Company rate for travel in your own vehicle, rupees per km. */
+/** Company rates for travel in your own four- and two-wheeler, rupees per km. */
 export const OWN_VEHICLE_RATE = 8
+export const TWO_WHEELER_RATE = 3
+/** Modes paid per km: the amount is kms × rate, never typed. */
+export const PER_KM_RATE: Readonly<Record<string, number>> = { 'Own vehicle': OWN_VEHICLE_RATE, 'Own two-wheeler': TWO_WHEELER_RATE }
 
 /** A point on a journey; lat/lng and placeId come from Google Maps when the place was picked there. */
 export interface Place { name: string; address?: string; lat?: number; lng?: number; placeId?: string }
@@ -122,7 +125,7 @@ export const billState = (e: Expense): BillState => (e.attachments.length ? 'Yes
 /** "A to B to C" for a route. */
 export const routeText = (route: readonly Place[]) => route.map((p) => p.name.trim()).filter(Boolean).join(' to ')
 
-export const ownVehicleAmount = (kms: number) => Math.round(kms * OWN_VEHICLE_RATE * 100) / 100
+export const ownVehicleAmount = (kms: number, rate = OWN_VEHICLE_RATE) => Math.round(kms * rate * 100) / 100
 
 /** Rupees per km, as the claim sheet shows it; null when the row has no distance. */
 export const rateOf = (e: Expense): number | null => (e.kms && e.kms > 0 ? Math.round((e.amount / e.kms) * 100) / 100 : null)

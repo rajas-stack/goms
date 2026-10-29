@@ -10,7 +10,7 @@ Install dependencies with `npm ci`; the root postinstall builds the domain packa
 
 ## Docker
 
-Follow [DOCKER.md](../DOCKER.md) for secret generation, public configuration, startup, optional reference-data seeding, ONLYOFFICE, logs and backups. The default web address is `http://localhost:8088`. Do not copy private credentials into documentation or images.
+Follow [DOCKER.md](../DOCKER.md) for secret generation, public configuration, startup, optional reference-data seeding, Document maker, logs and backups. The default web address is `http://localhost:8088`. Do not copy private credentials into documentation or images.
 
 ## Cloud and CI
 

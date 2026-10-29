@@ -63,7 +63,6 @@ export const RBAC_NODE_MANIFEST: readonly RbacNodeDef[] = [
   {"id":"opportunity.master.views","parentId":"opportunity.master","label":"Views","kind":"section","actions":["view","create","edit","delete"],"dynamic":{"source":"savedViews","sheet":"master"},"order":0},
   {"id":"opportunity.dashboard","parentId":"opportunity","label":"Dashboard","kind":"tab","actions":["view","create","edit","delete","download","manage"],"order":5},
   {"id":"documentMaker","parentId":null,"label":"Document maker","kind":"module","actions":["view","create","edit","delete","download","manage"],"order":4},
-  {"id":"documentMaker.editor","parentId":"documentMaker","label":"Document editor","kind":"page","actions":["view","create","edit","delete","download","manage"],"order":0},
   {"id":"documents","parentId":null,"label":"Documents","kind":"module","actions":["view","create","edit","delete","download","manage"],"order":5},
   {"id":"teams","parentId":null,"label":"Directory","kind":"module","actions":["view","create","edit","delete","download","manage"],"order":6},
   {"id":"teams.sales","parentId":"teams","label":"Sales","kind":"page","actions":["view","create","edit","delete","download","manage"],"order":0},

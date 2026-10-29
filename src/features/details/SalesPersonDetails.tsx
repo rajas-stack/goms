@@ -27,6 +27,7 @@ import { EditPostingDatesDialog } from '@/features/sales/EditPostingDatesDialog'
 import { TransferBookOfBusinessDialog } from '@/features/sales/TransferBookOfBusinessDialog'
 import { TransferSalesPersonDialog } from '@/features/sales/TransferSalesPersonDialog'
 import type { SalesPerson } from '@/lib/types'
+import { claimantFromProfile } from '@/features/finance/reimbursements/claimantProfile'
 
 /** Statuses where a person typically stops actively working their book of
  *  business — marking one of these prompts the bulk hand-off dialog rather
@@ -109,6 +110,7 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
   const deptById = new Map(departments.map((d) => [d.id, d]))
   const empById = new Map(employees.map((e) => [e.id, e]))
   const oppById = new Map(opportunities.map((o) => [o.id, o]))
+  const claimant = claimantFromProfile(person, current?.office)
 
   // Book of Business, split by entity kind (spec: departments / contacts /
   // opportunities as separate groups) rather than one flat list.
@@ -248,6 +250,16 @@ export function SalesPersonDetails({ salesPersonId }: { salesPersonId: string })
             <dl>
               <Row label="Join date" value={person.joinedOn || '—'} icon="Calendar" />
               <Row label="Leave date" value={person.leftOn || '—'} icon="Calendar" />
+            </dl>
+          </div>
+
+          <div>
+            <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-wide text-muted">Reimbursement</p>
+            <dl>
+              <Row label="Employee code" value={claimant.employeeCode || '—'} icon="Hash" />
+              <Row label="Base location" value={claimant.baseLocation || '—'} icon="MapPin" />
+              <Row label="BU" value={claimant.businessUnit || '—'} icon="Building2" />
+              <Row label="Network / WBS / Project" value={claimant.project || '—'} icon="Briefcase" />
             </dl>
           </div>
 

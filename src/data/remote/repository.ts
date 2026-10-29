@@ -48,7 +48,7 @@ import type {
 import type { AddCorrigendumChangesInput, CreateCorrigendumInput, UpdateCorrigendumRegisterInput } from '@/modules/bid-tracker/corrigenda/model'
 import type { DocumentBatch, DocumentCategory } from '@goms/domain'
 import type { MakerDocument, MakerDocumentKind, MakerDriveStatus, MakerPermission, MakerShare, MakerVersion } from '@goms/domain'
-import type { MakerDownload, MakerEditorSession } from '../in-memory/makerDocuments'
+import type { MakerDownload } from '../in-memory/makerDocuments'
 
 export class RemoteRepository implements Partial<Repository> {
   getBidSynopsis = (bidId: string, section: BidSynopsisSection): Promise<BidSynopsis | null> =>
@@ -113,8 +113,6 @@ export class RemoteRepository implements Partial<Repository> {
   renameMakerDocument = (id: string, title: string): Promise<MakerDocument> => this.client.makerDocuments.rename.mutate({ id, title })
   duplicateMakerDocument = (id: string): Promise<MakerDocument> => this.client.makerDocuments.duplicate.mutate({ id })
   deleteMakerDocument = async (id: string): Promise<void> => { await this.client.makerDocuments.delete.mutate({ id }) }
-  getMakerEditorSession = (id: string, theme: 'light' | 'dark'): Promise<MakerEditorSession> =>
-    this.client.makerDocuments.editorConfig.query({ id, theme }) as Promise<MakerEditorSession>
   getMakerDownload = async (id: string): Promise<MakerDownload> => {
     const { path } = await this.client.makerDocuments.downloadUrl.query({ id })
     return { url: `${import.meta.env.VITE_API_BASE_URL}${path}`, name: '' }

@@ -67,8 +67,8 @@ describe('WebDAV for Office apps', () => {
     expect((await app.inject({ method: 'UNLOCK', url: `${base}/Plan.docx`, headers: { 'lock-token': token } })).statusCode).toBe(204)
   })
 
-  it('opens read-only for shares without write and refuses their saves', async () => {
-    const { app, saves } = setup(['read', 'comment'])
+  it('opens read-only for read-only shares and refuses their saves', async () => {
+    const { app, saves } = setup(['read'])
     expect((await app.inject({ method: 'LOCK', url: `${base}/Plan.docx` })).statusCode).toBe(403)
     const put = await app.inject({ method: 'PUT', url: `${base}/Plan.docx`, payload: Buffer.from(blankOfficeFile('docx')), headers: { 'content-type': 'application/octet-stream' } })
     expect(put.statusCode).toBe(403)

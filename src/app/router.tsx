@@ -69,9 +69,6 @@ const RolesAccessPage = lazy(() => import('@/modules/rbac-tree/RolesAccessPage')
 const DocumentMakerHome = lazy(() =>
   import('@/modules/document-maker/DocumentMakerHome').then((m) => ({ default: m.DocumentMakerHome })),
 )
-const DocumentMakerEditor = lazy(() =>
-  import('@/modules/document-maker/DocumentMakerEditor').then((m) => ({ default: m.DocumentMakerEditor })),
-)
 const EmailPage = lazy(() => import('./routes/EmailPage').then((m) => ({ default: m.EmailPage })))
 const WhatsAppWorkspace = lazy(() => import('@/features/whatsapp/WhatsAppWorkspace').then((m) => ({ default: m.WhatsAppWorkspace })))
 const MarketingPage = lazy(() => import('./routes/MarketingPage').then((m) => ({ default: m.MarketingPage })))
@@ -175,7 +172,6 @@ export const router = createBrowserRouter([
       routed('/documents/:module', ROUTE_NODES.documents, <DmsDocumentsPage />),
       // Personal Office files: every signed-in user; the API scopes each file to its owner.
       routed('/document-maker', ROUTE_NODES.documentMaker, <DocumentMakerHome />),
-      routed('/document-maker/:id', ROUTE_NODES.documentEditor, <DocumentMakerEditor />),
       routed('/email', ROUTE_NODES.email, <EmailPage />),
       // Each user's own WhatsApp, linked through the OpenWA gateway (features/whatsapp/api.ts).
       routed('/whatsapp', ROUTE_NODES.whatsapp, <WhatsAppWorkspace />),

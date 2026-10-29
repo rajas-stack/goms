@@ -92,6 +92,7 @@ describe('reimbursement claim model', () => {
     it('computes the own-vehicle amount from kms and needs the kms', () => {
       expect(parseDraft({ ...draft, particulars: 'Home to Office', mode: 'Own vehicle', kms: '10', amount: '' }, '2026-09')).toMatchObject({ amount: 80, kms: 10 })
       expect(parseDraft({ ...draft, particulars: 'Home to Office', mode: 'Own vehicle', amount: '' }, '2026-09')).toMatch(/kms/)
+      expect(parseDraft({ ...draft, particulars: 'Home to Office', mode: 'Own two-wheeler', kms: '10', amount: '999' }, '2026-09')).toMatchObject({ amount: 30, kms: 10 })
     })
 
     it('drops the route and kms for non-travel rows', () => {

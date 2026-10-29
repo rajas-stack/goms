@@ -157,7 +157,7 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
     try { return await completeMailConnection(req, reply) } catch { return reply.code(503).send({ error: 'Email connection is temporarily unavailable.' }) }
   })
 
-  // Document maker: file + save-callback routes for the ONLYOFFICE Document Server (JWT-authorised, not tRPC).
+  // Document maker: signed browser download links (token-authorised, not tRPC).
   registerDocumentMakerRoutes(app)
   // Desktop/phone Office apps open and save Document maker files over WebDAV (session-id URLs, not tRPC).
   registerMakerDavRoutes(app)

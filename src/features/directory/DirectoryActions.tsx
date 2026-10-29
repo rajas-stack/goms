@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { CommunicationContact, PolicyModuleKey } from '@goms/domain'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Icon } from '@/components/ui/Icon'
+import { LockSwitch } from '@/components/ui/LockSwitch'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { useToast } from '@/components/ui/Toast'
 import { TEAM_DEPARTMENT, type OrgPerson } from '@/data/org-structure'
@@ -34,6 +35,9 @@ interface DirectoryApi {
   /** The entry whose profile is open in edit mode (`entryKey`), if any. */
   editingKey: string | null
   setEditingKey: (key: string | null) => void
+  /** Edit, transfer and delete start locked on every visit, like the Opportunity master grid. */
+  unlocked: boolean
+  toggleLock: () => void
 }
 
 const Ctx = createContext<DirectoryApi | null>(null)
@@ -44,6 +48,7 @@ const MODULE: Record<DirectoryKind, PolicyModuleKey | null> = {
   employee: 'am.contacts', orgPerson: 'team.org', salesPerson: 'team.sales', contact: 'am.contacts', teamMember: null,
 }
 const ROSTER_ONLY = 'Added by hand to a team roster: change or remove them there'
+const LOCKED = 'Locked: unlock the Directory to edit, transfer or delete'
 const ACTION_LABEL: Record<DirectoryAction, string> = { edit: 'Edit', delete: 'Delete', transfer: 'Transfer' }
 const ACTION_ICON: Record<DirectoryAction, string> = { edit: 'Pencil', delete: 'Trash2', transfer: 'ArrowLeftRight' }
 
@@ -57,6 +62,7 @@ export function DirectoryActionsProvider({ records, children }: { records: Direc
   // user chose to keep (UnsavedChangesGuard) is not swapped out from under them.
   const [requestedEdit, setRequestedEdit] = useState<string | null>(null)
   const [pending, setPending] = useState<Pending>(null)
+  const [unlocked, setUnlocked] = useState(false)
   // Edit mode belongs to the profile it was opened on.
   const selectedKey = ws.selection ? entryKey(ws.selection as { kind: DirectoryKind; id: string }) : null
   useEffect(() => {
@@ -66,6 +72,7 @@ export function DirectoryActionsProvider({ records, children }: { records: Direc
   }, [selectedKey])
 
   const blocked = (entry: DirectoryEntry, action: DirectoryAction): string | null => {
+    if (!unlocked) return LOCKED
     const module = MODULE[entry.kind]
     if (!module) return action === 'edit' ? null : ROSTER_ONLY
     const ok = isAllowed(perms, module, action === 'delete' ? 'delete' : 'update')
@@ -87,7 +94,7 @@ export function DirectoryActionsProvider({ records, children }: { records: Direc
   }
 
   return (
-    <Ctx.Provider value={{ blocked, run, editingKey, setEditingKey }}>
+    <Ctx.Provider value={{ blocked, run, editingKey, setEditingKey, unlocked, toggleLock: () => setUnlocked((v) => !v) }}>
       {children}
       {pending && <PendingDialog pending={pending} records={records} onClose={() => setPending(null)} />}
     </Ctx.Provider>
@@ -201,5 +208,18 @@ export function EntryActions({ entry, selected = false, className }: { entry: Di
         )
       })}
     </span>
+  )
+}
+
+/** The Directory's edit lock, with the same switch and labels pattern as the Opportunity master grid. */
+export function DirectoryLockSwitch({ className }: { className?: string }) {
+  const api = useDirectoryActions()
+  if (!api) return null
+  return (
+    <LockSwitch
+      unlocked={api.unlocked} onToggle={api.toggleLock} className={className}
+      lockedLabel="Directory editing locked — tap to unlock"
+      unlockedLabel="Directory editing unlocked — tap to lock"
+    />
   )
 }

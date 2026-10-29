@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { CFB, read } from 'xlsx'
 import {
-  assertOfficeFile, blankOfficeFile, crc32, DOCUMENT_TYPE_FOR_FILE_TYPE, downloadName, fileTypeForName, hasZipMagic,
-  isAmnexEmail, keyBelongsTo, makerDocumentKey, makerRights, normalizeMakerPermissions, MAKER_LIMITS, normalizeMakerTitle, titleFromFileName,
+  assertOfficeFile, blankOfficeFile, crc32, downloadName, fileTypeForName, hasZipMagic,
+  isAmnexEmail, makerDocumentKey, makerRights, normalizeMakerPermissions, MAKER_LIMITS, normalizeMakerTitle, titleFromFileName,
 } from './index.js'
 
 const decoder = new TextDecoder()
@@ -37,18 +37,11 @@ describe('document maker rules', () => {
     expect(() => normalizeMakerTitle('x'.repeat(MAKER_LIMITS.title + 1))).toThrow('under')
   })
 
-  it('issues a new key per version and recognises its own keys only', () => {
+  it('issues a new key per version', () => {
     const id = '1b2c3d4e-0000-4000-8000-000000000001'
     expect(makerDocumentKey(id, 1)).not.toBe(makerDocumentKey(id, 2))
     expect(makerDocumentKey(id, 3)).toMatch(/^[0-9A-Za-z._=-]{1,128}$/)
-    expect(keyBelongsTo(id, makerDocumentKey(id, 7))).toBe(true)
-    expect(keyBelongsTo(id, makerDocumentKey('1b2c3d4e-0000-4000-8000-000000000002', 7))).toBe(false)
-    expect(keyBelongsTo(id, `${makerDocumentKey(id, 1)}x`)).toBe(false)
     expect(() => makerDocumentKey(id, 0)).toThrow()
-  })
-
-  it('maps file types to ONLYOFFICE document types', () => {
-    expect(DOCUMENT_TYPE_FOR_FILE_TYPE).toEqual({ docx: 'word', xlsx: 'cell', pptx: 'slide' })
   })
 
   it('allows only Office extensions with zip content', () => {
@@ -98,7 +91,7 @@ describe('blank Office files', () => {
 describe('sharing rules', () => {
   it('gives owners everything and share holders only what was granted', () => {
     expect(makerRights({})).toEqual({ owner: true, read: true, comment: true, write: true })
-    expect(makerRights({ permissions: ['comment'] })).toEqual({ owner: false, read: false, comment: true, write: false })
+    expect(makerRights({ permissions: ['comment'] })).toEqual({ owner: false, read: false, comment: true, write: true })
     expect(makerRights({ permissions: ['read', 'write'] })).toMatchObject({ owner: false, read: true, comment: false, write: true })
   })
   it('normalizes any combination and rejects an empty one', () => {

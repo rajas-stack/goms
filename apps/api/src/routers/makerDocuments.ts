@@ -9,7 +9,7 @@ import { createDavSession } from '../routes/makerDavRoutes.js'
 import { beginDriveConnection, disconnectDrive, driveStatus } from '../lib/makerDrive.js'
 import { protectedProcedure, protectedReadProcedure, router, type Context } from '../trpc.js'
 import { isAmnexAccount, verifyIdentity } from '../auth/identity.js'
-import { buildEditorConfig, onlyofficeSettings, OnlyofficeNotConfigured, urlToken } from '../lib/onlyoffice.js'
+import { signDownloadToken } from '../lib/makerDownloadToken.js'
 import {
   deleteOwned, deleteShare, findDirectoryEmployee, getAccessible, getOwned, insertDocument, listAccessible, listShares, listVersions, readContent,
   renameOwned, saveVersion, upsertShare, type Owner,
@@ -43,13 +43,6 @@ function allowed(doc: MakerDocument | null, need?: MakerPermission): MakerDocume
   const file = found(doc)
   if (need && !makerRights(file)[need]) throw new TRPCError({ code: 'FORBIDDEN', message: `You do not have ${need} permission on this file.` })
   return file
-}
-
-function settingsOrThrow() {
-  try { return onlyofficeSettings() } catch (error) {
-    if (error instanceof OnlyofficeNotConfigured) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: `The document editor is not set up: ${error.message}` })
-    throw error
-  }
 }
 
 function officeBytes(name: string, data: string) {
@@ -91,18 +84,10 @@ export const makerDocumentsRouter = router({
   delete: protectedProcedure.input(z.object({ id }).strict()).mutation(async ({ input, ctx }) => {
     if (!await deleteOwned(input.id, (await owner(ctx)).email)) throw new TRPCError({ code: 'NOT_FOUND', message: 'File not found.' })
   }),
-  /** Signed DocsAPI config for the current version. */
-  editorConfig: protectedReadProcedure.input(z.object({ id, theme: z.enum(['light', 'dark']) }).strict()).query(async ({ input, ctx }) => {
-    const settings = settingsOrThrow()
-    const me = await owner(ctx)
-    const doc = allowed(await getAccessible(input.id, me.email))
-    return buildEditorConfig(doc, { id: me.email, name: me.name }, input.theme, settings)
-  }),
   /** A 5-minute link (path under the API base URL) that downloads the current version. */
   downloadUrl: protectedReadProcedure.input(z.object({ id }).strict()).query(async ({ input, ctx }) => {
-    const settings = settingsOrThrow()
     const doc = allowed(await getAccessible(input.id, (await owner(ctx)).email), 'read')
-    const token = await urlToken('download', { id: doc.id }, settings.secret)
+    const token = await signDownloadToken({ id: doc.id })
     return { path: `/api/document-maker/files/${doc.id}?token=${encodeURIComponent(token)}` }
   }),
   /** A 12-hour WebDAV session for opening the file in an installed Office app; `path` is under the API base URL. */
@@ -157,9 +142,8 @@ export const makerDocumentsRouter = router({
   }),
   /** A 5-minute link that downloads one earlier version. */
   versionDownloadUrl: protectedReadProcedure.input(z.object({ id, version: z.number().int().min(1) }).strict()).query(async ({ input, ctx }) => {
-    const settings = settingsOrThrow()
     const doc = allowed(await getAccessible(input.id, (await owner(ctx)).email), 'read')
-    const token = await urlToken('download', { id: doc.id, version: input.version }, settings.secret)
+    const token = await signDownloadToken({ id: doc.id, version: input.version })
     return { path: `/api/document-maker/files/${doc.id}?token=${encodeURIComponent(token)}` }
   }),
 })

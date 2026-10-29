@@ -3,9 +3,9 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Field'
 import { AddableSelect } from '@/components/ui/AddableSelect'
 import { Icon } from '@/components/ui/Icon'
-import { Bike, BusFront, Car, CarTaxiFront, CircleOff, Plane, TrainFront, TramFront, type LucideProps } from 'lucide-react'
+import { Bike, BusFront, Car, CarTaxiFront, CircleOff, Motorbike, Plane, TrainFront, TramFront, type LucideProps } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { formatINR, MODES, OWN_VEHICLE_RATE, ownVehicleAmount, returnTrip, routeText, type Expense, type Place } from './model'
+import { formatINR, MODES, ownVehicleAmount, PER_KM_RATE, returnTrip, routeText, type Expense, type Place } from './model'
 import { mapsEnabled, routeKm } from './maps'
 import { PlaceInput } from './PlaceInput'
 
@@ -13,7 +13,6 @@ export type ExpenseValues = Pick<Expense, 'trip' | 'date' | 'project' | 'particu
 
 interface Draft { trip: string; date: string; project: string; particulars: string; route: Place[]; mode: string; kms: string; amount: string; remarks: string }
 
-const OWN = 'Own vehicle'
 const blankRoute = (): Place[] => [{ name: '' }, { name: '' }]
 const draftOf = (v: Partial<ExpenseValues>): Draft => ({
   trip: String(v.trip ?? 1), date: v.date ?? '', project: v.project ?? '', particulars: v.particulars ?? '', route: v.route?.length ? v.route : blankRoute(),
@@ -24,7 +23,8 @@ const draftOf = (v: Partial<ExpenseValues>): Draft => ({
 export function parseDraft(d: Draft, month: string): ExpenseValues | string {
   const trip = Number(d.trip), kms = d.kms.trim() === '' ? null : Number(d.kms)
   const travel = d.mode !== 'NA', usesRoute = travel && d.route.some((p) => p.name.trim())
-  const amount = d.mode === OWN && kms ? ownVehicleAmount(kms) : Number(d.amount)
+  const perKm = PER_KM_RATE[d.mode]
+  const amount = perKm && kms ? ownVehicleAmount(kms, perKm) : Number(d.amount)
   if (!Number.isInteger(trip) || trip < 0 || trip > 99) return 'Trip number must be a whole number from 0 to 99.'
   if (!d.date.startsWith(month)) return 'Pick a date in this month.'
   if (!d.project.trim()) return 'Select the Network / WBS / Project, or add it with +.'
@@ -32,8 +32,8 @@ export function parseDraft(d: Draft, month: string): ExpenseValues | string {
   const particulars = d.particulars.trim() || (usesRoute ? routeText(d.route) : '')
   if (!particulars) return 'Say what the expense was (Particulars), or fill From and To.'
   if (kms !== null && (!Number.isFinite(kms) || kms < 0 || kms > 100_000)) return 'Kms must be a positive number.'
-  if (d.mode === OWN && !kms) return `Enter the kms — own vehicle is paid at ${formatINR(OWN_VEHICLE_RATE)} per km.`
-  if (!Number.isFinite(amount) || (d.mode !== OWN && d.amount.trim() === '') || amount < 0 || amount > 10_000_000) return 'Enter the amount in rupees.'
+  if (perKm && !kms) return `Enter the kms — ${d.mode.toLowerCase()} is paid at ${formatINR(perKm)} per km.`
+  if (!Number.isFinite(amount) || (!perKm && d.amount.trim() === '') || amount < 0 || amount > 10_000_000) return 'Enter the amount in rupees.'
   return {
     trip, date: d.date, project: d.project.trim().slice(0, 200), particulars: particulars.slice(0, 200), mode: d.mode,
     route: usesRoute ? d.route.map((p) => ({ ...p, name: p.name.trim().slice(0, 200) })) : undefined,
@@ -53,7 +53,7 @@ function AutoRickshaw(props: LucideProps) {
 }
 
 const MODE_ICON: Record<(typeof MODES)[number], ComponentType<LucideProps>> = {
-  Cab: CarTaxiFront, Auto: AutoRickshaw, Rickshaw: Bike, Bus: BusFront, Train: TrainFront, Metro: TramFront, Flight: Plane, 'Own vehicle': Car, NA: CircleOff,
+  Cab: CarTaxiFront, Auto: AutoRickshaw, Rickshaw: Bike, Bus: BusFront, Train: TrainFront, Metro: TramFront, Flight: Plane, 'Own vehicle': Car, 'Own two-wheeler': Motorbike, NA: CircleOff,
 }
 
 /** Add or edit one expense row. In add mode the next row keeps trip, date, project and mode, and starts where this one ended. */
@@ -79,8 +79,8 @@ export function ExpenseForm({ month, initial, projects, last, nextTrip, disabled
   const set = (patch: Partial<Draft>) => { setD((prev) => ({ ...prev, ...patch })); setError('') }
   const [y, m] = month.split('-').map(Number)
   const lastDay = `${month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`
-  const travel = d.mode !== 'NA', own = d.mode === OWN
-  const amountShown = own ? (Number(d.kms) > 0 ? String(ownVehicleAmount(Number(d.kms))) : '') : d.amount
+  const travel = d.mode !== 'NA', perKm = PER_KM_RATE[d.mode], own = !!perKm
+  const amountShown = own ? (Number(d.kms) > 0 ? String(ownVehicleAmount(Number(d.kms), perKm)) : '') : d.amount
   const rate = Number(d.kms) > 0 && Number(amountShown) > 0 ? Number(amountShown) / Number(d.kms) : null
 
   /** Changing the route keeps Particulars in step unless the user wrote their own. */
@@ -198,7 +198,7 @@ export function ExpenseForm({ month, initial, projects, last, nextTrip, disabled
           <div className="mb-0.5 flex items-baseline justify-between gap-1">
             <label htmlFor={amountId} className="text-[11px] font-medium text-muted">Amount (₹)</label>
             <span id={hintId} className="truncate text-[10px] text-muted">
-              {own ? `${formatINR(OWN_VEHICLE_RATE)} × km` : rate ? `${formatINR(Math.round(rate * 100) / 100)}/km` : ''}
+              {own ? `${formatINR(perKm)} × km` : rate ? `${formatINR(Math.round(rate * 100) / 100)}/km` : ''}
             </span>
           </div>
           <Input id={amountId} type="number" step="0.01" min={0} value={amountShown} readOnly={own} required={!own} onChange={(e) => set({ amount: e.target.value })}

@@ -20,7 +20,7 @@ describe('Local Conveyance Form', () => {
     const ws = (await buildConveyanceWorkbook(claim, who, null)).getWorksheet('Local Conveyance')!
     const v = (ref: string) => ws.getCell(ref).value
     expect(v('D2')).toBe('Local Conveyance Form')
-    expect([v('C4'), v('D4'), v('C5'), v('D5'), v('D6')]).toEqual(['3096', 'Base Location: Mumbai', 'Shubham Mehra', 'Project Name: 0-000104 (Sales Internal Cost Project)', 'BU - Corporate'])
+    expect([v('C4'), v('D4'), v('C5'), v('D5'), v('D6')]).toEqual(['3096', 'Base Location: Mumbai', 'Shubham Mehra', 'Network / WBS / Project: 0-000104 (Sales Internal Cost Project)', 'BU - Corporate'])
     expect(v('C6')).toBe('9th June 2026 - 13th June 2026')
     expect(String(v('A7'))).toContain('Four Wheeler is 8.0 Rs./KM')
     expect([v('A9'), v('C9'), v('E9'), v('G9')]).toEqual(['09-06-2026', 'Home to Mumbai Airport', 8.4, 296])

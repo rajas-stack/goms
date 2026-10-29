@@ -872,8 +872,8 @@
       "owners": [
         "apps/api:dependencies"
       ],
-      "purpose": "JWT/JWS/JWK handling for OAuth and OnlyOffice token flows.",
-      "ui": "Google OAuth server flow and document-maker/OnlyOffice security. Files include `apps/api/src/auth/oauth/accessToken.ts`, `apps/api/src/auth/oauth/googleClient.ts`, and `apps/api/src/lib/onlyoffice.ts`; UI areas: Login/Google Integration and `/document-maker`.",
+      "purpose": "JWT/JWS/JWK handling for OAuth and Document maker download links.",
+      "ui": "Google OAuth server flow and Document maker download links. Files include `apps/api/src/auth/oauth/accessToken.ts`, `apps/api/src/auth/oauth/googleClient.ts`, and `apps/api/src/lib/makerDownloadToken.ts`; UI areas: Login/Google Integration and `/document-maker`.",
       "latest": "6.2.12",
       "status": "Latest",
       "source": "https://registry.npmjs.org/jose/latest"

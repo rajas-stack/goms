@@ -1,0 +1,26 @@
+# Local development Postgres for the GOMS API. The API (npm run dev in apps/api) and the web app (npm run dev) run on the host.
+#   cp docker/dev-db/.env.example docker/dev-db/.env   # then fill in real values (.env is git-ignored)
+#   docker compose -f docker/dev-db/docker-compose.yml --env-file docker/dev-db/.env up -d
+# For the full containerised stack use compose.yaml instead (DOCKER.md).
+name: goms-dev
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-goms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in docker/dev-db/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-goms}
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - goms_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  goms_pgdata:

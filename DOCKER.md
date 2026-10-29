@@ -31,13 +31,9 @@ For GOMS Google OAuth, set `AUTH_PROVIDER=oauth` in `.env.docker`, and fill `GOO
 
 Drive/DMS integrations still need their provider credentials and configuration in Settings. GCS uploads require `ATTACHMENTS_BUCKET` plus a signing-capable Google service account copied to `.docker/secrets/google_credentials.json`. Leave its generated empty JSON file in place when you do not use GCS. Jev AI requires `JEV_API_KEY` in `.docker/secrets/api.json`. These external services are not emulated by Compose.
 
-## Optional document editor
+## Document maker
 
-```powershell
-docker compose --env-file .env.docker -f compose.yaml -f compose.onlyoffice.yaml up --build -d
-```
-
-The optional ONLYOFFICE server uses localhost port 8082 and a shared JWT secret from `.docker/secrets/onlyoffice_jwt`. Its internal file/callback URL is `http://api:8080`; the API permits downloads from `http://onlyoffice`. Allow about 4 GB of additional memory. Set `ONLYOFFICE_URL` if using another browser-accessible host. The application must contain its Document Maker feature to use this service. JWT and private-network settings follow the [ONLYOFFICE Docker installation guide](https://helpcenter.onlyoffice.com/docs/installation/docs-community-install-docker.aspx).
+Files open in the installed Word, Excel or PowerPoint, which read and save them over WebDAV at `/api/dav/…` on this origin; every save is stored as a version in Postgres. No extra service is needed. Download links are signed with a key derived from `AUTH_SESSION_SECRET`.
 
 ## Operations and backups
 

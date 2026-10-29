@@ -18,8 +18,8 @@ import { uid } from '@/lib/utils'
 import { PROTECTED_VALUES_ENFORCED, documentToGeneral, updateGeneralDocument, validateSynopsisDocument, type BidSynopsis, type BidSynopsisSection, type SaveBidSynopsisInput } from '@goms/domain'
 import { downloadName, MIME_FOR_FILE_TYPE, type MakerDocument, type MakerDocumentKind, type MakerDriveStatus, type MakerPermission, type MakerShare, type MakerVersion } from '@goms/domain'
 import {
-  base64ToBytes, createLocal, duplicateLocal, LOCAL_OWNER, MakerEditorUnavailable, renameLocal, replaceLocal, requireLocal, toPublic, uploadLocal,
-  type LocalMakerDocument, type MakerDownload, type MakerEditorSession, type MakerOwner, MakerSharingUnavailable,
+  base64ToBytes, createLocal, duplicateLocal, LOCAL_OWNER, renameLocal, replaceLocal, requireLocal, toPublic, uploadLocal,
+  type LocalMakerDocument, type MakerDownload, type MakerOwner, MakerSharingUnavailable,
 } from './makerDocuments'
 import { assertUniqueTenderWebsiteName, normalizeTenderWebsiteInput, tenderWebsiteKind, type TenderWebsite, type TenderWebsiteInput, type TenderWebsiteKind, type TenderDscEmployee } from '@goms/domain'
 import type { Competitor, CompetitorInput } from '@goms/domain'
@@ -627,7 +627,6 @@ export interface Repository {
   renameMakerDocument(id: string, title: string): Promise<MakerDocument>
   duplicateMakerDocument(id: string): Promise<MakerDocument>
   deleteMakerDocument(id: string): Promise<void>
-  getMakerEditorSession(id: string, theme: 'light' | 'dark'): Promise<MakerEditorSession>
   getMakerDownload(id: string): Promise<MakerDownload>
   /** Sharing and version history need the server: one browser's local store has no other users. */
   listMakerShareDirectory(): Promise<{ email: string; name: string }[]>
@@ -2373,7 +2372,6 @@ class InMemoryRepository implements Repository {
     requireLocal(this.makerDocs, id)
     this.data.makerDocuments = this.makerDocs.filter((item) => item.id !== id)
   }
-  async getMakerEditorSession(): Promise<MakerEditorSession> { throw new MakerEditorUnavailable() }
   async getMakerDownload(id: string): Promise<MakerDownload> {
     const doc = requireLocal(this.makerDocs, id)
     const blob = new Blob([base64ToBytes(doc.contentBase64) as BlobPart], { type: MIME_FOR_FILE_TYPE[doc.fileType] })
@@ -3973,7 +3971,7 @@ const READER_KEYS = [
   'listCredentialPassphrases', 'getBidSynopsis', 'listTenderWebsites', 'listTenderDscEmployees', 'listCompetitors', 'listAmnexDepartments',
   'listInsightVisuals', 'listInsightReports', 'listInsightCorrigenda',
   'getRbacMyAccess', 'listRbacNodes', 'getRbacSubjects', 'getRbacConfig',
-  'listMakerDocuments', 'getMakerEditorSession', 'getMakerDownload', 'listMakerShareDirectory', 'listMakerShares', 'listMakerVersions', 'getMakerVersionDownload', 'getMakerDriveStatus',
+  'listMakerDocuments', 'getMakerDownload', 'listMakerShareDirectory', 'listMakerShares', 'listMakerVersions', 'getMakerVersionDownload', 'getMakerDriveStatus',
   'listDeliveryTeamMembers', 'listOrgPeople',
   'listStates', 'getState', 'getNode', 'listChildren', 'listOrgRoots', 'listDepartments', 'listPostingNodes',
   'breadcrumb', 'childCount', 'geoRoot', 'childCounts',

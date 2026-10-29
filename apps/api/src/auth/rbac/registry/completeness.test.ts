@@ -32,7 +32,7 @@ describe('PROCEDURE_POLICY completeness', () => {
       'self:googleIntegrations.get', 'self:googleIntegrations.save',
       'self:makerDocuments.create', 'self:makerDocuments.delete', 'self:makerDocuments.desktopSession', 'self:makerDocuments.directory',
       'self:makerDocuments.downloadUrl', 'self:makerDocuments.driveConnect', 'self:makerDocuments.driveDisconnect',
-      'self:makerDocuments.driveStatus', 'self:makerDocuments.duplicate', 'self:makerDocuments.editorConfig',
+      'self:makerDocuments.driveStatus', 'self:makerDocuments.duplicate',
       'self:makerDocuments.list', 'self:makerDocuments.rename', 'self:makerDocuments.replace', 'self:makerDocuments.share',
       'self:makerDocuments.shares', 'self:makerDocuments.unshare', 'self:makerDocuments.upload', 'self:makerDocuments.versionDownloadUrl',
       'self:makerDocuments.versions', 'self:rbacTree.myAccess',

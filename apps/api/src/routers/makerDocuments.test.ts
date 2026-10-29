@@ -8,9 +8,8 @@ vi.mock('../auth/identity.js', async (original) => ({
   verifyIdentity: vi.fn(async () => ({ uid: 'u1', email: 'Writer@amnex.com' })),
 }))
 import { makerDocumentsRouter } from './makerDocuments.js'
-import { verifyToken, onlyofficeSettings } from '../lib/onlyoffice.js'
 
-const ENV = { ONLYOFFICE_JWT_SECRET: 'router-test-secret-long-enough-0123456789', ONLYOFFICE_URL: 'http://localhost:8082', ONLYOFFICE_INTERNAL_API_URL: 'http://host.docker.internal:8787' }
+const ENV = { AUTH_SESSION_SECRET: 'router-test-session-secret-0123456789abcdef' }
 const id = '11111111-2222-4333-8444-555555555555'
 const row = (over: Record<string, unknown> = {}) => ({
   id, kind: 'document', title: 'Plan', file_type: 'docx', size_bytes: 100, version: 1, document_key: `${id}-v1`,
@@ -105,22 +104,20 @@ describe('makerDocuments router', () => {
     })
 
     it('enforces each shared permission', async () => {
+      const data = Buffer.from(blankOfficeFile('docx')).toString('base64')
+      serve(shared({ can_read: true }))
+      expect((await caller().downloadUrl({ id })).path).toContain(id)
+      expect((await caller().desktopSession({ id })).write).toBe(false)
+      await expect(caller().replace({ id, name: 'Plan.docx', data })).rejects.toMatchObject({ code: 'FORBIDDEN' })
+
+      // Comments are written into the file by Word, so a comment share saves like a write share.
       serve(shared({ can_comment: true }))
       await expect(caller().downloadUrl({ id })).rejects.toMatchObject({ code: 'FORBIDDEN' })
       await expect(caller().duplicate({ id })).rejects.toMatchObject({ code: 'FORBIDDEN' })
-      const data = Buffer.from(blankOfficeFile('docx')).toString('base64')
-      await expect(caller().replace({ id, name: 'Plan.docx', data })).rejects.toMatchObject({ code: 'FORBIDDEN' })
-      const { config } = await caller().editorConfig({ id, theme: 'light' })
-      expect(config.document.permissions).toMatchObject({ edit: false, download: false, comment: true })
-      expect(config.editorConfig.mode).toBe('edit')
-
-      serve(shared({ can_read: true }))
-      expect((await caller().downloadUrl({ id })).path).toContain(id)
-      const view = await caller().editorConfig({ id, theme: 'light' })
-      expect(view.config.editorConfig.mode).toBe('view')
+      expect((await caller().desktopSession({ id })).write).toBe(true)
 
       serve(shared({ can_write: true }))
-      expect((await caller().editorConfig({ id, theme: 'light' })).config.document.permissions.edit).toBe(true)
+      expect((await caller().desktopSession({ id })).write).toBe(true)
     })
 
     it('lets only the owner rename, delete or manage shares', async () => {
@@ -135,16 +132,6 @@ describe('makerDocuments router', () => {
     const copy = await caller().duplicate({ id })
     expect(copy.title).toBe('Copy of Plan')
     expect(copy.id).not.toBe(id)
-  })
-
-  it('returns a signed editor config and refuses when ONLYOFFICE is not configured', async () => {
-    const { config, documentServerUrl } = await caller().editorConfig({ id, theme: 'dark' })
-    expect(documentServerUrl).toBe('http://localhost:8082')
-    expect(config.documentType).toBe('word')
-    expect(config.editorConfig.user).toEqual({ id: 'writer@amnex.com', name: 'writer' })
-    expect(await verifyToken(config.token, onlyofficeSettings().secret)).not.toBeNull()
-    delete process.env.ONLYOFFICE_JWT_SECRET
-    await expect(caller().editorConfig({ id, theme: 'light' })).rejects.toMatchObject({ code: 'PRECONDITION_FAILED' })
   })
 
   it('issues a short download link', async () => {

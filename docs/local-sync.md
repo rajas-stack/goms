@@ -43,7 +43,7 @@ stable snapshot of all saved source. The domain, API, and complete production
 frontend builds finish before the running web/API stack is updated on port 8088.
 It rechecks for updates after building and recaptures if another tool saved edits.
 No build outputs are written into the shared source tree. The running PostgreSQL
-volume and OnlyOffice instance are retained. Application services may restart
+volume is retained. Application services may restart
 briefly after successful builds; no browser is focused, signed in, or reloaded.
 Pause is checked before building, deployment, and remote publication.
 

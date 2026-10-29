@@ -1,10 +1,12 @@
 import type { Workbook, Worksheet } from 'exceljs'
-import { claimTotal, OWN_VEHICLE_RATE, orderedRows, rateOf, sheetDate, type Claim } from './model'
+import { claimTotal, OWN_VEHICLE_RATE, orderedRows, rateOf, sheetDate, TWO_WHEELER_RATE, type Claim } from './model'
 
 /** The claimant's header block on the Local Conveyance Form; remembered per user. */
-export interface ClaimantDetails { employeeCode: string; employeeName: string; baseLocation: string; businessUnit: string }
+export interface ClaimantDetails { employeeCode: string; employeeName: string; baseLocation: string; businessUnit: string; project?: string }
 
-const TWO_WHEELER_RATE = 3
+/** The month's distinct Network / WBS / Project names, in row order. */
+export const claimProjects = (claim: Claim) => [...new Set(claim.expenses.map((e) => e.project).filter(Boolean))].join(', ')
+
 const MIN_ROWS = 14
 const COLS = [18, 32, 34, 13, 9, 10, 15, 24] // A Date … H Remarks
 
@@ -47,9 +49,9 @@ export async function buildConveyanceWorkbook(claim: Claim, who: ClaimantDetails
   put(ws, 'A2:C3', null)
   if (logoPng) ws.addImage(wb.addImage({ base64: logoPng, extension: 'png' }), { tl: { col: 0.15, row: 1.25 }, ext: { width: 300, height: 32 }, editAs: 'oneCell' })
   put(ws, 'D2:H3', 'Local Conveyance Form', { bold: true, size: 18, align: 'center' })
-  const projects = [...new Set(claim.expenses.map((e) => e.project).filter(Boolean))].join(', ')
+  const projects = who.project?.trim() || claimProjects(claim)
   put(ws, 'A4:B4', 'Employee code:', { bold: true }); put(ws, 'C4', who.employeeCode, { bold: true }); put(ws, 'D4:H4', `Base Location: ${who.baseLocation}`, { bold: true })
-  put(ws, 'A5:B5', 'Employee Name:', { bold: true }); put(ws, 'C5', who.employeeName, { bold: true }); put(ws, 'D5:H5', `Project Name: ${projects}`, { bold: true })
+  put(ws, 'A5:B5', 'Employee Name:', { bold: true }); put(ws, 'C5', who.employeeName, { bold: true }); put(ws, 'D5:H5', `Network / WBS / Project: ${projects}`, { bold: true })
   put(ws, 'A6:B6', 'Claim Period :', { bold: true }); put(ws, 'C6', claimPeriod(claim)); put(ws, 'D6:H6', `BU - ${who.businessUnit}`, { bold: true })
   put(ws, 'A7:H7', `Note: Applicable Reimbursement for Two Wheeler is ${TWO_WHEELER_RATE.toFixed(1)} Rs/KM || Applicable Reimbursement for Four Wheeler is ${OWN_VEHICLE_RATE.toFixed(1)} Rs./KM`, { bold: true, align: 'center' })
   ;['Date', 'Network / WBS / Project Name', 'Particulars', 'Mode', 'Kms.', 'Rate', 'Amount in Rs.', 'Remarks']
