@@ -6,6 +6,8 @@ import { loadGoogleSettings } from './settings'
 import { disconnectAllDrive } from '@/features/dms/googleDrive'
 import { getGoogleAccount } from './session'
 import { useQueryClient } from '@tanstack/react-query'
+import { authApi } from '@/lib/auth/authApi'
+import { localGoogleAccount } from '@/lib/auth/localGoogleProvider'
 
 export function googleAccountFromUser(user: User | null): GoogleAccount | null {
   const google = user?.providerData.find(provider => provider.providerId === 'google.com')
@@ -16,9 +18,7 @@ export function googleAccountFromUser(user: User | null): GoogleAccount | null {
 export function GoogleAccountBinder() {
   const queryClient = useQueryClient()
   useEffect(() => {
-    if (!auth) { setGoogleAccount(null); disconnectAllDrive(); return }
-    return onAuthStateChanged(auth, user => {
-      const account = googleAccountFromUser(user)
+    const bind = (account: GoogleAccount | null) => {
       const previous = getGoogleAccount()
       const changed = previous?.uid !== account?.uid || previous?.email !== account?.email || previous?.googleId !== account?.googleId || !account
       if (changed) disconnectAllDrive()
@@ -29,7 +29,11 @@ export function GoogleAccountBinder() {
         queryClient.removeQueries({ type: 'inactive' })
       }
       if (account) void loadGoogleSettings(account).catch(() => undefined)
-    })
+    }
+    if (auth) return onAuthStateChanged(auth, user => bind(googleAccountFromUser(user)))
+    // Local mode (no Firebase): the browser-side Google sign-in is the account the Google apps use.
+    if (authApi.kind === 'google-local') return authApi.subscribe(() => bind(localGoogleAccount()))
+    setGoogleAccount(null); disconnectAllDrive()
   }, [queryClient])
   return null
 }

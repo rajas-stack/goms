@@ -18,8 +18,8 @@ flowchart LR
     UI --> Google[Configured Google service APIs]
     API --> Storage[Google Cloud Storage]
     API --> AI[Jev AI: optional configuration]
-    UI --> Docs[ONLYOFFICE: optional editor]
-    Docs --> API
+    UI --> Docs[Installed Word / Excel / PowerPoint]
+    Docs -- WebDAV open and save --> API
 ```
 
 ## Local Docker deployment
@@ -35,8 +35,8 @@ flowchart LR
     DB --> Volume[Persistent database volume]
     Secret[Mounted Docker secrets] --> API
     Secret --> DB
-    User --> Office[Optional ONLYOFFICE: localhost 8082]
-    Office --> API
+    User --> Office[Installed Office app]
+    Office -- WebDAV /api/dav --> API
 ```
 
 ## Cloud deployment configuration

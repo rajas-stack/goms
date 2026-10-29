@@ -15,6 +15,8 @@ import { salesPersonOption } from './salesPersonOption'
 import { SalesTeamPicker } from '@/features/employees/SalesTeamPicker'
 import { EmployeeNumberField } from '@/features/org/EmployeeNumberField'
 import { liveSalesRoster, resolveSalesChain } from '@/data/sales-hierarchy'
+import { AddableSelect } from '@/components/ui/AddableSelect'
+import { CLAIMANT_META } from '@/features/finance/reimbursements/claimantProfile'
 
 /** Create/edit form for a salesperson. Editing a designation/tier/manager
  *  writes directly to their CURRENT posting rather than opening a new one —
@@ -47,6 +49,8 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
   const [managerId, setManagerId] = useState('')
   const [notes, setNotes] = useState('')
   const [employeeCode, setEmployeeCode] = useState('')
+  /** Reimbursement header (Local Conveyance Form), kept in the profile's metadata. */
+  const [claimant, setClaimant] = useState({ baseLocation: '', businessUnit: '', project: '' })
   /** Editable RM email for the "quick edit" path (editing only) — bound to
    *  the current posting's managerId, resolved to an email since
    *  SalesTeamPicker's candidates are keyed by email, not id. Compared
@@ -70,6 +74,8 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
     setPhotoUrl(editing?.photoUrl ?? null)
     setNotes(editing?.notes ?? '')
     setEmployeeCode(editing?.employeeCode ?? '')
+    const meta = editing?.metadata ?? {}
+    setClaimant({ baseLocation: meta[CLAIMANT_META.baseLocation] ?? '', businessUnit: meta[CLAIMANT_META.businessUnit] ?? '', project: meta[CLAIMANT_META.project] ?? '' })
     setDesignation('')
     setTierKey(SALES_TIERS[SALES_TIERS.length - 1].key)
     setManagerId('')
@@ -100,9 +106,12 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
       // server's size cap (apps/api/src/photoUrl.ts) impossible to save, even
       // for an unrelated edit like a phone number.
       const photoChanged = photoUrl !== (editing.photoUrl ?? null)
+      const meta = editing.metadata ?? {}
+      const nextMeta: Record<string, string> = { ...meta, [CLAIMANT_META.baseLocation]: claimant.baseLocation.trim(), [CLAIMANT_META.businessUnit]: claimant.businessUnit.trim(), [CLAIMANT_META.project]: claimant.project.trim() }
+      const metaChanged = (Object.values(CLAIMANT_META) as string[]).some((k) => (meta[k] ?? '') !== nextMeta[k])
       await update.mutateAsync({
         id: editing.id,
-        patch: { name, officialEmail: email, mobile, notes, ...(photoChanged ? { photoUrl } : {}), ...(employeeCode !== editing.employeeCode ? { employeeCode } : {}) },
+        patch: { name, officialEmail: email, mobile, notes, ...(photoChanged ? { photoUrl } : {}), ...(employeeCode !== editing.employeeCode ? { employeeCode } : {}), ...(metaChanged ? { metadata: nextMeta } : {}) },
       })
       const postingPatch: { managerId?: string | null; gmOverrideId?: string | null } = {}
       if (rmEmail !== initialRmEmail) {
@@ -204,6 +213,23 @@ export function SalesPersonFormDialog({ open, personId, onClose }: {
               <SalesTeamPicker value={gmEmail} onChange={setGmOverrideEmail} ariaLabel="GM / Higher Reporting Manager" />
             </Field>
           </>
+        )}
+
+        {editing && (
+          <fieldset className="space-y-2 rounded-lg border border-line p-3">
+            <legend className="px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Reimbursement</legend>
+            <div className="grid grid-cols-2 gap-2.5">
+              <Field label="Base location">
+                <Input value={claimant.baseLocation} onChange={(e) => setClaimant((c) => ({ ...c, baseLocation: e.target.value }))} placeholder="Mumbai" />
+              </Field>
+              <Field label="BU">
+                <Input value={claimant.businessUnit} onChange={(e) => setClaimant((c) => ({ ...c, businessUnit: e.target.value }))} placeholder="Corporate" />
+              </Field>
+            </div>
+            <Field label="Network / WBS / Project" hint="Default for the Local Conveyance Form when a month has no project.">
+              <AddableSelect value={claimant.project} onChange={(project) => setClaimant((c) => ({ ...c, project }))} options={[]} storageKey="finance.reimbursement.projects" placeholder="Select project" />
+            </Field>
+          </fieldset>
         )}
 
         <Field label="Notes">

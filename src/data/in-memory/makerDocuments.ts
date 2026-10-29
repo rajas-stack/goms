@@ -1,6 +1,6 @@
 // Document maker in local (no API) mode: the records and their bytes live in the IndexedDB snapshot like every
-// other entity, so the home list, upload, rename, duplicate, delete and download all work offline. Editing needs
-// the ONLYOFFICE Document Server, which can only fetch files from the API — see MakerEditorUnavailable.
+// other entity, so the home list, upload, rename, duplicate, delete and download all work offline. Opening a file
+// in Word needs the API (Word fetches and saves it over WebDAV) — see MakerSharingUnavailable.
 import {
   assertOfficeFile, blankOfficeFile, FILE_TYPE_FOR_KIND, KIND_FOR_FILE_TYPE, makerDocumentKey, MAKER_LIMITS,
   normalizeMakerTitle, titleFromFileName, type MakerDocument, type MakerDocumentKind,
@@ -70,16 +70,9 @@ export function requireLocal(list: readonly LocalMakerDocument[], id: string): L
   return doc
 }
 
-/** What `new DocsAPI.DocEditor(…)` needs: where api.js lives, and the server-signed config. */
-export interface MakerEditorSession {
-  documentServerUrl: string
-  config: { token: string; documentType: string; document: { key: string; title: string }; [key: string]: unknown }
-}
-
 /** A link the browser can download the current version from. */
 export interface MakerDownload { url: string; name: string }
 
-/** Thrown by the local repository's editor-config call: there is no API for the Document Server to fetch from. */
-export class MakerEditorUnavailable extends Error {
-  constructor() { super('Editing needs the GOMS API and an ONLYOFFICE Document Server. This build runs offline (no VITE_API_BASE_URL).') }
+export class MakerSharingUnavailable extends Error {
+  constructor() { super('Sharing, version history, Google Drive upload and opening in an installed app need the GOMS server. Files on this device stay on this device.') }
 }

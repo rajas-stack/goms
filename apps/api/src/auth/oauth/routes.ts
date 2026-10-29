@@ -11,6 +11,7 @@ import { SessionError, revokeFamilyByRefreshToken, rotateRefreshToken, startSess
 import { completeMailConnection, saveMailbox } from '../../email/oauth.js'
 import { GMAIL_SCOPE } from '../../email/config.js'
 import { completeProfileConnection } from '../../profileImages/oauth.js'
+import { completeDriveConnection, isMakerDriveState } from '../../lib/makerDrive.js'
 import { browserBindingCookie, hasBrowserBinding } from './browserBinding.js'
 
 export interface OAuthDeps { google: GoogleGateway }
@@ -89,6 +90,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
 
   app.get('/api/oauth/google/callback', limited, guarded('callback', async (req, reply) => {
     if (typeof req.query?.state === 'string' && req.query.state.startsWith('profile.')) return completeProfileConnection(req, reply)
+    if (isMakerDriveState(req.query?.state)) return completeDriveConnection(req, reply)
     if (typeof req.query?.state === 'string' && req.query.state.startsWith('mail.')) return completeMailConnection(req, reply)
     if (!hasBrowserBinding('login', req.query?.state, req.headers.cookie)) return fail(reply, 'web', 'state')
     const clearBinding = browserBindingCookie('login', req.query.state, true)

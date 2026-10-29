@@ -99,7 +99,13 @@ export function gmailFor(mailbox: MailboxRow) {
     if (!messages.length) throw new GmailFailure(404)
     return { id: value.id, subject: messages[0].subject, messages }
   }
-  return { request, upload, message, thread,
+  /** Just what an inbox row shows: the list headers of every message in the thread (much smaller than every header). */
+  async function threadSummary(id: string): Promise<EmailSummary> {
+    const headers = ['Subject', 'From', 'To', 'Cc', 'Date', 'Message-ID'].map(name => `metadataHeaders=${name}`).join('&')
+    const value = await request<{ id: string; messages?: GmailMessage[] }>(`threads/${encodeURIComponent(id)}?format=metadata&${headers}`)
+    return gmailSummary((value.messages ?? []).map(gmailMessage).sort((a, b) => a.date.localeCompare(b.date)))
+  }
+  return { request, upload, message, thread, threadSummary,
     async conversation(kind: 'message' | 'thread', id: string, metadata = false): Promise<EmailConversation> {
       if (kind === 'thread') return thread(id, metadata)
       const value = await message(id, metadata); return { id: value.threadId, subject: value.subject, messages: [value] }

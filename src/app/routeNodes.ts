@@ -41,7 +41,7 @@ export const ROUTE_NODES = {
   email: 'email',
   whatsapp: 'whatsapp',
   marketing: 'marketing',
-  documentEditor: page('documentMaker', 'editor', 'Document editor'),
+  finance: 'finance',
   dataImport: page('settings', 'dataImport', 'Admin data import'),
 } as const
 

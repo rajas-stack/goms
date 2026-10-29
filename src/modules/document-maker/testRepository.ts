@@ -17,7 +17,6 @@ export function makeMakerRepository() {
     renameMakerDocument: vi.fn(async (id: string, title: string) => put(renameLocal(requireLocal(docs, id), title))),
     duplicateMakerDocument: vi.fn(async (id: string) => put(duplicateLocal(requireLocal(docs, id)))),
     deleteMakerDocument: vi.fn(async (id: string) => { requireLocal(docs, id); docs = docs.filter((d) => d.id !== id) }),
-    getMakerEditorSession: vi.fn(),
     getMakerDownload: vi.fn(async (id: string) => ({ url: `blob:${id}`, name: `${requireLocal(docs, id).title}.docx` })),
   }
 }

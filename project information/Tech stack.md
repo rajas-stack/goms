@@ -6,7 +6,7 @@
 | Web frontend | React 18, React DOM, Vite 6, React Router 7 |
 | UI and styling | Tailwind CSS 3, PostCSS, Autoprefixer, clsx, tailwind-merge, Lucide React, Framer Motion |
 | Data and grids | TanStack React Query, React Table, React Virtual |
-| Rich text | Tiptap and ProseMirror; optional ONLYOFFICE document editing |
+| Rich text | Tiptap and ProseMirror; Document maker files open in the installed Word, Excel or PowerPoint over WebDAV |
 | Import/export and OCR | SheetJS/XLSX, application CSV utilities, Tesseract.js |
 | Geographic features | D3 Geo, SVG, GeoJSON; Turf Simplify, polygon-clipping, Proj4, shapefile and archive tooling |
 | Browser persistence | IndexedDB, localStorage, sessionStorage |
@@ -17,7 +17,7 @@
 | Credential protection | Web Crypto, PBKDF2/SHA-256, AES-256-GCM; OAuth refresh-token hashing and rotation |
 | External services | Google service integrations, Google Drive DMS, Google Cloud Storage SDK, Jev AI |
 | Android | Capacitor 8, Android WebView, Java, Android SDK, Gradle; lifecycle, browser, filesystem, sharing and secure-storage plugins |
-| Containers | Docker, Docker Compose, Node build images, unprivileged Nginx, PostgreSQL volumes and mounted secrets; optional ONLYOFFICE |
+| Containers | Docker, Docker Compose, Node build images, unprivileged Nginx, PostgreSQL volumes and mounted secrets |
 | Infrastructure | Terraform; Cloud Run, Cloud SQL, Cloud Storage, Artifact Registry, Secret Manager, IAM, VPC and Workload Identity Federation configuration |
 | Hosting | Firebase Hosting configuration; GitLab Pages pipeline configuration also exists |
 | Monitoring | Cloud Logging, Cloud Monitoring, uptime checks, alert policies; database backups and point-in-time recovery configuration |

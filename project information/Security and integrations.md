@@ -12,7 +12,7 @@ Portal credentials use passphrase-based encryption with Web Crypto, PBKDF2/SHA-2
 
 The catalog lists Gmail, Drive, Docs, Sheets, Calendar, Chat, Meet, Maps, Translate, Sites, Notes/Keep, NotebookLM and Tasks. Each service has its own mode, scopes, registered feature pages and enablement configuration. API adapters, web access and cloud services have different capabilities; a catalog entry alone does not mean every product capability is embedded. User/provider credentials and Google-side API configuration determine what works.
 
-Google Drive is used for DMS configuration. Google Cloud Storage supports signed attachment upload/download operations. Jev AI requires its server-side API key. Optional ONLYOFFICE requires a Document Server and the matching JWT secret. See the relevant feature source and [Docker guide](../DOCKER.md) for setup.
+Google Drive is used for DMS configuration. Google Cloud Storage supports signed attachment upload/download operations. Jev AI requires its server-side API key. Document maker needs no extra service: Office apps reach `/api/dav/…` with a short random session id that is re-checked against the file's owner or share on every request, and download links are signed with a key derived from `AUTH_SESSION_SECRET`. Its Google Drive copy uses the owner's own Drive (`drive.file` scope). See the relevant feature source and [Docker guide](../DOCKER.md) for setup.
 
 ## Secrets and documentation
 

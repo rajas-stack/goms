@@ -23,7 +23,6 @@ if (existsSync('/run/secrets/google_credentials')) {
   const credentials = readSecretJson('/run/secrets/google_credentials')
   if (credentials.type) process.env.GOOGLE_APPLICATION_CREDENTIALS = '/run/secrets/google_credentials'
 }
-if (existsSync('/run/secrets/onlyoffice_jwt')) process.env.ONLYOFFICE_JWT_SECRET = readFileSync('/run/secrets/onlyoffice_jwt', 'utf8').trim()
 const args = process.argv[2] === 'migrate'
   // The API image keeps the npm workspace layout (apps/api/...); node-pg-migrate names migrations by file basename,
   // so the directory itself is not recorded in the pgmigrations table.

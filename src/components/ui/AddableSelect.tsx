@@ -14,13 +14,15 @@ interface Props {
   /** localStorage namespace for options a user adds via the "+" button. */
   storageKey: string
   className?: string
+  /** Shown as an empty first option while nothing is chosen. */
+  placeholder?: string
 }
 
 /** A <Select> plus a "+" button that opens a small popup for adding a new
  *  option not already in the list. Additions persist (localStorage, keyed by
  *  `storageKey`) so they're there again next time, for every dropdown backed
  *  by the same key. */
-export function AddableSelect({ value, onChange, options, storageKey, className }: Props) {
+export function AddableSelect({ value, onChange, options, storageKey, className, placeholder }: Props) {
   const [custom, addOption] = useCustomOptions(storageKey)
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
@@ -45,6 +47,7 @@ export function AddableSelect({ value, onChange, options, storageKey, className 
     <>
       <div className={cn('relative', className)}>
         <Select value={value} onChange={(e) => onChange(e.target.value)} className="pr-9">
+          {placeholder && !value && <option value="" disabled>{placeholder}</option>}
           {withCurrent.map((o) => <option key={o} value={o}>{o}</option>)}
         </Select>
         <button

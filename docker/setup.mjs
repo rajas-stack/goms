@@ -11,5 +11,4 @@ const create = (name, value) => { const path = resolve(secrets, name); if (!exis
 create('postgres_password', randomBytes(32).toString('hex'))
 create('api.json', JSON.stringify({ AUTH_SESSION_SECRET: randomBytes(48).toString('base64'), GOOGLE_OAUTH_CLIENT_ID: '', GOOGLE_OAUTH_CLIENT_SECRET: '', JEV_API_KEY: '' }, null, 2) + '\n')
 create('google_credentials.json', '{}\n')
-create('onlyoffice_jwt', randomBytes(48).toString('base64'))
 console.log('Docker secret files are ready in .docker/secrets. Existing secrets were preserved.')

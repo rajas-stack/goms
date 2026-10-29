@@ -69,12 +69,10 @@ const RolesAccessPage = lazy(() => import('@/modules/rbac-tree/RolesAccessPage')
 const DocumentMakerHome = lazy(() =>
   import('@/modules/document-maker/DocumentMakerHome').then((m) => ({ default: m.DocumentMakerHome })),
 )
-const DocumentMakerEditor = lazy(() =>
-  import('@/modules/document-maker/DocumentMakerEditor').then((m) => ({ default: m.DocumentMakerEditor })),
-)
 const EmailPage = lazy(() => import('./routes/EmailPage').then((m) => ({ default: m.EmailPage })))
 const WhatsAppWorkspace = lazy(() => import('@/features/whatsapp/WhatsAppWorkspace').then((m) => ({ default: m.WhatsAppWorkspace })))
 const MarketingPage = lazy(() => import('./routes/MarketingPage').then((m) => ({ default: m.MarketingPage })))
+const FinanceWorkspace = lazy(() => import('@/features/finance/FinanceWorkspace').then((m) => ({ default: m.FinanceWorkspace })))
 const Login = lazy(() => import('./routes/Login').then((m) => ({ default: m.Login })))
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
 
@@ -174,11 +172,12 @@ export const router = createBrowserRouter([
       routed('/documents/:module', ROUTE_NODES.documents, <DmsDocumentsPage />),
       // Personal Office files: every signed-in user; the API scopes each file to its owner.
       routed('/document-maker', ROUTE_NODES.documentMaker, <DocumentMakerHome />),
-      routed('/document-maker/:id', ROUTE_NODES.documentEditor, <DocumentMakerEditor />),
       routed('/email', ROUTE_NODES.email, <EmailPage />),
       // Each user's own WhatsApp, linked through the OpenWA gateway (features/whatsapp/api.ts).
       routed('/whatsapp', ROUTE_NODES.whatsapp, <WhatsAppWorkspace />),
       routed('/marketing', ROUTE_NODES.marketing, <MarketingPage />),
+      routed('/finance', ROUTE_NODES.finance, <FinanceWorkspace />),
+      routed('/finance/:tab', ROUTE_NODES.finance, <FinanceWorkspace />),
       routed('/settings/tender-websites', ROUTE_NODES.tenderWebsites, <TenderWebsitesSettingsPage />),
       routed('/settings/document-verifications', ROUTE_NODES.verifications, <DocumentVerificationsSettingsPage />),
       routed('/settings/competitors', ROUTE_NODES.competitors, <CompetitorsSettingsPage />),

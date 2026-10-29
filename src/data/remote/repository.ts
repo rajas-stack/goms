@@ -47,8 +47,8 @@ import type {
 } from '@/modules/commercial-calculator/types'
 import type { AddCorrigendumChangesInput, CreateCorrigendumInput, UpdateCorrigendumRegisterInput } from '@/modules/bid-tracker/corrigenda/model'
 import type { DocumentBatch, DocumentCategory } from '@goms/domain'
-import type { MakerDocument, MakerDocumentKind } from '@goms/domain'
-import type { MakerDownload, MakerEditorSession } from '../in-memory/makerDocuments'
+import type { MakerDocument, MakerDocumentKind, MakerDriveStatus, MakerPermission, MakerShare, MakerVersion } from '@goms/domain'
+import type { MakerDownload } from '../in-memory/makerDocuments'
 
 export class RemoteRepository implements Partial<Repository> {
   getBidSynopsis = (bidId: string, section: BidSynopsisSection): Promise<BidSynopsis | null> =>
@@ -113,10 +113,26 @@ export class RemoteRepository implements Partial<Repository> {
   renameMakerDocument = (id: string, title: string): Promise<MakerDocument> => this.client.makerDocuments.rename.mutate({ id, title })
   duplicateMakerDocument = (id: string): Promise<MakerDocument> => this.client.makerDocuments.duplicate.mutate({ id })
   deleteMakerDocument = async (id: string): Promise<void> => { await this.client.makerDocuments.delete.mutate({ id }) }
-  getMakerEditorSession = (id: string, theme: 'light' | 'dark'): Promise<MakerEditorSession> =>
-    this.client.makerDocuments.editorConfig.query({ id, theme }) as Promise<MakerEditorSession>
   getMakerDownload = async (id: string): Promise<MakerDownload> => {
     const { path } = await this.client.makerDocuments.downloadUrl.query({ id })
+    return { url: `${import.meta.env.VITE_API_BASE_URL}${path}`, name: '' }
+  }
+  listMakerShareDirectory = (): Promise<{ email: string; name: string }[]> => this.client.makerDocuments.directory.query()
+  listMakerShares = (id: string): Promise<MakerShare[]> => this.client.makerDocuments.shares.query({ id })
+  shareMakerDocument = (id: string, email: string, permissions: MakerPermission[]): Promise<MakerShare[]> =>
+    this.client.makerDocuments.share.mutate({ id, email, permissions })
+  unshareMakerDocument = (id: string, email: string): Promise<MakerShare[]> => this.client.makerDocuments.unshare.mutate({ id, email })
+  openMakerDesktopSession = async (id: string): Promise<{ url: string; write: boolean }> => {
+    const { path, write } = await this.client.makerDocuments.desktopSession.mutate({ id })
+    // Office needs an absolute URL; the API base may be relative (same-origin proxy).
+    return { url: new URL(`${import.meta.env.VITE_API_BASE_URL ?? ''}${path}`, window.location.href).href, write }
+  }
+  getMakerDriveStatus = (): Promise<MakerDriveStatus> => this.client.makerDocuments.driveStatus.query()
+  connectMakerDrive = (): Promise<{ url: string }> => this.client.makerDocuments.driveConnect.mutate()
+  disconnectMakerDrive = async (): Promise<void> => { await this.client.makerDocuments.driveDisconnect.mutate() }
+  listMakerVersions = (id: string): Promise<MakerVersion[]> => this.client.makerDocuments.versions.query({ id })
+  getMakerVersionDownload = async (id: string, version: number): Promise<MakerDownload> => {
+    const { path } = await this.client.makerDocuments.versionDownloadUrl.query({ id, version })
     return { url: `${import.meta.env.VITE_API_BASE_URL}${path}`, name: '' }
   }
 

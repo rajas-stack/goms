@@ -146,7 +146,7 @@ function composeConfiguration(source, images) {
       if (stateRelative.startsWith('..') || isAbsolute(stateRelative)) throw new Error('Another deployment owns the Compose configuration.')
       return basename(file)
     })
-  } catch { if (existsSync(resolve(root, 'compose.onlyoffice.yaml'))) files.push('compose.onlyoffice.yaml') }
+  } catch { /* no running stack: deploy with compose.yaml alone */ }
   for (const file of files) {
     if (file.startsWith('..') || isAbsolute(file) || !existsSync(resolve(source, file))) throw new Error(`Unrecognized active Compose configuration: ${file}`)
   }

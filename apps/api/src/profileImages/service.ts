@@ -191,7 +191,8 @@ export async function profilePhoto(state: Pick<ProfileState, 'folderId' | 'crede
     if (file.thumbnailLink) {
       const url = new URL(file.thumbnailLink)
       if (url.protocol === 'https:' && !url.username && !url.password && (url.hostname === 'googleusercontent.com' || url.hostname.endsWith('.googleusercontent.com'))) {
-        url.pathname = url.pathname.replace(/=s\d+$/, '=s96')
+        // 512 px: sharp on 2x screens for the 112 px hover photo; still a small JPEG.
+        url.pathname = url.pathname.replace(/=s\d+$/, '=s512')
         const response = await fetch(url, options)
         if (response.ok) photo = await imageBytes(response)
         else if (![403, 404].includes(response.status)) throw new DriveError(response.status)

@@ -456,7 +456,7 @@ function PersonRow({ row: e, selected, onSelect, actions, onHover }: {
         actions && 'pr-28',
       )}
     >
-      <Avatar person={e.employee ?? e} size="sm" cutout />
+      <Avatar person={e.employee ?? e} size="sm" />
       <span className="min-w-0 flex-1">
         <span className={cn('block break-words text-[13px] font-medium', selected ? 'text-paper' : 'text-ink-900')}>{e.name}</span>
         <span className={cn('block break-words text-[11px]', selected ? 'text-paper/70' : 'text-muted')}>

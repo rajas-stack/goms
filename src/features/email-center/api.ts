@@ -24,7 +24,11 @@ export function emailApi(actorEmail: string) {
 /** Reopening correspondence or access views must recheck the server, including after a grant is revoked.
  *  Dispose of message bodies when their last viewer unmounts; account-keyed caching alone cannot revoke access. */
 export const emailQueryDefaults = { staleTime: 0, gcTime: 0, retry: false as const, refetchOnWindowFocus: true }
+/** Your own mailbox's list, labels and status: still rechecked with the server on every mount (staleTime 0), but kept for
+ *  5 minutes so reopening E-mail paints the last inbox at once instead of a blank page. Message bodies and supervisory views
+ *  keep emailQueryDefaults. The cache is keyed by the signed-in email and reset when the account changes. */
+export const ownMailCache = { ...emailQueryDefaults, gcTime: 5 * 60_000 }
 export function useEmailStatus() {
   const { user } = useAuthUser(); const email = user?.email?.toLowerCase() ?? ''
-  return useQuery({ ...emailQueryDefaults, queryKey: ['emailCenter', email, 'status'], enabled: !!email, queryFn: () => emailApi(email).status.query() })
+  return useQuery({ ...ownMailCache, queryKey: ['emailCenter', email, 'status'], enabled: !!email, queryFn: () => emailApi(email).status.query() })
 }

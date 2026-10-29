@@ -1,4 +1,4 @@
-/** Document maker: real Office files (.docx / .xlsx / .pptx) edited in ONLYOFFICE Docs.
+/** Document maker: real Office files (.docx / .xlsx / .pptx) edited in the installed Word / Excel / PowerPoint.
  *  The bytes live server-side; this module holds the shared record shape and every rule both repositories enforce. */
 
 export const MAKER_DOCUMENT_KINDS = ['document', 'spreadsheet', 'presentation'] as const
@@ -7,17 +7,12 @@ export type MakerDocumentKind = (typeof MAKER_DOCUMENT_KINDS)[number]
 export const MAKER_FILE_TYPES = ['docx', 'xlsx', 'pptx'] as const
 export type MakerFileType = (typeof MAKER_FILE_TYPES)[number]
 
-/** ONLYOFFICE's `documentType` for each kind. */
-export type OnlyofficeDocumentType = 'word' | 'cell' | 'slide'
 
 export const FILE_TYPE_FOR_KIND: Record<MakerDocumentKind, MakerFileType> = {
   document: 'docx', spreadsheet: 'xlsx', presentation: 'pptx',
 }
 export const KIND_FOR_FILE_TYPE: Record<MakerFileType, MakerDocumentKind> = {
   docx: 'document', xlsx: 'spreadsheet', pptx: 'presentation',
-}
-export const DOCUMENT_TYPE_FOR_FILE_TYPE: Record<MakerFileType, OnlyofficeDocumentType> = {
-  docx: 'word', xlsx: 'cell', pptx: 'slide',
 }
 export const MIME_FOR_FILE_TYPE: Record<MakerFileType, string> = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -29,7 +24,7 @@ export const KIND_LABELS: Record<MakerDocumentKind, string> = {
 }
 
 export const MAKER_LIMITS = {
-  /** A version saved back by the Document Server. */
+  /** A version saved back from Word / Excel / PowerPoint. */
   fileBytes: 50 * 1024 * 1024,
   /** A file uploaded from the browser (sent base64 inside one API request, which is capped at 8 MB). */
   uploadBytes: 5 * 1024 * 1024,
@@ -43,29 +38,67 @@ export interface MakerDocument {
   fileType: MakerFileType
   /** Bytes of the current version. */
   size: number
-  /** Starts at 1; +1 for every version saved back from the editor or replaced by an upload. */
+  /** Starts at 1; +1 for every version saved back from Office or replaced by an upload. */
   version: number
-  /** ONLYOFFICE `document.key`: a new value for every version, so the Document Server never serves a stale cache. */
+  /** A new value for every version; served as the WebDAV ETag so Office never reuses a stale copy. */
   documentKey: string
   ownerEmail: string
   ownerName: string
   createdAt: string
   updatedAt: string
+  /** The caller's rights on a file shared with them; absent on the caller's own files (full access). */
+  permissions?: MakerPermission[]
 }
 
-/** Unique per document and version, within ONLYOFFICE's key alphabet (`[0-9A-Za-z._=-]`, at most 128 characters). */
+/** Independent rights a file owner grants (any combination). Every share may open the file; `read` adds
+ *  download and copy, `comment` and `write` both let the person save changes from Word (comments live in the file). */
+export const MAKER_PERMISSIONS = ['read', 'comment', 'write'] as const
+export type MakerPermission = (typeof MAKER_PERMISSIONS)[number]
+
+export interface MakerShare {
+  email: string
+  name: string
+  permissions: MakerPermission[]
+  sharedBy: string
+  updatedAt: string
+}
+
+export interface MakerVersion {
+  version: number
+  size: number
+  savedBy: string | null
+  reason: string
+  createdAt: string
+}
+
+/** Upload of an employee's own files to their Google Drive. */
+export interface MakerDriveStatus { configured: boolean; connected: boolean; lastSyncAt: string | null; lastError: string | null; folderUrl: string | null }
+
+/** The caller's rights on a file: everything for the owner, otherwise what was shared. */
+export function makerRights(doc: Pick<MakerDocument, 'permissions'>): Record<MakerPermission, boolean> & { owner: boolean } {
+  const granted = doc.permissions
+  if (!granted) return { owner: true, read: true, comment: true, write: true }
+  // Desktop Word stores comments inside the file, so commenting means saving it: comment implies write.
+  return { owner: false, read: granted.includes('read'), comment: granted.includes('comment'), write: granted.includes('write') || granted.includes('comment') }
+}
+
+/** Sorted, de-duplicated, non-empty permission list, or an error message. */
+export function normalizeMakerPermissions(raw: readonly unknown[]): MakerPermission[] {
+  const set = MAKER_PERMISSIONS.filter((p) => raw.includes(p))
+  if (!set.length) throw new Error('Choose at least one permission.')
+  return set
+}
+
+/** Files are shared only with Amnex employees. */
+export function isAmnexEmail(email: unknown): email is string {
+  return typeof email === 'string' && /^[^@\s]+@amnex\.com$/i.test(email.trim())
+}
+
+/** Unique per document and version (`[0-9A-Za-z_-]`, at most 128 characters). */
 export function makerDocumentKey(id: string, version: number): string {
   const safe = id.replace(/[^0-9A-Za-z_-]/g, '')
   if (!safe || !Number.isInteger(version) || version < 1) throw new Error('Invalid document version.')
   return `${safe}-v${version}`.slice(0, 128)
-}
-
-/** True when `key` was issued for this document (any version). The callback of a session that began on an
- *  earlier version still carries that version's key. */
-export function keyBelongsTo(id: string, key: unknown): boolean {
-  if (typeof key !== 'string') return false
-  const prefix = `${id.replace(/[^0-9A-Za-z_-]/g, '')}-v`
-  return key.startsWith(prefix) && /^\d+$/.test(key.slice(prefix.length))
 }
 
 /** Trimmed title, or an error message. */
@@ -112,4 +145,13 @@ export function assertOfficeFile(name: string, bytes: Uint8Array, maxBytes: numb
   if (bytes.length > maxBytes) throw new Error(`Files must be smaller than ${Math.round(maxBytes / 1024 / 1024)} MB.`)
   if (!hasZipMagic(bytes)) throw new Error('This is not a valid Office file.')
   return fileType
+}
+
+const OFFICE_SCHEME: Record<MakerFileType, string> = { docx: 'ms-word', xlsx: 'ms-excel', pptx: 'ms-powerpoint' }
+
+/** Links that open a WebDAV file in an installed app: Microsoft Office's URI scheme and LibreOffice's equivalent.
+ *  `ofe` opens for editing, `ofv` read-only. */
+export function officeAppLinks(fileType: MakerFileType, write: boolean, davUrl: string): { office: string; libreOffice: string } {
+  const mode = write ? 'ofe' : 'ofv'
+  return { office: `${OFFICE_SCHEME[fileType]}:${mode}|u|${davUrl}`, libreOffice: `vnd.libreoffice.command:${mode}|u|${davUrl}` }
 }

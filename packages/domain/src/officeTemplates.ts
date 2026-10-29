@@ -1,5 +1,5 @@
 /** Blank, valid Office Open XML files for "New" in the Document maker. Kept minimal on purpose: Word, Excel,
- *  PowerPoint and ONLYOFFICE all open them, and the editor writes a full package on the first save. */
+ *  PowerPoint and LibreOffice all open them, and the app writes a full package on the first save. */
 import type { MakerFileType } from './makerDocuments.js'
 import { createZip, type ZipEntry } from './officeZip.js'
 import { blankPptxEntries } from './officeTemplatesPptx.js'

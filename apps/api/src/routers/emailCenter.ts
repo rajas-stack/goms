@@ -10,8 +10,9 @@ import { applicableEmailGrant, assertContextCorrespondence, authorizedEmailRelat
 import { buildEmailMime, gmailFor, gmailSummary, GmailFailure } from '../email/gmail.js'
 import { emailEvent, inTransaction, loadEmailMailbox } from '../email/store.js'
 import { isSystemAdminEmail } from '../auth/rbac/systemAdminOnly.js'
-/** Parallel Gmail reads per list page: 10 x threads.get = 100 quota units, well under the 250/s per-user limit. */
-const LIST_CONCURRENCY = 10
+import { cachedSummary, rememberSummary } from '../email/summaryCache.js'
+/** Parallel Gmail reads per list page: a full 20-row page of threads.get is 200 quota units, under the 250/s per-user limit. */
+const LIST_CONCURRENCY = 20
 /** Above ~4 MB the JSON endpoint is unreliable; Gmail's upload endpoint takes up to 35 MB. */
 const isLarge = (mime: { raw: string }) => mime.raw.length > 4 * 1024 * 1024
 const threadOf = (mime: { threadId?: string }) => (mime.threadId ? { threadId: mime.threadId } : {})
@@ -131,11 +132,17 @@ export const emailCenterRouter = router({
         return gmailSummary([gmailMessage(data.message)], data.id)
       })))
     } else {
-      const result = await gmail.request<{ threads?: { id: string }[]; nextPageToken?: string }>(`threads?${params}`); nextPageToken = result.nextPageToken
-      // Threads are fetched LIST_CONCURRENCY at a time: a 20-row page takes 2 rounds to Gmail instead of 5.
-      for (let i = 0; i < (result.threads?.length ?? 0); i += LIST_CONCURRENCY) items.push(...await Promise.all(result.threads!.slice(i, i + LIST_CONCURRENCY).map(async item => gmailSummary((await gmail.thread(item.id, true)).messages))))
+      const result = await gmail.request<{ threads?: { id: string; historyId?: string }[]; nextPageToken?: string }>(`threads?${params}`); nextPageToken = result.nextPageToken
+      // Unchanged threads (same historyId) come from the summary cache; only new or changed ones go back to Gmail, all in one round.
+      const threads = result.threads ?? []
+      for (let i = 0; i < threads.length; i += LIST_CONCURRENCY) items.push(...await Promise.all(threads.slice(i, i + LIST_CONCURRENCY).map(async item => {
+        const hit = cachedSummary(mailbox, item.id, item.historyId)
+        if (hit) return hit
+        const summary = await gmail.threadSummary(item.id)
+        rememberSummary(mailbox, item.id, item.historyId, summary)
+        return summary
+      })))
     }
-    await recheckEmailAccess(actor, mailbox, { entity: input.entity, supervisor: input.supervisor, allowUnlinked: true })
     const filtered = []
     for (const summary of items) {
       if (!input.unlinkedOnly) { filtered.push(summary); continue }
@@ -143,6 +150,7 @@ export const emailCenterRouter = router({
       const links = await authorizedEmailRelationships(actor, mailbox, { mailboxId: mailbox.id, kind: 'thread', id: summary.threadId }, messages)
       if (!links.length) filtered.push(summary)
     }
+    // One recheck after every Gmail read (access may have been revoked meanwhile) — the earlier duplicate added a DB round for nothing.
     await recheckEmailAccess(actor, mailbox, { entity: input.entity, supervisor: input.supervisor, allowUnlinked: true })
     return { items: filtered.sort((a, b) => b.date.localeCompare(a.date)), nextPageToken: nextPageToken ?? null }
   }),
