@@ -1,10 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import * as api from '@/lib/api'
 import { EmployeeDetails } from './EmployeeDetails'
 import type { Employee, HierNode, SalesPerson, TimelineEvent } from '@/lib/types'
+
+/** Sections live in tabs under the profile header; open the one a test looks at. */
+function renderOnTab(tab: RegExp) {
+  render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+  fireEvent.click(screen.getByRole('button', { name: tab }))
+}
 
 beforeEach(() => {
   // jsdom has no ResizeObserver; FitText (the header name) uses one purely
@@ -103,7 +109,7 @@ describe('EmployeeDetails — ChainRow Avatar rollout (Task 9.1)', () => {
     const manager = makeEmployee({ id: 'mgr-1', name: 'Manager Boss', photoUrl: 'https://example.com/mgr.jpg' })
     stubApiHooks({ employee: emp, chain: [manager] })
 
-    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+    renderOnTab(/^Reporting line$/)
 
     const img = screen.getByAltText('Manager Boss')
     expect(img).toHaveAttribute('src', 'https://example.com/mgr.jpg')
@@ -114,7 +120,7 @@ describe('EmployeeDetails — ChainRow Avatar rollout (Task 9.1)', () => {
     const manager = makeEmployee({ id: 'mgr-1', name: 'Manager Boss', photoUrl: null })
     stubApiHooks({ employee: emp, chain: [manager] })
 
-    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+    renderOnTab(/^Reporting line$/)
 
     expect(screen.getByText('MB')).toBeInTheDocument()
     expect(screen.queryByAltText('Manager Boss')).not.toBeInTheDocument()
@@ -125,7 +131,7 @@ describe('EmployeeDetails — ChainRow Avatar rollout (Task 9.1)', () => {
     const report = makeEmployee({ id: 'rep-1', name: 'Report Person', photoUrl: 'https://example.com/rep.jpg' })
     stubApiHooks({ employee: emp, reports: [report] })
 
-    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+    renderOnTab(/^Reporting line$/)
 
     const img = screen.getByAltText('Report Person')
     expect(img).toHaveAttribute('src', 'https://example.com/rep.jpg')
@@ -181,7 +187,7 @@ describe('EmployeeDetails — Timeline Agenda/Outcome/Next Steps display (Task 8
     })
     stubApiHooks({ employee: emp, timeline: [event] })
 
-    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+    renderOnTab(/^Timeline/)
 
     expect(screen.getByText('Agenda:')).toBeInTheDocument()
     expect(screen.getByText('Discuss Q1 budget')).toBeInTheDocument()
@@ -196,7 +202,7 @@ describe('EmployeeDetails — Timeline Agenda/Outcome/Next Steps display (Task 8
     const event = makeTimelineEvent({ note: 'Just a plain note' })
     stubApiHooks({ employee: emp, timeline: [event] })
 
-    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+    renderOnTab(/^Timeline/)
 
     expect(screen.getByText('Just a plain note')).toBeInTheDocument()
     expect(screen.queryByText('Agenda:')).not.toBeInTheDocument()
@@ -224,7 +230,7 @@ describe('EmployeeDetails — attendee display, mixed legacy/new shapes (Task 8.
     const salesPerson = makeSalesPerson({ id: 'sp-1', name: 'New Snapshot Name' })
     stubApiHooks({ employee: emp, timeline: [event], salesPersons: [salesPerson] })
 
-    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+    renderOnTab(/^Timeline/)
 
     expect(screen.getByText('Attendees')).toBeInTheDocument()
     expect(screen.getByText('Legacy Name')).toBeInTheDocument()
@@ -241,7 +247,7 @@ describe('EmployeeDetails — attendee display, mixed legacy/new shapes (Task 8.
     const event = makeTimelineEvent({ attendees: ['Just A Name'] })
     stubApiHooks({ employee: emp, timeline: [event], salesPersons: [] })
 
-    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+    renderOnTab(/^Timeline/)
 
     expect(screen.getByText('Just A Name')).toBeInTheDocument()
     expect(screen.getAllByTestId('avatar').length).toBeGreaterThanOrEqual(1)
@@ -255,7 +261,7 @@ describe('EmployeeDetails — attendee display, mixed legacy/new shapes (Task 8.
     const salesPerson = makeSalesPerson({ id: 'sp-1', name: 'New Snapshot Name', photoUrl: 'data:image/png;base64,AAA=' })
     stubApiHooks({ employee: emp, timeline: [event], salesPersons: [salesPerson] })
 
-    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+    renderOnTab(/^Timeline/)
 
     expect(screen.getByRole('img')).toHaveAttribute('src', 'data:image/png;base64,AAA=')
   })
@@ -265,7 +271,7 @@ describe('EmployeeDetails — attendee display, mixed legacy/new shapes (Task 8.
     const event = makeTimelineEvent({ attendees: undefined })
     stubApiHooks({ employee: emp, timeline: [event] })
 
-    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+    renderOnTab(/^Timeline/)
 
     expect(screen.queryByText('Attendees')).not.toBeInTheDocument()
   })
@@ -282,7 +288,7 @@ describe('EmployeeDetails — per-entry Edit action (Task 8.4)', () => {
     const event = makeTimelineEvent({ id: 'evt-42', title: 'Quarterly review', source: 'manual' })
     stubApiHooks({ employee: emp, timeline: [event] })
 
-    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+    renderOnTab(/^Timeline/)
 
     expect(screen.queryByTestId('timeline-dialog')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /edit quarterly review/i }))
@@ -295,7 +301,7 @@ describe('EmployeeDetails — per-entry Edit action (Task 8.4)', () => {
     const event = makeTimelineEvent({ id: 'evt-joined', type: 'joined', title: 'Contact created', source: 'system' })
     stubApiHooks({ employee: emp, timeline: [event] })
 
-    render(<MemoryRouter><EmployeeDetails employeeId="emp-1" /></MemoryRouter>)
+    renderOnTab(/^Timeline/)
 
     expect(screen.queryByRole('button', { name: /edit contact created/i })).not.toBeInTheDocument()
   })

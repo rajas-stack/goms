@@ -7,9 +7,9 @@ const workspace = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const stateDir = resolve(workspace, '..', '.goms-dev-server')
 const release = resolve(stateDir, 'releases', new Date().toISOString().replace(/[:.]/g, '-'))
 await mkdir(release, { recursive: true })
-async function run(script, args) {
+async function run(script, args, env = process.env) {
   await new Promise((done, reject) => {
-    const child = spawn(process.execPath, [resolve(workspace, script), ...args], { cwd: workspace, windowsHide: true, stdio: 'inherit' })
+    const child = spawn(process.execPath, [resolve(workspace, script), ...args], { cwd: workspace, env, windowsHide: true, stdio: 'inherit' })
     child.once('error', reject)
     child.once('exit', code => code === 0 ? done() : reject(new Error(`Preview build failed (${code}). The previous preview stays online.`)))
   })
@@ -18,7 +18,10 @@ async function run(script, args) {
 await run('node_modules/typescript/bin/tsc', ['-p', 'packages/domain/tsconfig.json'])
 await run('node_modules/typescript/bin/tsc', ['-p', 'apps/api/tsconfig.json'])
 await run('node_modules/typescript/bin/tsc', ['-b'])
-await run('node_modules/vite/bin/vite.js', ['build', '--mode', 'local-preview', '--outDir', release, '--emptyOutDir'])
+// Server mode, like the Docker web image: /api is proxied to the :8088 stack (vite.config.ts), so the preview signs in with
+// GOMS Google sign-in (which also connects Gmail) and shares the server's data.
+const serverMode = { VITE_API_BASE_URL: 'http://localhost:5173', VITE_AUTH_PROVIDER: 'oauth', VITE_BID_TRACKER_ENABLED: 'true', VITE_ADMIN_IMPORT_ENABLED: 'true' }
+await run('node_modules/vite/bin/vite.js', ['build', '--mode', 'local-preview', '--outDir', release, '--emptyOutDir'], { ...process.env, ...serverMode })
 const pointer = resolve(stateDir, 'current-preview.json')
 const temporary = `${pointer}.${process.pid}.tmp`
 await writeFile(temporary, JSON.stringify({ directory: release, builtAt: new Date().toISOString() }, null, 2))

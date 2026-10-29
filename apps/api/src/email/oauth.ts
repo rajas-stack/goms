@@ -3,6 +3,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose'
 import type { FastifyReply } from 'fastify'
 import { TRPCError } from '@trpc/server'
 import { safeReturnTo, webRedirectUrl } from '../auth/oauth/redirect.js'
+import { chosenWebOrigin } from '../auth/oauth/config.js'
 import { GMAIL_SCOPE, openEmailCredentials, requireEmailConfiguration, sealEmailCredentials } from './config.js'
 import type { EmailActor } from './access.js'
 import { emailEvent, inTransaction } from './store.js'
@@ -53,12 +54,12 @@ function cookieName(state: string) { return `goms_mail_${digest(state).slice(0, 
 function cookie(state: string, value: string, secure: boolean, expired = false) {
   return `${cookieName(state)}=${value}; HttpOnly; SameSite=Lax; Path=/api/oauth/google/callback; Max-Age=${expired ? 0 : 600}${secure ? '; Secure' : ''}`
 }
-export async function beginMailConnection(actor: EmailActor, returnTo: string, setCookie?: (value: string) => void) {
+export async function beginMailConnection(actor: EmailActor, returnTo: string, setCookie?: (value: string) => void, webOrigin?: string) {
   const cfg = requireEmailConfiguration()
   if (!setCookie) throw new TRPCError({ code: 'PRECONDITION_FAILED', message: 'Open Email Center in the browser to connect Gmail.' })
   const state = `mail.${random()}`; const verifier = random(); const nonce = random(); const browserBinding = random()
   await pool.query('DELETE FROM email_oauth_flows WHERE expires_at<now()')
-  await pool.query(`INSERT INTO email_oauth_flows(state_hash,cookie_hash,verifier,nonce,user_uid,email,return_to,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,now()+interval '10 minutes')`, [digest(state), digest(browserBinding), verifier, nonce, actor.uid, actor.email, safeReturnTo(returnTo)])
+  await pool.query(`INSERT INTO email_oauth_flows(state_hash,cookie_hash,verifier,nonce,user_uid,email,return_to,web_origin,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now()+interval '10 minutes')`, [digest(state), digest(browserBinding), verifier, nonce, actor.uid, actor.email, safeReturnTo(returnTo), chosenWebOrigin(webOrigin, cfg.origin, cfg.origin)])
   setCookie(cookie(state, browserBinding, cfg.origin.startsWith('https:')))
   const url = new URL('https://accounts.google.com/o/oauth2/v2/auth')
   url.search = new URLSearchParams({ client_id: cfg.clientId, redirect_uri: cfg.redirectUri, response_type: 'code', scope: `openid email ${GMAIL_SCOPE}`, state, nonce, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256', access_type: 'offline', include_granted_scopes: 'true', prompt: 'consent', login_hint: actor.email, hd: 'amnex.com' }).toString()
@@ -73,7 +74,7 @@ export async function completeMailConnection(req: { query?: any; headers: { cook
   const flow = (await pool.query('DELETE FROM email_oauth_flows WHERE state_hash=$1 AND cookie_hash=$2 AND expires_at>now() RETURNING *', [digest(state), digest(binding)])).rows[0]
   reply.header('Set-Cookie', cookie(state, '', cfg.origin.startsWith('https:'), true))
   if (!flow) return reply.code(400).send({ error: 'Email connection expired or does not belong to this browser. Start again.' })
-  const redirect = (status: string) => reply.code(302).header('Location', webRedirectUrl(cfg.origin, flow.return_to, { email_connection: status })).send()
+  const redirect = (status: string) => reply.code(302).header('Location', webRedirectUrl(flow.web_origin ?? cfg.origin, flow.return_to, { email_connection: status })).send()
   if (req.query?.error) return redirect('cancelled')
   if (typeof req.query?.code !== 'string' || req.query.code.length > 2048) return redirect('failed')
   try {

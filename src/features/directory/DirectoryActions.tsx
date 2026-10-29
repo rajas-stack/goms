@@ -182,10 +182,10 @@ export function linkedRecords(entry: DirectoryEntry, records: DirectoryRecords):
 }
 
 /** Pencil / bin / transfer icons for one entry. Each opens that record's own editor or dialog; disabled with the reason
- *  when the role (or the record) does not allow it. */
+ *  when the role (or the record) does not allow it. Hidden entirely while the Directory is locked. */
 export function EntryActions({ entry, selected = false, className }: { entry: DirectoryEntry; selected?: boolean; className?: string }) {
   const api = useDirectoryActions()
-  if (!api) return null
+  if (!api?.unlocked) return null
   return (
     <span className={cn('flex items-center gap-0.5', className)}>
       {(['edit', 'transfer', 'delete'] as const).map((action) => {

@@ -24,7 +24,8 @@ export function webSignInUrl(): string {
   for (const name of HANDOFF_PARAMS) params.delete(name)
   const query = params.toString()
   const returnTo = `${window.location.pathname}${query ? `?${query}` : ''}`
-  return `${apiBase}/api/oauth/google/start?client=web&return_to=${encodeURIComponent(returnTo)}`
+  // web_origin: the API serves more than one GOMS site (the :5173 preview and the :8088 stack); come back to this one.
+  return `${apiBase}/api/oauth/google/start?client=web&return_to=${encodeURIComponent(returnTo)}&web_origin=${encodeURIComponent(window.location.origin)}`
 }
 
 export const oauthProvider: AuthProviderApi = {

@@ -1,10 +1,12 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { cn } from '@/lib/utils'
 
-export function Tabs<T extends string>({ tabs, value, onChange }: {
+export function Tabs<T extends string>({ tabs, value, onChange, underlineId = 'tab-underline' }: {
   tabs: { value: T; label: string }[]
   value: T
   onChange: (v: T) => void
+  /** Distinct per tab bar when two are on screen, so the underline doesn't fly between them. */
+  underlineId?: string
 }) {
   return (
     <div className="flex gap-1 border-b border-line">
@@ -23,7 +25,7 @@ export function Tabs<T extends string>({ tabs, value, onChange }: {
             <AnimatePresence>
               {active && (
                 <motion.span
-                  layoutId="tab-underline"
+                  layoutId={underlineId}
                   className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-indigo"
                   transition={{ type: 'spring', stiffness: 400, damping: 32 }}
                 />

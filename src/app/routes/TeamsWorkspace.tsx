@@ -20,16 +20,18 @@ import { DeliveryOrgChart } from '@/features/teams/DeliveryOrgChart'
 import { OrgStructureChart } from '@/features/org/OrgStructureChart'
 import { SalesWorkspace } from './SalesWorkspace'
 import { Directory } from './Directory'
+import { MyIdCard } from '@/features/directory/HangingIdCard'
 import { useCanReadAny } from '@/lib/permissions'
 import { useNodeFilter } from '@/lib/rbacTree/access'
 import { NAV_MODULES } from '@/lib/routeModules'
 import { ROUTE_NODES } from '../routeNodes'
 
-type TeamKey = 'directory' | 'org' | 'sales' | DeliveryTeamKey
+type TeamKey = 'directory' | 'idCard' | 'org' | 'sales' | DeliveryTeamKey
 
 /** Directory (every person, internal and external) comes first; the team views follow. */
 const TABS: { value: TeamKey; label: string }[] = [
   { value: 'directory', label: 'Directory' },
+  { value: 'idCard', label: 'ID card' },
   { value: 'org', label: 'Org Structure' },
   { value: 'sales', label: 'Sales' },
   { value: 'preSales', label: 'Pre-sales' },
@@ -273,7 +275,7 @@ export function TeamsWorkspace() {
   const tree = useNodeFilter()
   const canDirectory = useCanReadAny(NAV_MODULES.directory) && tree(ROUTE_NODES.directory)
   // Org Structure and the delivery teams follow Company Org Structure; the Sales tab follows the Sales Team.
-  const tabs = TABS.filter((t) => t.value === 'directory'
+  const tabs = TABS.filter((t) => t.value === 'directory' || t.value === 'idCard'
     ? canDirectory
     : !perms.enforced || perms.level(t.value === 'sales' ? 'team.sales' : 'team.org') !== 'N')
   const tab = tabs.find((t) => t.value === teamParam) ?? tabs[0] ?? TABS[0]
@@ -288,6 +290,7 @@ export function TeamsWorkspace() {
       </div>
       <div className="min-h-0 flex-1">
         {tab.value === 'directory' ? <Directory actionsSlot={actionsSlot} />
+          : tab.value === 'idCard' ? <MyIdCard />
           : tab.value === 'org' ? <OrgStructureChart />
           : tab.value === 'sales' ? <SalesWorkspace basePath="/teams/sales" />
           : <DeliveryTeam key={tab.value} team={tab.value} label={tab.label} section={section} />}

@@ -19,6 +19,7 @@ import { useAllowed, useCanReadAny } from '@/lib/permissions'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import { cn } from '@/lib/utils'
 import { MobileDetailsSheet } from './StateWorkspace'
+import { SelectedIdCard } from '@/features/directory/SelectedIdCard'
 
 /** The one Directory of people (sidebar › Directory): Amnex employees and external contacts, each still stored in its own
  *  master. Reuses the workspace context, details panel and phonebook list the state workspace's People tab uses. */
@@ -140,9 +141,11 @@ function ProfileAside() {
         expanded ? 'fixed inset-0 z-40' : open ? 'w-[400px]' : 'w-0',
       )}
     >
+      {expanded && open && <div className="absolute inset-y-0 left-0 right-[48rem] hidden lg:block"><SelectedIdCard /></div>}
       <div className={cn(
         'h-full overflow-y-auto scrollbar-thin motion-safe:transition-[opacity,transform] motion-safe:duration-200 motion-safe:ease-[cubic-bezier(0.32,0.72,0,1)]',
-        expanded ? 'mx-auto max-w-4xl border-x border-line' : 'w-[400px]',
+        // Full screen keeps the profile on the right; the left is free for the hanging ID card.
+        expanded ? 'ml-auto w-full max-w-3xl border-l border-line' : 'w-[400px]',
         open ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0',
       )}>
         {panel}

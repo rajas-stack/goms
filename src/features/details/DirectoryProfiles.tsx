@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom'
 import { Avatar, type AvatarPerson } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Icon } from '@/components/ui/Icon'
+import { Tabs } from '@/components/ui/Tabs'
 import { IconButton } from '@/components/ui/IconButton'
 import { useToast } from '@/components/ui/Toast'
 import { DISCARD_CHANGES_MESSAGE, UnsavedChangesGuard } from '@/components/UnsavedChangesGuard'
@@ -166,8 +167,11 @@ function NotFound({ what }: { what: string }) {
   return <p className="px-6 py-8 text-sm text-muted">This {what} is no longer in the Directory.</p>
 }
 
+type OrgPersonTab = 'contact' | 'teams' | 'reporting'
+
 export function OrgPersonDetails({ personId }: { personId: string }) {
   const ws = useWorkspace()
+  const [tab, setTab] = useState<OrgPersonTab>('contact')
   const dir = useDirectoryActions()
   const { employees, orgPeople, isLoading } = useMasterEmployees()
   const { data: members = [] } = useDeliveryTeamMembers()
@@ -191,14 +195,19 @@ export function OrgPersonDetails({ personId }: { personId: string }) {
         stats={[{ label: 'Reportees', value: reports.length, icon: 'Users' }, { label: 'Teams', value: rosters.length, icon: 'Layers' }, { label: 'Departments', value: person.departments.length, icon: 'Building2' }]}
         actions={dir && entry && <EntryActions entry={entry} />}
       />
+      <div className="px-4">
+        <Tabs value={tab} onChange={setTab} underlineId="org-person-tab" tabs={[
+          { value: 'contact', label: 'Contact' }, { value: 'teams', label: `Teams · ${rosters.length}` }, { value: 'reporting', label: `Reporting · ${reports.length}` },
+        ]} />
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <Sections>
-          <Section title="Contact" icon="Mail">
+          {tab === 'contact' && <Section title="Contact" icon="Mail" wide>
             <Detail label="Email"><EmailValue email={person.email} /></Detail>
             <Detail label="Organisation">Amnex</Detail>
             <Detail label="Departments">{person.departments.join(', ')}</Detail>
-          </Section>
-          <Section title="Teams" icon="Layers" order={1}>
+          </Section>}
+          {tab === 'teams' && <Section title="Teams" icon="Layers" wide>
             {rosters.length ? (
               <div className="flex flex-wrap gap-2">
                 {rosters.map((m) => (
@@ -213,8 +222,8 @@ export function OrgPersonDetails({ personId }: { personId: string }) {
               </div>
             ) : <p className="text-[13px] text-muted">Not on a Pre-sales, Bid or Legal roster.</p>}
             {master && master.sources.length > 1 && <p className="mt-3 text-[12px] text-muted">Also in {master.sources.filter((s) => s !== 'org').map((s) => SOURCE_LABEL[s]).join(', ')}</p>}
-          </Section>
-          <Section title="Reporting" icon="Network" order={2} wide>
+          </Section>}
+          {tab === 'reporting' && <Section title="Reporting" icon="Network" wide>
             <div className="flex flex-col items-stretch gap-2">
               {manager
                 ? <div className="max-w-sm"><p className="mb-1 text-[11px] text-muted">Reports to</p><PersonCard person={manager} subtitle={manager.designation} tone="up" onClick={() => ws.select('orgPerson', manager.id)} /></div>
@@ -229,7 +238,7 @@ export function OrgPersonDetails({ personId }: { personId: string }) {
                 </div>
               )}
             </div>
-          </Section>
+          </Section>}
         </Sections>
       </div>
     </div>
