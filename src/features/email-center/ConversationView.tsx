@@ -14,6 +14,7 @@ import { Icon } from '@/components/ui/Icon'
 import { Tooltip } from '@/components/ui/Tooltip'
 import { IconAction } from './IconAction'
 import { AttachmentCard, ImageThumb, MailAvatar, MailPersonName, MailTime, MotionIn } from './emailUi'
+import { EmailBody } from './EmailBody'
 
 export function ConversationView({ email, item, entity, origin, supervisor, unlinked = false, capabilities, ownMailboxes, onCompose, onChanged }: {
   email: string; item: EmailItemRef; entity?: EmailEntityRef; origin?: EmailEntityRef; supervisor: boolean; unlinked?: boolean; capabilities: EmailAction[]; ownMailboxes: EmailMailbox[]; onCompose: (value: ComposeStart) => void; onChanged: () => void
@@ -94,7 +95,7 @@ export function ConversationView({ email, item, entity, origin, supervisor, unli
               {message.cc.length > 0 && <><span className="font-medium">Cc</span>{message.cc.map(p => <MailAvatar key={p.email} person={p} size="xs" />)}</>}
               {message.bcc.length > 0 && <><span className="ml-2 font-medium">Bcc</span>{message.bcc.map(p => <MailAvatar key={p.email} person={p} size="xs" />)}</>}
             </div>}
-            <pre className="whitespace-pre-wrap break-words font-sans text-[14px] leading-7 text-ink-900">{message.text || message.snippet || 'No text content.'}</pre>
+            <EmailBody text={message.text || message.snippet || 'No text content.'} />
             {!!message.attachments.length && <div className="flex flex-wrap gap-2" aria-label="Attachments">{message.attachments.map(file => {
               const previewable = /^(image\/(png|jpeg|gif|webp)|application\/pdf)$/.test(file.mimeType)
               // Images render inline as thumbnails (fetched with the same authorized attachment call).

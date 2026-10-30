@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  APP_SCHEMES, OAuthConfigError, accessTtlSeconds, appScheme, authProvider, firebaseAccepted, gomsAccepted, oauthConfig, oauthEnabled, refreshTtlDays, sessionKey, ttlSetting,
+  APP_SCHEMES, OAuthConfigError, accessTtlSeconds, appScheme, authProvider, chosenWebOrigin, firebaseAccepted, gomsAccepted, oauthConfig, oauthEnabled, refreshTtlDays, sessionKey, ttlSetting,
 } from './config.js'
 
 const KEYS = ['AUTH_PROVIDER', 'GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET', 'GOOGLE_OAUTH_REDIRECT_URI', 'AUTH_SESSION_SECRET',
@@ -78,6 +78,18 @@ describe('oauthConfig', () => {
     expect(() => oauthConfig()).toThrow(OAuthConfigError)
     process.env.CORS_ALLOWED_ORIGINS = 'https://evil.example'
     expect(oauthConfig().webOrigin).toBe('https://evil.example') // an operator-approved origin is allowed
+  })
+
+  it('sends a sign-in back to the allowed site that started it, and anything else to the configured origin', () => {
+    const callback = 'http://localhost:8088'
+    expect(chosenWebOrigin('http://localhost:5173', callback, callback)).toBe('http://localhost:5173')
+    expect(chosenWebOrigin('http://localhost:5173/', callback, callback)).toBe('http://localhost:5173')
+    expect(chosenWebOrigin('http://localhost:8088', 'http://x.test', callback)).toBe('http://localhost:8088')
+    for (const raw of ['https://evil.example', 'http://localhost:5174', '', undefined, 42, 'x'.repeat(300)]) {
+      expect(chosenWebOrigin(raw, callback, callback)).toBe(callback)
+    }
+    process.env.CORS_ALLOWED_ORIGINS = 'https://goms.example'
+    expect(chosenWebOrigin('https://goms.example', callback, callback)).toBe('https://goms.example')
   })
 })
 

@@ -21,6 +21,9 @@ export function useSalesEditLock(): SalesEditLockApi {
   return v
 }
 
+/** Same as useSalesEditLock, but null outside the provider (for optional controls). */
+export const useSalesEditLockIfAny = (): SalesEditLockApi | null => useContext(Ctx)
+
 export function SalesEditLockProvider({ children }: { children: ReactNode }) {
   const [unlocked, setUnlocked] = useState(() => sessionStorage.getItem(STORAGE_KEY) === '1')
 

@@ -50,6 +50,9 @@ export default defineConfig(({ mode }) => ({
     strictPort: true,
     // WhatsApp (self-hosted OpenWA gateway, ../OpenWA). The key is added here in Node: OPENWA_* (no VITE_ prefix) never reaches the bundle.
     proxy: {
+      // The GOMS API (Docker stack on :8088): the :5173 preview is built against this origin, so sign-in, Email Center,
+      // Document maker and every other server feature work here with the same session as :8088.
+      '/api': { target: 'http://127.0.0.1:8088' },
       '/openwa': {
         target: 'http://127.0.0.1:2785',
         changeOrigin: true,

@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAllEmployees, useSalesPersons } from '@/lib/api'
 import { FrozenSelection, WorkspaceProvider, useWorkspace } from '@/features/workspace/context'
 import { PeopleDirectory, type TypeFilter } from '@/features/directory/PeopleDirectory'
 import { DetailsPanel } from '@/features/details/DetailsPanel'
-import { DirectoryActionsProvider, DirectoryLockSwitch, EntryActions } from '@/features/directory/DirectoryActions'
+import { DirectoryActionsProvider, DirectoryLockSwitch, EntryActions, useDirectoryActions } from '@/features/directory/DirectoryActions'
+import { useSalesEditLockIfAny } from '@/features/sales/salesEditLock'
+import { Icon } from '@/components/ui/Icon'
 import { NewContactDialog } from '@/features/directory/NewContactDialog'
 import {
   externalCategories, fromContact, fromMasterEmployee, internalCategories, readTypeFilter, type ContactType,
@@ -19,6 +21,7 @@ import { useAllowed, useCanReadAny } from '@/lib/permissions'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import { cn } from '@/lib/utils'
 import { MobileDetailsSheet } from './StateWorkspace'
+import { SelectedIdCard } from '@/features/directory/SelectedIdCard'
 
 /** The one Directory of people (sidebar › Directory): Amnex employees and external contacts, each still stored in its own
  *  master. Reuses the workspace context, details panel and phonebook list the state workspace's People tab uses. */
@@ -108,10 +111,50 @@ function DirectoryPage({ actionsSlot }: { actionsSlot?: HTMLElement | null }) {
  *  Directory list — in the frame the slide starts. Opening and closing share one motion: the list narrows as
  *  the panel widens, fades and slides in (and back). One panel instance whether docked or full screen (only
  *  classes change), so an open edit survives the switch. */
+/** Full-screen profile is a page: `?profile=1` in the URL, pushed onto history, so browser Back returns to the Directory. */
+function useProfilePage() {
+  const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
+  const location = useLocation()
+  const expanded = params.get('profile') === '1'
+  const pushed = !!(location.state as { profilePushed?: boolean } | null)?.profilePushed
+  const open = useCallback(() => setParams((p) => { p.set('profile', '1'); return p }, { state: { profilePushed: true } }), [setParams])
+  const close = useCallback(() => {
+    if (pushed) navigate(-1)
+    else setParams((p) => { p.delete('profile'); return p }, { replace: true })
+  }, [pushed, navigate, setParams])
+  return { expanded, open, close }
+}
+
+/** Back + one Edit switch for the profile page: unlocks both the Directory and Sales edit locks together. */
+function ProfilePageBar({ onBack }: { onBack: () => void }) {
+  const dir = useDirectoryActions()
+  const sales = useSalesEditLockIfAny()
+  const editing = (sales?.unlocked ?? true) && (dir?.unlocked ?? true)
+  const toggle = () => {
+    if (sales && sales.unlocked !== !editing) sales.toggle()
+    if (dir && dir.unlocked !== !editing) dir.toggleLock()
+  }
+  return (
+    <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-line bg-paper/95 px-4 py-2 backdrop-blur">
+      <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] font-medium text-ink-900 hover:bg-ink-900/[0.06]">
+        <Icon name="ArrowLeft" size={15} /> Back to Directory
+      </button>
+      <button type="button" onClick={toggle} aria-pressed={editing}
+        className={cn('ml-auto mr-10 inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-[13px] font-medium transition-colors',
+          editing ? 'border-goms-navy bg-goms-navy text-paper' : 'border-line text-ink-900 hover:bg-ink-900/[0.04]')}>
+        <Icon name={editing ? 'Check' : 'Pencil'} size={14} /> {editing ? 'Done editing' : 'Edit'}
+      </button>
+    </div>
+  )
+}
+
 function ProfileAside() {
   const ws = useWorkspace()
-  const [expanded, setExpanded] = useState(false)
-  useEffect(() => { if (!ws.selection) setExpanded(false) }, [ws.selection])
+  const page = useProfilePage()
+  const expanded = page.expanded && !!ws.selection
+  // Closing the profile also leaves the profile page.
+  useEffect(() => { if (!ws.selection && page.expanded) page.close() }, [ws.selection, page])
   // The last contact shown, kept while the panel animates closed so it doesn't flash to an empty state.
   const [shown, setShown] = useState(ws.selection)
   useEffect(() => { if (ws.selection) setShown(ws.selection) }, [ws.selection])
@@ -128,9 +171,10 @@ function ProfileAside() {
   // Same element across the open flip, so React skips re-rendering the profile when only the shell's classes change.
   const panel = useMemo(() => shown && (
     <FrozenSelection selection={ws.selection ?? shown}>
-      <DetailsPanel floatingClose expanded={expanded} onToggleExpand={hasSelection ? () => setExpanded((v) => !v) : undefined} />
+      {expanded && <ProfilePageBar onBack={page.close} />}
+      <DetailsPanel floatingClose expanded={expanded} onToggleExpand={hasSelection && !expanded ? page.open : undefined} />
     </FrozenSelection>
-  ), [shown, ws.selection, expanded, hasSelection])
+  ), [shown, ws.selection, expanded, hasSelection, page.open, page.close])
 
   return (
     <aside
@@ -140,9 +184,11 @@ function ProfileAside() {
         expanded ? 'fixed inset-0 z-40' : open ? 'w-[400px]' : 'w-0',
       )}
     >
+      {expanded && open && <div className="absolute inset-y-0 left-0 right-[62%] hidden lg:block"><SelectedIdCard /></div>}
       <div className={cn(
         'h-full overflow-y-auto scrollbar-thin motion-safe:transition-[opacity,transform] motion-safe:duration-200 motion-safe:ease-[cubic-bezier(0.32,0.72,0,1)]',
-        expanded ? 'mx-auto max-w-4xl border-x border-line' : 'w-[400px]',
+        // Full screen keeps the profile on the right; the left is free for the hanging ID card.
+        expanded ? 'ml-auto w-full border-l border-line lg:w-[62%]' : 'w-[400px]',
         open ? 'translate-x-0 opacity-100' : 'translate-x-4 opacity-0',
       )}>
         {panel}

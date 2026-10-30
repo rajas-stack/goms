@@ -34,6 +34,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const whatsappActive = location.pathname.startsWith('/whatsapp')
   const marketingActive = location.pathname.startsWith('/marketing')
   const financeActive = location.pathname.startsWith('/finance')
+  const calendarActive = location.pathname.startsWith('/calendar')
   // Same rule as the desktop rail: the server policy (A) AND the permission tree. Roles & Access lives in Settings.
   const tree = useNodeFilter()
   const canAccountMapping = useCanReadAny(NAV_MODULES.accountMapping) && tree('accountMapping')
@@ -47,6 +48,7 @@ export function MobileNavDrawer({ open, onClose }: Props) {
   const canWhatsApp = tree(ROUTE_NODES.whatsapp)
   const canMarketing = tree(ROUTE_NODES.marketing)
   const canFinance = tree(ROUTE_NODES.finance)
+  const canCalendar = tree(ROUTE_NODES.calendar)
   const canInsights = useCanReadAny(NAV_MODULES.insights) && tree('accountMapping.insights')
 
   useEffect(() => {
@@ -210,6 +212,20 @@ export function MobileNavDrawer({ open, onClose }: Props) {
               >
                 <Icon name="Wallet" size={17} />
                 Finance
+              </button>}
+              {canCalendar && <button
+                onClick={() => {
+                  onClose()
+                  navigate('/calendar')
+                }}
+                aria-current={calendarActive ? 'page' : undefined}
+                className={cn(
+                  'flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium',
+                  calendarActive ? 'bg-white text-ink-900 shadow-sm' : 'text-ink hover:bg-ink-900/[0.05]',
+                )}
+              >
+                <Icon name="CalendarDays" size={17} />
+                Calendar
               </button>}
               {canInsights && <button onClick={() => { onClose(); navigate('/insights') }} aria-current={/^\/(insights|analytics)/.test(location.pathname) ? 'page' : undefined} className="flex h-11 items-center gap-3 rounded-lg px-3 text-left text-sm font-medium text-ink hover:bg-ink-900/[0.05]">
                 <Icon name="BarChart3" size={17}/>Insights

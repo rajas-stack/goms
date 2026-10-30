@@ -3,7 +3,7 @@
 import { vi } from 'vitest'
 import type { MakerDocumentKind } from '@goms/domain'
 import {
-  createLocal, duplicateLocal, LOCAL_OWNER, renameLocal, requireLocal, toPublic, uploadLocal, type LocalMakerDocument, type MakerOwner,
+  createLocal, duplicateLocal, LOCAL_OWNER, renameLocal, replaceLocal, requireLocal, toPublic, uploadLocal, type LocalMakerDocument, type MakerOwner,
 } from '@/data/in-memory/makerDocuments'
 
 export function makeMakerRepository() {
@@ -16,6 +16,7 @@ export function makeMakerRepository() {
     uploadMakerDocument: vi.fn(async (input: { name: string; data: string; owner?: MakerOwner }) => put(uploadLocal(input.name, input.data, input.owner ?? LOCAL_OWNER))),
     renameMakerDocument: vi.fn(async (id: string, title: string) => put(renameLocal(requireLocal(docs, id), title))),
     duplicateMakerDocument: vi.fn(async (id: string) => put(duplicateLocal(requireLocal(docs, id)))),
+    replaceMakerDocument: vi.fn(async (id: string, name: string, data: string) => put(replaceLocal(requireLocal(docs, id), name, data))),
     deleteMakerDocument: vi.fn(async (id: string) => { requireLocal(docs, id); docs = docs.filter((d) => d.id !== id) }),
     getMakerDownload: vi.fn(async (id: string) => ({ url: `blob:${id}`, name: `${requireLocal(docs, id).title}.docx` })),
   }

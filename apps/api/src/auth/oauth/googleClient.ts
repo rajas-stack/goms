@@ -2,7 +2,7 @@
 import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from 'jose'
 import { isAmnexAccount } from '../identity.js'
 import { oauthConfig } from './config.js'
-import { GMAIL_SCOPE, emailConfiguration } from '../../email/config.js'
+import { CALENDAR_SCOPE, GMAIL_SCOPE, emailConfiguration } from '../../email/config.js'
 
 export class GoogleAuthError extends Error {
   readonly reason: 'exchange' | 'token' | 'nonce' | 'unverified' | 'domain'
@@ -34,7 +34,7 @@ export function buildAuthUrl(f: { state: string; nonce: string; challenge: strin
   const url = new URL(AUTH_ENDPOINT)
   url.search = new URLSearchParams({
     client_id: cfg.clientId, redirect_uri: cfg.redirectUri, response_type: 'code',
-    scope: mailAtSignIn() ? `openid email profile ${GMAIL_SCOPE}` : 'openid email profile',
+    scope: mailAtSignIn() ? `openid email profile ${GMAIL_SCOPE} ${CALENDAR_SCOPE}` : 'openid email profile',
     state: f.state, nonce: f.nonce, code_challenge: f.challenge, code_challenge_method: 'S256',
     hd: 'amnex.com', // a hint only: the @amnex.com check below is what enforces the domain
     prompt: 'select_account',

@@ -82,7 +82,7 @@ export const emailCenterRouter = router({
     const actor = await emailActor(ctx); const cfg = emailConfiguration()
     return { ready: cfg.ready, callback: cfg.ready ? cfg.redirectUri : null, email: actor.email, administrator: isSystemAdminEmail(actor.email), capabilities: EMAIL_ACTIONS.filter(action => emailActionAllowed(actor, action)) }
   }),
-  connect: protectedProcedure.input(z.object({ returnTo: z.string().max(512) }).strict()).mutation(async ({ input, ctx }) => beginMailConnection(await emailActor(ctx), input.returnTo, ctx.setCookie)),
+  connect: protectedProcedure.input(z.object({ returnTo: z.string().max(512), webOrigin: z.string().max(200).optional() }).strict()).mutation(async ({ input, ctx }) => beginMailConnection(await emailActor(ctx), input.returnTo, ctx.setCookie, input.webOrigin)),
   mailboxes: protectedReadProcedure.input(context.extend({ mode: z.enum(['mine', 'supervisor']).default('mine') }).strict()).query(async ({ input, ctx }) => {
     const actor = await emailActor(ctx)
     if (input.entity) await assertEmailEntity(actor, input.entity)

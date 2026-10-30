@@ -112,4 +112,5 @@ export const RBAC_NODE_MANIFEST: readonly RbacNodeDef[] = [
   {"id":"marketing","parentId":null,"label":"Marketing","kind":"module","actions":["view","create","edit","delete","download","manage"],"order":10},
   {"id":"finance","parentId":null,"label":"Finance","kind":"module","actions":["view","create","edit","delete","download","manage"],"order":11},
   {"id":"finance.reimbursements","parentId":"finance","label":"Reimbursements","kind":"tab","actions":["view","create","edit","delete","download","manage"],"order":0},
+  {"id":"calendar","parentId":null,"label":"Calendar","kind":"module","actions":["view","create","edit","delete","download","manage"],"order":12},
 ]

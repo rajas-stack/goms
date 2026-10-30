@@ -1,6 +1,6 @@
 import {
   Paperclip, Reply, ReplyAll, Forward, Inbox, MailOpen, RefreshCw, FileImage, FileArchive,
-  Target, Trophy, BriefcaseBusiness, Cloud,
+  Target, Trophy, BriefcaseBusiness, Cloud, WifiOff,
   Folder, Video, Languages, PanelsTopLeft, BookOpen, KeyRound, Globe, Landmark, MapPin, Map, Home, Building2, GitBranch, Layers, DoorOpen, Boxes,
   Search, Plus, Pencil, Trash2, Archive, ArchiveRestore, Copy, ChevronRight, ChevronLeft, ChevronDown, ChevronUp,
   X, Upload, Download, Users, User, Mail, Phone, ExternalLink, ArrowLeft, Command, CornerDownLeft,
@@ -18,7 +18,7 @@ import {
 
 const REGISTRY: Record<string, LucideIcon> = {
   Paperclip, Reply, ReplyAll, Forward, Inbox, MailOpen, RefreshCw, FileImage, FileArchive,
-  Target, Trophy, BriefcaseBusiness, Cloud,
+  Target, Trophy, BriefcaseBusiness, Cloud, WifiOff,
   FilePenLine, Presentation, FileUp, ArrowDownUp, LayoutGrid, Rows3, ServerOff, ShieldAlert, Bookmark, Maximize2, Minimize2, FilterX, Save, CalendarPlus, Tag, Megaphone, Wallet, Receipt,
   Lightbulb, ClipboardCheck, MessageSquareText, CalendarDays, EllipsisVertical, CircleCheck, Diamond,
   Folder, Video, Languages, PanelsTopLeft, BookOpen, KeyRound, Globe, Landmark, MapPin, Map, Home, Building2, GitBranch, Layers, DoorOpen, Boxes,

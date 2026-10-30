@@ -125,7 +125,7 @@ describe('Directory — every person in one list', () => {
 
     await user.click(screen.getByRole('button', { name: 'Expand details to full screen' }))
     expect(screen.getByLabelText('Full name')).toHaveValue('Bina Rao')
-    await user.click(screen.getByRole('button', { name: 'Collapse details' }))
+    await user.click(screen.getByRole('button', { name: 'Back to Directory' }))
     expect(screen.getByLabelText('Full name')).toHaveValue('Bina Rao')
 
     await user.click(screen.getByRole('button', { name: 'Save' }))
@@ -206,15 +206,16 @@ describe('Directory — every person in one list', () => {
     expect(changes).toHaveTextContent('Pre-Sales derives a sign-in role')
   })
 
-  it('keeps edit, transfer and delete locked until the Directory is unlocked', async () => {
+  it('hides edit, transfer and delete until the Directory is unlocked', async () => {
     const user = userEvent.setup()
     renderDirectory()
-    for (const action of ['Edit', 'Transfer', 'Delete']) expect(await screen.findByRole('button', { name: `${action} Asha Lead` })).toBeDisabled()
+    await screen.findByText('Asha Lead')
+    for (const action of ['Edit', 'Transfer', 'Delete']) expect(screen.queryByRole('button', { name: `${action} Asha Lead` })).toBeNull()
     expect(screen.getByRole('button', { name: 'New contact' })).toBeEnabled() // adding is not behind the lock
     await unlock(user)
     for (const action of ['Edit', 'Transfer', 'Delete']) expect(screen.getByRole('button', { name: `${action} Asha Lead` })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: 'Directory editing unlocked — tap to lock' }))
-    expect(screen.getByRole('button', { name: 'Delete Asha Lead' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Delete Asha Lead' })).toBeNull()
   })
 
   it('disables an action the role may not use, saying why', async () => {

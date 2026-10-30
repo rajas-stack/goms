@@ -67,7 +67,7 @@ describe('buildAuthUrl', () => {
     expect(`${u.origin}${u.pathname}`).toBe('https://accounts.google.com/o/oauth2/v2/auth')
     expect(Object.fromEntries(u.searchParams)).toEqual({
       client_id: 'test-client.apps.googleusercontent.com', redirect_uri: 'https://goms.test/api/oauth/google/callback', response_type: 'code',
-      scope: 'openid email profile https://www.googleapis.com/auth/gmail.modify', state: 'S', nonce: 'N', code_challenge: 'C', code_challenge_method: 'S256',
+      scope: 'openid email profile https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/calendar.events', state: 'S', nonce: 'N', code_challenge: 'C', code_challenge_method: 'S256',
       hd: 'amnex.com', prompt: 'select_account', access_type: 'offline', include_granted_scopes: 'true',
     })
   })

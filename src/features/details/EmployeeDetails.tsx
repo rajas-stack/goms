@@ -10,6 +10,7 @@ import { useWorkspace } from '@/features/workspace/context'
 import { Button } from '@/components/ui/Button'
 import { IconButton } from '@/components/ui/IconButton'
 import { Icon } from '@/components/ui/Icon'
+import { Tabs } from '@/components/ui/Tabs'
 import { ConfirmDeleteDialog } from '@/components/ui/ConfirmDeleteDialog'
 import { Dialog } from '@/components/ui/Dialog'
 import { Menu, MenuItem, MenuDivider } from '@/components/ui/Menu'
@@ -45,6 +46,8 @@ const COMM_LABEL: Record<string, string> = {
   phone: 'Phone', email: 'Email', whatsapp: 'WhatsApp', 'in-person': 'In person', sms: 'SMS',
 }
 
+type DetailTab = 'details' | 'relationship' | 'events' | 'timeline' | 'reporting'
+
 export function EmployeeDetails({ employeeId }: { employeeId: string }) {
   const ws = useWorkspace()
   const toast = useToast()
@@ -69,6 +72,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
   // edited, not just a mode flag — the dialog seeds every field from it.
   const [editingEvent, setEditingEvent] = useState<TimelineEvent | null>(null)
   const [reporteeMode, setReporteeMode] = useState<'junior' | 'manager' | null>(null)
+  const [tab, setTab] = useState<DetailTab>('details')
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
   const [mergeCandidateId, setMergeCandidateId] = useState<string | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -121,6 +125,13 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
     await update.mutateAsync({ id: emp!.id, patch: { metadata: rest } })
     toast('Unflagged')
   }
+
+  const tabs: { value: DetailTab; label: string }[] = vacant
+    ? [{ value: 'details', label: 'Details' }, { value: 'reporting', label: 'Reporting line' }]
+    : [
+        { value: 'details', label: 'Details' }, { value: 'relationship', label: 'Relationship' }, { value: 'events', label: 'Events' },
+        { value: 'timeline', label: `Timeline · ${timeline.length}` }, { value: 'reporting', label: 'Reporting line' },
+      ]
 
   return (
     <motion.div
@@ -277,6 +288,9 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
             )}
           </Menu>
         </div>
+        <div className="-mb-5 mt-4">
+          <Tabs tabs={tabs} value={tab} onChange={setTab} underlineId="employee-details-tab" />
+        </div>
       </div>
 
       <Dialog open={cardOpen} onClose={() => setCardOpen(false)} title="Visiting card" description={emp.name}>
@@ -348,6 +362,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
       />
 
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto scrollbar-thin px-6 py-5">
+        {tab === 'details' && <>
         <EmailQuickPanel entity={{ type: 'contact', id: emp.id }} title={emp.name} />
         <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
           {!vacant && emp.email && (
@@ -387,8 +402,9 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
             </DetailRow>
           )}
         </dl>
+        </>}
 
-        {!vacant && (
+        {tab === 'relationship' && !vacant && (
           <Section title="Relationship" icon="Handshake">
             <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
               {emp.connected && (
@@ -422,7 +438,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           </Section>
         )}
 
-        {!vacant && (
+        {tab === 'relationship' && !vacant && (
           <section className="mb-4 rounded-xl border border-line bg-panel/40 p-3">
             <OwnershipBlock
               entityType="contact"
@@ -434,7 +450,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           </section>
         )}
 
-        {emp.charges.length > 0 && (
+        {tab === 'reporting' && emp.charges.length > 0 && (
           <Section title={`Charges · ${emp.charges.length}`} icon="Briefcase">
             <div className="space-y-2">
               {emp.charges.map((c) => (
@@ -444,7 +460,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           </Section>
         )}
 
-        {transfers.length > 0 && (
+        {tab === 'reporting' && transfers.length > 0 && (
           <Section title={`Transfers · ${transfers.length}`} icon="ArrowLeftRight">
             <div className="space-y-2">
               {transfers.map((t) => <TransferRow key={t.id} transfer={t} />)}
@@ -452,9 +468,9 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           </Section>
         )}
 
-        {!vacant && <PersonEvents person={emp} />}
+        {tab === 'events' && !vacant && <PersonEvents person={emp} />}
 
-        {!vacant && (
+        {tab === 'timeline' && !vacant && (
           <section>
             <div className="mb-2.5 flex items-center justify-between">
               <h3 className="flex items-center gap-2 text-[13px] font-semibold text-ink-800">
@@ -471,7 +487,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
           </section>
         )}
 
-        <section>
+        {tab === 'reporting' && <section>
           <h3 className="mb-3 text-[13px] font-semibold text-ink-800">Reporting line</h3>
           <div className="rounded-card border border-line bg-white p-4">
             <div className="relative">
@@ -505,7 +521,7 @@ export function EmployeeDetails({ employeeId }: { employeeId: string }) {
               )}
             </div>
           </div>
-        </section>
+        </section>}
       </div>
     </motion.div>
   )

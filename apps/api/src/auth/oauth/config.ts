@@ -68,10 +68,8 @@ export function oauthConfig(): OAuthConfig {
     throw new OAuthConfigError('GOOGLE_OAUTH_REDIRECT_URI must be exactly <origin>/api/oauth/google/callback')
   }
 
-  const cors = (process.env.CORS_ALLOWED_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean)
-  const allowedWebOrigins = new Set([redirect.origin, 'http://localhost:5173', ...cors])
   const webOrigin = (process.env.OAUTH_WEB_ORIGIN?.trim() || redirect.origin).replace(/\/$/, '')
-  if (!allowedWebOrigins.has(webOrigin)) throw new OAuthConfigError('OAUTH_WEB_ORIGIN is not an allowed origin')
+  if (!allowedWebOrigins(redirect.origin).has(webOrigin)) throw new OAuthConfigError('OAUTH_WEB_ORIGIN is not an allowed origin')
 
   return {
     clientId: process.env.GOOGLE_OAUTH_CLIENT_ID!.trim(),
@@ -81,4 +79,17 @@ export function oauthConfig(): OAuthConfig {
     accessTtlSeconds: accessTtlSeconds(),
     refreshTtlDays: refreshTtlDays(),
   }
+}
+
+/** Sites a Google callback may send the browser back to: the callback's own origin, the local preview, and CORS_ALLOWED_ORIGINS. */
+function allowedWebOrigins(callbackOrigin: string): Set<string> {
+  const cors = (process.env.CORS_ALLOWED_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean)
+  return new Set([callbackOrigin, 'http://localhost:5173', ...cors])
+}
+
+/** The site that asked for a sign-in (`web_origin`), when it is an allowed one; otherwise `fallback`. */
+export function chosenWebOrigin(raw: unknown, fallback: string, callbackOrigin: string): string {
+  if (typeof raw !== 'string' || raw.length > 200) return fallback
+  const origin = raw.replace(/\/$/, '')
+  return allowedWebOrigins(callbackOrigin).has(origin) ? origin : fallback
 }

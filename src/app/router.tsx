@@ -72,6 +72,7 @@ const DocumentMakerHome = lazy(() =>
 const EmailPage = lazy(() => import('./routes/EmailPage').then((m) => ({ default: m.EmailPage })))
 const WhatsAppWorkspace = lazy(() => import('@/features/whatsapp/WhatsAppWorkspace').then((m) => ({ default: m.WhatsAppWorkspace })))
 const MarketingPage = lazy(() => import('./routes/MarketingPage').then((m) => ({ default: m.MarketingPage })))
+const CalendarPage = lazy(() => import('@/features/calendar/CalendarPage').then((m) => ({ default: m.CalendarPage })))
 const FinanceWorkspace = lazy(() => import('@/features/finance/FinanceWorkspace').then((m) => ({ default: m.FinanceWorkspace })))
 const Login = lazy(() => import('./routes/Login').then((m) => ({ default: m.Login })))
 const NotFound = lazy(() => import('./routes/NotFound').then((m) => ({ default: m.NotFound })))
@@ -177,6 +178,7 @@ export const router = createBrowserRouter([
       routed('/whatsapp', ROUTE_NODES.whatsapp, <WhatsAppWorkspace />),
       routed('/marketing', ROUTE_NODES.marketing, <MarketingPage />),
       routed('/finance', ROUTE_NODES.finance, <FinanceWorkspace />),
+      routed('/calendar', ROUTE_NODES.calendar, <CalendarPage />),
       routed('/finance/:tab', ROUTE_NODES.finance, <FinanceWorkspace />),
       routed('/settings/tender-websites', ROUTE_NODES.tenderWebsites, <TenderWebsitesSettingsPage />),
       routed('/settings/document-verifications', ROUTE_NODES.verifications, <DocumentVerificationsSettingsPage />),

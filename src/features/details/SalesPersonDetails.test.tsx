@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import * as api from '@/lib/api'
 import { SalesPersonDetails } from './SalesPersonDetails'
 import type { SalesPerson, SalesPosting } from '@/lib/types'
@@ -42,6 +42,7 @@ function stubApiHooks(opts: { postings?: SalesPosting[]; people?: SalesPerson[];
   vi.spyOn(api, 'useDepartments').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useDepartments>)
   vi.spyOn(api, 'useAllEmployees').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useAllEmployees>)
   vi.spyOn(api, 'useOpportunities').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useOpportunities>)
+  vi.spyOn(api, 'useAllTimelineEvents').mockReturnValue({ data: [] } as unknown as ReturnType<typeof api.useAllTimelineEvents>)
   vi.spyOn(api, 'useSalesPersonMutations').mockReturnValue({
     setStatus: { mutateAsync: vi.fn() },
     remove: { mutateAsync: vi.fn() },
@@ -99,6 +100,7 @@ describe('SalesPersonDetails — GM / Higher Reporting Manager row (item 1)', ()
       },
     })
     render(<SalesPersonDetails salesPersonId="sp-alice" />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Role' }))
     expect(screen.getAllByText('Carol GM').length).toBeGreaterThan(0)
   })
 
@@ -112,6 +114,7 @@ describe('SalesPersonDetails — GM / Higher Reporting Manager row (item 1)', ()
       },
     })
     render(<SalesPersonDetails salesPersonId="sp-alice" />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Role' }))
     // Derived would be Carol; the override picks Alice herself instead.
     expect(screen.queryAllByText('Carol GM')).toHaveLength(0)
     expect(screen.getAllByText(/^Alice Anderson$/).length).toBeGreaterThan(0)
@@ -130,12 +133,14 @@ describe('SalesPersonDetails — Edit dates action', () => {
   it('offers Edit dates on the Posting section, disabled while editing is locked', () => {
     stubApiHooks({ postings: [posting()] })
     render(<SalesPersonDetails salesPersonId="sp-alice" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Posting' }))
     expect(screen.getByRole('button', { name: /edit dates/i })).toBeDisabled()
   })
 
   it('still offers Edit dates when the only posting has ended, and says when it ended', () => {
     stubApiHooks({ postings: [posting({ endDate: '2026-04-01' })] })
     render(<SalesPersonDetails salesPersonId="sp-alice" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Posting' }))
     expect(screen.getByRole('button', { name: /edit dates/i })).toBeInTheDocument()
     expect(screen.getByText(/no current posting\. the latest posting ended 2026-03-31/i)).toBeInTheDocument()
   })
@@ -143,6 +148,7 @@ describe('SalesPersonDetails — Edit dates action', () => {
   it('does not offer Edit dates when the person has no postings at all', () => {
     stubApiHooks({ postings: [] })
     render(<SalesPersonDetails salesPersonId="sp-alice" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Posting' }))
     expect(screen.queryByRole('button', { name: /edit dates/i })).not.toBeInTheDocument()
   })
 })

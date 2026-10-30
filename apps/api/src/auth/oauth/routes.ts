@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { signAccessToken } from './accessToken.js'
-import { OAuthConfigError, appScheme, oauthConfig, oauthEnabled, sessionKey } from './config.js'
+import { OAuthConfigError, appScheme, chosenWebOrigin, oauthConfig, oauthEnabled, sessionKey } from './config.js'
 import { createExchangeCode, redeemExchangeCode } from './exchangeCodes.js'
 import { consumeFlow, createFlow } from './flows.js'
 import { GoogleAuthError, buildAuthUrl, type GoogleGateway } from './googleClient.js'
@@ -82,8 +82,10 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
   app.get('/api/oauth/google/start', limited, guarded('start', async (req, reply) => {
     const client = parseClient(req.query?.client)
     if (!client) return reply.code(400).send({ error: 'invalid_request' })
-    oauthConfig() // fail fast with a 503 before any state is stored
-    const flow = await createFlow(client, safeReturnTo(req.query?.return_to))
+    const cfg = oauthConfig() // fail fast with a 503 before any state is stored
+    // The preview (:5173) and the full stack (:8088) share this API; send the browser back to the one that asked.
+    const webOrigin = chosenWebOrigin(req.query?.web_origin, cfg.webOrigin, new URL(cfg.redirectUri).origin)
+    const flow = await createFlow(client, safeReturnTo(req.query?.return_to), webOrigin)
     reply.header('Set-Cookie', browserBindingCookie('login', flow.state))
     return reply.code(302).header('Location', buildAuthUrl(flow)).send()
   }))
@@ -118,7 +120,7 @@ export function registerOAuthRoutes(app: FastifyInstance, deps: OAuthDeps): void
     const exchange = await createExchangeCode({ uid: `g:${claims.sub}`, email: claims.email, familyId: randomUUID(), client: flow.client })
     if (flow.client === 'app') return reply.code(200).type('text/html; charset=utf-8').send(appPage(appScheme(), `code=${exchange}`))
     reply.header('Set-Cookie', [clearBinding, browserBindingCookie('exchange', exchange)])
-    return reply.code(302).header('Location', webRedirectUrl(oauthConfig().webOrigin, flow.returnTo, { auth_code: exchange })).send()
+    return reply.code(302).header('Location', webRedirectUrl(flow.webOrigin ?? oauthConfig().webOrigin, flow.returnTo, { auth_code: exchange })).send()
   }))
 
   app.post('/api/oauth/exchange', postRoute, guarded('exchange', async (req, reply) => {

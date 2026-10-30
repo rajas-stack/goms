@@ -27,7 +27,7 @@ describe('PROCEDURE_POLICY completeness', () => {
     expect(exempt).toEqual([
       'outside:adminImport.commitGeographyLoad', 'outside:adminImport.history', 'outside:adminImport.listDomains',
       'outside:adminImport.previewGeographyLoad', 'outside:adminImport.session.commit', 'outside:adminImport.session.history',
-      'outside:adminImport.session.validate', 'public:health.check', 'self:auth.me',
+      'outside:adminImport.session.validate', 'public:health.check', 'self:auth.me', 'self:calendar.create', 'self:calendar.events',
       ...EMAIL_CENTER_PROCEDURES.map(name => `self:emailCenter.${name}`).sort(),
       'self:googleIntegrations.get', 'self:googleIntegrations.save',
       'self:makerDocuments.create', 'self:makerDocuments.delete', 'self:makerDocuments.desktopSession', 'self:makerDocuments.directory',

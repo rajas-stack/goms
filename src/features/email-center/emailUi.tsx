@@ -43,6 +43,7 @@ const FILE_TYPES: { test: RegExp; icon: IconName; tone: string; label: string }[
   { test: /\.(png|jpe?g|gif|webp|svg|heic)$|^image\//i, icon: 'FileImage', tone: 'bg-violet-50 text-violet-600 ring-violet-100', label: 'Image' },
   { test: /\.(zip|rar|7z|tar|gz)$|zip|compressed/i, icon: 'FileArchive', tone: 'bg-amber-50 text-amber-600 ring-amber-100', label: 'Archive' },
   { test: /\.(mp4|mov|avi|mkv|webm)$|^video\//i, icon: 'Video', tone: 'bg-pink-50 text-pink-600 ring-pink-100', label: 'Video' },
+  { test: /\.ics$|^invite$|text\/calendar|application\/ics/i, icon: 'CalendarDays', tone: 'bg-indigo-100/60 text-indigo-600 ring-indigo-100', label: 'Calendar invite' },
 ]
 export function fileType(name: string, mime = '') {
   return FILE_TYPES.find(t => t.test.test(name) || t.test.test(mime)) ?? { icon: 'FileText' as IconName, tone: 'bg-ink-900/[0.05] text-ink-600 ring-line', label: 'File' }
